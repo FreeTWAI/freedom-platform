@@ -15784,8 +15784,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/work-plan.md",
-      "bytes": 15381,
-      "sha256": "ea3965469ac66d65374f8733abe69c7610519e306647ab04285d3be40083304c"
+      "bytes": 15879,
+      "sha256": "d459c5fcb78473d174cfba7a400ff6d3578c79b4234c8963393b593f1a428b9a"
     },
     {
       "path": "docs/platform-plan/execution/tools/check_package_dag.py",
@@ -18379,8 +18379,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Material.tsx",
-      "bytes": 22057,
-      "sha256": "740bde76910848ab7b397aa2b21fdec88bffeeea7be02c204a0b576a3fda52b3"
+      "bytes": 22734,
+      "sha256": "98848efc111f408ed0d235a393ec134390d6db2c9e4a10d5d6980cda03909bf3"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/MaterialNew.tsx",
@@ -22909,8 +22909,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-materials.spec.ts",
-      "bytes": 68327,
-      "sha256": "226ea31fd8de1f72e14233a756ecf47113b94a654f63b9edd110890302e3963a"
+      "bytes": 75708,
+      "sha256": "ff3c90f89ca44942cbd830f69c7948094e973568bc245ba6fc62aaab7f1e9cf7"
     },
     {
       "path": "tests/e2e/supplier-console-navigation.spec.ts",
