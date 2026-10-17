@@ -28,3 +28,8 @@
 
 .seller-console .seller-axis .card { padding: 0; border: 0; background: transparent; box-shadow: none; }
 .seller-console .choice { display: inline-flex; gap: .5rem; align-items: center; min-height: 44px; }
+
+.seller-console .seller-settings-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.seller-console .seller-settings-wide { grid-column: 1 / -1; }
+.seller-console textarea { width: 100%; min-width: 0; max-width: 100%; }
+@media(max-width:720px) { .seller-console .seller-settings-fields { grid-template-columns: minmax(0,1fr); } .seller-console textarea { font-size: 16px; } }

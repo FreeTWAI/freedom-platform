@@ -1,13 +1,16 @@
 import {randomUUID} from 'node:crypto';
 import {test, expect, type BrowserContext, type Page, type Route} from './fixtures.js';
 import {setupCartFixtureStore, assertCartResponsiveLayout} from './storefront-cart-fixture.js';
-import {apiLogin, member, ownedSchema} from './hosted-order-fixture.js';
+import {apiLogin, buyerLogin, member, ownedSchema} from './hosted-order-fixture.js';
 import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transaction.js';
 import {CheckoutResponseSchema, PlaceOrderResponseSchema, PublicOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {createAccessLink} from '../../modules/agent-commerce/checkout/access.js';
 import {sweepDueCheckoutHolds} from '../../modules/agent-commerce/checkout/settlement.js';
 import {endOfflinePaymentWindow} from '../../modules/agent-commerce/payments/offline/window.js';
 import type {Pool} from 'pg';
+import {verifyPassword,taipeiDate,command} from './seller-console-fixture.js';
+import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
+import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 
 type Store = Awaited<ReturnType<typeof setupCartFixtureStore>>;
 async function openBuyer(db: Pool, context: BrowserContext, store: Store) {
@@ -277,4 +280,238 @@ test('real hold expiry shows grace and window cancellation without a new payment
     await expect(page.locator('body')).not.toContainText('000000123456');
     expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_payment_attempts WHERE order_id=ANY($1::uuid[])', [[source.order_ref, grace, ended]])).rows[0].n).toBe(0);
   } finally {await context.close(); await store.close();}
+});
+
+const sellerHash=(store:Store,path:string)=>`#stores/${store.tenant}/${store.instance}/${path}`;
+async function sellerSettings(page:Page,store:Store){
+ await page.goto(store.origin+'/'+sellerHash(store,'settings/payments'));
+ await expect(page.locator('.seller-console')).toBeVisible();
+ await expect(page.getByRole('button',{name:'編輯線下收款設定',exact:true})).toBeEnabled();
+}
+async function configureSeller(page:Page,store:Store){
+ await sellerSettings(page,store);
+ await page.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+ const form=page.getByRole('form',{name:'線下收款設定',exact:true});
+ await form.getByLabel('提供銀行匯款',{exact:true}).check();
+ await form.getByLabel('銀行代碼',{exact:true}).fill('000');
+ await form.getByLabel('銀行名稱',{exact:true}).fill('合成測試銀行');
+ await form.getByLabel('收款帳號',{exact:true}).fill('000000123456');
+ await form.getByLabel('戶名',{exact:true}).fill('合成測試商店');
+ await form.getByLabel('匯款說明（選填）',{exact:true}).fill('匯款後請與店家聯絡。');
+ await form.getByLabel('提供面交現金付款',{exact:true}).check();
+ await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();
+ await verifyPassword(page,DEMO_PASSWORD);
+}
+async function saveMeetup(page:Page,note:string){
+ await page.getByRole('button',{name:'編輯面交取貨設定',exact:true}).click();
+ const form=page.getByRole('form',{name:'面交取貨設定',exact:true});
+ await form.getByLabel('提供面交取貨',{exact:true}).check();
+ await form.getByLabel('面交地區與時段',{exact:true}).fill(note);
+ await form.getByRole('button',{name:'儲存面交取貨設定',exact:true}).click();
+ await expect(form).toHaveCount(0);
+}
+async function sellerOrder(page:Page,store:Store,order:{order_ref:string;display_number:string}){
+ await page.goto(store.origin+'/'+sellerHash(store,'orders/'+order.order_ref));
+ await expect(page.getByRole('heading',{name:'訂單詳情：'+order.display_number,exact:true})).toBeVisible();
+}
+async function recordOffline(page:Page,label:string,amount?:string){
+ const form=page.getByRole('form',{name:label,exact:true});
+ if(amount!==undefined)await form.getByLabel('實收金額（TWD 整數元）',{exact:true}).fill(amount);
+ await form.getByLabel(label==='確認收到匯款'?'收款日期':'面交日期',{exact:true}).fill(taipeiDate());
+ await form.getByRole('button',{name:label,exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:label,exact:true});
+ await expect(dialog).toContainText('$350.00');
+ await dialog.getByRole('button',{name:'確認登記',exact:true}).click();
+}
+async function sellerScreens(page:Page,output:(width:number)=>string){
+ for(const width of [1440,768,390]){
+  await page.setViewportSize({width,height:width===390?844:900});
+  await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const sizes=await page.locator('.seller-console .btn:visible').evaluateAll(buttons=>buttons.map(b=>({height:b.getBoundingClientRect().height,width:b.getBoundingClientRect().width,parent:b.parentElement!.getBoundingClientRect().width})));
+  for(const b of sizes){expect(b.height).toBeGreaterThanOrEqual(44);expect(b.width).toBeLessThanOrEqual(b.parent+1);}
+  await page.screenshot({path:output(width),fullPage:true});
+ }
+}
+
+test('ordinary seller UI configures bank/cash meetup, preserves unknown commands, confirms and hands over to a returning buyer',async({browser,e2eAuthPool},info)=>{
+ test.setTimeout(120000);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false);
+ const seller=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
+ seller.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
+ try{
+  const sp=await seller.newPage(),bp=await buyer.newPage(),person=await member(e2eAuthPool);
+  await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
+  const settingsRequests:{key:string;body:string|null;version:string|undefined}[]=[];
+  await sp.route('**/offline-payment-settings',async route=>{
+   if(route.request().method()!=='PUT'){await route.continue();return;}
+   const request=route.request();settingsRequests.push({key:request.headers()['idempotency-key'],body:request.postData(),version:request.headers()['if-match']});
+   const response=await route.fetch();expect(response.ok(),await response.text()).toBe(true);
+   if(settingsRequests.length===1)await route.abort('failed');else await route.fulfill({response});
+  });
+  await configureSeller(sp,store);
+  await expect(sp.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await sp.getByRole('button',{name:/更新資料\s*：線下收款設定/}).click();
+  await expect(sp.getByRole('button',{name:'儲存線下收款設定',exact:true})).toBeDisabled();
+  await sp.getByRole('button',{name:'重試',exact:true}).click();
+  await expect(sp.getByRole('form',{name:'線下收款設定',exact:true})).toHaveCount(0);
+  expect(settingsRequests).toHaveLength(2);expect(settingsRequests[1]).toEqual(settingsRequests[0]);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payment_settings WHERE instance_id=$1',[store.instance])).rows[0].n).toBe(1);
+  await saveMeetup(sp,'請先約定時間，在山邊小店門口面交。');
+  await sellerScreens(sp,width=>info.outputPath(`seller-settings-${width}.png`));
+  await sp.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+  await sellerScreens(sp,width=>info.outputPath(`seller-payment-form-${width}.png`));
+  await sp.getByRole('form',{name:'線下收款設定',exact:true}).getByRole('button',{name:'捨棄輸入，重新讀取設定',exact:true}).click();
+  await expect(sp.getByRole('button',{name:'編輯線下收款設定',exact:true})).toBeEnabled();
+  await seller.clearCookies();await sp.goto('about:blank');
+  await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
+  await expect(sp.getByText('000000123456',{exact:true})).toBeVisible();
+  await expect(sp.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  await buyerLogin(bp,person.email,'',store.origin);
+  await start(bp,store);await freeze(bp,store);const bank=await place(bp,'銀行匯款');
+  await sellerOrder(sp,store,bank);
+  await expect(sp.getByText('下單時選擇：銀行匯款',{exact:true})).toBeVisible();
+  await sellerScreens(sp,width=>info.outputPath(`seller-bank-confirm-form-${width}.png`));
+  await recordOffline(sp,'確認收到匯款','350');
+  await expect(sp.getByText('已收款（店家確認）',{exact:true}).first()).toBeVisible();
+  // The existing expiry handler must retain an already paid allocation even when its due work is selected.
+  await endOfflinePaymentWindow(e2eAuthPool,bank.order_ref,{now:()=>new Date(Date.now()+30*86400000)});
+  expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:5,reserved:1});
+  await recordOffline(sp,'確認已面交');
+  await expect(sp.getByText(/已登記面交：/)).toBeVisible();
+  await sellerScreens(sp,width=>info.outputPath(`seller-bank-handover-${width}.png`));
+  await buyer.clearCookies();await bp.goto('about:blank');await buyerLogin(bp,person.email,'',store.origin);
+  await bp.goto(`${store.origin}/shops/${store.slug}/orders/${bank.order_ref}`);
+  await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+  await start(bp,store);await freeze(bp,store);const cash=await place(bp,'面交付款');
+  await sellerOrder(sp,store,cash);
+  const cashRequests:{key:string;body:string|null;version:string|undefined}[]=[];
+  await sp.route('**/meetup-completion',async route=>{
+   const request=route.request();cashRequests.push({key:request.headers()['idempotency-key'],body:request.postData(),version:request.headers()['if-match']});
+   const response=await route.fetch();expect(response.status()).toBe(200);
+   if(cashRequests.length===1)await route.abort('failed');else await route.fulfill({response});
+  });
+  await recordOffline(sp,'確認收現金並完成面交','350');
+  await expect(sp.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await sp.getByRole('button',{name:/更新資料\s*：訂單詳情/}).click();
+  await expect(sp.getByText(/已登記面交：/)).toBeVisible();
+  await expect(sp.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await sp.getByRole('button',{name:'重試',exact:true}).click();
+  await expect(sp.locator('.seller-announcement')).toContainText('已保存：確認收現金並完成面交。');
+  await expect(sp.getByText('正在確認結果',{exact:true})).toHaveCount(0);
+  expect(cashRequests).toHaveLength(2);expect(cashRequests[1]).toEqual(cashRequests[0]);
+  for(const order of [bank,cash]){
+   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payments WHERE order_id=$1',[order.order_ref])).rows[0].n).toBe(1);
+   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_meetup_handovers WHERE order_id=$1',[order.order_ref])).rows[0].n).toBe(1);
+  }
+  expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
+  await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
+  await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+  // Existing seller cancellation remains reachable for an unpaid order and releases only its hold.
+  await start(bp,store);await freeze(bp,store);const cancelled=await place(bp,'銀行匯款');
+  await sellerOrder(sp,store,cancelled);await sp.getByRole('button',{name:'取消訂單',exact:true}).click();
+  await sp.getByRole('dialog',{name:'取消訂單',exact:true}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
+  await expect(sp.getByRole('region',{name:'訂單',exact:true})).toContainText('已取消');
+  await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
+  await expect(bp.getByText(/訂單狀態：已取消/)).toBeVisible();
+  expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
+ }finally{await seller.close();await buyer.close();await store.close();}
+});
+
+test('seller settings refuse failed reads and stale drafts; meetup edits retain the rest of the shipping profile',async({browser,e2eAuthPool})=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true),context=await browser.newContext({baseURL:store.origin});
+ context.setDefaultTimeout(15000);
+ try{
+  const ownerSession=await apiLogin(context,store.origin,store.seller.email);const page=await context.newPage(),other=await context.newPage();
+  const location=await command(context,store.origin,ownerSession.csrf_token,store.root+'/ship-from-locations',{label:'合成退貨地點',sender_name:'合成店主',mobile:'0900123456',postal_code:'100',address:'台北市中正區測試路一段一號',ships:true,receives_returns:true});
+  const existing=await (await context.request.get('/api/v1'+store.root+'/shipping-profile')).json();
+  const retained={method:'home',fee_per_parcel_minor:8000,free_over_minor:200000,outlying:{kind:'surcharge',surcharge_per_parcel_minor:10000}};
+  await command(context,store.origin,ownerSession.csrf_token,store.root+'/shipping-profile',{...existing.profile,working_days:[2,4,6],delivery_options:[...existing.profile.delivery_options,retained],drop_ship:{offered:false,fees:[],return_location_id:location.location_id,liability:'合成退貨責任說明',recipient_retention_days:14,accept_within_hours:24}},existing.version,'PUT');
+  await page.route('**/offline-payment-settings',r=>r.fulfill({status:503,contentType:'application/json',json:{error:'synthetic_read_failure'}}));
+  await page.goto(store.origin+'/'+sellerHash(store,'settings/payments'));
+  await expect(page.getByText(/無法取得線下收款設定/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'編輯線下收款設定',exact:true})).toHaveCount(0);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payment_settings WHERE instance_id=$1',[store.instance])).rows[0].n).toBe(1);
+  await page.unroute('**/offline-payment-settings');await page.getByRole('button',{name:/重試\s*：線下收款設定/}).click();
+  await expect(page.getByRole('button',{name:'編輯線下收款設定',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+  const payment=page.getByRole('form',{name:'線下收款設定',exact:true});
+  await payment.getByLabel('收款帳號',{exact:true}).fill('------');
+  await payment.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();
+  const invalid=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/offline-payment-settings'));
+  await verifyPassword(page,DEMO_PASSWORD);expect((await invalid).status()).toBe(422);
+  await expect(payment.getByRole('alert')).toContainText('收款帳號：請填寫 6–16 位數字');
+  await payment.getByRole('alert').getByRole('link',{name:/收款帳號/}).click();
+  await expect(payment.getByLabel('收款帳號',{exact:true})).toBeFocused();
+  await expect(payment.getByLabel('收款帳號',{exact:true})).toHaveValue('------');
+  await payment.getByLabel('收款帳號',{exact:true}).fill('000000123456');
+  await payment.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+  await expect(payment).toHaveCount(0);
+  const before=await (await context.request.get('/api/v1'+store.root+'/shipping-profile')).json();
+  await page.getByRole('button',{name:'編輯面交取貨設定',exact:true}).click();
+  const form=page.getByRole('form',{name:'面交取貨設定',exact:true});await form.getByLabel('面交地區與時段',{exact:true}).fill('這份舊草稿不能覆寫別頁。');
+  await sellerSettings(other,store);await saveMeetup(other,'另一分頁已確認的新地點。');
+  let writes=0;page.on('request',r=>{if(r.method()==='PUT'&&r.url().endsWith('/shipping-profile'))writes++;});
+  await page.route('**/shipping-profile',r=>r.request().method()==='GET'?r.fulfill({status:503,contentType:'application/json',json:{error:'synthetic_read_failure'}}):r.continue());
+  const refusal=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/shipping-profile'));
+  await form.getByRole('button',{name:'儲存面交取貨設定',exact:true}).click();expect((await refusal).status()).toBe(412);
+  await expect(page.getByText('原操作未完成，等待重新取得伺服器資料後再確認。',{exact:true})).toBeVisible();
+  await expect(form.getByRole('button',{name:'儲存面交取貨設定',exact:true})).toBeDisabled();
+  await expect(page.getByText(/操作已完成/)).toHaveCount(0);expect(writes).toBe(1);
+  await page.unroute('**/shipping-profile');await page.getByRole('button',{name:/重試\s*：操作後的資料/}).click();
+  await expect(form.getByRole('alert')).toContainText('配送設定已由其他操作變更');
+  await expect(form.getByLabel('面交地區與時段',{exact:true})).toHaveValue('這份舊草稿不能覆寫別頁。');
+  await expect(form.getByRole('button',{name:'儲存面交取貨設定',exact:true})).toBeDisabled();
+  await expect(page.getByText(/操作已完成/)).toHaveCount(0);expect(writes).toBe(1);
+  const current=await (await context.request.get('/api/v1'+store.root+'/shipping-profile')).json();
+  expect(current.profile).toEqual({...before.profile,delivery_options:[{method:'meetup',note:'另一分頁已確認的新地點。'},retained]});
+  await form.getByRole('button',{name:'捨棄輸入，重新讀取設定',exact:true}).click();
+  await expect(page.getByRole('button',{name:'編輯面交取貨設定',exact:true})).toBeEnabled();
+  await saveMeetup(page,'重新核對後的新地點。');expect(writes).toBe(2);
+ }finally{await context.close();await store.close();}
+});
+
+test('delegated seller sees masked settings and retains the original cash command through failed reads and revoked fulfil permission',async({browser,e2eAuthPool})=>{
+ test.setTimeout(90000);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true),owner=await browser.newContext({baseURL:store.origin}),operator=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
+ operator.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
+ try{
+  const ownerSession=await apiLogin(owner,store.origin,store.seller.email),person=await member(e2eAuthPool);
+  const candidate=await (await owner.request.get('/api/v1/tenants/invite-candidates?user_id='+person.id)).json();
+  const capabilities=['store:read','store:manage','store:orders:read','store:orders:manage','store:fulfil','store:finance:read'];
+  const invite=await command(owner,store.origin,ownerSession.csrf_token,'/tenants/'+store.tenant+'/invitations',{invitee_principal_id:candidate.principal_id,role:'operator',expires_at:new Date(Date.now()+86400000).toISOString(),instance_capabilities:[{instance_id:store.instance,capabilities}]});
+  const operatorSession=await apiLogin(operator,store.origin,person.email);
+  await command(operator,store.origin,operatorSession.csrf_token,'/tenants/'+store.tenant+'/invitations/'+invite.invitation_id+'/accept',{},invite.version);
+  async function grant(keys:string[]){const members=await (await owner.request.get('/api/v1/tenants/'+store.tenant+'/members')).json(),membership=members.items.find((m:{principal_id:string})=>m.principal_id===candidate.principal_id);await command(owner,store.origin,ownerSession.csrf_token,'/tenants/'+store.tenant+'/members/'+candidate.principal_id+'/change',{role:'operator',status:'active',instance_capabilities:[{instance_id:store.instance,capabilities:keys}],reason:'Synthetic seller cash recovery'},membership.version);}
+  const page=await operator.newPage(),bp=await buyer.newPage();
+  await page.goto(store.origin+'/'+sellerHash(store,'settings/payments'));
+  await expect(page.getByText('末四碼 3456',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'編輯線下收款設定',exact:true})).toHaveCount(0);
+  await expect(page.getByText('000000123456',{exact:true})).toHaveCount(0);
+  await openBuyer(e2eAuthPool,buyer,store);await start(bp,store);await freeze(bp,store);const cash=await place(bp,'面交付款');
+  const orderPath='**/checkout-orders/'+cash.order_ref;
+  await page.route(orderPath,r=>r.fulfill({status:503,contentType:'application/json',json:{error:'synthetic_read_failure'}}));
+  await page.goto(store.origin+'/'+sellerHash(store,'orders/'+cash.order_ref));
+  await expect(page.getByText(/無法取得訂單詳情/)).toBeVisible();
+  await expect(page.getByRole('form',{name:'確認收現金並完成面交',exact:true})).toHaveCount(0);
+  await page.unroute(orderPath);await page.getByRole('button',{name:/重試\s*：訂單詳情/}).click();
+  const requests:{key:string;body:string|null;version:string|undefined}[]=[],statuses:number[]=[];
+  await page.route('**/meetup-completion',async route=>{const request=route.request();requests.push({key:request.headers()['idempotency-key'],body:request.postData(),version:request.headers()['if-match']});const response=await route.fetch();statuses.push(response.status());if(requests.length===1)await route.abort('failed');else await route.fulfill({response});});
+  await recordOffline(page,'確認收現金並完成面交','350');await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await grant(capabilities.filter(capability=>capability!=='store:fulfil'));
+  await page.getByRole('button',{name:'重試',exact:true}).click();
+  await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toBeVisible();
+  await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await expect(page.locator('.seller-announcement')).not.toContainText('已保存');
+  expect(statuses).toEqual([200,403]);expect(requests[1]).toEqual(requests[0]);
+  await page.getByRole('button',{name:/更新資料\s*：訂單詳情/}).click();
+  await expect(page.getByText(/已登記面交：/)).toBeVisible();await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();
+  await grant(capabilities);await page.getByRole('button',{name:'重試',exact:true}).click();
+  await expect(page.locator('.seller-announcement')).toContainText('已保存：確認收現金並完成面交。');
+  await expect(page.getByText('正在確認結果',{exact:true})).toHaveCount(0);expect(statuses).toEqual([200,403,200]);expect(requests[2]).toEqual(requests[0]);
+  await page.getByRole('button',{name:'重新確認權限',exact:true}).click();await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
+  const detail=SellerCheckoutOrderSchema.parse(await (await operator.request.get('/api/v1'+store.root+'/checkout-orders/'+cash.order_ref)).json());
+  expect(detail.payment_detail?.offline_payments).toHaveLength(1);expect(detail.meetup_handover).not.toBeNull();expect(detail.actions.complete_meetup).toBe(false);
+  expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:4,reserved:0});
+ }finally{await owner.close();await operator.close();await buyer.close();await store.close();}
 });

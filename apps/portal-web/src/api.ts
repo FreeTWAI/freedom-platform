@@ -3,6 +3,7 @@ import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import type { ProblemDetails, SessionPayload } from './types'
 import { beginRequest } from './request-activity'
+import { OfflineSettingsFieldErrorSchema } from '../../../contracts/guild-launchpad/v1/hosted-offline-payment'
 
 const API_BASE = '/api/v1'
 
@@ -418,7 +419,13 @@ function instanceCandidates(payload: unknown): InstanceSelectionCandidate[] | un
 }
 
 function fieldErrors(payload: unknown): {code: string; path: string}[] | undefined {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as {errors?: unknown}).errors)) return undefined
+  if (!payload || typeof payload !== 'object') return undefined
+  // Offline settings use the published `fields` contract. Keep other error consumers unchanged.
+  if (!Array.isArray((payload as {errors?: unknown}).errors)) {
+    if ((payload as {code?: unknown}).code !== 'offline_settings_invalid') return undefined
+    const parsed = OfflineSettingsFieldErrorSchema.array().min(1).max(20).safeParse((payload as {fields?: unknown}).fields)
+    return parsed.success ? parsed.data : undefined
+  }
   const errors = (payload as {errors: unknown[]}).errors.flatMap(item => {
     if (!item || typeof item !== 'object') return []
     const code = (item as {code?: unknown}).code
