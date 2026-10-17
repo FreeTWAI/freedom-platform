@@ -15724,8 +15724,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-02-shell-session-recovery.md",
-      "bytes": 7088,
-      "sha256": "0003048e5b23e23d9fdd3372eba851e6b4fe48579b9d6a5d18acebdc6f1d4414"
+      "bytes": 8198,
+      "sha256": "b061128d93b56fbd96692830389228f7c4e1ec91f08c5380e990c8fa68f9a967"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-03-commerce-reads-writes.md",
@@ -15739,8 +15739,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-05-tests-ci-guild-dev.md",
-      "bytes": 29994,
-      "sha256": "d56cc9bcb579f0e0dfb45fee108a5037c129a20248b7e397df40d24f05caf1ca"
+      "bytes": 30407,
+      "sha256": "8e94fa1b28c2733d2888f57327966256ef097a0584ef2f8b8338e30e6ec46350"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-06-release-rollback-pilot.md",
@@ -18339,8 +18339,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/state/useSupplierConsoleController.ts",
-      "bytes": 27919,
-      "sha256": "d07610cffccd087fdab8899ad1e3846b0e603209f537fd5f36c7b4ff315b2913"
+      "bytes": 28323,
+      "sha256": "0c32eab68d87d682cf884fced15503c80e0c3f69a89308d6b93e30df3cace48d"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/SupplierConsole.css",
@@ -22919,8 +22919,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-recovery.spec.ts",
-      "bytes": 50411,
-      "sha256": "93390e49be78e19a72a3280adca9dc89d186985a35ef534c2eb7185c98e8c8ef"
+      "bytes": 56117,
+      "sha256": "3bc8a97ba165de92ff58cb7b4cdbe077ac086650e40df45ada48c12319936b89"
     },
     {
       "path": "tests/e2e/supplier-console-visual.spec.ts",

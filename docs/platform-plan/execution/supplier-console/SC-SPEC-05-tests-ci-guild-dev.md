@@ -82,6 +82,7 @@
 | `SC-E2E-01`～`02` | `tests/e2e/supplier-console.spec.ts` | 純供貨從公會到重新登入的連續旅程；已開零售的同一個營運中心（AT-01、02、05、12、22、31、39、42） |
 | `SC-E2E-10`～`13` | `tests/e2e/supplier-console-cooperation.spec.ts` | 同名店、同意與不同意、改價與撤回同意、改條件後重新公開、唯讀成員（AT-04、12～16、33） |
 | `SC-E2E-20`～`26` | `tests/e2e/supplier-console-recovery.spec.ts` | 回應遺失後重試、未確認時離開、兩個分頁的 412、庫存低於預留、概覽讀取失敗、登出後晚到、權限撤回（AT-06、07、08、29、34、36、37） |
+| `SC-E2E-36` | `tests/e2e/supplier-console-recovery.spec.ts` | #888：已提交但 ACK 遺失／未抵達 × 真 API 撤 write 403／撤 read 404，原 method／path／key／body／If-Match 保留；期間禁止離開與新增，恢復權限的 GET 不結案，原生重試後單一 receipt／journal／版本效果。首次拒絕沿 `SC-E2E-33`／`35`，一般同鍵恢復沿 `SC-E2E-20`（AT-06、36、37） |
 | `SC-E2E-30`～`32` | `tests/e2e/supplier-console-navigation.spec.ts` | 事業切換時晚到的讀取、200 件商品的清單與返回位置、鍵盤與焦點（AT-03、09、10、30、41） |
 | `SC-E2E-40` | `tests/e2e/supplier-console-visual.spec.ts` | 五種寬度與五種外觀的版面檢查與截圖（AT-40） |
 | `SC-API-25`～`36` | `tests/runtime/supplier-console-report.test.ts` | S3 報表：台灣日界與期間、與清單同一定義、到期不結算、只含被查詢的供應商、owner 與能力、CSV 版面與防公式注入、10,000／10,001 列；`33` 另以未更新統計的隔離資料、原受限角色與實際 EXPLAIN buffer 次數防止每張訂單重掃全部行項，不以放寬逾時通過；失敗不變成 0 或部分 CSV、未設定時沿用原拒絕、畫面最多 200 家而 CSV 列全部店家（AT-04、29、30、32） |
