@@ -14,7 +14,7 @@
 | 可交付成果 | 已有程式／具日期證據 | 有限剩餘工作與啟用驗收 | 既有負責人與立即下一步 | 本列不等待／不冒稱 |
 | --- | --- | --- | --- | --- |
 | Supplier R1＋Commerce C1 商品旅程 | #862 的 S3 隨上述 schema171 部署；#864 的 D-11 已進主線。供貨、選品、照片與發布已有入口，完整 C1 仍依 EC-WP02／EC-AT03～10 核對。 | 接續 schema172 發布、素材 policy／容量與必要 flags；兩個普通帳號走新增商品→合作→選品照片→公開店面，保留未知結果、撤權、ON→OFF→ON 與原 R1 試用條件。C1 的變體、分類、優惠及必要 E 頁缺項仍交原工作包。 | `teddashh` 沿 #862／#864 供貨線與 #863 Commerce 線修實際缺口；root release owner 先接續[Supplier 發布工作](../supplier-console/work-plan.md#2026-10-17交付與啟用接點)，Ted 安排原定試用。 | 不等信用卡、物流、發票或 C3；不以 Seller M2 三頁或合成測試宣告完整 C1／R1。 |
-| **自有庫存商品：離線匯款／現金＋面交取貨** | #875 的買家 B04→B05→B07 已隨 `d39370a1` 部署但 checkout OFF。[#884](https://github.com/FreeTWAI/freedom-platform/issues/884) 賣家 UI 候選 `b3cc1323a` 已接原設定／訂單 API；本機雙帳號用正常 UI 完成設定→下單→確認收款／面交→重登讀回，含未知回覆原命令重試、412 後失讀、撤權恢復、取消與庫存回歸。 | 下一步是固定整合候選的獨立 review、完整同 attempt CI 與既有備份／還原後部署。啟用前先確認經同意店家的既有商店版本、離線 profile／准入設定，以及必要 flags 的實際影響範圍；沿既有控制機制，若無法確認是否只影響指定店家，先釐清具體設定。完成後在限定環境驗原 UI 旅程、quarantine／ON→OFF→ON 關閉恢復、未知結果與已付款庫存，再由 Ted 安排小量試用。現有 Commerce console／checkout／email 仍 OFF。 | `teddashh` 沿原 Commerce 線交付候選並修 review／旅程缺口；`detna-vibe-coding` 審精確整合 head，root release owner 承接合併、部署、限定設定及回退收據，Ted 安排同意店家與原定試用。 | 供貨行項目前仍回 `fulfilment_not_agreed`，不含供應商配送；不需 provider 帳號／keyring／journal，不等整個 M3。本機驗證不等於已上線或真人採用；「店家自行確認收款」不等於平台核實銀行入帳。 |
+| **自有庫存商品：離線匯款／現金＋面交取貨** | #875 的買家 B04→B05→B07 已隨 `d39370a1` 部署但 checkout OFF。[#884](https://github.com/FreeTWAI/freedom-platform/issues/884) 賣家 UI 候選 `b3cc1323a` 已接原設定／訂單 API；本機雙帳號用正常 UI 完成設定→下單→確認收款／面交→重登讀回，含未知回覆原命令重試、412 後失讀、撤權恢復、取消與庫存回歸。 | 候選仍按原 review、完整同 attempt CI 與備份／還原流程部署。啟用前唯一具體下一步是 root／Ted 產出下方[實際啟用範圍收據](#離線試用的實際啟用範圍)：對帳同意店家、版本／設定與該環境全部未撤銷准入，並明列 console／Supplier 的全域曝光。之後才按確定範圍驗原 UI 旅程、quarantine／ON→OFF→ON 關閉恢復、未知結果與已付款庫存，接原定小量試用。本次沒有操作 public；旗標現況仍以具日期部署收據為準。 | `teddashh` 沿原 Commerce 線交付候選並修 review／旅程缺口；`detna-vibe-coding` 審精確整合 head，root release owner 承接合併、部署、限定設定及回退收據，Ted 安排同意店家與原定試用。 | 供貨行項目前仍回 `fulfilment_not_agreed`，不含供應商配送；不需 provider 帳號／keyring／journal，不等整個 M3。本機驗證不等於已上線或真人採用；「店家自行確認收款」不等於平台核實銀行入帳。 |
 | 真實信用卡收款 | AIO 協定、帳戶、付款通知／查詢與例外核心已隨 #863 合併；16:42 收據沒有真實商家憑證或付款驗收。 | 先完成 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告對帳；接完原付款／退款工作，配置商家自身帳戶、keyring、外部效果 journal 與 callback；依 EC-SPEC-10 用明確 profile 驗證小額收款、未知結果、全／部分退款及還原隔離。 | `teddashh` 沿 EC-WP04 先核對現有人工退款紀錄與尚缺 provider 退款接線；root release owner／Ted 承接具名帳戶配置與原定真實驗收。 | 不把純協定向量當實際收款；#883 只約束使用 provider 憑證，不擋離線面交。 |
 | 第一條物流鏈 | 主線已有 Node／Worker 本地報價、配送規則、服務設定與 ECPay 協定；面交獨立可用，供貨履約未議定仍回 `fulfilment_not_agreed`。沒有已交付整條 shipment／標籤／貨態旅程的證據。 | EC-WP05 先固定一個自有商品、單一服務 profile，接配置→報價／下單→託運單→標籤／交寄→貨態與失敗恢復；若選 CVS，才把選店納入該鏈。保留原 EC-SPEC-05 驗收。 | `teddashh` 沿原 fulfilment 線先交 [#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的兩個 caller／profile 邊界修正，再交單一物流鏈；用憑證前一併處理 #883，root／Ted 安排 provider 驗收。 | #882 不是 Supplier R1／面交前置；不一次要求所有物流商、供應商代寄、發票與售後，也不默默取消它們。 |
 | 可攜營業後續（C3） | `855bdfff` 已有根目錄 MIT [LICENSE](../../../../LICENSE)；EC-SPEC-08 的 10/15「尚無 LICENSE」是歷史觀察。尚無可攜發行物／實際外移驗收收據。 | EC-WP09／10 先交一個無秘密的官方 profile 建置與路徑白名單、NOTICE／SBOM；再按原規格補單店匯出匯入、物件核對、單一寫入者與在途通知交接，完成自主安裝／升級／還原。 | `teddashh` 沿原 Commerce 整合線先定 EC-SPEC-08 的首個 profile 與可建置子集，Ted 確認 DC11 支援範圍；不另建商務核心。 | 不阻擋上述受控交付；MIT 不代表第三方／素材與發行清單已核完，C3 未驗收不能宣告整案結案。 |
@@ -27,6 +27,35 @@
 本輪隔離 PostgreSQL 容器與精確資料卷均已移除。首次欄位名稱／測試等待失敗及最後一次 server 啟動超時仍保留，
 不能以後續通過抹去原結果。這些是本機合成帳號的真 API 證據；整合 head 的 hosted CI、部署與真人試用仍各自待驗。#884 依原程式交付條件驗收結案，實際啟用與試用由本表持續追蹤。
 三個新 Issue 都沿既有作者工作線；精確來源的 review／CI、普通使用者旅程、provider／部署與真人採用各自記證據，不互相代替，也不把 Foundation 原 168 項需求改為 accepted。
+
+### 離線試用的實際啟用範圍
+
+固定來源 `9a23ea2a5112db6409b90e7835baa3548ee1b2a6` 的唯讀核對確認：
+[`createStoreAdmissionPort`](../../../../modules/agent-commerce/operations/admissions.ts) 對離線付款同樣要求
+`tenant_id + instance_id + environment` 的未撤銷准入；`local`／`staging` 對應 `sandbox`，`public` 對應 `live`。
+實際安裝版本的 capabilities 必須包含 `storefront@1.1.0` 全部能力，最新離線付款設定也須符合 host 列出的 profile。
+准入由同社群、不是該 tenant 活躍成員的獨立 active platform admin，沿既有 admin API、CSRF、Idempotency-Key 與 audit 建立／撤銷；
+店主補設定或升級版本不會自行取得准入。紀錄不會自動到期，也不綁單一付款方式；它本身不是店家同意的證明。
+
+[`runtime-settings.ts`](../../../../modules/agent-commerce/operations/runtime-settings.ts) 的 console／checkout 是環境全域旗標：
+checkout ON 需要 console ON，console ON 又需要 Guild Launchpad 與 Supplier console ON。
+[`platform-app.ts`](../../../../apps/platform-api/src/platform-app.ts) 的付款／面交設定路由只沿既有會員與商店權限，沒有套用上述准入名單；
+其他有權店家也可看到並修改自己的設定，不能宣稱 console 或 Supplier 只向試用店家曝光。
+新訂單仍經准入核對，離線首批可只列 `offline.bank_transfer.v1`／`offline.cash_on_meetup.v1`，不需 provider keyring／journal；
+匯款不自動限制交付方式，僅面交的試用仍須核對既有 shipping profile。
+
+**啟用前唯一下一步是實際範圍收據。** root release owner 與 Ted／同意店家沿現有控制機制，
+記下指定環境的已部署 release／schema、具名 tenant／instance 與同意依據、安裝版本能力、發布／自有庫存、付款及面交設定版本；
+並核對該 provider environment 的**全部未撤銷准入**，包括目前尚未具備設定或版本能力的店家，列明需由獨立 admin 執行的既有准入／撤銷操作。
+不能只列當下已可結帳的店家，因為已准入店家稍後補設定也可能開始接單。收據只需識別碼、版本與設定狀態，不需帳號內容或秘密。
+同一份收據須明列是否接受較廣的 console／Supplier 曝光；若要求連 UI 都只向具名店家開放，現有旗標沒有這項限制，
+public 保持 OFF，改用已隔離環境承接約定試用，或把這個具體缺口交回既有 owner 處理，不另建准入平台。
+
+[`public-commands.ts`](../../../../modules/agent-commerce/checkout/public-commands.ts) 與
+[`confirm.ts`](../../../../modules/agent-commerce/payments/offline/confirm.ts) 保留不同停止方式：
+checkout OFF／撤銷准入停止新訂單，console ON 且 quarantine OFF 時仍可處理既有義務；console OFF 會撤下賣家路由，quarantine 則拒絕收款／交付等效果。
+付款與配送設定 handler 沒有 quarantine gate，不能把它當成所有設定的寫入凍結。
+這次只核對來源，尚未取得上述實際範圍收據，沒有讀寫線上資料、憑證或旗標；也沒有改變 #884 原程式交付的完成條件。
 
 ## 1. 原則
 
