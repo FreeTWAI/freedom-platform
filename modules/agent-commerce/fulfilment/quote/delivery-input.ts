@@ -1,6 +1,7 @@
 import type {DeliveryFieldErrorCode,ShippingMethodRef} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {isOutlyingPostalPrefix} from '../rules/postal.js';
-import {normalizeMobile,validateCvsRecipient,validateHomeRecipient,validatePostalCode} from '../rules/recipient.js';
+import {normalizeMobile,validatePostalCode} from '../rules/recipient.js';
+import {validateEcpayCvsRecipient,validateEcpayHomeRecipient} from '../rules/ecpay-recipient.js';
 
 const METHODS=['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup'] as const;
 type Method=(typeof METHODS)[number];
@@ -93,7 +94,7 @@ export function parseCheckoutDelivery(raw:unknown):ParsedDelivery {
   let outlying=false;
   if(method.method==='home') {
     takeString(raw,'name',true,fields);takeString(raw,'postal_code',true,fields);takeString(raw,'address',true,fields);
-    const recipient=validateHomeRecipient(raw);
+    const recipient=validateEcpayHomeRecipient(raw);
     if(!recipient.ok)addRecipient(fields,recipient.errors);
     else outlying=recipient.recipient.outlying;
   } else if(method.method==='meetup') {
@@ -101,7 +102,7 @@ export function parseCheckoutDelivery(raw:unknown):ParsedDelivery {
     if(mobileOk){const mobile=normalizeMobile(raw.mobile);if(!mobile.ok)fields.push({path:'delivery.mobile',code:mobile.code});}
   } else {
     takeString(raw,'name',true,fields);
-    const recipient=validateCvsRecipient(raw);
+    const recipient=validateEcpayCvsRecipient(raw);
     if(!recipient.ok)addRecipient(fields,recipient.errors);
   }
   return fields.length?fail(fields):{ok:true,method:method.method,outlying};

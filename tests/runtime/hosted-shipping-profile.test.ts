@@ -4,7 +4,7 @@ import {after,before,beforeEach,describe,test} from 'node:test';
 import {shippingSettingsHarness,type ShippingSettingsHarness,type ShippingTestStore} from './module-registry-harness.js';
 import {SERVICE_KEYS} from '../../modules/agent-commerce/fulfilment/rules/types.js';
 import {canonicalJSON} from '../../modules/agent-commerce/checkout/terms.js';
-import {ShippingProfileViewSchema} from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
+import {ShippingProfileViewSchema,ShippingErrorSchema} from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
 
 describe('shipping profile versions',()=>{
   let h:ShippingSettingsHarness;
@@ -34,6 +34,24 @@ describe('shipping profile versions',()=>{
     const s=await h.store(),other=await h.store(),id=await location(other),retired=await location(s),returnOnly=await location(s,{ships:false});h.expect(await h.request(s,'POST',`/ship-from-locations/${retired}/retire`,{}));
     const input=h.document();input.services=[service(id),service(retired,SERVICE_KEYS[1]),service(returnOnly,SERVICE_KEYS[2])];
     const r=await h.request(s,'PUT','/shipping-profile',input);assert.equal(r.status,409);assert.equal(r.data.code,'ship_from_location_unavailable');assert.deepEqual(r.data.fields.map((f:{code:string})=>f.code),['not_found','retired','role_required']);assert.equal((await h.f.x.h.pool.query('SELECT count(*)::int n FROM commerce_shipping_profile_versions')).rows[0].n,0);
+  });
+  test('ECPay service selection rejects incompatible saved locations and attributes errors to the selected reference (#882)',async()=>{
+    const s=await h.store();await h.provider(s,[SERVICE_KEYS[0],SERVICE_KEYS[2]],true);
+    const cases:[string,string,string][]=[['sender_name','Amy','too_short'],['sender_name','星'.repeat(6),'too_long'],['sender_name','Echo','blocked_term'],['sender_name','Élodie','format'],['address','合成Echo路一百號','blocked_term'],['address','合成測試路 & 一號','format']];
+    for(const [field,value,code] of cases){
+      const id=await location(s,{[field]:value}),input={...h.document(),services:[service(id)]};
+      const r=await h.request(s,'PUT','/shipping-profile',input);
+      assert.equal(r.status,422);ShippingErrorSchema.parse(r.data);
+      assert.deepEqual(r.data.fields,[{path:'services.0.ship_from_location_id',code}]);
+      const stored=h.expect(await h.request(s,'GET',`/ship-from-locations/${id}`));assert.equal(stored[field],value);
+    }
+    assert.equal((await h.f.x.h.pool.query('SELECT count(*)::int n FROM commerce_shipping_profile_versions')).rows[0].n,0);
+    assert.equal((await h.f.x.h.pool.query("SELECT count(*)::int n FROM scoped_command_receipts WHERE operation='commerce.shipping_profile.save'")).rows[0].n,0);
+    // CVS transmits only sender name/mobile. A manual return address has no ECPay profile.
+    const id=await location(s,{address:'合成Echo路 & 一號'});
+    const cvs={...h.document(),services:[service(id,SERVICE_KEYS[2])]};
+    h.expect(await h.request(s,'PUT','/shipping-profile',cvs),201);
+    const good=await location(s);h.expect(await h.request(s,'PUT','/shipping-profile',{...h.document(),services:[service(good)]},'1'));
   });
   test('only activated retained sub-types in the route environment may be configured, including suspended services',async()=>{
     const s=await h.store(),id=await location(s),input=h.document();input.services=[service(id)];
