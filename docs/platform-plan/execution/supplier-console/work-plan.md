@@ -4,16 +4,16 @@
 
 ## 2026-10-17：交付與啟用接點
 
-本節按 `main@855bdfff` 與作者最新有日期的紀錄安排接續工作；下方批次／決策表保留原歷史狀態。
+本節按 #886 合併後的 `main@1ab95391` 與作者具日期的紀錄安排接續工作；下方批次／決策表保留原歷史狀態。
 [#862](https://github.com/FreeTWAI/freedom-platform/pull/862) 的 S3 已合併，schema171 已隨 `d39370a1` 在兩環境部署；
 [16:42 UTC 收據](../unified-foundation/rollout-commerce-buyer-2026-10-17.json)記錄 Supplier staging ON、production OFF，未宣告素材／D-11 已開啟。
 [#864](https://github.com/FreeTWAI/freedom-platform/pull/864) 的 D-11／schema172 已於 16:19 UTC 合併；作者 17:09 UTC 更新保留 CI 失敗與隔離演練證據，線上 172 rollout 仍待接續。
-後續 #880 的 CI 修正與 #876 文件已合併，不構成新的部署或真人試用收據。
+後續 #880 的 CI 修正、#876 文件與 #886 的離線賣家 UI／設定恢復已合併，不構成新的部署或真人試用收據。
 
 - **下一步與 owner：** `teddashh` 沿 #862／#864 原供貨線修正實際旅程缺口；root release owner 從修正後主線固定候選，接續既有 [WP-07](WP-07-release-evidence.md) 的 schema172、備份／還原與 staging 真 API／R2 驗收，記下素材 policy revision／容量與實際旗標。兩普通帳號驗新增／照片未知結果恢復、合作／撤權、選用／發布及 ON→OFF→ON；通過後同候選 production，D-13 仍採原 host 開關，不另造逐事業灰度。
 - **D-11 的驗收語意與有限 UI 缺口：** 選用時複製成賣家 Asset 並計入賣家容量，選用與發布都驗目前權限。撤權後保留既有公開快照，失效合作照片在下一次發布移除；不能要求既有公開快照立刻 404。賣家選用確認已說明此語意；`teddashh` 沿 #864 補供應商 `Material.tsx` 的撤銷授權、撤回素材與改回 `partners`：執行前清楚說明「既有已發布照片保留，店家重新發布後才移除失效來源」並確認，取消零寫入，見 [detna 既有啟用清單](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6240724810)。關旗標後私人合作照片路徑 404、已存預覽可開但照片可能不可讀；賣家自有照片與已發布快照仍可讀，回退 reader 必須保留 schema172 的資料能力。
 - **真正完成 R1：** Ted 依 [SC-SPEC-06 §5～7](SC-SPEC-06-release-rollback-pilot.md) 安排兩位供應商、兩位賣家與兩位非核心公會作者的原定試用；必要操作不能由 DB／API 代做，舊頁退場仍守原條件。CI／合成雙帳號通過只提供相應證據，不補造真人採用。
-- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。`teddashh` 的 [#884 自有庫存商品離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884) 已有 `b3cc1323a` 本機雙帳號真 API／UI 候選證據，整合候選的 review／CI、部署與真人試用各自保留，首批不含供應商配送。依既有 [host 旗標判斷](../../../../modules/agent-commerce/operations/runtime-settings.ts)，Commerce console ON 需要 Supplier console ON，兩者均非逐店曝光；Commerce 的 tenant／instance／environment 准入只限制新訂單，不限制這兩個主控台。root／Ted 下一步須在同一份 [Commerce 實際啟用範圍收據](../commerce/work-plan.md#離線試用的實際啟用範圍) 記清這項影響；本次沒有操作 public，也不變更 D-13 或 #884 的完成條件。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
+- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。`teddashh` 的 [#884 自有庫存商品離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884) 已隨 [#886](https://github.com/FreeTWAI/freedom-platform/pull/886)（`699cae20` → `main@1ab95391`）通過獨立 review、完整 CI 並合併；原本機雙帳號真 API／UI 證據保留，部署與真人試用仍待完成，首批不含供應商配送。依既有 [host 旗標判斷](../../../../modules/agent-commerce/operations/runtime-settings.ts)，Commerce console ON 需要 Supplier console ON，兩者均非逐店曝光；Commerce 的 tenant／instance／environment 准入只限制新訂單，不限制這兩個主控台。root／Ted 下一步須在同一份 [Commerce 實際啟用範圍收據](../commerce/work-plan.md#離線試用的實際啟用範圍) 記清這項影響；本次沒有操作 public，也不變更 D-13 或 #884 的完成條件。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
 
 這是原工作包的具體交接，沿本次既有整合／發布授權推進；不改歷史收據、未驗項或 Foundation 的 accepted 狀態。
 
