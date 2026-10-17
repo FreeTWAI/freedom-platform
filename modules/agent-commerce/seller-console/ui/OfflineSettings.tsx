@@ -45,7 +45,7 @@ function PaymentForm({c,initial,current,ready,fresh,close}:{c:Controller;initial
   const parsed=PaymentDraftSchema.safeParse(body);
   if(!parsed.success){setErrors(paymentErrors(parsed.error.issues.map(issue=>issue.path.join('.'))));return;}
   setErrors({});
-  const run=(verification:string)=>c.command({label:'線下收款設定',method:'put',path:c.root+'/offline-payment-settings',body:{...parsed.data,fresh_auth_verification_id:verification},ifMatch:initial.version??undefined,schema:OfflinePaymentSettingsViewSchema,sensitive:true,success:close,failed:cause=>{if(cause instanceof ApiError&&cause.code==='offline_settings_invalid')setErrors(paymentErrors((cause.errors??[]).map(error=>error.path)));},freshAgain:()=>fresh.start(run)});
+  const run=(verification:string)=>c.command({label:'線下收款設定',method:'put',path:c.root+'/offline-payment-settings',body:{...parsed.data,fresh_auth_verification_id:verification},ifMatch:initial.version??undefined,schema:OfflinePaymentSettingsViewSchema,sensitive:true,success:close,failed:cause=>{if(cause instanceof ApiError&&cause.code==='offline_settings_invalid')setErrors(paymentErrors((cause.errors??[]).map(error=>error.path)));},freshRecovery:resume=>fresh.start(resume),freshAgain:()=>fresh.start(run)});
   fresh.start(run);
  }}>
   {stale&&<p role="alert">設定已由其他操作變更。請捨棄這份輸入、重新讀取後再編輯；尚未覆寫設定。</p>}

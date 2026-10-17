@@ -8,7 +8,7 @@ import {createAccessLink} from '../../modules/agent-commerce/checkout/access.js'
 import {sweepDueCheckoutHolds} from '../../modules/agent-commerce/checkout/settlement.js';
 import {endOfflinePaymentWindow} from '../../modules/agent-commerce/payments/offline/window.js';
 import type {Pool} from 'pg';
-import {verifyPassword,taipeiDate,command} from './seller-console-fixture.js';
+import {verifyPassword,taipeiDate,command,expireNextSettingsProof} from './seller-console-fixture.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 
@@ -514,4 +514,44 @@ test('delegated seller sees masked settings and retains the original cash comman
   expect(detail.payment_detail?.offline_payments).toHaveLength(1);expect(detail.meetup_handover).not.toBeNull();expect(detail.actions.complete_meetup).toBe(false);
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:4,reserved:0});
  }finally{await owner.close();await operator.close();await buyer.close();await store.close();}
+});
+
+
+for(const outcome of ['committed','never committed','concurrent change'] as const)test(`expired settings proof recovers original command: ${outcome}`,async({browser,e2eAuthPool})=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true),context=await browser.newContext({baseURL:store.origin});
+ try{
+  await apiLogin(context,store.origin,store.seller.email);const page=await context.newPage();await sellerSettings(page,store);
+  const expired=await expireNextSettingsProof(page,e2eAuthPool);
+  const requests:{key:string;body:string|null;version:string|undefined;recovery:string|undefined}[]=[],statuses:number[]=[];
+  let lostRecovery=false;
+  await page.route('**/offline-payment-settings',async route=>{
+   if(route.request().method()!=='PUT'){await route.continue();return;}
+   const r=route.request(),headers=r.headers();requests.push({key:headers['idempotency-key'],body:r.postData(),version:headers['if-match'],recovery:headers['commerce-recovery-verification']});
+   if(requests.length===1&&outcome!=='committed'){await route.abort('failed');return;}
+   const response=await route.fetch();statuses.push(response.status());
+   if(requests.length===1)expect(response.status(),await response.text()).toBe(200);
+   if(requests.length===1||outcome==='committed'&&headers['commerce-recovery-verification']&&!lostRecovery){if(headers['commerce-recovery-verification'])lostRecovery=true;await route.abort('failed');}else await route.fulfill({response});
+  });
+  await page.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();const form=page.getByRole('form',{name:'線下收款設定',exact:true});
+  await form.getByLabel('匯款說明（選填）',{exact:true}).fill('續驗仍是同一份設定。');
+  await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+  await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();await expired();
+  if(outcome==='concurrent change')await store.saveOfflineFixture(2);
+  await page.getByRole('button',{name:'重試',exact:true}).click();await expect(page.getByRole('dialog',{name:'驗證身分'})).toBeVisible();
+  await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'驗證身分'})).not.toBeVisible();
+  await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();await expect(form.getByRole('button',{name:'儲存線下收款設定',exact:true})).toBeDisabled();
+  await expect(page.locator('.seller-announcement')).not.toContainText('已保存');expect(requests).toHaveLength(2);
+  await page.getByRole('button',{name:'重試',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+  if(outcome==='committed'){await expect.poll(()=>lostRecovery).toBe(true);await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();await page.getByRole('button',{name:'重試',exact:true}).click();}
+  if(outcome==='concurrent change'){
+   await expect(form.getByRole('alert')).toHaveText('設定已由其他操作變更。請捨棄這份輸入、重新讀取後再編輯；尚未覆寫設定。');await expect(page.locator('.seller-announcement')).not.toContainText('已保存');
+   expect(statuses.at(-1)).toBe(412);
+   const recovery=requests.at(-1)!.recovery;expect(recovery).toBeTruthy();expect((await e2eAuthPool.query('SELECT consumed_at IS NULL AS open FROM tenant_high_risk_verifications WHERE verification_id=$1',[recovery])).rows[0].open).toBe(true);
+  }else{await expect(page.locator('.seller-announcement')).toContainText('已保存：線下收款設定。');await expect(form).toHaveCount(0);}
+  const identity=({key,body,version}:typeof requests[number])=>({key,body,version});for(const request of requests)expect(identity(request)).toEqual(identity(requests[0]));
+  expect(requests.at(-1)!.recovery).toBeTruthy();expect(requests.at(-1)!.recovery).not.toBe(JSON.parse(requests[0].body!).fresh_auth_verification_id);
+  if(outcome==='committed')expect(requests.at(-1)!.recovery).toBe(requests.at(-2)!.recovery);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payment_settings WHERE instance_id=$1',[store.instance])).rows[0].n).toBe(2);
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM scoped_command_receipts WHERE operation='commerce.offline_payment_settings.save' AND idempotency_key=$1",[requests[0].key])).rows[0].n).toBe(outcome==='concurrent change'?0:1);
+ }finally{await context.close();await store.close();}
 });

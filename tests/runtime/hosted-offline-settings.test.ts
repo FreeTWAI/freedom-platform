@@ -12,6 +12,7 @@ import {Problem} from '../../packages/shared/problem.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {checkoutHarness, type CheckoutHarness} from './hosted-checkout-harness.js';
 import type {Session} from './module-registry-harness.js';
+import type {Pool} from 'pg';
 
 const SYLLABLES = ['青', '禾', '川', '石', '林', '安', '白', '南'] as const;
 const SCHEMA = 'freedom.offline-payment-settings/v1';
@@ -99,6 +100,97 @@ async function rows(instanceId: string) {
 async function verificationOpen(id: string) {
   return (await x.h.pool.query('SELECT consumed_at IS NULL AS open FROM tenant_high_risk_verifications WHERE verification_id=$1', [id])).rows[0].open === true;
 }
+async function shortProof(source:string,seconds:number,purpose?:string){
+  const id=randomUUID();
+  await x.h.pool.query(`INSERT INTO tenant_high_risk_verifications(verification_id,user_id,principal_id,session_hash,tenant_id,purpose,verified_at,expires_at)
+    SELECT $2,user_id,principal_id,session_hash,tenant_id,coalesce($4,purpose),clock_timestamp()-interval '1 day',clock_timestamp()+make_interval(secs=>$3)
+    FROM tenant_high_risk_verifications WHERE verification_id=$1`,[source,id,seconds,purpose??null]);
+  return id;
+}
+async function expireNaturally(id:string){
+  await x.h.pool.query('SELECT pg_sleep(greatest(0,extract(epoch FROM expires_at-clock_timestamp()))+0.02) FROM tenant_high_risk_verifications WHERE verification_id=$1',[id]);
+}
+
+for(const committed of [true,false])test(`expired original settings proof recovers ${committed?'committed':'never committed'} command without changing receipt identity`,async()=>{
+  const s=await shop(),source=await fresh(s.owner,s.tenantId),proof=await shortProof(source,committed?8:-1),body=command(proof,bank()),key=randomUUID();
+  if(committed)assert.equal((await put(s,s.owner,body,{'Idempotency-Key':key})).status,201);
+  await expireNaturally(proof);
+  assert.equal((await put(s,s.owner,body,{'Idempotency-Key':key})).data.code,'fresh_auth_required');
+  const recovery=await fresh(s.owner,s.tenantId),headers={'Idempotency-Key':key,'Commerce-Recovery-Verification':recovery};
+  const recovered=await put(s,s.owner,body,headers);assert.equal(recovered.status,201,JSON.stringify(recovered.data));
+  assert.equal(await verificationOpen(recovery),false);assert.equal(await verificationOpen(proof),false);
+  assert.deepEqual((await put(s,s.owner,body,headers)).data,recovered.data,'a second lost ACK must reuse the same recovery proof');
+  const another=await fresh(s.owner,s.tenantId),changedHeaders={...headers,'Commerce-Recovery-Verification':another};
+  for(const changed of [{body:command(proof,null),headers:changedHeaders},{body,headers:{...changedHeaders,'If-Match':'"1"'}}]){
+    const response=await put(s,s.owner,changed.body,changed.headers);assert.equal(response.data.code,'idempotency_conflict');
+    assert.equal(await verificationOpen(another),true,'digest conflict must roll back recovery consumption');
+  }
+  assert.equal((await put(s,s.owner,body,{...headers,'Idempotency-Key':randomUUID()})).data.code,'fresh_auth_required');
+  const otherOriginal=await shortProof(source,-1);
+  assert.equal((await put(s,s.owner,command(otherOriginal,null),{'Commerce-Recovery-Verification':recovery,'If-Match':'"1"'})).data.code,'fresh_auth_required');
+  const stored=await rows(s.instanceId);assert.equal(stored.settings.length,1);assert.equal(stored.events.length,1);assert.deepEqual(stored.receipts,[{response:{id:'1'}}]);
+  await x.h.pool.query("UPDATE tenants SET status='suspended' WHERE tenant_id=$1",[s.tenantId]);
+  assert.equal((await put(s,s.owner,body,changedHeaders)).data.code,'capability_denied');
+  assert.equal(await verificationOpen(another),true);
+});
+
+test('settings recovery keeps original scope and CAS and rolls back a proof that expires behind the final write lock',async()=>{
+  const s=await shop(),source=await fresh(s.owner,s.tenantId),expired=await shortProof(source,-1),body=command(expired,bank()),key=randomUUID();
+  const recovery=await fresh(s.owner,s.tenantId);
+  const admin=await grant(s,'admin',null),other=await shop();
+  for(const wrong of [await shortProof(await fresh(admin,s.tenantId),-1),await shortProof(await fresh(other.owner,other.tenantId),-1),await shortProof(source,-1,'tenant.ownership.propose')]){
+    assert.equal((await put(s,s.owner,command(wrong,null),{'Commerce-Recovery-Verification':recovery})).data.code,'fresh_auth_required');
+    assert.equal(await verificationOpen(recovery),true);
+  }
+  const wrongRecovery=await fresh(admin,s.tenantId);
+  assert.equal((await put(s,s.owner,body,{'Commerce-Recovery-Verification':wrongRecovery})).data.code,'fresh_auth_required');
+  assert.equal(await verificationOpen(wrongRecovery),true);
+  assert.equal((await put(s,s.owner,command(source,null))).status,201);
+  const conflicted=await put(s,s.owner,body,{'Idempotency-Key':key,'If-Match':'"9"','Commerce-Recovery-Verification':recovery});
+  assert.equal(conflicted.status,412);assert.equal(await verificationOpen(recovery),true);assert.equal(await verificationOpen(expired),true);
+  const short=await shortProof(recovery,5),lock=await x.h.pool.connect();
+  try{
+    await lock.query('BEGIN');await lock.query('LOCK TABLE commerce_offline_payment_settings IN EXCLUSIVE MODE');
+    const pending=put(s,s.owner,body,{'Idempotency-Key':key,'If-Match':'"1"','Commerce-Recovery-Verification':short});
+    let waiting=false;
+    for(let i=0;i<40&&!waiting;i++){
+      waiting=(await x.h.pool.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE 'INSERT INTO commerce_offline_payment_settings%') AS waiting")).rows[0].waiting;
+      if(!waiting)await new Promise(resolve=>setTimeout(resolve,25));
+    }
+    assert.equal(waiting,true,'the mutation must reach the final SQL write lock while its proof is still live');
+    await expireNaturally(short);await lock.query('COMMIT');
+    const failed=await pending;assert.equal(failed.data.code,'fresh_auth_required');
+  }finally{await lock.query('ROLLBACK');lock.release();}
+  assert.equal(await verificationOpen(short),true);assert.equal(await verificationOpen(expired),true);
+  assert.equal((await rows(s.instanceId)).settings.length,1);
+  assert.equal((await put(s,s.owner,body,{'Idempotency-Key':key,'If-Match':'"1"','Commerce-Recovery-Verification':recovery})).status,200);
+  assert.equal((await rows(s.instanceId)).settings.length,2);
+});
+
+for(const committed of [true,false])test(`recovery expiry at final settings projection ${committed?'withholds replay':'rolls back effects'}`,async()=>{
+  const s=await shop(),source=await fresh(s.owner,s.tenantId),proof=await shortProof(source,committed?8:-1),body=command(proof,bank()),key=randomUUID();
+  if(committed)assert.equal((await put(s,s.owner,body,{'Idempotency-Key':key})).status,201);
+  await expireNaturally(proof);
+  const recovery=await shortProof(source,5);let projections=0,delayed=false;
+  // Real RLS client/transaction and SQL clock; delay only the final projection,
+  // after receipt lookup/write and its revalidation have already completed.
+  const delayedPool=new Proxy(x.runtime,{get(target,property){
+    if(property!=='connect'){const value=Reflect.get(target,property,target);return typeof value==='function'?value.bind(target):value;}
+    return async()=>{const q=await target.connect();return new Proxy(q,{get(client,key){
+      if(key!=='query'){const value=Reflect.get(client,key,client);return typeof value==='function'?value.bind(client):value;}
+      return async(...args:any[])=>{
+        if(typeof args[0]==='string'&&args[0].startsWith('SELECT version::text,document,created_at FROM commerce_offline_payment_settings')&&++projections===(committed?1:2)){
+          delayed=true;await client.query('SELECT pg_sleep(greatest(0,extract(epoch FROM expires_at-clock_timestamp()))+0.02) FROM tenant_high_risk_verifications WHERE verification_id=$1',[recovery]);
+        }
+        return (client.query as (...args:any[])=>any)(...args);
+      };
+    }});};
+  }}) as Pool;
+  const failure=await saveOfflinePaymentSettings(delayedPool,await actorOf(s.owner),s.tenantId,s.instanceId,body,key,undefined,IMPLEMENTED_PROVIDER_PROFILES,recovery).then(()=>{throw Error('expired recovery disclosed a settings result');},problemOf);
+  assert.equal(delayed,true);assert.equal(failure.code,'fresh_auth_required');assert.equal(await verificationOpen(recovery),true);
+  const stored=await rows(s.instanceId);for(const entries of [stored.settings,stored.receipts,stored.events])assert.equal(entries.length,committed?1:0);
+  assert.equal(await verificationOpen(proof),!committed);
+});
 async function grant(s: Store, role: 'admin' | 'operator', caps: string[] | null) {
   const session = (await x.h.person(syntheticName(4))).session;
   const principal = await x.h.candidate(s.owner, session.user.user_id);
