@@ -71,6 +71,8 @@ export type RequestOptions = {
   arPattern?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
+  /** Current authorization for retrying the unchanged Commerce settings command. */
+  commerceRecoveryVerificationId?: string
   /** Unquoted positive decimal version for leave-v2 when the guild is a category primary. */
   preferenceVersion?: string
   /** Email-proven event participation only; never a member or general API credential. */
@@ -287,6 +289,11 @@ export class PortalClient {
     }
     if (options.ifMatch !== undefined) {
       headers['If-Match'] = quoteEtag(options.ifMatch)
+    }
+    if (options.commerceRecoveryVerificationId !== undefined) {
+      const settingsPath = /^\/tenants\/[0-9a-f-]{36}\/storefronts\/[0-9a-f-]{36}\/(?:offline-payment-settings|provider-accounts(?:\/[0-9a-f-]{36}\/services\/(?:payment|logistics|invoice)(?:\/(?:suspend|resume|retire|activation-payments))?)?)$/.test(path)
+      if (!settingsPath || !['POST','PUT'].includes(method) || !/^[0-9a-f-]{36}$/.test(options.commerceRecoveryVerificationId)) throw new ApiError({message:'收款設定驗證格式不正確。',status:400})
+      headers['Commerce-Recovery-Verification'] = options.commerceRecoveryVerificationId
     }
     if (options.preferenceVersion !== undefined) {
       headers['X-Preference-Version'] = options.preferenceVersion
