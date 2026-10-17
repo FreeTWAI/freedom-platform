@@ -20,8 +20,10 @@ on:
 # only after proving the exact clean integration tree and dependency closure.
 # The exact generated manifest
 # docs/platform-plan/verification/2026-09-20-file-inventory.json may accompany
-# qualifying edits and is not itself allowlisted. No other docs/platform-plan path is exempt.
-# Push, merge queue, rename, delete, unknown, governance, security, and
+# qualifying edits and is not itself allowlisted. Five exact informational
+# handoff documents retain governance-consumers after clean integration proof;
+# rollout JSON, specs and every other platform-plan path retain full selection.
+# Push, merge queue, rename, delete, unknown, other governance, security, and
 # shared-runtime changes keep the full set.
 # The selector, the verify aggregate, the runtime partition runner, the runtime aggregate and every node:test, pytest and browser suite runner come from job.workflow_sha, checked out at .freedom/trusted.
 # The pinned runner derives each file set from the candidate tree and requires complete per-file and per-case evidence.
