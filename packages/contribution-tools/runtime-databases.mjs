@@ -3,6 +3,61 @@ import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 import fs from 'node:fs';
 
+// Optional observation only: never awaited by DROP or used as cleanup evidence.
+// One separate, short-lived read-only connection; no payloads or identities leave it.
+export function observeRuntimeDrop({ connection, pid, owner, application, database, elapsed, emit }) {
+  let observer, watchdog, stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(timer); clearTimeout(watchdog);
+    try { observer?.connection?.stream?.destroy(); } catch { /* diagnostic only */ }
+  };
+  const publish = row => {
+    if (stopped) return;
+    try { emit(runtimeDropObservation(row, elapsed())); } catch { /* diagnostic only */ }
+  };
+  const timer = setTimeout(() => {
+    watchdog = setTimeout(() => { publish(); stop(); }, 500);
+    watchdog.unref();
+    void (async () => {
+      try {
+        observer = connection(application + '_observe', { connectionTimeoutMillis: 200,
+          query_timeout: 200, statement_timeout: 200, options: '-c default_transaction_read_only=on' });
+        await observer.connect();
+        if (stopped) return;
+        const result = await observer.query({ text: `SELECT a.state, a.wait_event_type, a.wait_event,
+          cardinality(pg_blocking_pids(a.pid)) AS blocker_count,
+          (SELECT count(*)::int FROM pg_locks l WHERE l.pid=a.pid AND l.granted) AS locks_granted,
+          (SELECT count(*)::int FROM pg_locks l WHERE l.pid=a.pid AND NOT l.granted) AS locks_waiting
+          FROM pg_stat_activity a WHERE a.pid=$1 AND a.usename=$2 AND a.application_name=$3
+          AND current_database()=$4 AND current_user=$2 AND session_user=$2`,
+          values: [pid, owner, application, database], query_timeout: 200 });
+        publish(result.rows.length === 1 ? result.rows[0] : undefined);
+      } catch { publish(); }
+      finally { stop(); }
+    })();
+  }, 8000);
+  timer.unref();
+  return stop;
+}
+
+export function runtimeDropObservation(row, elapsedMs) {
+  const pick = (value, allowed) => value === null ? null : allowed.includes(value) ? value : 'other';
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 1000) : null;
+  return { event: 'runtime_database_cleanup', phase: 'drop_observation',
+    result: row ? 'observed' : 'unavailable',
+    elapsed_ms: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(20000, Math.floor(elapsedMs))) : 0,
+    state: pick(row?.state, ['active', 'idle', 'idle in transaction', 'idle in transaction (aborted)', 'disabled']),
+    wait_event_type: pick(row?.wait_event_type, ['Activity', 'BufferPin', 'Client', 'Extension', 'IO', 'IPC', 'Lock', 'LWLock', 'Timeout']),
+    wait_event: pick(row?.wait_event, ['CheckpointDone', 'CheckpointStart', 'ProcSignalBarrier',
+      'DataFileRead', 'DataFileWrite', 'DataFileSync', 'DataFileImmediateSync', 'DataFileExtend',
+      'DataFileTruncate', 'WALSync', 'WALWrite', 'ClientRead', 'ClientWrite',
+      'relation', 'extend', 'page', 'tuple', 'transactionid', 'virtualxid', 'object', 'advisory']),
+    blocker_count: count(row?.blocker_count), locks_granted: count(row?.locks_granted),
+    locks_waiting: count(row?.locks_waiting) };
+}
+
 // Only bounded, reviewed vocabulary reaches CI logs. Never serialize errors,
 // connection URLs, database names, SQL, or server detail/message fields.
 export function runtimeCleanupDiagnostic(phase, result, error, elapsedMs) {
@@ -79,7 +134,7 @@ export async function createRuntimeDatabases(baseUrl, count, provisionTimeoutMs 
     const started = performance.now();
     const deadline = started + 20_000;
     let phase = 'owner_close';
-    const diagnostic = (result, error) => {
+    const writeDiagnostic = value => {
       // Initialize Node's lazy pipe handle before raw writes. Otherwise an inherited
       // blocking fd can stall before Node configures the pipe as nonblocking.
       // A tiny synchronous fd write makes EPIPE catchable here; stream.write
@@ -92,10 +147,11 @@ export async function createRuntimeDatabases(baseUrl, count, provisionTimeoutMs 
         if (process.platform !== 'linux') return;
         const flags = /^flags:\s+([0-7]+)$/m.exec(fs.readFileSync(`/proc/self/fdinfo/${fd}`, 'utf8'));
         if (!flags || !(Number.parseInt(flags[1], 8) & fs.constants.O_NONBLOCK)) return;
-        fs.writeSync(fd, JSON.stringify(runtimeCleanupDiagnostic(phase, result, error, performance.now() - started)) + '\n');
+        fs.writeSync(fd, JSON.stringify(value) + '\n');
       }
       catch { /* A closed diagnostic stream cannot change cleanup semantics. */ }
     };
+    const diagnostic = (result, error) => writeDiagnostic(runtimeCleanupDiagnostic(phase, result, error, performance.now() - started));
     const remaining = () => Math.floor(deadline - performance.now());
     async function boundedQuery(c, text, values = [], maximum = 2000, reserve = 0) {
       const milliseconds = Math.min(maximum, remaining() - reserve - 100);
@@ -154,8 +210,12 @@ export async function createRuntimeDatabases(baseUrl, count, provisionTimeoutMs 
         // exceed six seconds even when the checkpoint has already completed.
         const dropBudget = Math.floor((remaining() - 4000) / (names.length - index));
         phase = 'drop';
+        const stopObservation = observeRuntimeDrop({ connection, pid: cleanerPid, owner,
+          application: cleanupApplication, database: new URL(baseUrl).pathname.slice(1),
+          elapsed: () => performance.now() - started, emit: writeDiagnostic });
         try { await boundedQuery(cleaner, `DROP DATABASE ${quote(name)}`, [], dropBudget); }
         catch (error) { diagnostic('unknown_ack', error); /* Fresh reconciliation is still required. */ }
+        finally { stopObservation(); }
       }
     } catch (error) { okay = false; diagnostic('failed', error); }
     phase = 'cleaner_close';
