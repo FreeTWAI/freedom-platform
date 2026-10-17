@@ -2,6 +2,21 @@
 
 整體進度追蹤沿用 [#234](https://github.com/FreeTWAI/freedom-platform/issues/234)，這裡只記錄工作怎麼切、誰改哪些檔案、彼此依賴與待決事項，不另開進度系統。
 
+## 2026-10-17：交付與啟用接點
+
+本節按 `main@855bdfff` 與作者最新有日期的紀錄安排接續工作；下方批次／決策表保留原歷史狀態。
+[#862](https://github.com/FreeTWAI/freedom-platform/pull/862) 的 S3 已合併，schema171 已隨 `d39370a1` 在兩環境部署；
+[16:42 UTC 收據](../unified-foundation/rollout-commerce-buyer-2026-10-17.json)記錄 Supplier staging ON、production OFF，未宣告素材／D-11 已開啟。
+[#864](https://github.com/FreeTWAI/freedom-platform/pull/864) 的 D-11／schema172 已於 16:19 UTC 合併；作者 17:09 UTC 更新保留 CI 失敗與隔離演練證據，線上 172 rollout 仍待接續。
+後續 #880 的 CI 修正與 #876 文件已合併，不構成新的部署或真人試用收據。
+
+- **下一步與 owner：** `teddashh` 沿 #862／#864 原供貨線修正實際旅程缺口；root release owner 從修正後主線固定候選，接續既有 [WP-07](WP-07-release-evidence.md) 的 schema172、備份／還原與 staging 真 API／R2 驗收，記下素材 policy revision／容量與實際旗標。兩普通帳號驗新增／照片未知結果恢復、合作／撤權、選用／發布及 ON→OFF→ON；通過後同候選 production，D-13 仍採原 host 開關，不另造逐事業灰度。
+- **D-11 的驗收語意：** 選用時複製成賣家 Asset 並計入賣家容量，選用與發布都驗目前權限。撤權後保留既有公開快照，失效合作照片在下一次發布移除；不能要求既有公開快照立刻 404。關旗標後私人合作照片路徑 404、已存預覽可開但照片可能不可讀；賣家自有照片與已發布快照仍可讀，回退 reader 必須保留 schema172 的資料能力。
+- **真正完成 R1：** Ted 依 [SC-SPEC-06 §5～7](SC-SPEC-06-release-rollback-pilot.md) 安排兩位供應商、兩位賣家與兩位非核心公會作者的原定試用；必要操作不能由 DB／API 代做，舊頁退場仍守原條件。CI／合成雙帳號通過只提供相應證據，不補造真人採用。
+- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。下一個普通店主產品缺口是已指派 `teddashh` 的 [#884 離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884)；賣家 API 已有不等於普通 UI 可用。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
+
+這是原工作包的具體交接，沿本次既有整合／發布授權推進；不改歷史收據、未驗項或 Foundation 的 accepted 狀態。
+
 ## 1. 工作包與批次
 
 | 工作包 | 本案內容 | 批次 | 直接依賴 |
