@@ -15,10 +15,12 @@ import {
   logisticsSubTypeOfService,
   isKnownPostalPrefix,
   isOutlyingPostalPrefix,
-  validateRecipientName,
+  validateRecipientName as validateSharedRecipientName,
+  validateHomeRecipient as validateSharedHomeRecipient,
+  validateEcpayRecipientName as validateRecipientName,
   normalizeMobile,
-  validateHomeRecipient,
-  validateCvsRecipient,
+  validateEcpayHomeRecipient as validateHomeRecipient,
+  validateEcpayCvsRecipient as validateCvsRecipient,
   normalizeCvsStoreSelection,
   computeShipBy,
   planDelivery,
@@ -41,6 +43,7 @@ import {
   type LogisticsEventInput,
   type LogisticsEventOutcome,
 } from '../../modules/agent-commerce/fulfilment/rules/index.js';
+import {parseCheckoutDelivery} from '../../modules/agent-commerce/fulfilment/quote/delivery-input.js';
 import { ECPAY_LOGISTICS_STATUS_TABLE } from '../../modules/agent-commerce/fulfilment/rules/tracking.js';
 
 // --- Fixture Builders ---
@@ -2810,4 +2813,45 @@ describe('10. Immutability / Frozen results', () => {
       exception: 'lost',
     });
   });
+});
+
+
+describe('shared recipient data and ECPay profile boundary (#882)', () => {
+  it('preserves real names and addresses without applying provider-specific restrictions', () => {
+    for (const name of ['Echo', 'Amy', 'Élodie O’Connor', '陳·美玲', 'محمد علي']) {
+      assert.deepEqual(validateSharedRecipientName(name), {ok: true, value: name});
+    }
+    const input = {name: 'Echo', mobile: '0912345678', postal_code: '100', address: 'Echo路1號 & 2樓; 西側'};
+    const result = validateSharedHomeRecipient(input);
+    assert.equal(result.ok, true);
+    if (result.ok) { assert.equal(result.recipient.name, input.name); assert.equal(result.recipient.address, input.address); }
+    assert.deepEqual(validateHomeRecipient(input), {ok: false, errors: [
+      {field: 'name', code: 'blocked_term'}, {field: 'address', code: 'format'},
+    ]});
+    assert.equal(validateSharedHomeRecipient({...input, name: 'Amy', address: '合成測試路一號'}).ok, true);
+    assert.deepEqual(validateHomeRecipient({...input, name: 'Amy', address: '合成測試路一號'}), {ok: false, errors: [
+      {field: 'name', code: 'too_short'},
+    ]});
+  });
+  it('retains common type, length, control, malformed-text and markup rejection', () => {
+    for (const name of [42, 'A1', '王\u0001明', '王\ud800', '王\u202e明', '<王明>']) assert.deepEqual(validateSharedRecipientName(name), {ok: false, code: 'format'});
+    assert.deepEqual(validateSharedRecipientName('王'.repeat(41)), {ok: false, code: 'too_long'});
+    assert.equal(validateSharedRecipientName('𠮷'.repeat(40)).ok, true);
+    assert.equal(validateSharedHomeRecipient({name:'王',mobile:'0912345678',postal_code:'100',address:'一號'}).ok,true);
+    const input = {name: '王小明', mobile: '0912345678', postal_code: '100', address: '合成測試路一號'};
+    for (const address of [42, '一\u0001號', '一\ud800號', '一\u202e號', '<一號>']) assert.deepEqual(validateSharedHomeRecipient({...input,address}), {ok: false, errors: [{field:'address',code:'format'}]});
+    assert.equal(validateSharedHomeRecipient({...input,address:'𠮷'.repeat(120)}).ok,true);
+    assert.deepEqual(validateSharedHomeRecipient({...input,address:'路'.repeat(121)}), {ok:false,errors:[{field:'address',code:'too_long'}]});
+  });
+});
+
+it('checkout applies the ECPay profile only to home/CVS and keeps meetup independent (#882)', () => {
+  const recipient = {name:'Echo',mobile:'0912345678',postal_code:'100',address:'合成測試路一百號'};
+  for (const method of ['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C']) {
+    const input=method==='home'?{...recipient,method}:{name:recipient.name,mobile:recipient.mobile,method};
+    assert.deepEqual(parseCheckoutDelivery(input),{ok:false,fields:[{path:'delivery.name',code:'blocked_term'}]});
+    assert.equal(parseCheckoutDelivery({...input,name:'王小明'}).ok,true);
+  }
+  assert.deepEqual(parseCheckoutDelivery({method:'meetup',name:recipient.name,mobile:recipient.mobile}),{ok:true,method:'meetup',outlying:false});
+  assert.deepEqual(parseCheckoutDelivery({method:'meetup',name:'Élodie',mobile:recipient.mobile}),{ok:true,method:'meetup',outlying:false});
 });

@@ -20,13 +20,24 @@ describe('shipping locations',()=>{
     const full=(s:string)=>s.replace(/[0-9]/g,ch=>String.fromCharCode(ch.charCodeAt(0)+0xfee0));
     const r=await create(s,{...input,label:' '+input.label+' ',mobile:full('+886'+input.mobile.slice(1)),postal_code:full(input.postal_code)});
     assert.equal(r.data.mobile,input.mobile);assert.equal(r.data.postal_code,input.postal_code);assert.equal(r.data.label,input.label);
-    const cases:[string,string,string][]=[['sender_name',' ','required'],['sender_name','星','too_short'],['sender_name','星'.repeat(6),'too_long'],['sender_name','A1','format'],['sender_name','Echo','blocked_term'],['mobile',' ','required'],['mobile','123','format'],['postal_code',' ','required'],['postal_code','12','format'],['postal_code','000','unknown_postal_code'],['address',' ','required'],['address','星禾路','too_short'],['address','星'.repeat(61),'too_long'],['address','合成星禾路<一號','format'],['address','合成Echo路一百號','blocked_term'],['label',' ','required'],['label','倉'.repeat(41),'too_long'],['label','星\u0001禾','format'],['label','\t合成倉','format'],['label','星\u001f禾','format'],['label','星\u007f禾','format'],['address','合成星\u0001禾路一號','format'],['address','合成星\u001f禾路一號','format'],['address','合成星\u007f禾路一號','format'],['address','合成星\t禾路一號','format']];
+    const cases:[string,string,string][]=[['sender_name',' ','required'],['sender_name','星','too_short'],['sender_name','星'.repeat(11),'too_long'],['sender_name','A1','format'],['mobile',' ','required'],['mobile','123','format'],['postal_code',' ','required'],['postal_code','12','format'],['postal_code','000','unknown_postal_code'],['address',' ','required'],['address','星禾路','too_short'],['address','星'.repeat(61),'too_long'],['address','合成星禾路<一號','format'],['label',' ','required'],['label','倉'.repeat(41),'too_long'],['label','星\u0001禾','format'],['label','\t合成倉','format'],['label','星\u001f禾','format'],['label','星\u007f禾','format'],['address','合成星\u0001禾路一號','format'],['address','合成星\u001f禾路一號','format'],['address','合成星\u007f禾路一號','format'],['address','合成星\t禾路一號','format']];
     for(const [path,value,code] of cases){const e=await create(s,{...input,[path]:value},422);ShippingErrorSchema.parse(e.data);assert(e.data.fields.some((f:{path:string;code:string})=>f.path===path&&f.code===code),JSON.stringify(e.data));}
     const errors=await create(s,{...input,label:' ',sender_name:'X',mobile:'1',postal_code:'000',address:'短',ships:false,receives_returns:false},422);assert.equal(errors.data.fields.length,6);
     await retire(s,r.data.location_id);await receipts();
     const elsewhere=JSON.stringify({logs,events:(await h.f.x.h.pool.query('SELECT detail FROM commerce_control_events')).rows,journal:[...h.f.journal.objects.values()]});
     for(const value of [input.label,input.sender_name,input.mobile,input.address])assert.equal(elsewhere.includes(value),false);
     assert.equal((await h.f.x.h.pool.query("SELECT count(*)::int n FROM commerce_ship_from_locations WHERE instance_id=$1",[s.instanceId])).rows[0].n,1);
+  });
+  test('shared locations preserve provider-blocked and international names without choosing logistics (#882)',async()=>{
+    const s=await h.store();
+    for(const sender_name of ['Echo','星禾','星'.repeat(6),'Élodie','𠮷'.repeat(10)]){
+      const input={...h.locationInput(),sender_name,address:'合成Echo路 & 西側; 一號'};
+      const row=(await create(s,input)).data;
+      assert.equal(row.sender_name,input.sender_name);assert.equal(row.address,input.address);
+      const stored=h.expect(await h.request(s,'GET',`/ship-from-locations/${row.location_id}`));
+      assert.equal(stored.sender_name,input.sender_name);assert.equal(stored.address,input.address);
+    }
+    assert.equal((await h.f.x.h.pool.query('SELECT count(*)::int n FROM commerce_shipping_profile_versions')).rows[0].n,0);
   });
   test('the platform JSON guard rejects raw NUL and lone surrogates in each sender text field before location or profile writes',async()=>{
     const s=await h.store(),input=h.locationInput(),results:{path:string;character:string;status:number;code:string}[]=[];
@@ -59,6 +70,14 @@ describe('shipping locations',()=>{
     h.expect(await h.request(s,'PUT','/shipping-profile',profile),201);
     const count=async()=>(await h.f.x.h.pool.query('SELECT count(*)::int n FROM commerce_ship_from_locations')).rows[0].n;
     for(const role of ['ships','receives_returns']){const r=await create(s,{...h.locationInput(),[role]:false,replaces_location_id:old.location_id},409);assert.equal(r.data.code,'ship_from_location_role_required');assert.equal(r.data.fields.length,role==='ships'?2:1);assert.equal(await count(),1);}
+    const beforeReceipts=(await h.f.x.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts')).rows[0].n;
+    const incompatible=await create(s,{...h.locationInput(),sender_name:'Echo',replaces_location_id:old.location_id},422);
+    assert.equal(incompatible.data.code,'shipping_input_invalid');
+    assert.deepEqual(incompatible.data.fields,[{path:'services.0.ship_from_location_id',code:'blocked_term'},{path:'services.1.ship_from_location_id',code:'blocked_term'}]);
+    assert.equal(await count(),1);
+    assert.equal((await h.f.x.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts')).rows[0].n,beforeReceipts);
+    assert.equal((await h.f.x.h.pool.query('SELECT retired_at FROM commerce_ship_from_locations WHERE location_id=$1',[old.location_id])).rows[0].retired_at,null);
+    const unchanged=h.expect(await h.request(s,'GET','/shipping-profile'));assert.equal(unchanged.version,'1');assert.equal(unchanged.profile.services[0].ship_from_location_id,old.location_id);
     const denied=await retire(s,old.location_id,409);assert.equal(denied.data.code,'ship_from_location_in_use');assert.equal(denied.data.fields.length,3);
     const replacement=(await create(s,{...h.locationInput(),replaces_location_id:old.location_id})).data;
     const current=h.expect(await h.request(s,'GET','/shipping-profile'));assert.equal(current.version,'2');for(const service of current.profile.services)assert.equal(service.ship_from_location_id,replacement.location_id);assert.equal(current.profile.drop_ship.return_location_id,replacement.location_id);assert(replacement.in_use);

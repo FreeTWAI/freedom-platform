@@ -67,14 +67,16 @@ FulfillmentOrder 與 Shipment 是既有訂單行項與配置（EC-SPEC-03）的�
 ### 2.1 寄件地與退回地址（ShipFromLocation）
 
 - 欄位：名稱（給自己看，1～40 字）、寄件人姓名、手機、郵遞區號、地址、用途（寄件、收退回，可兩者皆是）。綠界的寄件人電話只用手機（`SenderCellPhone`），不收市話。
-- 寄件人姓名依綠界規則：4～10 字元（中文算 2、英文算 1；即 2～5 個中文字或 4～10 個英文字母），不含數字、表情與符號 [8809][7414]。店到店（C2C）必須是寄件人本人的真實姓名，因為未取件退回時要在門市出示證件 [8809]，設定頁要寫明這一點。
+- 共用收件格式的姓名／地址上限為 40／120；寄件地 caller 另保留 migration170 的目前儲存界線：姓名 2～10、地址 7～60 個 Unicode code points（與 PostgreSQL `char_length` 一致，含非 BMP 字元）；在 SQL 前回既有 422 欄位錯誤，不宣稱已支援 wire 上限 40／120，也不修改歷史 migration。姓名允許不同文字、空格、姓名分隔符，保留必要型別、長度、控制字元、malformed UTF-16 與安全檢查。這不驗證真人身分，也不為物流商禁詞改寫資料。以下綠界限制只在選入 `ecpay.logistics.domestic.v1` 服務時套用（#882）。
+- 選用綠界的寄件人姓名依綠界規則：4～10 字元（中文算 2、英文算 1；即 2～5 個中文字或 4～10 個英文字母），不含數字、表情與符號 [8809][7414]。店到店（C2C）必須是寄件人本人的真實姓名，因為未取件退回時要在門市出示證件 [8809]，設定頁要寫明這一點。
 - 手機：`09` 開頭、10 位數字；7-ELEVEN 與萊爾富店到店必填 [8809]。
 - 地址：宅配寄件地超過 6 字、最多 60 字 [7414]；不可含 `<`、`>`、`&` 與控制字元，前後不留空白（綠界不允許 HTML 標籤 [7400]）。
-- 姓名與地址還要通過綠界 CDN 的字詞檢查：值裡出現 `echo`、`tftp`、`tracert`、`cd/`、`;`、`|`、反引號等指令字詞或字元，整個請求會被 CDN 擋下 [7400]。我們用比綠界更嚴格的 `findCdnBlockedTerm`（commerce-providers）在設定頁儲存時就檢查，命中就請出貨者改寫（例如英文名 `Echo` 改填證件上的中文姓名）。
+- 姓名與地址還要通過綠界 CDN 的字詞檢查：值裡出現 `echo`、`tftp`、`tracert`、`cd/`、`;`、`|`、反引號等指令字詞或字元，整個請求會被 CDN 擋下 [7400]。以既有 `findCdnBlockedTerm`（commerce-providers）在 profile 選入服務時檢查該服務會送出的姓名／地址；共用寄件地可保存 `Echo`，不靜默替換成其他姓名。宅配檢查姓名、手機、郵遞區號與地址；店到店只送姓名／手機。request builder 在外送前仍獨立驗證。
 - 每次修改新增一列，舊列標 `retired_at`；列本身不可改。訂單、代出貨同意與 shipment 指向建立當下那一列，所以歷史不會被改寫（計畫 Supplier v1.1 §4.2）。
 - 修改就是「取代」：新列記下 `replaces_location_id`，舊列在同一個命令退役。目前的出貨設定（§2.3）引用舊列時，同一個命令產生新的出貨設定版本，把引用換成新列；新列要保有被引用的用途（被服務引用要能寄件，被當成退回地址要能收退回），否則整個命令不生效。目前出貨設定仍引用的寄件地不能單獨退役。每間店未退役的寄件地最多 20 個。
 - 儲存前用規則庫的 `validateHomeRecipient` 檢查並正規化（NFKC、`+886` 手機改成 `09` 開頭、郵遞區號前三碼要在已知清單裡），存正規化後的值。
-- 命令本文含 NUL 或單獨的 surrogate 時，共用命令邊界（`packages/scoped-commands`）在授權與領域之前回 400 `invalid_command_json`，什麼都不寫；這是全平台規則。其他控制字元與欄位錯誤合併成一個 422 `shipping_input_invalid`。`validateHomeRecipient` 本身清除 NUL、拒絕單獨 surrogate 的行為不變，由規則庫的測試涵蓋。
+- 命令本文含 NUL 或單獨的 surrogate 時，共用命令邊界（`packages/scoped-commands`）在授權與領域之前回 400 `invalid_command_json`，什麼都不寫；這是全平台規則。其他控制字元與欄位錯誤合併成一個 422 `shipping_input_invalid`。共用 `validateHomeRecipient` 拒絕控制字元與單獨 surrogate；明確的 `validateEcpayHomeRecipient` 保留原 provider 正規化及負向案例。
+- 選入服務時，不相容的寄件地回 422 `shipping_input_invalid`，欄位指向 `services.<index>.ship_from_location_id` 並保留具體格式／長度／禁詞 code。取代已引用地址時同樣重驗；失敗須一起回滾新地址、舊地址退役、新 profile 版本與 receipt。單獨的人工退回地址與面交不因此被套用 ECPay 規則。
 - 寫入命令的 receipt 只存寄件地 ID，回應在命令之後重新讀取；寄件地的值不進 receipt、控制事件與日誌。
 - 個資：tenant RLS，只有該事業有 `store:manage` 或 `store:fulfil` 的人看得到完整內容（寫入只限 `store:manage`）；不進公會區塊、公開頁、分享卡片、journal 與日誌（SC-SPEC-07 SL-01）。
 - 退回地址只在需要時揭露：代出貨同意裡給賣家看（賣家要知道退貨寄去哪），售後核准後給該買家看（EC-SPEC-06）。

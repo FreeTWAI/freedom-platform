@@ -15409,8 +15409,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-05-fulfilment.md",
-      "bytes": 87534,
-      "sha256": "9e120561b505152c3fc15e173bbd8ce96fd4e4af0db783c139a33f45c9839ca5"
+      "bytes": 88733,
+      "sha256": "688608a187d396b591cd08e14c403c1b2b9b783992e351806ba623c82222d59c"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
@@ -17369,8 +17369,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/README.md",
-      "bytes": 29041,
-      "sha256": "4fd6c839f88b37206267b44d42ce4762b89bd2899fed72e778eb9bdeee082ef9"
+      "bytes": 31161,
+      "sha256": "cceb17ab6969486d095c30f6c01803c2eec966b08fef660f8c2a359ab8b2fb40"
     },
     {
       "path": "modules/agent-commerce/fulfilment/freedom.module.json",
@@ -17379,8 +17379,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/delivery-input.ts",
-      "bytes": 7293,
-      "sha256": "dd5f8a9e6b3d64a3e4b207bf286cdd6044cf976eef36c003ccf5b022c5c261db"
+      "bytes": 7358,
+      "sha256": "a8178077c357aa843b95fc6bfa6d8ec36157b7cdf8d76bcdbeb3ea136655b63e"
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/ecpay.ts",
@@ -17398,14 +17398,19 @@
       "sha256": "d6bd57570fd237054cd680b5f2e7f4249962546a50dbce774e02e1796ce7336b"
     },
     {
+      "path": "modules/agent-commerce/fulfilment/rules/ecpay-recipient.ts",
+      "bytes": 4861,
+      "sha256": "437996ff794786b4b71e5a7f8ec2ffc50b2498b9624e113295787dfa7743d34b"
+    },
+    {
       "path": "modules/agent-commerce/fulfilment/rules/errors.ts",
       "bytes": 693,
       "sha256": "4d62868abb1a1b4c06ee03ccf35eb68829688102d4dba0617d7a04b049fbd59a"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/index.ts",
-      "bytes": 1721,
-      "sha256": "63a6d7a6ab1a5d6e77a459dcd29184d55604acf72c3c6dbdf8d4c650d5b8f693"
+      "bytes": 1872,
+      "sha256": "c1875eb8d169f19023dfdaeb0877555a0256a0cbf87f637d8927acea031b3938"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/plan.ts",
@@ -17419,8 +17424,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/recipient.ts",
-      "bytes": 12058,
-      "sha256": "a69adf65c3b7dd1576a70f6b9d709c5850f1cad98c740836bc0b783bc2f6bd7d"
+      "bytes": 11246,
+      "sha256": "413fb0a4b15607790e286e7a840914b4e82c7ef860317d9246482ab9582a6262"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/ship-by.ts",
@@ -17454,8 +17459,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/locations.ts",
-      "bytes": 7240,
-      "sha256": "10d9947d39fac87bcbbeaeda7bdaf80df4ee544caf79898e92c0c555167d52ea"
+      "bytes": 7692,
+      "sha256": "768eb44e419bc60bbaffcc68018f7b01a4dbdde9fe731da26056290a0f840d55"
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/logistics.ts",
@@ -17464,8 +17469,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/profile.ts",
-      "bytes": 6127,
-      "sha256": "efbefb56e40383c716080797c9456c86666c0d813bd87837a791e9d94a6646b2"
+      "bytes": 7025,
+      "sha256": "9e6e65e994acf8cb1d57cf8bd9e2547b927a108322378390b9a92f5789966ce0"
     },
     {
       "path": "modules/agent-commerce/hosted/capabilities.ts",
@@ -23394,8 +23399,8 @@
     },
     {
       "path": "tests/runtime/commerce-fulfilment-rules.test.ts",
-      "bytes": 94168,
-      "sha256": "ae6c7e9fbd1e1d8e05ea299a6ea8d5ad7224c96b0becc7d2b86a978bb03d0227"
+      "bytes": 97661,
+      "sha256": "92e95a7e45d5a16dbcfb186e1045c87b2b308969975be4d66020ca8707f1e0b6"
     },
     {
       "path": "tests/runtime/commerce-invoice-rules.test.ts",
@@ -24074,13 +24079,13 @@
     },
     {
       "path": "tests/runtime/hosted-shipping-locations.test.ts",
-      "bytes": 14209,
-      "sha256": "2568c9733201d114af5c614a2dade628f4dd02b612c4a5911caca9b04bfcd6a1"
+      "bytes": 15934,
+      "sha256": "a66dca4e7d8b1901e3e7c304224e43be556187a055fab6a352403ed538630fc6"
     },
     {
       "path": "tests/runtime/hosted-shipping-profile.test.ts",
-      "bytes": 14436,
-      "sha256": "0e8a52484de742d66c248b0179148dcab1543aabbecc9d30d95c59b404e07a76"
+      "bytes": 16188,
+      "sha256": "62f774ca0650904be1a647029ba5ff9ae73a8636d50ff1a818c2f754bdf56958"
     },
     {
       "path": "tests/runtime/hosted-shipping-quote-checkout.test.ts",
