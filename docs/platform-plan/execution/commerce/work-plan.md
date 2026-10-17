@@ -14,7 +14,7 @@
 | 可交付成果 | 已有程式／具日期證據 | 有限剩餘工作與啟用驗收 | 既有負責人與立即下一步 | 本列不等待／不冒稱 |
 | --- | --- | --- | --- | --- |
 | Supplier R1＋Commerce C1 商品旅程 | #862 的 S3 隨上述 schema171 部署；#864 的 D-11 已進主線。供貨、選品、照片與發布已有入口，完整 C1 仍依 EC-WP02／EC-AT03～10 核對。 | 接續 schema172 發布、素材 policy／容量與必要 flags；兩個普通帳號走新增商品→合作→選品照片→公開店面，保留未知結果、撤權、ON→OFF→ON 與原 R1 試用條件。C1 的變體、分類、優惠及必要 E 頁缺項仍交原工作包。 | `teddashh` 沿 #862／#864 供貨線與 #863 Commerce 線修實際缺口；root release owner 先接續[Supplier 發布工作](../supplier-console/work-plan.md#2026-10-17交付與啟用接點)，Ted 安排原定試用。 | 不等信用卡、物流、發票或 C3；不以 Seller M2 三頁或合成測試宣告完整 C1／R1。 |
-| **自有庫存商品：離線匯款／現金＋面交取貨** | #875 的買家 B04→B05→B07 已隨 `d39370a1` 部署但 checkout OFF；收款與交付 API 已有，該批驗收的賣家步驟由 API 代做。 | 首批只交付自有庫存商品；補普通店主的付款／面交設定、離線紀錄與三種確認／交付操作，取消已有 UI，保留回歸。兩普通帳號用正常 UI 完成設定→下單→處理→重登讀回，含未知回覆、412、撤權、quarantine 與庫存；之後由 release owner 配置離線 profile、商店准入及受控啟用，Ted 安排經同意的小量試用。 | **下一個產品交付是 [#884](https://github.com/FreeTWAI/freedom-platform/issues/884)**；已指派 `teddashh`，沿 seller-console 接既有 DTO／命令，`detna-vibe-coding` 獨立 review，root 整合與發布。 | 供貨行項目前仍回 `fulfilment_not_agreed`，不含供應商配送；不需 provider 帳號／keyring／journal，不等整個 M3。「店家自行確認收款」不等於平台核實銀行入帳。 |
+| **自有庫存商品：離線匯款／現金＋面交取貨** | #875 的買家 B04→B05→B07 已隨 `d39370a1` 部署但 checkout OFF。[#884](https://github.com/FreeTWAI/freedom-platform/issues/884) 賣家 UI 候選 `b3cc1323a` 已接原設定／訂單 API；本機雙帳號用正常 UI 完成設定→下單→確認收款／面交→重登讀回，含未知回覆原命令重試、412 後失讀、撤權恢復、取消與庫存回歸。 | 下一步是固定整合候選的獨立 review、完整同 attempt CI 與既有備份／還原後部署。啟用前先確認經同意店家的既有商店版本、離線 profile／准入設定，以及必要 flags 的實際影響範圍；沿既有控制機制，若無法確認是否只影響指定店家，先釐清具體設定。完成後在限定環境驗原 UI 旅程、quarantine／ON→OFF→ON 關閉恢復、未知結果與已付款庫存，再由 Ted 安排小量試用。現有 Commerce console／checkout／email 仍 OFF。 | `teddashh` 沿原 Commerce 線交付候選並修 review／旅程缺口；`detna-vibe-coding` 審精確整合 head，root release owner 承接合併、部署、限定設定及回退收據，Ted 安排同意店家與原定試用。 | 供貨行項目前仍回 `fulfilment_not_agreed`，不含供應商配送；不需 provider 帳號／keyring／journal，不等整個 M3。本機驗證不等於已上線或真人採用；「店家自行確認收款」不等於平台核實銀行入帳。 |
 | 真實信用卡收款 | AIO 協定、帳戶、付款通知／查詢與例外核心已隨 #863 合併；16:42 收據沒有真實商家憑證或付款驗收。 | 先完成 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告對帳；接完原付款／退款工作，配置商家自身帳戶、keyring、外部效果 journal 與 callback；依 EC-SPEC-10 用明確 profile 驗證小額收款、未知結果、全／部分退款及還原隔離。 | `teddashh` 沿 EC-WP04 先核對現有人工退款紀錄與尚缺 provider 退款接線；root release owner／Ted 承接具名帳戶配置與原定真實驗收。 | 不把純協定向量當實際收款；#883 只約束使用 provider 憑證，不擋離線面交。 |
 | 第一條物流鏈 | 主線已有 Node／Worker 本地報價、配送規則、服務設定與 ECPay 協定；面交獨立可用，供貨履約未議定仍回 `fulfilment_not_agreed`。沒有已交付整條 shipment／標籤／貨態旅程的證據。 | EC-WP05 先固定一個自有商品、單一服務 profile，接配置→報價／下單→託運單→標籤／交寄→貨態與失敗恢復；若選 CVS，才把選店納入該鏈。保留原 EC-SPEC-05 驗收。 | `teddashh` 沿原 fulfilment 線先交 [#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的兩個 caller／profile 邊界修正，再交單一物流鏈；用憑證前一併處理 #883，root／Ted 安排 provider 驗收。 | #882 不是 Supplier R1／面交前置；不一次要求所有物流商、供應商代寄、發票與售後，也不默默取消它們。 |
 | 可攜營業後續（C3） | `855bdfff` 已有根目錄 MIT [LICENSE](../../../../LICENSE)；EC-SPEC-08 的 10/15「尚無 LICENSE」是歷史觀察。尚無可攜發行物／實際外移驗收收據。 | EC-WP09／10 先交一個無秘密的官方 profile 建置與路徑白名單、NOTICE／SBOM；再按原規格補單店匯出匯入、物件核對、單一寫入者與在途通知交接，完成自主安裝／升級／還原。 | `teddashh` 沿原 Commerce 整合線先定 EC-SPEC-08 的首個 profile 與可建置子集，Ted 確認 DC11 支援範圍；不另建商務核心。 | 不阻擋上述受控交付；MIT 不代表第三方／素材與發行清單已核完，C3 未驗收不能宣告整案結案。 |
@@ -22,6 +22,10 @@
 #884 直接沿用 [`hosted-offline-payments.ts`](../../../../apps/platform-api/src/routes/hosted-offline-payments.ts) 的設定、
 [`hosted-shipping.ts`](../../../../apps/platform-api/src/routes/hosted-shipping.ts) 的面交設定，以及
 [`hosted-seller-checkout.ts`](../../../../apps/platform-api/src/routes/hosted-seller-checkout.ts) 的 `offline-payments`、`meetup-completion`、`meetup-handover`；不新建訂單／付款模型或 migration。
+產品來源 `b3cc1323adb0ee70c3aba99d79cb20aa3e2c5d51` 的 typecheck、build 與 79 項相關 runtime/client/UI 測試通過；
+14 項賣家／買家 browser 回歸通過，最後保留面交選項順序與畫面細修後的三個旅程再驗通過。390／768／1440 畫面已檢視，
+本輪隔離 PostgreSQL 容器與精確資料卷均已移除。首次欄位名稱／測試等待失敗及最後一次 server 啟動超時仍保留，
+不能以後續通過抹去原結果。這些是本機合成帳號的真 API 證據；整合 head 的 hosted CI、部署與真人試用仍各自待驗。#884 依原程式交付條件驗收結案，實際啟用與試用由本表持續追蹤。
 三個新 Issue 都沿既有作者工作線；精確來源的 review／CI、普通使用者旅程、provider／部署與真人採用各自記證據，不互相代替，也不把 Foundation 原 168 項需求改為 accepted。
 
 ## 1. 原則
