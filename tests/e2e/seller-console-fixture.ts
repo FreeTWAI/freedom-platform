@@ -34,6 +34,24 @@ export async function command(context:BrowserContext,origin:string,csrf:string,p
  const r=await context.request.fetch('/api/v1'+path,{method,data:body,headers:{Origin:origin,'X-CSRF-Token':csrf,'Idempotency-Key':randomUUID(),...(version?{'If-Match':`"${version}"`}:{})}});expect(r.ok(),await r.text()).toBeTruthy();return r.json();
 }
 export async function verifyPassword(page:Page,password:string){const dialog=page.getByRole('dialog',{name:'驗證身分'});await expect(dialog).toBeVisible();await dialog.getByLabel('密碼',{exact:true}).fill(password);await dialog.getByRole('button',{name:'驗證並繼續',exact:true}).click();}
+/** Short-lived synthetic proof, with all identity/immutability triggers enabled.
+ * The real password endpoint still authenticates; only this fixture's TTL differs. */
+export async function expireNextSettingsProof(page:Page,pool:import('pg').Pool){
+ let id='';
+ await page.route('**/me/high-risk-verifications',async route=>{
+  if(id){await route.continue();return;}
+  const response=await route.fetch(),body=await response.json();expect(response.status()).toBe(201);
+  id=randomUUID();
+  const row=(await pool.query(`INSERT INTO tenant_high_risk_verifications(verification_id,user_id,principal_id,session_hash,tenant_id,purpose,verified_at,expires_at)
+    SELECT $2,user_id,principal_id,session_hash,tenant_id,purpose,clock_timestamp(),clock_timestamp()+interval '8 seconds'
+    FROM tenant_high_risk_verifications WHERE verification_id=$1 RETURNING expires_at`,[body.verification_id,id])).rows[0];
+  await route.fulfill({response,json:{...body,verification_id:id,expires_at:row.expires_at.toISOString()}});
+ });
+ return async()=>{
+  expect(id).not.toBe('');
+  await pool.query('SELECT pg_sleep(greatest(0,extract(epoch FROM expires_at-clock_timestamp()))+0.02) FROM tenant_high_risk_verifications WHERE verification_id=$1',[id]);
+ };
+}
 export async function placeForStore(context:BrowserContext,origin:string,store:{slug:string;product:{sku:string}}){
  const r=await context.request.post('/api/v1/public/stores/'+store.slug+'/checkouts',{data:{publication_revision:'1',lines:[{sku:store.product.sku,quantity:1}],contact:{name:'合成測試買家',email:'synthetic-seller@example.test',phone:'0000000000'},delivery:{method:'synthetic',address:'合成測試地址'},invoice:null,consents:[]},headers:{Origin:origin,'Idempotency-Key':randomUUID()}});expect(r.status(),await r.text()).toBe(201);const checkout=await r.json();const placed=await context.request.post('/api/v1/public/stores/'+store.slug+'/checkouts/'+checkout.checkout_ref+'/orders',{data:{terms_sha256:checkout.terms_sha256,client_order_id:randomUUID()},headers:{Origin:origin}});expect(placed.status(),await placed.text()).toBe(201);return placed.json();
 }

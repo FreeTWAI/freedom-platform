@@ -224,3 +224,35 @@ lock/I/O capture was unavailable locally: no PostgreSQL binary/cached container
 image, and the pinned CI image pull returned Forbidden. Existing source-bound
 matrix checks and ordinary required CI remain mandatory; no blind full-suite
 rerun is evidence for this change.
+
+## One bounded DROP wait observation
+
+Actual main0de6e17c [Verify39062324899 partition6](https://github.com/FreeTWAI/freedom-platform/actions/runs/39062324899/job/117482703119)
+passed628 cases but failed cleanup: DROP unknown ACK at16054ms, then fresh
+`database_present` at16865ms after backend termination. Checkpoint took40ms;
+wait/lock/I/O cause remains unknown. Artifact12112047318 and receipt digest
+`bfce2a1808e9f06dd51b41207b4c86287191b630fbe833d500a80a08649d63c3`
+remain failed evidence, distinct from the earlier settlement and browser53200 failures.
+
+If an individual DROP is still pending after8s, the helper attempts one concurrent
+read-only observation on a separate connection with the same existing credentials.
+It targets the exact cleaner PID/user/nonce application, checks the observer's
+base database/current user/session user, and selects only state/wait category,
+wait event and counts of granted/waiting locks and blocking backends. No query,
+name, PID, client address, relation ID or arbitrary server error is emitted.
+The existing nonblocking JSON diagnostic sink emits `phase:drop_observation`;
+values are allowlisted, unknown strings become `other`, counts cap at1000 and
+invalid counts become null. Missing/inaccessible identity and probe failures are
+`unavailable`, never evidence of absence. A null wait event is not proof of progress.
+
+Connection, statement and query limits are200ms, with a500ms total observer
+watchdog. DROP completion cancels the observer timer and destroys any observer
+socket; observation is never awaited or consulted by cleanup. No extra sleep,
+DROP retry, privilege, deadline or acceptance change is introduced. The20s
+cleanup deadline,24s suite reserve and fresh positive absence check remain.
+The extra connection and catalog read have small resource overhead and may affect
+scheduling; this is a single diagnostic sample, not continuous tracing or proof of
+root cause. Slow scheduling can miss the sample; observer failure, unavailable
+metadata or a blocked/closed log sink must not change cleanup's boolean result.
+No full suite is run solely to manufacture a stall. Native PG wait-state evidence
+remains pending an ordinary run; controlled transport tests are not such evidence.

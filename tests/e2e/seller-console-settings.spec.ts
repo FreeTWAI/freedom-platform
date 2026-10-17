@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {test,expect,openSeller,verifyPassword} from './seller-console-fixture.js';
+import {test,expect,openSeller,verifyPassword,expireNextSettingsProof} from './seller-console-fixture.js';
 import {fixtureStore} from './hosted-order-fixture.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 test('E11 account, one-use fresh auth, write-only key replacement, activation, suspend and resume',async({page,browser,baseURL,e2eAuthPool})=>{
@@ -13,4 +13,22 @@ test('E11 account, one-use fresh auth, write-only key replacement, activation, s
  await console.getByRole('button',{name:'暫停',exact:true}).click();await page.getByRole('dialog',{name:'暫停',exact:true}).getByRole('button',{name:'確認暫停'}).click();await verifyPassword(page,DEMO_PASSWORD);await expect(page.getByRole('dialog',{name:'驗證身分'})).toBeVisible();await verifyPassword(page,DEMO_PASSWORD);await expect(console.getByText('已暫停',{exact:true})).toBeVisible();expect(ids).toHaveLength(2);expect(ids[0]).not.toBe(ids[1]);
  await console.getByRole('button',{name:'恢復',exact:true}).click();await page.getByRole('dialog',{name:'恢復',exact:true}).getByRole('button',{name:'確認恢復'}).click();await verifyPassword(page,DEMO_PASSWORD);await expect(console.getByText('使用中',{exact:true})).toBeVisible();
  await console.getByRole('button',{name:'停用',exact:true}).click();const retire=page.getByRole('dialog',{name:'停用',exact:true});await expect(retire).toContainText('無法復原');await retire.getByRole('button',{name:'確認停用'}).click();await verifyPassword(page,DEMO_PASSWORD);await expect(console.getByText('已停用',{exact:true})).toBeVisible();await expect(console.getByLabel('HashKey',{exact:true})).toHaveCount(0);expect((await accounts())[0].services.find((s:{purpose:string})=>s.purpose==='payment').state).toBe('retired');
+});
+
+
+for(const committed of [true,false])test(`provider key recovery with expired proof: ${committed?'committed':'never committed'}`,async({page,browser,baseURL,e2eAuthPool})=>{
+ const s=await fixtureStore(e2eAuthPool,browser,baseURL!);await openSeller(page,baseURL!,s.seller.email,`#stores/${s.tenant}/${s.instance}/settings/payments`);
+ const console=page.locator('.seller-console');await console.getByLabel('特店編號',{exact:true}).fill('1234567');await console.getByRole('button',{name:'新增綠界帳戶',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);await expect(console.getByRole('heading',{name:'特店 1234567',exact:true})).toBeVisible();
+ const expired=await expireNextSettingsProof(page,e2eAuthPool),requests:{key:string;body:string|null;version:string|undefined;recovery:string|undefined}[]=[];
+ await page.route('**/services/payment',async route=>{
+  const r=route.request(),h=r.headers();requests.push({key:h['idempotency-key'],body:r.postData(),version:h['if-match'],recovery:h['commerce-recovery-verification']});
+  if(requests.length===1&&!committed){await route.abort('failed');return;}
+  const response=await route.fetch();if(requests.length===1){expect(response.status(),await response.text()).toBe(200);await route.abort('failed');}else await route.fulfill({response});
+ });
+ const key=randomBytes(8).toString('hex'),iv=randomBytes(8).toString('hex');await console.getByLabel('HashKey',{exact:true}).fill(key);await console.getByLabel('HashIV',{exact:true}).fill(iv);await console.getByRole('button',{name:'儲存收款金鑰',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(page.getByText('正在確認結果',{exact:true})).toBeVisible();await expired();await console.getByRole('button',{name:'重試',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(console.getByText('已更新（第 1 版）',{exact:false})).toBeVisible();await expect(console.getByLabel('HashKey',{exact:true})).toHaveValue('');await expect(console.getByLabel('HashIV',{exact:true})).toHaveValue('');
+ expect(requests).toHaveLength(3);for(const r of requests)expect({key:r.key,body:r.body,version:r.version}).toEqual({key:requests[0].key,body:requests[0].body,version:requests[0].version});expect(requests[2].recovery).toBeTruthy();
+ expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_provider_credentials WHERE instance_id=$1',[s.instance])).rows[0].n).toBe(1);
+ expect(await page.content()).not.toContain(key);expect(await page.content()).not.toContain(iv);
 });

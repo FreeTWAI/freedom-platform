@@ -67,6 +67,7 @@
     "deploy/cloudflare/test/release-model-step.test.mjs",
     "deploy/cloudflare/test/release-runtime-enrollment.test.mjs",
     "scripts/ci/select-affected-jobs.mjs",
+    "scripts/ci/affected-jobs.md",
     "scripts/ci/derive-runtime-weights.mjs",
     "scripts/reconcile-issue-closures.mjs",
     ".github/workflows/reconcile-issue-closures.yml",

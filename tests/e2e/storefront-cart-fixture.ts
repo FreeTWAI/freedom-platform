@@ -93,6 +93,7 @@ export async function openCartListener(db: Pool, offline = false) {
     const origin = `http://127.0.0.1:${address.port}`;
     app = createApp(listenerPool, origin, 'local', {
       guildLaunchpadEnabled: true,
+      supplierConsoleEnabled: offline,
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
       commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
@@ -124,7 +125,7 @@ export async function openCartListener(db: Pool, offline = false) {
   }
 }
 
-export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false) {
+export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline) {
   await ownedSchema(db);
   const listener = await openCartListener(db, offline);
   const seller = await member(db);
@@ -249,7 +250,7 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       });
       expect(response.status(), await response.text()).toBe(version === 1 ? 201 : 200);
     };
-    if (offline) await saveOfflineFixture();
+    if (seedOffline) await saveOfflineFixture();
 
     const updatePriceAndRepublish = async (product: ProductView, priceMinor: number) => {
       const updated = ProductViewSchema.parse(
@@ -281,6 +282,7 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
     return {
       origin: listener.origin,
       slug,
+      seller,
       storeName: '山邊小店',
       root,
       instance,
