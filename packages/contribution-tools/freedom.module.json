@@ -75,7 +75,12 @@
     "scripts/ci/run-guild-runtime.mjs",
     "scripts/ci/verify-source-boundaries.py",
     "scripts/ci/test_source_boundaries.py",
-    "scripts/ci/release-inventory.md"
+    "scripts/ci/release-inventory.md",
+    "freedom.project.yaml",
+    "docs/platform-plan/contracts/project-manifest.schema.json",
+    "docs/platform-plan/contracts/project-manifest.example.yaml",
+    "docs/platform-plan/contracts/tests/test_client_credential_manifest.py",
+    "docs/platform-plan/contracts/tests/test_project_manifest_custody.py"
   ],
   "owner_role": "foundation",
   "public_exports": [

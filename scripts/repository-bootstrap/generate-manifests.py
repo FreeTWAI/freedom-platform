@@ -189,10 +189,12 @@ def manifest(name: str, observed: dict, maintainer: dict, schema: dict) -> dict:
         },
         "data_boundary": {
             "classification": "internal" if core else "public", "platform_record_types": meta.get("records", []),
-            "customer_data_mode": "platform_owned_with_explicit_basis" if core else "none",
-            "credential_reference_metadata_in_postgres": False, "dynamic_credential_storage": ["none"],
-            "credential_root_key_storage": "none", "stores_payment_instrument_data": False,
-            "stores_plaintext_credentials": False, "external_systems_of_record": ["github"],
+            "customer_data_mode": "platform_hosted_for_members" if core else "none",
+            "credential_reference_metadata_in_postgres": core,
+            "dynamic_credential_storage": ["postgres_envelope_vault", "postgres_keyring_sealed"] if core else ["none"],
+            "credential_root_key_storage": "cloudflare_worker_secret" if core else "none",
+            "stores_payment_instrument_data": False, "stores_plaintext_credentials": False,
+            "external_systems_of_record": ["github", "payment_provider", "bank"] if core else ["github"],
         },
         "quality": {
             "required_checks": ["manifest/schema", "manifest/github-consistency", "test", "page/build", "security", "release-policy"],

@@ -49,8 +49,8 @@
     },
     {
       "path": "freedom.project.yaml",
-      "bytes": 6351,
-      "sha256": "e0d1450eac482a45ced3da867a1775c771f89701b66c3e5430c0455e3b167995"
+      "bytes": 6455,
+      "sha256": "3a371c1ef952544479a9815dcc1a2caa690d220517c8ede74e3fa90a5238e09b"
     },
     {
       "path": "package-lock.json",
@@ -13295,7 +13295,7 @@
     {
       "path": "contracts/preview/v1/bundle.json",
       "bytes": 1474,
-      "sha256": "5272d0e15073dda83e9811f116a8f0c538bd843a7b0f56baccacc4a416eee19f"
+      "sha256": "4645795d61f5b69a2761c31990b087a9cbd04687c207eef09ed3bdd217e82e6a"
     },
     {
       "path": "contracts/preview/v1/client.d.mts",
@@ -13339,8 +13339,8 @@
     },
     {
       "path": "contracts/preview/v1/schemas/project-manifest.schema.json",
-      "bytes": 63929,
-      "sha256": "dc845236fcac6160e3c7adc2690690dc24bd7c2553ac599013c03f745d400345"
+      "bytes": 64713,
+      "sha256": "67770684e2ef380a2a36c809b3063084e1127d03c70f00c9e7fb9244b616753a"
     },
     {
       "path": "contracts/preview/v1/schemas/skill-package.schema.json",
@@ -14589,8 +14589,8 @@
     },
     {
       "path": "docs/platform-plan/contracts/README.md",
-      "bytes": 33577,
-      "sha256": "98df4140bc8f4bfe66ade2244b80ab76f2821daf5002bfb8bcf1fc069720cbd4"
+      "bytes": 35230,
+      "sha256": "e5f8b125ef62f22bc56fe178f38dcc201c8ad83ec3c6c310dc89e78d26ca45ef"
     },
     {
       "path": "docs/platform-plan/contracts/agent-work-contract.example.yaml",
@@ -14684,8 +14684,8 @@
     },
     {
       "path": "docs/platform-plan/contracts/project-manifest.example.yaml",
-      "bytes": 5091,
-      "sha256": "59711b481afa1398f97e4b23c5615bf2039a01ad7d115e0cadf127c7f3ee20d1"
+      "bytes": 5147,
+      "sha256": "57052c8fe714917237c1a6095bd996c517b6ab6fdb59a014c05673b78d4e0e8b"
     },
     {
       "path": "docs/platform-plan/contracts/project-manifest.external-personal-fork.example.yaml",
@@ -14694,8 +14694,8 @@
     },
     {
       "path": "docs/platform-plan/contracts/project-manifest.schema.json",
-      "bytes": 63929,
-      "sha256": "dc845236fcac6160e3c7adc2690690dc24bd7c2553ac599013c03f745d400345"
+      "bytes": 64713,
+      "sha256": "67770684e2ef380a2a36c809b3063084e1127d03c70f00c9e7fb9244b616753a"
     },
     {
       "path": "docs/platform-plan/contracts/project-status-attestation.example.yaml",
@@ -14754,8 +14754,8 @@
     },
     {
       "path": "docs/platform-plan/contracts/tests/test_client_credential_manifest.py",
-      "bytes": 4627,
-      "sha256": "ea56ff7e1337a51f889aa60570b66d75db3791f192ec5fdcf0158be29211743f"
+      "bytes": 4751,
+      "sha256": "fa51130ba53e3862c9162a8e99a003dc289656d033d670f1b576707c09c4e030"
     },
     {
       "path": "docs/platform-plan/contracts/tests/test_domain_skill_overlay_contract.py",
@@ -14786,6 +14786,11 @@
       "path": "docs/platform-plan/contracts/tests/test_portable_bundle_boundaries.py",
       "bytes": 13398,
       "sha256": "303f0ff8038e6039ca19cb635e18198689cc400ea83d93a83b3eb7bd15a7ac8b"
+    },
+    {
+      "path": "docs/platform-plan/contracts/tests/test_project_manifest_custody.py",
+      "bytes": 5184,
+      "sha256": "c35835dae46bacdde019831f7919e3ba3e6254f722b02001884c358ee826fe03"
     },
     {
       "path": "docs/platform-plan/contracts/tests/test_repository_manifest_identity.py",
@@ -20529,8 +20534,8 @@
     },
     {
       "path": "packages/contribution-tools/freedom.module.json",
-      "bytes": 4871,
-      "sha256": "32999cd9f57942c639e0ba8dbeb2ba3408bec63ec9cac01e14083167b568d6d9"
+      "bytes": 5182,
+      "sha256": "2126f408cb8247d4f37449d5b133baa98245cb0ce2ea109261b6e2e748dde160"
     },
     {
       "path": "packages/contribution-tools/github-app-publisher.mjs",
@@ -22004,8 +22009,8 @@
     },
     {
       "path": "scripts/repository-bootstrap/generate-manifests.py",
-      "bytes": 15996,
-      "sha256": "668fb4b22200193b31f3896364b9c2626da3411321f3c35e9bcd4d9c65607756"
+      "bytes": 16172,
+      "sha256": "144c580c0037cb2480d3734faf1a474b23e6747ea2d66f8d4cc0b2525525b7c7"
     },
     {
       "path": "scripts/repository-bootstrap/verify-consumer-libraries.mjs",
