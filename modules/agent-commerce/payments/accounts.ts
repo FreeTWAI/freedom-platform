@@ -1,3 +1,4 @@
+import {settingsVerification} from './settings-verification.js';
 import {SERVICE_KEYS} from '../fulfilment/rules/types.js';
 import type {PaymentAttemptOptions} from './attempts.js';
 import {scheduleDueWork} from '../operations/due-work.js';
@@ -12,7 +13,7 @@ import {scopedTenantCommand} from '../../../packages/scoped-commands/index.js';
 import {Problem,requireCondition} from '../../../packages/shared/problem.js';
 import type {Actor} from '../../identity-membership/service.js';
 import {bumpAuthorizationRevision} from '../../tenant-workspaces/facts.js';
-import {assertFreshVerificationCurrent,consumeFreshVerification,receiptNamespaceDigest,requireFreshVerification} from '../../tenant-workspaces/high-risk-verification.js';
+import {receiptNamespaceDigest} from '../../tenant-workspaces/high-risk-verification.js';
 import {effectiveStoreCapabilities,requireStoreInstance,storeCapabilities,STORE_MISSING} from '../hosted/capabilities.js';
 import {instance,storeFact,storeRead} from '../hosted/store.js';
 import {recordControlEvent} from '../operations/control-events.js';
@@ -55,7 +56,8 @@ export function listProviderAccounts(pool:Pool,actor:Actor,tenantId:string,insta
     const items=[];for(const row of rows)items.push(await accountView(q,row.account_id));return wire.ProviderAccountPageSchema.parse({items});
   });
 }
-export async function command<T extends object>(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string|undefined,operation:string,body:{fresh_auth_verification_id:string},key:string,expected:string|undefined,run:(q:PoolClient,ctx:TenantScopeContext)=>Promise<T>){
+export async function command<T extends object>(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string|undefined,operation:string,body:{fresh_auth_verification_id:string},key:string,expected:string|undefined,run:(q:PoolClient,ctx:TenantScopeContext)=>Promise<T>,recoveryVerificationId?:string){
+  const verification=settingsVerification(body.fresh_auth_verification_id,recoveryVerificationId);
   const namespace=(ctx:TenantScopeContext)=>receiptNamespaceDigest('freedom.scoped-tenant-command/v1',[ctx.principal_id,ctx.authn_kind,ctx.scope.scope_id,operation,key]);
   const authorize=async(q:PoolClient,ctx:TenantScopeContext)=>{
     await instance(q,tenantId,instanceId,false,true);
@@ -64,15 +66,15 @@ export async function command<T extends object>(pool:Pool,actor:Actor,tenantId:s
     await instance(q,tenantId,instanceId,true);
     requireCondition(ctx.tenant_status==='active',403,'capability_denied','目前無法使用這個業務空間。');
     if(accountId)await account(q,accountId,tenantId,instanceId,true);
-    await requireFreshVerification(q,{userId:actor.user_id,sessionHash:actor.session_hash,principalId:ctx.principal_id,tenantId,
-      purpose:'commerce.provider_account.write',verificationId:body.fresh_auth_verification_id,namespaceDigest:namespace(ctx)});
-    await assertFreshVerificationCurrent(q,body.fresh_auth_verification_id);
+    await verification.authorize(q,{userId:actor.user_id,sessionHash:actor.session_hash,principalId:ctx.principal_id,tenantId,
+      namespaceDigest:namespace(ctx)});
+    await verification.current(q);
   };
   try{return await scopedTenantCommand(pool,{actor,tenantId,operation,body,key,expected,target:{kind:'commerce_provider_account',id:accountId??instanceId},capabilitiesForRole:storeCapabilities},authorize,async(q,ctx)=>{
     if(accountId)checkVersion((await account(q,accountId,tenantId,instanceId)).version,expected);
-    await assertFreshVerificationCurrent(q,body.fresh_auth_verification_id);
+    await verification.current(q);
     const view=await run(q,ctx);
-    await consumeFreshVerification(q,body.fresh_auth_verification_id,namespace(ctx));
+    await verification.consume(q,namespace(ctx));
     await bumpAuthorizationRevision(q,tenantId);
     // Activation receipts contain only an attempt reference; journal the account
     // aggregate independently rather than putting its bearer handoff in a receipt.
@@ -80,7 +82,7 @@ export async function command<T extends object>(pool:Pool,actor:Actor,tenantId:s
     await storeFact(q,ctx,fact.account_id,fact.version,operation,'commerce_provider_account');return view;
   },authorize);}catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);throw e;}
 }
-export async function createProviderAccount(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,key:string,options:ProviderAccountOptions){
+export async function createProviderAccount(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,key:string,options:ProviderAccountOptions,recoveryVerificationId?:string){
   keyringOf(options);const input=parseInput(wire.ProviderAccountCreateInputSchema,raw);
   requireCondition(input.environment===options.environment,422,'provider_environment_not_allowed','這個環境不允許指定的供應商環境。');
   return command(pool,actor,tenantId,instanceId,undefined,'commerce.provider_account.create',input,key,undefined,async(q,ctx)=>{
@@ -91,12 +93,12 @@ export async function createProviderAccount(pool:Pool,actor:Actor,tenantId:strin
     await createProviderAccountRoute(q,{tenantId,instanceId,accountId:id});
     await recordControlEvent(q,{tenantId,instanceId,kind:'provider_account.created',subjectId:id,detail:{environment:input.environment},actorKind:'person',actorId:ctx.principal_id});
     return accountView(q,id);
-  });
+  },recoveryVerificationId);
 }
 export async function bumpAccount(q:PoolClient,id:string){
   await q.query('UPDATE commerce_provider_accounts SET version=version+1,updated_at=clock_timestamp() WHERE account_id=$1',[id]);
 }
-export async function putProviderService(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,purpose:ProviderPurpose,raw:unknown,key:string,expected:string,options:ProviderAccountOptions){
+export async function putProviderService(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,purpose:ProviderPurpose,raw:unknown,key:string,expected:string,options:ProviderAccountOptions,recoveryVerificationId?:string){
   const ring=keyringOf(options);
   if(raw&&typeof raw==='object'&&'profile' in raw&&raw.profile!==profiles[purpose])throw new Problem(422,'provider_profile_invalid','供應商設定檔與用途不符。');
   const input=parseInput(wire.ProviderServicePutInputSchema,raw);
@@ -119,9 +121,9 @@ export async function putProviderService(pool:Pool,actor:Actor,tenantId:string,i
     await recordControlEvent(q,{tenantId,instanceId,kind:old?'provider_credential.rotated':'provider_service.created',subjectId:accountId,
       detail:{purpose,profile:input.profile,environment:a.environment,credential_version:version},actorKind:'person',actorId:ctx.principal_id});
     return accountView(q,accountId);
-  });
+  },recoveryVerificationId);
 }
-export async function changeProviderServiceState(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,purpose:ProviderPurpose,action:'suspend'|'resume'|'retire',raw:unknown,key:string,expected:string,options:ProviderAccountOptions){
+export async function changeProviderServiceState(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,purpose:ProviderPurpose,action:'suspend'|'resume'|'retire',raw:unknown,key:string,expected:string,options:ProviderAccountOptions,recoveryVerificationId?:string){
   keyringOf(options);const input=parseInput(wire.ProviderServiceStateInputSchema,raw);
   return command(pool,actor,tenantId,instanceId,accountId,`commerce.provider_service.${action}.${purpose}`,input,key,expected,async(q,ctx)=>{
     const old=(await q.query('SELECT * FROM commerce_provider_account_services WHERE account_id=$1 AND purpose=$2 FOR UPDATE',[accountId,purpose])).rows[0];
@@ -131,7 +133,7 @@ export async function changeProviderServiceState(pool:Pool,actor:Actor,tenantId:
     await recordControlEvent(q,{tenantId,instanceId,kind:'provider_service.state_changed',subjectId:accountId,
       detail:{purpose,from_state:old.state,to_state:target},actorKind:'person',actorId:ctx.principal_id});
     return accountView(q,accountId);
-  });
+  },recoveryVerificationId);
 }
 export async function updateServiceState(q:PoolClient,id:string,purpose:ProviderPurpose,state:string,activationRef?:string){
   try{await q.query(`UPDATE commerce_provider_account_services SET state=$3,version=version+1,updated_at=clock_timestamp(),
@@ -201,7 +203,7 @@ async function authorizeActivationBudget(pool:Pool,actor:Actor,tenantId:string,i
     await account(q,accountId,tenantId,instanceId);
   });}catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);throw e;}
 }
-export async function createPaymentServiceActivation(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,raw:unknown,key:string,expected:string,options:PaymentAttemptOptions){
+export async function createPaymentServiceActivation(pool:Pool,actor:Actor,tenantId:string,instanceId:string,accountId:string,raw:unknown,key:string,expected:string,options:PaymentAttemptOptions,recoveryVerificationId?:string){
   keyringOf(options);const input=parseInput(wire.ProviderActivationPaymentInputSchema,raw);
   await authorizeActivationBudget(pool,actor,tenantId,instanceId,accountId);
   await chargeCommerceBudgets(pool,accountId,{network:'activationAccount'});
@@ -232,5 +234,5 @@ export async function createPaymentServiceActivation(pool:Pool,actor:Actor,tenan
       await bumpAccount(q,accountId);return {attempt_ref:attempt.attempt_id as string};
     }
     throw Error('payment_trade_number_unavailable');
-  });
+  },recoveryVerificationId);
 }

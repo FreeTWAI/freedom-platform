@@ -38,6 +38,16 @@
 
 ### 2.1 線下收款設定（E11 `settings/payments`；提議 `commerce_offline_payment_settings`）
 
+設定寫入的回覆遺失且原 fresh auth 到期時，沿原命令重試，不能換 key、body 或 If-Match。
+`PUT .../offline-payment-settings` 與既有 provider-account 設定命令接受可選的
+`Commerce-Recovery-Verification` UUID header：它是同帳號、session、tenant、purpose 的當下重新驗證，
+只作授權，不進原 request digest。原 body 中的 proof 仍須符合原範圍且未綁其他 receipt namespace。
+伺服器在原 receipt lock 下先核對目前權限與有效的續驗 proof；有收據時比對原 digest 後重播，
+無收據時才用原 CAS 執行。續驗 proof 在這筆 transaction 內綁原 namespace（重播也要綁定）；
+同 namespace 可再次重試，失敗則回滾，其他 namespace 不可復用。有效期以 DB clock 重驗，
+撤權、session 失效、原命令衝突都不以目前設定內容代替收據判斷。沒有修改一般 fresh-auth 契約。
+
+
 每間店一份設定。每次修改都新增一個版本，版本號從 1 開始連續，寫入後不可改。表有 tenant RLS，因為裡面有事業的銀行帳號。
 
 文件 `freedom.offline-payment-settings/v1` 有兩個區塊。區塊是 `null` 表示不提供該方式。

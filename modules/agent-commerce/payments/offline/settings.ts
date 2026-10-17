@@ -8,11 +8,12 @@ import {isolatedTransaction} from '../../../../packages/resource-scopes/tenant-t
 import {scopedTenantCommand} from '../../../../packages/scoped-commands/index.js';
 import {Problem,requireCondition} from '../../../../packages/shared/problem.js';
 import {bumpAuthorizationRevision} from '../../../tenant-workspaces/facts.js';
-import {assertFreshVerificationCurrent,consumeFreshVerification,receiptNamespaceDigest,requireFreshVerification} from '../../../tenant-workspaces/high-risk-verification.js';
+import {receiptNamespaceDigest} from '../../../tenant-workspaces/high-risk-verification.js';
 import {requireStoreInstance,storeCapabilities,STORE_MISSING} from '../../hosted/capabilities.js';
 import {instance,profile,ready} from '../../hosted/store.js';
 import {recordControlEvent} from '../../operations/control-events.js';
 import {canonicalJSON} from '../../checkout/terms.js';
+import {settingsVerification} from '../settings-verification.js';
 import type {Actor} from '../../../identity-membership/service.js';
 
 export const OFFLINE_BANK_PROFILE='offline.bank_transfer.v1';
@@ -115,8 +116,8 @@ export async function readOfflinePaymentSettings(pool:Pool,actor:Actor,tenantId:
     return offlineSettingsView(q,instanceId,profiles,visibilityOf(tenant.role,keys));
   });}catch(error){if(error instanceof Problem&&error.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);throw error;}
 }
-export async function saveOfflinePaymentSettings(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,key:string,expected:string|undefined,profiles:readonly string[]){
-  const input=parseOfflineSettingsInput(raw);
+export async function saveOfflinePaymentSettings(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,key:string,expected:string|undefined,profiles:readonly string[],recoveryVerificationId?:string){
+  const input=parseOfflineSettingsInput(raw),verification=settingsVerification(input.fresh_auth_verification_id,recoveryVerificationId);
   let context!:SettingsContext,output!:Awaited<ReturnType<typeof offlineSettingsView>>;
   const namespace=(ctx:TenantScopeContext)=>receiptNamespaceDigest('freedom.scoped-tenant-command/v1',[ctx.principal_id,ctx.authn_kind,ctx.scope.scope_id,OPERATION,key]);
   const authorize=async(q:PoolClient,tenant:TenantScopeContext)=>{
@@ -126,20 +127,20 @@ export async function saveOfflinePaymentSettings(pool:Pool,actor:Actor,tenantId:
     await instance(q,tenantId,instanceId,true);
     requireCondition(tenant.tenant_status==='active',403,'capability_denied','目前無法使用這個業務空間。');
     const p=await profile(q,tenantId,instanceId);ready(p);
-    await requireFreshVerification(q,{userId:actor.user_id,sessionHash:actor.session_hash,principalId:tenant.principal_id,tenantId,
-      purpose:'commerce.provider_account.write',verificationId:input.fresh_auth_verification_id,namespaceDigest:namespace(tenant)});
-    await assertFreshVerificationCurrent(q,input.fresh_auth_verification_id);
+    await verification.authorize(q,{userId:actor.user_id,sessionHash:actor.session_hash,principalId:tenant.principal_id,tenantId,
+      namespaceDigest:namespace(tenant)});
+    await verification.current(q);
     context={tenant};
   };
   try{
     await scopedTenantCommand(pool,{actor,tenantId,operation:OPERATION,target:{kind:'commerce_offline_payment_settings',id:instanceId},body:input,key,expected,capabilitiesForRole:storeCapabilities},authorize,async q=>{
-      await assertFreshVerificationCurrent(q,input.fresh_auth_verification_id);
+      await verification.current(q);
       const document=normalizeOfflineSettings(input),current=await currentOfflineSettings(q,instanceId),version=nextSettingsVersion(current?.version??null,expected);
       await q.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
         VALUES($1,$2,$3,$4,$5,$6)`,[tenantId,instanceId,version,document,createHash('sha256').update(canonicalJSON(document)).digest('hex'),context.tenant.principal_id]);
       await recordControlEvent(q,{tenantId,instanceId,kind:'offline_payment_settings.changed',subjectId:instanceId,
         detail:{settings_version:version,methods:offlineMethodList(document)},actorKind:'person',actorId:context.tenant.principal_id});
-      await consumeFreshVerification(q,input.fresh_auth_verification_id,namespace(context.tenant));
+      await verification.consume(q,namespace(context.tenant));
       await bumpAuthorizationRevision(q,tenantId);
       return {id:String(version)};
     },authorize,undefined,(source,command)=>isolatedTransaction(source,async q=>{

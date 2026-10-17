@@ -3,6 +3,7 @@ import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import type { ProblemDetails, SessionPayload } from './types'
 import { beginRequest } from './request-activity'
+import { OfflineSettingsFieldErrorSchema } from '../../../contracts/guild-launchpad/v1/hosted-offline-payment'
 
 const API_BASE = '/api/v1'
 
@@ -70,6 +71,8 @@ export type RequestOptions = {
   arPattern?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
+  /** Current authorization for retrying the unchanged Commerce settings command. */
+  commerceRecoveryVerificationId?: string
   /** Unquoted positive decimal version for leave-v2 when the guild is a category primary. */
   preferenceVersion?: string
   /** Email-proven event participation only; never a member or general API credential. */
@@ -287,6 +290,11 @@ export class PortalClient {
     if (options.ifMatch !== undefined) {
       headers['If-Match'] = quoteEtag(options.ifMatch)
     }
+    if (options.commerceRecoveryVerificationId !== undefined) {
+      const settingsPath = /^\/tenants\/[0-9a-f-]{36}\/storefronts\/[0-9a-f-]{36}\/(?:offline-payment-settings|provider-accounts(?:\/[0-9a-f-]{36}\/services\/(?:payment|logistics|invoice)(?:\/(?:suspend|resume|retire|activation-payments))?)?)$/.test(path)
+      if (!settingsPath || !['POST','PUT'].includes(method) || !/^[0-9a-f-]{36}$/.test(options.commerceRecoveryVerificationId)) throw new ApiError({message:'收款設定驗證格式不正確。',status:400})
+      headers['Commerce-Recovery-Verification'] = options.commerceRecoveryVerificationId
+    }
     if (options.preferenceVersion !== undefined) {
       headers['X-Preference-Version'] = options.preferenceVersion
     }
@@ -418,7 +426,13 @@ function instanceCandidates(payload: unknown): InstanceSelectionCandidate[] | un
 }
 
 function fieldErrors(payload: unknown): {code: string; path: string}[] | undefined {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as {errors?: unknown}).errors)) return undefined
+  if (!payload || typeof payload !== 'object') return undefined
+  // Offline settings use the published `fields` contract. Keep other error consumers unchanged.
+  if (!Array.isArray((payload as {errors?: unknown}).errors)) {
+    if ((payload as {code?: unknown}).code !== 'offline_settings_invalid') return undefined
+    const parsed = OfflineSettingsFieldErrorSchema.array().min(1).max(20).safeParse((payload as {fields?: unknown}).fields)
+    return parsed.success ? parsed.data : undefined
+  }
   const errors = (payload as {errors: unknown[]}).errors.flatMap(item => {
     if (!item || typeof item !== 'object') return []
     const code = (item as {code?: unknown}).code

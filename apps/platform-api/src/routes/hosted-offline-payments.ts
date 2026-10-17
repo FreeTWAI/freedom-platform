@@ -1,3 +1,4 @@
+import {parseSettingsRecoveryVerification} from '../../../../modules/agent-commerce/payments/settings-verification.js';
 import {Hono} from 'hono';
 import type {Pool} from 'pg';
 import {z} from 'zod';
@@ -17,6 +18,6 @@ export function createHostedOfflinePaymentRoutes(pool:Pool,{profiles}:{profiles:
   });
   const ids=(c:Parameters<typeof singleQuery>[0])=>[OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;
   app.get(root+'/offline-payment-settings',async c=>{const [t,i]=ids(c),view=wire.OfflinePaymentSettingsViewSchema.parse(await readOfflinePaymentSettings(pool,c.get('actor'),t,i,profiles));if(view.version)etag(c,view.version);return c.json(view);});
-  app.put(root+'/offline-payment-settings',async c=>{const h=commandHeaders(c,c.req.header('If-Match')!==undefined),[t,i]=ids(c),view=wire.OfflinePaymentSettingsViewSchema.parse(await saveOfflinePaymentSettings(pool,c.get('actor'),t,i,await c.req.json(),h.key,h.expected,profiles));if(view.version)etag(c,view.version);return c.json(view,view.version==='1'?201:200);});
+  app.put(root+'/offline-payment-settings',async c=>{const h=commandHeaders(c,c.req.header('If-Match')!==undefined),[t,i]=ids(c),view=wire.OfflinePaymentSettingsViewSchema.parse(await saveOfflinePaymentSettings(pool,c.get('actor'),t,i,await c.req.json(),h.key,h.expected,profiles,parseSettingsRecoveryVerification(c.req.header('Commerce-Recovery-Verification'))));if(view.version)etag(c,view.version);return c.json(view,view.version==='1'?201:200);});
   return app;
 }

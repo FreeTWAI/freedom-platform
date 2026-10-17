@@ -4,6 +4,8 @@ import {words,money,amountToMinor,setupNext} from '../../modules/agent-commerce/
 import {SellerPaymentStateSchema,SellerInventoryStateSchema,SellerCheckoutOrderSummarySchema,ExceptionCaseViewSchema,SellerPaymentAttemptSchema,SellerPaymentApplicationSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 import {ProviderServiceStateSchema,PaymentActivationSchema,CommerceSetupErrorCodeSchema} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import {createAttempt,idleAttempt,startAttempt,retryAttempt,attemptLocked,unknownFailure} from '../../modules/agent-commerce/seller-console/state/attempt.js';
+import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
+import {errorText} from '../../modules/agent-commerce/seller-console/state/controller.js';
 const enums={payment:SellerPaymentStateSchema.options,inventory:SellerInventoryStateSchema.options,lifecycle:SellerCheckoutOrderSummarySchema.shape.lifecycle_state.options,cancel:SellerCheckoutOrderSummarySchema.shape.cancel_reason.unwrap().options,kind:ExceptionCaseViewSchema.shape.kind.options,next:ExceptionCaseViewSchema.shape.next_action.options,resolution:ExceptionCaseViewSchema.shape.resolution.unwrap().shape.code.options,status:ExceptionCaseViewSchema.shape.status.options,service:ProviderServiceStateSchema.options,activation:PaymentActivationSchema.shape.state.options,attempt:SellerPaymentAttemptSchema.shape.state.options,application:SellerPaymentApplicationSchema.shape.outcome.options,latest:['ready','awaiting_result','paid','failed','expired']};
 for(const [axis,values] of Object.entries(enums))test('wording covers exactly '+axis,()=>{const map=words[axis as keyof typeof words];assert.deepEqual(Object.keys(map).sort(),[...values].sort());assert.equal(new Set(Object.values(map)).size,values.length);for(const word of Object.values(map))assert.ok(word.trim());});
 test('seller payment and inventory wording communicates independent axes',()=>{assert.equal(words.payment.confirmed,'已收款');assert.equal(words.payment.simulated,'模擬付款（不會出貨）');assert.equal(words.inventory.unallocated,'已收款但缺貨，需處理');assert.equal(words.payment.overpaid,'收款與訂單不符，需處理');});
@@ -12,3 +14,13 @@ test('unknown attempts keep the same immutable key, body and version; new key on
 
 test('every setup problem code has a specific next step',()=>{for(const code of CommerceSetupErrorCodeSchema.options)assert.ok(setupNext[code],code);});
 test('invalid money never becomes a zero amount',()=>{for(const value of ['bad','',NaN,'1.5'])assert.equal(money(value,'TWD'),'金額無法顯示');assert.match(money(0,'TWD'),/0\.00/);assert.match(money(100,'USD'),/1\.00/);});
+
+test('offline setting field problems reach the seller form without changing other API errors',async t=>{
+ const fields=[{path:'bank_transfer.account_number',code:'format'}];
+ const payloads=[{code:'offline_settings_invalid',fields},{code:'validation_failed',fields},{code:'offline_settings_invalid',fields:[{path:'bank_transfer.account_number',code:'untrusted secret'}]},{code:'offline_settings_invalid',fields:[{path:'account 123456',code:'format'}]},{code:'offline_settings_invalid',fields,errors:[{path:'old.consumer',code:'required'}]}];
+ t.mock.method(globalThis,'fetch',async()=>Response.json({...payloads.shift(),detail:'must not reflect an account or password'},{status:422}));
+ const client=new PortalClient();client.csrfToken='synthetic';
+ for(const expected of [fields,undefined,undefined,undefined,[{path:'old.consumer',code:'required'}]])await assert.rejects(client.put('/settings',{}, {suppressConsole:true}),(cause:unknown)=>{
+  assert.ok(cause instanceof ApiError);assert.deepEqual(cause.errors,expected);assert.doesNotMatch(errorText(cause,true),/account or password/);return true;
+ });
+});
