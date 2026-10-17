@@ -174,8 +174,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 36153,
-      "sha256": "bf1f3c36943daad4dcae649c35308c334ad0ee5d750300925adfe767f701188c"
+      "bytes": 36299,
+      "sha256": "1747984482962586ddf9f8677f5c9f0541beaaf2ac020c411ecafcb9188768df"
     },
     {
       "path": "apps/freedom.module.json",
@@ -20529,8 +20529,8 @@
     },
     {
       "path": "packages/contribution-tools/freedom.module.json",
-      "bytes": 4871,
-      "sha256": "32999cd9f57942c639e0ba8dbeb2ba3408bec63ec9cac01e14083167b568d6d9"
+      "bytes": 4906,
+      "sha256": "23014af4a567dc32a85f725d78a2809643afeabf2739206f6de4b75ead129746"
     },
     {
       "path": "packages/contribution-tools/github-app-publisher.mjs",
@@ -20624,8 +20624,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-databases.mjs",
-      "bytes": 13643,
-      "sha256": "a2c6b3c413f729c5b693ec2d23792c685eecced0ec5687409dadb14d33346531"
+      "bytes": 17129,
+      "sha256": "32a7777a00a195b6fd6e85ed2019a0e1ab5643ddc01281fd029d99f634a5bf87"
     },
     {
       "path": "packages/contribution-tools/runtime-file-weights.mjs",
@@ -20634,8 +20634,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-matrix.md",
-      "bytes": 21784,
-      "sha256": "0e16f9b97816a829b3fa7722d1e0161fe25f22db1da49aad4bfa1b8a2c071563"
+      "bytes": 24024,
+      "sha256": "791a2de450e840f941e4f056ad8bcffe763e2613170c8d40db30d6243b9207aa"
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
@@ -20904,8 +20904,8 @@
     },
     {
       "path": "packages/contribution-tools/test/runtime-cleanup-diagnostics.test.mjs",
-      "bytes": 12613,
-      "sha256": "db3207aa8775fb1271e32e89db75e92ca3ca556e13917a08775ac1d35cdc5006"
+      "bytes": 18791,
+      "sha256": "61721b618858c45c88220afe0c42e208972f2588cb6130a80a5bb6e08ca7f2c0"
     },
     {
       "path": "packages/contribution-tools/test/runtime-matrix.test.mjs",
@@ -21864,8 +21864,8 @@
     },
     {
       "path": "scripts/ci/affected-jobs.md",
-      "bytes": 4560,
-      "sha256": "42efbd8810fc3349636e14027a21cc94bfa68b25cf28c19a1d7f5fc1f651853a"
+      "bytes": 6551,
+      "sha256": "3e6bf2c24ae18d75e175b791a6dff51d25e2596d5c658aabc260d14de3fd8693"
     },
     {
       "path": "scripts/ci/broker-bridge-check.mjs",
@@ -21944,13 +21944,13 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.mjs",
-      "bytes": 38963,
-      "sha256": "59f3a7980265d9264c52db1a154519eee829e16dcc80e6ca3e8fab62378c3157"
+      "bytes": 43649,
+      "sha256": "6982d8dcca6f390eb370f0d3ddab78cf805eeb4b30178073b382f6b71ad745dc"
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 77405,
-      "sha256": "0a78ac90b7ae506f47bdfb1876d07a9dda0f1d34d354116f90e57c58966e8b5f"
+      "bytes": 89041,
+      "sha256": "9ff23dc8ca39555f9a37749147aa244bb6452752615884035fa8aa733c327a9d"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",
