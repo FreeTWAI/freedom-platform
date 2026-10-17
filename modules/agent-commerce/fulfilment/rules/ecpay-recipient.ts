@@ -163,4 +163,3 @@ export function validateEcpayCvsRecipient(raw: unknown): CvsRecipientResult {
     },
   });
 }
-
