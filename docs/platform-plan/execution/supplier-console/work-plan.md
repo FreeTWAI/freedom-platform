@@ -11,9 +11,9 @@
 後續 #880 的 CI 修正與 #876 文件已合併，不構成新的部署或真人試用收據。
 
 - **下一步與 owner：** `teddashh` 沿 #862／#864 原供貨線修正實際旅程缺口；root release owner 從修正後主線固定候選，接續既有 [WP-07](WP-07-release-evidence.md) 的 schema172、備份／還原與 staging 真 API／R2 驗收，記下素材 policy revision／容量與實際旗標。兩普通帳號驗新增／照片未知結果恢復、合作／撤權、選用／發布及 ON→OFF→ON；通過後同候選 production，D-13 仍採原 host 開關，不另造逐事業灰度。
-- **D-11 的驗收語意：** 選用時複製成賣家 Asset 並計入賣家容量，選用與發布都驗目前權限。撤權後保留既有公開快照，失效合作照片在下一次發布移除；不能要求既有公開快照立刻 404。關旗標後私人合作照片路徑 404、已存預覽可開但照片可能不可讀；賣家自有照片與已發布快照仍可讀，回退 reader 必須保留 schema172 的資料能力。
+- **D-11 的驗收語意與有限 UI 缺口：** 選用時複製成賣家 Asset 並計入賣家容量，選用與發布都驗目前權限。撤權後保留既有公開快照，失效合作照片在下一次發布移除；不能要求既有公開快照立刻 404。賣家選用確認已說明此語意；`teddashh` 沿 #864 補供應商 `Material.tsx` 的撤銷授權、撤回素材與改回 `partners`：執行前清楚說明「既有已發布照片保留，店家重新發布後才移除失效來源」並確認，取消零寫入，見 [detna 既有啟用清單](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6240724810)。關旗標後私人合作照片路徑 404、已存預覽可開但照片可能不可讀；賣家自有照片與已發布快照仍可讀，回退 reader 必須保留 schema172 的資料能力。
 - **真正完成 R1：** Ted 依 [SC-SPEC-06 §5～7](SC-SPEC-06-release-rollback-pilot.md) 安排兩位供應商、兩位賣家與兩位非核心公會作者的原定試用；必要操作不能由 DB／API 代做，舊頁退場仍守原條件。CI／合成雙帳號通過只提供相應證據，不補造真人採用。
-- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。下一個普通店主產品缺口是已指派 `teddashh` 的 [#884 離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884)；賣家 API 已有不等於普通 UI 可用。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
+- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。下一個普通店主產品缺口是已指派 `teddashh` 的 [#884 自有庫存商品的離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884)，首批不含供應商配送；賣家 API 已有不等於普通 UI 可用。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
 
 這是原工作包的具體交接，沿本次既有整合／發布授權推進；不改歷史收據、未驗項或 Foundation 的 accepted 狀態。
 
