@@ -4,6 +4,10 @@
   "owner_role": "foundation",
   "owned_paths": [
     "apps/portal-web/src/modules/SocialZone.tsx",
+    "apps/portal-web/src/share-module-loader.ts",
+    "apps/portal-web/src/modules/text-edit-history.ts",
+    "tests/runtime/social-text-history.test.ts",
+    "tests/e2e/social-text-history.spec.ts",
     "apps/portal-web/src/modules/SocialZone.css",
     "apps/portal-web/src/modules/social-image.ts",
     "tests/e2e/social-feed.spec.ts",
