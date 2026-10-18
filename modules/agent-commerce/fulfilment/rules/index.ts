@@ -37,6 +37,7 @@ export {
 
 export {
   validateRecipientName,
+  validateRecipientAddress,
   normalizeMobile,
   validatePostalCode,
   validateHomeRecipient,
@@ -78,3 +79,5 @@ export {
   type LogisticsEventInput,
   type LogisticsEventOutcome,
 } from './tracking.js';
+
+export { validateEcpayRecipientName, validateEcpayHomeRecipient, validateEcpayCvsRecipient } from './ecpay-recipient.js';

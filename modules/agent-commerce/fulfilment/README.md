@@ -11,7 +11,7 @@ This module provides the shipping settings layer and pure, I/O-free domain rule 
 - All returned objects and nested arrays are deeply frozen with `Object.freeze`. Caller input objects and arrays are never mutated, aliased, or frozen.
 
 ### Dependencies
-- `commerce-providers`: Imports the public export `findCdnBlockedTerm` from `ecpay/index.ts` for CDN blocked term checks on recipient names and addresses.
+- `commerce-providers`: Imports the public export `findCdnBlockedTerm` from `ecpay/index.ts` only in the explicit `ecpay-recipient.ts` profile rules, not shared location validation.
 
 ### What does not yet exist (deferred to future fulfilment domain milestone)
 - Shipment and agreement tables and migrations (e.g. `commerce_fulfilment_agreements`, `commerce_fulfilment_orders`, `commerce_fulfilment_recipients`, `commerce_cvs_selection_sessions`, `commerce_shipments`, `commerce_logistics_operations`, `commerce_logistics_events`).
@@ -34,10 +34,12 @@ This module provides the shipping settings layer and pure, I/O-free domain rule 
 - `POSTAL_SOURCE`: Metadata identifying the official Chunghwa Post 3-digit postal prefix source document and retrieval date.
 - `isKnownPostalPrefix(prefix)`: Returns whether a 3-digit string is an officially recognized Taiwan postal prefix (368 total).
 - `isOutlyingPostalPrefix(prefix)`: Returns whether a 3-digit prefix belongs to Taiwan outlying islands (Kinmen, Matsu, Penghu, Green Island, Orchid Island, Liuqiu, Pratas, Spratly, Diaoyutai).
-- `validateRecipientName(raw)`: Normalizes (NFKC) and validates recipient real name (4–10 char weight, Han=2, ASCII=1).
+- `validateRecipientName(raw)`: Normalizes (NFKC) shared real-name text (1–40 code points; Unicode letters/marks, spaces, apostrophes and name separators).
+- `validateRecipientAddress(raw)`: Applies shared address text validation without provider-specific restrictions.
 - `normalizeMobile(raw)`: Normalizes (NFKC) and validates Taiwan mobile numbers to 10-digit `09xxxxxxxx` format.
-- `validateHomeRecipient(raw)`: Validates full home delivery recipient details (name, mobile, 3/5/6-digit postal code, 7–60 char address).
-- `validateCvsRecipient(raw)`: Validates convenience store pickup recipient details (name, mobile).
+- `validateHomeRecipient(raw)`: Validates shared location details (name, mobile, 3/5/6-digit postal code, 1–120 code point address), without provider CDN terms.
+- `validateCvsRecipient(raw)`: Validates shared name/mobile fields.
+- `validateEcpayRecipientName`, `validateEcpayHomeRecipient`, `validateEcpayCvsRecipient`: Preserve the existing `ecpay.logistics.domestic.v1` protocol limits and field-error precedence below.
 - `normalizeCvsStoreSelection(raw)`: Validates and normalizes ECPay electronic map callback store parameters (supports `CVSOutSide` and 22-division address fallback for Hi-Life).
 - `computeShipBy(confirmedAtEpochMs, options)`: Calculates promised shipping deadline (23:59:59 Asia/Taipei) across working days and daily cutoff.
 - `planDelivery(input, method)`: Deterministically partitions order lines into delivery groups, packs parcels, and calculates fees for a method.
@@ -95,7 +97,9 @@ Within each delivery group, lines are expanded into individual units (in line in
 
 ## Recipient Validation and Convenience Store Selection
 
-All text fields are normalized using Unicode NFKC.
+Shared locations retain NFKC normalization, Taiwan mobile/postal validation, and bounded text. Shared names accept 1–40 Unicode code points and addresses 1–120. The locations caller separately retains migration 170 storage bounds of 2–10 for sender names and 7–60 for addresses, counting code points like PostgreSQL `char_length`, including astral characters. It returns existing 422 field errors before SQL for out-of-range values; location storage does not claim the wider wire maxima (40/120). No migration changes these bounds. Both reject controls, malformed UTF-16 and invisible bidi/format controls; names must contain letters and permitted name separators, addresses reject markup brackets. Provider-blocked words and address `&`/`;` remain unchanged in stored shared data. These syntax checks do not establish a person’s identity.
+
+The following name/address restrictions belong only to **`ecpay.logistics.domestic.v1`** (`ecpay-recipient.ts`). Checkout home/CVS explicitly selects these rules; meetup retains its separate existing validation. All provider text fields are normalized using Unicode NFKC.
 - Names: Must contain only Han ideographs and Latin alphabet characters (no digits, spaces, symbols, emoji, or dots). Han characters count as weight 2 (per code point, including surrogate pairs like `𠮷`), ASCII letters count as weight 1. Valid total weight is 4 to 10. After length and weight checks pass, names are checked against ECPay's CDN blocked terms (`findCdnBlockedTerm`); if matched (e.g. `Echo`, `ECHO`, `Tftp`), validation returns `blocked_term` so the buyer can provide an acceptable name (e.g. Chinese real name on ID card) before the request is rejected by ECPay's CDN. Order of checks: required -> format -> too_short/too_long -> blocked_term.
 - Mobile numbers: Must be a valid Taiwan mobile number matching `^09[0-9]{8}$`. Numbers in international format `+8869xxxxxxxx` are normalized to `09xxxxxxxx`.
 - **C2 Mobile Rule**: Convenience store pickup strictly requires a mobile number for SMS pickup notifications [8809]. Home delivery in C2 also strictly requires a mobile number so couriers can coordinate delivery.
@@ -229,7 +233,7 @@ retires the previous row and, if referenced, appends one profile version replaci
 all sender/return references in the same transaction. Used roles must be preserved.
 A referenced location cannot retire independently. Twenty unretired locations are
 allowed per store. Sender validation uses `validateHomeRecipient` and retains its
-normalized fields. Over HTTP, the platform JSON guard rejects raw NUL and lone
+normalized fields. A selected ECPay service revalidates its referenced sender in `validateShippingProfile`: HOME checks name/mobile/postal/address, CVS checks only the transmitted name/mobile. An incompatible location returns 422 `shipping_input_invalid` at `services.<index>.ship_from_location_id` with the existing field code. Replacement of an in-use location follows the same check and atomically rolls back the new location, old retirement, profile version and command receipt on rejection. A manual return location is not itself selection of an ECPay service. Request builders retain independent protocol/CDN checks before signing or sending. No new provider, flag or migration is introduced by #882. Over HTTP, the platform JSON guard rejects raw NUL and lone
 UTF-16 surrogates anywhere in a body with 422 `validation_failed`, before
 authentication; the shared command boundary repeats that rejection with 400
 `invalid_command_json` for any other caller. Other control characters in labels

@@ -9,7 +9,7 @@ import {ReservationSettingSchema} from '../../../../contracts/guild-launchpad/v1
 import {ProductMediaPageSchema} from '../../../../contracts/guild-launchpad/v1/hosted-store-media';
 import {heldPhotoAttempt} from '../../../../apps/portal-web/src/modules/hosted-store-photo-state';
 import {createAttempt,classifyCommandOutcome,ATTEMPT_KINDS,type Attempt,type AttemptKind,refusalReleased} from './attempt';
-import {holdAttempt,markAttemptUnknown,releaseAttempt,restoreAttempt,consolePhotoTargets,rememberConsolePhoto} from './registry';
+import {holdAttempt,markAttemptUnknown,releaseAttempt,restoreAttempt,retainedAttempt,consolePhotoTargets,rememberConsolePhoto} from './registry';
 import {editDraft,staleDrafts,discardDraft,reapplyAttempt,type Drafts,type Fields} from './drafts';
 import {heldMaterialUpload,materialUploadTargets} from './material-upload';
 import {leaveDecision} from './leave';
@@ -146,11 +146,14 @@ export function useSupplierConsoleController({client,userId,scope,route,register
   let outcome;
   try{outcome=classifyCommandOutcome(a,{response:await client[a.method](a.path,a.body,{idempotencyKey:a.key,ifMatch:a.ifMatch,signal:commandAbort.current.signal})});}
   catch(cause){outcome=classifyCommandOutcome(a,{error:cause});}
-  if(outcome.state==='unknown')markAttemptUnknown(client,userId,a);else releaseAttempt(client,userId,a);
+  // Current permission is checked before receipt lookup: a denied replay cannot settle an earlier unknown outcome.
+  const deniedUnknown=outcome.state==='known'&&[403,404].includes(outcome.status)&&retainedAttempt(client,userId,a.scope)?.hadUnknown===true;
+  if(outcome.state==='unknown'||deniedUnknown)markAttemptUnknown(client,userId,a);else releaseAttempt(client,userId,a);
   if(!mounted.current||generation.current!==client.sessionGeneration)return;
   busyRef.current=false;
   if(outcome.state==='unknown'){setPhase('held');return;}
-  attemptRef.current=null;setAttempt(null);setPhase('idle');
+  if(deniedUnknown){setPhase('held');if(outcome.state==='known'&&outcome.status===404)void read('profile');}
+  else{attemptRef.current=null;setAttempt(null);setPhase('idle');}
   if(outcome.state==='success'){
    const saved=`已保存：${a.label}。`;setNotice(saved);setSectionStatus(old=>({...old,[a.draft??a.target]:saved}));if(a.draft)discard(a.draft);
    if(a.productId&&typeof outcome.value.version==='string')setDrafts(old=>staleDrafts(old,a.productId!,outcome.value.version as string));

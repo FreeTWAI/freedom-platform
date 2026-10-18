@@ -532,10 +532,18 @@ test('SC-UI-M3-18 list states preserve failures, capacity unavailability, active
  const stale=renderPresentation(createElement(Materials,{c:materialController({materials:{...failedSlot,data}})}));assert.ok(stale.includes('目前無法讀取業務空間容量。'));assert.ok(!stale.includes('還可使用 75.0'));
 });
 test('SC-UI-M3-19 detail escapes copy, shows 404 recovery, confirmations and withdrawn read-only data',()=>{
- const detail=materialDetailFixture(),c=materialController({['material:'+id]:readySlot(detail)}),html=renderPresentation(createElement(Material,{c,id,mediaEnabled:false,uploadsEnabled:false,active:true}));
- for(const text of ['素材詳情','複製文字','儲存為新版本','合作店家可以把這個版本用在他們的公開店面。','確認開放','已經下載或放上店面的副本無法收回。撤回後不能復原。','合作店家已經下載或放上店面的副本，撤回後無法收回。','之後新加入的合作店家不會自動取得授權。'])assert.ok(html.includes(text),text);assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+ const base=materialDetailFixture(),detail=SupplyMaterialDetailSchema.parse({...base,material:{...base.material,active_grants:1},grants:[{partner_id:other,partner_name:'合作店家',granted_at:asOf,revoked_at:null}]}),c=materialController({['material:'+id]:readySlot(detail)}),html=renderPresentation(createElement(Material,{c,id,mediaEnabled:false,uploadsEnabled:false,active:true}));
+ for(const text of ['素材詳情','複製文字','儲存為新版本','已經下載或放上店面的副本無法收回。撤回後不能復原。','之後新加入的合作店家不會自動取得授權。'])assert.ok(html.includes(text),text);assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+ const dialogs=html.match(/<dialog\b[\s\S]*?<\/dialog>/g)??[];assert.equal(dialogs.length,3);
+ for(const [title,confirm,notice] of [
+  ['改為僅授權的合作店家','確認變更','合作店家不能再把這個素材選用到公開店面；已授權店家仍可讀取素材。'],
+  ['撤銷店家授權','確認撤銷','撤銷後，這間店不能再讀取這個素材；已經下載的副本無法收回。'],
+  ['永久撤回這個素材','確認撤回素材','撤回後，合作店家不能再讀取或使用這個素材，所有授權一併撤銷；已經下載或放上店面的副本無法收回。撤回後不能復原。'],
+ ]){const dialog:string|undefined=dialogs.find(value=>value.includes(`>${title}</h2>`));assert.ok(dialog,title);assert.doesNotMatch(dialog,/^<dialog\b[^>]*\sopen(?:[=\s>])/);for(const text of [notice,'既有已發布店面的照片仍保留；店家重新發布後，才會移除失效來源的照片。','>取消</button>',`>${confirm}</button>`])assert.ok(dialog.includes(text),`${title}: ${text}`);}
+ // SC-E2E-62 covers selecting public_use and its confirmation; SSR has no pending selection.
+ assert.ok(!html.includes('合作店家可以把這個版本用在他們的公開店面。'));assert.ok(!html.includes('確認開放'));
  const missing=renderPresentation(createElement(Material,{c:materialController({['material:'+id]:{...failedSlot,status:404}}),id,mediaEnabled:false,uploadsEnabled:false,active:true}));assert.ok(missing.includes('找不到這個素材。'));assert.ok(missing.includes(href(scope,'materials')));
- const withdrawn={...detail,material:{...detail.material,state:'withdrawn' as const,withdrawn_at:asOf}};const readOnly=renderPresentation(createElement(Material,{c:materialController({['material:'+id]:readySlot(withdrawn)}),id,mediaEnabled:false,uploadsEnabled:false,active:true}));assert.ok(readOnly.includes('已撤回'));for(const text of ['儲存為新版本','確認撤回素材','確認開放','授權選取的店家','編輯標題與說明'])assert.ok(!readOnly.includes(text),text);
+ const withdrawn=SupplyMaterialDetailSchema.parse({...detail,material:{...detail.material,state:'withdrawn',withdrawn_at:asOf,active_grants:0},grants:detail.grants.map(grant=>({...grant,revoked_at:asOf}))});const readOnly=renderPresentation(createElement(Material,{c:materialController({['material:'+id]:readySlot(withdrawn)}),id,mediaEnabled:false,uploadsEnabled:false,active:true}));assert.ok(readOnly.includes('已撤回'));assert.ok(!readOnly.includes('<dialog'));for(const text of ['儲存為新版本','確認撤回素材','確認開放','確認變更','確認撤銷','授權選取的店家','編輯標題與說明'])assert.ok(!readOnly.includes(text),text);
 });
 test('SC-UI-M3-20 image and video content respect flags and all version links use the private API path',()=>{
  for(const kind of ['image','video'] as const){const content=kind==='image'?{kind,content_type:'image/webp' as const,byte_size:1024,width:100,height:50}:{kind,content_type:'video/mp4' as const,byte_size:1024};const v={...materialVersion,content},d={...materialDetailFixture(),material:{...materialFixture(),kind,current:v},versions:[v]};
