@@ -106,6 +106,13 @@ HTML 的備用 `title` 只定位一次開始標籤、一次 `>` 與一次結束�
 這避免最多 1 MiB 的重複未結束標籤造成平方時間的同步解析；不宣稱
 AbortController 能中斷同步 JavaScript。OG 優先、entity 解碼、清理與長度上限不變。
 
+HTML 預覽在解析標題與圖片網址前，依 HTTP `Content-Type` 的明確 `charset`
+用 runtime 的標準 `TextDecoder` 解碼（#734），包含 Windows-1252 與 Big5。
+參數名稱／encoding label 不分大小寫，接受 MIME 雙引號；其他參數引號內的
+`charset=` 不會被誤認。沒有宣告、label 無效或 runtime 不支援時保留既有 UTF-8
+best-effort；不讀 HTML meta charset，也不下載外部解碼器。oEmbed JSON 仍固定
+UTF-8，圖片保持原始 bytes 交既有正規化；抓取限制仍按實際 bytes 計算。
+
 預覽抓取（`modules/community/link-preview.ts`）由 runtime 注入。YouTube 取影片 id（`watch?v=`、`youtu.be`、`/shorts/`、`/live/`、`/embed/`），再抓 `i.ytimg.com` 的 `hqdefault.jpg`，標題可選 oEmbed。其他平台讀 `og:image`、`og:image:secure_url` 或 `twitter:image`。限制是：`redirect:manual`、最多 3 次重導、每一跳都重跑網址規則、全程 6 秒、HTML 最多 1 MiB、圖片最多 5 MiB。回應只要聲明 `image/*` 就收下；格式以檔案簽名判斷，不採用對方的 Content-Type。GIF、動畫 PNG、動畫 WebP、簽名不符或超過 5 MiB 時捨棄縮圖、保留標題。靜態 png／jpeg／webp 正規化成 640×360 的 WebP（`social_thumbnail`）。處理器失敗就沒有縮圖，不讓貼文失敗。上傳的縮圖仍要聲明類型與簽名一致，且在 512 KiB 以下。User-Agent 固定為 `FreedomWorkshopPreview/1.0 (+https://freetwai.com)`。測試與 e2e 使用假的 fetcher，不連外網。
 
 HTML metadata 接受合法的無引號、單引號及雙引號屬性值；引號內的 `>` 不會提早
