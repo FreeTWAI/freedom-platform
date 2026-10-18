@@ -1,13 +1,13 @@
 // Conservative job selection for .github/workflows/verify.yml.
 // A pull request narrows only inside the explicit docs allowlist or the fixed
-// frontend leaf profiles below. An ordinary modification of the exact root
+// frontend leaf or informational handoff profiles below. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
 // Leaf edits retain all runtime/browser/static
 // jobs and require unchanged, compatible baseline/candidate descriptor graphs.
 // The exact generated inventory manifest may accompany qualifying edits; owning that one metadata file does not widen the decision, and the file
 // is not itself an allowlisted document. source-integrity verifies immutable migrations and local links; main archives
 // generate and restore a complete inventory. Rename, delete, copy, mode change, unknown paths,
-// merge_group, push, and governance, security, or shared-runtime paths keep
+// merge_group, push, and other governance, security, or shared-runtime paths keep
 // every selectable job. The aggregate accepts a skip only for a job this
 // decision left unselected; failure and cancellation do not pass.
 import { execFileSync } from 'node:child_process';
@@ -51,6 +51,20 @@ export const DOCS_ALLOWLIST_PREFIXES = Object.freeze([
 // scripts/update-inventory.py rewrites this manifest for every hashed source
 // change. It remains under docs/platform-plan/ for every other classification.
 export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09-20-file-inventory.json';
+
+// Informational handoffs only. Runtime/spec/control documents and every dated
+// rollout JSON remain full; a filename or a candidate declaration is no schema.
+export const HANDOFF_DOCS_PATHS = Object.freeze([
+  'docs/platform-plan/execution/commerce/work-plan.md',
+  'docs/platform-plan/execution/supplier-console/work-plan.md',
+  'docs/platform-plan/execution/guild-launchpad/README.md',
+  'docs/platform-plan/execution/unified-foundation/closeout.md',
+  'docs/platform-plan/execution/unified-foundation/current-state.json',
+]);
+export const HANDOFF_DOCS_JOBS = Object.freeze(['governance-consumers']);
+const HANDOFF_DOCS_REASON = 'informational_handoff_docs';
+const handoffOwner = path => path === HANDOFF_DOCS_PATHS[1] ? 'supplier-console'
+  : HANDOFF_DOCS_PATHS.slice(3).includes(path) ? 'governance' : null;
 
 // Host-owned paths and expected module obligations, never a candidate glob or
 // executable command. New files, public sharing/auth helpers, guide contracts,
@@ -100,7 +114,8 @@ function decision(mode, reason, selected) {
   return Object.freeze({
     mode, reason,
     jobs: Object.freeze(Object.fromEntries(SELECTABLE_JOBS.map(id => [id, mode === 'affected'
-      ? (reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
+      ? (reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
+        : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
   });
 }
 const full = reason => decision('full', reason, true);
@@ -211,6 +226,45 @@ export function decideAffectedJobs(input) {
   return docs();
 }
 
+export function decideHandoffDocsProfile(input) {
+  const fallback = reason => ({profile: 'full', reason});
+  if (input?.event !== 'pull_request') return fallback('non_pull_request');
+  if (input.diffComplete !== true || !Array.isArray(input.changes) || !input.changes.length
+    || input.changes.length > CHANGE_LIMIT || input.nonExecutableBlobsProven !== true) return fallback('handoff_diff_unproven');
+  const paths = input.changes.map(change => change?.path);
+  if (new Set(paths).size !== paths.length || input.changes.some(change => statusReason(change) || change.status !== 'M'
+    || (!HANDOFF_DOCS_PATHS.includes(change.path) && change.path !== GENERATED_INVENTORY_PATH))) return fallback('outside_handoff_docs');
+  const documents = paths.filter(path => path !== GENERATED_INVENTORY_PATH);
+  if (!documents.length) return fallback('outside_handoff_docs');
+  if (input.descriptorsProven !== true || !input.baseline?.length || !input.candidate?.length) return fallback('descriptors_unproven');
+  try {
+    const graphs = [validatedDescriptorGraph(input.baseline), validatedDescriptorGraph(input.candidate)];
+    if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) throw Error();
+    for (const [id, value] of graphs[0]) if (JSON.stringify(value) !== JSON.stringify(graphs[1].get(id))) throw Error();
+    for (const descriptors of [input.baseline, input.candidate]) {
+      for (const path of documents) {
+        if (RUNTIME_TEXT.has(path) || descriptors.some(descriptor => descriptor.instructions.includes(path))) throw Error();
+        const owners = descriptors.filter(descriptor => owns(descriptor, path));
+        const expected = handoffOwner(path);
+        if (!sameSet(owners.map(owner => owner.module_id), expected ? [expected] : [])) throw Error();
+        if (owners.some(owner => owner.owner_role !== 'foundation' || !sameSet(owner.dependencies,
+          expected === 'supplier-console' ? ['agent-commerce', 'hosted-distribution', 'asset-lifecycle'] : [])
+          || !sameSet(owner.tests, expected === 'supplier-console' ? ['runtime.full', 'e2e.harness'] : ['governance.unit', 'runtime.full']))) throw Error();
+      }
+    }
+    // Preserve known ownership/reverse-consumer obligations before selecting the
+    // fixed documentation check. This does not change general context impact.
+    const owned = documents.filter(handoffOwner), supplier = owned.some(path => handoffOwner(path) === 'supplier-console');
+    const governance = owned.some(path => handoffOwner(path) === 'governance');
+    const impact = selectImpact({baseline: input.baseline, candidate: input.candidate, changedPaths: owned});
+    if (impact.unknown_paths.length || !sameSet(impact.module_ids,
+      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition'] : []), ...(governance ? ['governance'] : [])])
+      || !sameSet(impact.tests, [...new Set([...(supplier ? ['e2e.harness', 'runtime.full', 'runtime.guild-blocks'] : []),
+        ...(governance ? ['governance.unit', 'runtime.full'] : [])])])) throw Error();
+    return {profile: HANDOFF_DOCS_REASON, reason: HANDOFF_DOCS_REASON};
+  } catch { return fallback('handoff_impact_unproven'); }
+}
+
 /** Explain the actual reverse-dependency closure before permitting the guild lane.
  * Descriptor, contract, SDK, registration, test, new-file and unknown changes
  * retain the complete integration path. This first profile only covers edits
@@ -244,7 +298,7 @@ export function decideGuildPresentationProfile(input) {
           || !sameSet(owner.public_exports, [leaf.entry]) || owner.surfaces.length !== 1) throw Error();
         const surface = owner.surfaces[0];
         if (surface.surface_id !== leaf.surface || surface.entry !== leaf.entry || surface.kind !== 'page'
-          || surface.auth_profile !== 'member-session' || !sameSet(surface.operations, [leaf.operation])) throw Error();
+          || surface.auth_profile !== 'member-session' || !sameSet(surface.operations, leaf.operations)) throw Error();
       }
       const composition = descriptors.find(item => item.module_id === GUIDE_COMPOSITION_PROFILE.module);
       if (!composition || composition.owner_role !== 'foundation'
@@ -493,11 +547,15 @@ function loadTrees(repository, base, head) {
     const baseTree = parseLsTreeZ(runGit(repository, ['ls-tree', '-r', '-z', '--end-of-options', base]).toString('utf8'));
     const headTree = parseLsTreeZ(runGit(repository, ['ls-tree', '-r', '-z', '--end-of-options', head]).toString('utf8'));
     if (!baseTree.ok || !headTree.ok) return null;
-    return changesFromTrees(baseTree.files, headTree.files);
+    const diff = changesFromTrees(baseTree.files, headTree.files);
+    return {...diff, nonExecutableBlobsProven: diff.changes.every(change =>
+      [baseTree.files.get(change.path), headTree.files.get(change.path)].every(entry => entry?.type === 'blob' && entry.mode === '100644'))};
   } catch { return null; }
 }
 export function collectRepositoryDecision({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
+  const handoff = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideHandoffDocsProfile);
+  if (handoff.profile === HANDOFF_DOCS_REASON) return decision('affected', handoff.reason, false);
   const guild = collectRepositoryGuildDecision({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (guild.profile === GUILD_PRESENTATION_PROFILE.id) return decision('affected', guild.reason, false);
   if (['guild_source_dependencies_unproven', 'guild_impact_unproven'].includes(guild.reason)) return full(guild.reason);
@@ -538,7 +596,8 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
     const diff = loadTrees(root, base, candidate);
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
-      baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok });
+      baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
+      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true });
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {
       for (const change of diff.changes) {
         if (change.path === GENERATED_INVENTORY_PATH) continue;
@@ -571,7 +630,8 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
     const profile = outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
-      : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : null;
+      : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
+        : outputs.reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS : null;
     if (!profile || SELECTABLE_JOBS.some(id => jobs[id] !== profile.includes(id))) return { ok: false, reason: 'decision_inconsistent' };
   }
   if (jobs['runtime-full'] !== jobs['runtime-aggregate']) return { ok: false, reason: 'runtime_selection_split' };

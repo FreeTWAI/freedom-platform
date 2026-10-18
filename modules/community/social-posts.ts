@@ -91,7 +91,10 @@ function cursorOf(raw: string | undefined) {
   return { createdAt, id };
 }
 
-export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query: { platform?: string; cursor?: string; kind?: string; tag?:string }) {
+export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query: { platform?: string; cursor?: string; kind?: string; tag?:string; post_id?:string }) {
+  // Exact lookup shares the list's current member/community/state boundary.
+  // It does not turn a private note or its thumbnail into a public resource.
+  const postId=query.post_id===undefined?null:z.uuid().parse(query.post_id);
   const tag=query.tag ? z.string().regex(/^[\p{L}\p{N}_]{1,50}$/u).parse(query.tag).toLocaleLowerCase() : null;
   const platform = query.platform ?? '';
   requireCondition(platform === '' || (SOCIAL_PLATFORMS as readonly string[]).includes(platform), 422, 'validation_failed', '平台篩選不正確。');
@@ -104,7 +107,8 @@ export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query
       AND ($6::text IS NULL OR p.kind=$6) AND ($7::text IS NULL OR p.tags @> ARRAY[$7::text])
       AND ($3::text[] IS NULL OR p.kind='link')
       AND ($4::timestamptz IS NULL OR (p.created_at,p.post_id)<($4::timestamptz,$5::uuid))
-    ORDER BY p.created_at DESC,p.post_id DESC LIMIT 25`, [actor.community_id, actor.user_id, platforms, cursor?.createdAt ?? null, cursor?.id ?? null, query.kind || null, tag])).rows as PostRow[];
+      AND ($8::uuid IS NULL OR p.post_id=$8)
+    ORDER BY p.created_at DESC,p.post_id DESC LIMIT 25`, [actor.community_id, actor.user_id, platforms, cursor?.createdAt ?? null, cursor?.id ?? null, query.kind || null, tag, postId])).rows as PostRow[];
   const page = rows.slice(0, 24).map(row => view(row, actor.user_id));
   const last = rows[23];
   return { items: page, next_cursor: rows.length > 24 && last ? Buffer.from(`${last.created_cursor}\n${last.post_id}`).toString('base64url') : null, can_hide: await canHideSocialPosts(pool, actor) };
@@ -220,13 +224,13 @@ export async function setSocialLike(pool: Pool, inputCommand: Command, id: strin
 }
 
 export type SocialCommentView = { image_url:string|null; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: { user_id: string; display_name: string }; mine: boolean };
-type CommentRow = { image_id?:string; post_id:string; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_at: Date | string; edited_at: Date | string | null; edit_revision: number; author_user_id: string; display_name: string };
+type CommentRow = { image_id?:string; post_id:string; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_cursor: string; edited_at: Date | string | null; edit_revision: number; author_user_id: string; display_name: string };
 function commentView(row: CommentRow, actor: Actor): SocialCommentView {
-  return {image_url:row.image_id?`/api/v1/social-posts/${row.post_id}/comments/${row.comment_id}/image`:null, sticker_id:row.sticker_id, mentions:row.mentions??[], like_count:Number(row.like_count)||0, liked:row.liked===true, comment_id: row.comment_id, body: row.body, created_at: new Date(row.created_at).toISOString(), edited_at: row.edited_at ? new Date(row.edited_at).toISOString() : null,
+  return {image_url:row.image_id?`/api/v1/social-posts/${row.post_id}/comments/${row.comment_id}/image`:null, sticker_id:row.sticker_id, mentions:row.mentions??[], like_count:Number(row.like_count)||0, liked:row.liked===true, comment_id: row.comment_id, body: row.body, created_at: row.created_cursor, edited_at: row.edited_at ? new Date(row.edited_at).toISOString() : null,
     revision: Number(row.edit_revision), author: {user_id: row.author_user_id, display_name: row.display_name}, mine: row.author_user_id === actor.user_id};
 }
 
-const COMMENTS=`SELECT to_char(c.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_cursor, c.comment_id,c.post_id,c.body,c.created_at,c.edited_at,c.edit_revision,c.author_user_id,c.sticker_id,c.mentions,u.display_name,
+const COMMENTS=`SELECT to_char(c.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_cursor, c.comment_id,c.post_id,c.body,c.edited_at,c.edit_revision,c.author_user_id,c.sticker_id,c.mentions,u.display_name,
  t.image_id,(SELECT count(*)::int FROM community_social_comment_likes l WHERE l.comment_id=c.comment_id) AS like_count,
  EXISTS(SELECT 1 FROM community_social_comment_likes l WHERE l.comment_id=c.comment_id AND l.user_id=$5) AS liked
  FROM community_social_comments c JOIN users u ON u.user_id=c.author_user_id

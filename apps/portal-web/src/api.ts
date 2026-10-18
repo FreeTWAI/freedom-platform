@@ -3,6 +3,7 @@ import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import type { ProblemDetails, SessionPayload } from './types'
 import { beginRequest } from './request-activity'
+import { OfflineSettingsFieldErrorSchema } from '../../../contracts/guild-launchpad/v1/hosted-offline-payment'
 
 const API_BASE = '/api/v1'
 
@@ -70,6 +71,8 @@ export type RequestOptions = {
   arPattern?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
+  /** Current authorization for retrying the unchanged Commerce settings command. */
+  commerceRecoveryVerificationId?: string
   /** Unquoted positive decimal version for leave-v2 when the guild is a category primary. */
   preferenceVersion?: string
   /** Email-proven event participation only; never a member or general API credential. */
@@ -216,6 +219,11 @@ export class PortalClient {
     try { return await this.request<T>('PATCH', path, { ...options, body }) }
     finally { this.reads.clear() }
   }
+  async put<T>(path: string, body: unknown, options: Omit<RequestOptions, 'body'> = {}): Promise<T> {
+    this.reads.clear()
+    try { return await this.request<T>('PUT', path, { ...options, body }) }
+    finally { this.reads.clear() }
+  }
 
   async putArPattern<T>(id:string, bytes:Uint8Array, options:Omit<RequestOptions,'body'|'arPattern'>):Promise<T> {
     if(!/^[0-9a-f-]{36}$/.test(id)||bytes.byteLength>20*1024*1024)throw new ApiError({message:'圖案辨識檔不完整或太大。',status:422})
@@ -281,6 +289,11 @@ export class PortalClient {
     }
     if (options.ifMatch !== undefined) {
       headers['If-Match'] = quoteEtag(options.ifMatch)
+    }
+    if (options.commerceRecoveryVerificationId !== undefined) {
+      const settingsPath = /^\/tenants\/[0-9a-f-]{36}\/storefronts\/[0-9a-f-]{36}\/(?:offline-payment-settings|provider-accounts(?:\/[0-9a-f-]{36}\/services\/(?:payment|logistics|invoice)(?:\/(?:suspend|resume|retire|activation-payments))?)?)$/.test(path)
+      if (!settingsPath || !['POST','PUT'].includes(method) || !/^[0-9a-f-]{36}$/.test(options.commerceRecoveryVerificationId)) throw new ApiError({message:'收款設定驗證格式不正確。',status:400})
+      headers['Commerce-Recovery-Verification'] = options.commerceRecoveryVerificationId
     }
     if (options.preferenceVersion !== undefined) {
       headers['X-Preference-Version'] = options.preferenceVersion
@@ -413,7 +426,13 @@ function instanceCandidates(payload: unknown): InstanceSelectionCandidate[] | un
 }
 
 function fieldErrors(payload: unknown): {code: string; path: string}[] | undefined {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as {errors?: unknown}).errors)) return undefined
+  if (!payload || typeof payload !== 'object') return undefined
+  // Offline settings use the published `fields` contract. Keep other error consumers unchanged.
+  if (!Array.isArray((payload as {errors?: unknown}).errors)) {
+    if ((payload as {code?: unknown}).code !== 'offline_settings_invalid') return undefined
+    const parsed = OfflineSettingsFieldErrorSchema.array().min(1).max(20).safeParse((payload as {fields?: unknown}).fields)
+    return parsed.success ? parsed.data : undefined
+  }
   const errors = (payload as {errors: unknown[]}).errors.flatMap(item => {
     if (!item || typeof item !== 'object') return []
     const code = (item as {code?: unknown}).code
@@ -433,6 +452,14 @@ export function requireItems<T>(payload: unknown, label: string): T[] {
     throw new ApiError({ message: `${label} 回應格式不正確` })
   }
   return (payload as { items: T[] }).items
+}
+
+export function requireCursorPage<T>(payload: unknown, label: string): {items:T[];next_cursor:string|null} {
+  const items=requireItems<T>(payload,label)
+  if(!payload||typeof payload!=='object'||!('next_cursor' in payload))throw new ApiError({message:`${label} 回應缺少分頁游標`})
+  const cursor=payload.next_cursor
+  if(cursor!==null&&typeof cursor!=='string')throw new ApiError({message:`${label} 分頁游標格式不正確`})
+  return {items,next_cursor:cursor}
 }
 
 export function requireDashboard<T extends { now: unknown; next: unknown; gained: unknown; review_queue: unknown; summary: unknown }>(
