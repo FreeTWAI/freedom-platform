@@ -33,6 +33,8 @@ GitHub 暫時故障時拒絕操作，不以快取授權；已確認的權限消�
 
 Agent 使用 `POST /development-agent/v1/proposals`，Bearer `fpd_…`、JSON 與 Idempotency-Key；不接受 cookie 作授權，外站 Origin 拒絕，串流上限 32 KiB，scope 固定 `development:propose`。kind、target、owner 由 key 的 source grant 決定，不接受客戶端改寫。這個 key 不能呼叫一般技能上傳 API，也不能取得其他會員的資料。瀏覽器核發 key 會在公會鎖與後續 GitHub 鎖之後，用 `clock_timestamp()` 重查 session；等鎖跨過到期不得核發。Grant 與 key 的授權檢查同樣用 `clock_timestamp()`，避免交易開始時的 `now()` 在鎖等待後仍放行。
 
+Bearer scheme 僅接受 ASCII 大小寫不敏感的 `Bearer` 與一個以上 ASCII SP；`fpd_` 前綴、43 字元 secret 與 hash bytes 保持大小寫敏感，不 trim 或正規化。Basic、BearerX、HTAB、缺 SP、NBSP、其他用途與變造憑證仍拒絕；scheme 相容不改變目前公會、GitHub binding、同意、grant、key 及 receipt 重播的授權檢查。
+
 GitHub evidence／`checked_at` 等候後重驗本次精確 grant 的資料庫期限，Agent 另重驗
 精確 `key_id`／`source_grant_id`。本機新 key、私人提案及 receipt 完成後，在原
 transaction client 的成功結尾再次檢查；Agent key 與 grant 由同一 SQL 判斷。

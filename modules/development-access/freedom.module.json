@@ -22,7 +22,8 @@
   "owned_paths": [
     "modules/development-access/service.ts",
     "apps/platform-api/src/routes/development-access.ts",
-    "tests/runtime/development-access-grant-race.test.ts"
+    "tests/runtime/development-access-grant-race.test.ts",
+    "tests/runtime/development-access.test.ts"
   ],
   "public_exports": [
     "modules/development-access/service.ts"

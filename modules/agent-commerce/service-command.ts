@@ -21,7 +21,7 @@ function response(value:unknown):Cancelled{
  * Create/payment retain their existing dynamic domain replay contracts. */
 export async function cancelShopOrder(pool:Pool,host:ShopServiceHost,authorization:string|undefined,orderId:string):Promise<Cancelled>{
  const id=OpaqueId.parse(orderId);
- if(typeof authorization==='string'&&/^Bearer fw_shop_[A-Za-z0-9_-]{43}$/.test(authorization))
+ if(typeof authorization==='string'&&/^[Bb][Ee][Aa][Rr][Ee][Rr] +fw_shop_[A-Za-z0-9_-]{43}$/.test(authorization))
   return response(await machine(pool,host,authorization,(q,shop)=>cancelOrder(q,shop,id)));
  let context:ShopServiceContext|undefined,pending=false;
  const namespace=()=>[context!.subject_principal.principal_id,context!.authn_kind,context!.scope.scope_id,operation,id];
