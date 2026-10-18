@@ -87,9 +87,9 @@ list/editor CSS is retained. The production Vite build was measured with
 | Initial HTML/static JavaScript closure | Baseline | Candidate |
 | --- | ---: | ---: |
 | Actual bytes | 816,416 | 792,158 |
-| Per-file gzip bytes | 252,020 | 245,864 |
+| Per-file gzip bytes | 252,020 | 245,858 |
 
-This is 24,258 fewer JavaScript bytes and 6,156 fewer gzip bytes (2.44%). It does
+This is 24,258 fewer JavaScript bytes and 6,162 fewer gzip bytes (2.45%). It does
 not measure network latency, real-device FPS, total asset storage, server capacity
 or all platform workflows. The self-hosted SDK, existing theme art and license
 bytes are retained. No new runtime dependencies, service, posting API or updater
