@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import * as wire from '../../../../contracts/guild-launchpad/v1/hosted-shipping.js';
 import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {Problem,requireCondition} from '../../../../packages/shared/problem.js';
-import {validateHomeRecipient} from '../rules/recipient.js';
+import {validateHomeRecipient,validateRecipientName,validateRecipientAddress} from '../rules/recipient.js';
 import {ShippingSettingsProblem,shippingSettingsCommand,shippingSettingsRead,type SettingsActor,type ShippingFieldError} from './command.js';
 import {currentShippingProfile,profileReferences,validateShippingProfile,insertShippingProfile,type ShippingEnvironment} from './profile.js';
 
@@ -32,8 +32,15 @@ export function createShipFromLocation(pool:Pool,actor:SettingsActor,tenantId:st
     if([...label].length>40)fields.push({path:'label',code:'too_long'});
     if(/[\u0000-\u001F\u007F-\u009F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(input.label))fields.push({path:'label',code:'format'});
     const validated=validateHomeRecipient({name:input.sender_name,mobile:input.mobile,postal_code:input.postal_code,address:input.address});
-    if(/[\u0001-\u001F\u007F-\u009F]/.test(input.address))fields.push({path:'address',code:'format'});
     if(!validated.ok)fields.push(...validated.errors.map(e=>({path:e.field==='name'?'sender_name':e.field,code:e.code})));
+    // Migration 170 bounds this persistent location, not the shared recipient model.
+    // Count Unicode code points like PostgreSQL char_length, not UTF-16 units.
+    for(const [path,result,min,max] of [
+      ['sender_name',validateRecipientName(input.sender_name),2,10],
+      ['address',validateRecipientAddress(input.address),7,60],
+    ] as const){
+      if(result.ok){const length=[...result.value].length;if(length<min||length>max)fields.push({path,code:length<min?'too_short':'too_long'});}
+    }
     if(!input.ships&&!input.receives_returns)fields.push({path:'ships',code:'required'});
     if(fields.length)throw new ShippingSettingsProblem(422,'shipping_input_invalid',fields);
     if(!validated.ok)throw new Problem(422,'shipping_input_invalid','配送資料無效。');

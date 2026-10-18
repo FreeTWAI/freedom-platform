@@ -406,7 +406,7 @@ async function inviteOperator(ownerPage:Page,writerPage:Page,db:Pool,s:Store,cap
 }
 async function changeOperatorCapabilities(ownerPage:Page,tenant:string,instance:string,principalId:string,capabilities:string[]){
  const members=await get(ownerPage,`/tenants/${tenant}/members`),membership=members.items.find((item:{principal_id:string})=>item.principal_id===principalId);
- await post(ownerPage,`/tenants/${tenant}/members/${principalId}/change`,{role:'operator',status:'active',instance_capabilities:[{instance_id:instance,capabilities}],reason:'Synthetic supplier console selective permission change'},200,membership.version);
+ await post(ownerPage,`/tenants/${tenant}/members/${principalId}/change`,{role:'operator',status:'active',instance_capabilities:capabilities.length?[{instance_id:instance,capabilities}]:[],reason:'Synthetic supplier console selective permission change'},200,membership.version);
 }
 
 test('SC-E2E-33 losing only publish keeps editing available after the refreshed profile (AT-37)',async({page,browser,baseURL,e2eAuthPool},info)=>{
@@ -505,5 +505,63 @@ test('SC-E2E-35 losing all write access after a refusal stays read-only (AT-37)'
   expect((await detail(page,s,p.product_id)).product.description).toBe('合成原始說明');
   expect(writeRequests).toHaveLength(1);
   await evidence(writer,info,'complete-write-revocation-readonly',{writeRequests,writeStatuses});
+ }finally{await context.close();}
+});
+
+for(const committed of [true,false])for(const denial of [403,404] as const)
+test(`SC-E2E-36 ${committed?'committed':'never-arrived'} original outcome survives ${denial} and recovers once (AT-06,36,37)`,async({page,browser,baseURL,e2eAuthPool},info)=>{
+ test.setTimeout(120_000);
+ const s=await supplier(page,e2eAuthPool),p=await product(page,s),context=await browser.newContext({baseURL});
+ const requests:ReturnType<typeof signature>[]=[],statuses:(number|null)[]=[],receipts:unknown[]=[];
+ try{
+  const writer=await context.newPage(),op=await inviteOperator(page,writer,e2eAuthPool,s,['store:read','store:write']);
+  await go(writer,s,'/products/'+p.product_id);
+  const pending=consoleArea(writer).getByRole('status').filter({hasText:'尚未確認原操作的結果：儲存庫存。'});
+  const form=active(writer).getByRole('form',{name:'儲存庫存',exact:true});
+  await writer.route('**/api/v1'+s.root+'/supply-products/'+p.product_id,async route=>{
+   if(route.request().method()!=='PATCH')return route.continue();requests.push(signature(route.request()));
+   if(requests.length===1&&!committed){statuses.push(null);await route.abort('failed');return;}
+   const response=await route.fetch();statuses.push(response.status());
+   if(response.status()===200)receipts.push(await response.json());
+   if(requests.length===1){expect(response.status()).toBe(200);await route.abort('failed');}else await route.fulfill({response});
+  });
+  await form.getByLabel('庫存',{exact:true}).fill('7');await form.getByRole('button',{name:'儲存庫存',exact:true}).click();
+  await expect(pending).toBeVisible();expect(requests).toHaveLength(1);
+  expect(requests[0].version).toBe(`"${p.version}"`);expect(requests[0].key).toBeTruthy();
+  const facts=async()=>({
+   product:(await detail(page,s,p.product_id)).product,
+   receipts:(await e2eAuthPool.query('SELECT response FROM scoped_command_receipts WHERE principal_id=$1 AND operation=$2 AND idempotency_key=$3',[op.principalId,'storefront.supply-product.update',requests[0].key])).rows,
+   effects:(await e2eAuthPool.query<{n:number}>('SELECT count(*)::int AS n FROM scoped_transition_journal WHERE aggregate_id=$1 AND operation=$2',[p.product_id,'storefront.supply-product.update'])).rows[0].n,
+  });
+  const beforeDenial=await facts();
+  expect(beforeDenial.product.stock).toBe(committed?7:10);expect(beforeDenial.receipts).toHaveLength(committed?1:0);expect(beforeDenial.effects).toBe(committed?1:0);
+  await changeOperatorCapabilities(page,op.tenant,op.instance,op.principalId,denial===403?['store:read']:[]);
+  const refused=writer.waitForResponse(r=>r.request().method()==='PATCH'&&r.url().endsWith(s.root+'/supply-products/'+p.product_id));
+  const deniedProfile=writer.waitForResponse(r=>r.request().method()==='GET'&&r.url().endsWith(s.root+'/supply-profile'));
+  await pending.getByRole('button',{name:'重試',exact:true}).click();expect((await refused).status()).toBe(denial);
+  await expect(pending).toBeVisible();expect((await deniedProfile).status()).toBe(denial===403?200:404);
+  await expect(consoleArea(writer).getByRole('alert').first()).toContainText(denial===403?'目前身分已沒有這項權限':'找不到');
+  expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);expect(await facts()).toEqual(beforeDenial);
+  const hash=new URL(writer.url()).hash;
+  await navigate(writer,'會員首頁');await expect(writer).toHaveURL(new RegExp(hash+'$'));
+  await expect(consoleArea(writer).locator('.sc-announcement')).toHaveText(leaveNotice);await expect(pending).toBeVisible();
+  expect(requests).toHaveLength(2);
+
+  // A fresh authorized profile read restores permission, not the original command's outcome.
+  await changeOperatorCapabilities(page,op.tenant,op.instance,op.principalId,['store:read','store:write']);
+  const restored=writer.waitForResponse(r=>r.request().method()==='GET'&&r.url().endsWith(s.root+'/supply-profile'));
+  if(denial===403){await nav(writer,'設定與資料');await active(writer).locator('.sc-read-status').first().getByRole('button',{name:'更新資料',exact:true}).click();}
+  else await consoleArea(writer).locator('.sc-read-status').first().getByRole('button',{name:'重試',exact:true}).click();
+  expect((await restored).status()).toBe(200);await expect(pending).toBeVisible();expect(requests).toHaveLength(2);
+  await go(writer,s,'/products/new');await expect(active(writer).getByRole('form',{name:'新增商品',exact:true}).getByRole('button',{name:'新增商品',exact:true})).toBeDisabled();
+  await go(writer,s,'/products/'+p.product_id);await expect(form.getByRole('button',{name:'儲存庫存',exact:true})).toBeDisabled();
+  await expect(pending).toBeVisible();expect(requests).toHaveLength(2);
+  await pending.getByRole('button',{name:'重試',exact:true}).click();
+  await expect(pending).toHaveCount(0);await expect(consoleArea(writer).locator('.sc-announcement')).toHaveText('已保存：儲存庫存。');
+  expect(statuses).toEqual([committed?200:null,denial,200]);expect(requests).toHaveLength(3);expect(requests[2]).toEqual(requests[0]);
+  const after=await facts();expect(after.product.stock).toBe(7);expect(after.product.version).toBe(String(BigInt(p.version)+1n));expect(after.receipts).toHaveLength(1);expect(after.effects).toBe(1);
+  if(committed){expect(receipts).toHaveLength(2);expect(receipts[1]).toEqual(receipts[0]);expect(after).toEqual(beforeDenial);}
+  else{expect(receipts).toHaveLength(1);expect(after.receipts[0].response).toEqual(receipts[0]);}
+  await evidence(writer,info,`unknown-${committed?'committed':'never-arrived'}-${denial}`,{requests,statuses,receipts,beforeDenial,after});
  }finally{await context.close();}
 });

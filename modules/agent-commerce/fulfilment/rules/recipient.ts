@@ -1,6 +1,5 @@
 import { deepFreeze } from './errors.js';
 import { isKnownPostalPrefix, isOutlyingPostalPrefix } from './postal.js';
-import { findCdnBlockedTerm } from '../../providers/ecpay/index.js';
 
 export type RecipientValidationCode =
   | 'required'
@@ -53,51 +52,16 @@ export type CvsStoreSelectionResult =
   | { readonly ok: true; readonly store: NormalizedCvsStore }
   | { readonly ok: false; readonly errors: readonly RecipientValidationError[] };
 
-/**
- * Validates recipient name:
- * - NFKC, trim
- * - empty -> required
- * - ^(?:\p{Script=Han}|[A-Za-z])+$ (flag u) else format
- * - weight: 2 per Han char, 1 per ASCII letter
- * - weight < 4 -> too_short, > 10 -> too_long
- */
+/** Shared real-name text; provider protocol limits are applied only by its caller. */
 export function validateRecipientName(raw: unknown): FieldValidationResult<string> {
-  if (raw === undefined || raw === null) {
-    return { ok: false, code: 'required' };
-  }
-  if (typeof raw !== 'string') {
-    return { ok: false, code: 'format' };
-  }
-
+  if (raw === undefined || raw === null) return { ok: false, code: 'required' };
+  if (typeof raw !== 'string') return { ok: false, code: 'format' };
+  if (INVALID_TEXT.test(raw)) return { ok: false, code: 'format' };
   const name = raw.normalize('NFKC').trim();
-  if (name.length === 0) {
-    return { ok: false, code: 'required' };
-  }
-
-  if (!/^(?:\p{Script=Han}|[A-Za-z])+$/u.test(name)) {
-    return { ok: false, code: 'format' };
-  }
-
-  let weight = 0;
-  for (const ch of name) {
-    if (/\p{Script=Han}/u.test(ch)) {
-      weight += 2;
-    } else if (/[A-Za-z]/.test(ch)) {
-      weight += 1;
-    }
-  }
-
-  if (weight < 4) {
-    return { ok: false, code: 'too_short' };
-  }
-  if (weight > 10) {
-    return { ok: false, code: 'too_long' };
-  }
-
-  if (findCdnBlockedTerm(name) !== null) {
-    return { ok: false, code: 'blocked_term' };
-  }
-
+  if (!name) return { ok: false, code: 'required' };
+  // Accommodate names from different scripts, spaces, apostrophes and separators.
+  if (!/^[\p{L}\p{M} .'’·-]+$/u.test(name) || !/\p{L}/u.test(name)) return { ok: false, code: 'format' };
+  if ([...name].length > 40) return { ok: false, code: 'too_long' };
   return { ok: true, value: name };
 }
 
@@ -133,46 +97,17 @@ export function normalizeMobile(raw: unknown): FieldValidationResult<string> {
   return { ok: true, value: s };
 }
 
-// Same rule as ECPay's assertHomeAddress: a lone UTF-16 surrogate is malformed text.
-const LONE_SURROGATE_PATTERN = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+// Reject malformed text before normalization; never silently strip control characters.
+const INVALID_TEXT = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
 
-function cleanAddressText(raw: unknown): FieldValidationResult<string> {
-  if (raw === undefined || raw === null) {
-    return { ok: false, code: 'required' };
-  }
-  if (typeof raw !== 'string') {
-    return { ok: false, code: 'format' };
-  }
-  // Checked on the raw text, so removing a control character cannot join two halves into a pair.
-  if (LONE_SURROGATE_PATTERN.test(raw)) {
-    return { ok: false, code: 'format' };
-  }
-
-  let s = raw.normalize('NFKC');
-  s = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-  s = s.replace(/\s+/g, ' ').trim();
-
-  if (s.length === 0) {
-    return { ok: false, code: 'required' };
-  }
-
-  if (/[<>&]/.test(s)) {
-    return { ok: false, code: 'format' };
-  }
-
-  const codePointCount = [...s].length;
-  if (codePointCount <= 6) {
-    return { ok: false, code: 'too_short' };
-  }
-  if (codePointCount > 60) {
-    return { ok: false, code: 'too_long' };
-  }
-
-  if (findCdnBlockedTerm(s) !== null) {
-    return { ok: false, code: 'blocked_term' };
-  }
-
-  return { ok: true, value: s };
+export function validateRecipientAddress(raw: unknown): FieldValidationResult<string> {
+  if (raw === undefined || raw === null) return { ok: false, code: 'required' };
+  if (typeof raw !== 'string' || INVALID_TEXT.test(raw)) return { ok: false, code: 'format' };
+  const address = raw.normalize('NFKC').replace(/\s+/g, ' ').trim();
+  if (!address) return { ok: false, code: 'required' };
+  if (/[<>]/.test(address)) return { ok: false, code: 'format' };
+  if ([...address].length > 120) return { ok: false, code: 'too_long' };
+  return { ok: true, value: address };
 }
 
 export function validatePostalCode(raw: unknown): FieldValidationResult<{ code: string; prefix: string }> {
@@ -219,7 +154,7 @@ export function validateHomeRecipient(raw: unknown): HomeRecipientResult {
     errors.push({ field: 'postal_code', code: postalRes.code });
   }
 
-  const addressRes = cleanAddressText(input.address);
+  const addressRes = validateRecipientAddress(input.address);
   if (!addressRes.ok) {
     errors.push({ field: 'address', code: addressRes.code });
   }

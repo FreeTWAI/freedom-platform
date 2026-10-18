@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {z} from 'zod';
 import * as wire from '../../../../contracts/guild-launchpad/v1/hosted-shipping.js';
+import {validateEcpayHomeRecipient,validateEcpayCvsRecipient} from '../rules/ecpay-recipient.js';
 import {canonicalJSON} from '../../checkout/terms.js';
 import {shippingSettingsCommand,shippingSettingsRead,ShippingSettingsProblem,nextSettingsVersion,type SettingsActor,type ShippingFieldError} from './command.js';
 import {logisticsAvailability,type ShippingEnvironment} from './logistics.js';
@@ -38,9 +39,18 @@ export async function validateShippingProfile(q:PoolClient,tenantId:string,insta
   if(fields.length)throw new ShippingSettingsProblem(422,'shipping_input_invalid',fields);
   const refs=input.services.map((s,i)=>({id:s.ship_from_location_id,path:`services.${i}.ship_from_location_id`,role:'ships'}));
   if(input.drop_ship)refs.push({id:input.drop_ship.return_location_id,path:'drop_ship.return_location_id',role:'receives_returns'});
-  const locations=(await q.query('SELECT location_id,retired_at,ships,receives_returns FROM commerce_ship_from_locations WHERE tenant_id=$1 AND instance_id=$2 AND location_id=ANY($3::uuid[])',[tenantId,instanceId,refs.map(ref=>ref.id)])).rows;
+  const locations=(await q.query('SELECT location_id,retired_at,ships,receives_returns,sender_name,mobile,postal_code,address FROM commerce_ship_from_locations WHERE tenant_id=$1 AND instance_id=$2 AND location_id=ANY($3::uuid[])',[tenantId,instanceId,refs.map(ref=>ref.id)])).rows;
   for(const ref of refs){const row=locations.find(row=>row.location_id===ref.id);const code=!row?'not_found':row.retired_at?'retired':!row[ref.role]?'role_required':null;if(code)fields.push({path:ref.path,code});}
   if(fields.length)throw new ShippingSettingsProblem(409,'ship_from_location_unavailable',fields);
+  // Every currently supported service belongs to ecpay.logistics.domestic.v1.
+  // Saving a shared location does not select a provider; choosing it here does.
+  input.services.forEach((service,index)=>{
+    const row=locations.find(row=>row.location_id===service.ship_from_location_id)!;
+    const party={name:row.sender_name,mobile:row.mobile,postal_code:row.postal_code,address:row.address};
+    const result=service.service_key.startsWith('ecpay.logistics.home.')?validateEcpayHomeRecipient(party):validateEcpayCvsRecipient(party);
+    if(!result.ok)fields.push(...result.errors.map(error=>({path:`services.${index}.ship_from_location_id`,code:error.code})));
+  });
+  if(fields.length)throw new ShippingSettingsProblem(422,'shipping_input_invalid',fields);
   const availability=await logisticsAvailability(q,{instanceId,environment});
   input.services.forEach((service,index)=>{if(!availability.profileServiceKeys.has(service.service_key))fields.push({path:`services.${index}.service_key`,code:'not_activated'});});
   if(fields.length)throw new ShippingSettingsProblem(409,'logistics_service_unavailable',fields);

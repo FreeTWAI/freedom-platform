@@ -26,6 +26,8 @@ const navLink = (page: Page, name: string) =>
   page.getByRole('navigation', {name: '營運中心', exact: true}).getByRole('link', {name, exact: true});
 const partnerMaterials = (page: Page) => page.locator('.partner-materials');
 
+const PUBLISHED_PHOTO_NOTICE = '既有已發布店面的照片仍保留；店家重新發布後，才會移除失效來源的照片。';
+
 const EMPTY_PARTNER_MATERIALS_TEXT =
   '目前沒有供應商授權給這間店的素材。供應商授權後會出現在這裡；你停止販售或對方撤回後，素材會從這裡移除。';
 
@@ -386,12 +388,28 @@ test('SC-E2E-60 copy material from creation to partner use, revoke and withdraw 
     // Supplier revokes B (dialog) → B after 重新整理 no longer sees the material
     await openSupplyPage(pageA, `${sup.store.hash}/supply/materials/${materialId}`, `素材詳情：${title}`);
     const grantRowB = grantSection.locator('ul.sc-list li.sc-row').filter({hasText: sellerB.name});
-    await grantRowB.getByRole('button', {name: '撤銷', exact: true}).click();
+    const materialPath = `${sup.store.root}/supply-materials/${materialId}`;
+    const revokeRequests: ReturnType<typeof signature>[] = [];
+    pageA.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith(`/api/v1${materialPath}/grants/`) && new URL(request.url()).pathname.endsWith('/revoke')) revokeRequests.push(signature(request));
+    });
+    const beforeRevoke = (await getJson(pageA, materialPath)).material.version;
+    const revokeButton = grantRowB.getByRole('button', {name: '撤銷', exact: true});
+    await revokeButton.click();
     const revokeDialog = pageA.getByRole('dialog', {name: '撤銷店家授權', exact: true});
     await expect(revokeDialog).toBeVisible();
+    await expect(revokeDialog).toContainText(PUBLISHED_PHOTO_NOTICE);
+    await revokeDialog.getByRole('button', {name: '取消', exact: true}).click();
+    await expect(revokeDialog).not.toBeVisible();
+    await expect(revokeButton).toBeFocused();
+    expect((await getJson(pageA, materialPath)).material.version).toBe(beforeRevoke);
+    expect(revokeRequests).toHaveLength(0);
+    await revokeButton.click();
     await revokeDialog.getByRole('button', {name: '確認撤銷', exact: true}).click();
     await expect(consoleRoot(pageA).locator('.sc-announcement')).toHaveText('已保存：撤銷授權。');
     await expect(grantRowB).toContainText('已撤銷');
+    expect(revokeRequests).toHaveLength(1);
+    expect(revokeRequests[0].version).toBe(JSON.stringify(beforeRevoke));
 
     await panelB.getByRole('button', {name: '重新整理', exact: true}).click();
     await expect(panelB).toContainText(EMPTY_PARTNER_MATERIALS_TEXT);
@@ -417,11 +435,27 @@ test('SC-E2E-60 copy material from creation to partner use, revoke and withdraw 
     const withdrawSection = activePage(pageA)
       .locator('.sc-section')
       .filter({has: pageA.getByRole('heading', {level: 3, name: '撤回素材', exact: true})});
-    await withdrawSection.getByRole('button', {name: '撤回素材', exact: true}).click();
+    const withdrawRequests: ReturnType<typeof signature>[] = [];
+    pageA.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === `/api/v1${materialPath}/withdraw`) withdrawRequests.push(signature(request));
+    });
+    const beforeWithdraw = (await getJson(pageA, materialPath)).material.version;
+    const withdrawButton = withdrawSection.getByRole('button', {name: '撤回素材', exact: true});
+    await withdrawButton.click();
     const withdrawDialog = pageA.getByRole('dialog', {name: '永久撤回這個素材', exact: true});
     await expect(withdrawDialog).toBeVisible();
+    await expect(withdrawDialog).toContainText(PUBLISHED_PHOTO_NOTICE);
+    await pageA.keyboard.press('Escape');
+    await expect(withdrawDialog).not.toBeVisible();
+    await expect(withdrawButton).toBeFocused();
+    expect((await getJson(pageA, materialPath)).material.version).toBe(beforeWithdraw);
+    expect(withdrawRequests).toHaveLength(0);
+    await withdrawButton.click();
     await withdrawDialog.getByRole('button', {name: '確認撤回素材', exact: true}).click();
     await expect(consoleRoot(pageA).locator('.sc-announcement')).toHaveText('已保存：撤回素材。');
+
+    expect(withdrawRequests).toHaveLength(1);
+    expect(withdrawRequests[0].version).toBe(JSON.stringify(beforeWithdraw));
 
     // Detail shows 已撤回 and no edit/upload/grant controls
     await expect(activePage(pageA).locator('.detail-list')).toContainText('已撤回');
@@ -758,7 +792,66 @@ test('SC-E2E-62 an unknown material command result is retried with the same key 
     ).rows[0].n;
     expect(activeGrantsAfterGrant).toBe(1);
 
-    // 2. Repeat once with 撤回素材
+    // 2. Restrict public use: cancellation sends nothing; a lost ACK retains the exact command.
+    const accessSelect = activePage(pageA).getByLabel('使用範圍');
+    await accessSelect.selectOption('public_use');
+    const publicDialog = pageA.getByRole('dialog', {name: '可用於合作店家的公開店面', exact: true});
+    await expect(publicDialog).toContainText('合作店家可以把這個版本用在他們的公開店面。這不會產生公開的檔案網址；合作店家已經下載或放上店面的副本，撤回後無法收回。');
+    await publicDialog.getByRole('button', {name: '確認開放', exact: true}).click();
+    await expect(accessSelect).toHaveValue('public_use');
+    const materialPath = `${sup.store.root}/supply-materials/${materialId}`;
+    const beforeRestrict = (await getJson(pageA, materialPath)).material.version;
+    const accessRequests: ReturnType<typeof signature>[] = [];
+    const accessStatuses: number[] = [];
+    await pageA.route(`**/api/v1${materialPath}/access`, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      accessRequests.push(signature(route.request()));
+      const response = await route.fetch();
+      accessStatuses.push(response.status());
+      if (accessRequests.length === 1) {
+        expect(response.status()).toBe(200);
+        await route.abort('failed');
+      } else await route.fulfill({response});
+    });
+    await accessSelect.evaluate(select => {
+      const dialog = select.closest('.sc-section')!.querySelector('dialog')!;
+      const showModal = dialog.showModal.bind(dialog);
+      dialog.showModal = () => {
+        dialog.dataset.titleAtOpen = dialog.querySelector('h2')!.textContent!;
+        showModal();
+      };
+    });
+    await accessSelect.selectOption('partners');
+    const restrictDialog = pageA.getByRole('dialog', {name: '改為僅授權的合作店家', exact: true});
+    await expect(restrictDialog).toContainText(PUBLISHED_PHOTO_NOTICE);
+    await expect(restrictDialog).toHaveAttribute('data-title-at-open', '改為僅授權的合作店家');
+    await restrictDialog.getByRole('button', {name: '取消', exact: true}).click();
+    await expect(restrictDialog).not.toBeVisible();
+    await expect(accessSelect).toBeFocused();
+    await expect(accessSelect).toHaveValue('public_use');
+    expect((await getJson(pageA, materialPath)).material.version).toBe(beforeRestrict);
+    expect(accessRequests).toHaveLength(0);
+    await accessSelect.selectOption('partners');
+    await restrictDialog.getByRole('button', {name: '確認變更', exact: true}).click();
+    const accessHeldBanner = consoleRoot(pageA).getByRole('status')
+      .filter({hasText: '尚未確認原操作的結果：變更素材授權範圍。請按『重試』確認。'});
+    await expect(accessHeldBanner).toBeVisible();
+    expect(accessRequests).toHaveLength(1);
+    await accessHeldBanner.getByRole('button', {name: '重試', exact: true}).click();
+    await expect(consoleRoot(pageA).locator('.sc-announcement')).toHaveText('已保存：變更素材授權範圍。');
+    await expect(accessHeldBanner).toHaveCount(0);
+    await expect(accessSelect).toHaveValue('partners');
+    expect(accessStatuses).toEqual([200, 200]);
+    expect(accessRequests).toHaveLength(2);
+    expect(accessRequests[0].key).toBeTruthy();
+    expect(accessRequests[0].version).toBe(JSON.stringify(beforeRestrict));
+    expect(JSON.parse(accessRequests[0].body!)).toEqual({access: 'partners'});
+    expect(accessRequests[1]).toEqual(accessRequests[0]);
+    const afterRestrict = (await getJson(pageA, materialPath)).material;
+    expect(afterRestrict.access).toBe('partners');
+    expect(BigInt(afterRestrict.version)).toBe(BigInt(beforeRestrict) + 1n);
+
+    // 3. Repeat once with 撤回素材
     const withdrawRequests: ReturnType<typeof signature>[] = [];
     const withdrawStatuses: number[] = [];
     await pageA.route(`**/api/v1${sup.store.root}/supply-materials/${materialId}/withdraw`, async route => {
@@ -796,7 +889,7 @@ test('SC-E2E-62 an unknown material command result is retried with the same key 
     expect(withdrawStatuses).toEqual([200, 200]);
     expect(withdrawRequests).toHaveLength(2);
     expect(withdrawRequests[0].key).toBeTruthy();
-    expect(withdrawRequests[0].version).toBe('"3"');
+    expect(withdrawRequests[0].version).toBe(JSON.stringify(afterRestrict.version));
     expect(withdrawRequests[1]).toEqual(withdrawRequests[0]);
 
     const stateAfterWithdraw = (
@@ -1122,6 +1215,30 @@ test('SC-E2E-65 material pages fit narrow and wide screens', async ({browser, ba
     await assertSmallButtonsOnDesktop(pageA, '.supplier-console');
     await pageA.screenshot({path: info.outputPath('materials-detail-1440.png'), fullPage: true});
     await publicDialog.getByRole('button', {name: '取消', exact: true}).click();
+
+    // Existing dialog controls and tokens also fit every restrictive confirmation.
+    await accessSection.getByLabel('使用範圍').selectOption('public_use');
+    await publicDialog.getByRole('button', {name: '確認開放', exact: true}).click();
+    await expect(accessSection.getByLabel('使用範圍')).toHaveValue('public_use');
+    for (const action of ['partners', 'revoke', 'withdraw'] as const) {
+      if (action === 'partners') await accessSection.getByLabel('使用範圍').selectOption('partners');
+      else await activePage(pageA).getByRole('button', {name: action === 'revoke' ? '撤銷' : '撤回素材', exact: true}).click();
+      const dialog = pageA.getByRole('dialog', {name: action === 'partners' ? '改為僅授權的合作店家' : action === 'revoke' ? '撤銷店家授權' : '永久撤回這個素材', exact: true});
+      await expect(dialog).toContainText(PUBLISHED_PHOTO_NOTICE);
+      for (const width of [390, 768, 1440]) {
+        await pageA.setViewportSize({width, height: width === 390 ? 844 : 900});
+        expect(await pageA.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        expect(await dialog.evaluate(el => {
+          const r = el.getBoundingClientRect();
+          return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.width > 0;
+        })).toBe(true);
+        for (const button of await dialog.getByRole('button').all()) {
+          expect(await button.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        }
+        await pageA.screenshot({path: info.outputPath(`materials-${action}-confirm-${width}.png`)});
+      }
+      await dialog.getByRole('button', {name: '取消', exact: true}).click();
+    }
 
     // 4. Seller's 合作素材 panel
     await openSellerCooperation(sellerB.page, sellerB.store.hash);
