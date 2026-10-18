@@ -140,20 +140,19 @@ data_boundary:
     - Order
     - PaymentFact
     - LedgerEvent
-  customer_data_mode: external_client_owned
+  # Central custody does not transfer member/business ownership or attest live setup.
+  customer_data_mode: platform_hosted_for_members
   credential_reference_metadata_in_postgres: true
   dynamic_credential_storage:
-    - provider_managed
     - postgres_envelope_vault
+    - postgres_keyring_sealed
   credential_root_key_storage: cloudflare_worker_secret
   stores_payment_instrument_data: false
   stores_plaintext_credentials: false
   external_systems_of_record:
     - github
-    - client_storage
     - discord
     - line
-    - client_database
     - payment_provider
     - bank
 
