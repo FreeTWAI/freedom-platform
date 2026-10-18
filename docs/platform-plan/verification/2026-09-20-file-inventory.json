@@ -15474,8 +15474,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 84589,
-      "sha256": "4f481ad75b07abd768eaaf57e9104b23c31423bdb57a41708c5b834b9804038e"
+      "bytes": 85359,
+      "sha256": "9f5cf6e26b22085ccbed5cf71f003ff6db847a0ff7e00a9b519082bd9fa9fb49"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -15784,8 +15784,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/work-plan.md",
-      "bytes": 16071,
-      "sha256": "f698385d90abd685032bcf99e24bd64993e5a55cf8c4ed4c1ea50813957bffff"
+      "bytes": 16767,
+      "sha256": "7ba4a7647f1dba06d5f321a77dcded46734ea7bdeb5d773826d329cc6a5c0dae"
     },
     {
       "path": "docs/platform-plan/execution/tools/check_package_dag.py",
