@@ -82,7 +82,7 @@ function sharedPostFromLocation():string|null {
   const id=new URLSearchParams(window.location.search).get('social-post');
   return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:null;
 }
-export function SocialZone({client, canReview = false, viewer, focusPost}: {client: PortalClient; canReview?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
+export function SocialZone({client, canReview = false, viewer, focusPost, shortVideos = false}: {client: PortalClient; canReview?: boolean; shortVideos?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
   const composerId = useId();
   const composer = useRef<HTMLDialogElement>(null), composerTrigger = useRef<HTMLButtonElement>(null), composerStart = useRef<HTMLDivElement>(null);
   // The sticky community header wraps on narrow screens, so the composer sticks below its measured height.
@@ -165,6 +165,25 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     finally { if (sequence === loadSequence.current) { pendingFeedLoad.current = false; setLoading(false); setMore(false); } }
   }, [client,tag,directPost]);
   useEffect(() => { void load(platform); }, [load, platform]);
+  // Quiet re-check for the Short feed (no spinner, so the viewer keeps their place): a hidden or withdrawn post drops out
+  // of everything already loaded, so it stops playing. Gives up silently; the next return tries again.
+  const refreshShorts = useCallback(async (loadedCount: number) => {
+    const sequence = loadSequence.current;
+    try {
+      const kept: Post[] = [];
+      let next: string | null | undefined;
+      let canHideNow = false;
+      for (let pages = 0; pages < 10 && (pages === 0 || (next && kept.length < loadedCount)); pages++) {
+        const query = new URLSearchParams({platform: 'youtube'});
+        if (next) query.set('cursor', next);
+        const page = await client.get<Page>(`/social-posts?${query}`);
+        if (sequence !== loadSequence.current) return;
+        kept.push(...page.items.filter(post => !kept.some(item => item.post_id === post.post_id)));
+        next = page.next_cursor; canHideNow = page.can_hide;
+      }
+      setItems(kept); setCursor(next ?? null); setCanHide(canHideNow);
+    } catch { /* keep what is already on screen */ }
+  }, [client]);
   useEffect(()=>{
     const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;setDirectPost(next);}};
     window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);
@@ -388,7 +407,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     <dialog ref={options} className="social-publish-dialog social-options-dialog" aria-labelledby={`${composerId}-options`} onCancel={event=>{event.preventDefault();closeOptions();}} onClose={()=>setOptionsOpen(false)}>
       {optionsOpen && <div className="stack">
         <header className="social-publish-head"><h2 id={`${composerId}-options`}>動態選項</h2><button type="button" className="btn btn-ghost" aria-label="關閉動態選項" onClick={closeOptions}>關閉</button></header>
-        <div className="social-view-options" role="group" aria-label="查看貼文">{FILTERS.map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{item.label}</button>)}</div>
+        <div className="social-view-options" role="group" aria-label="查看貼文">{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{item.label}</button>)}</div>
         <button type="button" className="btn btn-ghost social-link-entry" onClick={openLink}>分享外部連結</button>
       </div>}
     </dialog>
@@ -425,7 +444,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }}/>}
+    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => void refreshShorts(items.length)}/>}
     <div className="social-grid">
       {(platform === 'shorts' && !directPost ? [] : items).map(post => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">

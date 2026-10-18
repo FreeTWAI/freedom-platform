@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {platformContentSecurityPolicy} from '../../apps/platform-api/src/platform-app.js';
 import {SHORT_VIDEO_EMBED_ORIGIN,isShortsLink,playableShortVideos,playerCommand,shortVideoEmbedUrl} from '../../apps/portal-web/src/modules/short-video-embed.js';
 
 const post=(id:string,url:string|null,platform='youtube',kind:'link'|'note'='link')=>({post_id:id,url,platform,kind});
@@ -52,4 +53,12 @@ test('a Shorts link is recognised by host and path only',()=>{
 test('player commands are plain JSON for the YouTube postMessage API',()=>{
   assert.deepEqual(JSON.parse(playerCommand('playVideo')),{event:'command',func:'playVideo',args:[]});
   assert.deepEqual(JSON.parse(playerCommand('unMute')),{event:'command',func:'unMute',args:[]});
+});
+
+test('the player origin is allowed only when the host enabled Short, and never on payment hand-off or admin pages',()=>{
+  assert.ok(!platformContentSecurityPolicy('/').includes('frame-src'));
+  assert.ok(!platformContentSecurityPolicy('/',undefined,undefined,false).includes('frame-src'));
+  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes(`frame-src ${SHORT_VIDEO_EMBED_ORIGIN};`));
+  for(const path of ['/admin','/admin/github/callback'])assert.ok(!platformContentSecurityPolicy(path,undefined,undefined,true).includes('frame-src'));
+  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes("frame-ancestors 'none'"));
 });

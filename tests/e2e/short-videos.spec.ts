@@ -1,4 +1,4 @@
-import {test, expect, type Page} from './fixtures.js';
+import {test, expect, type Page} from './member-feature-fixture.js';
 import {navigate, selectSocialFeed} from './navigation.js';
 
 async function login(page: Page) {
@@ -10,6 +10,8 @@ async function login(page: Page) {
   await navigate(page, '社群分享');
 }
 
+test.describe('Short feed ON',()=>{
+test.use({memberFeatures:{shortVideosEnabled:true}});
 test('members swipe through shared YouTube links in a scrollbar-free feed; players come only from the allowed origin and other sources never get one', async ({page, e2eAuthPool}) => {
   const violations: string[] = [];
   page.on('console', message => { if (/Content Security Policy|Refused to frame/i.test(message.text())) violations.push(message.text()); });
@@ -84,6 +86,26 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
       await up.click();
       await expect(slides.nth(0)).toBeInViewport({ratio: 0.6});
     }
+    // Back leaves full screen first and keeps the page; Tab stays inside the full-screen dialog.
+    await page.setViewportSize({width: 390, height: 844});
+    await feed.scrollIntoViewIfNeeded();
+    const here = page.url();
+    await feed.getByRole('button', {name: '全螢幕', exact: true}).click();
+    const back = page.getByRole('dialog', {name: '短影音', exact: true});
+    await expect(back).toBeVisible();
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Tab');
+      expect(await back.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    }
+    await page.goBack();
+    await expect(page.getByRole('dialog', {name: '短影音', exact: true})).toHaveCount(0);
+    expect(page.url()).toBe(here);
+    await expect(feed).toBeVisible();
+    // A post hidden elsewhere stops being offered when the viewer returns to the tab.
+    await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1", [ids[1]]);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect(slides.filter({hasText: titles[1]})).toHaveCount(0);
+    await expect(slides.filter({hasText: titles[0]})).toHaveCount(1);
     // Phones: the feed fits the screen, never scrolls the page sideways, and keeps 44px touch targets.
     for (const [width, height] of [[320, 568], [390, 844], [820, 1180]]) {
       await page.setViewportSize({width, height});
@@ -110,4 +132,21 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
   } finally {
     if (ids.length) await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
   }
+});
+});
+
+test.describe('Short feed OFF (default)',()=>{
+test.use({memberFeatures:{}});
+test('no Short option, no frame-src and no player when the host did not enable it',async({page,baseURL})=>{
+  await login(page);
+  await page.getByRole('button',{name:'動態選項',exact:true}).click();
+  const options=page.getByRole('dialog',{name:'動態選項',exact:true});
+  await expect(options.getByRole('button',{name:'最新貼文'})).toBeVisible();
+  await expect(options.getByRole('button',{name:'Short',exact:true})).toHaveCount(0);
+  expect(await (await page.request.get(`${baseURL}/api/v1/site`)).json()).toMatchObject({short_videos_enabled:false});
+  const csp=(await page.request.get(`${baseURL}/`)).headers()['content-security-policy']??'';
+  expect(csp).not.toContain('frame-src');
+  expect(csp).toContain("frame-ancestors 'none'");
+  await expect(page.locator('iframe')).toHaveCount(0);
+});
 });

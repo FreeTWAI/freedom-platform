@@ -13,12 +13,12 @@
 .short-video-paused { font-size: 3rem; color: #fff; text-shadow: 0 2px 12px rgb(0 0 0 / 0.6); }
 .short-video-caption { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 0.2rem; padding: 2.5rem 4.5rem 0.9rem 0.9rem; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 0.75)); pointer-events: none; }
 .short-video-caption a { color: #fff; text-decoration: underline; pointer-events: auto; }
-.short-video-caption span { font-size: 0.85rem; opacity: 0.85; }
+.short-video-caption span { font-size: 0.9rem; opacity: 0.85; }
 .short-video-controls { position: absolute; right: max(0.6rem, calc((100% - 420px) / 2 + 0.6rem)); bottom: 3.2rem; display: grid; gap: 0.5rem; }
 .short-video-controls button { width: 44px; height: 44px; border: 0; border-radius: 50%; color: #fff; background: rgb(0 0 0 / 0.45); backdrop-filter: blur(4px); font-size: 1.1rem; cursor: pointer; }
 .short-video-controls button:disabled { opacity: 0.35; cursor: default; }
 .short-video-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.short-video-note { margin: 0; font-size: 0.8rem; text-align: center; }
+.short-video-note { margin: 0; font-size: 0.9rem; text-align: center; }
 @media (max-width: 480px) {
   .short-video-scroller { width: 100%; height: min(78dvh, 720px); border-radius: 12px; }
   .short-video-caption { padding-bottom: max(0.9rem, env(safe-area-inset-bottom)); }

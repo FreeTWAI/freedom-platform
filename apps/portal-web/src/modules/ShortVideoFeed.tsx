@@ -9,7 +9,7 @@ export type ShortVideoPost = ShortVideoSource & {title: string; thumbnail_url: s
  * Vertical, swipe-up feed of YouTube links members shared. The slide on screen and its two neighbours hold a
  * player, so the next video is already loaded when it arrives; only the one on screen plays.
  */
-export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts: readonly ShortVideoPost[]; hasMore: boolean; loadingMore: boolean; onLoadMore: () => void}) {
+export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefresh}: {posts: readonly ShortVideoPost[]; hasMore: boolean; loadingMore: boolean; onLoadMore: () => void; onRefresh: () => void}) {
   const videos = playableShortVideos(posts);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -20,10 +20,17 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
   const fullTrigger = useRef<HTMLButtonElement>(null);
   const closeFull = useRef<HTMLButtonElement>(null);
   const frames = useRef<(HTMLIFrameElement | null)[]>([]);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  const refresh = useRef(onRefresh);
+  refresh.current = onRefresh;
   const scroller = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLElement>(null);
   const send = useCallback((index: number, func: PlayerCommand) => {
     frames.current[index]?.contentWindow?.postMessage(playerCommand(func), SHORT_VIDEO_EMBED_ORIGIN);
   }, []);
+  // A refresh can remove posts; never point past the end.
+  useEffect(() => { if (videos.length && active >= videos.length) setActive(videos.length - 1); }, [videos.length, active]);
   // One video plays at a time; a new slide always starts playing.
   useEffect(() => {
     setPaused(false);
@@ -31,6 +38,16 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
   }, [active, send]);
   useEffect(() => { send(active, muted ? 'mute' : 'unMute'); }, [muted, active, send]);
   useEffect(() => { if (active >= videos.length - 2 && hasMore && !loadingMore) onLoadMore(); }, [active, videos.length, hasMore, loadingMore, onLoadMore]);
+  // Leaving the tab pauses playback; coming back re-checks the list so withdrawn or hidden posts stop playing.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) { frames.current.forEach((_, index) => send(index, 'pauseVideo')); return; }
+      refresh.current();
+      if (!pausedRef.current) send(latest.current, 'playVideo');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [send]);
   // Full screen is a fixed overlay (no browser Fullscreen API, so it behaves the same on phones): lock the page
   // behind it, keep the slide on screen after the resize, close on Escape and hand focus back afterwards.
   useEffect(() => {
@@ -40,10 +57,24 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
     const root = scroller.current;
     if (root) root.scrollTo({top: latest.current * root.clientHeight, behavior: 'instant'});
     closeFull.current?.focus();
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setFull(false); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { leaveFull(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), a[href], [tabindex="0"]') ?? [])];
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    // The browser's Back button leaves full screen first instead of leaving the page.
+    const onPop = () => { if (!window.history.state?.freedomShortFull) setFull(false); };
     document.addEventListener('keydown', onKey);
+    window.addEventListener('popstate', onPop);
     return () => {
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('popstate', onPop);
+      // Closed some other way (or the page was left): drop our marker so a later Back is not swallowed.
+      if (window.history.state?.freedomShortFull) { const {freedomShortFull: _marker, ...rest} = window.history.state; window.history.replaceState(Object.keys(rest).length ? rest : null, ''); }
       document.body.style.overflow = overflow;
       const back = scroller.current;
       if (back) back.scrollTo({top: latest.current * back.clientHeight, behavior: 'instant'});
@@ -57,6 +88,13 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
     const index = Math.min(Math.max(Math.round(root.scrollTop / root.clientHeight), 0), videos.length - 1);
     setActive(current => current === index ? current : index);
   }
+  function enterFull() {
+    window.history.pushState({...window.history.state, freedomShortFull: true}, '');
+    setFull(true);
+  }
+  function leaveFull() {
+    if (window.history.state?.freedomShortFull) window.history.back(); else setFull(false);
+  }
   function go(index: number) {
     const root = scroller.current;
     if (!root) return;
@@ -68,8 +106,8 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
     setPaused(value => !value);
   }
   if (!videos.length) return <p className="empty">還沒有短影音。分享 YouTube 影片連結，就會出現在這裡。</p>;
-  return <section className={`short-video-feed${full ? ' is-full' : ''}`} aria-label="短影音" {...(full ? {role: 'dialog', 'aria-modal': true} : {})}>
-    {full && <button ref={closeFull} type="button" className="short-video-close" aria-label="離開全螢幕" onClick={() => setFull(false)}>✕</button>}
+  return <section ref={dialog} className={`short-video-feed${full ? ' is-full' : ''}`} aria-label="短影音" {...(full ? {role: 'dialog', 'aria-modal': true} : {})}>
+    {full && <button ref={closeFull} type="button" className="short-video-close" aria-label="離開全螢幕" onClick={leaveFull}>✕</button>}
     <div ref={scroller} className="short-video-scroller" tabIndex={0} onScroll={follow} onKeyDown={event => {
       if (event.key === 'ArrowDown') { event.preventDefault(); go(active + 1); }
       if (event.key === 'ArrowUp') { event.preventDefault(); go(active - 1); }
@@ -97,7 +135,7 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore}: {posts
       <button type="button" aria-label="上一支短影音" disabled={active <= 0} onClick={() => go(active - 1)}>↑</button>
       <button type="button" aria-label={muted ? '開啟聲音' : '關閉聲音'} aria-pressed={!muted} onClick={() => setMuted(value => !value)}>{muted ? '🔇' : '🔊'}</button>
       <button type="button" aria-label="下一支短影音" disabled={active >= videos.length - 1} onClick={() => go(active + 1)}>↓</button>
-      {!full && <button ref={fullTrigger} type="button" aria-label="全螢幕" onClick={() => setFull(true)}>⛶</button>}
+      {!full && <button ref={fullTrigger} type="button" aria-label="全螢幕" onClick={enterFull}>⛶</button>}
     </div>
     {!full && <p className="muted short-video-note">播放時由 YouTube 提供影片，YouTube 會看到你正在觀看。</p>}
   </section>;
