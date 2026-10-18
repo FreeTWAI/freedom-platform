@@ -35,19 +35,19 @@ async function post(session: Session, text = '一起分享新作品\n歡迎一�
   const result = await request('/social-posts/notes', session, {text}); assert.equal(result.status, 201, JSON.stringify(result.data)); return result.data;
 }
 
-for(const collection of ['posts','comments','likes'] as const){
+for(const collection of ['posts','post','comments','likes'] as const){
  test(`${collection} collection denies a session expiring during the final projection wait`,async()=>{
   const owner=await login(),note=await post(owner,'Synthetic member-only note');
   const comment=await request(`/social-posts/${note.post_id}/comments`,owner,{text:'Synthetic private comment'});
   assert.equal(comment.status,201);
   assert.equal((await request(`/social-posts/${note.post_id}/like`,owner,{liked:true})).status,200);
-  const path=collection==='posts'?'/social-posts':`/social-posts/${note.post_id}/${collection}`;
+  const path=collection==='posts'?'/social-posts':collection==='post'?`/social-posts?post_id=${note.post_id}`:`/social-posts/${note.post_id}/${collection}`;
   const valid=await request(path,owner);assert.equal(valid.status,200);
-  if(collection==='posts')assert.equal(valid.data.items[0].note,'Synthetic member-only note');
+  if(collection==='posts'||collection==='post')assert.equal(valid.data.items[0].note,'Synthetic member-only note');
   else if(collection==='comments')assert.equal(valid.data.items[0].comment_id,comment.data.comment_id);
   else assert.equal(valid.data.items[0].user_id,owner.id);
   await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '2 seconds' WHERE user_id=$1",[owner.id]);
-  const table={posts:'community_social_posts',comments:'community_social_comments',likes:'community_social_likes'}[collection];
+  const table={posts:'community_social_posts',post:'community_social_posts',comments:'community_social_comments',likes:'community_social_likes'}[collection];
   const blocker=await pool.connect();let pending:ReturnType<typeof request>|undefined;
   try{
    await blocker.query('BEGIN');const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
@@ -191,6 +191,7 @@ for (const collection of ['posts', 'comments'] as const) {
       });
       const path = note ? `/social-posts/${note.post_id}/comments` : '/social-posts';
       const ids: string[] = [], sizes: number[] = [];
+      const comments: {comment_id: string; created_at: string}[] = [];
       let cursor: string | null = null;
       for (let page = 0; page < 4; page++) {
         const response = await request(path + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), session);
@@ -198,11 +199,16 @@ for (const collection of ['posts', 'comments'] as const) {
         const data = pageSchema.parse(response.data);
         sizes.push(data.items.length);
         ids.push(...data.items.map(item => z.uuid().parse(item[idField])));
+        if (note) comments.push(...z.array(z.object({comment_id: z.uuid(), created_at: z.string()})).parse(data.items));
         cursor = data.next_cursor;
         if (!cursor) break;
       }
       assert.deepEqual(sizes, [24, 24, 3]);
       assert.deepEqual(ids, expected, 'all rows appear exactly once in database order');
+      if (note) {
+        comments.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.comment_id.localeCompare(b.comment_id));
+        assert.deepEqual(comments.map(item => item.comment_id), expected, 'comment timestamps preserve enough precision for consumer reconciliation');
+      }
       assert.equal(cursor, null, 'the last page must terminate');
     });
   }
@@ -240,6 +246,7 @@ test('other communities cannot read, like, comment or remove a known post', asyn
   const signed = await request('/auth/login', undefined, {email: 'outsider@local.test', password: DEMO_PASSWORD}); assert.equal(signed.status, 200);
   const outside = {id: user, csrf: signed.data.csrf_token, cookie: signed.response.headers.get('set-cookie')!.split(';')[0]};
   assert.equal((await request('/social-posts', outside)).data.items.length, 0);
+  assert.deepEqual((await request(`/social-posts?post_id=${note.post_id}`, outside)).data.items, []);
   assert.equal((await request(`/social-posts/${note.post_id}/comments`, outside)).status, 404);
   assert.equal((await request(`/social-posts/${note.post_id}/comments`, outside, {text: 'hello'})).status, 404);
   assert.equal((await request(`/social-posts/${note.post_id}/like`, outside, {liked: true})).status, 404);
@@ -258,6 +265,25 @@ test('hidden/deleted posts deny new interactions and old creation/comment/like r
   assert.equal((await request(`/social-posts/${note.post_id}/comments`, session, {text: 'private'}, 'POST', commentKey)).status, 404);
   assert.equal((await request(`/social-posts/${note.post_id}/comments`, session)).status, 404);
   assert.equal((await request('/social-posts', session)).data.items.length, 0);
+  assert.deepEqual((await request(`/social-posts?post_id=${note.post_id}`, session)).data.items, []);
+});
+
+test('an exact shared-post lookup reaches old content without paging and keeps member authorization',async()=>{
+  const owner=await login(),recipient=await login(1),note=await post(owner,'An old shared post');
+  await pool.query("UPDATE community_social_posts SET created_at=timestamptz '2000-01-01' WHERE post_id=$1",[note.post_id]);
+  await pool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,platform,title,note,state)
+    SELECT $1,$2,'note','other','Recent fixture','Newer than the shared post','active' FROM generate_series(1,150)`,[DEMO_COMMUNITY,owner.id]);
+  assert.equal((await request('/social-posts',recipient)).data.items.some((item:any)=>item.post_id===note.post_id),false);
+  const path=`/social-posts?post_id=${note.post_id}`;
+  const exact=await request(path,recipient);assert.equal(exact.status,200);assert.equal(exact.data.next_cursor,null);
+  assert.deepEqual(exact.data.items.map((item:any)=>item.post_id),[note.post_id]);assert.equal(exact.data.items[0].note,'An old shared post');
+  assert.equal((await request(path)).status,401);
+  assert.equal((await request('/social-posts?post_id=not-a-uuid',recipient)).status,422);
+  assert.deepEqual((await request(`/social-posts?post_id=${randomUUID()}`,recipient)).data.items,[]);
+  await pool.query("UPDATE community_social_posts SET state='deleted' WHERE post_id=$1",[note.post_id]);
+  assert.deepEqual((await request(path,recipient)).data.items,[]);
+  await pool.query('UPDATE sessions SET revoked_at=clock_timestamp() WHERE user_id=$1',[recipient.id]);
+  assert.equal((await request(path,recipient)).status,401);
 });
 
 test('revoked session denies replay and author daily limits include removed posts', async () => {
