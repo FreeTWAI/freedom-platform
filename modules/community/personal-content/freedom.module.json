@@ -15,7 +15,11 @@
     "apps/portal-web/src/modules/FirstParticipation.css",
     "tests/runtime/first-participation.test.ts",
     "tests/e2e/first-participation.spec.ts",
-    "migrations/152_first_participation.sql"
+    "migrations/152_first_participation.sql",
+    "apps/portal-web/src/modules/promotional-content/**",
+    "apps/portal-web/promo-preview/**",
+    "docs/platform-plan/contracts/promotional-content-v1.md",
+    "tests/runtime/promotional-content.test.ts"
   ],
   "public_exports": [],
   "dependencies": [
