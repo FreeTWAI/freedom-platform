@@ -1,4 +1,6 @@
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {hashPassword} from '../../modules/identity-membership/service.js';
 import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
 import {navigate,signOut} from './navigation.js';
@@ -206,6 +208,7 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
     await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toHaveCount(0);
     expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
     await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);expect(prompts).toBe(0);
+    await info.attach('ack-lost-original-command',{body:JSON.stringify({width,attempts,title,durable_count:1,departed_while_get200_held:true}),contentType:'application/json'});
     await page.screenshot({path:info.outputPath(`event-retry-left-${width}.png`),fullPage:true});
   }finally{releaseRefresh();}
 });
@@ -220,4 +223,98 @@ test('a known event rejection unlocks the draft for correction and a new submiss
   await expect(form.getByLabel('活動名稱',{exact:true})).toBeEnabled();await form.getByLabel('結束時間',{exact:true}).fill('2030-06-10T15:30');
   await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
   expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
+});
+
+for(const width of [1440,390])test(`confirmed event versions and partial media survive held refreshes at ${width}px`,async({page,e2eAuthPool},info)=>{
+  const user=randomUUID(),email=`event-refresh-${user}@example.test`;
+  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    VALUES($1,$2,$3,'合成活動刷新會員',$4,$5,false)`,[user,DEMO_COMMUNITY,email,hashPassword('freedom-local-demo'),randomUUID()]);
+  await page.setViewportSize({width,height:844});await login(page,email);await navigate(page,'社群活動');
+  await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  const titles=[`刷新甲 ${user}`,`刷新乙 ${user}`];
+  const snapshots:{release:()=>void;done:Promise<void>;body:unknown}[]=[];
+  const writes:{path:string;version:string|undefined;status:number;body:unknown}[]=[];
+  let hold=false;
+  await page.route('**/api/v1/events',async route=>{
+    if(route.request().method()!=='GET'||!hold)return route.continue();
+    const response=await route.fetch();expect(response.status()).toBe(200);
+    let release!:()=>void,complete!:()=>void;
+    const wait=new Promise<void>(resolve=>{release=resolve;}),done=new Promise<void>(resolve=>{complete=resolve;});
+    snapshots.push({release,done,body:await response.json()});
+    await wait;await route.fulfill({response});complete();
+  });
+  try{
+    hold=true;
+    for(const title of titles){
+      await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+      await form.getByLabel('活動名稱',{exact:true}).fill(title);
+      await form.getByLabel('活動說明',{exact:true}).fill('合成內容：核對已確認版本與較新草稿。');
+      await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+      await form.getByRole('button',{name:'送出審核',exact:true}).click();
+      await expect(form).toHaveCount(0);
+    }
+    await expect.poll(()=>snapshots.length).toBe(2);
+    await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+    await form.getByLabel('活動名稱',{exact:true}).fill('較新的未送出草稿');
+    snapshots[1].release();await snapshots[1].done;
+    await expect(page.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
+    snapshots[0].release();await snapshots[0].done;
+    await expect(page.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
+    await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('較新的未送出草稿');
+    page.once('dialog',dialog=>dialog.accept());await form.getByRole('button',{name:'返回',exact:true}).click();
+    hold=false;
+    const id=(await e2eAuthPool.query('SELECT event_id FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,titles[1]])).rows[0].event_id as string;
+    await page.goto(`/events/${id}`);
+    const card=page.locator('.experience-card'),editor=card.locator('form');
+    await expect(card.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
+    await page.route(`**/api/v1/events/${id}/update`,async route=>{
+      const response=await route.fetch();
+      writes.push({path:'update',version:route.request().headers()['if-match'],status:response.status(),body:await response.json()});
+      await route.fulfill({response});
+    });
+    hold=true;
+    for(const suffix of [' 修改一',' 修改二']){
+      await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+      await editor.getByLabel('活動名稱',{exact:true}).fill(titles[1]+suffix);
+      await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
+      await expect(editor).toHaveCount(0);
+    }
+    expect(writes.map(write=>write.version)).toEqual(['"1"','"2"']);
+    expect(writes.map(write=>write.status)).toEqual([200,200]);
+    await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
+    const video=await readFile('tests/media-fixtures/event-video-160x90.mp4');
+    await editor.getByLabel('活動海報（選填）').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:photo});
+    await editor.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:video});
+    const media:{path:string;version:string|undefined;status:number;bytes:string}[]=[];
+    let rejectVideo=true;
+    await page.route(`**/api/v1/events/${id}/banner`,async route=>{
+      const response=await route.fetch();
+      media.push({path:'banner',version:route.request().headers()['if-match'],status:response.status(),bytes:route.request().postDataBuffer()!.toString('base64')});
+      await route.fulfill({response});
+    });
+    await page.route(`**/api/v1/events/${id}/video`,async route=>{
+      // Real server rejection; selected File bytes remain untouched for recovery.
+      const response=await route.fetch(rejectVideo?{headers:{...route.request().headers(),'content-type':'image/gif'}}:{});
+      media.push({path:'video',version:route.request().headers()['if-match'],status:response.status(),bytes:route.request().postDataBuffer()!.toString('base64')});
+      await route.fulfill({response});
+    });
+    await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(media.map(entry=>[entry.path,entry.version,entry.status])).toEqual([['banner','"4"',200],['video','"5"',415]]);
+    await expect(editor.getByLabel('活動名稱',{exact:true})).toHaveValue(titles[1]+' 修改二');
+    page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'我的內容');
+    await expect(page).toHaveURL(new RegExp(`/events/${id}$`));
+    await editor.getByRole('button',{name:'重試保存',exact:true}).click();
+    rejectVideo=false;await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
+    await expect(editor).toHaveCount(0);
+    expect(writes.map(write=>write.version)).toEqual(['"1"','"2"','"3"','"5"']);
+    expect(media.map(entry=>[entry.path,entry.version,entry.status])).toEqual([['banner','"4"',200],['video','"5"',415],['video','"6"',200]]);
+    expect(media[2].bytes).toBe(media[1].bytes);
+    const durable=(await e2eAuthPool.query('SELECT title,aggregate_version FROM community_events WHERE organizer_ref=$1 ORDER BY title',[user])).rows;
+    expect(durable).toHaveLength(2);expect(Number(durable.find(row=>row.title===titles[1]+' 修改二')!.aggregate_version)).toBe(7);
+    await info.attach('held-refresh-version-media',{body:JSON.stringify({width,snapshots:snapshots.map(value=>value.body),writes,media,durable}),contentType:'application/json'});
+    await page.screenshot({path:info.outputPath(`confirmed-media-${width}.png`),fullPage:true});
+  }finally{hold=false;for(const snapshot of snapshots)snapshot.release();}
 });

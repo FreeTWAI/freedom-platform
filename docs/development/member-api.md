@@ -655,8 +655,27 @@ used version 3 successfully. A completed banner plus an actual video-format
 without repeating the banner. Pending/unknown protection and original-tuple
 recovery remained intact. The unchanged focused event-member journey passed
 all seven cases after the final build and raw browser reload. This synthetic
-local evidence is not deployment, trusted CI or real-member acceptance; no new
-permanent UI test was added.
+local evidence is not deployment, trusted CI or real-member acceptance; that
+earlier smoke did not add a permanent UI test.
+
+The follow-up regression runs the event journey before notification preferences
+on the same worker schema. Event creation intentionally retains organizer
+`event_submitted` notifications; the history-count case owns a fresh synthetic
+recipient instead of deleting shared notifications or widening exact unread
+assertions. A bounded attachment records the shared demo recipient's actual
+notification kinds/source keys. Both widths additionally exercise newest-first
+real list responses, a newer unsent draft, immediate confirmed-version edits,
+and retained video recovery after a real server format rejection, without
+re-uploading the successful banner. The initial expanded local run passed 11
+cases and failed both new refresh cases: their interceptor also captured the
+initial empty-list response, so snapshot indexes did not identify the two
+post-save reads. Waiting for initial-list readiness before interception fixed
+that test race. The corrected sequential event-then-notification run passed all
+13 cases on the same existing build and owned PostgreSQL schema. The exact
+history/reminder counts remain 2/1 before reading the essential notification;
+the filtered bell remains 1 when full history opens. Neither this local pass
+nor the test correction relabels the original hosted count-3-versus-1 failure
+as a passing run.
 
 ## Member event detail session boundary
 
