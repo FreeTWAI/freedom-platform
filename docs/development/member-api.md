@@ -765,9 +765,10 @@ cancel a committed registration or recall a provider-accepted email.
 
 ## Event calendar, reminders and waitlists (#256)
 
-The candidate uses migration `153_event_participation.sql`. Apply it **before
-switching source, even with the feature off**: existing RSVP capacity and guest
-acknowledgement paths also use its columns. The new routes and UI require
+The candidate uses migrations `153_event_participation.sql` and
+`173_guest_invitation_credit.sql`. Apply both **before switching source, even
+with the feature off**: existing RSVP capacity and guest acknowledgement paths
+also use their columns. The new routes and UI require
 `FREEDOM_EVENT_PARTICIPATION_ENABLED=true` (default off); disabled routes return
 404 before authentication. Worker enablement requires a usable `EMAIL.send`
 binding. This is not deployment, sender authorization or trusted CI evidence.
@@ -854,10 +855,28 @@ This consumed offer is finalized even if optional participation was switched off
 after it was issued, as on the original member RSVP path. The disabled mode
 still creates no new management capability and does not reconcile the queue;
 successful registration cannot later turn its consumed offer into an expiry.
-Between admission and confirmation, reconciliation does not expire an invitation
-while that same event/Email has a live ten-minute pending registration hold.
-The durable hold also protects an explicit retry after provider rejection;
-confirmation can still finalize the offer instead of recording Going/expired.
+Admission persists the exact credited `invitation_id` on the RSVP alongside its
+separate, freshly generated `registration_attempt_id`. Confirmation and explicit
+provider retries retain that pair; an ordinary registration stores no credit.
+Neither email equality nor the finalizer's current offer deadline establishes
+credit. Reconciliation preserves only that exact invitation while its current
+attempt has a live ten-minute pending hold. A provider rejection rolls back
+confirmation, not the admission's durable identity. Renewing an expired/cancelled
+hold generates a new attempt even if the same offer remains live, fencing a late
+confirmation from the old attempt; replacement invitations cannot inherit credit.
+Participation OFF plus an expired, unswept offer can still admit an ordinary
+registration when capacity allows, but does not accept that historical offer;
+subsequent reconciliation records its expiry.
+Runtime regressions exercise these transitions over loopback HTTP and PostgreSQL
+with a synthetic sender. Expired-offer fixtures move both invitation timestamps
+into the past, preserving `invited_at < expires_at` so database constraints remain
+active while testing an unswept, genuinely expired offer.
+The nullable column is necessary because transient request state disappears on
+provider failure and email/hold correlation cannot prove actual invitation use.
+Existing rows are not backfilled by inference. Cutover must stop old writers and
+drain their ten-minute pending holds before installing the new writer; do not
+roll back to a writer that ignores exact credit. Schema173's release capability
+floor applies even with participation OFF. No deployment or flag change is implied.
 An expired hold grants no extension and allows the next candidate to advance.
 While the event is still published and not started, disabling its waitlist
 cancels unconsumed queue entries and offers, not a guest's admitted live hold.
