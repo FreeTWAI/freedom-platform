@@ -15479,8 +15479,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 81018,
-      "sha256": "dbfe31a1c97c59ea320166521f272f99bd586622f8b76051f61c9ed1f4591db9"
+      "bytes": 85359,
+      "sha256": "9f5cf6e26b22085ccbed5cf71f003ff6db847a0ff7e00a9b519082bd9fa9fb49"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -15789,8 +15789,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/work-plan.md",
-      "bytes": 15879,
-      "sha256": "d459c5fcb78473d174cfba7a400ff6d3578c79b4234c8963393b593f1a428b9a"
+      "bytes": 18772,
+      "sha256": "c8628a73965978fb02dd61ff020faddd71a7b330f99bf800bda7064fa4487427"
     },
     {
       "path": "docs/platform-plan/execution/tools/check_package_dag.py",
@@ -22459,8 +22459,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 205761,
-      "sha256": "7b695ce9f499baff11609ec12696898ce8b34e30718610cdd42b198a66fe62ef"
+      "bytes": 206311,
+      "sha256": "393159417a89a104ec2f737bca626868003468a616d608c0569f4d35541df2fd"
     },
     {
       "path": "tests/e2e/hosted-store.spec.ts",
