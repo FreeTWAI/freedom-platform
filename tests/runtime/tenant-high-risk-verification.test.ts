@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import { Pool } from 'pg';
+import { serve } from '@hono/node-server';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { z } from 'zod';
 import { createPool, LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_PASSWORD, DEMO_COMMUNITY } from '../../packages/testing/seed.js';
@@ -200,6 +204,49 @@ test('a high-risk password failure window starts after its budget row wait',asyn
     assert.deepEqual((await pool.query('SELECT failures,window_start>=$2::timestamptz AS fresh FROM login_attempts WHERE attempt_key=$1',[bucket,marker])).rows[0],{failures:1,fresh:true});
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications')).rows[0].n,0);
   }finally{await blocker.query('ROLLBACK');blocker.release();await pending;}
+});
+
+for(const expired of [true,false])test(`native HTTP proof issuance after budget wait (expired=${expired})`,async()=>{
+  let httpApp=app;
+  const server=serve({hostname:'127.0.0.1',port:0,fetch:request=>httpApp.fetch(request)});
+  const blocker=await pool.connect();let pending:Promise<Response>|undefined;
+  try{
+    if(!server.listening)await once(server,'listening');
+    const httpOrigin=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    httpApp=createApp(pool,httpOrigin,'local',{guildLaunchpadEnabled:true});
+    const login=await fetch(httpOrigin+'/api/v1/auth/login',{
+      method:'POST',headers:{Origin:httpOrigin,'Content-Type':'application/json'},
+      body:JSON.stringify({email:DEMO_USERS[0].email,password:DEMO_PASSWORD}),
+    });
+    assert.equal(login.status,200);
+    const data=z.object({csrf_token:z.string(),user:z.object({user_id:z.uuid()})}).parse(await login.json());
+    const session:Session={cookie:login.headers.get('set-cookie')!.split(';')[0],csrf:data.csrf_token,user:data.user};
+    const tenant=await createTenant(session),hash=tokenHash(session.cookie.split('=')[1]);
+    const bucket=tokenHash(`high-risk-verification:${session.user.user_id}`);
+    await pool.query('INSERT INTO login_attempts VALUES($1,3,clock_timestamp())',[bucket]);
+    const before=(await pool.query('SELECT failures,window_start::text AS window_start FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0];
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT 1 FROM login_attempts WHERE attempt_key=$1 FOR UPDATE',[bucket]);
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    await pool.query('UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>$2) WHERE token_hash=$1',[hash,expired?2:3600]);
+    pending=fetch(httpOrigin+'/api/v1/me/high-risk-verifications',{
+      method:'POST',headers:{Origin:httpOrigin,Cookie:session.cookie,'X-CSRF-Token':session.csrf,'Content-Type':'application/json'},
+      body:JSON.stringify({tenant_id:tenant.tenant_id,purpose:'tenant.ownership.propose',password:DEMO_PASSWORD}),
+    });
+    await waitForProofLock(pid);
+    if(expired)await expireProofSession(hash);
+    await blocker.query('COMMIT');
+    const response=await pending,body=z.record(z.string(),z.unknown()).parse(await response.json());
+    assert.equal(response.status,expired?401:201,JSON.stringify(body));
+    if(expired){assert.equal(body.code,'session_expired');assert.equal(body.verification_id,undefined);}
+    else assert.equal(typeof body.verification_id,'string');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications WHERE session_hash=$1',[hash])).rows[0].n,expired?0:1);
+    const after=(await pool.query('SELECT failures,window_start::text AS window_start FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0];
+    assert.deepEqual(after,expired?before:{...before,failures:0});
+  }finally{
+    await blocker.query('ROLLBACK');blocker.release();await pending;
+    await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+  }
 });
 
 test('fresh verification rejects a wrong password without becoming 401 and ignores Idempotency-Key', async () => {

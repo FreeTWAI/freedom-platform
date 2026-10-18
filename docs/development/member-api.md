@@ -34,7 +34,7 @@ regressions use native PostgreSQL lock barriers/database markers and scoped
 application-clock skew; they do not shorten production windows or add a
 production clock override.
 
-Shared persisted budgets serialize on the bucket row before deciding expiration
+The separate shared `auth_rate_limits` admission budgets serialize on the bucket row before deciding expiration
 with PostgreSQL `clock_timestamp()`. Reopened windows also start at that actual
 database clock, not Node time or transaction-start `now()`: an old transaction
 waiting for the bucket cannot repeatedly reopen an already-expired window.
@@ -45,6 +45,9 @@ does not promise that a window remains active through commit or response deliver
 [Window regressions](../../tests/runtime/auth-rate-limit-window.test.ts) use
 real PostgreSQL row waits, aged transactions and natural expiration in an isolated
 schema; their two-second fixture does not reduce any deployed limit or duration.
+This regression is exactly owned by identity-membership and retained in the
+central `FULL_RUNTIME_BASELINE` for deletion protection; discovery alone is not
+that protection. Neither budget replaces the issuer's final session-clock fence.
 
 Event `starts_at`/`ends_at` (create, edit and schedule), Work
 `claim_by`/`finish_by`, and receipt `received_at` share the existing ISO datetime
