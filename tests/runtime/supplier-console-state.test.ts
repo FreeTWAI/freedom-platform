@@ -539,7 +539,7 @@ test('SC-UI-M3-19 detail escapes copy, shows 404 recovery, confirmations and wit
   ['改為僅授權的合作店家','確認變更','合作店家不能再把這個素材選用到公開店面；已授權店家仍可讀取素材。'],
   ['撤銷店家授權','確認撤銷','撤銷後，這間店不能再讀取這個素材；已經下載的副本無法收回。'],
   ['永久撤回這個素材','確認撤回素材','撤回後，合作店家不能再讀取或使用這個素材，所有授權一併撤銷；已經下載或放上店面的副本無法收回。撤回後不能復原。'],
- ]){const dialog=dialogs.find(value=>value.includes(`>${title}</h2>`));assert.ok(dialog,title);assert.doesNotMatch(dialog,/^<dialog\b[^>]*\sopen(?:[=\s>])/);for(const text of [notice,'既有已發布店面的照片仍保留；店家重新發布後，才會移除失效來源的照片。','>取消</button>',`>${confirm}</button>`])assert.ok(dialog.includes(text),`${title}: ${text}`);}
+ ]){const dialog:string|undefined=dialogs.find(value=>value.includes(`>${title}</h2>`));assert.ok(dialog,title);assert.doesNotMatch(dialog,/^<dialog\b[^>]*\sopen(?:[=\s>])/);for(const text of [notice,'既有已發布店面的照片仍保留；店家重新發布後，才會移除失效來源的照片。','>取消</button>',`>${confirm}</button>`])assert.ok(dialog.includes(text),`${title}: ${text}`);}
  // SC-E2E-62 covers selecting public_use and its confirmation; SSR has no pending selection.
  assert.ok(!html.includes('合作店家可以把這個版本用在他們的公開店面。'));assert.ok(!html.includes('確認開放'));
  const missing=renderPresentation(createElement(Material,{c:materialController({['material:'+id]:{...failedSlot,status:404}}),id,mediaEnabled:false,uploadsEnabled:false,active:true}));assert.ok(missing.includes('找不到這個素材。'));assert.ok(missing.includes(href(scope,'materials')));

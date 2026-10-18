@@ -25179,8 +25179,8 @@
     },
     {
       "path": "tests/runtime/supplier-console-state.test.ts",
-      "bytes": 76294,
-      "sha256": "9f6cb28f5c70a651350f4cb858dbefedbc3618441c1ddb71e5a0b9e9d7f70393"
+      "bytes": 76311,
+      "sha256": "5638ae1e9734c28e02704948f2e4d01f1d92b000e6c585c9457f1787d88c284a"
     },
     {
       "path": "tests/runtime/supplier-console-writes.test.ts",
