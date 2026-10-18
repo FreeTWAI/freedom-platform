@@ -129,12 +129,16 @@ test('numeric preview references replace invalid scalars and preserve valid Unic
     for (const html of [
       `<title>before${reference}after</title>`,
       `<title>fallback</title><meta property="og:title" content="before${reference}after">`,
+      `<title>fallback</title><meta property=og:title content=before${reference}after>`,
+      `<title>fallback</title><meta property='og:title' content='before${reference}after'>`,
     ]) {
       assert.equal(previewTitle(html), expected, reference);
       assert.deepEqual(await previewLink('https://example.com/numeric', async () => htmlResponse(html)),
         {title: expected, image: null, source: null}, reference);
     }
     assert.equal(previewImageUrl(`<meta name="twitter:image" content="/before${reference}after.png">`, 'https://example.com/page'),
+      new URL(`/before${decoded}after.png`, 'https://example.com').href, reference);
+    assert.equal(previewImageUrl(`<meta name=twitter:image content=/before${reference}after.png>`, 'https://example.com/page'),
       new URL(`/before${decoded}after.png`, 'https://example.com').href, reference);
   }
 });
@@ -322,7 +326,12 @@ for (const fixture of [
 }
 
 test('absent, unsupported and malformed HTML charset labels retain UTF-8 fallback', async () => {
-  for (const contentType of ['text/html', 'text/html; charset=x-unsupported', 'text/html; charset=""', 'text/html; charset="unfinished']) {
+  for (const contentType of [
+    'text/html', 'text/html; charset=x-unsupported', 'text/html; charset=""', 'text/html; charset="unfinished',
+    'text/html; note="unfinished; charset=windows-1252',
+    'text/html; note="unfinished; charset=big5',
+    'text/html; charset=windows-1252; note="unfinished',
+  ]) {
     const result = await previewLink('https://cdn.example/utf8', async () => htmlResponse('<title>工坊 Café</title>', 200, {'content-type': contentType}));
     assert.equal(result.title, '工坊 Café', contentType);
   }

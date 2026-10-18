@@ -129,11 +129,22 @@ async function asThumbnail(bytes: Buffer, type: string) {
 }
 
 function htmlText(body: Buffer, contentType: string) {
-  for (const match of contentType.matchAll(/;\s*([^;=\s]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^;"\s]+))/g)) {
-    if (match[1].toLowerCase() !== 'charset') continue;
-    const label = (match[2] ?? match[3]).replace(/\\(.)/g, '$1');
-    try { return new TextDecoder(label).decode(body); }
-    catch { break; } // Unsupported labels retain the original best-effort UTF-8 decoding.
+  // Consume parameters in order: a failed quoted value must not restart at its inner semicolon.
+  const parameter = /;\s*([^;=\s]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^;"\s]+))\s*(?=;|$)/y;
+  let offset = contentType.indexOf(';');
+  let charset: string | undefined;
+  while (offset >= 0 && offset < contentType.length) {
+    parameter.lastIndex = offset;
+    const match = parameter.exec(contentType);
+    if (!match) return body.toString('utf8');
+    if (charset === undefined && match[1].toLowerCase() === 'charset') {
+      charset = (match[2] ?? match[3]).replace(/\\(.)/g, '$1');
+    }
+    offset = parameter.lastIndex;
+  }
+  if (charset !== undefined) {
+    try { return new TextDecoder(charset).decode(body); }
+    catch { /* Unsupported labels retain best-effort UTF-8 decoding. */ }
   }
   return body.toString('utf8');
 }

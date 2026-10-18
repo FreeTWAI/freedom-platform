@@ -108,8 +108,9 @@ AbortController 能中斷同步 JavaScript。OG 優先、entity 解碼、清理�
 
 HTML 預覽在解析標題與圖片網址前，依 HTTP `Content-Type` 的明確 `charset`
 用 runtime 的標準 `TextDecoder` 解碼（#734），包含 Windows-1252 與 Big5。
-參數名稱／encoding label 不分大小寫，接受 MIME 雙引號；其他參數引號內的
-`charset=` 不會被誤認。沒有宣告、label 無效或 runtime 不支援時保留既有 UTF-8
+參數名稱／encoding label 不分大小寫，接受 MIME 雙引號；參數依序解析，
+其他參數引號內的 `charset=` 不會被誤認，未閉合引號或其他 malformed
+參數整份採 UTF-8 fallback。沒有宣告、label 無效或 runtime 不支援時保留既有 UTF-8
 best-effort；不讀 HTML meta charset，也不下載外部解碼器。oEmbed JSON 仍固定
 UTF-8，圖片保持原始 bytes 交既有正規化；抓取限制仍按實際 bytes 計算。
 
@@ -125,6 +126,11 @@ Production runtime 必須提供受限的 preview transport；缺少 transport �
 - Node（`apps/platform-api/src/node-preview-fetch.ts`）取得完整 DNS address 列表；空列表、任何非公開或 family 不符的位址都拒絕。涵蓋 IPv4 私網、loopback、link-local、CGNAT、保留／測試網段，以及 IPv6 私網、mapped IPv4、NAT64、transition 與文件網段。使用全新的 HTTPS socket，lookup 只回傳已檢查的同一個 IP；Host、SNI 和正常憑證驗證仍使用原 hostname。不做「先 resolve、再另一次 fetch」。
 - Workers（`apps/platform-api/src/worker-preview-fetch.ts`）不宣稱 DNS pinning：[原生 `https.request`](https://developers.cloudflare.com/workers/runtime-apis/nodejs/https/) 仍是 fetch 包裝。改採維護者選定的可信 DNS namespace allowlist：`youtube.com`、`youtu.be`、`instagram.com`、`facebook.com`、`fb.watch`、`threads.net`、`threads.com`、`tiktok.com`、`x.com`、`twitter.com`（各自可加 `www.`）；資產只允許 `ytimg.com`、`fbcdn.net`、`cdninstagram.com`、`tiktokcdn.com`、`twimg.com` 及其子網域。每一跳與縮圖 URL 都重新檢查，不自動跟隨重導。
 - 其他 HTTPS 連結在 Workers 仍可分享，但不抓取標題或縮圖，作者可自填標題與上傳縮圖。這是明確的相容性取捨，不是 SSRF 已在正式環境可利用的證明；allowlist 信任列出的第三方 DNS 管理者，不保護第三方自身遭入侵。
+
+原生 Worker 的 `tests/worker/social-preview-assets.test.ts` 與既有 runtime
+social-preview 測試同屬 `modules/assets/freedom.module.json` 的 `asset-lifecycle`；
+精確路徑保留 `runtime.full`、baseline／candidate union 與未知路徑 fallback，
+不增加 composition 容量、不擴大 wildcard，也不把這個 ownership 當成 transport 驗證。
 
 ## API
 
