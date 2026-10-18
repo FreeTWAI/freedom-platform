@@ -2509,6 +2509,7 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
   const suffix = randomUUID().slice(0, 6);
   const extra: Array<{close: () => Promise<void>}> = [];
   const suppliers: string[] = [];
+  let releaseRefresh = () => {};
   try {
     const sup = await setupSupplierWithOfferForPartnerMedia(page, e2eAuthPool, suffix);
     suppliers.push(sup.member.id);
@@ -2566,6 +2567,16 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
     expect(beforeRetry.assets).toHaveLength(baseline.assets.length + 1);
     expect(beforeRetry.assets.map(row => row.asset_id)).toContain(beforeRetry.copies[0].asset_id);
     expect(BigInt(beforeRetry.capacity) - BigInt(baseline.capacity)).toBe(BigInt(beforeRetry.copies[0].byte_size));
+    // The photo hook can publish its badge before the command owner's refresh finishes.
+    // Hold that refresh to exercise the boundary instead of relying on HTTP timing.
+    let refreshReached = false;
+    const refreshGate = new Promise<void>(resolve => {releaseRefresh = resolve;});
+    await seller.page.route(`**/api/v1${seller.store.root}/reservation-setting`, async route => {
+      const response = await route.fetch();
+      refreshReached = true;
+      await refreshGate;
+      await route.fulfill({response});
+    });
     const replay = seller.page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === usePath);
     await retry.click();
     const replayed = await replay;
@@ -2575,6 +2586,14 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
     expect(replayed.status()).toBe(200);
     expect(await replayed.text()).toBe(originalUse);
     await expect(block.locator('.badge')).toHaveText('店面使用中（第 1 版）');
+    await expect.poll(() => refreshReached).toBe(true);
+    await expect(block.getByRole('button', {name:'停止使用', exact:true})).toBeDisabled();
+    const commandStatus = seller.page.locator('.hosted-store > [role="status"]');
+    await expect(commandStatus).not.toContainText('已更新店面草稿，發布店面後才會生效。');
+    releaseRefresh();
+    await expect(commandStatus).toContainText('已更新店面草稿，發布店面後才會生效。');
+    // announce() focuses on the next frame; wait for its scroll before the next pointer click.
+    await expect(commandStatus).toBeFocused();
     const afterUse = await photoFacts(e2eAuthPool, seller.store, productId);
     expect(afterUse).toEqual(beforeRetry);
     let originalDetach = '';
@@ -2594,6 +2613,7 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
       await route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(json)});
     });
     await block.getByRole('button', {name:'停止使用', exact:true}).click();
+    await expect.poll(() => detachCaptured.length).toBe(1);
     await expect(seller.page.locator('.hosted-store > [role="alert"]')).toHaveText('尚未確認原操作的結果，請按「重試」確認。');
     await expect(block.getByRole('button', {name:'停止使用', exact:true})).toBeDisabled();
     expect(detachCaptured).toHaveLength(1);
@@ -2616,6 +2636,7 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
     expect(captured.filter(item => item.key === captured[0].key)).toHaveLength(2);
     expect(detachCaptured).toHaveLength(2);
   } finally {
+    releaseRefresh();
     await withdrawPartnerOffers(e2eAuthPool, suppliers);
     await Promise.all(extra.map(ctx => ctx.close()));
   }
