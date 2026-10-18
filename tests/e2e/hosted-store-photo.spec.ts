@@ -957,6 +957,12 @@ async function setMaterialAccessInConsole(page: Page, access: 'partners' | 'publ
     const accessDialog = page.getByRole('dialog', {name: '可用於合作店家的公開店面', exact: true});
     await expect(accessDialog).toBeVisible();
     await accessDialog.getByRole('button', {name: '確認開放', exact: true}).click();
+  } else {
+    const accessDialog = page.getByRole('dialog', {name: '改為僅授權的合作店家', exact: true});
+    await expect(accessDialog).toBeVisible();
+    await expect(accessDialog).toContainText('合作店家不能再把這個素材選用到公開店面；已授權店家仍可讀取素材。');
+    await expect(accessDialog).toContainText('既有已發布店面的照片仍保留；店家重新發布後，才會移除失效來源的照片。');
+    await accessDialog.getByRole('button', {name: '確認變更', exact: true}).click();
   }
   await expect(materialConsole(page).locator('.sc-announcement')).toHaveText('已保存：變更素材授權範圍。');
 }
