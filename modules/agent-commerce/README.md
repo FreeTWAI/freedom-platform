@@ -36,10 +36,16 @@ locations. The reader uses Fetch `referrerPolicy: 'no-referrer'`, not a literal
 `no-referrer` URL in `referrer`; native Node Fetch must be able to construct the
 request without disclosing the member page as Referer. Redirect refusal,
 credential omission, the 24,000-byte cap and eight-second abort remain unchanged.
-The native-fetch regression in [agent-commerce.test.ts](../../tests/runtime/agent-commerce.test.ts)
-substitutes only a synthetic loopback upstream and checks complete manifest
-content plus absent Referer. This does not establish live GitHub availability,
-Worker/deployed behavior, or additional text-encoding guarantees.
+Remote bytes are decoded as strict UTF-8 before parsing: malformed sequences
+(including encoded surrogates and truncated code points) return
+`422 manifest_fetch_failed`, never replacement characters or a preview.
+The raw byte cap includes any BOM; valid code points split across chunks,
+BOM-prefixed sources and intentional U+FFFD remain accepted.
+The native-fetch regressions in [agent-commerce.test.ts](../../tests/runtime/agent-commerce.test.ts)
+substitute only a synthetic loopback upstream and exercise authenticated
+URL preview, confirmation, same-key replay and exact SQL text/digest readback,
+plus malformed wire rejection without import writes or Referer disclosure.
+This does not establish live GitHub availability or Worker/deployed behavior.
 
 Local JSON/MD import sources remain limited to 24,000 UTF-8 bytes. Only
 `POST /api/v1/commerce/preview` permits a 144,014-byte JSON request: the

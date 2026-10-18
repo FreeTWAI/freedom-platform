@@ -2,6 +2,8 @@ import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
+import {serve} from '@hono/node-server';
+import {once} from 'node:events';
 import {setImmediate} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {createPool,LOCAL_DATABASE_URL} from '../../packages/db/index.js';
@@ -409,6 +411,107 @@ test('native fetch reads a complete raw manifest without forwarding an ambient r
  }finally{
   await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
  }
+});
+
+test('native authenticated URL and escaped 24KB previews preserve SQL fidelity through unknown confirmation and same-key replay',async t=>{
+ const nativeFetch=globalThis.fetch,remote='https://raw.githubusercontent.com/synthetic/fixture/main/shop.md';
+ const value='繁中😀𐀀�\\u0000\\ud800\\udc00';
+ const manifest={...internal(),mode:'test',name:'原生匯入保真',description:value,products:Array.from({length:10},(_,i)=>({...internal().products[0],sku:`NATIVE-${i}`,description:value+'\\'.repeat(950),shipping_terms:value,return_terms:value}))};
+ const md='# 合成成果\n```json\n'+JSON.stringify(manifest)+'\n```';
+ const content='\u0001'.repeat(24000-Buffer.byteLength(md)-3)+'\uFEFF'+md;
+ assert.equal(Buffer.byteLength(content),24000);assert.ok(Buffer.byteLength(JSON.stringify({content}))>32768);
+ let wire=Buffer.from(content),upstreamCalls=0,damageConfirm=true;
+ const referers:(string|undefined)[]=[];
+ const upstream=createServer((request,response)=>{
+  upstreamCalls++;referers.push(request.headers.referer);response.writeHead(200,{'Content-Type':'text/plain'});
+  // HTTP writes may be coalesced; the deterministic one-byte reader case below
+  // separately guarantees coverage of split UTF-8 code points.
+  response.write(wire.subarray(0,wire.length-2));response.end(wire.subarray(wire.length-2));
+ });
+ let liveApp=app;
+ const server=serve({hostname:'127.0.0.1',port:0,fetch:async request=>{
+  const response=await liveApp.fetch(request);
+  if(damageConfirm&&request.method==='POST'&&new URL(request.url).pathname==='/api/v1/commerce/import'&&response.status===201){
+   damageConfirm=false;await response.arrayBuffer();return new Response('{"incomplete":',{status:201,headers:{'Content-Type':'application/json'}});
+  }
+  return response;
+ }});
+ try{
+  await new Promise<void>(resolve=>upstream.listen(0,'127.0.0.1',resolve));
+  if(!server.listening)await once(server,'listening');
+  const address=server.address(),upstreamAddress=upstream.address();assert.ok(address&&typeof address==='object');assert.ok(upstreamAddress&&typeof upstreamAddress==='object');
+  const liveOrigin=`http://127.0.0.1:${address.port}`,upstreamOrigin=`http://127.0.0.1:${upstreamAddress.port}`;
+  liveApp=createApp(pool,liveOrigin,'local',{shopKeyPolicy:'legacy-compatible'});
+  t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
+   assert.equal(String(input),remote);
+   const response=await nativeFetch(upstreamOrigin,{referrer:upstreamOrigin+'/private/member',...init});
+   return new Response(response.body,{status:response.status,headers:response.headers});
+  });
+  const post=(path:string,body:unknown,session?:Session,key=randomUUID())=>nativeFetch(liveOrigin+path,{method:'POST',headers:{Origin:liveOrigin,'Content-Type':'application/json','Idempotency-Key':key,...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{})},body:JSON.stringify(body)});
+  const auth=await post('/api/v1/auth/login',{email:DEMO_USERS[0].email,password:DEMO_PASSWORD});
+  assert.equal(auth.status,200);const session={cookie:auth.headers.get('set-cookie')!.split(';')[0],csrf:(await auth.json()).csrf_token};
+  assert.equal((await post('/api/v1/commerce/preview',{url:remote})).status,401);
+  assert.equal((await post('/api/v1/commerce/preview',{url:'https://127.0.0.1/private.json'},session)).status,422);
+  assert.equal(upstreamCalls,0);
+  const facts=async()=>(await pool.query(`SELECT
+   (SELECT count(*)::int FROM commerce_shops) AS shops,
+   (SELECT count(*)::int FROM commerce_items) AS items,
+   (SELECT count(*)::int FROM command_receipts) AS receipts,
+   (SELECT count(*)::int FROM transition_journal) AS journal`)).rows[0];
+  const empty=await facts(),validWire=wire;
+  const prefix=Buffer.from(JSON.stringify({...internal(),description:'BROKEN'})),offset=prefix.indexOf('BROKEN');
+  for(const bytes of [[0xc3,0x28],[0xed,0xa0,0x80],[0xf0,0x9f],[0xff],[0xc0,0xaf]]){
+   wire=Buffer.concat([prefix.subarray(0,offset),Buffer.from(bytes),prefix.subarray(offset+6)]);
+   const rejected=await post('/api/v1/commerce/preview',{url:remote},session);
+   assert.equal(rejected.status,422);assert.equal((await rejected.json()).code,'manifest_fetch_failed');
+   assert.deepEqual(await facts(),empty);
+  }
+  wire=validWire;
+  const remotePreview=await post('/api/v1/commerce/preview',{url:remote},session);assert.equal(remotePreview.status,200);
+  const preview=await remotePreview.json();assert.deepEqual(preview.manifest,manifest);
+  const localPreview=await post('/api/v1/commerce/preview',{content},session);assert.equal(localPreview.status,200);assert.deepEqual(await localPreview.json(),preview);
+  const body={manifest:preview.manifest,confirmed:true},key=randomUUID();
+  const unknown=await post('/api/v1/commerce/import',body,session,key);assert.equal(unknown.status,201);await assert.rejects(()=>unknown.json(),SyntaxError);
+  const written=await facts();assert.deepEqual(written,{shops:1,items:10,receipts:empty.receipts+1,journal:empty.journal+1});
+  const replay=await post('/api/v1/commerce/import',body,session,key);assert.equal(replay.status,201);const receipt=await replay.json();
+  assert.deepEqual(await facts(),written);
+  const shop=(await pool.query('SELECT name,description,manifest_sha256 FROM commerce_shops WHERE shop_id=$1',[receipt.shop_id])).rows[0];
+  assert.deepEqual(shop,{name:manifest.name,description:value,manifest_sha256:preview.sha256});
+  const items=(await pool.query('SELECT sku,description,shipping_terms,return_terms FROM commerce_items WHERE shop_id=$1 ORDER BY sku',[receipt.shop_id])).rows;
+  assert.deepEqual(items,manifest.products.map(p=>({sku:p.sku,description:p.description,shipping_terms:value,return_terms:value})));
+  for(const bad of ['\0','\uD800','\uDC00','\uD800x\uDC00']){
+   const response=await post('/api/v1/commerce/preview',{content:JSON.stringify({...internal(),description:bad})},session);
+   assert.equal(response.status,422);assert.equal((await response.json()).code,'validation_failed');
+  }
+  const itemId='a1234567-b123-4123-8123-c123456789ab';
+  await pool.query('UPDATE commerce_items SET item_id=$1 WHERE shop_id=$2 AND sku=$3',[itemId,receipt.shop_id,'NATIVE-0']);
+  const {products,access,...base}=internal(),selection={item_id:itemId,retail_price_minor:50000,sale_terms:value};
+  const publicManifest={...base,mode:'test',kind:'public',name:'大寫 UUID 公開店',selections:[selection,{...selection,item_id:itemId.toUpperCase()}]};
+  const duplicate=await post('/api/v1/commerce/preview',{content:JSON.stringify(publicManifest)},session);assert.equal(duplicate.status,422);assert.equal((await duplicate.json()).code,'validation_failed');
+  assert.deepEqual(await facts(),written);
+  publicManifest.selections=[{...selection,item_id:itemId.toUpperCase()}];
+  const uppercase=await post('/api/v1/commerce/preview',{content:JSON.stringify(publicManifest)},session);assert.equal(uppercase.status,200);
+  const upperPreview=await uppercase.json();assert.equal(upperPreview.manifest.selections[0].item_id,itemId.toUpperCase());
+  const upperBody={manifest:upperPreview.manifest,confirmed:true},upperKey=randomUUID();
+  const upperImport=await post('/api/v1/commerce/import',upperBody,session,upperKey);assert.equal(upperImport.status,201);const upperReceipt=await upperImport.json();
+  assert.deepEqual(await (await post('/api/v1/commerce/import',upperBody,session,upperKey)).json(),upperReceipt);
+  assert.deepEqual((await pool.query(`SELECT s.manifest_sha256,l.item_id,l.sale_terms,l.snapshot->>'sale_terms' AS snapshot_terms
+   FROM commerce_shops s JOIN commerce_selections l USING(shop_id) WHERE s.shop_id=$1`,[upperReceipt.shop_id])).rows,[{manifest_sha256:upperPreview.sha256,item_id:itemId,sale_terms:value,snapshot_terms:value}]);
+  assert.ok(upstreamCalls>0);assert.deepEqual(referers,Array(upstreamCalls).fill(undefined));
+ }finally{
+  t.mock.restoreAll();
+  await Promise.all([new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve())),new Promise<void>((resolve,reject)=>upstream.close(error=>error?reject(error):resolve()))]);
+ }
+});
+
+test('remote strict UTF-8 preserves split scalar pairs, BOM and intentional replacement characters with reader cleanup',async()=>{
+ const manifest={...internal(),mode:'test',description:'繁中😀𐀀�'},source=Buffer.from('\uFEFF'+JSON.stringify(manifest));
+ const valid=new Response(new ReadableStream<Uint8Array>({start(controller){for(const byte of source)controller.enqueue(Uint8Array.of(byte));controller.close();}}));
+ assert.deepEqual(await fetchManifest('https://raw.githubusercontent.com/synthetic/fixture/main/shop.json',async()=>valid),manifest);
+ let oversizedCancelled=false;
+ const oversized=new Response(new ReadableStream<Uint8Array>({start(controller){controller.enqueue(new Uint8Array(24001));},cancel(){oversizedCancelled=true;}}));
+ await assert.rejects(()=>fetchManifest('https://raw.githubusercontent.com/synthetic/fixture/main/shop.json',async()=>oversized),(e:unknown)=>e instanceof Problem&&e.status===413);
+ assert.equal(oversizedCancelled,true);
 });
 
 test('manifest URL reader rejects unsafe hosts and oversize data without following redirects',async()=>{

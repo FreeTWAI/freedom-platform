@@ -389,8 +389,8 @@
     },
     {
       "path": "apps/platform-api/src/platform-app.ts",
-      "bytes": 69531,
-      "sha256": "f8f65348b1bc0cf20fedcaa81fb1a74aa459d1456dc018601d49d7bd673ff351"
+      "bytes": 69663,
+      "sha256": "f1686314cff60a08afbe602427450fda8f6ac0b386815e6773e910094bb7f04e"
     },
     {
       "path": "apps/platform-api/src/private-ai-path.ts",
@@ -699,8 +699,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/promotion.ts",
-      "bytes": 12672,
-      "sha256": "7b68ac7ec668db4bf4eb163401356bb958fc7e1d0123fda09e31ccb532162566"
+      "bytes": 12704,
+      "sha256": "1dc3c98d789d168dfb90c9c70f8878bf19178873a45bdcbafa055562f3702574"
     },
     {
       "path": "apps/platform-api/src/routes/published-skills.ts",
@@ -2774,8 +2774,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MyContent.tsx",
-      "bytes": 8565,
-      "sha256": "c331de5e454659e759ef5af5c6deeca9499b82e31d481b951418a85b6e7da0af"
+      "bytes": 8859,
+      "sha256": "c926b553a94f30ae2b1f7e94b891e300ebbae4a3fa9bbcba699ac1cf19660fe9"
     },
     {
       "path": "apps/portal-web/src/modules/MyStoreAction.tsx",
@@ -2989,8 +2989,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialPostShare.tsx",
-      "bytes": 3235,
-      "sha256": "ebd23122b45f064762f9f9c9c47ad57c2858cea0997181a971b83ac59bc76f37"
+      "bytes": 3118,
+      "sha256": "b55070db3e6ee352e2cc0190bae06ca21813e53a48c44d2d6d98e07a2bdca840"
     },
     {
       "path": "apps/portal-web/src/modules/SocialTools.tsx",
@@ -3004,8 +3004,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.tsx",
-      "bytes": 39924,
-      "sha256": "0b9798c45e37ef942436142efd8b01152fe07233dd2e5f5dcf3b08756b94ce40"
+      "bytes": 41232,
+      "sha256": "f949abe83f72fd0f396ef9b4dd126af67e9690ec78b133346e17869c6f81a07b"
     },
     {
       "path": "apps/portal-web/src/modules/SquadInvitations.css",
@@ -3259,8 +3259,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/Editor.tsx",
-      "bytes": 5290,
-      "sha256": "bfc83ec2885943642f9116f686ce386388fbf9f8265e03faa6e6ca8abe13e3f2"
+      "bytes": 5963,
+      "sha256": "829b2c401c2721b2edd871555246364e223cdcb5003c9c944906ebcb09b795fc"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/Panel.tsx",
@@ -3269,18 +3269,23 @@
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/Scanner.tsx",
-      "bytes": 14614,
-      "sha256": "7a086af16aef16451a5ecff1377925c96bf1bc08e001951f071ea40ee2b892c5"
+      "bytes": 20549,
+      "sha256": "87b1cc2e12b49e23843800b615fea31327dc78b065676dc290454d01d528e096"
+    },
+    {
+      "path": "apps/portal-web/src/modules/community-ar/SpatialPreview.tsx",
+      "bytes": 3870,
+      "sha256": "67f7440f2b9592d429bf5dfec4ee57152dd8af3bf20f809e4114d8f87c63e488"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/ar.css",
-      "bytes": 5932,
-      "sha256": "ef62b711e7a525fbcdca8379268d58ea783b7a9b1b663e8dee4ffa933be22139"
+      "bytes": 9768,
+      "sha256": "4f421a16779af2ea4a8b666542084a4f43cb07c075861d593c21bca00b7e497b"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/camera.ts",
-      "bytes": 5036,
-      "sha256": "53767fd1a429f62ea530b7099b9aae377ace247e06898be4b6adde8df61e9612"
+      "bytes": 5729,
+      "sha256": "cf44842b13633d05e8efc7d1261c38d8ee7ebb343069851ef259ecace641abec"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/compile.ts",
@@ -3293,9 +3298,14 @@
       "sha256": "29d25a74aee8632450615b387f84f423acc4a03fe5e61769a3971c3c5f19e47e"
     },
     {
+      "path": "apps/portal-web/src/modules/community-ar/packet.ts",
+      "bytes": 1469,
+      "sha256": "ccddbb9a3c45a437757510ad48ea1f557e43a4a916f2a214b182688d34444d6d"
+    },
+    {
       "path": "apps/portal-web/src/modules/community-ar/render.ts",
-      "bytes": 7160,
-      "sha256": "4b8f3f71d78a52b345d8241af9f738284adf6e815b38ad62bb7eea306217d8f3"
+      "bytes": 8207,
+      "sha256": "dc85f9cbbdf57bd1ef023191f4be34c2c17008d79b6992e726673200bc56237c"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/sdk-location.ts",
@@ -3311,6 +3321,11 @@
       "path": "apps/portal-web/src/modules/community-ar/share.tsx",
       "bytes": 3613,
       "sha256": "3321414665ad777015eb949ee093fa882910ba334c6cfc834de8e04112693783"
+    },
+    {
+      "path": "apps/portal-web/src/modules/community-ar/spatial.ts",
+      "bytes": 11501,
+      "sha256": "cd7bd70614342dda1151e103fc3d5bbffeb6b27a65667b9f220e322a524cb5ce"
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/GuideHost.tsx",
@@ -14194,8 +14209,8 @@
     },
     {
       "path": "docs/development/member-communications.md",
-      "bytes": 34399,
-      "sha256": "db4e3d44d9599b1d162743c68af3c0a2c84b49f6838560c44e0dc98974a5176e"
+      "bytes": 34482,
+      "sha256": "75415be62c4ca746b9e819c8c39634a98cb21b210e998cd2666c11457e3befaa"
     },
     {
       "path": "docs/development/member-connections.md",
@@ -14339,8 +14354,8 @@
     },
     {
       "path": "docs/development/share-promotion.md",
-      "bytes": 35993,
-      "sha256": "abb5e6efc75a91b56b762335081438c4c7e5a27afa54d1a910905e03b36330b9"
+      "bytes": 36874,
+      "sha256": "7c0c4cb1b7af738a94c51f3a62ecbe28fb3b154fceb4a083c0781cbbd849e8c3"
     },
     {
       "path": "docs/development/simple-work-sharing.md",
@@ -17234,8 +17249,8 @@
     },
     {
       "path": "modules/agent-commerce/README.md",
-      "bytes": 30764,
-      "sha256": "a93b38f0ac74d4fbb398fe023ee59d8391c0bbc7840b7f3dc841e241c25bdf7a"
+      "bytes": 33715,
+      "sha256": "a1a4fc8507042010de1b9e627ed7998fc3685a968ee57ed680c440f2f07897c0"
     },
     {
       "path": "modules/agent-commerce/distribution.ts",
@@ -17249,8 +17264,8 @@
     },
     {
       "path": "modules/agent-commerce/imports.ts",
-      "bytes": 7778,
-      "sha256": "f6428175fe4242a976e36bb66444d5f223fe24043cac91525850350dbc9e23dc"
+      "bytes": 7928,
+      "sha256": "52634faeabdae7a298b51a7c2c9e59ed36c6f73290ca2a8f9d03425cbb6f1ca9"
     },
     {
       "path": "modules/agent-commerce/key-exit.ts",
@@ -19234,8 +19249,8 @@
     },
     {
       "path": "modules/community/social-posts.ts",
-      "bytes": 44672,
-      "sha256": "9b49f34a69e8a10c1bb484c352d837f8f20ec7d75830a5fa4cfe0db9edd09edf"
+      "bytes": 44974,
+      "sha256": "7e23f90482bf7b6d5ac15a8b5bc4535d7d4a1bf92e9f1c514d3a26b61b20047a"
     },
     {
       "path": "modules/community/task-board.ts",
@@ -19479,8 +19494,8 @@
     },
     {
       "path": "modules/community-ar/README.md",
-      "bytes": 7213,
-      "sha256": "5bfa7b65f48c2847881fb4c300344d2dfc5881503fc2f1d768a78bca99eb16fe"
+      "bytes": 11689,
+      "sha256": "937f9a82cf350886db8f0bf380bfc80356f47b91936ee08dedb71280eb423635"
     },
     {
       "path": "modules/community-ar/assets.ts",
@@ -22099,8 +22114,8 @@
     },
     {
       "path": "tests/e2e/agent-shops.spec.ts",
-      "bytes": 23869,
-      "sha256": "640b84b38a8773d11da422af0836f5ae4cea085a10fcf74e7d56eb747314c59d"
+      "bytes": 26968,
+      "sha256": "af7e36bc23ca319e907c5691a335a6c54d72caf66ba5234ee86288170ff464dd"
     },
     {
       "path": "tests/e2e/ai-sister-guides.spec.ts",
@@ -22199,8 +22214,8 @@
     },
     {
       "path": "tests/e2e/community-ar.spec.ts",
-      "bytes": 27538,
-      "sha256": "295e63d5769db072f243c77697999e40420724606290cc6eadb57c7e60dd9853"
+      "bytes": 36663,
+      "sha256": "1b1921fe70ba3f67daa634f39562d46284e97c21b281b493eb23508b20572fc4"
     },
     {
       "path": "tests/e2e/community-erp-demo.spec.ts",
@@ -22459,8 +22474,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 206311,
-      "sha256": "393159417a89a104ec2f737bca626868003468a616d608c0569f4d35541df2fd"
+      "bytes": 207570,
+      "sha256": "c41052a53a901ac924860d3a58cd6a1df619684e804ef9db0d8849af5432966d"
     },
     {
       "path": "tests/e2e/hosted-store.spec.ts",
@@ -22749,8 +22764,8 @@
     },
     {
       "path": "tests/e2e/share-promotion.spec.ts",
-      "bytes": 31239,
-      "sha256": "803d32a710733d1c2c85e44ba7320328d07b7a2529846a4bf6e1c69bc14364a4"
+      "bytes": 31251,
+      "sha256": "bcfb054a0f79965da9519ebffff9e019320d8c7406f95e72071b576b5a494864"
     },
     {
       "path": "tests/e2e/shared-feedback-language.spec.ts",
@@ -22844,8 +22859,8 @@
     },
     {
       "path": "tests/e2e/social-wall.spec.ts",
-      "bytes": 13340,
-      "sha256": "df1c7def8b2cd51009be822799635929ac14c5d4e32eb55fbf0c846c985dcf3b"
+      "bytes": 19436,
+      "sha256": "09ac1b3de0e06d8cd139d9e642e4ebbbf43e7f490bf29f0aebf05d077f72fd2a"
     },
     {
       "path": "tests/e2e/squad-invitations.spec.ts",
@@ -23204,8 +23219,8 @@
     },
     {
       "path": "tests/runtime/agent-commerce.test.ts",
-      "bytes": 53247,
-      "sha256": "f1149bf404d21e9c5dcb5b29b9c278eba751aa56ba48049749f4737659470110"
+      "bytes": 62384,
+      "sha256": "7393f7216b8837f7e56ca240c19de324d06433fac7a96d16c070cfd77cad4727"
     },
     {
       "path": "tests/runtime/agent-connections-adversarial.test.ts",
@@ -23449,8 +23464,8 @@
     },
     {
       "path": "tests/runtime/community-ar-format.test.ts",
-      "bytes": 3357,
-      "sha256": "39d44b484f071ab1cac188b8fa4ca92d7a1853ea754b875c6a36cb783f4b7916"
+      "bytes": 7282,
+      "sha256": "cbcbe036d08679e48716068af7a457cf0b3ee802c4ed76c18dab0405aa53528a"
     },
     {
       "path": "tests/runtime/community-ar.test.ts",
@@ -25074,8 +25089,8 @@
     },
     {
       "path": "tests/runtime/social-feed.test.ts",
-      "bytes": 37786,
-      "sha256": "398916bdb500205dcd03f64f2c3da1ac103315636ce7344813ee320c8e5fd707"
+      "bytes": 39723,
+      "sha256": "1d40eb48a26907161d058e1bead733d52bbb02fab70a8714dd4ff9e1b24c084a"
     },
     {
       "path": "tests/runtime/social-links.test.ts",
@@ -25084,8 +25099,8 @@
     },
     {
       "path": "tests/runtime/social-notification-focus.test.ts",
-      "bytes": 2529,
-      "sha256": "08dcb4c4a7b61c852a4930a2bb8e53e2f16fe934ea7e1c8049b0b71563039144"
+      "bytes": 2892,
+      "sha256": "ff338f91e64aef06eb90183832d8679bb113417d034a58928e41abfdd2ee13d6"
     },
     {
       "path": "tests/runtime/social-post-edit.test.ts",
