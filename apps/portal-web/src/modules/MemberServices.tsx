@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState, type FormEvent} from 'react'
+import {useCallback, useEffect, useId, useState, type FormEvent} from 'react'
 import {accessAwareFetch} from '../access-fetch'
 import {ApiError, type PortalClient} from '../api'
 import {SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS, SERVICE_MODE_LABELS, SERVICE_MODES, validateMemberService, type ServiceCategory, type ServiceMode} from '../../../../packages/shared/member-service'
@@ -43,7 +43,8 @@ export function MemberServices({client}: {client: PortalClient}) {
   const [draft, setDraft] = useState<Draft>(BLANK)
   const [file, setFile] = useState<File | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
-  const [confirming, setConfirming] = useState<{serviceId: string; action: 'delete' | 'hide'} | null>(null)
+  const confirmationId = useId()
+  const [confirming, setConfirming] = useState<{serviceId: string; origin: 'mine' | 'card'; action: 'delete' | 'hide'} | null>(null)
   const issue = (field: string) => issues.find(item => item.field === field)?.message ?? ''
   const refreshMine = useCallback(async () => {
     const page = await client.get<Mine>('/member-services/mine')
@@ -129,26 +130,31 @@ export function MemberServices({client}: {client: PortalClient}) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : '服務未能更新。') }
     finally { setSaving(false) }
   }
-  function actions(service: Service) {
+  function actions(service: Service, origin: 'mine' | 'card') {
     const paused = service.state === 'paused'
-    const confirmation = confirming?.serviceId === service.service_id ? confirming.action : null
+    const confirmation = confirming?.serviceId === service.service_id && confirming.origin === origin ? confirming.action : null
+    const controlId = `${confirmationId}-${origin}-${service.service_id}`
+    function cancel(action: 'delete' | 'hide') {
+      setConfirming(null)
+      document.getElementById(`${controlId}-${action}`)?.focus()
+    }
     return <div className="service-actions">
       {!paused && <a className="btn btn-ghost" href={service.public_path} target="_blank" rel="noopener noreferrer">服務頁 ↗</a>}
       {!paused && <PromotionShare client={client} kind="member_service" target={service.service_id} title={service.title} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
       {service.mine && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => openEdit(service)}>編輯</button>}
       {service.mine && !paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'pause')}>暫停</button>}
       {service.mine && paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'resume')}>恢復</button>}
-      {service.mine && confirmation !== 'delete' && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => setConfirming({serviceId: service.service_id, action: 'delete'})}>刪除</button>}
-      {service.mine && confirmation === 'delete' && <>
+      {service.mine && <button id={`${controlId}-delete`} type="button" className="btn btn-ghost" disabled={saving} aria-expanded={confirmation === 'delete'} aria-controls={`${controlId}-delete-confirmation`} onClick={() => setConfirming({serviceId: service.service_id, origin, action: 'delete'})}>刪除</button>}
+      {service.mine && <div id={`${controlId}-delete-confirmation`} hidden={confirmation !== 'delete'} role="group" aria-label={`刪除「${service.title}」`}>
         <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void act(service, 'delete')}>確定刪除</button>
-        <button type="button" className="btn btn-ghost" onClick={() => setConfirming(null)}>取消</button>
-      </>}
-      {canHide && confirmation !== 'hide' && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => setConfirming({serviceId: service.service_id, action: 'hide'})}>隱藏</button>}
-      {canHide && confirmation === 'hide' && <>
-        <p className="field-hint service-confirmation-note">隱藏後服務主人也看不到、無法編輯，分享連結會失效，且目前無法復原。</p>
-        <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'hide')}>確定隱藏</button>
-        <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => setConfirming(null)}>取消</button>
-      </>}
+        <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => cancel('delete')}>取消</button>
+      </div>}
+      {canHide && <button id={`${controlId}-hide`} type="button" className="btn btn-ghost" disabled={saving} aria-expanded={confirmation === 'hide'} aria-controls={`${controlId}-hide-confirmation`} aria-describedby={confirmation === 'hide' ? `${controlId}-warning` : undefined} onClick={() => setConfirming({serviceId: service.service_id, origin, action: 'hide'})}>隱藏</button>}
+      {canHide && <div id={`${controlId}-hide-confirmation`} hidden={confirmation !== 'hide'} role="group" aria-label={`隱藏「${service.title}」`} aria-describedby={`${controlId}-warning`}>
+        <p id={`${controlId}-warning`} className="field-hint service-confirmation-note">隱藏後服務主人也看不到、無法編輯，分享連結會失效，且目前無法復原。</p>
+        <button type="button" className="btn btn-ghost" disabled={saving} aria-describedby={`${controlId}-warning`} onClick={() => void act(service, 'hide')}>確定隱藏</button>
+        <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => cancel('hide')}>取消</button>
+      </div>}
     </div>
   }
   return <section className="service-zone stack" aria-label="社員服務分享區">
@@ -162,7 +168,7 @@ export function MemberServices({client}: {client: PortalClient}) {
         {mine.map(service => <li className="service-mine-row" key={service.service_id}>
           <span className="service-mine-title">{service.title}</span>
           {service.state === 'paused' && <span className="service-state">暫停中</span>}
-          {actions(service)}
+          {actions(service, 'mine')}
         </li>)}
       </ul>}
     </section>
@@ -219,7 +225,7 @@ export function MemberServices({client}: {client: PortalClient}) {
           <p className="service-summary multiline-text">{service.summary}</p>
           {(service.price_text || service.area_text) && <p className="service-facts">{[service.price_text, service.area_text].filter(Boolean).join(' · ')}</p>}
           <p className="service-points">推廣點擊 {service.total_points}</p>
-          {actions(service)}
+          {actions(service, 'card')}
         </div>
       </article>)}
     </div>

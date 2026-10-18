@@ -208,9 +208,15 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
 會員介面的管理員「隱藏」先顯示後果與「確定隱藏／取消」；此時不送請求，
 取消也不寫入。只有按「確定隱藏」才呼叫原有 hide API。確認會說明主人也
 無法查看或編輯、分享連結失效，且目前沒有復原操作；沒有新增 unhide 或擴權。
-確認狀態同時綁定服務與 `hide`／`delete`，避免切換操作時沿用另一種確認。
+確認狀態同時綁定服務、`hide`／`delete` 及「我的服務列／公開卡片」來源，避免
+重複呈現的同一服務互相展開或取消後回到另一個控制點。觸發按鈕保持掛載，
+以 `aria-expanded`／`aria-controls` 關聯確認區；警告同時是確認區與確認按鈕的
+可存取說明。鍵盤取消後焦點回到原來源的觸發按鈕，不送寫入。
 `member-services.spec.ts` 以真實管理員 session 與隔離 PostgreSQL 驗證自己／
-他人的服務：取消後仍公開且版本不變，確認後才隱藏、只寫一次且公開頁 404。
+他人的服務：鍵盤取消後仍公開且版本不變，確認後才隱藏、只寫一次，等待實際
+列表移除後重新登入核對主人／管理員清單與公開頁 404。公開頁既有最長 60 秒
+快取政策不變；原生 HTTP 與 browser `cache: 'no-store'` 讀回不沿用瀏覽器舊快取，
+不能把仍在有效期的舊 200 視為隱藏提交失敗。
 
 封面輸入是 JPEG、PNG 或 WebP，最多 4 MiB，簽名與動畫檢查與其他上傳相同。輸出是 `service_cover`，`cover` 成 1200×675 的 WebP，最多 512 KiB。上傳是帶 Idempotency-Key 與 If-Match 的二進位 PUT。會員看封面走 `GET /api/v1/member-services/:id/cover`（暫停的服務主人仍看得到）；公開封面是 `GET /api/v1/public/member-services/:id/cover`。
 

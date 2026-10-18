@@ -359,6 +359,7 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
 });
 
 test('admin hide requires confirmation and cancelling never changes the service', async ({ page, e2eAuthPool: db }) => {
+  test.setTimeout(120_000);
   const userId = randomUUID(), adminId = randomUUID(), ids = [randomUUID(), randomUUID()];
   const email = `service-admin-${userId}@example.test`;
   const titles = ids.map((id, index) => `E2E 確認隱藏 ${index} ${id}`);
@@ -377,23 +378,61 @@ test('admin hide requires confirmation and cancelling never changes the service'
     [id, DEMO_COMMUNITY, index === 0 ? DEMO_USERS[0].user_id : userId, titles[index]]);
     await login(page, email);
     await navigate(page, '社員服務');
+    const ownCard = card(page, titles[1]);
+    const ownRow = page.locator('li.service-mine-row').filter({ hasText: titles[1] });
+    for (const origin of [ownRow, ownCard]) {
+      const trigger = origin.getByRole('button', { name: '隱藏', exact: true });
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      const controlled = await trigger.getAttribute('aria-controls');
+      expect(controlled).toBeTruthy();
+      const group = origin.getByRole('group', { name: `隱藏「${titles[1]}」` });
+      await expect(group).toHaveAttribute('id', controlled!);
+      await expect(group).toHaveAccessibleDescription(/服務主人也看不到.*目前無法復原/);
+      await expect((origin === ownRow ? ownCard : ownRow).getByRole('button', { name: '確定隱藏', exact: true })).toBeHidden();
+      await page.keyboard.press('Tab');
+      await expect(group.getByRole('button', { name: '確定隱藏', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(group.getByRole('button', { name: '取消', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    }
+    await ownRow.getByRole('button', { name: '隱藏', exact: true }).press('Enter');
+    await ownCard.getByRole('button', { name: '刪除', exact: true }).press('Enter');
+    await expect(ownRow.getByRole('button', { name: '確定隱藏', exact: true })).toBeHidden();
+    await card(page, titles[0]).getByRole('button', { name: '隱藏', exact: true }).press('Enter');
+    await expect(ownCard.getByRole('button', { name: '確定刪除', exact: true })).toBeHidden();
+    await card(page, titles[0]).getByRole('button', { name: '取消', exact: true }).press('Enter');
+    expect(writes).toEqual([]);
     for (const [index, id] of ids.entries()) {
       const target = card(page, titles[index]);
-      await target.getByRole('button', { name: '隱藏', exact: true }).click();
-      await expect(target.getByRole('button', { name: '確定隱藏', exact: true })).toBeVisible();
-      await target.getByRole('button', { name: '取消', exact: true }).click();
-      await expect(target.getByRole('button', { name: '確定隱藏', exact: true })).toHaveCount(0);
+      const trigger = target.getByRole('button', { name: '隱藏', exact: true });
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(trigger).toBeFocused();
+      await expect(target.getByRole('button', { name: '確定隱藏', exact: true })).toHaveAccessibleDescription(/目前無法復原/);
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await expect(target.getByRole('button', { name: '取消', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(trigger).toBeFocused();
+      await expect(target.getByRole('button', { name: '確定隱藏', exact: true })).toBeHidden();
       expect(writes).toEqual(ids.slice(0, index).map(previous => `${new URL(page.url()).origin}/api/v1/member-services/${previous}/hide`));
       expect((await db.query('SELECT state,aggregate_version::text AS version FROM member_services WHERE service_id=$1', [id])).rows).toEqual([{ state: 'active', version: '1' }]);
       expect((await page.request.get(`/services/${id}`)).status()).toBe(200);
       if (index === 1) {
-        await target.getByRole('button', { name: '刪除', exact: true }).click();
+        await target.getByRole('button', { name: '刪除', exact: true }).press('Enter');
         await expect(target.getByRole('button', { name: '確定刪除', exact: true })).toBeVisible();
       }
-      await target.getByRole('button', { name: '隱藏', exact: true }).click();
-      await expect(target.getByRole('button', { name: '確定刪除', exact: true })).toHaveCount(0);
+      await trigger.press('Enter');
+      await expect(target.getByRole('button', { name: '確定刪除', exact: true })).toBeHidden();
       const hidden = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/member-services/${id}/hide` && response.request().method() === 'POST');
-      await target.getByRole('button', { name: '確定隱藏', exact: true }).click();
+      await page.keyboard.press('Tab');
+      await expect(target.getByRole('button', { name: '確定隱藏', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
       expect((await hidden).status()).toBe(200);
       await expect(target).toHaveCount(0);
       await expect(page.locator('li.service-mine-row').filter({ hasText: titles[index] })).toHaveCount(0);
@@ -401,6 +440,22 @@ test('admin hide requires confirmation and cancelling never changes the service'
       expect((await page.request.get(`/services/${id}`)).status()).toBe(404);
     }
     expect(writes).toEqual(ids.map(id => `${new URL(page.url()).origin}/api/v1/member-services/${id}/hide`));
+    await signOut(page);
+    for (const account of [email, 'maker@local.test']) {
+      await login(page, account);
+      await navigate(page, '社員服務');
+      for (const [index, id] of ids.entries()) {
+        await expect(card(page, titles[index])).toHaveCount(0);
+        await expect(page.locator('li.service-mine-row').filter({ hasText: titles[index] })).toHaveCount(0);
+        const mine = await page.request.get('/api/v1/member-services/mine');
+        expect(mine.status()).toBe(200);
+        expect((await mine.json()).items.some((service: {service_id: string}) => service.service_id === id)).toBe(false);
+        // Native HTTP is independent of an existing browser max-age=60 cache entry.
+        expect((await page.request.get(`/services/${id}`, {headers: {'Cache-Control': 'no-cache'}})).status()).toBe(404);
+        expect(await page.evaluate(async path => (await fetch(path, {cache: 'no-store'})).status, `/services/${id}`)).toBe(404);
+      }
+      await signOut(page);
+    }
   } finally {
     await db.query('DELETE FROM member_services WHERE service_id=ANY($1::uuid[])', [ids]);
     await db.query('DELETE FROM platform_admins WHERE admin_id=$1', [adminId]);

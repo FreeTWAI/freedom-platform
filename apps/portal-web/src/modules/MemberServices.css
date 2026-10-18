@@ -37,6 +37,7 @@
 .service-points{color:var(--muted);font-size:.85rem}
 .service-facts{color:var(--ink);font-size:.85rem}
 .service-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+.service-actions > [role="group"]:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;min-width:0}
 .service-confirmation-note{flex-basis:100%;margin:0;overflow-wrap:anywhere}
 .service-actions > .skill-share,.service-mine-row > .service-actions > .skill-share{flex:0 1 auto;width:auto}
 .service-actions > .skill-share > .btn{width:auto}
