@@ -1,8 +1,69 @@
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {verificationEnvironment} from '../process-env.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {runtimeCleanupDiagnostic} from '../runtime-databases.mjs';
+import {runtimeCleanupDiagnostic, runtimeDropObservation, observeRuntimeDrop} from '../runtime-databases.mjs';
+
+test('DROP observation only emits allowlisted metadata and capped counts', () => {
+  const secret = 'postgresql://private:password@example.invalid/member-secret';
+  const value = runtimeDropObservation({state:secret, wait_event_type:secret, wait_event:secret,
+    blocker_count:1001, locks_granted:-1, locks_waiting:secret, query:secret, pid:123}, 9000.5);
+  assert.deepEqual(value, {event:'runtime_database_cleanup', phase:'drop_observation', result:'observed',
+    elapsed_ms:9000, state:'other', wait_event_type:'other', wait_event:'other',
+    blocker_count:1000, locks_granted:null, locks_waiting:null});
+  assert.equal(JSON.stringify(value).includes(secret),false);
+  assert.equal(runtimeDropObservation(undefined,Infinity).result,'unavailable');
+  assert.equal(runtimeDropObservation({wait_event:null},1).wait_event,null);
+});
+
+test('quick DROP cancels observation without creating a connection', t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  let connected=0;
+  const stop=observeRuntimeDrop({connection:()=>{connected++;},elapsed:()=>0,emit:()=>{throw Error('unexpected');}});
+  stop(); t.mock.timers.tick(9000);
+  assert.equal(connected,0);
+});
+
+test('one read-only probe scopes exact identity, cancels its socket and contains emit failure', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const queries=[];let destroyed=0,emitted=0;
+  const stop=observeRuntimeDrop({pid:42,owner:'review',application:'nonce_cleanup',database:'fp_review',elapsed:()=>8001,
+    connection:(name,limits)=>{
+      assert.equal(name,'nonce_cleanup_observe');
+      assert.equal(limits.options,'-c default_transaction_read_only=on');
+      assert.equal(limits.connectionTimeoutMillis,200);assert.equal(limits.statement_timeout,200);
+      return {connect:async()=>{},connection:{stream:{destroy(){destroyed++;}}},query:async q=>{
+        queries.push(q);return {rows:[{state:'active',wait_event_type:'IPC',wait_event:'ProcSignalBarrier',
+          blocker_count:0,locks_granted:2,locks_waiting:0}]};
+      }};
+    },emit:event=>{emitted++;assert.equal(event.wait_event,'ProcSignalBarrier');throw Error('closed sink');}});
+  t.mock.timers.tick(8000);
+  for(let i=0;i<5;i++)await Promise.resolve();
+  assert.equal(queries.length,1);assert.equal(emitted,1);assert.equal(destroyed,1);
+  assert.deepEqual(queries[0].values,[42,'review','nonce_cleanup','fp_review']);
+  assert.match(queries[0].text,/a.pid=\$1 AND a.usename=\$2 AND a.application_name=\$3/);
+  assert.match(queries[0].text,/current_database\(\)=\$4 AND current_user=\$2 AND session_user=\$2/);
+  assert.equal(queries[0].query_timeout,200);
+  assert.doesNotMatch(queries[0].text,/a\.query|client_addr|GRANT|pg_terminate/);
+  stop();t.mock.timers.tick(10000);assert.equal(emitted,1);
+});
+
+for (const cancel of [false,true]) test(`pending observer connect cannot delay DROP or publish after stop, cancel=${cancel}`, async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  let finishConnect, queries=0,destroyed=0;
+  const events=[];
+  const stop=observeRuntimeDrop({connection:()=>({
+    connect:()=>new Promise(resolve=>{finishConnect=resolve;}),
+    query:async()=>{queries++;return {rows:[]};},connection:{stream:{destroy(){destroyed++;}}},
+  }),elapsed:()=>8500,emit:event=>events.push(event)});
+  t.mock.timers.tick(8000);
+  if(cancel)stop();else t.mock.timers.tick(500);
+  assert.equal(destroyed,1);assert.equal(events.length,cancel?0:1);
+  if(!cancel)assert.equal(events[0].result,'unavailable');
+  finishConnect();for(let i=0;i<5;i++)await Promise.resolve();
+  assert.equal(queries,0);assert.equal(destroyed,1);
+  stop();t.mock.timers.tick(20000);assert.equal(events.length,cancel?0:1);
+});
 
 test('cleanup diagnostics retain only reviewed phases, outcomes and stable error codes', () => {
   assert.deepEqual(runtimeCleanupDiagnostic('drop', 'unknown_ack', {code:'57014'}, 16001.9), {
@@ -138,3 +199,98 @@ test('test cancellation kills and reaps the transport child', {timeout:10000}, a
   controller.abort();
   await assert.rejects(pending,/cleanup_fixture_aborted/);
 });
+
+// Controlled transport/clock evidence, not a reproduction of PostgreSQL I/O.
+// Run the actual helper with DROP's ACK lost at 16.057s and a nonce-bound
+// cleaner whose termination is delayed beyond pg_terminate_backend's 1s wait.
+const settlementCode = String.raw`
+const assert=require('node:assert/strict'),Module=require('node:module');
+const scenario=process.argv[2],originalLoad=Module._load;
+let now=0,pid=0,polls=0,terminations=0,absence=0,database,cleanupApplication;
+Object.defineProperty(performance,'now',{value:()=>now});
+const realTimeout=setTimeout;
+global.setTimeout=(callback,delay,...args)=>{
+ if(delay===100){now+=delay;return realTimeout(callback,0,...args);}
+ return realTimeout(callback,delay,...args);
+};
+class Client {
+ constructor(config){this.config=config;this.pid=++pid;this.connection={stream:{destroy(){}}};
+  if(config.application_name.endsWith('_cleanup'))cleanupApplication=config.application_name;}
+ on(){} async connect(){} async end(){}
+ async query(q){
+  const text=typeof q==='string'?q:q.text,values=q.values||[];
+  if(text.startsWith('SELECT current_database()'))return {rows:[{database:'fp_review',owner:'review',session:'review',pid:this.pid}],rowCount:1};
+  if(text.startsWith('SELECT 1 FROM pg_database'))return {rows:[],rowCount:0};
+  if(text.startsWith('CREATE DATABASE')){database=text.match(/^CREATE DATABASE "([^"]+)"/)[1];return {rows:[],rowCount:0};}
+  if(text.startsWith('SELECT pg_get_userbyid'))return {rows:[{owner:'review'}],rowCount:1};
+  if(text.startsWith('DROP DATABASE')){now=16057;throw Error('Query read timeout');}
+  if(text.includes('FROM pg_stat_activity WHERE pid=$1')){
+   assert.match(text,/usename=\$2 AND application_name=\$3$/);
+   assert.equal(values[1],'review');
+   if(values[0]===1){assert.match(values[2],/^fp_suite_\d+_[a-f0-9]{16}_owner$/);return {rows:[],rowCount:0};}
+   assert.equal(values[0],2);assert.equal(values[2],cleanupApplication);
+   if(text.startsWith('SELECT pg_terminate_backend')){terminations++;now+=1000;return {rows:[{stopped:false}],rowCount:1};}
+   polls++;now+=50;
+   const present=scenario==='never'||now<(scenario==='late'?19500:18700);
+   return {rows:present?[{}]:[],rowCount:present?1:0};
+  }
+  if(text.startsWith('SELECT datname FROM pg_database')){
+   absence++;assert.deepEqual(values,[[database]]);
+   if(scenario==='absence-deadline')now=20001;
+   return {rows:scenario==='present'?[{datname:database}]:[],rowCount:scenario==='present'?1:0};
+  }
+  return {rows:[],rowCount:0};
+ }
+}
+Module._load=function(request,...rest){return request==='pg'?{Client}:originalLoad.call(this,request,...rest)};
+(async()=>{const {createRuntimeDatabases}=await import(process.argv[1]);
+ const created=await createRuntimeDatabases('postgresql://review@localhost/fp_review',1);
+ const verified=await created.cleanup();console.log(JSON.stringify({verified,now,polls,terminations,absence}));
+})().catch(()=>{process.exitCode=1;});
+`;
+for (const scenario of ['delayed', 'never', 'present', 'late', 'absence-deadline']) {
+  test(`nonce cleaner settlement ${scenario} preserves the absolute deadline and positive absence proof`, () => {
+    const child=spawnSync(process.execPath,['-e',settlementCode,new URL('../runtime-databases.mjs',import.meta.url).href,scenario],
+      {env:verificationEnvironment(),encoding:'utf8',timeout:5000});
+    assert.equal(child.status,0,child.stderr);
+    const result=JSON.parse(child.stdout);
+    assert.equal(result.verified,scenario==='delayed',JSON.stringify(result));
+    assert.equal(result.terminations,1,'poll settlement; never resend termination');
+    assert.ok(result.polls>1,JSON.stringify(result));
+    assert.equal(result.absence,['never','late'].includes(scenario)?0:1,JSON.stringify(result));
+    assert.ok(result.now <= (scenario==='absence-deadline'?20001:20000),JSON.stringify(result));
+    if(scenario==='delayed')assert.ok(result.now>=18700&&result.now<19000);
+    assert.doesNotMatch(child.stderr,/fp_suite_|postgresql:|DROP DATABASE/);
+  });
+}
+
+// Accelerate only the diagnostic timers and make the fake DROP last long enough
+// to trigger them. Actual cleanup, identity, termination and absence code runs.
+for (const failure of ['connect', 'query', 'hung', 'success']) for (const retain of [false,true]) {
+  test(`optional DROP probe ${failure} preserves cleanup result retained=${retain}`, () => {
+    const injected = childCode
+      .replace("const oldLoad=Module._load;", `const oldLoad=Module._load;
+        const realSetTimeout=setTimeout;let observations=0,destroyed=0;
+        global.setTimeout=(fn,ms,...args)=>realSetTimeout(fn,ms===8000?1:ms===500?5:ms,...args);`)
+      .replace('this.connection={stream:{destroy(){}}}', 'this.connection={stream:{destroy:()=>{if(config.application_name.endsWith("_observe"))destroyed++;}}}')
+      .replace('async connect(){}', `async connect(){if(this.config.application_name.endsWith('_observe')&&'${failure}'==='connect')throw Error('private connect detail');}`)
+      .replace("const text=typeof q==='string'?q:q.text, values=q.values||[];", `const text=typeof q==='string'?q:q.text, values=q.values||[];
+        if(this.config.application_name.endsWith('_observe')){
+          observations++;
+          if('${failure}'==='query')throw Error('private query detail');
+          if('${failure}'==='hung')return new Promise(()=>{});
+          return {rows:[{state:'active',wait_event_type:'Lock',wait_event:'relation',blocker_count:1,locks_granted:3,locks_waiting:1}]};
+        }
+        if(text.startsWith('DROP DATABASE'))await new Promise(resolve=>realSetTimeout(resolve,30));`)
+      .replace("process.once('message',async()=> {", '(async()=> {')
+      .replace('process.disconnect();', "process.stdout.write('observers destroyed='+destroyed+' observations='+observations+'\\n');")
+      .replace(/\}\);\s*$/, '})();');
+    const child=spawnSync(process.execPath,['-e',injected,new URL('../runtime-databases.mjs',import.meta.url).href,
+      retain?'retain':'drop','normal','run','normal'],{env:verificationEnvironment(),encoding:'utf8',timeout:5000});
+    assert.equal(child.status,0,child.stderr);
+    assert.match(child.stdout,retain?/cleanup result=false remaining_databases=1/:/cleanup result=true remaining_databases=0/);
+    assert.match(child.stdout,/observers destroyed=1 observations=/);
+    assert.match(child.stderr,/"phase":"drop_observation"/);
+    assert.doesNotMatch(child.stderr,/private|fp_suite_|postgresql:|DROP DATABASE/);
+  });
+}

@@ -12,15 +12,22 @@ export function cameraIssue(error:unknown):string{
   if(error instanceof Error&&error.message==='camera_insecure')return '相機需要 HTTPS。請用 Safari 或 Chrome 開啟自由工坊網站。';
   return '相機或辨識未完成啟動，請重新開啟；原本的圖案仍保留。';
 }
+/** HD camera/photo, bounded inference. MindAR's InputLoader draws using the
+ * video's IDL width/height, so downsampling preserves the full field of view. */
+export function trackingSize(width:number,height:number):[number,number]{
+  if(!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<1||height<1||width>16384||height>16384)throw new Error('camera_dimensions');
+  const scale=Math.min(1,640/Math.max(width,height));return [Math.max(1,Math.round(width*scale)),Math.max(1,Math.round(height*scale))];
+}
 export class ArCamera{
   private generation=0;private stream?:MediaStream;private controller?:ArController;private video?:HTMLVideoElement;private processing?:Promise<void>;private cancelStartup?:()=>void;
-  async start(video:HTMLVideoElement,packets:readonly Uint8Array[],update:(event:ArUpdate,projection:number[],dimensions:[number,number][])=>void){
+  async start(video:HTMLVideoElement,packets:readonly Uint8Array[],update:(event:ArUpdate,projection:number[],dimensions:[number,number][])=>void,facing:'environment'|'user'='environment'){
     this.stop();const generation=this.generation;this.video=video;
     const alive=()=>this.generation===generation;
     if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('camera_insecure');
     const buffer=combineArTargets(packets);
     // Called synchronously by the Start button, before the first network await.
-    const acquisition=navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:640},height:{ideal:480}}}).then(stream=>{
+    const portrait=window.matchMedia('(orientation: portrait)').matches;
+    const acquisition=navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:portrait?720:1280},height:{ideal:portrait?1280:720},frameRate:{ideal:30}}}).then(stream=>{
       if(!alive()){stream.getTracks().forEach(track=>track.stop());throw new DOMException('Aborted','AbortError');}this.stream=stream;return stream;
     });
     let timer:ReturnType<typeof setTimeout>|undefined;
@@ -34,7 +41,7 @@ export class ArCamera{
       await video.play();if(!alive())throw new DOMException('Aborted','AbortError');
       if(!video.videoWidth||!video.videoHeight)throw new Error('camera_dimensions');
       // MindAR reads the IDL dimensions, not only videoWidth or CSS bounds.
-      video.width=video.videoWidth;video.height=video.videoHeight;
+      [video.width,video.height]=trackingSize(video.videoWidth,video.videoHeight);
       let dimensions:[number,number][]=[];
       const controller=new sdk.Controller({inputWidth:video.width,inputHeight:video.height,maxTrack:1,warmupTolerance:3,missTolerance:8,
         onUpdate:event=>{if(alive()&&this.controller===controller)update(event,controller.getProjectionMatrix(),dimensions);}});

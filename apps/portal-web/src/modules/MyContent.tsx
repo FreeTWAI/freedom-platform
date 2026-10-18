@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { requireItems } from '../api';
 import { accessAwareFetch } from '../access-fetch';
 import { client, describeError, usePortal } from '../portal-session';
-import { ShowcaseDraftEditor } from './ShowcasePanel';
+import { PageLoadBoundary } from '../LazyPage';
 import './WorkSharing.css';
+
+// Keep authoring code off the initial shell and personal-content list paths.
+const ShowcaseDraftEditor = lazy(() => import('./ShowcasePanel').then(module => ({default: module.ShowcaseDraftEditor})));
 
 export type PersonalContentItem = { kind: 'showcase' | 'skill_submission' | 'event' | 'social_post'; id: string; title: string; status: string; version: string | number | null; path: string; manage_path?: string; visibility: string; actions: string[] };
 const kinds: Record<PersonalContentItem['kind'], string> = { showcase: '作品', skill_submission: '技能投稿', event: '活動', social_post: '動態' };
@@ -40,7 +43,7 @@ export function MyContent() {
   useEffect(() => { setItems([]); setFilter('all'); setCreating(false); void load(); return () => { generation.current++; }; }, [load, session.user.user_id, client.sessionGeneration]);
   useEffect(() => { const change = () => { setSelected(selectedShowcase()); setCreating(false); }; window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
   const close = () => { setCreating(false); setSelected(null); window.location.hash = 'my-content'; };
-  if (creating || selected) return <ShowcaseDraftEditor key={selected ?? 'new'} id={selected} onChanged={() => void load()} onClose={close}/>;
+  if (creating || selected) return <PageLoadBoundary label="私人作品編輯" resetKey={selected ?? 'new'}><ShowcaseDraftEditor key={selected ?? 'new'} id={selected} onChanged={() => void load()} onClose={close}/></PageLoadBoundary>;
   const shown = items.filter(item => filter === 'all' || item.kind === filter);
   return <div className="stack personal-content">
     <section className="card stack"><div className="section-head"><h2>草稿與已發布內容</h2><div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => setCreating(true)}>新增私人作品草稿</button><a className="btn btn-secondary btn-small" href="#opensource">投稿技能</a><a className="btn btn-secondary btn-small" href="#events">建立活動</a></div></div>

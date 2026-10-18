@@ -1,13 +1,13 @@
 import { test,before,after,beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
+import { setTimeout as delay,setImmediate } from 'node:timers/promises';
 import { Pool, type PoolClient } from 'pg';
 import { createPool,LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { migrate } from '../../scripts/database.js';
 import { seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY } from '../../packages/testing/seed.js';
 import { login, tokenHash } from '../../modules/identity-membership/service.js';
-import { approveClientPairing, pollClientPairing, readClientResource } from '../../modules/client-connections/service.js';
+import { approveClientPairing, pollClientPairing, readClientResource,pairingView } from '../../modules/client-connections/service.js';
 import { Problem } from '../../packages/shared/problem.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 
@@ -35,6 +35,63 @@ async function product(member:Session){const r=await api('/supplier/products',me
 async function listing(member:Session,storeId:string,offerId:string){const r=await api('/retail/listings',member,{store_id:storeId,offer_version_id:offerId,retail_price_minor:16000,sale_terms:'先確認供貨'});assert.equal(r.status,201,JSON.stringify(r.data));return r.data;}
 async function connect(member:Session,kind:'storefront'|'supplier',storeId?:string){const pairing=await start(kind);const approved=await api(`/client-connections/${pairing.user_code}/approve`,member,{confirmed:true,...(storeId?{store_id:storeId}:{})});assert.equal(approved.status,200,JSON.stringify(approved.data));const issued=await api('/client-connections/poll',undefined,{device_secret:pairing.device_secret});assert.equal(issued.status,200,JSON.stringify(issued.data));assert.equal(issued.data.status,'authorized');return {...issued.data,pairing};}
 const client=(path:string,token:string,body?:unknown)=>request('/client-api/v1'+path,undefined,body,undefined,undefined,{Authorization:'Bearer '+token});
+
+test('bearer auth scheme casing and SP are flexible but opaque credential casing is not',async()=>{
+ const member=await ready(),created=await product(member),issued=await connect(member,'supplier');
+ // A deterministic mixed-case credential isolates token identity from scheme syntax.
+ const token='fw_read_'+ 'Ab'.repeat(21)+'C',path='/client-api/v1/supplier/products';
+ await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(token)]);
+ const authorized=await request(path,undefined,undefined,undefined,undefined,{Authorization:'bEaReR   '+token});
+ assert.equal(authorized.status,200,JSON.stringify(authorized.data));
+ assert.ok(authorized.data.items.some((item:{product_id:string})=>item.product_id===created.product_id));
+ const folded=await request(path,undefined,undefined,undefined,undefined,{Authorization:'bEaReR   '+'fw_read_'+token.slice(8).toLowerCase()});
+ assert.equal(folded.status,401);assert.equal(folded.data.code,'client_token_invalid');
+ const tab=await request(path,undefined,undefined,undefined,undefined,{Authorization:'Bearer\t'+token});
+ assert.equal(tab.status,401);assert.equal(tab.data.code,'client_token_invalid');
+});
+
+test('pairing review refreshes the member session after its pending-code query wait',async()=>{
+ const member=await ready(),pairing=await start('supplier'),path=`/client-connections/${pairing.user_code}`;
+ const expected=await api(path,member);assert.equal(expected.status,200);
+ const facts=async()=>(await pool.query('SELECT (SELECT count(*)::int FROM member_client_connections) AS connections,(SELECT count(*)::int FROM command_receipts) AS receipts,(SELECT count(*)::int FROM transition_journal) AS journal')).rows[0];
+ const before=await facts(),hash=tokenHash(member.cookie.split('=')[1]);
+ for(const expired of [true,false]){
+  const gate=await admin.connect();let pending:Promise<unknown>|undefined;
+  try{
+   await gate.query('BEGIN');await gate.query(`LOCK TABLE ${schema}.client_pairing_requests IN ACCESS EXCLUSIVE MODE`);
+   await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>$2) WHERE token_hash=$1",[hash,expired?3:3600]);
+   const pid=(await gate.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+   const response=api(path,member);pending=response.catch(()=>undefined);
+   const deadline=Date.now()+2000;
+   for(;;){
+    if((await admin.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount!>0)break;
+    assert.ok(Date.now()<deadline,'pairing review reached its real source query');await setImmediate();
+   }
+   assert.equal((await pool.query('SELECT expires_at>clock_timestamp() AS live FROM sessions WHERE token_hash=$1',[hash])).rows[0].live,true);
+   if(expired)await pool.query('SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM expires_at-clock_timestamp()))+0.05) FROM sessions WHERE token_hash=$1',[hash]);
+   await gate.query('ROLLBACK');const result=await response;
+   assert.equal(result.status,expired?401:200,JSON.stringify(result.data));
+   if(expired){
+    assert.equal(result.data.code,'session_expired');
+    for(const key of ['user_code','client_name','kind','scope'])assert.equal(key in result.data,false);
+    assert.equal(result.response.headers.get('set-cookie'),null);
+   }else assert.deepEqual(result.data,expected.data);
+   assert.deepEqual(await facts(),before);
+  }finally{
+   await gate.query('ROLLBACK');gate.release();if(pending)await pending;
+   await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '30 days' WHERE token_hash=$1",[hash]);
+  }
+ }
+});
+
+for(const invalid of ['expired','revoked','inactive'] as const)test(`pairing review refuses a cached actor whose current authority is ${invalid}`,async()=>{
+ const {actor}=await login(pool,DEMO_USERS[0].email,DEMO_PASSWORD),pairing=await start('supplier');
+ const expected=await pairingView(pool,actor,pairing.user_code);assert.equal(expected.client_name,'我的 Fork 客戶端');
+ if(invalid==='expired')await pool.query("UPDATE sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE token_hash=$1",[actor.session_hash]);
+ else if(invalid==='revoked')await pool.query('UPDATE sessions SET revoked_at=clock_timestamp() WHERE token_hash=$1',[actor.session_hash]);
+ else await pool.query('UPDATE users SET active=false WHERE user_id=$1',[actor.user_id]);
+ await assert.rejects(pairingView(pool,actor,pairing.user_code),(error:unknown)=>error instanceof Problem&&error.status===401&&error.code==='session_expired');
+});
 
 test('pairing stores only hashes, requires explicit approval after onboarding, throttles polls and issues token once',async()=>{
  const member=await signIn(),ownStore=await store(member),pairing=await start();
@@ -71,6 +128,37 @@ test('storefront bearer sees catalog and only approved store/listings; cannot wr
  assert.equal((await request('/api/v1/session',undefined,undefined,undefined,undefined,{Authorization:'Bearer '+token})).status,401);
  assert.equal((await request('/api/v1/session',undefined,undefined,undefined,undefined,{Cookie:'freedom_local_session='+token})).status,401);
  assert.equal((await request('/client-api/v1/retail/stores',seller)).status,401);
+});
+
+test('store UUID and bearer scheme aliases compose without expanding scope or credential lifetime',async()=>{
+ const seller=await ready(DEMO_USERS[1].email),supplier=await ready(),source=await product(supplier);
+ const ids=['a0000000-0000-4000-8000-000000000001','b0000000-0000-4000-8000-000000000002','c0000000-0000-4000-8000-000000000003'];
+ for(const [index,id]of ids.entries())await pool.query(`INSERT INTO retail_stores(store_id,community_id,seller_ref,name,description,support_contact)
+  VALUES($1,$2,$3,$4,'固定含字母 UUID 的合成商店','合成客服')`,[id,DEMO_COMMUNITY,index===2?supplier.user.user_id:seller.user.user_id,`合成 UUID 商店 ${index}`]);
+ const own=await listing(seller,ids[0],source.current_offer.offer_version_id);
+ await listing(seller,ids[1],source.current_offer.offer_version_id);await listing(supplier,ids[2],source.current_offer.offer_version_id);
+ const connected=await connect(seller,'storefront',ids[0].toUpperCase()),token=connected.access_token;
+ const storePage=await client(`/retail/stores/${ids[0].toUpperCase()}`,token);
+ assert.equal(storePage.status,200,JSON.stringify(storePage.data));
+ assert.deepEqual(storePage.data.items.map((row:{store_id:string})=>row.store_id),[ids[0]]);
+ const listingPage=await client(`/retail/stores/${ids[0].toUpperCase()}/listings`,token);
+ assert.equal(listingPage.status,200,JSON.stringify(listingPage.data));
+ assert.deepEqual(listingPage.data.items.map((row:{listing_id:string})=>row.listing_id),[own.listing_id]);
+ const aliased=(id:string,suffix='',body?:unknown)=>request(`/client-api/v1/retail/stores/${id.toUpperCase()}${suffix}`,undefined,body,undefined,undefined,{Authorization:'bEaReR   '+token});
+ assert.deepEqual((await aliased(ids[0])).data,storePage.data);
+ assert.deepEqual((await aliased(ids[0],'/listings')).data,listingPage.data);
+ for(let index=1;index<ids.length;index++)for(const suffix of ['', '/listings']){
+  for(const denied of [await client(`/retail/stores/${ids[index].toUpperCase()}${suffix}`,token),await aliased(ids[index],suffix)]){
+   assert.equal(denied.status,404);assert.equal(denied.data.code,'store_not_found');
+  }
+ }
+ assert.equal((await aliased(ids[0],'/listings',{})).status,405);
+ await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1",[connected.connection_id]);
+ for(const suffix of ['', '/listings'])assert.equal((await aliased(ids[0],suffix)).status,401);
+ await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()+interval '1 hour' WHERE connection_id=$1",[connected.connection_id]);
+ assert.equal((await aliased(ids[0])).status,200);
+ assert.equal((await api(`/me/client-connections/${connected.connection_id}/revoke`,seller,{},1)).status,200);
+ for(const suffix of ['', '/listings'])assert.equal((await aliased(ids[0],suffix)).status,401);
 });
 
 test('supplier bearer is restricted to own products and requests, not other suppliers or retailer data',async()=>{

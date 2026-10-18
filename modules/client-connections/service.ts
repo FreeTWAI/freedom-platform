@@ -2,6 +2,7 @@ import { randomBytes,randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool,PoolClient } from 'pg';
 import { command,checkVersion,transaction,type Command } from '../../packages/db/index.js';
+import { readWithMemberSession } from '../../packages/db/member-session.js';
 import { requireCondition } from '../../packages/shared/problem.js';
 import { tokenHash,type Actor } from '../identity-membership/service.js';
 import { authRateLimit } from '../identity-membership/members.js';
@@ -70,8 +71,10 @@ async function pairingByCode(q:Pool|PoolClient,code:string,lock=false){
 }
 export async function pairingView(pool:Pool,actor:Actor,code:string){
  await authRateLimit(pool,'client-pairing-lookup',actor.user_id,30,300);
- const row=await pairingByCode(pool,code);
- return {user_code:normalizeCode(code).match(/.{1,5}/g)!.join('-'),kind:row.kind,client_name:row.client_name,scope:row.kind+':read',expires_at:row.expires_at,state:'pending',read_only:true};
+ return readWithMemberSession(pool,actor,async q=>{
+   const row=await pairingByCode(q,code);
+   return {user_code:normalizeCode(code).match(/.{1,5}/g)!.join('-'),kind:row.kind,client_name:row.client_name,scope:row.kind+':read',expires_at:row.expires_at,state:'pending',read_only:true};
+ });
 }
 export async function approveClientPairing(pool:Pool,input:Command,code:string){
  const body=ApprovalInput.parse(input.body);
@@ -120,9 +123,10 @@ async function assertClientConnectionClock(q:PoolClient,connectionId:string){
  requireCondition((await q.query('SELECT 1 FROM member_client_connections WHERE connection_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[connectionId])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
 }
 export async function readClientResource(pool:Pool,authorization:string|undefined,resource:ClientResource,requestedStoreId?:string){
- requireCondition(authorization&&/^Bearer fw_read_[A-Za-z0-9_-]{43}$/.test(authorization),401,'client_token_invalid','讀取連線已失效，請重新配對。');
+ // Only the HTTP scheme is case-insensitive; keep the opaque credential's exact bytes.
+ requireCondition(authorization&&/^[Bb][Ee][Aa][Rr][Ee][Rr] +fw_read_[A-Za-z0-9_-]{43}$/.test(authorization),401,'client_token_invalid','讀取連線已失效，請重新配對。');
  return transaction(pool,async q=>{
-   const credentialHash=tokenHash(authorization.slice(7));
+   const credentialHash=tokenHash(authorization.slice(authorization.lastIndexOf(' ')+1));
    const owner=(await q.query('SELECT user_id,community_id FROM member_client_connections WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[credentialHash])).rows[0];
    requireCondition(owner,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    // Member → connection is the same lock order as administrative deactivation.
@@ -135,7 +139,7 @@ export async function readClientResource(pool:Pool,authorization:string|undefine
      return {connection_id:client.connection_id,kind:client.kind,scope:client.scope,store_id:client.store_id,expires_at:client.expires_at,read_only:true};
    }
    requireCondition((client.kind==='storefront'&&['catalog','stores','listings'].includes(resource))||(client.kind==='supplier'&&['products','requests'].includes(resource)),403,'client_scope_denied','這個讀取連線沒有此資料的權限。');
-   if(requestedStoreId!==undefined)requireCondition(client.kind==='storefront'&&requestedStoreId===client.store_id,404,'store_not_found','找不到這個讀取連線的商店。');
+   if(requestedStoreId!==undefined)requireCondition(client.kind==='storefront'&&requestedStoreId.toLowerCase()===client.store_id,404,'store_not_found','找不到這個讀取連線的商店。');
    if(client.kind==='storefront')requireCondition((await q.query('SELECT 1 FROM retail_stores WHERE store_id=$1 AND community_id=$2 AND seller_ref=$3',[client.store_id,client.community_id,client.user_id])).rowCount===1,403,'client_store_unavailable','已批准的商店不再可供這個連線讀取。');
    let rows:any[];
    if(resource==='catalog'||resource==='products')rows=(await q.query(`SELECT p.*,u.display_name AS supplier_name,to_jsonb(o) AS current_offer FROM catalog_products p
