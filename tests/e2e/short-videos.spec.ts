@@ -141,7 +141,7 @@ test('no Short option, no frame-src and no player when the host did not enable i
   await login(page);
   await page.getByRole('button',{name:'動態選項',exact:true}).click();
   const options=page.getByRole('dialog',{name:'動態選項',exact:true});
-  await expect(options.getByRole('button',{name:'最新貼文'})).toBeVisible();
+  await expect(options.getByRole('button',{name:'YouTube',exact:true})).toBeVisible();
   await expect(options.getByRole('button',{name:'Short',exact:true})).toHaveCount(0);
   expect(await (await page.request.get(`${baseURL}/api/v1/site`)).json()).toMatchObject({short_videos_enabled:false});
   const csp=(await page.request.get(`${baseURL}/`)).headers()['content-security-policy']??'';
