@@ -1,0 +1,55 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {SHORT_VIDEO_EMBED_ORIGIN,isShortsLink,playableShortVideos,playerCommand,shortVideoEmbedUrl} from '../../apps/portal-web/src/modules/short-video-embed.js';
+
+const post=(id:string,url:string|null,platform='youtube',kind:'link'|'note'='link')=>({post_id:id,url,platform,kind});
+
+test('the player address is built from the video id alone on the allowed origin',()=>{
+  const url=shortVideoEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ?si=tracking&feature=share')!;
+  assert.ok(url.startsWith(`${SHORT_VIDEO_EMBED_ORIGIN}/embed/dQw4w9WgXcQ?`));
+  assert.ok(!url.includes('tracking'));
+  const query=new URL(url).searchParams;
+  assert.equal(query.get('mute'),'1');
+  assert.equal(query.get('controls'),'0');
+  assert.equal(query.get('loop'),'1');
+  assert.equal(query.get('playlist'),'dQw4w9WgXcQ');
+  assert.equal(query.get('enablejsapi'),'1');
+  assert.equal(query.has('autoplay'),false);
+});
+
+test('anything that is not a clean https YouTube video link has no player',()=>{
+  for(const bad of ['http://www.youtube.com/watch?v=dQw4w9WgXcQ','https://evil.example/watch?v=dQw4w9WgXcQ','https://youtube.com.evil.example/shorts/dQw4w9WgXcQ',
+    'https://www.youtube.com/watch?v=short','javascript:alert(1)','not a url','https://www.youtube.com/@channel','']){
+    assert.equal(shortVideoEmbedUrl(bad),null,bad);
+  }
+  assert.equal(shortVideoEmbedUrl(null),null);
+});
+
+test('only vertical Shorts links become slides, one per video; watch, youtu.be and embed links never do',()=>{
+  const posts=[
+    post('a','https://www.youtube.com/shorts/dQw4w9WgXcQ'),
+    post('b','https://youtu.be/dQw4w9WgXcQ'),
+    post('c','https://www.instagram.com/reel/abc/','instagram'),
+    post('d','https://www.youtube.com/shorts/short'),
+    post('e',null,'youtube','note'),
+    post('f','https://www.youtube.com/watch?v=aaaaaaaaaaa'),
+    post('g','https://www.youtube.com/embed/bbbbbbbbbbb'),
+    post('h','https://m.youtube.com/shorts/cccccccccc_?feature=share'),
+    post('i','https://www.youtube.com/shorts/dQw4w9WgXcQ?si=again'),
+  ];
+  assert.deepEqual(playableShortVideos(posts).map(item=>item.post_id),['a','h']);
+});
+
+test('a Shorts link is recognised by host and path only',()=>{
+  assert.equal(isShortsLink('https://www.youtube.com/shorts/dQw4w9WgXcQ'),true);
+  assert.equal(isShortsLink('https://youtube.com/shorts/dQw4w9WgXcQ'),true);
+  for(const no of ['https://youtu.be/dQw4w9WgXcQ','https://www.youtube.com/watch?v=dQw4w9WgXcQ','https://www.youtube.com/live/dQw4w9WgXcQ','https://evil.example/shorts/dQw4w9WgXcQ',
+    'https://youtube.com.evil.example/shorts/dQw4w9WgXcQ','http://www.youtube.com/shorts/dQw4w9WgXcQ','',null]){
+    assert.equal(isShortsLink(no),false,String(no));
+  }
+});
+
+test('player commands are plain JSON for the YouTube postMessage API',()=>{
+  assert.deepEqual(JSON.parse(playerCommand('playVideo')),{event:'command',func:'playVideo',args:[]});
+  assert.deepEqual(JSON.parse(playerCommand('unMute')),{event:'command',func:'unMute',args:[]});
+});

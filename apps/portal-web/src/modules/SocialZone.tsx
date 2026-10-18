@@ -8,6 +8,7 @@ import {MemberAvatar} from './MemberAvatar';
 import {PromotionShare} from './PromotionShare';
 import {SocialInteractions} from './SocialInteractions';
 import {SocialPostEditor} from './SocialPostEditor';
+import {ShortVideoFeed} from './ShortVideoFeed';
 import './SocialZone.css';
 import {prepareSocialImage} from './social-image';
 import {socialPostJobForSession} from '../social-post-task';
@@ -40,6 +41,7 @@ const FILTERS = [
   {id: 'note', label: '社群貼文'},
   {id: '', label: '全部動態'},
   {id: 'youtube', label: 'YouTube'},
+  {id: 'shorts', label: 'Short'},
   {id: 'instagram', label: 'Instagram'},
   {id: 'facebook', label: 'Facebook'},
   {id: 'other', label: '其他'},
@@ -148,7 +150,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
       if(directPost){query.set('post_id',directPost);focusing.current=directPost;}
       else {
         if (nextPlatform === 'note') query.set('kind', 'note');
-        else if (nextPlatform) query.set('platform', nextPlatform);
+        else if (nextPlatform) query.set('platform', nextPlatform === 'shorts' ? 'youtube' : nextPlatform);
         if (nextCursor) query.set('cursor', nextCursor);
         if(tag)query.set('tag',tag);
       }
@@ -422,9 +424,10 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
-    {!loading && !error && items.length === 0 && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
+    {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
+    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }}/>}
     <div className="social-grid">
-      {items.map(post => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
+      {(platform === 'shorts' && !directPost ? [] : items).map(post => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
             {(post.mine||canHide)&&<details className="social-post-menu" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.currentTarget.open=false;event.currentTarget.querySelector('summary')?.focus();}}}>
@@ -450,6 +453,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
         </div>
       </article>)}
     </div>
-    {cursor && <button type="button" className="btn btn-ghost" disabled={more} onClick={() => void load(platform, cursor)}>{more ? '正在載入…' : '載入更多'}</button>}
+    {cursor && !(platform === 'shorts' && !directPost) && <button type="button" className="btn btn-ghost" disabled={more} onClick={() => void load(platform, cursor)}>{more ? '正在載入…' : '載入更多'}</button>}
   </section>;
 }

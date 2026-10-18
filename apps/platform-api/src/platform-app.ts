@@ -165,7 +165,9 @@ export function isMemberCardPage(path:string){return /^\/member-cards\/[A-Za-z0-
 export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string){
   const githubSetupForm=path==='/admin'||path==='/admin/github/callback'?' https://github.com/organizations/FreeTWAI/settings/apps/new':'';
   const destinations=isPaymentHandoffPath(path)?(paymentFormOrigin?' '+paymentFormOrigin:''):githubSetupForm+(brokerFormOrigin?' '+brokerFormOrigin:'');
-  return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
+  // Only the Short feed embeds a player: one named origin, never on a payment hand-off or an admin page.
+  const frames=isPaymentHandoffPath(path)||path==='/admin'||path.startsWith('/admin/')?'':" frame-src https://www.youtube-nocookie.com;";
+  return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:;"+frames+" base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
 }
 export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string){
   return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':platformContentSecurityPolicy(path,brokerFormOrigin,paymentFormOrigin)};
