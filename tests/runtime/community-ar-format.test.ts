@@ -5,6 +5,9 @@ import {createHash} from 'node:crypto';
 import {decode,encode} from '@msgpack/msgpack';
 import {inspectArTarget,inspectArExperience,createArExperience,combineArTargets,AR_TARGET_MAX_BYTES} from '../../packages/asset-storage/ar-target.js';
 import {projectTarget} from '../../apps/portal-web/src/modules/community-ar/render.js';
+import {trackingSize} from '../../apps/portal-web/src/modules/community-ar/camera.js';
+import {readArPacket} from '../../apps/portal-web/src/modules/community-ar/packet.js';
+import {effectScene,spatialGeometry,transform4,multiply4,previewProjection} from '../../apps/portal-web/src/modules/community-ar/spatial.js';
 
 const bytes=readFileSync(new URL('../fixtures/community-ar/card.mind',import.meta.url));
 test('AR-FMT-01 actual frozen SDK target is accepted, and media does not enter the inference packet',()=>{
@@ -38,4 +41,47 @@ test('AR-FMT-05 installed self-hosted SDK files retain exact reviewed hashes and
     assert.equal(createHash('sha256').update(file).digest('hex'),hash);
     if(name.startsWith('mindar-controller'))assert.equal(file.toString().includes('data:application/javascript;base64,'),false);
   }
+});
+
+test('AR-FMT-06 HD and portrait capture retain their field of view under the inference pixel budget',()=>{
+  assert.deepEqual(trackingSize(1280,720),[640,360]);assert.deepEqual(trackingSize(1080,1920),[360,640]);
+  assert.deepEqual(trackingSize(320,240),[320,240]);assert.deepEqual(trackingSize(640,480),[640,480]);
+  for(const dimensions of [[0,720],[Infinity,480],[1280,-1],[1.5,10],[20000,100]])assert.throws(()=>trackingSize(...dimensions as [number,number]));
+  for(const dimensions of [[4032,3024],[720,1280],[1920,1080]]){
+    const [w,h]=trackingSize(...dimensions as [number,number]);assert.ok(Math.max(w,h)<=640);assert.ok(Math.abs(w/h-dimensions[0]/dimensions[1])<.005);
+  }
+});
+test('AR-FMT-07 a small streamed pattern never reserves the old 20 MiB download arena',async()=>{
+  const chunks=[new Uint8Array(512).fill(7),new Uint8Array(512).fill(9)];
+  const response=new Response(new ReadableStream({start(controller){for(const chunk of chunks)controller.enqueue(chunk);controller.close();}}));
+  const Native=globalThis.Uint8Array,allocations:number[]=[];
+  globalThis.Uint8Array=new Proxy(Native,{construct(target,args,newTarget){if(typeof args[0]==='number')allocations.push(args[0]);return Reflect.construct(target,args,newTarget);}});
+  let result:Uint8Array;
+  try{result=await readArPacket(response,new AbortController().signal);}finally{globalThis.Uint8Array=Native;}
+  assert.equal(result.length,1024);assert.equal(result[511],7);assert.equal(result[512],9);
+  assert.ok(allocations.length>0);assert.ok(Math.max(...allocations)<1024*1024,'a small stream must not reserve a maximum-sized arena');
+});
+test('AR-FMT-08 streamed scene overflow and an aborted stalled stream cancel the reader',async()=>{
+  let cancelled=false;
+  const oversized=new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array(65));},cancel(){cancelled=true;}}));
+  await assert.rejects(readArPacket(oversized,new AbortController().signal,64),/ar_scene_size/);assert.equal(cancelled,true);
+  let release!:()=>void;const reading=new Promise<void>(resolve=>release=resolve),control=new AbortController();let aborted=false;
+  const stalled=new Response(new ReadableStream({pull(){release();},cancel(){aborted=true;}}));
+  const pending=readArPacket(stalled,control.signal);await reading;control.abort();
+  await assert.rejects(pending,{name:'AbortError'});assert.equal(aborted,true);
+});
+test('AR-FMT-09 original effect presets use bounded three-dimensional lit meshes and a real perspective transform',()=>{
+  for(const effect of ['sparkle','halo','confetti'] as const){
+    const scene=effectScene(effect,0);assert.ok(scene.length>3&&scene.length<=32);let triangles=0;
+    for(const object of scene){
+      assert.ok([...object.position,...object.rotation,...object.scale,...object.color,object.opacity].every(Number.isFinite));
+      const geometry=spatialGeometry(object.mesh);triangles+=geometry.positions.length/9;
+      assert.equal(geometry.positions.length,geometry.normals.length);assert.ok(geometry.positions.every(Number.isFinite));
+      const depths=Array.from(geometry.positions).filter((_,i)=>i%3===2);assert.ok(Math.max(...depths)>Math.min(...depths));
+      assert.ok(geometry.normals.every(Number.isFinite));
+    }
+    assert.ok(triangles<=4096);assert.notDeepEqual(scene,effectScene(effect,1000));assert.deepEqual(scene,effectScene(effect,NaN));
+  }
+  const projection=previewProjection(1.6),matrix=multiply4(projection,transform4([0,0,-2.4],[0,.4,0],[1,1,1]));
+  assert.ok(matrix.every(Number.isFinite));assert.notEqual(matrix[3],0);assert.equal(projection[11],-1);
 });

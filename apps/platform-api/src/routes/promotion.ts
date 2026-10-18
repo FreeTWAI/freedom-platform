@@ -98,7 +98,7 @@ export function registerMemberPromotion(app: Hono<PlatformEnv>, pool: Pool, runt
   });
   app.get('/api/v1/social-posts', async c => {
     const actor = c.get('actor');
-    return c.json(await readWithMemberSession(pool, actor, q => listSocialPosts(q, actor, { platform: c.req.query('platform'), cursor: c.req.query('cursor'), kind: c.req.query('kind'), tag:c.req.query('tag') })));
+    return c.json(await readWithMemberSession(pool, actor, q => listSocialPosts(q, actor, { platform: c.req.query('platform'), cursor: c.req.query('cursor'), kind: c.req.query('kind'), tag:c.req.query('tag'), post_id:c.req.query('post_id') })));
   });
   app.post('/api/v1/social-posts/notes', async c => c.json(await createNativeSocialPost(pool, await moduleCommand(c), clock(runtime), runtime.socialThumbnailAssets), 201));
   app.get('/api/v1/social-posts/:id/likes', async c => {

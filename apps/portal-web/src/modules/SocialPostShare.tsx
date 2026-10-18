@@ -1,23 +1,40 @@
-import {useEffect,useRef,useState,lazy,Suspense,Component,type ReactNode} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import type {PortalClient} from '../api';
-import {SocialShareSession} from '../social-share';
+import {useLocalAction} from '../useLocalAction';
 import {SocialIcon} from './SocialTools';
 import type {SocialPost} from './SocialZone';
-const Panel=lazy(()=>import('./SocialCrossPlatformShare').then(m=>({default:m.SocialCrossPlatformShare})));
-class ShareBoundary extends Component<{children:ReactNode},{failed:boolean}>{state={failed:false};static getDerivedStateFromError(){return {failed:true};}render(){return this.state.failed?<p role="alert">分享工具暫時無法載入，請重新整理後再試。</p>:this.props.children;}}
+
+/** Sharing an existing post hands off its permalink, never an authoring job. */
 export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPost}){
- const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null);
- const [open,setOpen]=useState(false),[job]=useState(()=>new SocialShareSession(client)),[error,setError]=useState(''),[busy,setBusy]=useState(false),alive=useRef(true);
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
- const caption=[post.note||post.title,post.url].filter(Boolean).join('\n');
- function close(){dialog.current?.close();setOpen(false);trigger.current?.focus();}
- async function attach(){const generation=client.sessionGeneration;setBusy(true);setError('');try{
-  const image=new Image();image.src=post.thumbnail_url!;await image.decode();
-  const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;canvas.getContext('2d')!.drawImage(image,0,0);
-  const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('圖片無法準備。')),'image/png'));
-  if(!alive.current||generation!==client.sessionGeneration)return;
-  if(!job.snapshot().enabled){setError('請先開啟分享，再加入照片。');return;}
-  await job.addFiles([new File([blob],'workshop-post.png',{type:'image/png'})]);
- }catch(e){if(alive.current&&generation===client.sessionGeneration)setError(e instanceof Error?e.message:'圖片無法準備。');}finally{if(alive.current&&generation===client.sessionGeneration)setBusy(false);}}
- return <><button ref={trigger} type="button" className="btn btn-ghost" aria-label="分享到其他社群" onClick={()=>{setOpen(true);dialog.current?.showModal();}}><SocialIcon name="share"/>分享</button><dialog ref={dialog} className="social-publish-dialog social-share-dialog" aria-label="分享貼文" onCancel={e=>{if(e.target!==e.currentTarget)return;e.preventDefault();close();}}>{open&&<><header className="social-publish-head"><h2>分享貼文</h2><button type="button" className="btn btn-ghost" onClick={close}>關閉分享</button></header><p className="muted">已預選全部平台，可取消不需要的分享對象。</p>{post.thumbnail_url&&<button className="btn btn-ghost" type="button" disabled={busy} onClick={()=>void attach()}>{busy?'處理圖片中…':'加入貼文照片'}</button>}{error&&<p role="alert">{error}</p>}<ShareBoundary><Suspense fallback={<p role="status">載入分享工具…</p>}><Panel client={client} draft={caption} disabled={busy} onClose={close} shareJob={job}/></Suspense></ShareBoundary></>}</dialog></>;
+  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),field=useRef<HTMLInputElement>(null),id=useId();
+  const [open,setOpen]=useState(false),[status,setStatus]=useState('');
+  const action=useLocalAction([client,client.sessionGeneration,post.post_id,open]);
+  const destination=new URL('/',window.location.origin);destination.searchParams.set('social-post',post.post_id);destination.hash='social';
+  const url=destination.href;
+  useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();},[open]);
+  function close(){dialog.current?.close();setOpen(false);setStatus('');trigger.current?.focus({preventScroll:true});}
+  async function share(){
+    if(typeof navigator.share!=='function'){setStatus('');setOpen(true);return;}
+    const result=await action.run('share',()=>navigator.share({title:'自由工坊的貼文',url}));
+    if(result.status==='failed'&&(result.error as {name?:string}|null)?.name!=='AbortError'){
+      setStatus('系統分享暫時無法使用，可以複製貼文連結。');setOpen(true);
+    }
+  }
+  async function copy(){
+    const result=await action.run('copy',()=>navigator.clipboard.writeText(url));
+    if(result.status==='done')setStatus('已複製貼文連結');
+    else if(result.status==='failed'){setStatus('請選取並複製下方貼文連結。');field.current?.focus();field.current?.select();}
+  }
+  return <>
+    <button ref={trigger} type="button" className="btn btn-ghost" aria-label="分享貼文連結" disabled={action.pending!==null} aria-busy={action.pending==='share'} onClick={()=>void share()}><SocialIcon name="share"/>{action.pending==='share'?'分享中…':'分享'}</button>
+    <dialog ref={dialog} className="social-publish-dialog social-share-dialog" aria-labelledby={`${id}-title`} onCancel={event=>{event.preventDefault();close();}} onClose={()=>setOpen(false)}>
+      {open&&<div className="stack">
+        <header className="social-publish-head"><h2 id={`${id}-title`}>分享貼文連結</h2><button type="button" className="btn btn-ghost" onClick={close}>關閉分享</button></header>
+        <p>把連結傳給朋友，就能直接找到這則貼文。社群貼文需要登入並具備原本的閱覽權限。</p>
+        <label className="field">貼文連結<input ref={field} readOnly value={url} onFocus={event=>event.currentTarget.select()}/></label>
+        <div className="actions"><button type="button" className="btn btn-primary" disabled={action.pending!==null} aria-busy={action.pending==='copy'} onClick={()=>void copy()}>{action.pending==='copy'?'複製中…':'複製貼文連結'}</button></div>
+        {status&&<p role="status">{status}</p>}
+      </div>}
+    </dialog>
+  </>;
 }
