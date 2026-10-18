@@ -15414,8 +15414,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-05-fulfilment.md",
-      "bytes": 87534,
-      "sha256": "9e120561b505152c3fc15e173bbd8ce96fd4e4af0db783c139a33f45c9839ca5"
+      "bytes": 88733,
+      "sha256": "688608a187d396b591cd08e14c403c1b2b9b783992e351806ba623c82222d59c"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
@@ -15729,8 +15729,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-02-shell-session-recovery.md",
-      "bytes": 7088,
-      "sha256": "0003048e5b23e23d9fdd3372eba851e6b4fe48579b9d6a5d18acebdc6f1d4414"
+      "bytes": 8198,
+      "sha256": "b061128d93b56fbd96692830389228f7c4e1ec91f08c5380e990c8fa68f9a967"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-03-commerce-reads-writes.md",
@@ -15744,8 +15744,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-05-tests-ci-guild-dev.md",
-      "bytes": 29994,
-      "sha256": "d56cc9bcb579f0e0dfb45fee108a5037c129a20248b7e397df40d24f05caf1ca"
+      "bytes": 30407,
+      "sha256": "8e94fa1b28c2733d2888f57327966256ef097a0584ef2f8b8338e30e6ec46350"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-06-release-rollback-pilot.md",
@@ -15789,8 +15789,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/work-plan.md",
-      "bytes": 15381,
-      "sha256": "ea3965469ac66d65374f8733abe69c7610519e306647ab04285d3be40083304c"
+      "bytes": 15879,
+      "sha256": "d459c5fcb78473d174cfba7a400ff6d3578c79b4234c8963393b593f1a428b9a"
     },
     {
       "path": "docs/platform-plan/execution/tools/check_package_dag.py",
@@ -17374,8 +17374,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/README.md",
-      "bytes": 29041,
-      "sha256": "4fd6c839f88b37206267b44d42ce4762b89bd2899fed72e778eb9bdeee082ef9"
+      "bytes": 31161,
+      "sha256": "cceb17ab6969486d095c30f6c01803c2eec966b08fef660f8c2a359ab8b2fb40"
     },
     {
       "path": "modules/agent-commerce/fulfilment/freedom.module.json",
@@ -17384,8 +17384,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/delivery-input.ts",
-      "bytes": 7293,
-      "sha256": "dd5f8a9e6b3d64a3e4b207bf286cdd6044cf976eef36c003ccf5b022c5c261db"
+      "bytes": 7358,
+      "sha256": "a8178077c357aa843b95fc6bfa6d8ec36157b7cdf8d76bcdbeb3ea136655b63e"
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/ecpay.ts",
@@ -17403,14 +17403,19 @@
       "sha256": "d6bd57570fd237054cd680b5f2e7f4249962546a50dbce774e02e1796ce7336b"
     },
     {
+      "path": "modules/agent-commerce/fulfilment/rules/ecpay-recipient.ts",
+      "bytes": 4860,
+      "sha256": "003bb48492ebdb1deea3c36ca8224936d5d7572cce5f4fb657c2c5f579c89011"
+    },
+    {
       "path": "modules/agent-commerce/fulfilment/rules/errors.ts",
       "bytes": 693,
       "sha256": "4d62868abb1a1b4c06ee03ccf35eb68829688102d4dba0617d7a04b049fbd59a"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/index.ts",
-      "bytes": 1721,
-      "sha256": "63a6d7a6ab1a5d6e77a459dcd29184d55604acf72c3c6dbdf8d4c650d5b8f693"
+      "bytes": 1872,
+      "sha256": "c1875eb8d169f19023dfdaeb0877555a0256a0cbf87f637d8927acea031b3938"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/plan.ts",
@@ -17424,8 +17429,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/recipient.ts",
-      "bytes": 12058,
-      "sha256": "a69adf65c3b7dd1576a70f6b9d709c5850f1cad98c740836bc0b783bc2f6bd7d"
+      "bytes": 11246,
+      "sha256": "413fb0a4b15607790e286e7a840914b4e82c7ef860317d9246482ab9582a6262"
     },
     {
       "path": "modules/agent-commerce/fulfilment/rules/ship-by.ts",
@@ -17459,8 +17464,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/locations.ts",
-      "bytes": 7240,
-      "sha256": "10d9947d39fac87bcbbeaeda7bdaf80df4ee544caf79898e92c0c555167d52ea"
+      "bytes": 7692,
+      "sha256": "768eb44e419bc60bbaffcc68018f7b01a4dbdde9fe731da26056290a0f840d55"
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/logistics.ts",
@@ -17469,8 +17474,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/settings/profile.ts",
-      "bytes": 6127,
-      "sha256": "efbefb56e40383c716080797c9456c86666c0d813bd87837a791e9d94a6646b2"
+      "bytes": 7025,
+      "sha256": "9e6e65e994acf8cb1d57cf8bd9e2547b927a108322378390b9a92f5789966ce0"
     },
     {
       "path": "modules/agent-commerce/hosted/capabilities.ts",
@@ -18344,8 +18349,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/state/useSupplierConsoleController.ts",
-      "bytes": 27919,
-      "sha256": "d07610cffccd087fdab8899ad1e3846b0e603209f537fd5f36c7b4ff315b2913"
+      "bytes": 28323,
+      "sha256": "0c32eab68d87d682cf884fced15503c80e0c3f69a89308d6b93e30df3cace48d"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/SupplierConsole.css",
@@ -18379,8 +18384,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Material.tsx",
-      "bytes": 22057,
-      "sha256": "740bde76910848ab7b397aa2b21fdec88bffeeea7be02c204a0b576a3fda52b3"
+      "bytes": 22734,
+      "sha256": "98848efc111f408ed0d235a393ec134390d6db2c9e4a10d5d6980cda03909bf3"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/MaterialNew.tsx",
@@ -22909,8 +22914,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-materials.spec.ts",
-      "bytes": 68327,
-      "sha256": "226ea31fd8de1f72e14233a756ecf47113b94a654f63b9edd110890302e3963a"
+      "bytes": 75974,
+      "sha256": "6160d904c140e72b4195e244d9f8578c762f2ce5ed27fd48a06c705f2152e63c"
     },
     {
       "path": "tests/e2e/supplier-console-navigation.spec.ts",
@@ -22924,8 +22929,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-recovery.spec.ts",
-      "bytes": 50411,
-      "sha256": "93390e49be78e19a72a3280adca9dc89d186985a35ef534c2eb7185c98e8c8ef"
+      "bytes": 56117,
+      "sha256": "3bc8a97ba165de92ff58cb7b4cdbe077ac086650e40df45ada48c12319936b89"
     },
     {
       "path": "tests/e2e/supplier-console-visual.spec.ts",
@@ -23399,8 +23404,8 @@
     },
     {
       "path": "tests/runtime/commerce-fulfilment-rules.test.ts",
-      "bytes": 94168,
-      "sha256": "ae6c7e9fbd1e1d8e05ea299a6ea8d5ad7224c96b0becc7d2b86a978bb03d0227"
+      "bytes": 97661,
+      "sha256": "92e95a7e45d5a16dbcfb186e1045c87b2b308969975be4d66020ca8707f1e0b6"
     },
     {
       "path": "tests/runtime/commerce-invoice-rules.test.ts",
@@ -24079,13 +24084,13 @@
     },
     {
       "path": "tests/runtime/hosted-shipping-locations.test.ts",
-      "bytes": 14209,
-      "sha256": "2568c9733201d114af5c614a2dade628f4dd02b612c4a5911caca9b04bfcd6a1"
+      "bytes": 15934,
+      "sha256": "a66dca4e7d8b1901e3e7c304224e43be556187a055fab6a352403ed538630fc6"
     },
     {
       "path": "tests/runtime/hosted-shipping-profile.test.ts",
-      "bytes": 14436,
-      "sha256": "0e8a52484de742d66c248b0179148dcab1543aabbecc9d30d95c59b404e07a76"
+      "bytes": 16188,
+      "sha256": "62f774ca0650904be1a647029ba5ff9ae73a8636d50ff1a818c2f754bdf56958"
     },
     {
       "path": "tests/runtime/hosted-shipping-quote-checkout.test.ts",
@@ -25179,8 +25184,8 @@
     },
     {
       "path": "tests/runtime/supplier-console-state.test.ts",
-      "bytes": 74844,
-      "sha256": "de3940d03b18ef7ca3bd5f4d9fcad4e5e39cc7ac725184eb08ad1dec7c8cc246"
+      "bytes": 76311,
+      "sha256": "5638ae1e9734c28e02704948f2e4d01f1d92b000e6c585c9457f1787d88c284a"
     },
     {
       "path": "tests/runtime/supplier-console-writes.test.ts",
