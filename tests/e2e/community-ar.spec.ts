@@ -238,7 +238,7 @@ test('AR-UI-13 failure of the optional 3D preview preserves the authored draft a
   await login(page);await page.getByRole('button',{name:'製作圖案',exact:true}).click();await page.getByLabel('自訂文字、特效、圖片或影片').check();
   await page.getByLabel('要顯示的文字').fill('預覽斷線也要保留的介紹');await page.getByRole('button',{name:'特效',exact:true}).click();
   await expect(page.getByText('3D 預覽暫時無法載入，仍可繼續編輯並發布圖案。',{exact:true})).toBeVisible();
-  await expect(page.getByLabel('介紹文字（選填）',{exact:true})).toHaveValue('預覽斷線也要保留的介紹');await page.getByLabel('選擇特效').selectOption('halo');
+  await expect(page.getByRole('textbox',{name:'介紹文字（選填）',exact:true})).toHaveValue('預覽斷線也要保留的介紹');await page.getByLabel('選擇特效').selectOption('halo');
   await expect(page.getByLabel('選擇特效')).toHaveValue('halo');await page.getByRole('button',{name:'文字',exact:true}).click();
   await expect(page.getByLabel('要顯示的文字')).toHaveValue('預覽斷線也要保留的介紹');await expect(page.getByLabel('選擇衣服或海報上的圖片')).toBeEnabled();
 });
