@@ -13,28 +13,32 @@ function callback(start:string,end:string){
   return source.slice(from+start.length,to);
 }
 for(const oldCursor of [null,'old-filter-cursor']){
-  test(`notification focus waits for the new unfiltered first page, stale cursor=${oldCursor}`,async()=>{
+  test(`notification focus waits for the exact-post lookup, stale cursor=${oldCursor}`,async()=>{
     let resolve!:(value:unknown)=>void;
     const pending=new Promise(resolveValue=>{resolve=resolveValue;});
     const requests:string[]=[],notices:string[]=[],actions:string[]=[];
-    const focusing={current:{id:'target',pages:0} as {id:string;pages:number}|null};
+    const target='00000000-0000-4000-8000-000000000001';
+    const focusing={current:target as string|null};
     let visible=false;
     const context:any={URLSearchParams,loadSequence:{current:0},pendingFeedLoad:{current:false},newPosts:{current:[]},
       client:{get:(path:string)=>{requests.push(path);return pending;}},
       setLoading(){},setMore(){},setError(){},setItems(){},setCursor(){},setCanHide(){},
-      focusing,loading:false,more:false,platform:'',tag:'',cursor:oldCursor,FOCUS_PAGE_LIMIT:4,setNotice:(value:string)=>notices.push(value),
-      document:{getElementById:()=>visible?{scrollIntoView:()=>actions.push('scroll'),focus:()=>actions.push('focus')}:null},
+      focusing,directPost:target,loading:false,more:false,platform:'',tag:'',cursor:oldCursor,setNotice:(value:string)=>notices.push(value),
+      document:{getElementById:(id:string)=>{assert.equal(id,`social-post-${target}`);return visible?{scrollIntoView:()=>actions.push('scroll'),focus:()=>actions.push('focus')}:null;}},
     };
-    const load=callback('const load = useCallback(', ', [client,tag]);');
-    const focus=callback('const target = focusing.current;', '}, [items, loading, more, cursor, platform, tag]);');
+    const load=callback('const load = useCallback(', ', [client,tag,directPost]);');
+    const focus=callback('const target = focusing.current;', '}, [items, loading, more, directPost]);');
     runInNewContext(transformSync(`globalThis.load=${load};globalThis.focus=()=>{const target=focusing.current;${focus}}`,{loader:'ts',format:'cjs'}).code,context);
-    const request=context.load(''); // earlier useEffect starts first-page refresh
+    const request=context.load(''); // earlier useEffect starts the exact-post replacement
     context.focus(); // later useEffect still sees loading=false and the old cursor
-    assert.deepEqual(requests,['/social-posts']);
+    assert.deepEqual(requests,[`/social-posts?post_id=${target}`]);
     assert.deepEqual(notices,[]);
-    assert.equal(focusing.current?.id,'target');
+    assert.deepEqual(actions,[]);assert.equal(context.pendingFeedLoad.current,true);
+    assert.equal(focusing.current,target);
     resolve({items:[],next_cursor:null,can_hide:false});await request;
-    visible=true;context.focus();
+    visible=true;context.focus();context.focus();
     assert.deepEqual(actions,['scroll','focus']);assert.equal(focusing.current,null);
+    assert.equal(context.pendingFeedLoad.current,false);
+    assert.deepEqual(requests,[`/social-posts?post_id=${target}`],'focus must not request extra pagination');
   });
 }

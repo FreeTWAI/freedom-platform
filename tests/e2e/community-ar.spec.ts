@@ -1,4 +1,6 @@
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
 import {createArExperience} from '../../packages/asset-storage/ar-target.js';
 
@@ -92,14 +94,18 @@ test('AR-UI-05 actual replay camera renders a tracked overlay, captures a photo 
     const link=Array.from(document.querySelectorAll<HTMLAnchorElement>('.ar-scanner a')).find(node=>node.textContent?.trim()==='查看內容');
     const rect=link?.getBoundingClientRect();
     if(!link||!rect?.width||!rect.height||getComputedStyle(link).visibility!=='visible')return false;
-    const canvas=document.querySelector<HTMLCanvasElement>('.ar-stage canvas');
+    const canvas=document.querySelector<HTMLCanvasElement>('.ar-stage .ar-flat-layer');
     if(!canvas?.width||!canvas.height)return false;
     const c=canvas.getContext('2d');
     return c!==null&&c.getImageData(0,0,canvas.width,canvas.height).data.some((v,i)=>i%4===3&&v>0);
   }),{timeout:30000,intervals:[100]}).toBe(true);
+  await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','webgl');
+  await expect.poll(async()=>Number(await page.locator('.ar-spatial-layer').getAttribute('data-triangles'))).toBeGreaterThan(0);
   await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
   await page.getByRole('button',{name:'X',exact:true}).click();await expect(page.getByRole('button',{name:'X',exact:true})).toHaveAttribute('aria-pressed','true');await page.getByRole('button',{name:'Facebook',exact:true}).click();await expect(page.getByRole('button',{name:'Facebook',exact:true})).toHaveAttribute('aria-pressed','true');
-  await page.getByRole('button',{name:'暫停相機',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
+  await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeEnabled();
+  await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
+  await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','stopped');
   await page.screenshot({path:'.rd/ar/capture-platforms.png',fullPage:true});
 });
 
@@ -155,7 +161,7 @@ test('AR-UI-08 failed public refresh stops the camera until explicit metadata re
   test.setTimeout(90000);
   await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
   await login(page);
-  const path=await publish(page,createArExperience(pattern,{version:1,kind:'text',text:'Synthetic refresh recovery'}),'Synthetic refresh recovery');
+  const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',effect:'halo',text:'Synthetic refresh recovery'}),'Synthetic refresh recovery');
   let failRefresh=false,failedReads=0,metadataReads=0;
   await page.route(`**/api/v1/public${path}`,async route=>{
     metadataReads++;
@@ -173,7 +179,8 @@ test('AR-UI-08 failed public refresh stops the camera until explicit metadata re
     expect(failedReads,'tracker frames must not repeat a failed metadata refresh').toBe(1);
     await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
     await expect(page.getByRole('link',{name:'查看內容',exact:true})).toHaveCount(0);
-    expect(await page.locator('.ar-stage canvas').evaluate(node=>{const c=(node as HTMLCanvasElement).getContext('2d')!;return c.getImageData(0,0,c.canvas.width,c.canvas.height).data.every((v,i)=>i%4!==3||v===0);})).toBe(true);
+    expect(await page.locator('.ar-flat-layer').evaluate(node=>{const c=(node as HTMLCanvasElement).getContext('2d')!;return c.getImageData(0,0,c.canvas.width,c.canvas.height).data.every((v,i)=>i%4!==3||v===0);})).toBe(true);
+    await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','stopped');
     await expect(page.getByRole('button',{name:'重新載入圖案',exact:true})).toBeEnabled();
     for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath(`refresh-error-${width}.png`),fullPage:true});}
     const beforeReload=metadataReads;failRefresh=false;
@@ -183,6 +190,74 @@ test('AR-UI-08 failed public refresh stops the camera until explicit metadata re
     await page.getByRole('button',{name:'開啟相機',exact:true}).click();
     await expect(page.getByRole('link',{name:'查看內容',exact:true})).toBeVisible({timeout:30000});
     await page.getByRole('button',{name:'暫停相機',exact:true}).click();
+  }finally{await page.evaluate(()=>{(window as any).arReplay?.pause();(window as any).arTestStream?.getTracks().forEach((track:MediaStreamTrack)=>track.stop());});}
+});
+
+test('AR-UI-10 real WebGL previews have visible pixels, respond to rotation and recover a lost graphics context',async({page},testInfo)=>{
+  test.setTimeout(90000);await page.emulateMedia({reducedMotion:'reduce'});await login(page);
+  await page.getByRole('button',{name:'製作圖案',exact:true}).click();
+  await page.getByLabel('自訂文字、特效、圖片或影片').check();await page.getByRole('button',{name:'特效',exact:true}).click();
+  const canvas=page.getByRole('img',{name:'有深度與透視的 3D 特效預覽'});
+  await canvas.scrollIntoViewIfNeeded();await expect(canvas).toHaveAttribute('data-renderer','webgl');
+  await expect(page.getByRole('button',{name:'播放動畫',exact:true})).toBeVisible();
+  for(const effect of ['sparkle','halo','confetti']){
+    await page.getByLabel('選擇特效').selectOption(effect);await canvas.scrollIntoViewIfNeeded();
+    await expect.poll(async()=>Number(await canvas.getAttribute('data-triangles'))).toBeGreaterThan(0);
+    const screenshot=await canvas.screenshot(),pixels=await sharp(screenshot).ensureAlpha().raw().toBuffer();let bright=0;
+    for(let i=0;i<pixels.length;i+=4)if(Math.max(pixels[i],pixels[i+1],pixels[i+2])>110)bright++;
+    expect(bright,`${effect} must render actual bright 3D geometry`).toBeGreaterThan(50);
+    await canvas.screenshot({path:testInfo.outputPath(`spatial-${effect}.png`)});
+  }
+  const rotation=page.getByLabel('轉動預覽');await rotation.focus();await rotation.press('Home');await expect(rotation).toHaveValue('-55');
+  const before=createHash('sha256').update(await canvas.screenshot()).digest('hex');
+  await rotation.press('End');await expect(rotation).toHaveValue('55');
+  await expect.poll(async()=>createHash('sha256').update(await canvas.screenshot()).digest('hex')).not.toBe(before);
+  const lost=await canvas.evaluate(node=>{const gl=(node as HTMLCanvasElement).getContext('webgl')!,extension=gl.getExtension('WEBGL_lose_context');if(!extension)return false;extension.loseContext();return true;});expect(lost).toBe(true);
+  await expect(page.getByText('這台裝置暫時無法顯示 3D 預覽，掃描時會使用精簡特效。',{exact:false})).toBeVisible();
+  await page.getByRole('button',{name:'重試預覽',exact:true}).click();await expect(canvas).toHaveAttribute('data-renderer','webgl');
+  await expect.poll(async()=>Number(await canvas.getAttribute('data-triangles'))).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'文字',exact:true}).click();await expect(canvas).toHaveCount(0);
+});
+
+test('AR-UI-11 immersive camera fits narrow screens and restores focus and page scrolling on Escape',async({page,e2eAuthPool},testInfo)=>{
+  await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
+  await login(page);const path=await publish(page,createArExperience(pattern,{version:1,kind:'text',text:'Synthetic expanded camera'}),'Synthetic expanded camera');await page.goto(path);
+  for(const width of [320,390,768,1440]){
+    await page.setViewportSize({width,height:844});await page.getByRole('button',{name:'展開相機',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'AR 相機'});await expect(dialog).toBeVisible();
+    const rect=await dialog.boundingBox();expect(rect!.x).toBe(0);expect(rect!.y).toBe(0);expect(rect!.width).toBe(width);expect(Math.abs(rect!.height-844)).toBeLessThan(2);
+    expect(await page.evaluate(()=>document.body.style.overflow)).toBe('hidden');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:testInfo.outputPath(`immersive-${width}.png`)});
+    await page.getByRole('button',{name:'縮小相機',exact:true}).press('Escape');await expect(page.getByRole('dialog',{name:'AR 相機'})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'展開相機',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+  }
+});
+
+test('AR-UI-13 failure of the optional 3D preview preserves the authored draft and editor controls',async({page})=>{
+  await page.route(/\/assets\/SpatialPreview-[^/]+\.js$/,route=>route.abort('failed'));
+  await login(page);await page.getByRole('button',{name:'製作圖案',exact:true}).click();await page.getByLabel('自訂文字、特效、圖片或影片').check();
+  await page.getByLabel('要顯示的文字').fill('預覽斷線也要保留的介紹');await page.getByRole('button',{name:'特效',exact:true}).click();
+  await expect(page.getByText('3D 預覽暫時無法載入，仍可繼續編輯並發布圖案。',{exact:true})).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'介紹文字（選填）',exact:true})).toHaveValue('預覽斷線也要保留的介紹');await page.getByLabel('選擇特效').selectOption('halo');
+  await expect(page.getByLabel('選擇特效')).toHaveValue('halo');await page.getByRole('button',{name:'文字',exact:true}).click();
+  await expect(page.getByLabel('要顯示的文字')).toHaveValue('預覽斷線也要保留的介紹');await expect(page.getByLabel('選擇衣服或海報上的圖片')).toBeEnabled();
+});
+
+test('AR-UI-12 devices without a second WebGL context still track, draw fallback effects and capture',async({page,e2eAuthPool})=>{
+  test.setTimeout(90000);await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
+  await login(page);const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',text:'Synthetic fallback camera',effect:'confetti'}),'Synthetic fallback camera');
+  await page.route('**/_ar-test/positive.webm',route=>route.fulfill({contentType:'video/webm',body:readFileSync(new URL('../fixtures/community-ar/positive.webm',import.meta.url))}));
+  await page.addInitScript(()=>{
+    const original=HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,kind:string,...args:unknown[]){if(this.classList.contains('ar-spatial-layer')&&kind==='webgl')return null;return (original as any).call(this,kind,...args);} as typeof original;
+    Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{const replay=document.createElement('video');replay.src='/_ar-test/positive.webm';replay.loop=true;replay.muted=true;replay.playsInline=true;await replay.play();await new Promise<void>(resolve=>replay.requestVideoFrameCallback(()=>resolve()));(window as any).arReplay=replay;const stream=(replay as HTMLVideoElement&{captureStream:()=>MediaStream}).captureStream();(window as any).arTestStream=stream;return stream;}});
+  });
+  try{
+    await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();await expect(page.getByRole('link',{name:'查看內容',exact:true})).toBeVisible({timeout:30000});
+    await expect(page.getByText('目前使用精簡特效，可以繼續掃描與拍照。',{exact:true})).toBeVisible();
+    expect(await page.locator('.ar-flat-layer').evaluate(node=>{const canvas=node as HTMLCanvasElement;return canvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0);})).toBe(true);
+    await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+    await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
   }finally{await page.evaluate(()=>{(window as any).arReplay?.pause();(window as any).arTestStream?.getTracks().forEach((track:MediaStreamTrack)=>track.stop());});}
 });
 
