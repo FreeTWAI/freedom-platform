@@ -4,7 +4,32 @@ The member commerce routes manage an existing owner's shops and opaque credentia
 
 Order list hydration (#326) loads imported page orders, visible transfers, lines and recorded payables in four batch queries after the existing shop check and page-ID query. Single-order reads share the same assembler; internal views retain only their own transfers and each payable stays attached to its transfer. Hosted seller pages retain the existing sorted order/item locks and expiry effects, but batch persisted orders and immutable quote terms. A shared post-lock clock snapshot handles live reservations with the existing final deadline fence; expired reservations still perform their per-order stock release and journal writes, so those effect queries are not constant-size.
 
+Imported order creation evaluates pending reservation expiry with
+`clock_timestamp()` after the existing community commerce lock, not the
+transaction-start `now()`. A request queued across a reservation's deadline
+can release that expired stock and reserve it for its new order atomically,
+without a spurious `out_of_stock` or a client retry. Unexpired reservations
+still block excess orders; merchant-reported paid/refunded orders retain their
+stock. External-ID replays do not reserve again. This changes neither the TTL
+nor payment reporting, and does not guarantee the clock through commit.
+New reservations also use one post-lock SQL clock snapshot for `created_at`
+and `expires_at`, preserving the full 30-minute interval rather than consuming
+it while queued. Exact external-ID replays preserve both original timestamps;
+they do not renew that interval. Existing migration defaults remain unchanged.
+
 Owner imported-shop listing (#350) first selects the current community/owner's imported shops, then groups product and selection counts separately by shop before joining them. Empty shops keep numeric zero counts; all existing shop fields, key dates and descending creation-time ordering remain unchanged. The portal consumes the complete list and filters internal/public shops locally, so this change deliberately retains the unpaginated `{items}` response rather than silently hiding shops.
+
+Member catalog, own-shop, owner-order, distribution-acceptance and import-preview
+reads use the existing locked member-session transaction on one database client.
+They check the current session clock after the final domain query; expiry while
+waiting returns `401 session_expired` without private items or a preview, including
+empty lists and source-free internal previews. Catalog-backed agent-kit reads
+inherit that boundary. Preview downloads finish before this short transaction;
+no network I/O is moved under member locks. Read projections create no command
+receipt or transition journal. Ownership/community filters, grouped counts and
+batched orders remain unchanged. This is a read-decision fence, not a guarantee
+through commit or HTTP delivery; machine bearer and anonymous public-shop readers
+retain their separate authority and are not changed by the member boundary.
 
 The server resolver and schema constraints are documented in [resource-scopes](../../packages/resource-scopes/README.md). After schema 117 and 118, an upgraded issuer creates only purpose-bound v2 keys when the owner explicitly requests issuance. Its existing member receipt/digest stays unchanged and a replay still returns `token: null`. The application must receive an explicit `FREEDOM_SHOP_KEY_POLICY=legacy-compatible` or `purpose-bound-only`; absent configuration yields shop-only 503. The Worker config checker lists this as a required injection without changing deployed vars. `/api/v1/health` reports the actual selected policy and issuer profile, or `unconfigured`/null. A merged source SHA or configured example is not an installed policy observation.
 
@@ -18,11 +43,43 @@ An active legacy key, invalid bound tuple or active hash shared across the two s
 
 The operator must separately verify the complete active/retained issuer inventory and rollback floor, then approve and observe `purpose-bound-only` on both environments. Old issuers that cannot verify the binding cannot remain an allowed rollback. Re-observe the exact release/policy after rollout and retain the client compatibility evidence. This packet does not rotate live keys, discover provider configuration, change policy or assert that this operational exit has happened.
 
+## Member result-file imports
+
+The Portal [result-file reader](../../apps/portal-web/src/modules/CommercePanels.tsx)
+checks the original file's 24000-byte limit before reading it, then decodes those
+bytes as strict UTF-8. Invalid sequences produce the existing accessible error
+banner, clear any previous preview/confirmation, and send no preview request for
+that file. They are not silently replaced with `U+FFFD`. Intentionally encoded
+`U+FFFD`, Chinese, non-BMP characters and a UTF-8 BOM remain supported; JSON/MD
+parsing and domain validation keep their existing rules.
+
+The existing read revision and session generation are captured before file I/O
+and checked again before sending the preview and accepting its response. A late
+read cannot submit an old file under a replacement login or restore a superseded
+preview. Reading/error state uses the existing controls and banner, not a new
+upload transport or storage service. The [browser regressions](../../tests/e2e/agent-shops.spec.ts)
+cover invalid bytes, stale confirmations, the original-byte size boundary,
+Unicode/Markdown recovery and same/different-account replacement during a real
+file read. Their sources are not evidence of a particular execution or live shop
+deployment.
+
 ## Validation scope
 
 The isolated [identity](../../tests/runtime/shop-service-identity.test.ts), [command](../../tests/runtime/shop-service-command.test.ts), and [exit adapter](../../tests/runtime/shop-key-exit.test.ts) tests require an explicit disposable loopback `fp_*` PostgreSQL database. They use synthetic owners/keys, real HTTP handlers/servers and SQL transactions/locks, including restricted LOGIN roles. Their sources are not evidence of a particular execution; recorded commands, source hashes and results belong in the integration evidence. No test here targets production or demonstrates live legacy retirement, general service authority, all commerce common-command coverage or model broker authorization.
 
 ## Hosted stores
+
+### Release 1.1.0 and upgrade
+
+New stores use `hosted-store@1.1.0` / `storefront@1.1.0`, with the original
+storefront contract bytes and twelve registered capabilities. Existing 1.0.0
+instances retain their four keys until their owner invokes the versioned,
+idempotent upgrade command. `GET .../storefronts/:instance_id/release` reports the
+installed references, effective caller keys and registered upgrade path; only an
+active tenant's owner can upgrade an active instance. The paired upgrade bumps
+authority revision, retains grants and records a release journal/control fact.
+It does not enable payment processing. Provider setup and independent admission
+are documented in `payments/README.md` and `operations/README.md`.
 
 The `storefront` module uses the existing commerce tables. A hosted store has two `commerce_shops` rows with `origin='hosted'`: an internal supply shop for items and a public storefront shop for selections. `commerce_resource_tenants` maps each shop to its tenant and instance under tenant RLS. The original acting person principal is saved as `source_owner_id`; readers never infer this historical identity from the current member. Private profile, publication and product reads join confirmed mappings under a session-bound tenant context. Registry provisioning creates no shop; the separate setup command creates both shops, mappings and the profile atomically.
 

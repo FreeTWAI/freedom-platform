@@ -1,11 +1,57 @@
 import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
+import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();}
 function card(page:Page,text:string){return page.locator('.social-card').filter({has:page.locator('.social-note').filter({hasText:text})});}
 
+test('sharing an existing post uses one native link handoff and cancelling never starts a publishing task',async({page})=>{
+ await page.addInitScript(()=>{
+  const control={calls:[] as {data:ShareData;active:boolean}[],copies:0,resolve:()=>{},reject:(_error:unknown)=>{}};Object.assign(window,{postShareControl:control});
+  Object.defineProperty(navigator,'share',{configurable:true,value:(data:ShareData)=>{control.calls.push({data,active:navigator.userActivation.isActive});return new Promise<void>((resolve,reject)=>{control.resolve=resolve;control.reject=reject;});}});
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{control.copies++;}}});
+ });
+ await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const text=`分享連結不建立發文工作 ${Date.now()}`;
+ await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);await expect(post).toBeVisible();
+ const attempts:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(url.pathname.includes('SocialCrossPlatformShare-')||request.method()==='POST'&&(url.pathname==='/api/v1/social-posts/notes'||url.pathname==='/api/v1/promotion/links'))attempts.push(url.pathname);});
+ const share=post.getByRole('button',{name:'分享貼文連結',exact:true});await share.click();await expect(share).toBeDisabled();
+ const first=await page.evaluate(()=>(window as any).postShareControl.calls[0]);expect(first.active).toBe(true);
+ const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${postId}#social`});
+ await page.evaluate(()=>(window as any).postShareControl.reject(new DOMException('cancelled','AbortError')));await expect(share).toBeEnabled();
+ await expect(page.getByRole('dialog',{name:'分享貼文連結'})).toHaveCount(0);expect(await page.evaluate(()=>(window as any).postShareControl.copies)).toBe(0);
+ await share.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(share).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).postShareControl.calls.length)).toBe(2);expect(attempts).toEqual([]);
+});
+
+test('a recipient opens the exact old shared post after login; removed content stays unavailable',async({page,browser,e2eAuthPool})=>{
+ await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const text=`直接打開這一篇舊貼文 ${Date.now()}`;
+ await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const own=card(page,text);await expect(own).toBeVisible();
+ const postId=(await own.getAttribute('id'))!.slice('social-post-'.length),tag=`share-filler-${postId}`;
+ const recipientContext=await browser.newContext(),recipient=await recipientContext.newPage();
+ try{
+  await e2eAuthPool.query("UPDATE community_social_posts SET created_at=timestamptz '2000-01-01' WHERE post_id=$1",[postId]);
+  await e2eAuthPool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,platform,title,note,state)
+   SELECT community_id,author_user_id,'note','other',$2,$2,'active' FROM community_social_posts CROSS JOIN generate_series(1,150) WHERE post_id=$1`,[postId,tag]);
+  const reads:string[]=[];recipient.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/social-posts')reads.push(request.url());});
+  await recipient.goto(`${e2eOrigin()}/?social-post=${postId}#social`);await expect(recipient.getByRole('button',{name:'登入',exact:true})).toBeVisible();await expect(card(recipient,text)).toHaveCount(0);
+  await recipient.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await recipient.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await recipient.getByRole('button',{name:'登入',exact:true}).click();
+  const target=card(recipient,text);await expect(target).toBeVisible();await expect(target).toBeFocused();await expect(recipient.locator('.social-card')).toHaveCount(1);
+  expect(reads).toHaveLength(1);expect(new URL(reads[0]).searchParams.get('post_id')).toBe(postId);
+  await recipient.setViewportSize({width:320,height:844});expect(await recipient.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await recipient.getByRole('button',{name:'建立貼文',exact:true}).click();const newText=`從指定貼文返回發文 ${Date.now()}`;
+  await recipient.getByLabel('貼文內容',{exact:true}).fill(newText);await recipient.getByRole('button',{name:'發布貼文',exact:true}).click();
+  await expect(card(recipient,newText)).toBeVisible();expect(new URL(recipient.url()).searchParams.has('social-post')).toBe(false);
+  await recipient.goto(`${e2eOrigin()}/?social-post=${postId}#social`);await expect(target).toBeVisible();
+  await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1",[postId]);await recipient.reload();
+  await expect(recipient.getByText('這則貼文已刪除、隱藏，或你目前沒有閱覽權限。',{exact:true})).toBeVisible();await expect(card(recipient,text)).toHaveCount(0);
+  await recipient.getByRole('button',{name:'回到動態牆',exact:true}).click();await expect(recipient.locator('.social-card').first()).toBeVisible();expect(new URL(recipient.url()).searchParams.has('social-post')).toBe(false);
+ }finally{
+  await recipientContext.close();await e2eAuthPool.query('DELETE FROM community_social_posts WHERE title=$1',[tag]);
+ }
+});
+
 test('wall tools publish topics, mentions, check-ins and pictures; social comments and share controls work at every width',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await login(page);
- await page.getByRole('button',{name:'新增照片貼文',exact:true}).click();
+ await page.getByRole('button',{name:'建立貼文',exact:true}).click();
  const compose=page.getByRole('dialog',{name:'建立貼文',exact:true}),text=`一起分享今日作品 ${Date.now()}`;
  await compose.getByLabel('貼文內容',{exact:true}).fill(text+' #作品');
  await compose.getByLabel('貼文主題').selectOption('work');await compose.getByRole('button',{name:'打卡',exact:true}).click();await compose.getByLabel('打卡地點',{exact:true}).fill('台北松菸');
@@ -30,8 +76,13 @@ test('wall tools publish topics, mentions, check-ins and pictures; social commen
  }
  await post.locator('.social-comments').screenshot({path:'test-results/social-wall-comments-390.png'});
  for(const theme of ['dark','versefolk']){await page.evaluate(v=>{document.documentElement.dataset.theme=v;window.scrollTo(0,0);},theme);await page.screenshot({path:`test-results/social-wall-${theme}-390.png`,fullPage:false});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
- await page.evaluate(()=>document.documentElement.dataset.theme='light');await post.getByRole('button',{name:'分享到其他社群',exact:true}).click();const share=page.getByRole('dialog',{name:'分享貼文',exact:true});await share.getByRole('button',{name:'了解並開啟',exact:true}).click();for(const name of ['X','Instagram','Facebook','Threads'])await expect(share.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
- await share.getByRole('button',{name:'加入貼文照片',exact:true}).click();await expect(share.locator('.social-share-files li')).toHaveCount(1);await share.getByRole('button',{name:'準備分享',exact:true}).click();await expect(share).toContainText('本人確認完成 0/4');await page.keyboard.press('Escape');await expect(post.getByRole('button',{name:'分享到其他社群',exact:true})).toBeFocused();
+ await page.evaluate(()=>{document.documentElement.dataset.theme='light';Object.defineProperty(navigator,'share',{configurable:true,value:undefined});Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:(value:string)=>{(window as any).copiedPostLink=value;return Promise.resolve();}}});});
+ await post.getByRole('button',{name:'分享貼文連結',exact:true}).click();const share=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+ const link=await share.getByLabel('貼文連結',{exact:true}).inputValue(),postId=(await post.getAttribute('id'))!.slice('social-post-'.length);
+ expect(new URL(link).searchParams.get('social-post')).toBe(postId);expect(new URL(link).hash).toBe('#social');
+ await expect(share.getByRole('region',{name:'多平台分享'})).toHaveCount(0);await expect(share.getByRole('button',{name:'了解並開啟'})).toHaveCount(0);
+ await share.getByRole('button',{name:'複製貼文連結',exact:true}).click();await expect(share.getByRole('status')).toHaveText('已複製貼文連結');expect(await page.evaluate(()=>(window as any).copiedPostLink)).toBe(link);
+ await page.keyboard.press('Escape');await expect(post.getByRole('button',{name:'分享貼文連結',exact:true})).toBeFocused();
  await post.getByRole('button',{name:'#作品',exact:true}).click();await expect(page.locator('.social-active-tag')).toContainText('#作品');await expect(card(page,text)).toBeVisible();await page.getByRole('button',{name:'清除標籤篩選',exact:true}).click();
  expect(errors).toEqual([]);
 });

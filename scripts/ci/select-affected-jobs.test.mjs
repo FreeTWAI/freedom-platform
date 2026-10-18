@@ -5,11 +5,12 @@ import { copyFile, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateDescriptor, ROOT_INSTRUCTIONS, selectImpact } from '../../packages/contribution-tools/context.mjs';
+import { validateDescriptor, ROOT_INSTRUCTIONS, selectImpact, owns } from '../../packages/contribution-tools/context.mjs';
 import {
   ALWAYS_ON_INTEGRITY_COMMANDS, DOCS_ALLOWLIST_PREFIXES, GENERATED_INVENTORY_PATH, JOB_OUTPUT_KEYS, SELECTABLE_JOBS, FRONTEND_LEAF_PROFILES, FRONTEND_LEAF_JOBS,
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
   heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
+  HANDOFF_DOCS_PATHS, HANDOFF_DOCS_JOBS, decideHandoffDocsProfile,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -379,6 +380,91 @@ test('real checkout descriptors parse without freezing live document ownership',
   // future module claiming an existing doc may legitimately select full CI.
 });
 
+const knownDomainPaths = [
+  ['modules/catalog-commerce/service.ts', 'catalog-commerce'],
+  ['apps/platform-api/src/routes/commerce.ts', 'catalog-commerce'],
+  ['apps/portal-web/src/modules/LegacyCommercePanels.tsx', 'catalog-commerce'],
+  ['tests/runtime/commerce.test.ts', 'catalog-commerce'],
+  ['modules/client-connections/service.ts', 'client-connections'],
+  ['apps/platform-api/src/routes/client-connections.ts', 'client-connections'],
+  ['tests/runtime/client-connections.test.ts', 'client-connections'],
+  ['modules/development-access/service.ts', 'development-access'],
+  ['apps/platform-api/src/routes/development-access.ts', 'development-access'],
+  ['tests/runtime/development-access-grant-race.test.ts', 'development-access'],
+  ['modules/opensource-marketing/github.ts', 'skill-submissions'],
+  ['tests/runtime/opensource-marketing.test.ts', 'skill-submissions'],
+  ['tests/e2e/opensource-modules.spec.ts', 'skill-submissions'],
+  ['tests/runtime/link-preview.test.ts', 'community'],
+];
+function knownDomainGraph() {
+  // Match the existing real-checkout tests: CI tests the committed candidate.
+  const graph = loadModuleDescriptors(root, 'HEAD');
+  assert.equal(graph.ok, true, 'including implicit descriptor ownership within the 64-path bound');
+  return graph.descriptors;
+}
+
+test('known legacy domain and regression paths select their actual owner without dropping runtime obligations', () => {
+  const graph = knownDomainGraph();
+  for (const [path, owner] of knownDomainPaths) {
+    assert.deepEqual(graph.filter(module => owns(module, path)).map(module => module.module_id), [owner], path);
+    const impact = selectImpact({baseline: graph, candidate: graph, changedPaths: [path]});
+    assert.deepEqual(impact.unknown_paths, [], path);
+    assert.ok(impact.module_ids.includes(owner), path);
+    assert.ok(impact.tests.includes('runtime.full'), path);
+  }
+  const catalog = selectImpact({baseline: graph, candidate: graph, changedPaths: ['modules/catalog-commerce/service.ts']});
+  assert.ok(catalog.module_ids.includes('client-connections'), 'scoped client reads depend on catalog data semantics');
+  const github = selectImpact({baseline: graph, candidate: graph, changedPaths: ['modules/github-social/service.ts']});
+  assert.ok(github.module_ids.includes('development-access'), 'development grants depend on current GitHub evidence');
+  const profile = (id, name) => graph.find(module => module.module_id === id).surfaces.find(surface => surface.surface_id === name).auth_profile;
+  assert.equal(profile('client-connections', 'client-connections.member-api'), 'member-session');
+  assert.equal(profile('client-connections', 'client-connections.scoped-read-api'), 'client-read-bearer');
+  assert.equal(profile('client-connections', 'client-connections.pairing-poll'), 'device-secret');
+  assert.equal(profile('development-access', 'development-access.agent-api'), 'development-key');
+});
+
+test('unmapped roots and new domain paths still select every module and full CI', () => {
+  const graph = knownDomainGraph();
+  for (const path of ['repositories.lock.json', 'tests/integration/repositories.test.ts',
+    'tests/integration/consumer-libraries.test.ts', 'modules/catalog-commerce/future-unreviewed.ts']) {
+    const impact = selectImpact({baseline: graph, candidate: graph, changedPaths: [path]});
+    assert.deepEqual(impact.unknown_paths, [path]);
+    assert.deepEqual(impact.module_ids, graph.map(module => module.module_id).sort());
+    assert.ok(impact.tests.includes('runtime.full'));
+    const selection = pull([edited(path)], {baseline: graph, candidate: graph});
+    assert.equal(selection.mode, 'full');
+    assert.ok(Object.values(selection.jobs).every(Boolean));
+  }
+});
+
+test('candidate ownership, dependency and test shrink cannot subtract known baseline domain impact', () => {
+  const baseline = knownDomainGraph(), candidate = structuredClone(baseline);
+  const catalog = candidate.find(module => module.module_id === 'catalog-commerce');
+  catalog.owned_paths = catalog.owned_paths.filter(path => path !== 'modules/catalog-commerce/service.ts');
+  catalog.tests = ['governance.unit'];
+  const client = candidate.find(module => module.module_id === 'client-connections');
+  client.dependencies = client.dependencies.filter(id => id !== 'catalog-commerce');
+  client.tests = ['governance.unit'];
+  const impact = selectImpact({baseline, candidate, changedPaths: ['modules/catalog-commerce/service.ts']});
+  assert.deepEqual(impact.unknown_paths, []);
+  assert.ok(impact.module_ids.includes('catalog-commerce'));
+  assert.ok(impact.module_ids.includes('client-connections'));
+  assert.ok(impact.tests.includes('runtime.full'));
+  assert.ok(impact.tests.includes('governance.unit'));
+});
+
+test('known domain ownership does not grant a narrower browser or CI profile', () => {
+  const graph = knownDomainGraph();
+  for (const [path] of knownDomainPaths) {
+    const input = {event: 'pull_request', diffComplete: true, changes: [edited(path)], baseline: graph, candidate: graph};
+    const selection = decideAffectedJobs(input);
+    assert.equal(selection.mode, 'full', path);
+    assert.equal(selection.jobs['runtime-full'], true, path);
+    assert.equal(selection.jobs['ui-e2e'], true, path);
+    assert.equal(decideE2eProfile(input).profile, 'full', path);
+  }
+});
+
 test('descriptor self-ownership respects the path bound and fails closed when no slot remains', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'fp-select-bound-'));
   t.after(() => rm(directory, {recursive: true, force: true}));
@@ -652,12 +738,12 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
   for (const str of banned) assert.doesNotMatch(text, new RegExp(str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'u'));
 
   const runtimeFull = jobBlock(text, 'runtime-full');
-  assert.match(runtimeFull, /partition: \[0, 1, 2, 3, 4, 5\]/);
+  assert.match(runtimeFull, /partition: \[0, 1, 2, 3, 4, 5, 6, 7\]/);
   assert.match(runtimeFull, /fail-fast: false/);
-  assert.match(runtimeFull, /node \.freedom\/trusted\/scripts\/runtime-full\.mjs --partition-count 6 --partition-index/);
+  assert.match(runtimeFull, /node \.freedom\/trusted\/scripts\/runtime-full\.mjs --partition-count 8 --partition-index/);
 
   const runtimeAggregate = jobBlock(text, 'runtime-aggregate');
-  assert.match(runtimeAggregate, /node \.freedom\/trusted\/scripts\/runtime-aggregate\.mjs --partition-count 6 --input-dir/);
+  assert.match(runtimeAggregate, /node \.freedom\/trusted\/scripts\/runtime-aggregate\.mjs --partition-count 8 --input-dir/);
   // Artifacts belong to one run attempt. A failed-only rerun cannot combine
   // its replacement fragment with previous-attempt passes, even at one SHA.
   assert.match(runtimeFull, /name: runtime-partition-\$\{\{ github\.run_attempt \}\}-\$\{\{ matrix\.partition \}\}/u);
@@ -1089,4 +1175,154 @@ test('additional composition runtime ownership keeps the guide browser obligatio
       assert.deepEqual(decideE2eProfile(input),{profile:'full',reason:'guide_impact_unproven'});
     }
   }
+});
+
+function handoffDescriptors() {
+  return [
+    moduleDescriptor('governance', [HANDOFF_DOCS_PATHS[3], HANDOFF_DOCS_PATHS[4], GENERATED_INVENTORY_PATH], {tests:['governance.unit', 'runtime.full']}),
+    ...['agent-commerce', 'hosted-distribution', 'asset-lifecycle'].map(id => moduleDescriptor(id, [`modules/${id}/**`])),
+    moduleDescriptor('supplier-console', [HANDOFF_DOCS_PATHS[1]], {
+      dependencies:['agent-commerce', 'hosted-distribution', 'asset-lifecycle'], tests:['runtime.full', 'e2e.harness']}),
+    moduleDescriptor('guild-supply', ['modules/guild-supply/**'], {dependencies:['supplier-console'], tests:['runtime.guild-blocks']}),
+    moduleDescriptor('application-composition', ['apps/platform-api/**'], {dependencies:['guild-supply'], tests:['runtime.full']}),
+  ];
+}
+function handoffInput(paths = HANDOFF_DOCS_PATHS, extra = {}) {
+  const graph = handoffDescriptors();
+  return {event:'pull_request', diffComplete:true, nonExecutableBlobsProven:true, descriptorsProven:true,
+    changes:paths.map(path => edited(path)), baseline:graph, candidate:graph, ...extra};
+}
+const handoffSelection = () => ({mode:'affected', reason:'informational_handoff_docs',
+  jobs:Object.fromEntries(SELECTABLE_JOBS.map(id => [id, HANDOFF_DOCS_JOBS.includes(id)]))});
+
+test('five exact informational handoffs retain governance consumers, including both workplans', () => {
+  assert.deepEqual(HANDOFF_DOCS_PATHS, [
+    'docs/platform-plan/execution/commerce/work-plan.md',
+    'docs/platform-plan/execution/supplier-console/work-plan.md',
+    'docs/platform-plan/execution/guild-launchpad/README.md',
+    'docs/platform-plan/execution/unified-foundation/closeout.md',
+    'docs/platform-plan/execution/unified-foundation/current-state.json',
+  ]);
+  assert.deepEqual(HANDOFF_DOCS_JOBS, ['governance-consumers']);
+  for (const paths of [...HANDOFF_DOCS_PATHS.map(path => [path]), HANDOFF_DOCS_PATHS,
+    [...HANDOFF_DOCS_PATHS, GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[1], GENERATED_INVENTORY_PATH]]) {
+    assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'informational_handoff_docs');
+  }
+  const actual = loadModuleDescriptors(root, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim());
+  assert.equal(actual.ok, true);
+  assert.equal(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
+    {baseline:actual.descriptors, candidate:actual.descriptors})).profile, 'informational_handoff_docs');
+  assert.equal(pull([edited(HANDOFF_DOCS_PATHS[0])]).mode, 'full', 'path-only selector cannot establish integration proof');
+});
+
+test('handoff profile refuses unproven events, receipt JSON, controls and non-content changes', () => {
+  const denied = [
+    'docs/platform-plan/execution/unified-foundation/rollout-commerce-buyer-2026-10-17.json',
+    'docs/platform-plan/execution/unified-foundation/rollout-new-2099-01-01.json',
+    'docs/platform-plan/execution/unified-foundation/acceptance.md',
+    'docs/platform-plan/execution/unified-foundation/requirement-evidence.json',
+    'docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md',
+    'docs/platform-plan/execution/commerce/new-work-plan.md',
+    'docs/platform-plan/execution/supplier-console/README.md',
+    'docs/platform-plan/execution/guild-launchpad/validate-spec-pack.py',
+    'governance/schemas/module.schema.json', 'AGENTS.md', 'CONTRIBUTING.md',
+    '.github/workflows/verify.yml', 'packages/contribution-tools/freedom.module.json',
+    'scripts/ci/select-affected-jobs.mjs', 'scripts/runtime-full.mjs', 'migrations/001_initial.sql',
+    'modules/module-registry/platform-hold.md', 'tests/runtime/flows.test.ts', 'unknown.md',
+  ];
+  for (const path of denied) assert.equal(decideHandoffDocsProfile(handoffInput([HANDOFF_DOCS_PATHS[0], path])).profile, 'full', path);
+  // Original #876 includes a rollout receipt: no whole-PR savings claim.
+  assert.equal(decideHandoffDocsProfile(handoffInput([
+    'README.md', HANDOFF_DOCS_PATHS[2], HANDOFF_DOCS_PATHS[3], HANDOFF_DOCS_PATHS[4], denied[0], GENERATED_INVENTORY_PATH])).profile, 'full');
+  for (const event of ['push', 'merge_group', 'workflow_dispatch', undefined])
+    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {event})).profile, 'full');
+  for (const extra of [{diffComplete:false}, {descriptorsProven:false}, {nonExecutableBlobsProven:false},
+    {nonExecutableBlobsProven:undefined}, {changes:[]}, {baseline:[]}, {candidate:[]}])
+    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, extra)).profile, 'full');
+  for (const status of ['A', 'D', 'R', 'R100', 'C', 'T', 'U', 'X'])
+    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {changes:[edited(HANDOFF_DOCS_PATHS[0],status)]})).profile, 'full');
+  for (const paths of [[GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[0]],
+    [HANDOFF_DOCS_PATHS[0], GENERATED_INVENTORY_PATH, GENERATED_INVENTORY_PATH]])
+    assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'full');
+  assert.equal(decideHandoffDocsProfile(handoffInput(undefined,
+    {changes:[{...edited(HANDOFF_DOCS_PATHS[0]),previousPath:'other.md'}]})).profile, 'full');
+});
+
+test('handoff documents cannot drop ownership, instructions, graph or reverse-consumer obligations', () => {
+  for (const mutate of [
+    graph => graph.push(structuredClone(graph[0])),
+    graph => graph[0].dependencies.push('absent'),
+    graph => graph[0].dependencies.push('governance'),
+    graph => graph[0].owned_paths.push(HANDOFF_DOCS_PATHS[0]),
+    graph => graph[0].owned_paths.splice(0,1),
+    graph => graph[0].instructions.push(HANDOFF_DOCS_PATHS[4]),
+    graph => { graph[0].owner_role = 'consumer'; },
+    graph => graph[4].dependencies.pop(),
+    graph => graph[4].tests.push('governance.unit'),
+    graph => graph.push(moduleDescriptor('new-consumer', ['modules/new-consumer/**'], {dependencies:['governance']})),
+    graph => graph.push(moduleDescriptor('new-consumer', ['modules/new-consumer/**'], {dependencies:['supplier-console']})),
+  ]) {
+    const baseline=handoffDescriptors(), candidate=structuredClone(baseline); mutate(candidate);
+    for (const before of [baseline, candidate])
+      assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {baseline:before,candidate})).profile, 'full');
+  }
+});
+
+test('handoff aggregate requires its exact reason, shape and successful governance evidence', () => {
+  const selected=handoffSelection(), results={...allResults('skipped'), 'governance-consumers':'success'};
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true);
+  for (const result of ['skipped','failure','cancelled',undefined])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected,{...results,'governance-consumers':result})).ok,false);
+  for (const job of SELECTABLE_JOBS) {
+    const needs=needsFor(selected,results); delete needs[job]; assert.equal(evaluateVerifyAggregate(needs).ok,false);
+    for (const result of ['failure','cancelled'])
+      assert.equal(evaluateVerifyAggregate(needsFor(selected,{...results,[job]:result})).ok,false);
+    const forged=needsFor(selected,results);
+    forged.select.outputs[JOB_OUTPUT_KEYS[job]]=String(!selected.jobs[job]);
+    assert.equal(evaluateVerifyAggregate(forged).ok,false);
+  }
+  for (const reason of ['frontend_leaf_profiles','guild_presentation_dependency_closure','unknown_profile']) {
+    const needs=needsFor(selected,results);needs.select.outputs.reason=reason;
+    assert.equal(evaluateVerifyAggregate(needs).ok,false);
+  }
+  for (const options of [{select:'failure'},{integrity:'failure'},{integrity:'skipped'}])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected,results,options)).ok,false);
+});
+
+test('handoff selection uses clean exact integration Git blobs, rejects executable blobs and ignores candidate selector code', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'fp-handoff-select-'));
+  t.after(() => rm(directory,{recursive:true,force:true}));
+  const git=(args,input) => execFileSync('/usr/bin/git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
+    input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
+      GIT_AUTHOR_NAME:'Handoff Test',GIT_AUTHOR_EMAIL:'handoff@example.invalid',GIT_COMMITTER_NAME:'Handoff Test',GIT_COMMITTER_EMAIL:'handoff@example.invalid'},
+  }).trim();
+  const put=async(path,body) => {await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit=message => {git(['add','.']);git(['commit','-qm',message]);return git(['rev-parse','HEAD']);};
+  const merge=(base,head) => {const candidate=git(['commit-tree',git(['rev-parse',`${head}^{tree}`]),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);return candidate;};
+  git(['init','-q','-b','main']);
+  for (const d of handoffDescriptors()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
+  for (const p of [...HANDOFF_DOCS_PATHS,GENERATED_INVENTORY_PATH]) await put(p,'before\n');
+  await put('.gitignore','tests/e2e/generated.spec.ts\n');
+  await put('scripts/ci/select-affected-jobs.mjs','throw new Error("candidate selector must not run");\n');
+  const base=commit('base');
+  for (const p of [...HANDOFF_DOCS_PATHS,GENERATED_INVENTORY_PATH]) await put(p,'after\n');
+  const head=commit('informational handoffs'), candidate=merge(base,head);
+  const input={repository:directory,event:'pull_request',base,head,candidate};
+  assert.deepEqual(collectRepositoryDecision(input),handoffSelection());
+  const output=join(directory,'.git','selection-output');
+  const cli=spawnSync(process.execPath,[selector,'--event','pull_request','--repository',directory,'--base',base,'--head',head,'--candidate',candidate,'--github-output',output],{encoding:'utf8'});
+  assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout),handoffSelection());
+  assert.equal(await readFile(output,'utf8'),githubOutput(handoffSelection()));
+  for (const extra of [{event:'push'},{event:'merge_group'},{candidate:head},{head:base},{base:head},{candidate:''}])
+    assert.equal(collectRepositoryDecision({...input,...extra}).mode,'full');
+  await put(HANDOFF_DOCS_PATHS[0],'dirty');assert.equal(collectRepositoryDecision(input).mode,'full');git(['checkout','--',HANDOFF_DOCS_PATHS[0]]);
+  await put('unexpected.md','untracked');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'unexpected.md'));
+  await put('tests/e2e/generated.spec.ts','ignored');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'tests/e2e/generated.spec.ts'));
+  const reversed=git(['commit-tree',git(['rev-parse',`${head}^{tree}`]),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
+  assert.equal(collectRepositoryDecision({...input,candidate:reversed}).mode,'full');
+  git(['checkout','-q',base]);git(['update-index','--chmod=+x',HANDOFF_DOCS_PATHS[0]]);git(['commit','-qm','executable base']);
+  const executableBase=git(['rev-parse','HEAD']);await put(HANDOFF_DOCS_PATHS[0],'executable edit');
+  git(['add',HANDOFF_DOCS_PATHS[0]]);git(['update-index','--chmod=+x',HANDOFF_DOCS_PATHS[0]]);git(['commit','-qm','executable head']);
+  const executableHead=git(['rev-parse','HEAD']), executableCandidate=merge(executableBase,executableHead);
+  assert.equal(collectRepositoryDecision({...input,base:executableBase,head:executableHead,candidate:executableCandidate}).mode,'full');
 });

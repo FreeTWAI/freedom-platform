@@ -35,6 +35,66 @@ card, event, Asset, storage or command systems.
    Opening a composer or an OS handoff is not confirmed publication. No platform
    posting API, account password, automated browser bot or OAuth is introduced.
 
+## Spatial effects and camera interaction (2026-10-18)
+
+The three existing effect IDs now have original, genuinely three-dimensional
+WebGL meshes: orbiting extruded stars (`sparkle`), tilted portal rings and a
+floating gem (`halo`), and a rotating cube with volumetric confetti (`confetti`).
+They use the tracker's column-major world/projection matrices, not a screen-fixed
+animation. Stored packets, bindings, permissions and older readers keep their
+existing format; no migration, external model download or new dependency is needed.
+
+The editor loads its camera-free 3D preview only while editing an effect. Members
+can rotate and pause it before compiling a target. Reduced-motion preference
+starts the preview paused and freezes scanned effects. Preview animation stops
+offscreen or in a hidden document; loss of the graphics context offers an explicit
+retry. A failed optional preview chunk leaves the draft/editor usable. The scanner falls back to its lightweight 2D effect if WebGL is unavailable
+or lost, while recognition, content links and photos remain usable.
+
+The camera offers an immersive, safe-area-aware view, Escape/focus return, front/
+rear switching and optional torch. A captured photo includes the current 3D pixels
+and automatically stops the camera and inference while the member reviews/shares
+it. Continuing scanning is explicit. Backgrounding, leaving, cancelling startup,
+changing the login or losing the public display lease clears the overlay and
+stops owned media/GPU work. A failed authority refresh invalidates the prepared
+scan set until an explicit metadata reload; already-captured local photos cannot
+be recalled.
+
+### Resource budgets and measured delivery size
+
+- Request an ideal HD camera image for display/photos, while using a maximum
+  **640-pixel longest edge** for inference, preserving the full field of view.
+  MindAR 1.2.5's InputLoader draws from the video element's IDL width/height;
+  camera `videoWidth`/`videoHeight` remain available for capture. This bounds
+  inference pixels, not a guarantee of a particular device's frame rate.
+- Cap effect drawing at 30 fps, the GPU backing image at 1280 pixels, and each
+  procedural scene at 32 draws / 4096 triangles. Mesh buffers are created once
+  per renderer and explicitly deleted on stop; they are not rebuilt per frame.
+- Stream actual packet bytes under both the 20 MiB packet and remaining 32 MiB
+  scene budgets. The previous implementation allocated a 20 MiB download arena
+  even for a small pattern. The new one retains received chunks and makes one
+  exact-sized output copy, with a chunk-count bound and cancellable stalled reads.
+- The spatial renderer and preview are separate, deferred chunks (7,595 and
+  2,924 bytes respectively in this local build; approximately 3.2/1.5 kB gzip).
+  They are absent from the initial application JavaScript closure.
+
+The same increment removes My Content's eager import of the showcase editor,
+using the existing loading/error boundary when the member opens a draft. Existing
+list/editor CSS is retained. The production Vite build was measured with
+`scripts/benchmark-portal-build.mjs` against source
+`37cdf6ca9da85c60cd528e322d2bcdd3bbafcb33`, using the same installed lockfile:
+
+| Initial HTML/static JavaScript closure | Baseline | Candidate |
+| --- | ---: | ---: |
+| Actual bytes | 816,416 | 792,158 |
+| Per-file gzip bytes | 252,020 | 245,858 |
+
+This is 24,258 fewer JavaScript bytes and 6,162 fewer gzip bytes (2.45%). It does
+not measure network latency, real-device FPS, total asset storage, server capacity
+or all platform workflows. The self-hosted SDK, existing theme art and license
+bytes are retained. No new runtime dependencies, service, posting API or updater
+are introduced.
+
 ## Data and common-core boundary
 
 `community_ar_targets` is an opt-in personal-scope sidecar registered in the
@@ -105,7 +165,17 @@ the positive replay and reject the negative replay. Mock camera/clipboard
 checks only establish UI recovery and lifetime behavior. Browser layout checks
 cover narrow/mobile/desktop, current theme tokens, keyboard and touch sizes.
 
-Physical printed shirts, folds, outdoor reflections and real iPhone/Android
-devices require a separate operator field trial. Source/browser simulation
-cannot establish those outcomes. The reference YouTube short was unavailable
-to the current tools and is not claimed as viewed evidence.
+The focused runtime suite also covers streamed-packet allocation/overflow/abort,
+bounded spatial geometry and HD/portrait inference dimensions. Browser cases
+exercise actual WebGL preview pixels and rotation, context loss/retry, immersive
+320/390/768/1440 layouts, real positive/negative tracker replays, 3D photo capture,
+camera/GPU shutdown and the no-second-WebGL-context fallback. Run them against a
+fresh frontend build and an explicitly isolated PostgreSQL database.
+
+On 2026-10-18 the supplied [reference short](https://www.youtube.com/shorts/ECpb7sJg8Vs)
+was viewed in a browser: poster-anchored 3D skull/shoe/portal imagery informed the
+interaction direction. No reference media or models were imported. These original
+procedural presets are not a general Lens Studio editor or a measured claim of
+competitor superiority. Physical printed shirts, folds, outdoor reflections and
+real iPhone/Android devices still require a separate operator field trial;
+source/browser simulation cannot establish those outcomes.

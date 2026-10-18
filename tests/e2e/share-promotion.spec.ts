@@ -266,7 +266,7 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
   await sharePost(page, INSTAGRAM);
   await sharePost(page, FACEBOOK, 'Facebook 示範');
 
-  await youtube.getByRole('button', { name: '分享', exact: true }).click();
+  await youtube.getByRole('button', { name: '推廣原文', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「E2E 示範影片」', exact: true });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
@@ -305,7 +305,7 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   const avatar = await card.locator('.social-byline .social-avatar').boundingBox();
   expect(avatar!.width).toBeLessThanOrEqual(40);
   const open = await card.getByRole('link', { name: '開啟原文 ↗', exact: true }).boundingBox();
-  const share = await card.getByRole('button', { name: '分享', exact: true }).boundingBox();
+  const share = await card.getByRole('button', { name: '推廣原文', exact: true }).boundingBox();
   expect(Math.abs(open!.y - share!.y)).toBeLessThanOrEqual(1);
 
   await navigate(page, '推廣排行榜');

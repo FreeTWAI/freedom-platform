@@ -61,7 +61,7 @@ function assertBlocks(body: any, key: string) {
   assert.equal(body.guild_key, key);
   assert.equal(body.mission_override, null);
   assert.deepEqual(body.application_refs, ['guild_commerce_sales', 'guild_product_quality_supply'].includes(key)
-    ? [{application_key: 'hosted-store', release_ref: 'hosted-store@1.0.0', order: 0}, {application_key: 'manual-workspace', release_ref: 'manual-workspace@1.0.0', order: 1}]
+    ? [{application_key: 'hosted-store', release_ref: 'hosted-store@1.1.0', order: 0}, {application_key: 'manual-workspace', release_ref: 'manual-workspace@1.0.0', order: 1}]
     : (key === 'guild_commercial_production' || key === 'guild_talent_direction') ? [{application_key: 'manual-workspace', release_ref: 'manual-workspace@1.0.0', order: 0}] : []);
   assert.equal(body.blocks.length, BLOCK_KINDS.length);
   assert.deepEqual([...body.blocks.map((block: {kind: string}) => block.kind)].sort(), [...BLOCK_KINDS].sort());
@@ -452,9 +452,12 @@ test('astral titles round-trip and a lone surrogate is rejected', async () => {
   assert.equal(seen.starter.objective_hint, astral);
   assert.equal(seen.starter.note_hint, astral);
   assert.equal(Buffer.from(JSON.stringify(seen.mission_override)).equals(Buffer.from(JSON.stringify(astral))), true);
+  const beforeLone = await counts();
   const lone = await request(`/guilds/${guild}/launchpad-config/drafts`, leader, {body: {...config, blocks: config.blocks.map(block => block.kind === 'announcements' ? {...block, title: '題\uD800'} : block)}}, published.data.pointer_version);
   assert.equal(lone.status, 422, JSON.stringify(lone.data));
-  hasError(lone.data, 'lone_surrogate');
+  assert.equal(lone.data.code, 'validation_failed');
+  assert.equal(lone.data.errors, undefined);
+  assert.deepEqual(await counts(), beforeLone);
   const reverted = await request(`/guilds/${guild}/launchpad-config/revert`, leader, {to_revision: published.data.revision, reason: `回復 ${astral}`}, published.data.pointer_version);
   assert.equal(reverted.status, 200, JSON.stringify(reverted.data));
   assert.equal(reverted.data.body.mission_override, astral);

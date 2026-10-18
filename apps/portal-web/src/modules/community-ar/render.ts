@@ -30,6 +30,19 @@ export function cardTexture(item:ArContent):HTMLCanvasElement{
   wrap(c,summary,640,3).forEach((line,i)=>c.fillText(line,36,263+i*38));
   c.fillStyle='#c4ff2d';c.font=`500 23px ${family}`;c.fillText('點「查看內容」開啟完整資料',36,405);return canvas;
 }
+export function effectTexture(item:ArContent):HTMLCanvasElement{
+  const canvas=document.createElement('canvas');canvas.width=720;canvas.height=160;
+  const c=canvas.getContext('2d')!,family=getComputedStyle(document.body).fontFamily;
+  c.fillStyle='rgba(8,18,23,.9)';c.fillRect(0,0,720,160);c.fillStyle='#c4ff2d';c.fillRect(0,0,7,160);
+  c.fillStyle='#fff';c.font=`700 34px ${family}`;wrap(c,item.title,656,1).forEach(line=>c.fillText(line,28,49));
+  c.fillStyle='#d8e7dd';c.font=`400 24px ${family}`;wrap(c,item.binding?.text??'',656,2).forEach((line,index)=>c.fillText(line,28,91+index*30));return canvas;
+}
+export function effectCaptionQuad(quad:Quad):Quad{
+  return [[.08,.94],[.92,.94],[.92,1.18],[.08,1.18]].map(([u,v])=>[
+    quad[0][0]*(1-u)*(1-v)+quad[1][0]*u*(1-v)+quad[2][0]*u*v+quad[3][0]*(1-u)*v,
+    quad[0][1]*(1-u)*(1-v)+quad[1][1]*u*(1-v)+quad[2][1]*u*v+quad[3][1]*(1-u)*v,
+  ] as [number,number]);
+}
 /** Two affine triangles align a card with the measured target. CSS letterbox
  * uses the same video ratio, so live view and exported photo have one geometry. */
 export function drawArCard(context:CanvasRenderingContext2D,texture:CanvasImageSource,quad:Quad,sourceWidth?:number,sourceHeight?:number,targetAspect?:number){
@@ -65,10 +78,11 @@ export function drawArEffect(context:CanvasRenderingContext2D,quad:Quad,effect:'
     if(effect==='confetti')context.fillRect(px-4,py-4,8,12);else{context.moveTo(px,py-8);context.lineTo(px+3,py-2);context.lineTo(px+8,py);context.lineTo(px+2,py+3);context.lineTo(px,py+8);context.lineTo(px-3,py+2);context.lineTo(px-8,py);context.lineTo(px-2,py-3);context.closePath();context.fill();}
   }context.restore();
 }
-export async function captureArPhoto(video:HTMLVideoElement,overlay:HTMLCanvasElement):Promise<File>{
+export async function captureArPhoto(video:HTMLVideoElement,overlay:HTMLCanvasElement,spatial?:HTMLCanvasElement):Promise<File>{
   if(video.readyState<2||!video.videoWidth||!video.videoHeight||!video.srcObject)throw new Error('請先開啟相機，等畫面出現後再拍照。');
   const canvas=document.createElement('canvas');const scale=Math.min(1,1920/Math.max(video.videoWidth,video.videoHeight));canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
   const c=canvas.getContext('2d')!;c.drawImage(video,0,0,canvas.width,canvas.height);c.drawImage(overlay,0,0,canvas.width,canvas.height);
+  if(spatial&&spatial.width>1&&spatial.height>1)c.drawImage(spatial,0,0,canvas.width,canvas.height);
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('照片未產生，請重試。')),'image/jpeg',0.92));
   return new File([blob],`freedom-ar-${new Date().toISOString().replace(/[:.]/g,'-')}.jpg`,{type:'image/jpeg'});
 }
