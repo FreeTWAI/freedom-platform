@@ -55,9 +55,11 @@ def test_declared_external_client_local_read_cache_is_valid(project_type):
 
 @pytest.mark.parametrize('field,value', [
     ('customer_data_mode', 'platform_owned_with_explicit_basis'),
+    ('customer_data_mode', 'platform_hosted_for_members'),
     ('customer_data_mode', 'none'),
     ('dynamic_credential_storage', ['client_owned', 'provider_managed']),
     ('dynamic_credential_storage', ['postgres_envelope_vault']),
+    ('dynamic_credential_storage', ['postgres_keyring_sealed']),
     ('dynamic_credential_storage', ['none']),
     ('credential_root_key_storage', 'client_owned'),
     ('credential_root_key_storage', 'cloudflare_worker_secret'),

@@ -2,6 +2,22 @@
 
 整體進度追蹤沿用 [#234](https://github.com/FreeTWAI/freedom-platform/issues/234)，這裡只記錄工作怎麼切、誰改哪些檔案、彼此依賴與待決事項，不另開進度系統。
 
+## 2026-10-17：交付與啟用接點
+
+本節按 #886 合併後的 `main@1ab95391` 與作者具日期的紀錄安排接續工作；下方批次／決策表保留原歷史狀態。
+[#862](https://github.com/FreeTWAI/freedom-platform/pull/862) 的 S3 與 [#864](https://github.com/FreeTWAI/freedom-platform/pull/864) 的 D-11 已隨 `855bdfff`／schema172 完成兩環境發布，見 [2026-10-17 23:26:50 UTC 完成收據的公開對帳](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6243446592)。
+Supplier console、素材 media/uploads 與合作照片在 staging ON、production OFF；Commerce console／checkout／email 兩環境都 OFF。Staging 合成帳號 core、S3／D-11、ON→OFF→ON 通過；production 僅 health／protocol／Supplier-OFF，沒有建立業務帳號或 session。
+四組前後備份均完成遠端讀回、DB＋物件實際還原與清理；schema172 日常程式已安裝、timers 已恢復。自然排程尚未觀察，production service 歷史 exit-code 失敗及其他原失敗保留。
+[16:42 UTC 的 `d39370a1`／schema171 收據](../unified-foundation/rollout-commerce-buyer-2026-10-17.json)保留為歷史；855發布工作已完成。#886 賣家離線 UI 不在855部署內，#890 後續修正尚未合併；兩者不借用855收據宣告新候選驗收或真人試用完成。
+
+- **下一步與 owner：** `teddashh` 沿 #862／#864 原供貨線交付 #890 素材操作確認與未知後撤權恢復等有限修正；root release owner 從實際合併來源固定新候選，依既有 [WP-07](WP-07-release-evidence.md) 完成其適用的備份／還原、部署與 staging 真 API／R2 驗收，對帳該候選素材 policy／容量與旗標。855／schema172 發布及其原雲端驗收已完成，不重新設為待辦。Production Supplier 受控啟用與 R1 真人試用仍沿原工作包；D-13 維持原 host 開關，不另造逐事業灰度。
+- **D-11 的驗收語意與操作確認：** 選用時複製成賣家 Asset 並計入賣家容量，選用與發布都驗目前權限。撤權後保留既有公開快照，失效合作照片在下一次發布移除；不能要求既有公開快照立刻 404。賣家選用確認已說明此語意；`teddashh` 沿 #864 的本機候選已在供應商 [Material.tsx](../../../../modules/agent-commerce/supplier-console/ui/pages/Material.tsx) 補齊撤銷授權、撤回素材與改回 `partners` 的說明及可取消確認：「既有已發布照片保留，店家重新發布後才移除失效來源」。[SC-E2E-60／62／65](../../../../tests/e2e/supplier-console-materials.spec.ts) 已驗三種取消零寫入、原版本送出、遺失回覆後同命令重試，以及 390／768／1440 確認視窗；既有 [DP-04](../../../../tests/runtime/distribution-photos.test.ts) 的撤銷／撤回／`partners` 三案亦通過。本機合成驗證不代表已審查、合併、部署或真人試用；後續沿 [detna 既有啟用清單](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6240724810) 與原 release owner 接續。關旗標後私人合作照片路徑 404、已存預覽可開但照片可能不可讀；賣家自有照片與已發布快照仍可讀，回退 reader 必須保留 schema172 的資料能力。
+- **#888 未知後拒絕的原命令恢復：** [#890](https://github.com/FreeTWAI/freedom-platform/pull/890) 的產品修正來源 `df013ee8a` 已包含 [#888](https://github.com/FreeTWAI/freedom-platform/issues/888) 的 [controller 修正](../../../../modules/agent-commerce/supplier-console/state/useSupplierConsoleController.ts)：曾有未知結果的命令再遇 403／404 時保留原 method／path／body／key／If-Match，成功重新讀取 profile 也不結案；權限恢復後只重播原命令，從未未知的明確拒絕維持原處理。[SC-E2E-36](../../../../tests/e2e/supplier-console-recovery.spec.ts) 的已提交／未送達 × 403／404 四案與既有回歸已在本機通過，規格沿 [SC-SPEC-02](SC-SPEC-02-shell-session-recovery.md)／[SC-SPEC-05](SC-SPEC-05-tests-ci-guild-dev.md) 同步。`cf458f84` 的 [原 CI](https://github.com/FreeTWAI/freedom-platform/actions/runs/39083411024) 保留 SC-E2E-73 漏按新增 `partners` 確認的失敗；`df013ee8a` 僅補測試 helper 的確認步驟與說明斷言，完整 [照片 browser 檔](../../../../tests/e2e/hosted-store-photo.spec.ts) 在本機專用 fixture 25／25 通過，沒有移除既有公開快照／重新發布斷言。這份產品與 #889 啟用交接文件的整合候選尚未合併或部署，須以新精確 head 重新完成 review／完整 CI；舊來源核准或本機結果不能代替。`teddashh` 與 root release owner 沿原供貨線完成後續，不以本機結果宣告 R1 真人試用完成。
+- **真正完成 R1：** Ted 依 [SC-SPEC-06 §5～7](SC-SPEC-06-release-rollback-pilot.md) 安排兩位供應商、兩位賣家與兩位非核心公會作者的原定試用；必要操作不能由 DB／API 代做，舊頁退場仍守原條件。CI／合成雙帳號通過只提供相應證據，不補造真人採用。
+- **Commerce 接點：** [五項交付順序](../commerce/work-plan.md#2026-10-17交付與啟用順序)保留 C1 商品工作與 C2／C3 原承諾。`teddashh` 的 [#884 自有庫存商品離線設定、收款確認與面交 UI](https://github.com/FreeTWAI/freedom-platform/issues/884) 已隨 [#886](https://github.com/FreeTWAI/freedom-platform/pull/886)（`699cae20` → `main@1ab95391`）通過獨立 review、完整 CI 並合併；原本機雙帳號真 API／UI 證據保留，該新來源尚未包含在855部署，部署與真人試用仍待完成，首批不含供應商配送。依既有 [host 旗標判斷](../../../../modules/agent-commerce/operations/runtime-settings.ts)，Commerce console ON 需要 Supplier console ON，兩者均非逐店曝光；Commerce 的 tenant／instance／environment 准入只限制新訂單，不限制這兩個主控台。root／Ted 下一步須在同一份 [Commerce 實際啟用範圍收據](../commerce/work-plan.md#離線試用的實際啟用範圍) 記清這項影響；本次沒有操作 public，也不變更 D-13 或 #884 的完成條件。付款、物流、發票及可攜發行不是 R1 前置；[#882](https://github.com/FreeTWAI/freedom-platform/issues/882) 的 provider 邊界與 [#883](https://github.com/FreeTWAI/freedom-platform/issues/883) 的憑證宣告亦不擋面交或 R1。
+
+這是原工作包的具體交接，沿本次既有整合／發布授權推進；不改歷史收據、未驗項或 Foundation 的 accepted 狀態，也不把其他 Foundation 未驗項增加為本批產品的新前置。
+
 ## 1. 工作包與批次
 
 | 工作包 | 本案內容 | 批次 | 直接依賴 |
@@ -19,7 +35,7 @@
 
 - **S1 第一條供貨旅程**（本輪實作）：殼層、概覽、商品清單／新增／詳情（含照片）、供貨條件與審核、合作店家清單／詳情、預留、設定與資料。詳見 [first-journey.md](first-journey.md)。
 - **S2 補齊查詢**：預留的伺服器篩選與單筆詳情（G-07）、近期變更（G-09）、公會區塊的本人待辦（G-14）。可先接在 S1 分支上開發，S1 合併後開 PR。
-- **S3 素材與報表**：SC-09、SC-10（SC-SPEC-04 §4、§5）。D-05、D-14 已核准；可先接在 S1 分支上開發，S1 合併後開 PR。
+- **S3 素材與報表**：SC-09、SC-10（SC-SPEC-04 §4、§5）。D-05、D-14 已核准。報表要連到 S2 的預留篩選，所以 S3 接在 S2 分支上開發，S1、S2 合併後開 PR。D-11（素材進公開店面）不在 S3 這批，見 §5。
 
 ## 2. 三條實作線與 S1 分工
 
@@ -75,11 +91,11 @@ A、B、C 平行（各自的 worktree、拋棄式資料庫與 E2E port），以�
 WP-00 → WP-01（含契約）─┬→ A ─┐
                         ├→ B ─┼→ Claude 整合 → D1～D5 → WP-06（S1 證據）→ Ted 決定 PR／合併 → WP-07
                         └→ C ─┘
-S1 合併 → S2
-S1 合併 → S3（D-05、D-14 已核准）
+S1 合併 → S2 → S3（D-05、D-14 已核准）
+S3 → D-11 素材進公開店面（先通知 Commerce）
 ```
 
-只有一件事會擋路：合併、部署、開旗標與試用都等 Ted（開 PR 已依 D-12 核准）。S2、S3 可以先接在 S1 分支上開發，S1 合併後再各自開 PR。其餘依上圖往下做。
+只有一件事會擋路：合併、部署、開旗標與試用都等 Ted（開 PR 已依 D-12 核准）。S2、S3 可以先接在前一批的分支上開發，前一批合併後再各自開 PR。其餘依上圖往下做。
 
 ## 5. 決策
 
@@ -97,7 +113,7 @@ S1 合併 → S3（D-05、D-14 已核准）
 | D-08 | 純供貨商品照片的讀取權限 | 與零售商品照片相同（`store:read`，只回 ID、版本與照片 metadata） | 採用 | WP-03、04 |
 | D-09 | 離開檢查 | App 的檢查接收目的地 hash，營運中心內換頁不打斷 | 採用 | WP-02 |
 | D-10 | 頁面工具與新手引導 | 頁面工具用 `supplier-console`；引導沿用 `stores` 的停用 | 採用 | WP-02 |
-| D-11 | 合作店家如何在公開店面使用素材 | 發布時複製成賣家 tenant 的 Asset（佔賣家容量） | Ted 核准（2026-10-15） | WP-05 |
+| D-11 | 合作店家如何在公開店面使用素材 | 選「用於公開店面」時複製成賣家 tenant 的 Asset（佔賣家容量）；發布只引用複本 | Ted 已核准 D-11（2026-10-15）；本機 job-d11 候選，未合併／未部署；選用時複製的時機 Ted 已確認（2026-10-16）；瀏覽器 SC-E2E-72～77、82～84（82、83 為合成 HTTP 投影，84 與 76 為資料庫複本；本機；SC-E2E-78 屬於 S3，79～81 留給 S3） | WP-05 |
 | D-12 | PR 怎麼包 | 文件＋S1 一支 PR，一次完整 CI、同一候選的證據 | Ted 核准（2026-10-15） | WP-06、07 |
 | D-13 | 正式環境怎麼開 | 沿用 host 設定一次開，不做逐事業灰度 | Ted 核准（2026-10-15） | WP-07 |
 | D-14 | 素材影片 | 供應商自己壓縮後上傳：MP4 或 WebM，最多 20 MiB；平台只檢查格式與大小，不轉檔，也不在瀏覽器壓縮。另立用途 `storefront.supply-material-video`，存放與播放沿用活動影片。Cloudflare Media Transformations 是之後要由平台產生縮圖或較小版本時的做法（SC-SPEC-04 §4） | Ted 核准（2026-10-15） | WP-05 |

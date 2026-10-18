@@ -20,15 +20,19 @@ may accompany a leaf; they cannot introduce another module obligation.
 
 | Mode | Required selectable jobs |
 | --- | --- |
-| `full` | All six existing jobs |
+| `full` | All seven existing jobs |
 | `docs` | None; always-on integrity still runs |
-| `affected` | Full six-part runtime plus aggregate, full browser, static/worker |
+| `affected`: frontend leaves | Full eight-part runtime plus aggregate, full browser, static/worker |
+| `affected`: guild presentation | Guild presentation and static/worker |
+| `affected`: informational handoffs | Governance consumers |
 
-Affected mode omits only `governance-consumers` and `deploy-preflight`. It does
+The frontend profile omits `governance-consumers`, `deploy-preflight` and the
+separate guild-presentation job. It does
 not trim runtime test files or browser cases, add a second runner, or replace
 independent security harnesses with candidate test reports. `source-integrity`
-still verifies generated contracts, runtime text, governance and full inventory.
-The two omitted jobs are selected again if any changed file falls outside the
+still verifies generated contracts, runtime text, governance, immutable migrations
+and local links; main pushes generate and restore the complete source inventory.
+The omitted jobs are selected again if any changed file falls outside the
 fixed profile, including database/migration/operator changes.
 
 The aggregate requires every output and every job result. Only the exact fixed
@@ -39,9 +43,38 @@ An intentionally unselected job may report skipped or success.
 Local tests use real Git commits and the actual CLI as well as graph/aggregate
 negative cases. They do not prove installed GitHub enforcement or cost savings.
 UF:INT-17 also requires the corresponding TS/Rust conformance evidence; full
-fallback alone does not supply a missing conformance adapter. Release/archive
-inventory replacement is a separate packet. Until its complete archive and
-restore integrity checks exist, daily `verify:inventory` remains unchanged.
+fallback alone does not supply a missing conformance adapter. The existing
+main source archive/restore and daily `verify:inventory` obligations remain separate.
+
+## Informational handoff documents
+
+The fixed `informational_handoff_docs` profile accepts only ordinary modifications
+of these existing files, optionally with the exact generated inventory:
+
+- `docs/platform-plan/execution/commerce/work-plan.md`
+- `docs/platform-plan/execution/supplier-console/work-plan.md`
+- `docs/platform-plan/execution/guild-launchpad/README.md`
+- `docs/platform-plan/execution/unified-foundation/closeout.md`
+- `docs/platform-plan/execution/unified-foundation/current-state.json`
+
+The trusted selector proves the exact PR base/head and clean integration checkout
+with those two ordered parents. Every changed entry must be a non-executable
+regular blob in both trees. Complete descriptor graphs must be valid and unchanged;
+the fixed owners, dependencies, reverse consumers and suites must still match.
+An allowed document used as a module instruction or runtime text stays full.
+General context ownership and its full fallback are unchanged.
+
+`governance-consumers` remains selected: its existing contract tests check guild
+status against current-state and source facts. Source-integrity, select, the required
+verify aggregate and CodeQL keep their existing obligations. Only the exact reason
+and job-output shape pass the aggregate; selected skips or missing results fail.
+
+Inventory alone, new/unknown paths, rename/copy/delete/mode changes, mixed code,
+tests, specs, acceptance/traceability, schemas, policy, workflow/runner/descriptor
+changes and every `rollout-*.json` retain full CI. No schema authenticates those
+dated receipts for this exception; the original six-file #876 therefore stays full.
+Push and merge-group events remain full. #885 changes the selector itself and
+also receives full CI; local tests establish no hosted time or cost saving.
 
 The `deploy-preflight` job enables setup-node's npm download cache before
 `npm ci --ignore-scripts`; it still performs a clean install and runs the same
