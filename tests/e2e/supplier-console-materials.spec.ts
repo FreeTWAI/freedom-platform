@@ -795,7 +795,9 @@ test('SC-E2E-62 an unknown material command result is retried with the same key 
     // 2. Restrict public use: cancellation sends nothing; a lost ACK retains the exact command.
     const accessSelect = activePage(pageA).getByLabel('使用範圍');
     await accessSelect.selectOption('public_use');
-    await pageA.getByRole('dialog', {name: '可用於合作店家的公開店面', exact: true}).getByRole('button', {name: '確認開放', exact: true}).click();
+    const publicDialog = pageA.getByRole('dialog', {name: '可用於合作店家的公開店面', exact: true});
+    await expect(publicDialog).toContainText('合作店家可以把這個版本用在他們的公開店面。這不會產生公開的檔案網址；合作店家已經下載或放上店面的副本，撤回後無法收回。');
+    await publicDialog.getByRole('button', {name: '確認開放', exact: true}).click();
     await expect(accessSelect).toHaveValue('public_use');
     const materialPath = `${sup.store.root}/supply-materials/${materialId}`;
     const beforeRestrict = (await getJson(pageA, materialPath)).material.version;

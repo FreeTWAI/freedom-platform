@@ -22909,8 +22909,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-materials.spec.ts",
-      "bytes": 75708,
-      "sha256": "ff3c90f89ca44942cbd830f69c7948094e973568bc245ba6fc62aaab7f1e9cf7"
+      "bytes": 75974,
+      "sha256": "6160d904c140e72b4195e244d9f8578c762f2ce5ed27fd48a06c705f2152e63c"
     },
     {
       "path": "tests/e2e/supplier-console-navigation.spec.ts",
@@ -25179,8 +25179,8 @@
     },
     {
       "path": "tests/runtime/supplier-console-state.test.ts",
-      "bytes": 74844,
-      "sha256": "de3940d03b18ef7ca3bd5f4d9fcad4e5e39cc7ac725184eb08ad1dec7c8cc246"
+      "bytes": 76294,
+      "sha256": "9f6cb28f5c70a651350f4cb858dbefedbc3618441c1ddb71e5a0b9e9d7f70393"
     },
     {
       "path": "tests/runtime/supplier-console-writes.test.ts",
