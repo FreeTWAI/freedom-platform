@@ -40,10 +40,15 @@ Schema 證據使用各次成功備份的 authenticated preflight時間窗，還�
 原168項需求、T-047 與第二操作者未驗項保留。
 
 本輪繼續以公會自主交付、可信商店／供貨、專業介紹／分享三個成果收尾。
-主線 `9df3b76e` 的 #902，以及含 #901、#906–#909 的整合候選
-[#910](https://github.com/FreeTWAI/freedom-platform/pull/910)，與本次實際部署分開記錄；
-其審查與 CI 不代表已部署，店面、介紹與分享改動不包含在 `12940c71`。
-下一步沿既有有限商務交接完成會員設定與適用交易驗收，並完成這些候選的整合驗證；
+包含 #901、#906–#909 的整合 PR
+[#910](https://github.com/FreeTWAI/freedom-platform/pull/910) 已於19:31 UTC合併為
+`main@10ad8d2d`（tree `919f8e86`）。截至19:32 UTC的觀察，該主線
+[Verify 39311717186](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311717186)
+與 [CodeQL 39311715398](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311715398)
+仍在執行，不能把 PR 的合併與檢查當成新主線 CI 通過或已部署。
+店面、介紹、分享與公會改動不包含在本次 `12940c71` 發布。
+下一步完成該主線驗證，另以實際版本、公開資產與清理後證據驗收並發布；
+新部署另寫收據，不改寫本次紀錄。會員設定與適用交易驗收沿既有有限商務交接繼續，
 不新增第四條工作線，也不把後台啟用稱為完整電商或 Foundation完成。
 
 以下10月17日及更早段落保留當時觀察；當前具日期快照以上方收據與`current-state.json`為準。

@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-19T18:08:55.016109+00:00",
+  "recorded_at": "2026-10-19T19:45:43.075545+00:00",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,10 +14,10 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "9df3b76ed6da9376af29f7ff65c0fcefe0aaab6a",
-    "tree": "0d1147d52ae23deaff49b4435074c2fdf76f62df",
-    "observed_at": "2026-10-19T18:08:55.016109+00:00",
-    "observation_kind": "exact source object checked locally; merge and CI observations separately dated in rollout receipt",
+    "sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+    "tree": "919f8e866315562a9a6f992e191a45d6b8340f96",
+    "observed_at": "2026-10-19T19:32:33.960111+00:00",
+    "observation_kind": "Exact merged source object checked locally against the dated GitHub merge observation; main CI remains pending in that observation. Runtime deployment evidence is recorded separately.",
     "runtime_release_source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
     "release_source_verify": {
       "conclusion": "success",
@@ -29,33 +29,57 @@
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json"
     },
     "main_verify_observation": {
-      "main": "9df3b76ed6da9376af29f7ff65c0fcefe0aaab6a",
-      "main_tree": "0d1147d52ae23deaff49b4435074c2fdf76f62df",
-      "main_pr": 902,
-      "main_merged_at": "2026-10-19T17:12:06Z",
-      "main_verify_run": 39292076098,
+      "observed_at": "2026-10-19T19:32:33.960111+00:00",
+      "main": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+      "main_tree": "919f8e866315562a9a6f992e191a45d6b8340f96",
+      "main_pr": 910,
+      "main_merged_at": "2026-10-19T19:31:32Z",
+      "integrated_head": "dcc71644816aaa1c5751538b7abce672a29d6a5c",
+      "main_verify_run": 39311717186,
       "main_verify_last_reported_status": "in_progress",
-      "superseded_main": "9cc6ca08eccc7123a072562799e24c37f99eefa1",
-      "superseded_verify_run": 39282418124,
-      "superseded_verify": "cancellation_requested; not counted as passing",
-      "integrated_candidate_pr": 910,
-      "integrated_candidate_head": "b6d4ccd71b08f821622a242395554562b30146c7",
-      "integrated_candidate_verify_run": 39297631468,
-      "integrated_candidate_last_reported_status": "detna-vibe-coding approved exact head; CodeQL passed; full Verify still running",
-      "excluded_work": [
-        797,
-        902,
-        901,
-        906,
-        907,
-        908,
-        909,
-        910
-      ],
-      "limitation": "These are dated source/review observations, not runtime or acceptance evidence. This rollout only deploys the selected 12940c71 source."
+      "main_codeql_run": 39311715398,
+      "main_codeql_last_reported_status": "in_progress",
+      "main_ci_complete": false,
+      "pr_verify_run": 39306102349,
+      "pr_codeql_run": 39306094330,
+      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/910",
+      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39311717186",
+      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39311715398",
+      "deployed_by_existing_receipt": false,
+      "limitation": "PR merge and its checks do not establish passing CI on the new main, deployment, public asset delivery or member acceptance. The existing rollout still records only 12940c71; a later actual release needs separate source-bound evidence."
     },
-    "limitation": "Main and the separately reviewed #910 candidate are not deployed by this dated receipt. All 168 original Foundation requirements, T-047 current-authority reconciliation, human usability and second-operator recovery remain open where previously unverified.",
-    "migrations_beyond_observed_runtime": []
+    "limitation": "Merged main 10ad8d2d is not deployed by the existing 12940c71 rollout receipt. All 168 original Foundation requirements, T-047 current-authority reconciliation, human usability and second-operator recovery remain open where previously unverified.",
+    "migrations_beyond_observed_runtime": [],
+    "previous_main_verify_observation": {
+      "observed_at": "2026-10-19T18:08:55.016109+00:00",
+      "observation": {
+        "main": "9df3b76ed6da9376af29f7ff65c0fcefe0aaab6a",
+        "main_tree": "0d1147d52ae23deaff49b4435074c2fdf76f62df",
+        "main_pr": 902,
+        "main_merged_at": "2026-10-19T17:12:06Z",
+        "main_verify_run": 39292076098,
+        "main_verify_last_reported_status": "in_progress",
+        "superseded_main": "9cc6ca08eccc7123a072562799e24c37f99eefa1",
+        "superseded_verify_run": 39282418124,
+        "superseded_verify": "cancellation_requested; not counted as passing",
+        "integrated_candidate_pr": 910,
+        "integrated_candidate_head": "b6d4ccd71b08f821622a242395554562b30146c7",
+        "integrated_candidate_verify_run": 39297631468,
+        "integrated_candidate_last_reported_status": "detna-vibe-coding approved exact head; CodeQL passed; full Verify still running",
+        "excluded_work": [
+          797,
+          902,
+          901,
+          906,
+          907,
+          908,
+          909,
+          910
+        ],
+        "limitation": "These are dated source/review observations, not runtime or acceptance evidence. This rollout only deploys the selected 12940c71 source."
+      },
+      "limitation": "Historical observation retained unchanged. The b6d4ccd7 candidate is not the final merged head, and the then-running Verify is not promoted to a pass."
+    }
   },
   "deployment": {
     "production": {
@@ -1200,7 +1224,7 @@
         "acceptance": "Owned synthetic normal-member seller/supplier login, assigned scope and desktop/mobile console visibility passed on staging; production public read-only HTTP passed. Fixtures, sessions and temporary staging Access cleaned.",
         "human_acceptance": false,
         "real_transaction_acceptance": false,
-        "next": "Use existing finite commerce activation handoff for owner settings and independent admission; finish real supplier/store/member journeys and review/deploy the separately pending storefront/content/guild candidate.",
+        "next": "Use the existing finite commerce activation handoff for owner settings and independent admission; finish real supplier/store/member journeys. #910 is merged as main 10ad8d2d; await exact-main CI and separately evidenced staging/production deployment and acceptance of its guild, storefront, introduction and sharing changes.",
         "limitation": "Supplier and Commerce consoles are ON; checkout and transactional email remain OFF. Staging uses owned synthetic ordinary-member console access/readability acceptance; production acceptance is public read-only HTTP. No human usability, payment, bank verification or complete supplier fulfilment is claimed. New operator natural scheduled execution is not yet observed."
       }
     },
