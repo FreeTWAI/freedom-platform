@@ -19,9 +19,13 @@
 
 會員 session cookie 是 `SameSite=Strict`。從 LINE、Facebook 或其他網站點進來時，瀏覽器不會帶 cookie，直接 302 無法分辨是不是本人在點自己的連結。連結預覽機器人也不該計分。
 
-所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session，然後才前往目標。
+所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session。計數請求使用 `keepalive`，站內目標立即接續開啟，無須等回報成功或逾時；回報失敗不阻擋閱讀。不可改成直接 302，否則會失去本人排除所需的同源 cookie。
 
-未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址 302 回首頁。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
+只有 `social_post` 的目標是外部網站；其他類型使用伺服器組出的站內路徑。外部分享頁顯示原貼文標題、目的地域名與路徑，以及目的地的帳號、費用、資料處理責任，訪客按「前往原文」才離站，沒有倒數或自動跳轉。網址取自目前有效貼文並沿用既有 HTTPS 正規化與外站規則；一般頁面的外連不增加確認步驟。沒有 JavaScript 時，頁面與主要連結仍可使用。
+
+外部分享的既有分數仍代表這條分享頁的有效訪問，不代表訪客按了外連、採用了產品或完成交易；去重、機器人排除與隱私規則不變。
+
+未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址回傳共用的 404 頁與返回首頁入口，不顯示原標題、目的地、個人分享碼、OG 預覽或計數程式。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
 
 中繼頁含 `noindex,nofollow`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`，以及網站既有的 CSP。不放 inline script 或 style。OG 圖網址使用 runtime 的公開來源。`og:type` 是 `website`。`og:url` 是這條個人連結本身（公開來源 + `/go/<code>`）；技能書只有在 `intro` 有效（1–999）時才附上 `?intro=N`。它不是目標網址，否則 Facebook 會把分享收成目標頁、跳過個人連結。
 
@@ -120,7 +124,7 @@ Production runtime 必須提供受限的 preview transport；缺少 transport �
 
 | 方法與路徑 | 誰 | 用途 |
 | --- | --- | --- |
-| `GET /go/:code` | 公開 | 中繼頁，或 302 回首頁 |
+| `GET /go/:code` | 公開 | 站內接續／外部目的地頁，或不揭露舊內容的 404 |
 | `POST /api/v1/promotion/clicks` | 公開 | `{code}`，永遠 `{ok:true}` |
 | `POST /api/v1/promotion/links` | 會員 | 取得或建立個人連結 |
 | `GET /api/v1/promotion/links/mine?period=` | 會員 | 自己的連結、各期間分數與 `available`；只讀 |

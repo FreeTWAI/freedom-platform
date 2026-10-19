@@ -35,13 +35,15 @@ async function login() {
   return { cookie: response.headers.get('set-cookie')!.split(';')[0], csrf: body.csrf_token };
 }
 
-test('an unknown share code is the app redirect, not the SPA shell', async () => {
+test('an unknown share code is the generic app 404, not the SPA shell', async () => {
   const response = await app.request(origin + '/go/aaaaaaaaaa');
-  assert.equal(response.status, 302);
-  assert.ok((response.headers.get('location') ?? '').endsWith('/'));
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get('location'), null);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
-  assert.ok(!(await response.text()).includes('spa shell'));
+  const html = await response.text();
+  assert.match(html, /分享連結目前無法開啟/);
+  assert.doesNotMatch(html, /spa shell|og:|data-target|data-code|go\.js/);
 });
 
 test('a live share code returns the interstitial before assets, and /go.js stays a static file', async () => {
