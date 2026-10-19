@@ -334,14 +334,18 @@ async function sellerScreens(page:Page,output:(width:number)=>string){
  }
 }
 
-test('ordinary seller UI configures bank/cash meetup, preserves unknown commands, confirms and hands over to a returning buyer',async({browser,e2eAuthPool},info)=>{
+test('with supplier console OFF, ordinary seller UI configures bank/cash meetup, preserves unknown commands, confirms and hands over to a returning buyer',async({browser,e2eAuthPool},info)=>{
  test.setTimeout(120000);
- const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,false);
  const seller=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
  seller.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
  try{
   const sp=await seller.newPage(),bp=await buyer.newPage(),person=await member(e2eAuthPool);
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
+  expect(await (await seller.request.get('/api/v1/site')).json()).toMatchObject({commerce_console_enabled:true,commerce_checkout_enabled:true,supplier_console_enabled:false});
+  const supplierResponse=await seller.request.get(`/api/v1/tenants/${store.tenant}/storefronts/${store.instance}/supplier-console/overview`);
+  expect(supplierResponse.status()).toBe(404);
+  expect((await supplierResponse.json()).code).toBe('not_found');
   const settingsRequests:{key:string;body:string|null;version:string|undefined}[]=[];
   await sp.route('**/offline-payment-settings',async route=>{
    if(route.request().method()!=='PUT'){await route.continue();return;}

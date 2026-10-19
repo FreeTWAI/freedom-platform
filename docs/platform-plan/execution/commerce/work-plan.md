@@ -31,6 +31,8 @@ Staging 的合成帳號 core、S3／D-11 與 ON→OFF→ON 驗收通過；produc
 
 ### 離線試用的實際啟用範圍
 
+2026-10-19 候選補正：賣家與供應商只共用 UI 元件，移除 Commerce console 對 Supplier console 開關的相依。此版本可在 Supplier console OFF 時執行自有庫存離線旅程；不變更店家准入、付款方式或供貨履約同意。實際啟用仍須先核對已部署版本，不能套用到855的歷史收據。
+
 以下五個控制來源在 `main@1ab95391` 與原固定來源 `9a23ea2a5112db6409b90e7835baa3548ee1b2a6` 的 blob 相同；原唯讀核對確認：
 [`createStoreAdmissionPort`](../../../../modules/agent-commerce/operations/admissions.ts) 對離線付款同樣要求
 `tenant_id + instance_id + environment` 的未撤銷准入；`local`／`staging` 對應 `sandbox`，`public` 對應 `live`。
@@ -39,9 +41,9 @@ Staging 的合成帳號 core、S3／D-11 與 ON→OFF→ON 驗收通過；produc
 店主補設定或升級版本不會自行取得准入。紀錄不會自動到期，也不綁單一付款方式；它本身不是店家同意的證明。
 
 [`runtime-settings.ts`](../../../../modules/agent-commerce/operations/runtime-settings.ts) 的 console／checkout 是環境全域旗標：
-checkout ON 需要 console ON，console ON 又需要 Guild Launchpad 與 Supplier console ON。
+checkout ON 需要 console ON，console ON 需要 Guild Launchpad ON；包含上述候選修正的版本不再要求 Supplier console ON，舊版仍須依其實際相依對帳。
 [`platform-app.ts`](../../../../apps/platform-api/src/platform-app.ts) 的付款／面交設定路由只沿既有會員與商店權限，沒有套用上述准入名單；
-其他有權店家也可看到並修改自己的設定，不能宣稱 console 或 Supplier 只向試用店家曝光。
+其他有權店家也可看到並修改自己的設定，不能宣稱 console 只向試用店家曝光；Supplier 另由自己的全域開關決定。
 新訂單仍經准入核對，離線首批可只列 `offline.bank_transfer.v1`／`offline.cash_on_meetup.v1`，不需 provider keyring／journal；
 匯款不自動限制交付方式，僅面交的試用仍須核對既有 shipping profile。
 
@@ -49,7 +51,7 @@ checkout ON 需要 console ON，console ON 又需要 Guild Launchpad 與 Supplie
 記下指定環境的已部署 release／schema、具名 tenant／instance 與同意依據、安裝版本能力、發布／自有庫存、付款及面交設定版本；
 並核對該 provider environment 的**全部未撤銷准入**，包括目前尚未具備設定或版本能力的店家，列明需由獨立 admin 執行的既有准入／撤銷操作。
 不能只列當下已可結帳的店家，因為已准入店家稍後補設定也可能開始接單。收據只需識別碼、版本與設定狀態，不需帳號內容或秘密。
-同一份收據須明列是否接受較廣的 console／Supplier 曝光；若要求連 UI 都只向具名店家開放，現有旗標沒有這項限制，
+同一份收據須明列 console 的全域曝光及 Supplier 的實際開關；若要求連 UI 都只向具名店家開放，現有旗標沒有這項限制，
 public 保持 OFF，改用已隔離環境承接約定試用，或把這個具體缺口交回既有 owner 處理，不另建准入平台。
 
 [`public-commands.ts`](../../../../modules/agent-commerce/checkout/public-commands.ts) 與
