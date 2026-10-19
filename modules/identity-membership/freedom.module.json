@@ -7,6 +7,7 @@
     "modules/identity-membership/test-accounts.ts",
     "tests/runtime/member-read-session-clock.test.ts",
     "tests/runtime/auth-rate-limit-window.test.ts",
+    "tests/runtime/login-lockout-recovery.test.ts",
     "modules/identity-membership/avatars.ts",
     "modules/identity-membership/avatar-bridge.md",
     "apps/platform-api/src/routes/avatars.ts",
