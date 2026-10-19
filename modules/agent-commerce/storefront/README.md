@@ -12,6 +12,12 @@ client bundle they share (EC-SPEC-01 §3, EC-SPEC-02 §4.2 and §6).
   and never loads the portal app, themes, navigation or chat.
 - Orders are read only through the public checkout API (`hosted-checkout`).
   The pages show no data that the API did not return.
+- The shop, product and buyer pages share the published merchant name and
+  navigation through `hosted/storefront-shell.ts`. The original Freedom Workshop
+  logo and platform attribution stay in the footer. Order guidance remains
+  reachable when new checkout is closed; it does not grant access to any order.
+  Private previews show the saved merchant identity without public navigation
+  or checkout actions. No contact or bank settings enter this shared frame.
 - Before Ted authorises `FREEDOM_COMMERCE_EMAIL_ENABLED`, B10 shows the
   EC-SPEC-10 §6.2 explanation and collects no Email.
 

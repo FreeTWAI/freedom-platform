@@ -419,8 +419,8 @@ test('paused, hidden, deleted and ineligible owners leave the public pages', asy
   assert.equal((await request('/promotion/links', reviewer, { kind: 'member_service', target: id })).status, 404);
   const code = randomBytes(7).toString('base64url');
   await pool.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'member_service',$3,$4)`, [DEMO_COMMUNITY, reviewer.user.user_id, id, code]);
-  assert.equal((await go(code)).status, 302);
-  assert.ok(((await go(code)).headers.get('location') ?? '').endsWith('/'));
+  assert.equal((await go(code)).status, 404);
+  assert.equal((await go(code)).headers.get('location'), null);
   const resumed = await request(`/member-services/${id}/resume`, maker, {}, 'POST', { 'If-Match': `"${paused.data.aggregate_version}"` });
   assert.equal((await html(`/services/${id}`)).status, 200);
   assert.equal((await request('/promotion/links', reviewer, { kind: 'member_service', target: id })).status, 200);
@@ -443,7 +443,7 @@ test('paused, hidden, deleted and ineligible owners leave the public pages', asy
   assert.match(missing.html, /找不到這項服務/);
   assert.match(missing.html, /noindex/);
   assert.equal(missing.html.includes('rel="canonical"'), false);
-  assert.equal((await go(code)).status, 302);
+  assert.equal((await go(code)).status, 404);
   assert.equal((await request(`/member-services/${id}/pause`, maker, {}, 'POST', { 'If-Match': `"${hidden.data.aggregate_version}"` })).status, 404);
 
   const fresh = await request('/member-services', maker, draft({ title: '即將刪除' }));
@@ -468,7 +468,7 @@ test('paused, hidden, deleted and ineligible owners leave the public pages', asy
   assert.equal((await html(`/services/${quiet.data.service_id}`)).status, 404);
   const quietCode = randomBytes(7).toString('base64url');
   await pool.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'member_service',$3,$4)`, [DEMO_COMMUNITY, maker.user.user_id, quiet.data.service_id, quietCode]);
-  assert.equal((await go(quietCode)).status, 302);
+  assert.equal((await go(quietCode)).status, 404);
 });
 
 test('public pages escape member text, page, and filter without echoing a bad query', async () => {
