@@ -76,6 +76,7 @@
     "tests/e2e/game-console.spec.ts",
     "tests/e2e/instant-feedback.spec.ts",
     "tests/e2e/member-directory.spec.ts",
+    "tests/e2e/member-ecard.spec.ts",
     "tests/e2e/member-settings-real.spec.ts",
     "tests/e2e/member-settings.spec.ts",
     "tests/e2e/member-todos.spec.ts",
