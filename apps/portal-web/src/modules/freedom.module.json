@@ -39,6 +39,7 @@
     "apps/portal-web/src/modules/PublicMemberPage.tsx",
     "apps/portal-web/src/modules/MemberCardShareActions.tsx",
     "tests/runtime/member-ecard.test.ts",
+    "tests/e2e/member-ecard.spec.ts",
     "apps/portal-web/src/modules/MemberShare.tsx",
     "apps/portal-web/src/modules/MemberCardDownload.tsx",
     "apps/portal-web/src/modules/MemberCardQr.tsx",
