@@ -10,6 +10,36 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-19 商店公開說明與會員啟用邊界發布完成
+
+**截至23:06 UTC，staging 與 production 都已部署 `240cf677`／schema172，
+限定驗收、發布後備份與隔離還原通過，兩環境 dispatcher 已綁定本次來源，
+原 timer 已恢復 active／enabled。這是操作收據支持的程式發布，三項真人成果仍待驗收。**
+來源為 #911 的實際 main，Verify 39326252768 的17個 jobs與 CodeQL 39326246130
+的3個 jobs全部通過；公會局部 CI 的已合併／驗證不等於非核心作者已完成自主交付。
+本輪沒有 migration；Supplier／Commerce console 保持 ON，checkout／交易 Email 保持 OFF，
+其他旗標、路由與 cron 未變。完整證據見[商店會員流程發布收據](rollout-merchant-readiness-2026-10-19.json)。
+
+店主可在既有「商店資料 → 商店介紹」填寫客服、交付及售後說明，沿儲存／預覽／發布流程，
+讓買家頁呈現同一份「商店說明與聯絡」；不從會員或銀行資料推導公開資訊。
+Seller console 已解除對 Supplier console 開關的相依，既有權限、准入與 checkout 前置仍保留。
+22:53 UTC 的 production 唯讀盤點為1個已啟用店面，離線付款、交付設定與
+獨立准入各為0；店主實際設定與真人供應商／店主／買家旅程尚未完成，既有測試同意不需重問。
+
+Staging 的普通合成會員後台與匿名公開頁已通過；店面驗收使用首次導航前設定的
+390／1440視窗，確認公開說明、草稿隔離、錨點、checkout OFF與分享目的地。
+Session、fixture及臨時 Access清理通過。先前三次跨 resize失敗仍保留，沒有改稱通過；
+有界本機試驗支持 no-JS、smooth anchor與resize交互作用，尚未證明原生瀏覽器缺陷或
+Playwright獨有原因。**固定初始尺寸通過不代表跨尺寸已修復，也不能據此稱正式站故障。**
+Production 僅做公開唯讀檢查與資產核對，未登入會員、下單或宣稱真人採用。
+
+發布前備份沿用已完成的兩份 `10ad8d2d` 發布後備份，保留原來源與日期，沒有冒稱新擷取。
+本輪新 staging／production備份分別完整還原66個／48個物件，172 floor、素材政策與清理通過；
+只有production另核對10項座標約束及canonical saved floor，staging此項不適用。
+Dispatcher為`ef99163d`；原03:30／04:30 UTC與5分鐘隨機延遲、Persistent設定及service argv維持。
+觀察到下次排程為10月20日03:34:58／04:32:12 UTC，**新 wrapper自然執行尚未觀察**。
+`12940c71`／`10ad8d2d`歷史收據及既有未驗項保留，不新增第四條發布工作線。
+
 ## 2026-10-19 三項成果的程式發布完成
 
 **截至21:51 UTC，staging 與 production 都已部署 `10ad8d2d`／schema172，

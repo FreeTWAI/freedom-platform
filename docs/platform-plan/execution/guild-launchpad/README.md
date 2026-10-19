@@ -6,7 +6,15 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=10ad8d2d9db105fbc102a24481fda52140182c0f release.staging=10ad8d2d9db105fbc102a24481fda52140182c0f flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=240cf677e892f6f20306089c75c34fa914597960 release.staging=240cf677e892f6f20306089c75c34fa914597960 flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至 2026-10-19 23:06:51.019348 UTC，staging 與 production 都已部署 `240cf677`／schema172，商店公開說明與獨立 Seller console 啟用邊界已發布。兩環境限定驗收、發布後備份還原與清理通過，dispatcher 已綁定本次來源，原 timer 已恢復；checkout／email 仍 OFF，新 operator 自然排程尚未觀察。發布前沿用原 `10ad8d2d` 已完成備份，不改寫其來源與日期。詳見[商店會員流程發布收據](../unified-foundation/rollout-merchant-readiness-2026-10-19.json)及[現況快照](../unified-foundation/current-state.json)。
+
+公會局部 CI 已合併並驗證；這次 Worker 發布不代表兩位非核心公會作者已自行交付。`as_of=2026-10-12` 及 M1／完整計畫未接受的狀態維持。Staging 合成店面驗收僅涵蓋初始390／1440視窗，先前三次跨 resize失敗保留，尚未確定原生瀏覽器或自動化原因；production 僅公開唯讀檢查。真人三項成果、店主付款／交付設定與獨立准入仍待完成，不把部署或合成驗收當成真人成功。
+
+### 2026-10-19 21:51 歷史發布
+
+以下原文保留 `10ad8d2d` 當時觀察；最新部署以上方23:06 UTC收據為準。
 
 截至 2026-10-19 21:51:02.819573 UTC，staging 與 production 已完成 `10ad8d2d`／schema172 發布，Supplier／Commerce console 已開啟，checkout／email 仍 OFF。Staging 的自有合成會員在桌面與手機完成供應商／商店後台及公開頁面限定驗收；production 只做公開唯讀檢查，未執行真人會員登入或訂單交易。兩環境發布前後備份均完成隔離資料庫＋物件還原與清理；dispatcher 已綁定 `10ad8d2d`，兩個原 timer 已恢復 active／enabled，尚未觀察新 operator 的自然排程。失敗驗收與修正後通過的證據分開保留，詳見[三項成果發布收據](../unified-foundation/rollout-three-outcomes-2026-10-19.json)與[現況快照](../unified-foundation/current-state.json)。
 
