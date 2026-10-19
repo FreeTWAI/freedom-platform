@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { navigate, signOut } from './navigation.js';
 import { test, expect, type Browser, type Page } from './fixtures.js';
@@ -201,7 +202,8 @@ test('real API journey: cover recovery, edit, pause, the 5-service cap, delete a
   await expect(mine.locator('h2')).toHaveText('我的服務 0／5');
 
   // Oversized cover is refused in the browser. A legal one then meets two injected transport faults on the real API:
-  // first the request never reaches the server, then the server applies it but the response is lost. Both retry from the form.
+  // first the request never reaches the server, then the server commits it (200 checked) but the response is lost.
+  // Each explicit retry resends only the cover with the original key, If-Match and bytes; the service is not rewritten.
   const form = await fillService(page, 'E2E 旅程 1', '設計', '封面與恢復');
   const cover = form.locator('input[type="file"]');
   await cover.setInputFiles({ name: 'huge.png', mimeType: 'image/png', buffer: Buffer.alloc(4 * 1024 * 1024 + 1) });
@@ -209,26 +211,41 @@ test('real API journey: cover recovery, edit, pause, the 5-service cap, delete a
   expect(coverPuts).toHaveLength(0);
   await cover.setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: PNG });
   const faults = ['before-server', 'response-lost'];
+  const sent: { key: string; ifMatch: string; sha: string; status: number | null }[] = [];
   await page.route('**/api/v1/member-services/*/cover', async route => {
-    const fault = route.request().method() === 'PUT' ? faults.shift() : undefined;
-    if (fault === 'response-lost') await route.fetch();
-    return fault ? route.abort('failed') : route.continue();
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.continue();
+    const fault = faults.shift();
+    const entry = { key: request.headers()['idempotency-key'], ifMatch: request.headers()['if-match'], sha: createHash('sha256').update(request.postDataBuffer() ?? Buffer.alloc(0)).digest('hex'), status: null as number | null };
+    sent.push(entry);
+    if (fault === 'before-server') return route.abort('failed');
+    const response = await route.fetch();
+    entry.status = response.status();
+    return fault === 'response-lost' ? route.abort('failed') : route.fulfill({ response });
   });
+  const unknownCover = '封面上傳結果還沒確認，服務已儲存。按「重試封面」會用同一張圖片和同一個請求再送一次。';
   await form.getByRole('button', { name: '建立服務', exact: true }).click();
-  await expect(form.getByRole('alert')).toHaveText('封面未能換上。服務已儲存，按「儲存變更」可重試封面。');
+  await expect(form.getByRole('alert')).toHaveText(unknownCover);
   await expect(page.getByText('已新增服務。')).toHaveCount(0);
   await expect(form.getByRole('heading', { name: '編輯服務', exact: true })).toBeVisible();
   await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('E2E 旅程 1');
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toBeDisabled();
   expect(await mineTitles()).toEqual([{ title: 'E2E 旅程 1', state: 'active' }]);
-  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
-  await expect(form.getByRole('alert')).toHaveText('封面未能換上。服務已儲存，按「儲存變更」可重試封面。');
-  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText(unknownCover);
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
   await expect(page.getByText('已更新服務。')).toBeVisible();
   await page.unroute('**/api/v1/member-services/*/cover');
+  expect(sent.map(item => item.status)).toEqual([null, 200, 200]);
+  expect(new Set(sent.map(item => `${item.key}|${item.ifMatch}|${item.sha}`)).size).toBe(1);
+  expect(sent[0].ifMatch).toBe('"1"');
   expect(coverPuts).toHaveLength(3);
   expect(await mineTitles()).toEqual([{ title: 'E2E 旅程 1', state: 'active' }]);
   await expect(card(page, 'E2E 旅程 1').locator('img.service-cover')).toBeVisible();
-  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM member_services s JOIN member_service_covers c USING(service_id) WHERE s.owner_user_id=$1 AND s.title='E2E 旅程 1'`, [owner])).rows[0].n).toBe(1);
+  const journeyRow = (await e2eAuthPool.query(`SELECT s.service_id::text AS id, s.aggregate_version::int AS v FROM member_services s JOIN member_service_covers c USING(service_id) WHERE s.owner_user_id=$1 AND s.title='E2E 旅程 1'`, [owner])).rows;
+  expect(journeyRow).toHaveLength(1);
+  expect(journeyRow[0].v).toBe(2);
+  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND operation LIKE $2`, [owner, `%/member-services/${journeyRow[0].id}/cover`])).rows[0].n).toBe(1);
 
   // Edit, pause and resume the same service.
   const row = mine.locator('li.service-mine-row').filter({ hasText: 'E2E 旅程 1' });
@@ -296,6 +313,185 @@ test('real API journey: cover recovery, edit, pause, the 5-service cap, delete a
   await expect(mine.locator('li.service-mine-row').filter({ hasText: 'E2E 旅程 1' }).locator('.service-state')).toHaveText('暫停中');
   expect((await mineTitles()).map(item => item.title)).toEqual(['E2E 旅程 1', 'E2E 旅程 2', 'E2E 旅程 3', 'E2E 旅程 4', 'E2E 旅程 6']);
   await expect(create).toBeDisabled();
+});
+
+test('two tabs: a cover committed before its lost response is replayed with its original key and never overwrites the other tab', async ({ page, context, e2eAuthPool }) => {
+  test.setTimeout(180_000);
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  await (await fillService(page, 'E2E 兩分頁', '設計', '原始簡介')).getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(mine.locator('li.service-mine-row').filter({ hasText: 'E2E 兩分頁' })).toBeVisible();
+  const id = (await e2eAuthPool.query(`SELECT service_id::text AS id FROM member_services WHERE owner_user_id=$1 AND title='E2E 兩分頁'`, [owner])).rows[0].id as string;
+
+  // Tab A: the cover PUT reaches the real server and commits (status and response identity checked), then its response is dropped.
+  const attempts: { key: string; ifMatch: string; sha: string; status: number; service: string; version: number }[] = [];
+  let drop = true;
+  await page.route(`**/api/v1/member-services/${id}/cover`, async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.continue();
+    const response = await route.fetch();
+    const body = await response.json() as { service_id: string; aggregate_version: number };
+    attempts.push({ key: request.headers()['idempotency-key'], ifMatch: request.headers()['if-match'], sha: createHash('sha256').update(request.postDataBuffer() ?? Buffer.alloc(0)).digest('hex'), status: response.status(), service: body.service_id, version: body.aggregate_version });
+    if (drop) { drop = false; return route.abort('failed'); }
+    return route.fulfill({ response });
+  });
+  const servicePuts: string[] = [];
+  page.on('request', request => { if (request.method() === 'PUT' && request.url().endsWith(`/api/v1/member-services/${id}`)) servicePuts.push(request.headers()['idempotency-key']); });
+  // Tab A's recovery read of its own list is held until tab B has saved (the window where a fresh version would
+  // let the old draft overwrite B), and then fails with 500; the pending cover must survive both.
+  let release: () => void = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let holdMine = false;
+  await page.route('**/api/v1/member-services/mine', async route => {
+    if (!holdMine || route.request().method() !== 'GET') return route.continue();
+    holdMine = false;
+    await gate;
+    return route.fulfill({ status: 500, json: { detail: '暫時無法讀取。' } });
+  });
+  await mine.locator('li.service-mine-row').filter({ hasText: 'E2E 兩分頁' }).getByRole('button', { name: '編輯', exact: true }).click();
+  const form = page.locator('form.service-form');
+  await form.getByRole('textbox', { name: /^簡介/ }).fill('A 分頁的簡介');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: PNG });
+  holdMine = true;
+  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(1);
+  expect(attempts[0]).toMatchObject({ ifMatch: '"2"', status: 200, service: id, version: 3 });
+
+  // Tab B edits the same service after the cover commit, while tab A is still recovering.
+  const other = await context.newPage();
+  await other.goto('/');
+  await navigate(other, '社員服務');
+  const otherMine = other.getByRole('region', { name: '我的服務', exact: true });
+  await otherMine.locator('li.service-mine-row').filter({ hasText: 'E2E 兩分頁' }).getByRole('button', { name: '編輯', exact: true }).click();
+  const otherForm = other.locator('form.service-form');
+  await expect(otherForm.getByRole('textbox', { name: /^簡介/ })).toHaveValue('A 分頁的簡介');
+  await otherForm.getByRole('textbox', { name: /^簡介/ }).fill('B 分頁的簡介');
+  await otherForm.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(other.getByText('已更新服務。')).toBeVisible();
+  expect((await e2eAuthPool.query('SELECT aggregate_version::int AS v FROM member_services WHERE service_id=$1', [id])).rows[0].v).toBe(4);
+  expect(holdMine).toBe(false);
+  release();
+  await expect(form.getByRole('alert')).toHaveText('封面上傳結果還沒確認，服務已儲存。按「重試封面」會用同一張圖片和同一個請求再送一次。');
+
+  // Tab A retries explicitly: same key, If-Match and bytes; the server replays the committed result.
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
+  await expect(page.getByText('已更新服務。')).toBeVisible();
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]).toEqual(attempts[0]);
+  expect(servicePuts).toHaveLength(1);
+  expect((await e2eAuthPool.query('SELECT summary, aggregate_version::int AS v FROM member_services WHERE service_id=$1', [id])).rows[0]).toEqual({ summary: 'B 分頁的簡介', v: 4 });
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [id])).rows[0].n).toBe(1);
+  expect((await e2eAuthPool.query(`SELECT idempotency_key FROM command_receipts WHERE user_id=$1 AND operation LIKE $2`, [owner, `%/member-services/${id}/cover`])).rows.map(row => row.idempotency_key)).toEqual([attempts[0].key]);
+  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2`, [owner, servicePuts[0]])).rows[0].n).toBe(1);
+
+  // Both tabs and the public page read the other tab's content with the cover.
+  const publicPage = await page.request.get(`/services/${id}`);
+  expect(publicPage.status()).toBe(200);
+  expect(await publicPage.text()).toContain('B 分頁的簡介');
+  await page.reload();
+  await navigate(page, '社員服務');
+  await expect(card(page, 'E2E 兩分頁')).toContainText('B 分頁的簡介');
+  await expect(card(page, 'E2E 兩分頁').locator('img.service-cover')).toBeVisible();
+  await other.close();
+});
+
+test('two tabs: a cover that never reached the server stops at the version conflict and keeps the chosen file', async ({ page, context, e2eAuthPool }) => {
+  test.setTimeout(180_000);
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  await (await fillService(page, 'E2E 衝突', '設計', '原始簡介')).getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(mine.locator('li.service-mine-row').filter({ hasText: 'E2E 衝突' })).toBeVisible();
+  const id = (await e2eAuthPool.query(`SELECT service_id::text AS id FROM member_services WHERE owner_user_id=$1 AND title='E2E 衝突'`, [owner])).rows[0].id as string;
+  const keys: string[] = [];
+  let lose = true;
+  await page.route(`**/api/v1/member-services/${id}/cover`, route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    keys.push(route.request().headers()['idempotency-key']);
+    if (lose) { lose = false; return route.abort('failed'); }
+    return route.continue();
+  });
+  await mine.locator('li.service-mine-row').filter({ hasText: 'E2E 衝突' }).getByRole('button', { name: '編輯', exact: true }).click();
+  const form = page.locator('form.service-form');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: PNG });
+  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('封面上傳結果還沒確認，服務已儲存。按「重試封面」會用同一張圖片和同一個請求再送一次。');
+
+  const other = await context.newPage();
+  await other.goto('/');
+  await navigate(other, '社員服務');
+  await other.getByRole('region', { name: '我的服務', exact: true }).locator('li.service-mine-row').filter({ hasText: 'E2E 衝突' }).getByRole('button', { name: '編輯', exact: true }).click();
+  const otherForm = other.locator('form.service-form');
+  await otherForm.getByRole('textbox', { name: /^簡介/ }).fill('B 分頁先改');
+  await otherForm.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(other.getByText('已更新服務。')).toBeVisible();
+  await other.close();
+
+  // The original operation is retried unchanged; the server refuses it and nothing is overwritten.
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('這項服務已在其他地方更新，這次的封面沒有換上。你選的圖片還在；按「載入最新內容」確認後，再儲存一次即可換上。');
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).toBe(keys[0]);
+  expect((await e2eAuthPool.query('SELECT summary FROM member_services WHERE service_id=$1', [id])).rows[0].summary).toBe('B 分頁先改');
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [id])).rows[0].n).toBe(0);
+  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND operation LIKE $2`, [owner, `%/member-services/${id}/cover`])).rows[0].n).toBe(0);
+  await expect(form.getByRole('button', { name: '儲存變更', exact: true })).toBeDisabled();
+  for (const theme of ['light', 'dark', 'versefolk'] as const) {
+    await themeOf(page, theme);
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await form.screenshot({ path: `${SHOTS}/cover-conflict-${theme}-${width}.png` });
+      await noOverflow(page);
+    }
+  }
+  await themeOf(page, 'light');
+
+  // Loading the latest content is the explicit choice; the chosen file stays and the next save is a new operation.
+  await form.getByRole('button', { name: '載入最新內容', exact: true }).click();
+  await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('B 分頁先改');
+  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(page.getByText('已更新服務。')).toBeVisible();
+  expect(keys).toHaveLength(3);
+  expect(keys[2]).not.toBe(keys[0]);
+  expect((await e2eAuthPool.query('SELECT summary FROM member_services WHERE service_id=$1', [id])).rows[0].summary).toBe('B 分頁先改');
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [id])).rows[0].n).toBe(1);
+});
+
+test('a create whose response is lost is retried with its original key and body, and creates one service', async ({ page, e2eAuthPool }) => {
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const posts: { key: string; body: string; status: number }[] = [];
+  let lose = true;
+  await page.route('**/api/v1/member-services', async route => {
+    const request = route.request();
+    if (request.method() !== 'POST') return route.continue();
+    const response = await route.fetch();
+    posts.push({ key: request.headers()['idempotency-key'], body: request.postData() ?? '', status: response.status() });
+    if (lose) { lose = false; return route.abort('failed'); }
+    return route.fulfill({ response });
+  });
+  const form = await fillService(page, 'E2E 建立未確認', '設計', '回應遺失');
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('儲存結果還沒確認。按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。');
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toBeDisabled();
+  for (const theme of ['light', 'dark', 'versefolk'] as const) {
+    await themeOf(page, theme);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await form.screenshot({ path: `${SHOTS}/save-pending-${theme}-390.png` });
+    await noOverflow(page);
+  }
+  await themeOf(page, 'light');
+  await form.getByRole('button', { name: '重試儲存', exact: true }).click();
+  await expect(page.getByText('已新增服務。')).toBeVisible();
+  expect(posts.map(post => post.status)).toEqual([201, 201]);
+  expect(posts[1].key).toBe(posts[0].key);
+  expect(posts[1].body).toBe(posts[0].body);
+  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1 AND title='E2E 建立未確認'`, [owner])).rows[0].n).toBe(1);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2', [owner, posts[0].key])).rows[0].n).toBe(1);
 });
 
 test('another member shares it and a signed-out visitor lands on the public page', async ({ page, browser }) => {

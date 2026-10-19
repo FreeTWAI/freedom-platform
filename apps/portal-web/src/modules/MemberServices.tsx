@@ -18,8 +18,16 @@ type Page = {items: Service[]; next_cursor: string | null; can_hide: boolean}
 type Mine = {items: Service[]; limit: number}
 type Draft = {title: string; category: ServiceCategory | ''; summary: string; description: string; price_text: string; area_text: string; service_mode: ServiceMode; contacts: Contact[]}
 type Issue = {field: string; message: string}
+// A write whose outcome is unknown is retried as the same operation: same key, body or File, If-Match and target.
+type SaveOperation = {stage: 'save'; method: 'POST' | 'PUT'; path: string; body: unknown; key: string; version: number | null; file: File | null; coverKey: string}
+type CoverOperation = {stage: 'cover'; service: Service; file: File; key: string; version: number}
+type Operation = SaveOperation | CoverOperation
 
 const BLANK: Draft = {title: '', category: '', summary: '', description: '', price_text: '', area_text: '', service_mode: 'online', contacts: [{label: '', url: ''}]}
+
+// No response, a 5xx or an unreadable success body leaves a write's outcome unknown.
+const unknownOutcome = (cause: unknown) => !(cause instanceof ApiError) || cause.network
+const conflictOf = (cause: unknown) => cause instanceof ApiError && cause.code === 'version_conflict'
 
 function Cover({service}: {service: Service}) {
   const [broken, setBroken] = useState(false)
@@ -44,6 +52,8 @@ export function MemberServices({client}: {client: PortalClient}) {
   const [draft, setDraft] = useState<Draft>(BLANK)
   const [file, setFile] = useState<File | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
+  const [pending, setPending] = useState<Operation | null>(null)
+  const [conflict, setConflict] = useState<'save' | 'cover' | null>(null)
   const confirmationId = useId()
   const [confirming, setConfirming] = useState<{serviceId: string; origin: 'mine' | 'card'; action: 'delete' | 'hide'} | null>(null)
   const issue = (field: string) => issues.find(item => item.field === field)?.message ?? ''
@@ -77,47 +87,86 @@ export function MemberServices({client}: {client: PortalClient}) {
     setFile(null); setIssues([]); setError(''); setFormOpen(true)
   }
   function patch(partial: Partial<Draft>) { setDraft(current => ({...current, ...partial})) }
-  async function send(method: 'PUT' | 'DELETE', path: string, body: unknown, version: number) {
+  async function write(method: 'PUT' | 'DELETE', path: string, body: BodyInit, headers: Record<string, string>, fallback: string) {
     if (!client.csrfToken) throw new ApiError({message: '登入狀態已變更，請重新整理。', status: 400})
-    const response = await accessAwareFetch(`/api/v1${path}`, {
-      method, credentials: 'same-origin', body: JSON.stringify(body),
-      headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${version}"`},
-    })
-    const payload = await response.json().catch(() => ({})) as Service & {detail?: string; code?: string}
-    if (!response.ok) throw new ApiError({message: payload.detail || '服務未能更新。', status: response.status, code: payload.code})
+    let response: Response
+    try {
+      response = await accessAwareFetch(`/api/v1${path}`, {method, credentials: 'same-origin', body, headers: {Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, ...headers}})
+    } catch { throw new ApiError({message: '沒有收到伺服器回應，尚未確認結果。', status: 0, network: true}) }
+    const payload = await response.json().catch(() => null) as (Service & {detail?: string; code?: string}) | null
+    if (!response.ok) throw new ApiError({message: payload?.detail || fallback, status: response.status, code: payload?.code, network: response.status >= 500})
+    if (!payload) throw new ApiError({message: '回應未完整收到，尚未確認結果。', status: response.status, network: true})
     return payload
   }
-  async function uploadCover(service: Service, next: File) {
-    if (!client.csrfToken) throw new ApiError({message: '登入狀態已變更，請重新整理。', status: 400})
-    const response = await accessAwareFetch(`/api/v1/member-services/${service.service_id}/cover`, {
-      method: 'PUT', credentials: 'same-origin', body: next,
-      headers: {Accept: 'application/json', 'Content-Type': next.type, 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${service.aggregate_version}"`},
-    })
-    const payload = await response.json().catch(() => ({})) as {detail?: string}
-    if (!response.ok) throw new ApiError({message: payload.detail || '封面未能換上。', status: response.status})
+  function send(method: 'PUT' | 'DELETE', path: string, body: unknown, version: number, key: string = crypto.randomUUID()) {
+    return write(method, path, JSON.stringify(body), {'Content-Type': 'application/json', 'Idempotency-Key': key, 'If-Match': `"${version}"`}, '服務未能更新。')
+  }
+  function uploadCover(op: CoverOperation) {
+    return write('PUT', `/member-services/${op.service.service_id}/cover`, op.file, {'Content-Type': op.file.type, 'Idempotency-Key': op.key, 'If-Match': `"${op.version}"`}, '封面未能換上。')
+  }
+  async function finish(created: boolean) {
+    setPending(null); setFormOpen(false); setFile(null); setNotice(created ? '已新增服務。' : '已更新服務。')
+    await Promise.all([load(category), refreshMine()])
+  }
+  function closeForm() {
+    setFormOpen(false); setIssues([]); setConflict(null)
+    if (pending) { setPending(null); void Promise.all([load(category), refreshMine().catch(() => null)]) }
+  }
+  async function reloadLatest() {
+    const keep = conflict === 'cover' ? file : null, id = editing?.service_id
+    setConflict(null)
+    const latest = (await refreshMine().catch(() => null))?.find(item => item.service_id === id)
+    void load(category)
+    if (!latest) { setFormOpen(false); setError('找不到這項服務的最新內容，請重新整理頁面。'); return }
+    openEdit(latest)
+    setFile(keep)
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const payload = {...draft, category: draft.category, contacts: draft.contacts.map(row => ({label: row.label, url: row.url}))}
-    const parsed = validateMemberService(payload)
-    if (!parsed.ok) { setIssues(parsed.issues); setError(parsed.issues[0]?.message || '請修正標示的欄位。'); return }
-    setIssues([]); setSaving(true); setError(''); setNotice('')
+    let op = pending
+    if (!op) {
+      const payload = {...draft, category: draft.category, contacts: draft.contacts.map(row => ({label: row.label, url: row.url}))}
+      const parsed = validateMemberService(payload)
+      if (!parsed.ok) { setIssues(parsed.issues); setError(parsed.issues[0]?.message || '請修正標示的欄位。'); return }
+      op = {stage: 'save', method: editing ? 'PUT' : 'POST', path: editing ? `/member-services/${editing.service_id}` : '/member-services', body: parsed.value,
+        key: crypto.randomUUID(), version: editing ? editing.aggregate_version : null, file, coverKey: crypto.randomUUID()}
+    }
+    const created = op.stage === 'save' && op.method === 'POST'
+    setIssues([]); setSaving(true); setError(''); setNotice(''); setConflict(null)
     try {
-      const saved = editing
-        ? await send('PUT', `/member-services/${editing.service_id}`, parsed.value, editing.aggregate_version)
-        : await client.post<Service>('/member-services', parsed.value)
-      if (file) {
-        try { await uploadCover(saved, file) }
-        catch (cause) {
-          // The upload may have been applied before its response was lost; retry from the current version.
-          const [, fresh] = await Promise.all([load(category), refreshMine().catch(() => null)])
-          setEditing(fresh?.find(item => item.service_id === saved.service_id) ?? saved)
-          setError(`${cause instanceof ApiError ? cause.message : '封面未能換上。'}服務已儲存，按「儲存變更」可重試封面。`)
+      if (op.stage === 'save') {
+        const save = op
+        let saved: Service
+        try {
+          saved = save.method === 'PUT'
+            ? await send('PUT', save.path, save.body, save.version!, save.key)
+            : await client.post<Service>(save.path, save.body, {idempotencyKey: save.key})
+        } catch (cause) {
+          const unknown = unknownOutcome(cause)
+          setPending(unknown ? save : null)
+          if (conflictOf(cause)) setConflict('save')
+          setError(unknown ? '儲存結果還沒確認。按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。'
+            : conflictOf(cause) ? '這項服務已在其他地方更新，你這次的修改沒有存入。輸入還在表單裡；需要的內容先複製，再按「載入最新內容」。'
+            : cause instanceof Error ? cause.message : '服務未能儲存。')
           return
         }
+        setEditing(saved)
+        if (!save.file) { await finish(created); return }
+        op = {stage: 'cover', service: saved, file: save.file, key: save.coverKey, version: saved.aggregate_version}
       }
-      setFormOpen(false); setFile(null); setNotice(editing ? '已更新服務。' : '已新增服務。')
-      await Promise.all([load(category), refreshMine()])
+      const cover = op
+      try { await uploadCover(cover) }
+      catch (cause) {
+        const unknown = unknownOutcome(cause)
+        setPending(unknown ? cover : null)
+        await Promise.all([load(category), refreshMine().catch(() => null)])
+        if (conflictOf(cause)) setConflict('cover')
+        setError(unknown ? '封面上傳結果還沒確認，服務已儲存。按「重試封面」會用同一張圖片和同一個請求再送一次。'
+          : conflictOf(cause) ? '這項服務已在其他地方更新，這次的封面沒有換上。你選的圖片還在；按「載入最新內容」確認後，再儲存一次即可換上。'
+          : `${cause instanceof Error ? cause.message : '封面未能換上。'}服務已儲存。`)
+        return
+      }
+      await finish(created)
     } catch (cause) { setError(cause instanceof Error ? cause.message : '服務未能儲存。') }
     finally { setSaving(false) }
   }
@@ -145,7 +194,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     return <div className="service-actions">
       {!paused && <a className="btn btn-ghost" href={service.public_path} target="_blank" rel="noopener noreferrer">服務頁 ↗</a>}
       {!paused && <PromotionShare client={client} kind="member_service" target={service.service_id} title={service.title} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
-      {service.mine && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => openEdit(service)}>編輯</button>}
+      {service.mine && <button type="button" className="btn btn-ghost" disabled={saving || pending !== null} onClick={() => openEdit(service)}>編輯</button>}
       {service.mine && !paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'pause')}>暫停</button>}
       {service.mine && paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'resume')}>恢復</button>}
       {service.mine && <button id={`${controlId}-delete`} type="button" className="btn btn-ghost" disabled={saving} aria-expanded={confirmation === 'delete'} aria-controls={`${controlId}-delete-confirmation`} onClick={() => setConfirming({serviceId: service.service_id, origin, action: 'delete'})}>刪除</button>}
@@ -166,7 +215,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     <section className="card service-mine" data-guide-anchor="services:mine" aria-label="我的服務">
       <div className="service-mine-head">
         <h2>我的服務 <span className="service-count">{mine.length}／{limit}</span></h2>
-        <button type="button" data-guide-anchor="services:create" className={formOpen ? 'btn btn-ghost' : 'btn btn-primary'} disabled={!formOpen && mine.length >= limit} onClick={() => { if (formOpen) { setFormOpen(false); setIssues([]); } else openCreate(); }}>{formOpen ? '關閉表單' : '新增服務'}</button>
+        <button type="button" data-guide-anchor="services:create" className={formOpen ? 'btn btn-ghost' : 'btn btn-primary'} disabled={!formOpen && mine.length >= limit} onClick={() => { if (formOpen) closeForm(); else openCreate(); }}>{formOpen ? '關閉表單' : '新增服務'}</button>
       </div>
       {!formOpen && mine.length >= limit && <p className="muted">已達 {limit} 項上限（含暫停中的服務）。刪除一項後才能再新增。</p>}
       {mine.length === 0 ? <p className="muted">你還沒有建立服務。</p> : <ul>
@@ -180,6 +229,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     {formOpen && <form className="card service-form" onSubmit={event => void submit(event)} aria-busy={saving}>
       <h2>{editing ? '編輯服務' : '新增服務'}</h2>
       <p className="service-public-note">服務頁會公開，任何拿到連結的人都看得到。</p>
+      <fieldset className="service-form-fields" disabled={pending !== null}>
       <label className="field">標題<input required maxLength={80} value={draft.title} aria-invalid={Boolean(issue('title'))} onChange={event => patch({title: event.target.value})}/>{issue('title') && <span className="field-error">{issue('title')}</span>}</label>
       <label className="field">分類<select required value={draft.category} aria-invalid={Boolean(issue('category'))} onChange={event => patch({category: event.target.value as ServiceCategory | ''})}>
         <option value="">請選擇</option>
@@ -211,10 +261,12 @@ export function MemberServices({client}: {client: PortalClient}) {
         setFile(next)
       }}/>{issue('cover') && <span className="field-error">{issue('cover')}</span>}</label>
       {editing?.cover_url && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(editing, 'remove-cover')}>移除封面</button>}
+      </fieldset>
       {error && <div className="banner banner-error" role="alert"><p>{error}</p></div>}
       <div className="service-form-actions">
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? '正在儲存…' : editing ? '儲存變更' : '建立服務'}</button>
-        <button className="btn btn-ghost" type="button" onClick={() => { setFormOpen(false); setIssues([]) }}>取消</button>
+        <button className="btn btn-primary" type="submit" disabled={saving || conflict !== null}>{saving ? '正在儲存…' : pending?.stage === 'cover' ? '重試封面' : pending ? '重試儲存' : editing ? '儲存變更' : '建立服務'}</button>
+        {conflict && <button className="btn btn-ghost" type="button" disabled={saving} onClick={() => void reloadLatest()}>載入最新內容</button>}
+        <button className="btn btn-ghost" type="button" disabled={saving} onClick={closeForm}>{pending ? '放棄並關閉' : '取消'}</button>
       </div>
     </form>}
     {notice && <p className="banner banner-info" role="status">{notice}</p>}
