@@ -232,10 +232,13 @@ test('an older refresh answer that arrives after a newer one never brings a with
     const oldAnswerHeld = new Promise<void>(resolve => { deliverOld = async () => resolve(); });
     let oldDelivered!: () => void;
     const oldDone = new Promise<void>(resolve => { oldDelivered = resolve; });
+    let snapshotCaptured!: (body: string) => void;
+    const captured = new Promise<string>(resolve => { snapshotCaptured = resolve; });
     await page.route('**/api/v1/social-posts?*', async route => {
       if (firstSeen) { await route.continue(); return; }
       firstSeen = true;
       const snapshot = await route.fetch();
+      snapshotCaptured(await snapshot.text());
       await oldAnswerHeld;
       await route.fulfill({response: snapshot});
       oldDelivered();
@@ -243,6 +246,8 @@ test('an older refresh answer that arrives after a newer one never brings a with
     await setHidden(page, true);
     await setHidden(page, false);
     await expect(feed.getByRole('button', {name: '正在確認影片狀態', exact: true})).toBeVisible();
+    // A's snapshot is complete, and it still lists the post, before the withdrawal happens.
+    expect(await captured).toContain(titles[0]);
     // The post is withdrawn; a newer refresh (B) completes first and removes it.
     await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1", [ids[0]]);
     await setHidden(page, true);
