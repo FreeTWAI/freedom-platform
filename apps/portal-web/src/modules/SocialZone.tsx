@@ -75,15 +75,29 @@ async function composeImage(file: File) {
   return {mime_type: file.type, data_base64: data};
 }
 
-const FOCUS_PAGE_LIMIT = 4;
+function sharedPostFromLocation():string|null {
+  if(window.location.hash!=='#social')return null;
+  const id=new URLSearchParams(window.location.search).get('social-post');
+  return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:null;
+}
 export function SocialZone({client, canReview = false, viewer, focusPost}: {client: PortalClient; canReview?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
   const composerId = useId();
-  const composer = useRef<HTMLDialogElement>(null), composerTrigger = useRef<HTMLButtonElement>(null);
+  const composer = useRef<HTMLDialogElement>(null), composerTrigger = useRef<HTMLButtonElement>(null), composerStart = useRef<HTMLDivElement>(null);
+  // The sticky community header wraps on narrow screens, so the composer sticks below its measured height.
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>('.community-header'), start = composerStart.current;
+    if (!header || !start) return;
+    const size = () => start.style.setProperty('--social-composer-top', `${header.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(size); observer.observe(header); size();
+    return () => observer.disconnect();
+  }, []);
   const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null);
   const [optionsOpen, setOptionsOpen] = useState(false), [linkOpen, setLinkOpen] = useState(false);
   const linkVersion = useRef(0);
   const [composerOpen, setComposerOpen] = useState(false);
   const [platform, setPlatform] = useState('note');
+  const [directPost,setDirectPost]=useState<string|null>(sharedPostFromLocation);
+  const focusing=useRef<string|null>(null);
   const [items, setItems] = useState<Post[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [canHide, setCanHide] = useState(canReview);
@@ -131,38 +145,44 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     setError('');
     try {
       const query = new URLSearchParams();
-      if (nextPlatform === 'note') query.set('kind', 'note');
-      else if (nextPlatform) query.set('platform', nextPlatform);
-      if (nextCursor) query.set('cursor', nextCursor);
-      if(tag)query.set('tag',tag);
+      if(directPost){query.set('post_id',directPost);focusing.current=directPost;}
+      else {
+        if (nextPlatform === 'note') query.set('kind', 'note');
+        else if (nextPlatform) query.set('platform', nextPlatform);
+        if (nextCursor) query.set('cursor', nextCursor);
+        if(tag)query.set('tag',tag);
+      }
       const page = await client.get<Page>(`/social-posts${query.size ? `?${query}` : ''}`);
       if (sequence !== loadSequence.current) return;
-      const fresh = nextPlatform === '' || nextPlatform === 'note' ? newPosts.current.filter(post => (!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
+      const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
       setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [...fresh, ...page.items]);
       newPosts.current = newPosts.current.filter(post => !page.items.some(item => item.post_id === post.post_id));
       setCursor(page.next_cursor);
       setCanHide(page.can_hide);
     } catch (cause) { if (sequence === loadSequence.current) setError(cause instanceof Error ? cause.message : '貼文暫時無法載入。'); }
     finally { if (sequence === loadSequence.current) { pendingFeedLoad.current = false; setLoading(false); setMore(false); } }
-  }, [client,tag]);
+  }, [client,tag,directPost]);
   useEffect(() => { void load(platform); }, [load, platform]);
-  // A notification opens one post: show every kind, then page a few times until it appears.
-  const focusing = useRef<{id: string; pages: number} | null>(null);
+  useEffect(()=>{
+    const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;setDirectPost(next);}};
+    window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);
+    return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed);};
+  },[directPost]);
+  // Permalinks and notifications use one exact authorized lookup, even for old posts.
   useEffect(() => {
     if (!focusPost) return;
-    focusing.current = {id: focusPost.id, pages: 0};
-    if (platform !== '' || tag) {selectPlatform('');if(tag)selectTag('');}
-    else void load('');
+    ++loadSequence.current;setNotice('');setDirectPost(focusPost.id);
+    selection.current={platform:'',tag:'',version:selection.current.version+1};setPlatform('');setTag('');
+    if(directPost===focusPost.id)void load(platform);
   }, [focusPost?.sequence]);
   useEffect(() => {
     const target = focusing.current;
     // Earlier effects may have started a request while this render still has loading=false.
-    if (!target || pendingFeedLoad.current || loading || more || platform !== '' || tag) return;
-    const card = document.getElementById(`social-post-${target.id}`);
+    if (!target || pendingFeedLoad.current || loading || more || target!==directPost) return;
+    const card = document.getElementById(`social-post-${target}`);
     if (card) { focusing.current = null; card.scrollIntoView({block: 'center'}); card.focus({preventScroll: true}); return; }
-    if (cursor && target.pages < FOCUS_PAGE_LIMIT) { target.pages += 1; void load('', cursor); return; }
-    focusing.current = null; setNotice('找不到這則貼文，可能已刪除或已不在近期動態中。');
-  }, [items, loading, more, cursor, platform, tag]);
+    focusing.current = null;
+  }, [items, loading, more, directPost]);
   useEffect(() => () => { ++loadSequence.current; }, []);
   useEffect(() => { if (composerOpen && !composer.current?.open) {composer.current?.showModal(); composer.current?.querySelector<HTMLTextAreaElement>('textarea:not(:disabled)')?.focus();} }, [composerOpen]);
   useEffect(() => { if (optionsOpen && !options.current?.open) options.current?.showModal(); }, [optionsOpen]);
@@ -214,12 +234,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     deleteTrigger.current?.focus({preventScroll: true});
   }
   function selectPlatform(next: string) {
+    if(directPost)clearDirectPost();
     if (selection.current.platform === next) return;
     selection.current = {...selection.current,platform: next, version: selection.current.version + 1};
     ++loadSequence.current;
     setPlatform(next);
   }
-  function selectTag(next:string){selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;setTag(next);}
+  function clearDirectPost(){
+    ++loadSequence.current;focusing.current=null;setDirectPost(null);setNotice('');
+    const location=new URL(window.location.href);location.searchParams.delete('social-post');window.history.replaceState(null,'',location);
+  }
+  function selectTag(next:string){if(directPost)clearDirectPost();selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;setTag(next);}
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
@@ -239,6 +264,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
       const created = await client.post<Post>('/social-posts/notes', {text: command.text,topic:command.topic,location_name:command.location_name,mention_ids:command.mention_ids, ...(command.image ? {image: command.image} : {})}, {idempotencyKey: command.key});
       newPosts.current = [created, ...newPosts.current.filter(post => post.post_id !== created.post_id)];
       const currentSelection = selection.current;
+      if(directPost&&currentSelection.version===selectedVersion)clearDirectPost();
       if ((currentSelection.platform === '' || currentSelection.platform === 'note')&&(!currentSelection.tag||created.tags?.includes(currentSelection.tag.toLocaleLowerCase()))) {
         setItems(current => [created, ...current.filter(post => post.post_id !== created.post_id)]);
       } else if (!currentSelection.tag&&currentSelection.version === selectedVersion) {
@@ -332,9 +358,9 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     finally { setSaving(false); }
   }
   return <section className="social-zone stack" aria-label="社群媒體分享專區" data-feed={platform || 'all'} aria-busy={loading||more}>
-    <div className="card social-composer-start" data-guide-anchor="social:composer">
+    <div ref={composerStart} className="card social-composer-start" data-guide-anchor="social:composer">
       <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/>
-        <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label="建立貼文" aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? '繼續確認剛才的貼文…' : text ? '繼續編輯你的貼文…' : '想分享什麼？'}</span><strong>＋發文</strong></button><button type="button" className="social-icon-button social-compose-camera" aria-label="新增照片貼文" title="新增照片貼文" onClick={()=>{openComposer();requestAnimationFrame(()=>composeInput.current?.click());}}><SocialIcon name="camera"/></button>
+        <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label="建立貼文" aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? '繼續確認剛才的貼文…' : text ? '繼續編輯你的貼文…' : '想分享什麼？'}</span></button>
       </div>
     </div>
     <dialog ref={composer} className="social-publish-dialog" aria-labelledby={composerId} onCancel={event => {if(event.target!==event.currentTarget)return;event.preventDefault(); closeComposer();}} onClose={() => setComposerOpen(false)}>
@@ -391,12 +417,12 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
     {notice && !linkOpen && <p className="social-feedback" role="status">{notice}</p>}
     {error && !linkOpen && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
-      <h2>{platform==='note'?'最新貼文':FILTERS.find(item=>item.id===platform)?.label}</h2>
-      <div><button type="button" className="social-feed-control" aria-label="更新動態" disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control" aria-label="動態選項" aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}>⋯</button></div>
+      <h2>{directPost?'這則貼文':platform==='note'?'最新貼文':FILTERS.find(item=>item.id===platform)?.label}</h2>
+      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label="更新動態" disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control" aria-label="動態選項" aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}>⋯</button></div>
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
-    {!loading && items.length === 0 && <p className="empty">{platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
+    {!loading && !error && items.length === 0 && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
     <div className="social-grid">
       {items.map(post => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
@@ -419,7 +445,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost}: {clie
           <SocialInteractions onTag={selectTag} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
-            {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="分享"/>}
+            {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
           </div>
         </div>
       </article>)}

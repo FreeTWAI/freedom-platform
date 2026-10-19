@@ -9,7 +9,7 @@
 | `member_card` | 會員自己的名片 | 名片點擊排行榜 | 已開放 |
 | `platform` | 自由工坊本身 | 平台推廣排行榜 | 已做 |
 | `skill_book` | 目錄技能書或已公開的社群技能書 | 技能推廣排行榜 | 已做 |
-| `social_post` | 社群分享區的一則外部連結貼文 | 社群推廣排行榜 | 已做；原生貼文不發公開推廣碼，可由本人確認後分享文字與照片到外站 |
+| `social_post` | 社群分享區的一則外部連結貼文 | 社群推廣排行榜 | 「推廣原文」沿用既有計分；一般「分享」傳送指定貼文連結，原生貼文不發公開推廣碼 |
 | `member_service` | 一項公開的社員服務 | 業務推廣排行榜 | 已做 |
 | `event` | 已公開的社群活動 | 活動推廣排行榜 | 已做 |
 
@@ -125,7 +125,7 @@ Production runtime 必須提供受限的 preview transport；缺少 transport �
 | `POST /api/v1/promotion/links` | 會員 | 取得或建立個人連結 |
 | `GET /api/v1/promotion/links/mine?period=` | 會員 | 自己的連結、各期間分數與 `available`；只讀 |
 | `GET /api/v1/promotion/leaderboards?period=` | 會員 | 六塊榜，`week`／`month`／`all` |
-| `GET /api/v1/social-posts` | 會員 | 同社群有效貼文，每頁 24；`kind=note/link`，外部平台篩選不混入原生貼文 |
+| `GET /api/v1/social-posts` | 會員 | 同社群有效貼文，每頁 24；`kind=note/link`，外部平台篩選不混入原生貼文；`post_id=<uuid>` 精確讀取指定貼文，沿用同一閱覽權限 |
 | `POST /api/v1/social-posts` | 會員 | 新增貼文，需 Idempotency-Key |
 | `POST /api/v1/social-posts/notes` | 會員 | `{text, image?, topic?, location_name?, mention_ids?}`，1–2,000 字；不取外部預覽。`image` 是 `{mime_type, data_base64}`，PNG／JPEG／WebP 傳輸檔 2 MB（2,097,152 bytes）以下，與文字同一個 command 發布；這條路由的 JSON 上限因此放寬到約 2.8 MB，其他 JSON 命令仍是 32 KiB |
 | `POST /api/v1/social-posts/:id/like` | 會員 | `{liked:boolean}`；設為讚／未讚，與推廣點擊分開 |
@@ -287,7 +287,9 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
   base64url 標記，原樣放進下一次 `cursor`，最後一頁為 `null`。時間取 PostgreSQL
   精確 UTC 微秒字串，不經 JavaScript Date 截成毫秒，避免同毫秒的按讚者重複或游標停滯；
   完全同時的按讚以 user ID 穩定排序。這不改可見性條件、每頁上限或顯示日期。
-- 每張貼文的分享對話框帶入原文，X／Instagram／Facebook／Threads 預設全選；照片由使用者選擇加入。沿用已存在的轉交／下載與逐平台本人確認流程，不自動冒充已在外站刊登，原生貼文與會員附圖也不因此成為公開網址。
+- 每張貼文的「分享」直接將 `/?social-post=<uuid>#social` 交給系統分享選單；沒有系統分享或操作失敗時，提供可複製／手動選取的貼文連結。取消系統分享不自動複製、不開發文器、不建立多平台工作或上傳照片。分享資料不自動夾帶原生正文或私人附圖。外部連結貼文另以「推廣原文」保留既有 `/go/` 計分入口。
+- 收件者登入後，以 `GET /social-posts?post_id=` 直接取得那篇有效貼文並聚焦，不再為定位舊貼文逐頁讀取，也不受近期頁數上限限制。這是同社群的既有會員讀面；匿名仍 401、跨社群／隱藏／刪除／不存在均不回內容，結尾 session clock 檢查不變。「回到動態牆」移除指定貼文參數並恢復一般動態。通知入口也共用精確定位。
+- 多平台發文仍從「建立貼文」的獨立 Social Post 入口由本人開啟，沿用平台選擇、轉交／下載與逐平台本人確認。一般貼文分享不會開啟此流程，也不因此公開原生貼文或會員附圖。
 
 新增會員路由：`POST /social-posts/:id/comment-images`、`GET /social-posts/:id/comments/:commentId/image`、`POST /social-posts/:id/comments/:commentId/like`。寫入沿用 session／CSRF／Origin 與 Idempotency-Key。上傳圖片綁定本人與目標貼文，只能附加至一則留言；斷線後沿用原上傳與留言 key。HTTP 二進位上限512 KiB，瀏覽器先縮圖；伺服器完整解碼並正規化為最長1920px、最多1 MiB WebP。格式限定靜態 PNG／JPEG／WebP。
 

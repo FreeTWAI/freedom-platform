@@ -91,7 +91,10 @@ function cursorOf(raw: string | undefined) {
   return { createdAt, id };
 }
 
-export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query: { platform?: string; cursor?: string; kind?: string; tag?:string }) {
+export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query: { platform?: string; cursor?: string; kind?: string; tag?:string; post_id?:string }) {
+  // Exact lookup shares the list's current member/community/state boundary.
+  // It does not turn a private note or its thumbnail into a public resource.
+  const postId=query.post_id===undefined?null:z.uuid().parse(query.post_id);
   const tag=query.tag ? z.string().regex(/^[\p{L}\p{N}_]{1,50}$/u).parse(query.tag).toLocaleLowerCase() : null;
   const platform = query.platform ?? '';
   requireCondition(platform === '' || (SOCIAL_PLATFORMS as readonly string[]).includes(platform), 422, 'validation_failed', '平台篩選不正確。');
@@ -104,7 +107,8 @@ export async function listSocialPosts(pool: Pool|PoolClient, actor: Actor, query
       AND ($6::text IS NULL OR p.kind=$6) AND ($7::text IS NULL OR p.tags @> ARRAY[$7::text])
       AND ($3::text[] IS NULL OR p.kind='link')
       AND ($4::timestamptz IS NULL OR (p.created_at,p.post_id)<($4::timestamptz,$5::uuid))
-    ORDER BY p.created_at DESC,p.post_id DESC LIMIT 25`, [actor.community_id, actor.user_id, platforms, cursor?.createdAt ?? null, cursor?.id ?? null, query.kind || null, tag])).rows as PostRow[];
+      AND ($8::uuid IS NULL OR p.post_id=$8)
+    ORDER BY p.created_at DESC,p.post_id DESC LIMIT 25`, [actor.community_id, actor.user_id, platforms, cursor?.createdAt ?? null, cursor?.id ?? null, query.kind || null, tag, postId])).rows as PostRow[];
   const page = rows.slice(0, 24).map(row => view(row, actor.user_id));
   const last = rows[23];
   return { items: page, next_cursor: rows.length > 24 && last ? Buffer.from(`${last.created_cursor}\n${last.post_id}`).toString('base64url') : null, can_hide: await canHideSocialPosts(pool, actor) };

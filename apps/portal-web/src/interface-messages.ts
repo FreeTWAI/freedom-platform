@@ -2,6 +2,15 @@
 // All supported languages must have the same keys. Member-authored content is
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
+  'sellerConsole.orders':["訂單", "Orders", "注文", "주문", "Pedidos"],
+  'sellerConsole.order':["訂單詳情", "Order details", "注文詳細", "주문 상세", "Detalles del pedido"],
+  'sellerConsole.reservations':["舊版預留", "Legacy reservations", "旧版の予約", "이전 예약", "Reservas anteriores"],
+  'sellerConsole.payments':["收款與對帳", "Payments and reconciliation", "入金と照合", "수금 및 대사", "Cobros y conciliación"],
+  'sellerConsole.case':["付款例外", "Payment exception", "支払い例外", "결제 예외", "Incidencia de pago"],
+  'sellerConsole.settings':["商店設定", "Store settings", "店舗設定", "매장 설정", "Configuración de la tienda"],
+  'sellerConsole.settings-payments':["收款設定", "Payment settings", "入金設定", "수금 설정", "Configuración de cobros"],
+  'sellerConsole.not-allowed':["沒有權限", "Access denied", "権限がありません", "권한 없음", "Sin permiso"],
+
   'supplierConsole.overview':["營運概覽", "Overview", "運営概要", "운영 개요", "Resumen"],
   'supplierConsole.products':["商品與庫存", "Products and stock", "商品と在庫", "상품 및 재고", "Productos e inventario"],
   'supplierConsole.product-new':["新增商品", "New product", "商品追加", "상품 추가", "Nuevo producto"],
@@ -12,6 +21,10 @@ export const interfaceMessages = {
   'supplierConsole.review':["審核售價申請", "Review price proposal", "販売価格の申請審査", "판매가 신청 검토", "Revisar propuesta de precio"],
   'supplierConsole.reservation':["預留明細", "Reservation details", "予約の詳細", "예약 상세", "Detalles de la reserva"],
   'supplierConsole.reservations':["預留與訂單", "Reservations and orders", "予約と注文", "예약 및 주문", "Reservas y pedidos"],
+  'supplierConsole.materials':["行銷素材", "Marketing materials", "マーケティング素材", "마케팅 자료", "Materiales de marketing"],
+  'supplierConsole.material-new':["新增素材", "New material", "素材追加", "자료 추가", "Nuevo material"],
+  'supplierConsole.material':["素材詳情", "Material details", "素材の詳細", "자료 상세", "Detalles del material"],
+  'supplierConsole.reports':["營運報表", "Operations report", "運営レポート", "운영 보고서", "Informe de operaciones"],
   'supplierConsole.settings':["設定與資料", "Settings and information", "設定と情報", "설정 및 정보", "Configuración e información"],
   'supplierConsole.not-found':["找不到這個頁面", "Page not found", "ページが見つかりません", "페이지를 찾을 수 없습니다", "Página no encontrada"],
   'action.copying':['複製中…','Copying…','コピー中…','복사 중…','Copiando…'],
