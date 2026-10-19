@@ -15494,8 +15494,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 86844,
-      "sha256": "1c8c1577171c6ce8c9cb5678486d8f990c0169d949279d2be257d6ff221a832a"
+      "bytes": 88554,
+      "sha256": "f5ce540b7a8929251d30f65a4361b7d82aed1be8e12759d36730d32a90223418"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -22894,8 +22894,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 50970,
-      "sha256": "982679dbe3dd72c14198e0b0185ea2054225eef6efd7772954212b609962395d"
+      "bytes": 53148,
+      "sha256": "f1579087161345897a2b0347e996a00833016d93cf10c0cd54335383d3283ea4"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
