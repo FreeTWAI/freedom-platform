@@ -10,10 +10,11 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
-## 2026-10-19 三項成果發布中
+## 2026-10-19 三項成果的程式發布完成
 
-**截至21:20 UTC，`10ad8d2d`／schema172 已部署 staging，限定驗收通過；
-production 仍為 `12940c71`，新一輪 after-backup 與日常 operator／timer 收尾尚待實際收據。**
+**截至21:51 UTC，staging 與 production 都已部署 `10ad8d2d`／schema172，
+各自限定驗收、before／after 備份與隔離還原通過；兩環境 operator 已綁定本次來源，
+兩個原 timer 已恢復 active／enabled。這是程式發布完成，真人產品旅程仍待驗收。**
 這次來源包含 #910 的公會局部 CI、店面品牌呈現、作品介紹與清楚目的地的分享頁，
 另含公開資料隱私修正。沒有 migration；旗標、路由與 cron 未改，
 Supplier／Commerce console 保持開啟，checkout／交易 Email 保持關閉。
@@ -24,10 +25,19 @@ Staging 的自有合成普通會員已完成店主／供應商桌面與手機後
 Session、公開與普通會員 fixture、臨時 Access 清理各有收據。
 分享計分與外部請求使用攔截驗證，沒有建立訂單，也不宣稱真實採用或真人交易完成。
 
+Production 完成公開唯讀 health、版本／旗標、protocol、首頁、匿名拒絕及介紹／店面／分享資產核對，
+沒有登入正式會員或建立訂單。21:37 的唯讀盤點為1個店面且已啟用，但獨立准入、離線付款設定、
+交付設定各為0；這些仍由店主沿既有流程完成，不能以部署成功代替可交易。
+兩環境新備份分別還原66個物件／142089 bytes與48個物件／629894 bytes，172 floor與清理通過，
+production另核對素材政策及10項座標約束。日常 dispatcher 為`999e640b`，原排程未改；
+下次排程為10月20日03:30:31 UTC（staging）及04:31:38 UTC（production）。
+新 wrapper 的自然執行尚未觀察，不能以手動還原或 timer恢復代替。
+
 原驗收在 producer 檢查後累積3個 supplier error，被 finalizer拒絕；其原因未在原收據記錄。
 後續三次失敗保留。新的獨立 recheck 補齊實際商品載入等待及手機隱藏導覽的 owner存在判斷，
 最後才通過整體驗收，沒有放寬 error gate或改動本次產品來源。
-#911 已另於21:16 UTC合併為 `240cf677`，不包含在本次 `10ad8d2d` 發布。
+#911 已另於21:16 UTC合併為 `240cf677`，不包含在本次 `10ad8d2d` 發布；
+截至21:51 UTC，其主線 Verify仍在執行。
 真人會員設定、獨立准入、買家交易及兩位非核心公會作者自主交付仍需各自驗收。
 
 ## 2026-10-19 會員商務後台啟用（前一輪完成紀錄）
