@@ -15499,8 +15499,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 32339,
-      "sha256": "4a53f570ac94cc3e16439baf09418e14d0e14b2cbacb91eb8dfa398160c5c6b4"
+      "bytes": 34881,
+      "sha256": "3acf68305c8615eb91eaed49ecba3ce9aeb632334f187a6b3896280f45f19084"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -15984,8 +15984,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/closeout.md",
-      "bytes": 92660,
-      "sha256": "f7bbbf62bf07b75b3fd9a81cb03d7550dc54dcad5a81b9c95e9dcf433f956c58"
+      "bytes": 101272,
+      "sha256": "707f4b4f27c89045dda12f9c81c09f881ddda6957f892207d2bf16f195f86057"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/composition-evidence-2026-10-05.json",
@@ -16004,8 +16004,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/current-state.json",
-      "bytes": 192984,
-      "sha256": "425c5936df01b780946d6ffa2a4295251f74176369fe41e3f1ae9f4535b771b8"
+      "bytes": 245164,
+      "sha256": "b400f14d926ffb62000949eafc4dd3c5a70f474676f305933b7df7a74d6b2e51"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/daily-snapshot-pins-evidence-2026-10-05.json",
@@ -16133,6 +16133,16 @@
       "sha256": "8fcceaaa0397572c4cc45ab0630378908174e9d080b9af9ff9f851c05c4f6870"
     },
     {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
+      "bytes": 25817,
+      "sha256": "cea304096119c37d7614a94a3b831acf1fb0c0ab257cefdc3716e5a60cfe99df"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-merchant-readiness-2026-10-19.json",
+      "bytes": 27666,
+      "sha256": "8621955508700e28ce8697d21585b277863f9e683504d2c5281c33a9d66354b5"
+    },
+    {
       "path": "docs/platform-plan/execution/unified-foundation/rollout-r15-2026-10-10.json",
       "bytes": 12748,
       "sha256": "d878d75b52023f3fa4286443bb719fac16a8d862992f9f07ae78908b8a7111ec"
@@ -16186,6 +16196,11 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-security-2026-10-14.json",
       "bytes": 77522,
       "sha256": "91de5a2e52a634a3da870bf01913c91fe3765faf52ce1d42242db4753380c391"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "bytes": 25112,
+      "sha256": "3ebb9bdf353d8dcbfe5e27732ec6218276e8b7fcb48209d5a050b64a128c2235"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/shop-key-expiry-evidence-2026-10-05.json",
