@@ -67,6 +67,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
+      - name: Install the pinned selector parsers without lifecycle scripts
+        working-directory: trusted-selector
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Select affected jobs
         id: decision
         env:
