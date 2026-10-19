@@ -6,7 +6,15 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=d39370a17d1d1d6af2507acd9ee7b592ff221a21 release.staging=d39370a17d1d1d6af2507acd9ee7b592ff221a21 flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=171 applied_migration.staging=171 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=10ad8d2d9db105fbc102a24481fda52140182c0f release.staging=10ad8d2d9db105fbc102a24481fda52140182c0f flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至 2026-10-19 21:51:02.819573 UTC，staging 與 production 已完成 `10ad8d2d`／schema172 發布，Supplier／Commerce console 已開啟，checkout／email 仍 OFF。Staging 的自有合成會員在桌面與手機完成供應商／商店後台及公開頁面限定驗收；production 只做公開唯讀檢查，未執行真人會員登入或訂單交易。兩環境發布前後備份均完成隔離資料庫＋物件還原與清理；dispatcher 已綁定 `10ad8d2d`，兩個原 timer 已恢復 active／enabled，尚未觀察新 operator 的自然排程。失敗驗收與修正後通過的證據分開保留，詳見[三項成果發布收據](../unified-foundation/rollout-three-outcomes-2026-10-19.json)與[現況快照](../unified-foundation/current-state.json)。
+
+`as_of=2026-10-12` 仍是公會功能、flag 與政策列的原觀察日期；本次發布不代表 M1／完整計畫或真人易用性已接受。店主實際付款／交付設定、准入及真人會員旅程仍待完成；兩位非核心公會作者自主交付也未驗收。較新 main `240cf677` 不包含在這份 `10ad8d2d` 發布收據中，其他歷史未完成項保留原狀態，不新增為這輪三項成果的發布前置。
+
+### 2026-10-17 歷史發布
+
+以下原文保留當時觀察；最新具日期的部署狀態以上方為準。
 
 截至 2026-10-17 16:42:32.826 UTC，staging 與 production 已部署買家流程版本 `d39370a1`，schema171／170 筆 canonical ledger。#863 的 schema168–170 與 #875 買家流程已依序發布；本輪兩環境部署前後四組資料庫＋物件備份完成遠端讀回、完整隔離還原、保留 floor 與清理。Staging 完成自有合成會員的限定 session／browser 驗收；production 只做公開唯讀驗收，未執行會員登入或 GitHub OAuth。新 daily operator 已安裝，兩個原 timer 已恢復；新 operator 的自然排程尚未觀察。Commerce console／checkout／email仍 OFF，原失敗與後續處置分開保留。詳見[本輪部署收據](../unified-foundation/rollout-commerce-buyer-2026-10-17.json)與[現況快照](../unified-foundation/current-state.json)。
 
