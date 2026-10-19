@@ -10,7 +10,27 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
-## 2026-10-19 會員商務後台啟用
+## 2026-10-19 三項成果發布中
+
+**截至21:20 UTC，`10ad8d2d`／schema172 已部署 staging，限定驗收通過；
+production 仍為 `12940c71`，新一輪 after-backup 與日常 operator／timer 收尾尚待實際收據。**
+這次來源包含 #910 的公會局部 CI、店面品牌呈現、作品介紹與清楚目的地的分享頁，
+另含公開資料隱私修正。沒有 migration；旗標、路由與 cron 未改，
+Supplier／Commerce console 保持開啟，checkout／交易 Email 保持關閉。
+分環境狀態見[本輪發布紀錄](rollout-three-outcomes-2026-10-19.json)。
+
+Staging 的自有合成普通會員已完成店主／供應商桌面與手機後台，兩者 transport error為零，
+匿名 API 拒絕、公開書架、品牌店面、明示目的地的手動外連及撤下後隱藏均通過。
+Session、公開與普通會員 fixture、臨時 Access 清理各有收據。
+分享計分與外部請求使用攔截驗證，沒有建立訂單，也不宣稱真實採用或真人交易完成。
+
+原驗收在 producer 檢查後累積3個 supplier error，被 finalizer拒絕；其原因未在原收據記錄。
+後續三次失敗保留。新的獨立 recheck 補齊實際商品載入等待及手機隱藏導覽的 owner存在判斷，
+最後才通過整體驗收，沒有放寬 error gate或改動本次產品來源。
+#911 已另於21:16 UTC合併為 `240cf677`，不包含在本次 `10ad8d2d` 發布。
+真人會員設定、獨立准入、買家交易及兩位非核心公會作者自主交付仍需各自驗收。
+
+## 2026-10-19 會員商務後台啟用（前一輪完成紀錄）
 
 **截至18:04 UTC，staging 與 production 都已部署 `12940c71`／schema172，
 Supplier 與 Commerce console 已開啟；checkout 與交易 Email 仍關閉。**
@@ -42,12 +62,13 @@ Schema 證據使用各次成功備份的 authenticated preflight時間窗，還�
 本輪繼續以公會自主交付、可信商店／供貨、專業介紹／分享三個成果收尾。
 包含 #901、#906–#909 的整合 PR
 [#910](https://github.com/FreeTWAI/freedom-platform/pull/910) 已於19:31 UTC合併為
-`main@10ad8d2d`（tree `919f8e86`）。截至19:32 UTC的觀察，該主線
+`main@10ad8d2d`（tree `919f8e86`）。截至20:22 UTC的觀察，該主線
 [Verify 39311717186](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311717186)
 與 [CodeQL 39311715398](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311715398)
-仍在執行，不能把 PR 的合併與檢查當成新主線 CI 通過或已部署。
+已分別完成17及3個 jobs，全部通過；完整 run 與 jobs 收據綁定同一主線來源。
+這是合併後主線的 CI 證據，不代替部署、公開資產或會員驗收；原 PR 失敗紀錄保留。
 店面、介紹、分享與公會改動不包含在本次 `12940c71` 發布。
-下一步完成該主線驗證，另以實際版本、公開資產與清理後證據驗收並發布；
+下一步以實際版本、公開資產與清理後證據完成新一輪驗收及發布；
 新部署另寫收據，不改寫本次紀錄。會員設定與適用交易驗收沿既有有限商務交接繼續，
 不新增第四條工作線，也不把後台啟用稱為完整電商或 Foundation完成。
 

@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-19T19:45:43.075545+00:00",
+  "recorded_at": "2026-10-19T21:23:57.348964+00:00",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -16,8 +16,8 @@
     "repository": "FreeTWAI/freedom-platform",
     "sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
     "tree": "919f8e866315562a9a6f992e191a45d6b8340f96",
-    "observed_at": "2026-10-19T19:32:33.960111+00:00",
-    "observation_kind": "Exact merged source object checked locally against the dated GitHub merge observation; main CI remains pending in that observation. Runtime deployment evidence is recorded separately.",
+    "observed_at": "2026-10-19T20:22:28.127987+00:00",
+    "observation_kind": "Exact merged source object checked locally against the dated GitHub merge observation; its own completed main Verify and CodeQL run/job records now pass. Runtime deployment evidence is recorded separately.",
     "runtime_release_source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
     "release_source_verify": {
       "conclusion": "success",
@@ -29,24 +29,28 @@
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-19T19:32:33.960111+00:00",
+      "observed_at": "2026-10-19T20:22:28.127987+00:00",
       "main": "10ad8d2d9db105fbc102a24481fda52140182c0f",
       "main_tree": "919f8e866315562a9a6f992e191a45d6b8340f96",
       "main_pr": 910,
       "main_merged_at": "2026-10-19T19:31:32Z",
       "integrated_head": "dcc71644816aaa1c5751538b7abce672a29d6a5c",
       "main_verify_run": 39311717186,
-      "main_verify_last_reported_status": "in_progress",
+      "main_verify_last_reported_status": "completed",
       "main_codeql_run": 39311715398,
-      "main_codeql_last_reported_status": "in_progress",
-      "main_ci_complete": false,
+      "main_codeql_last_reported_status": "completed",
+      "main_ci_complete": true,
       "pr_verify_run": 39306102349,
       "pr_codeql_run": 39306094330,
       "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/910",
       "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39311717186",
       "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39311715398",
       "deployed_by_existing_receipt": false,
-      "limitation": "PR merge and its checks do not establish passing CI on the new main, deployment, public asset delivery or member acceptance. The existing rollout still records only 12940c71; a later actual release needs separate source-bound evidence."
+      "limitation": "Exact merged-main Verify and CodeQL passed. CI does not establish deployment, public asset delivery or member acceptance. The existing rollout receipt still records only 12940c71; a later actual release needs separate source-bound evidence. Original failed PR runs retain their failed conclusions.",
+      "main_verify_conclusion": "success",
+      "main_verify_successful_job_count": 17,
+      "main_codeql_conclusion": "success",
+      "main_codeql_successful_job_count": 3
     },
     "limitation": "Merged main 10ad8d2d is not deployed by the existing 12940c71 rollout receipt. All 168 original Foundation requirements, T-047 current-authority reconciliation, human usability and second-operator recovery remain open where previously unverified.",
     "migrations_beyond_observed_runtime": [],
@@ -79,6 +83,17 @@
         "limitation": "These are dated source/review observations, not runtime or acceptance evidence. This rollout only deploys the selected 12940c71 source."
       },
       "limitation": "Historical observation retained unchanged. The b6d4ccd7 candidate is not the final merged head, and the then-running Verify is not promoted to a pass."
+    },
+    "runtime_release_source_scope": "Last completed two-environment rollout remains 12940c71; the separately recorded in-progress staging release is 10ad8d2d.",
+    "newer_main_observation": {
+      "observed_at": "2026-10-19T21:18:57.279786+00:00",
+      "sha": "240cf677e892f6f20306089c75c34fa914597960",
+      "pr": 911,
+      "merged_at": "2026-10-19T21:16:54Z",
+      "head": "e75b7fa5279122f942f88732ee203b7d535d4a0a",
+      "receipt_sha256": "c415ceef7eba2f72a47a241ed7dcadffd19f9a85686ac63ef070e6c19aa190b1",
+      "included_in_this_release": false,
+      "limitation": "Separate newer merged source; its code, CI and acceptance are not part of the selected 10ad release."
     }
   },
   "deployment": {
@@ -110,29 +125,30 @@
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
-      "observed_at": "2026-10-19T18:04:18.481Z",
+      "observed_release_sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+      "observed_at": "2026-10-19T21:20:58.601Z",
       "health": {
         "http": 200,
         "status": "ok",
         "mode": "staging",
         "runtime": "cloudflare-workers",
-        "release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+        "release_sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
         "cache_control_no_store": true
       },
-      "worker_version": "b8d00827-76f8-4a2b-9160-0d54afb10d59",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
-      "status": "deployed_console_enablement_restore_and_operator_passed",
+      "worker_version": "81c86154-248d-4dcc-8bd7-e9e4e8f82857",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "status": "deployed_and_scoped_acceptance_passed_after_backup_not_yet_evidenced",
       "last_operator_release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
-      "limitation": "Supplier and Commerce consoles are ON; checkout and transactional email remain OFF. Staging uses owned synthetic ordinary-member console access/readability acceptance; production acceptance is public read-only HTTP. No human usability, payment, bank verification or complete supplier fulfilment is claimed. New operator natural scheduled execution is not yet observed.",
-      "health_observation": "Passing staging browser acceptance separately checked HTTP200, exact-release health and staging mode before ordinary-member desktop/mobile console checks; the deployment receipt records HTML and no-store health. The later read-only Worker binding observation verifies active version/flags/routes and is not a fresh HTTP health check.",
-      "worker_binding_observed_at": "2026-10-19T18:04:18.481Z",
-      "health_observed_at": "2026-10-19T17:01:17.725Z",
+      "limitation": "Source 10ad passed owned synthetic normal-member console and public-page staging acceptance; original failures remain preserved. Checkout/email stay OFF; after-backup and new daily-operator transition are not yet evidenced. No human usability or real transaction acceptance.",
+      "health_observation": "Deployment receipt checked exact-source health; the latest source-bound public-phase health check is separately timestamped. Aggregate acceptance completion is not a fresh health or Worker binding read.",
+      "worker_binding_observed_at": null,
+      "health_observed_at": "2026-10-19T21:18:51.768Z",
       "health_observed_between": {
-        "start": "2026-10-19T17:00:56.152Z",
-        "end": "2026-10-19T17:01:17.725Z"
+        "start": "2026-10-19T21:18:51.357Z",
+        "end": "2026-10-19T21:18:55.651Z"
       },
-      "health_observed_at_basis": "Completion time of the passing acceptance receipt; the health response has no separate timestamp and was checked within the recorded window."
+      "health_observed_at_basis": "Explicit health_observed_at in the withdrawn public-phase receipt.",
+      "worker_binding_observed_at_basis": "The actual deployment receipt establishes Worker version and traffic but has no per-binding timestamp; the aggregate completion time is not substituted."
     },
     "last_operator_rollout": {
       "source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
@@ -876,6 +892,18 @@
         "production": "cbf1f3a8-806b-4d5d-bc1d-1c4b71d3484e"
       },
       "limitation": "Live staging acceptance uses one newly registered synthetic member through the normal UI at 1440 and 390 widths; its synthetic events are cancelled, sessions revoked and account deactivated. Nothing is published and this is not a human usability test."
+    },
+    "in_progress_rollout": {
+      "source": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+      "status": "staging_deployed_and_scoped_acceptance_passed_production_pending",
+      "evidence_cutoff_at": "2026-10-19T21:20:58.601Z",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "receipt_sha256": "9193c3817e97e1b9ea2228f30af70e3efac802c35cbcdc155d486ce7eaa5be4a",
+      "staging_acceptance": "passed_owned_synthetic_only",
+      "production": "new_source_not_yet_evidenced",
+      "after_backups": "not_yet_evidenced",
+      "operator_and_timers": "new_transition_not_yet_evidenced",
+      "limitation": "Historical completed 12940 rollout and deployment.last_operator_rollout remain separate; no aggregate full-rollout success claimed."
     }
   },
   "schema": {
@@ -1224,7 +1252,7 @@
         "acceptance": "Owned synthetic normal-member seller/supplier login, assigned scope and desktop/mobile console visibility passed on staging; production public read-only HTTP passed. Fixtures, sessions and temporary staging Access cleaned.",
         "human_acceptance": false,
         "real_transaction_acceptance": false,
-        "next": "Use the existing finite commerce activation handoff for owner settings and independent admission; finish real supplier/store/member journeys. #910 is merged as main 10ad8d2d; await exact-main CI and separately evidenced staging/production deployment and acceptance of its guild, storefront, introduction and sharing changes.",
+        "next": "Use the existing finite commerce activation handoff for owner settings and independent admission; finish real supplier/store/member journeys. #910 is merged as main 10ad8d2d; its own Verify and CodeQL passed. Complete separately evidenced staging/production deployment and acceptance of its guild, storefront, introduction and sharing changes.",
         "limitation": "Supplier and Commerce consoles are ON; checkout and transactional email remain OFF. Staging uses owned synthetic ordinary-member console access/readability acceptance; production acceptance is public read-only HTTP. No human usability, payment, bank verification or complete supplier fulfilment is claimed. New operator natural scheduled execution is not yet observed."
       }
     },

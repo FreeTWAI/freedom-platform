@@ -15984,8 +15984,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/closeout.md",
-      "bytes": 95978,
-      "sha256": "f6e747b5e07d9ac5e960c981d1236872f023fa436308b168fe272f8649857060"
+      "bytes": 97666,
+      "sha256": "a5e804394107c31cffb37079995ff8130f65af8a8b59618622a7498dea798665"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/composition-evidence-2026-10-05.json",
@@ -16004,8 +16004,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/current-state.json",
-      "bytes": 228837,
-      "sha256": "c7753cfc177fc5d28fa28c9ce556c94b9b21c5a6ea01a9f56f8353d7066598b1"
+      "bytes": 230498,
+      "sha256": "15f4f6a9d7ffbed8ce268dfa7057ef7618084150b9015a8b26ce3b050a19d40a"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/daily-snapshot-pins-evidence-2026-10-05.json",
@@ -16191,6 +16191,11 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-security-2026-10-14.json",
       "bytes": 77522,
       "sha256": "91de5a2e52a634a3da870bf01913c91fe3765faf52ce1d42242db4753380c391"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "bytes": 14660,
+      "sha256": "9193c3817e97e1b9ea2228f30af70e3efac802c35cbcdc155d486ce7eaa5be4a"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/shop-key-expiry-evidence-2026-10-05.json",
