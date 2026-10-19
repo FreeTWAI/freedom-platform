@@ -789,8 +789,8 @@
     },
     {
       "path": "apps/portal-web/public/go.js",
-      "bytes": 1230,
-      "sha256": "96d7ee449be8e9855258364f4d61914cab4bb1002ee781c59f97c464b83eac5f"
+      "bytes": 1464,
+      "sha256": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644"
     },
     {
       "path": "apps/portal-web/public/manifest.webmanifest",
@@ -22764,8 +22764,8 @@
     },
     {
       "path": "tests/e2e/share-promotion.spec.ts",
-      "bytes": 39940,
-      "sha256": "0ebc9a15932668f50e94b77a9e970a8a7afcbec0f1fd8e811b843e994d18c9fa"
+      "bytes": 42339,
+      "sha256": "a4dd2f1552499ee46a47f7dd7f92e359071dc1770ecef2a1cf029d2d454f8532"
     },
     {
       "path": "tests/e2e/shared-feedback-language.spec.ts",

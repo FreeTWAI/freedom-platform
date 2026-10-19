@@ -654,3 +654,43 @@ test('share destination shows the external address until an explicit action, wor
     await noScript.close();
   } finally { await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id=$1', [postId]); }
 });
+
+test('share destination rejects tampered executable and off-origin DOM targets and preserves replacement history', async ({ page, browser, baseURL }) => {
+  const link = await destinationLink(page, 'skill_book', 'book:social-post');
+  const go = baseURL + link.path;
+  // Bypass CSP only in this adversarial fixture, so a broken URL guard cannot hide behind CSP.
+  const context = await browser.newContext({ bypassCSP: true });
+  let target = '';
+  await context.route(go, async route => {
+    const response = await route.fetch();
+    const escaped = target.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    const html = (await response.text()).replace(/data-target="[^"]*"/, `data-target="${escaped}"`);
+    await route.fulfill({ response, body: html });
+  });
+  await context.route('**/api/v1/promotion/clicks', route => route.fulfill({ json: { ok: true } }));
+  await context.route('https://outside.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Unexpected external navigation</h1>' }));
+  const visitor = await context.newPage();
+  try {
+    for (const unsafe of [
+      "javascript:document.documentElement.dataset.executed='yes'",
+      "data:text/html,<script>document.documentElement.dataset.executed='yes'</script>",
+      '//outside.example/work', '/\\outside.example/work', '/\n/outside.example/work',
+      'https://outside.example/work', baseURL + '/development/skills/social-post',
+    ]) {
+      target = unsafe;
+      const counted = visitor.waitForResponse(response => response.url().endsWith('/api/v1/promotion/clicks'));
+      await visitor.goto(go);
+      await counted;
+      await expect(visitor).toHaveURL(go);
+      await expect(visitor.locator('html')).not.toHaveAttribute('data-executed', 'yes');
+      await expect(visitor.getByRole('link', { name: '開啟站內內容', exact: true })).toHaveAttribute('href', '/development/skills/social-post');
+    }
+    const previous = baseURL + '/development/skills/social-post?intro=1';
+    await visitor.goto(previous);
+    target = '/development/skills/../skills/social-post?intro=2';
+    await visitor.goto(go, { waitUntil: 'commit' });
+    await expect(visitor).toHaveURL(baseURL + '/development/skills/social-post?intro=2');
+    await visitor.goBack();
+    await expect(visitor).toHaveURL(previous);
+  } finally { await context.close(); }
+});
