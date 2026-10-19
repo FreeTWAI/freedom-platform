@@ -1,10 +1,7 @@
 import { escapeHtml } from '../../../packages/shared/html.js';
-import {storefrontHeader, storefrontFooter} from '../hosted/storefront-shell.js';
+import {storefrontHeader, storefrontFooter, type StorefrontHeading} from '../hosted/storefront-shell.js';
 
-export interface StorefrontStoreHeading {
-  slug: string;
-  name: string;
-}
+export type StorefrontStoreHeading = StorefrontHeading;
 
 function storefrontShell(store: StorefrontStoreHeading, title: string, content: string, includeScript = false): string {
   const script = includeScript ? '<script type="module" src="/assets/storefront.js"></script>' : '';

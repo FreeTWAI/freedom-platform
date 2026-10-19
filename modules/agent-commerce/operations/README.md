@@ -5,16 +5,19 @@ exact `true`/`false`. FREEDOM_COMMERCE_CONSOLE_ENABLED=true requires
 FREEDOM_GUILD_LAUNCHPAD_ENABLED=true; checkout=true requires console=true. The
 parser always sets consoleEnabled; its optional type keeps older fixtures
 compatible, and absence is off. Worker/deployment readiness applies the same
-commerce_launchpad_required, commerce_supplier_console_required (console=true
-also requires FREEDOM_SUPPLIER_CONSOLE_ENABLED=true, whose shell hosts the seller
-pages) and commerce_console_required dependency errors. `providerProfiles` is empty
-unless `FREEDOM_COMMERCE_PROVIDER_PROFILES` lists implemented IDs, comma-separated
-without whitespace, empty entries or duplicates. Only `ecpay.aio.credit.v1` is
-implemented. Invalid configuration fails readiness with a fixed value-free code.
-A nonempty Worker list requires a usable credential keyring and COMMERCE_JOURNAL
-R2 binding; `FREEDOM_COMMERCE_EMAIL_ENABLED='true'` requires the Worker `EMAIL`
-(`send_email`) binding and COMMERCE_JOURNAL. Node refuses both a nonempty profile
-list and `emailEnabled` (`commerce_email_requires_worker`) because it has no
+commerce_launchpad_required and commerce_console_required dependency errors.
+Seller and supplier pages share the hosted-ui ConsoleShell component, but their
+activation flags are independent. Supplier console may remain off during an
+own-stock offline checkout trial; its routes and site flag stay off.
+`providerProfiles` is empty unless `FREEDOM_COMMERCE_PROVIDER_PROFILES` lists implemented IDs, comma-separated
+without whitespace, empty entries or duplicates. `ecpay.aio.credit.v1`,
+`offline.bank_transfer.v1` and `offline.cash_on_meetup.v1` are implemented. Invalid
+configuration fails readiness with a fixed value-free code.
+A Worker list containing `ecpay.*` requires a usable credential keyring and
+COMMERCE_JOURNAL R2 binding; offline-only profiles need neither.
+`FREEDOM_COMMERCE_EMAIL_ENABLED='true'` requires the Worker `EMAIL`
+(`send_email`) binding and COMMERCE_JOURNAL. Node refuses both an `ecpay.*` profile
+and `emailEnabled` (`commerce_email_requires_worker`) because it has no
 journal or email binding. Only the local E2E host installs memory storage, a
 fixture gateway and `FixtureEmailSender`.
 

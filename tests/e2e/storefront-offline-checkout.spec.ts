@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {test, expect, type BrowserContext, type Page, type Route} from './fixtures.js';
 import {setupCartFixtureStore, assertCartResponsiveLayout} from './storefront-cart-fixture.js';
+import {storeArea} from './hosted-store-fixture.js';
 import {apiLogin, buyerLogin, member, ownedSchema} from './hosted-order-fixture.js';
 import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transaction.js';
 import {CheckoutResponseSchema, PlaceOrderResponseSchema, PublicOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
@@ -368,14 +369,18 @@ async function sellerScreens(page:Page,output:(width:number)=>string){
  }
 }
 
-test('ordinary seller UI configures bank/cash meetup, preserves unknown commands, confirms and hands over to a returning buyer',async({browser,e2eAuthPool},info)=>{
+test('with supplier console OFF, a merchant publishes public service information, configures bank/cash meetup and fulfils orders for a returning buyer',async({browser,e2eAuthPool},info)=>{
  test.setTimeout(120000);
- const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,false);
  const seller=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
  seller.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
  try{
   const sp=await seller.newPage(),bp=await buyer.newPage(),person=await member(e2eAuthPool);
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
+  expect(await (await seller.request.get('/api/v1/site')).json()).toMatchObject({commerce_console_enabled:true,commerce_checkout_enabled:true,supplier_console_enabled:false});
+  const supplierResponse=await seller.request.get(`/api/v1/tenants/${store.tenant}/storefronts/${store.instance}/supplier-console/overview`);
+  expect(supplierResponse.status()).toBe(404);
+  expect((await supplierResponse.json()).code).toBe('not_found');
   const settingsRequests:{key:string;body:string|null;version:string|undefined}[]=[];
   await sp.route('**/offline-payment-settings',async route=>{
    if(route.request().method()!=='PUT'){await route.continue();return;}
@@ -401,8 +406,33 @@ test('ordinary seller UI configures bank/cash meetup, preserves unknown commands
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
   await expect(sp.getByText('000000123456',{exact:true})).toBeVisible();
   await expect(sp.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  // The same merchant can reach the existing publication flow from the seller console.
+  await sp.setViewportSize({width:1280,height:900});
+  await sp.getByRole('link',{name:'商店首頁',exact:true}).click();
+  await storeArea(sp,'商店資料');
+  const description='合成商店，僅供本機操作驗證。\n客服：shop@example.test，由合成店主處理。\n付款與交付：銀行匯款或面交現金，先聯絡約定面交時間。\n取消與售後：請提供訂單編號聯絡店主。';
+  const storeForm=sp.getByRole('form',{name:'商店資料',exact:true});
+  await storeForm.getByRole('textbox',{name:'商店介紹',exact:true}).fill(description);
+  await storeForm.getByRole('button',{name:'儲存商店資料',exact:true}).click();
+  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+  await bp.goto(`/shops/${store.slug}`);
+  await expect(bp.locator('body')).not.toContainText('shop@example.test');
+  await storeArea(sp,'店面與發布');
+  await sp.getByRole('button',{name:'發布更新',exact:true}).click();
+  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 2 版');
+  await bp.setViewportSize({width:390,height:844});
+  for(const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access']){
+   await bp.goto(`/shops/${store.slug}${path}`);
+   await bp.getByRole('navigation',{name:'商店導覽',exact:true}).getByRole('link',{name:'商店說明',exact:true}).click();
+   await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
+   await expect(bp.locator('body')).not.toContainText('000000123456');
+   expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  await bp.screenshot({path:info.outputPath('merchant-public-information-390.png'),fullPage:true});
   await buyerLogin(bp,person.email,'',store.origin);
   await start(bp,store);await freeze(bp,store);const bank=await place(bp,'銀行匯款');
+  await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
+  await expect(bp.locator('body')).toContainText('000000123456');
   await sellerOrder(sp,store,bank);
   await expect(sp.getByText('下單時選擇：銀行匯款',{exact:true})).toBeVisible();
   await sellerScreens(sp,width=>info.outputPath(`seller-bank-confirm-form-${width}.png`));
