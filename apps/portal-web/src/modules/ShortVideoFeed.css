@@ -33,3 +33,12 @@
 .short-video-feed.is-full .short-video-caption { padding-bottom: max(0.9rem, env(safe-area-inset-bottom)); }
 .short-video-close { position: absolute; top: max(0.6rem, env(safe-area-inset-top)); left: max(0.6rem, env(safe-area-inset-left)); z-index: 1; width: 44px; height: 44px; border: 0; border-radius: 50%; color: #fff; background: rgb(0 0 0 / 0.5); backdrop-filter: blur(4px); font-size: 1.1rem; cursor: pointer; }
 .short-video-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Until the list is confirmed current the player is hidden and silent. */
+.short-video-slide.is-unconfirmed iframe { visibility: hidden; }
+.short-video-status { padding: 0.6rem 1rem; border-radius: 12px; color: #fff; background: rgb(0 0 0 / 0.65); font-size: 0.95rem; text-align: center; }
+.short-video-manage { justify-self: start; min-height: 44px; padding: 0 0.9rem; border: 1px solid rgb(255 255 255 / 0.6); border-radius: 22px; color: #fff; background: rgb(0 0 0 / 0.45); font-size: 0.9rem; cursor: pointer; pointer-events: auto; }
+.short-video-manage:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.short-video-post-dialog { width: min(92vw, 520px); max-height: 85dvh; padding: 0; border: 0; border-radius: 16px; overflow: auto; }
+.short-video-post-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.short-video-post-dialog-close { display: block; margin: 0.6rem 0.6rem 0 auto; min-height: 44px; }

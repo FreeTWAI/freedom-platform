@@ -24,8 +24,8 @@ export function playerCommand(func: PlayerCommand) {
 }
 
 /**
- * A vertical (9:16) video, judged by the address alone: YouTube Shorts live under youtube.com/shorts/<id>.
- * Watch, youtu.be and embed links can be any shape, so they never qualify. The address is not fetched.
+ * A link in the Shorts address form (youtube.com/shorts/<id>). This is a URL classification only: the video's aspect
+ * ratio is not checked or claimed. Watch, youtu.be and embed links never qualify. The address is not fetched.
  */
 export function isShortsLink(url: string | null | undefined): boolean {
   if (!url || !youtubeVideoId(url)) return false;
@@ -34,7 +34,7 @@ export function isShortsLink(url: string | null | undefined): boolean {
   return (host === 'youtube.com' || host.endsWith('.youtube.com')) && parsed.pathname.split('/').filter(Boolean)[0] === 'shorts';
 }
 
-/** Link posts that carry a vertical YouTube Short, newest first as given, one slide per video. */
+/** Link posts whose address is in the YouTube Shorts form, newest first as given, one slide per video. */
 export function playableShortVideos<T extends ShortVideoSource>(posts: readonly T[]): T[] {
   const seen = new Set<string>();
   return posts.filter(post => {

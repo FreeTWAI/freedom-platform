@@ -135,6 +135,13 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const optimization=useSyncExternalStore(optimizationJob.subscribe,optimizationJob.snapshot,optimizationJob.snapshot);
   const [originalDraft,setOriginalDraft]=useState<{before:string;after:string}|null>(null);
   const pending = useRef<{text: string; topic?:string;location_name?:string;mention_ids?:string[]; key: string; image?: {mime_type: string; data_base64: string}} | null>(null);
+  const [shortPostId, setShortPostId] = useState<string | null>(null);
+  const shortPost = platform === 'shorts' ? items.find(item => item.post_id === shortPostId) : undefined;
+  const shortDialog = useRef<HTMLDialogElement>(null);
+  const shortTrigger = useRef<HTMLElement | null>(null);
+  // The card lives in a dialog opened from a slide; withdrawing or hiding the post removes it from `items`, which closes the dialog.
+  useEffect(() => { if (shortPost && !shortDialog.current?.open) shortDialog.current?.showModal(); }, [shortPost]);
+  useEffect(() => { if (!shortPost && shortTrigger.current) { const back = shortTrigger.current; shortTrigger.current = null; if (back.isConnected) back.focus(); else document.querySelector<HTMLElement>('.short-video-scroller')?.focus(); } }, [shortPost]);
   const loadSequence = useRef(0);
   const pendingFeedLoad = useRef(false);
   const selection = useRef({platform: 'note', tag:'', version: 0});
@@ -166,8 +173,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   }, [client,tag,directPost]);
   useEffect(() => { void load(platform); }, [load, platform]);
   // Quiet re-check for the Short feed (no spinner, so the viewer keeps their place): a hidden or withdrawn post drops out
-  // of everything already loaded, so it stops playing. Gives up silently; the next return tries again.
-  const refreshShorts = useCallback(async (loadedCount: number) => {
+  // of everything already loaded, so it stops playing. Returns null when the list could not be confirmed.
+  const refreshShorts = useCallback(async (loadedCount: number): Promise<readonly string[] | null> => {
     const sequence = loadSequence.current;
     try {
       const kept: Post[] = [];
@@ -177,12 +184,13 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         const query = new URLSearchParams({platform: 'youtube'});
         if (next) query.set('cursor', next);
         const page = await client.get<Page>(`/social-posts?${query}`);
-        if (sequence !== loadSequence.current) return;
+        if (sequence !== loadSequence.current) return null;
         kept.push(...page.items.filter(post => !kept.some(item => item.post_id === post.post_id)));
         next = page.next_cursor; canHideNow = page.can_hide;
       }
       setItems(kept); setCursor(next ?? null); setCanHide(canHideNow);
-    } catch { /* keep what is already on screen */ }
+      return kept.map(post => post.post_id);
+    } catch { return null; }
   }, [client]);
   useEffect(()=>{
     const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;setDirectPost(next);}};
@@ -378,6 +386,31 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     catch (cause) { setError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
     finally { setSaving(false); }
   }
+  const renderCard = (post: Post) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
+        <div className="social-card-body">
+          <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
+            {(post.mine||canHide)&&<details className="social-post-menu" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.currentTarget.open=false;event.currentTarget.querySelector('summary')?.focus();}}}>
+              <summary aria-label="貼文選項">⋯</summary><div className="social-post-menu-actions">
+                {post.mine && post.kind !== 'note' && <label className="btn btn-ghost social-file">換縮圖<input aria-label="更換縮圖" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={event=>{const next=event.target.files?.[0];if(next)void uploadLinkThumb(post,next);event.target.value='';}}/></label>}
+                {post.mine && <button type="button" className="btn btn-ghost" disabled={saving} aria-haspopup="dialog" onClick={event=>openDelete(post, event.currentTarget.closest('details')?.querySelector('summary') ?? event.currentTarget)}>刪除</button>}
+                {post.mine && confirming!==post.post_id && <button type="button" className="btn btn-ghost" disabled={saving} onClick={event=>{editTrigger.current=event.currentTarget.closest('details')?.querySelector('summary')??null;event.currentTarget.closest('details')?.removeAttribute('open');setNotice('');setEditingPost(post);}}>編輯</button>}
+                {canHide && !post.mine && <button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>void hide(post)}>隱藏</button>}
+              </div>
+            </details>}
+          </div>
+          <div className="social-post-context">{post.kind==='note'&&<span className="social-topic-badge" data-topic={post.topic??'mood'}>{SOCIAL_TOPICS[post.topic??'mood']}</span>}{post.location_name&&<span className="social-location"><SocialIcon name="pin"/>{post.location_name}</span>}</div>
+          {post.kind !== 'note' && <span className="social-platform-badge" data-platform={tone(post.platform)}>{post.platform_label || PLATFORM_LABELS[post.platform]}</span>}
+          {post.kind !== 'note' && <h3>{post.title}</h3>}
+          {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
+          <Thumb post={post}/>
+          {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
+          <SocialInteractions onTag={selectTag} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
+          <div className="social-actions">
+            {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
+            {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
+          </div>
+        </div>
+      </article>;
   return <section className="social-zone stack" aria-label="社群媒體分享專區" data-feed={platform || 'all'} aria-busy={loading||more}>
     <div ref={composerStart} className="card social-composer-start" data-guide-anchor="social:composer">
       <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/>
@@ -444,33 +477,13 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => void refreshShorts(items.length)}/>}
+    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortPostId(post.post_id); }}/>}
+    {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label="貼文選項與檢舉" onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
+      <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => shortDialog.current?.close()}>關閉</button>
+      {renderCard(shortPost)}
+    </dialog>}
     <div className="social-grid">
-      {(platform === 'shorts' && !directPost ? [] : items).map(post => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
-        <div className="social-card-body">
-          <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
-            {(post.mine||canHide)&&<details className="social-post-menu" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.currentTarget.open=false;event.currentTarget.querySelector('summary')?.focus();}}}>
-              <summary aria-label="貼文選項">⋯</summary><div className="social-post-menu-actions">
-                {post.mine && post.kind !== 'note' && <label className="btn btn-ghost social-file">換縮圖<input aria-label="更換縮圖" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={event=>{const next=event.target.files?.[0];if(next)void uploadLinkThumb(post,next);event.target.value='';}}/></label>}
-                {post.mine && <button type="button" className="btn btn-ghost" disabled={saving} aria-haspopup="dialog" onClick={event=>openDelete(post, event.currentTarget.closest('details')?.querySelector('summary') ?? event.currentTarget)}>刪除</button>}
-                {post.mine && confirming!==post.post_id && <button type="button" className="btn btn-ghost" disabled={saving} onClick={event=>{editTrigger.current=event.currentTarget.closest('details')?.querySelector('summary')??null;event.currentTarget.closest('details')?.removeAttribute('open');setNotice('');setEditingPost(post);}}>編輯</button>}
-                {canHide && !post.mine && <button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>void hide(post)}>隱藏</button>}
-              </div>
-            </details>}
-          </div>
-          <div className="social-post-context">{post.kind==='note'&&<span className="social-topic-badge" data-topic={post.topic??'mood'}>{SOCIAL_TOPICS[post.topic??'mood']}</span>}{post.location_name&&<span className="social-location"><SocialIcon name="pin"/>{post.location_name}</span>}</div>
-          {post.kind !== 'note' && <span className="social-platform-badge" data-platform={tone(post.platform)}>{post.platform_label || PLATFORM_LABELS[post.platform]}</span>}
-          {post.kind !== 'note' && <h3>{post.title}</h3>}
-          {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
-          <Thumb post={post}/>
-          {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
-          <SocialInteractions onTag={selectTag} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
-          <div className="social-actions">
-            {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
-            {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
-          </div>
-        </div>
-      </article>)}
+      {(platform === 'shorts' && !directPost ? [] : items).map(post => renderCard(post))}
     </div>
     {cursor && !(platform === 'shorts' && !directPost) && <button type="button" className="btn btn-ghost" disabled={more} onClick={() => void load(platform, cursor)}>{more ? '正在載入…' : '載入更多'}</button>}
   </section>;
