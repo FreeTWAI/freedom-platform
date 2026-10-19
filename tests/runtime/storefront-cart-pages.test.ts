@@ -8,7 +8,7 @@ import { cartPageHtml, checkoutPageHtml } from '../../modules/agent-commerce/sto
 import { checkoutHarness, ok, ports, type CheckoutHarness } from './hosted-checkout-harness.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 
-const V1_SYNTHETIC_PROJECTION: PublicStoreProjection = {
+const SYNTHETIC_PROJECTION: PublicStoreProjection = {
   slug: 'synthetic-tea-shop',
   name: '山邊合成茶鋪',
   brand: 'Mountain Synthetic',
@@ -33,19 +33,19 @@ const V1_SYNTHETIC_PROJECTION: PublicStoreProjection = {
   ],
 };
 
-const V1_PUBLIC_ORIGIN = { publicOrigin: 'https://shop.example.test/' } as const;
+const PUBLIC_ORIGIN = { publicOrigin: 'https://shop.example.test/' } as const;
 
-const V1_PINNED_SHA256 = {
-  gridDefault: 'e4632c75738352ee8ef2be7b6a545a159ff16a7d749df304025ef2fa47e2a9cd',
-  gridOrigin: '84e1677603b9639d81d47be0e5a79ab7a7f40b9ce1d4fa1b3c4061a919430692',
-  gridPreview: 'ac59754059828ceec03cb7e0ef698da637a1d54a43bf7add560334875df56807',
-  listDefault: 'e7bedbcc611309f4f973f6a83b111a15bf3915536938d89ff3078524a0ee0410',
-  listOrigin: '42359680c955f14aa7d48719a1b2be8faee4a17474f578a9f0361741471c33e4',
-  listPreview: '3afbc107234a93b40f29cf4cfdd175179ab40b83bca82da6b1e1be5e0ee83181',
-  product1Default: '8d5234fdff1a2c91482b853527df1cd26114d0b8c592e421261edd382704fd2f',
-  product1Origin: '2fd1eee6b2d9e20e92ef043b2c13c51818ffe6c9833d2380bb202340192cf699',
-  product2Default: '5923e0b9e9c823463e66403d22da965382390e4c616cdd590c39a4f648703062',
-  product2Origin: 'ad38b02cca7877d1b57cbc3aea2d613fb66d19d4ed43a07aa83f77edc19a85cc',
+const PINNED_SHA256 = {
+  gridDefault: 'e1112b46ccfb35f0ac7a6b57783e82e36676f35b18595b96a235e6325213bba3',
+  gridOrigin: 'e214fbf3e7785333c7ab52f42bc33f72e67a4f1449151032bd7d45ec0c595155',
+  gridPreview: 'cb2fcebf6765c91c4e8432c0bf4213143ba34ca665005b9611d65bb969d557bf',
+  listDefault: '47a7f745956df07b35d7467c1df401a8603b6b01d4037547305637750ff31529',
+  listOrigin: 'f1273e14fe620c9615e08aa20188d82fe915ee94830eb0468931acab8b319ef3',
+  listPreview: 'e332cc86f6860b0bdf710e011c5be618721eea1fc633fa0178f536d3c2f75d49',
+  product1Default: 'd9021da1512f6b0832f6b6d5b34ed17ed1d9e92fc974d8b0ff0f7fb40c636265',
+  product1Origin: 'b6406c9cb23a3f24bfafcf1f53668d82a98a9c4ca5929bf012cd6113c52db15e',
+  product2Default: '30f580ff8838188b24f84c261e59ec70d20814c5b96d653002b589b3fa977e6a',
+  product2Origin: 'a31fbf16c356fbeb8c245131b0b2a5c8bed6bd36344f12ff302ce724c48c9859',
   missingStore: '5fafd27a9f9b2e25e9d060e4009528265763ce8b9a4f1b37edd1275f180f5905',
   missingProduct: '5ded05ead3b2a30f84c4a7353f83f57a1b28f252b4b4c04cb30bff53144ee53d',
 } as const;
@@ -107,75 +107,75 @@ after(async () => {
   await x?.stop();
 });
 
-test('v1 storefront renderer bytes stay byte-identical across templates, publicOrigin, preview, explicit {open: false} and missing pages', () => {
-  assert.equal(sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1')), V1_PINNED_SHA256.gridDefault);
+test('merchant storefront snapshots cover templates, publicOrigin, private preview, closed checkout and missing pages', () => {
+  assert.equal(sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1')), PINNED_SHA256.gridDefault);
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], undefined, { open: false })),
-    V1_PINNED_SHA256.gridDefault,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], undefined, { open: false })),
+    PINNED_SHA256.gridDefault,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], V1_PUBLIC_ORIGIN)),
-    V1_PINNED_SHA256.gridOrigin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], PUBLIC_ORIGIN)),
+    PINNED_SHA256.gridOrigin,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], V1_PUBLIC_ORIGIN, { open: false })),
-    V1_PINNED_SHA256.gridOrigin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], PUBLIC_ORIGIN, { open: false })),
+    PINNED_SHA256.gridOrigin,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true })),
-    V1_PINNED_SHA256.gridPreview,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true })),
+    PINNED_SHA256.gridPreview,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true }, { open: true })),
-    V1_PINNED_SHA256.gridPreview,
-  );
-
-  assert.equal(sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1')), V1_PINNED_SHA256.listDefault);
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], undefined, { open: false })),
-    V1_PINNED_SHA256.listDefault,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], V1_PUBLIC_ORIGIN)),
-    V1_PINNED_SHA256.listOrigin,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], V1_PUBLIC_ORIGIN, { open: false })),
-    V1_PINNED_SHA256.listOrigin,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true })),
-    V1_PINNED_SHA256.listPreview,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true }, { open: true })),
-    V1_PINNED_SHA256.listPreview,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true }, { open: true })),
+    PINNED_SHA256.gridPreview,
   );
 
-  assert.equal(sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001') ?? ''), V1_PINNED_SHA256.product1Default);
+  assert.equal(sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1')), PINNED_SHA256.listDefault);
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], undefined, { open: false }) ?? ''),
-    V1_PINNED_SHA256.product1Default,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], undefined, { open: false })),
+    PINNED_SHA256.listDefault,
   );
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], V1_PUBLIC_ORIGIN) ?? ''),
-    V1_PINNED_SHA256.product1Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], PUBLIC_ORIGIN)),
+    PINNED_SHA256.listOrigin,
   );
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], V1_PUBLIC_ORIGIN, { open: false }) ?? ''),
-    V1_PINNED_SHA256.product1Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], PUBLIC_ORIGIN, { open: false })),
+    PINNED_SHA256.listOrigin,
   );
-  assert.equal(sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0002') ?? ''), V1_PINNED_SHA256.product2Default);
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0002', [], V1_PUBLIC_ORIGIN) ?? ''),
-    V1_PINNED_SHA256.product2Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true })),
+    PINNED_SHA256.listPreview,
+  );
+  assert.equal(
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true }, { open: true })),
+    PINNED_SHA256.listPreview,
   );
 
-  assert.equal(sha256(storeMissingHtml()), V1_PINNED_SHA256.missingStore);
-  assert.equal(sha256(storeMissingHtml(true)), V1_PINNED_SHA256.missingProduct);
+  assert.equal(sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001') ?? ''), PINNED_SHA256.product1Default);
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], undefined, { open: false }) ?? ''),
+    PINNED_SHA256.product1Default,
+  );
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], PUBLIC_ORIGIN) ?? ''),
+    PINNED_SHA256.product1Origin,
+  );
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], PUBLIC_ORIGIN, { open: false }) ?? ''),
+    PINNED_SHA256.product1Origin,
+  );
+  assert.equal(sha256(productHtml(SYNTHETIC_PROJECTION, 'P0002') ?? ''), PINNED_SHA256.product2Default);
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0002', [], PUBLIC_ORIGIN) ?? ''),
+    PINNED_SHA256.product2Origin,
+  );
+
+  assert.equal(sha256(storeMissingHtml()), PINNED_SHA256.missingStore);
+  assert.equal(sha256(storeMissingHtml(true)), PINNED_SHA256.missingProduct);
 });
 
-test('B01 and B03 serve open variants only when checkout is open, and keep v1 bytes when closed, quarantined or unadmitted', async () => {
+test('B01 and B03 serve open variants only when checkout is open, and keep closed variants when quarantined or unadmitted', async () => {
   const s = await x.store(5);
   const soldOut = await x.store(0);
   const openApp = makeApp({ checkoutEnabled: true });
@@ -188,7 +188,10 @@ test('B01 and B03 serve open variants only when checkout is open, and keep v1 by
     await x.app.request(`${x.h.origin}/shops/${s.slug}/products/${s.product.sku}`)
   ).text();
   assert.equal(closedStoreHtml.includes('<script'), false);
-  assert.ok(closedStoreHtml.includes('<span>會員的商品與商店</span>'));
+  assert.ok(closedStoreHtml.includes('<nav class="shop-navigation" aria-label="商店導覽">'));
+  assert.ok(closedStoreHtml.includes(`<a class="shop-top-store" href="/shops/${s.slug}">合成商店</a>`));
+  assert.ok(closedStoreHtml.includes(`<a href="/shops/${s.slug}/order-access">訂單查詢</a>`));
+  assert.ok(closedProductHtml.includes(`<a href="/shops/${s.slug}/order-access">訂單查詢</a>`));
   assert.ok(closedStoreHtml.includes('登入查看預留狀態'));
   assert.ok(closedStoreHtml.includes('查詢我的預留'));
   assert.equal(closedProductHtml.includes('<script'), false);
