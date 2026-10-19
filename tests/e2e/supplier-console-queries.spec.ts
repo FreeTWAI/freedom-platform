@@ -749,6 +749,7 @@ test('SC-E2E-52 recent changes and product records follow console actions (AT-15
     // A member with only store:read sees 無法取得：需要商品編輯權限才能查看 in place of 近期變更 and no change rows
     await inviteMember(ownerPage, viewerPage, e2eAuthPool, storeA, ['store:read']);
     await openSupplyPage(viewerPage, `${storeA.hash}/supply`, '營運概覽');
+    await expect(activePage(viewerPage).getByRole('region', {name: '供貨準備', exact: true})).toHaveCount(0);
     const viewerRecentSection = activePage(viewerPage)
       .locator('section.sc-section')
       .filter({has: viewerPage.getByRole('heading', {level: 3, name: '近期變更', exact: true})});

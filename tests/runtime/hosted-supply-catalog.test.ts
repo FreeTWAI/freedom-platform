@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import {after, before, beforeEach, test} from 'node:test';
 import {Pool} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
@@ -26,9 +27,9 @@ const send = (s: Store, path: string, body: unknown = {}, version?: string, key 
 const command = (path: string, session: Session, body: unknown, version?: string, key = randomUUID()) =>
   h.call('POST', path, session, body, {'Idempotency-Key': key, ...(version ? {'If-Match': `"${version}"`} : {})}, app);
 
-async function open(name: string, guild = supplierGuild, owner?: Session): Promise<Store> {
+async function open(name: string, guild = supplierGuild, owner?: Session, tier: 'intern' | 'full' = 'full'): Promise<Store> {
   owner ??= (await h.person(name)).session;
-  await h.fullMember(owner.user.user_id, guild);
+  await h.fullMember(owner.user.user_id, guild, tier);
   const {tenantId, workspaceId} = await h.createTenant(owner, name);
   const planned = await h.plan(owner, tenantId, h.planBody(guild, workspaceId, 'hosted-store', 'hosted-store@1.0.0'));
   ok(planned, 201);
@@ -447,4 +448,52 @@ test('the 200-product bound counts supplier-only items and concurrent creates ca
   assert.equal(ok(await get(s, '/supply-profile')).product_count, 200);
   assert.equal(await h.count('commerce_items'), 200); assert.equal(await h.count('commerce_selections'), 200);
   assert.equal(await h.count('commerce_storefront_publications'), 0);
+});
+
+
+test('supplier interns create and operate their own catalog; first retail setup requires active full commerce membership', async () => {
+  const s = await open('供應商實習會員', supplierGuild, undefined, 'intern');
+  const retail = {name: '合成零售店', slug: 'cohort-shop', currency: 'TWD'};
+  assert.equal(ok(await send(s, '/setup', retail), 403).code, 'commerce_guild_full_member_required');
+  assert.equal(await h.count('commerce_shops'), 0);
+  await h.fullMember(s.owner.user.user_id, retailGuild, 'intern');
+  assert.equal(ok(await send(s, '/setup', retail), 403).code, 'commerce_guild_full_member_required');
+  ok(await send(s, '/supply-profile', catalog), 201);
+  await createSupplyProduct(s);
+  const stranger = (await h.person('另一位供應商')).session;
+  await h.fullMember(stranger.user.user_id, supplierGuild);
+  ok(await get(s, '/supply-products', stranger), 404);
+  // Guild membership determines initial setup; retained business capabilities govern existing work.
+  await h.pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1", [s.owner.user.user_id]);
+  ok(await send(s, '/supply-profile', catalog));
+  await createSupplyProduct(s, {...product, title: '既有授權下繼續供貨'});
+  const shop = await open('準備零售', supplierGuild, undefined, 'intern');
+  await h.fullMember(shop.owner.user.user_id, retailGuild);
+  ok(await send(shop, '/setup', retail), 201);
+  await h.fullMember(shop.owner.user.user_id, retailGuild, 'intern');
+  ok(await send(shop, '/setup', retail));
+});
+
+test('first supply setup rechecks membership after an instance lock wait and leaves no partial profile', {timeout: 20000}, async () => {
+  const s = await open('等待期間離開供應商公會', supplierGuild, undefined, 'intern');
+  const holder = await h.pool.connect();
+  let pending: Promise<Reply> | undefined;
+  try {
+    await holder.query('BEGIN');
+    const pid = (await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    await holder.query('SELECT instance_id FROM module_instances WHERE instance_id=$1 FOR UPDATE', [s.instanceId]);
+    pending = send(s, '/supply-profile', catalog);
+    let waiting = false;
+    for (let i = 0; i < 200; i++) {
+      if ((await h.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))', [pid])).rowCount) {waiting = true; break;}
+      await delay(10);
+    }
+    assert.ok(waiting, 'setup reached the held instance lock');
+    await h.pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1", [s.owner.user.user_id]);
+    await holder.query('COMMIT');
+    assert.equal(ok(await pending, 403).code, 'guild_member_required');
+    assert.equal(await h.count('commerce_storefront_profiles'), 0);
+    assert.equal(await h.count('commerce_shops'), 0);
+    assert.equal(await h.count('scoped_command_receipts', "WHERE operation='storefront.supply-catalog.setup'"), 0);
+  } finally {await holder.query('ROLLBACK'); holder.release(); await pending?.catch(() => {});}
 });

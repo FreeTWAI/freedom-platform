@@ -15,6 +15,8 @@ import {ApplicationSkillSources, CommerceReadingReferences, PortableBusinessStat
 import './SkillBookIntro.css';
 
 export const REASONS: Record<string, string> = {
+  guild_member_required: '需要商品品質與供應公會的有效成員身分，實習成員也可開始供貨。',
+  commerce_guild_full_member_required: '建立零售商店需要電商公會的正式成員身分。',
   guild_full_member_required: '需要這個公會的正式會員身分，請在聊天室聯絡會長。',
   tenant_manage_required: '你目前沒有可管理的業務空間，請前往業務空間建立或接受邀請。',
   policy_unconfigured: '業務空間尚未設定容量政策，請聯絡擁有者。',
@@ -296,6 +298,8 @@ const NEXT: Record<string, string> = {
   quota_exceeded: '既有工作仍可使用，請聯絡業務空間擁有者調整容量。',
   policy_unconfigured: '請聯絡業務空間擁有者設定容量政策。',
   guild_full_member_required: REASONS.guild_full_member_required,
+  guild_member_required: REASONS.guild_member_required,
+  commerce_guild_full_member_required: REASONS.commerce_guild_full_member_required,
   capability_denied: '請切換到你擁有或管理的業務空間，或聯絡其擁有者。',
   tenant_not_found: '請切換業務空間，並確認目前成員資格。',
   not_found: '請重新載入目前業務空間，確認目標仍可讀取。',
