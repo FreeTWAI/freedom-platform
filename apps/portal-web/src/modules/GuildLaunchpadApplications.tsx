@@ -268,6 +268,7 @@ const FORGET_HINT = '不再追蹤只會讓這個分頁不再自動開啟這個�
 // error can also come from the route's read after commit, so keep that launch.
 const DECLINED_LAUNCH = new Set([
   'plan_stale', 'version_conflict', 'quota_exceeded', 'policy_unconfigured', 'guild_full_member_required',
+  'guild_member_required', 'commerce_guild_full_member_required',
   'application_not_available', 'license_unresolved', 'instance_unavailable', 'workspace_binding_conflict',
   'workspace_unavailable', 'validation_failed', 'configuration_invalid', 'dependency_cycle',
   'invalid_input', 'invalid_json', 'idempotency_required', 'invalid_version',

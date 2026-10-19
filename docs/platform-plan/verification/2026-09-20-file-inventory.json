@@ -2484,8 +2484,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/GuildLaunchpadApplications.tsx",
-      "bytes": 63655,
-      "sha256": "5ce9bc97a6e391d8f041e1cf9dd3a02717a03bf6576d4657e8243fdb44125892"
+      "bytes": 63721,
+      "sha256": "1ff5dabab34c63c96f17a51a989afcb8da14e703c477889658317eca7d8b489a"
     },
     {
       "path": "apps/portal-web/src/modules/GuildLaunchpadMyWork.css",
@@ -22969,8 +22969,8 @@
     },
     {
       "path": "tests/e2e/supplier-console.spec.ts",
-      "bytes": 29354,
-      "sha256": "fcdde9970f3237d3b0f12a6b56f73410febc1c48e954026f991f9715993d8995"
+      "bytes": 30539,
+      "sha256": "10ea80d9ad431d42f4a132b7f784ef59f3d754469a762f47a04ff518ed22a865"
     },
     {
       "path": "tests/e2e/tenant-member-grants-role-change.spec.ts",
