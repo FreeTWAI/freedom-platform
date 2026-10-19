@@ -15483,6 +15483,11 @@
       "sha256": "e0c1fd2767a887dc02d4b84dc09da5f05a588b688459b18cecbe4997f08e3e55"
     },
     {
+      "path": "docs/platform-plan/execution/commerce/handoff-2026-10-19-member-cohort-integration.md",
+      "bytes": 7491,
+      "sha256": "f728336f0ad8eb37f39abeb9ba6a1e37e838f86a1dddb694ff51178f2b6462d3"
+    },
+    {
       "path": "docs/platform-plan/execution/commerce/pages.md",
       "bytes": 18100,
       "sha256": "d534e93815df73d9f0f57f1c51302f51dd8e8756f26bc14a09c065dccd9813e9"
