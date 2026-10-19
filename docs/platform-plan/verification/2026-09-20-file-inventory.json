@@ -174,8 +174,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 36299,
-      "sha256": "1747984482962586ddf9f8677f5c9f0541beaaf2ac020c411ecafcb9188768df"
+      "bytes": 36477,
+      "sha256": "eeb9aed672757ddc15c23ba6b8b841691a65377f38a064505d8fa1873e222935"
     },
     {
       "path": "apps/freedom.module.json",
@@ -20624,8 +20624,8 @@
     },
     {
       "path": "packages/contribution-tools/guild-presentation-profile.mjs",
-      "bytes": 3110,
-      "sha256": "5d881d5d80f28cc287f530cf3842820117e08b918d330847911b31ff36ee70b0"
+      "bytes": 7535,
+      "sha256": "aed9c5b8009bd53f6ab25009380cbf650a56e8545c45d8930e93da9ce1a0d322"
     },
     {
       "path": "packages/contribution-tools/io.mjs",
@@ -21159,8 +21159,8 @@
     },
     {
       "path": "packages/guild-presentation/README.md",
-      "bytes": 8596,
-      "sha256": "c83316b4441cdf462765de95e0afd1267ce94e6aa4ad819a8acac827f8e456f4"
+      "bytes": 10946,
+      "sha256": "c4c3990416b89a55b616710f1c32c31412428d27811a531efae83b36ed6bcbe5"
     },
     {
       "path": "packages/guild-presentation/block.ts",
@@ -21904,8 +21904,8 @@
     },
     {
       "path": "scripts/ci/affected-jobs.md",
-      "bytes": 6551,
-      "sha256": "3e6bf2c24ae18d75e175b791a6dff51d25e2596d5c658aabc260d14de3fd8693"
+      "bytes": 8593,
+      "sha256": "4c47f7af1fe44c98af1426c061960d1cbd8d0b9fc16f1ab1d8e1c590b56ce72b"
     },
     {
       "path": "scripts/ci/broker-bridge-check.mjs",
@@ -21924,8 +21924,8 @@
     },
     {
       "path": "scripts/ci/guild-presentation-profile.test.mjs",
-      "bytes": 9090,
-      "sha256": "3aead53b7ebd3260c2765dda05b1ddf76e7daa37151f76e829d71b9f37985cbf"
+      "bytes": 14651,
+      "sha256": "e072bc0ee9cc81b60848285ba0d95938c91dea19445ad671e37781677b20320a"
     },
     {
       "path": "scripts/ci/native-cli-audit-readback.mjs",
@@ -21984,8 +21984,8 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.mjs",
-      "bytes": 43649,
-      "sha256": "6982d8dcca6f390eb370f0d3ddab78cf805eeb4b30178073b382f6b71ad745dc"
+      "bytes": 44903,
+      "sha256": "601055110b094d1147be88a965e5ecc54f1d08d9431ba00dba88bbb6a5e93916"
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
@@ -23839,8 +23839,8 @@
     },
     {
       "path": "tests/runtime/guild-blocks.test.ts",
-      "bytes": 13302,
-      "sha256": "e14d869296088e4c36cc0ce820d4196b122f26584b8a9694adff24d7f1cf1560"
+      "bytes": 13850,
+      "sha256": "974d8243c3ea2abe63565ced2a0b7bfafdacb6c87d0e14239c1c0aeedfefc3fe"
     },
     {
       "path": "tests/runtime/guild-category-preferences.test.ts",
