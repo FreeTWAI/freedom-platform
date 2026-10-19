@@ -14204,8 +14204,8 @@
     },
     {
       "path": "docs/development/member-api.md",
-      "bytes": 86413,
-      "sha256": "15e0037132ccffbbf82a4bfd928ade34b025e965abe926b21aa195628891a4a8"
+      "bytes": 88810,
+      "sha256": "f7872e60d447caccbaad6c7e67c9e418fcda4950188ce70f2f18f402dc94e7e2"
     },
     {
       "path": "docs/development/member-communications.md",
@@ -19719,8 +19719,8 @@
     },
     {
       "path": "modules/identity-membership/account-security.ts",
-      "bytes": 6616,
-      "sha256": "34768692a9407af02806b4b5ecbd0d7381ed8cd22035b7396d292b99d30676ff"
+      "bytes": 6634,
+      "sha256": "e8bbd905b7f798aa6a10ef6b813d7f7af78713bbcd47c6819c08b19fe7439f63"
     },
     {
       "path": "modules/identity-membership/auth-pruning.ts",
@@ -19759,8 +19759,8 @@
     },
     {
       "path": "modules/identity-membership/freedom.module.json",
-      "bytes": 2063,
-      "sha256": "263cb2de3c235eb0a055d999094ea4d19d05b0212b6b540f9a991e4b17398220"
+      "bytes": 2167,
+      "sha256": "cb754ae4d930ff221e99dc9640ef72920cca86da473fda47003b522aad2347eb"
     },
     {
       "path": "modules/identity-membership/member-connections.ts",
@@ -19774,18 +19774,18 @@
     },
     {
       "path": "modules/identity-membership/members.ts",
-      "bytes": 41384,
-      "sha256": "5c35b78d316d24733b0ea97888707f0abf9f4763bf39fe39c49bb97a18ddcd71"
+      "bytes": 41521,
+      "sha256": "95e9e9ee901efc1890d8062283101ddfa148499745e152bbabfc7c68191132db"
     },
     {
       "path": "modules/identity-membership/password-recovery.ts",
-      "bytes": 5349,
-      "sha256": "5931deb175bdfd369d400f3ff331a40ff0aac2b44947911b333933185b48c77b"
+      "bytes": 5373,
+      "sha256": "c7b2f4d8e1cf4b39f578a3c4ead4146f5eb77807f4e5a79e99735b6c33ca0cfb"
     },
     {
       "path": "modules/identity-membership/service.ts",
-      "bytes": 6816,
-      "sha256": "2da4a7936e587216b7279e8d91d4f184973cc9b8bd1a6bc02f44753474bbdab6"
+      "bytes": 6975,
+      "sha256": "429d84811067a7c38532c5a353acdff9ad64147c9fc4333fc623de8653f845c2"
     },
     {
       "path": "modules/identity-membership/social-links.ts",
@@ -20274,8 +20274,8 @@
     },
     {
       "path": "modules/tenant-workspaces/README.md",
-      "bytes": 7529,
-      "sha256": "87aa627860f74901bac50e0be66680fffdcfd95c1e85356ac2d7df9515b4157a"
+      "bytes": 8619,
+      "sha256": "2ddb82f517d347d0faf2ba22b311154a813c05c47c912285b5b6d78308b3177c"
     },
     {
       "path": "modules/tenant-workspaces/authorization.ts",
@@ -20294,8 +20294,8 @@
     },
     {
       "path": "modules/tenant-workspaces/high-risk-verification.ts",
-      "bytes": 8693,
-      "sha256": "3290d4a82b6ccb7f88db8c8766904ed152b70f77932716cf197da97b77ef147f"
+      "bytes": 9014,
+      "sha256": "ec7aab4db03fb8fd23a3fe2dd5c8d44aec606301c949c4e41548f77dd7d85eee"
     },
     {
       "path": "modules/tenant-workspaces/instance-grants.ts",
@@ -20684,8 +20684,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
-      "bytes": 9330,
-      "sha256": "f4a3f114f9aadd66c316bffb18bad1d439227146a64d4f76b0f7bf465c734b1c"
+      "bytes": 9353,
+      "sha256": "88b2118f986f29dbb1b8f279a84f9e8786928fe50706d3a8e09100cace1157f7"
     },
     {
       "path": "packages/contribution-tools/runtime-weights.mjs",
@@ -23184,8 +23184,8 @@
     },
     {
       "path": "tests/runtime/account-security.test.ts",
-      "bytes": 13566,
-      "sha256": "feb00df9a5d91a674892fb7548b4d9a0fb7804ca89408598b47389b759be6e5b"
+      "bytes": 16127,
+      "sha256": "257a857d69af83013000a2c52f2483c28512f7d652f32ff3de2eadff3caebd4d"
     },
     {
       "path": "tests/runtime/admin-access-session.test.ts",
@@ -23291,6 +23291,11 @@
       "path": "tests/runtime/auth-pruning.test.ts",
       "bytes": 35943,
       "sha256": "ca40708667a191b19b167a4109a6b22adf2f107bce188fea85bd8d18f90eb1df"
+    },
+    {
+      "path": "tests/runtime/auth-rate-limit-window.test.ts",
+      "bytes": 6605,
+      "sha256": "f9d5b4848de3ffe71a98ea887409de4bc89e37a1f00c86d1375b6baf74b71800"
     },
     {
       "path": "tests/runtime/avatar-bridge.test.ts",
@@ -24209,8 +24214,8 @@
     },
     {
       "path": "tests/runtime/login-lockout-recovery.test.ts",
-      "bytes": 18339,
-      "sha256": "57351c89213d2dea344a1129b42945d5655b11b3dd911ebffc7c52851918c950"
+      "bytes": 21950,
+      "sha256": "bb897ffd84fc3f09e562a9ea59b36fe9678e2235347b41057004c8a4a869cfef"
     },
     {
       "path": "tests/runtime/machine-device-client.test.ts",
@@ -24999,8 +25004,8 @@
     },
     {
       "path": "tests/runtime/share-promotion.test.ts",
-      "bytes": 94533,
-      "sha256": "b6ff2aef2c6b5ee33cff6a4e9fd54697683e442cd4b4c0fb22ba630103928dcd"
+      "bytes": 97002,
+      "sha256": "99b28a8f1b0b5ae896d902d31a64de746addec8d828ba54f491ea5e217d279c9"
     },
     {
       "path": "tests/runtime/sharing-authoring.test.ts",
@@ -25264,8 +25269,8 @@
     },
     {
       "path": "tests/runtime/tenant-high-risk-verification.test.ts",
-      "bytes": 18253,
-      "sha256": "8c550de6319941bc0d94af7fb5f17d7a0dafb94597b8567b45889d6920097c06"
+      "bytes": 30836,
+      "sha256": "ab6c0471a41283b1cbe920628ee0e7cc8b3ad83440d6b0687904012ef0d9b196"
     },
     {
       "path": "tests/runtime/tenant-instance-permissions.test.ts",
@@ -25619,8 +25624,8 @@
     },
     {
       "path": "tests/worker/source-network.test.ts",
-      "bytes": 5814,
-      "sha256": "0443c6f9f44ddc4f4cf49fd4450b2eb9b261c670d49e4852b365dd743c54cd9c"
+      "bytes": 1619,
+      "sha256": "c108108d49d39481215a699d89b425bbd5879d5c5215cf78fedf8c3449d4675c"
     },
     {
       "path": "tests/worker/static-cache-policy.test.ts",
