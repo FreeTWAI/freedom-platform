@@ -9,6 +9,9 @@ import {PromotionShare} from './PromotionShare';
 import {SocialInteractions} from './SocialInteractions';
 import {SocialPostEditor} from './SocialPostEditor';
 import {ShortVideoFeed} from './ShortVideoFeed';
+import {InlineVideo} from './InlineVideo';
+import {SocialPostShare} from './SocialPostShare';
+import {youtubeLinkHint, youtubeLinkKind} from './short-video-embed';
 import './SocialZone.css';
 import {prepareSocialImage} from './social-image';
 import {socialPostJobForSession} from '../social-post-task';
@@ -135,7 +138,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const optimization=useSyncExternalStore(optimizationJob.subscribe,optimizationJob.snapshot,optimizationJob.snapshot);
   const [originalDraft,setOriginalDraft]=useState<{before:string;after:string}|null>(null);
   const pending = useRef<{text: string; topic?:string;location_name?:string;mention_ids?:string[]; key: string; image?: {mime_type: string; data_base64: string}} | null>(null);
-  const [shortPostId, setShortPostId] = useState<string | null>(null);
+  const [shortPostId, setShortPostId] = useState<string | null>(null), [shortComments, setShortComments] = useState(false);
+  const [shortLiking, setShortLiking] = useState<string | null>(null), shortLikeCommands = useRef(new Map<string, {liked: boolean; key: string}>());
   const shortPost = platform === 'shorts' ? items.find(item => item.post_id === shortPostId) : undefined;
   const shortDialog = useRef<HTMLDialogElement>(null);
   const shortTrigger = useRef<HTMLElement | null>(null);
@@ -391,7 +395,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     catch (cause) { setError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
     finally { setSaving(false); }
   }
-  const renderCard = (post: Post) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
+  // One-tap like from a Short slide: same endpoint, per-post command and idempotency key as the card's like button.
+  async function likeShort(postId: string) {
+    const post = items.find(item => item.post_id === postId);
+    if (!post || shortLiking) return;
+    const command = shortLikeCommands.current.get(post.post_id) ?? {liked: !post.liked, key: crypto.randomUUID()};
+    shortLikeCommands.current.set(post.post_id, command); setShortLiking(post.post_id); setNotice('');
+    try {
+      const value = await client.post<{liked: boolean; like_count: number}>(`/social-posts/${post.post_id}/like`, {liked: command.liked}, {idempotencyKey: command.key});
+      setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...value} : item)); shortLikeCommands.current.delete(post.post_id);
+    } catch (cause) {
+      if (cause instanceof ApiError && !cause.network) shortLikeCommands.current.delete(post.post_id);
+      setNotice(cause instanceof Error ? cause.message : '尚未確認按讚結果，請再按一次重試。');
+    } finally { setShortLiking(null); }
+  }
+  const renderCard = (post: Post, view: {inline?: boolean; commentsOpen?: boolean} = {inline: true}) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
             {(post.mine||canHide)&&<details className="social-post-menu" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.currentTarget.open=false;event.currentTarget.querySelector('summary')?.focus();}}}>
@@ -405,11 +423,12 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           </div>
           <div className="social-post-context">{post.kind==='note'&&<span className="social-topic-badge" data-topic={post.topic??'mood'}>{SOCIAL_TOPICS[post.topic??'mood']}</span>}{post.location_name&&<span className="social-location"><SocialIcon name="pin"/>{post.location_name}</span>}</div>
           {post.kind !== 'note' && <span className="social-platform-badge" data-platform={tone(post.platform)}>{post.platform_label || PLATFORM_LABELS[post.platform]}</span>}
+          {shortVideos && post.kind === 'link' && youtubeLinkKind(post.url) === 'short' && <span className="social-platform-badge social-short-badge">Short</span>}
           {post.kind !== 'note' && <h3>{post.title}</h3>}
           {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
-          <Thumb post={post}/>
+          {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
-          <SocialInteractions onTag={selectTag} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
+          <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
             {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
@@ -454,6 +473,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         <header className="social-publish-head"><h2 id={`${composerId}-link`}>分享外部連結</h2><button type="button" className="btn btn-ghost" aria-label="關閉外部分享" onClick={closeLink}>關閉</button></header>
         <form className="social-link-composer stack" onSubmit={event=>void submit(event)} aria-busy={saving}>
           <label className="field">連結<input required type="url" inputMode="url" maxLength={2048} value={url} disabled={saving} onChange={event=>setUrl(event.target.value)} placeholder="https://"/></label>
+          {youtubeLinkHint(url, shortVideos) && <p className="field-hint" role="status">{youtubeLinkHint(url, shortVideos)}</p>}
           <label className="field">標題（選填）<input maxLength={120} value={title} disabled={saving} onChange={event=>setTitle(event.target.value)}/></label>
           <label className="field">說明（選填）<textarea maxLength={500} rows={3} value={note} disabled={saving} onChange={event=>setNote(event.target.value)}/></label>
           <label className="field">縮圖（選填，會自動調整大小）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving || preparingLinkImage} onChange={event=>{void selectLinkThumb(event.target.files?.[0]??null); event.target.value = '';}}/></label>
@@ -482,10 +502,10 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortPostId(post.post_id); }}/>}
-    {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label="貼文選項與檢舉" onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
+    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
+    {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label={shortComments ? '貼文留言' : '貼文選項與檢舉'} onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
       <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => shortDialog.current?.close()}>關閉</button>
-      {renderCard(shortPost)}
+      {renderCard(shortPost, {inline: false, commentsOpen: shortComments})}
     </dialog>}
     <div className="social-grid">
       {(platform === 'shorts' && !directPost ? [] : items).map(post => renderCard(post))}

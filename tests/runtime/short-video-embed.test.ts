@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {platformContentSecurityPolicy} from '../../apps/platform-api/src/platform-app.js';
-import {SHORT_VIDEO_EMBED_ORIGIN,isShortsLink,playableShortVideos,playerCommand,shortVideoEmbedUrl} from '../../apps/portal-web/src/modules/short-video-embed.js';
+import {SHORT_VIDEO_EMBED_ORIGIN,inlineVideoEmbedUrl,isShortsLink,playableShortVideos,playerCommand,shortVideoEmbedUrl,youtubeLinkHint,youtubeLinkKind} from '../../apps/portal-web/src/modules/short-video-embed.js';
 
 const post=(id:string,url:string|null,platform='youtube',kind:'link'|'note'='link')=>({post_id:id,url,platform,kind});
 
@@ -61,4 +61,29 @@ test('the player origin is allowed only when the host enabled Short, and never o
   assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes(`frame-src ${SHORT_VIDEO_EMBED_ORIGIN};`));
   for(const path of ['/admin','/admin/github/callback'])assert.ok(!platformContentSecurityPolicy(path,undefined,undefined,true).includes('frame-src'));
   assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes("frame-ancestors 'none'"));
+});
+
+test('a link is classified by its address alone: short, other single video, or neither',()=>{
+  assert.equal(youtubeLinkKind('https://www.youtube.com/shorts/dQw4w9WgXcQ'),'short');
+  for(const url of ['https://www.youtube.com/watch?v=dQw4w9WgXcQ','https://youtu.be/dQw4w9WgXcQ','https://www.youtube.com/live/dQw4w9WgXcQ'])assert.equal(youtubeLinkKind(url),'video');
+  for(const url of ['https://www.youtube.com/@channel','https://www.youtube.com/watch?v=short','http://www.youtube.com/watch?v=dQw4w9WgXcQ','https://evil.example/watch?v=dQw4w9WgXcQ','https://www.youtube.com.evil.example/shorts/dQw4w9WgXcQ',null,''])assert.equal(youtubeLinkKind(url as string|null),null);
+});
+
+test('the in-card player is rebuilt from the id on the one allowed origin and ignores everything else in the pasted address',()=>{
+  const url=inlineVideoEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx&t=99&si=tracking')!;
+  assert.ok(url.startsWith(`${SHORT_VIDEO_EMBED_ORIGIN}/embed/dQw4w9WgXcQ?`));
+  const query=new URL(url).searchParams;
+  assert.deepEqual([...query.keys()].sort(),['autoplay','modestbranding','playsinline','rel']);
+  assert.ok(!url.includes('tracking')&&!url.includes('PLx'));
+  assert.equal(inlineVideoEmbedUrl('https://www.youtube.com/@channel'),null);
+  assert.equal(inlineVideoEmbedUrl(null),null);
+});
+
+test('the composer hint names what was recognised and only promises playback when the host enabled it',()=>{
+  assert.match(youtubeLinkHint('https://www.youtube.com/shorts/dQw4w9WgXcQ',true)!,/Short 動態/);
+  assert.equal(youtubeLinkHint('https://www.youtube.com/shorts/dQw4w9WgXcQ',false),'這是 YouTube Short 連結。');
+  assert.match(youtubeLinkHint('https://youtu.be/dQw4w9WgXcQ',true)!,/直接播放/);
+  assert.equal(youtubeLinkHint('https://youtu.be/dQw4w9WgXcQ',false),'這是 YouTube 影片連結。');
+  assert.match(youtubeLinkHint('https://www.youtube.com/@channel',true)!,/不是單支影片/);
+  for(const raw of ['','https://','not a url','https://example.com/watch?v=dQw4w9WgXcQ'])assert.equal(youtubeLinkHint(raw,true),null);
 });

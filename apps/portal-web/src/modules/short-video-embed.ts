@@ -45,3 +45,33 @@ export function playableShortVideos<T extends ShortVideoSource>(posts: readonly 
     return true;
   });
 }
+
+export type YoutubeLinkKind = 'short' | 'video';
+
+/** `short` for the Shorts address form, `video` for any other single YouTube video address, otherwise null. URL only. */
+export function youtubeLinkKind(url: string | null | undefined): YoutubeLinkKind | null {
+  if (!url || !youtubeVideoId(url)) return null;
+  return isShortsLink(url) ? 'short' : 'video';
+}
+
+/**
+ * Player address for a single video opened from its post card. Built from the 11-character id on the one allowed
+ * origin; the viewer starts it, so it may autoplay, and it keeps the player's own controls.
+ */
+export function inlineVideoEmbedUrl(url: string | null | undefined): string | null {
+  const id = url ? youtubeVideoId(url) : null;
+  if (!id) return null;
+  const query = new URLSearchParams({playsinline: '1', rel: '0', modestbranding: '1', autoplay: '1'});
+  return `${SHORT_VIDEO_EMBED_ORIGIN}/embed/${id}?${query}`;
+}
+
+/** What the link composer tells the member about a pasted address. Judged from the text alone; nothing is fetched. */
+export function youtubeLinkHint(raw: string, playback: boolean): string | null {
+  const kind = youtubeLinkKind(raw.trim());
+  if (kind === 'short') return playback ? '這是 YouTube Short 連結，分享後會出現在 Short 動態，也能在貼文中直接播放。' : '這是 YouTube Short 連結。';
+  if (kind === 'video') return playback ? '這是 YouTube 影片連結，分享後可在貼文中直接播放。' : '這是 YouTube 影片連結。';
+  let host = '';
+  try { const parsed = new URL(raw.trim()); if (parsed.protocol === 'https:') host = parsed.hostname.toLowerCase().replace(/\.$/, ''); } catch { return null; }
+  const youtube = host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
+  return youtube ? '這看起來是 YouTube 連結，但不是單支影片（找不到影片代號）。仍可分享，但不會出現在 Short，也無法站內播放。' : null;
+}

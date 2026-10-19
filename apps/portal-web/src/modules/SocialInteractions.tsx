@@ -22,8 +22,8 @@ function mergeComments(current: Comment[], incoming: Comment[]) {
   });
 }
 
-export function SocialInteractions({client, post, canHide, onUpdate,onTag}: {onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
-  const [open, setOpen] = useState(false);
+export function SocialInteractions({client, post, canHide, onUpdate,onTag,initialOpen=false}: {initialOpen?:boolean;onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
+  const [open, setOpen] = useState(initialOpen);
   const [comments, setComments] = useState<Comment[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,6 +63,8 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag}: {onT
   const confirmedComments = useRef<Comment[]>([]);
   const sequence = useRef(0);
   useEffect(() => () => { ++sequence.current; }, []);
+  // Opened from a Short's comment button: the panel starts expanded and loads once.
+  useEffect(() => { if (initialOpen) void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   async function load(next?: string) {
     const token = ++sequence.current;
     setLoading(true); setError('');

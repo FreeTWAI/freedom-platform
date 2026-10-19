@@ -1,9 +1,9 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {formatIsoLocal} from '../format';
 import {SHORT_VIDEO_EMBED_ORIGIN, playableShortVideos, playerCommand, shortVideoEmbedUrl, type PlayerCommand, type ShortVideoSource} from './short-video-embed';
 import './ShortVideoFeed.css';
 
-export type ShortVideoPost = ShortVideoSource & {title: string; thumbnail_url: string | null; author: {display_name: string}; created_at: string};
+export type ShortVideoPost = ShortVideoSource & {title: string; thumbnail_url: string | null; author: {display_name: string}; created_at: string; like_count?: number; comment_count?: number; liked?: boolean};
 
 /** Current post ids from a fresh server response, or null when the list could not be confirmed. */
 export type ShortRefreshResult = readonly string[] | null;
@@ -13,12 +13,19 @@ export type ShortRefreshResult = readonly string[] | null;
  * player, so the next video is already loaded when it arrives; only the one on screen plays, and only while
  * the viewer has not paused it, the tab is visible and the list has been confirmed current.
  */
-export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefresh, onManage}: {
+export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefresh, onManage, onLike, onComment, likeBusy, renderShare}: {
   posts: readonly ShortVideoPost[]; hasMore: boolean; loadingMore: boolean; onLoadMore: () => void;
   /** Re-reads the list; resolves with the current ids, or null when the request failed. */
   onRefresh: () => Promise<ShortRefreshResult>;
   /** Opens the existing post card (report, edit, withdraw, hide) for a post. */
   onManage: (post: ShortVideoPost, trigger: HTMLElement) => void;
+  /** Like or unlike from the slide, through the same command as the post card. */
+  onLike: (post: ShortVideoPost) => void;
+  /** Opens the post's comments (the existing comment panel) for a post. */
+  onComment: (post: ShortVideoPost, trigger: HTMLElement) => void;
+  likeBusy?: string | null;
+  /** The existing share control for a post (permalink hand-off). */
+  renderShare: (post: ShortVideoPost) => ReactNode;
 }) {
   const videos = playableShortVideos(posts);
   const idsKey = videos.map(video => video.post_id).join('|');
@@ -106,7 +113,7 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
       if (document.querySelector('dialog[open]')) return;
       if (event.key === 'Escape') { leaveFull(); return; }
       if (event.key !== 'Tab') return;
-      const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), a[href], [tabindex="0"]') ?? [])];
+      const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), a[href], [tabindex="0"]') ?? [])].filter(element => !element.closest('[inert]'));
       if (!focusable.length) return;
       const first = focusable[0], last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -133,6 +140,10 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
     if (full) leaveFull();
     if (hadVideos.current) emptyNote.current?.focus();
   }, [videos.length, full]);
+  // On a phone the feed opens below the page header and composer; bring it fully on screen so the actions show.
+  useEffect(() => {
+    if (window.innerWidth <= 480) dialog.current?.scrollIntoView({block: 'start', behavior: 'instant'});
+  }, []);
   // Every slide is exactly one scroller tall, so the slide on screen follows from the scroll position alone.
   function follow() {
     const root = scroller.current;
@@ -185,7 +196,12 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
             <strong>{post.title}</strong>
             <span>{post.author.display_name} · {formatIsoLocal(post.created_at)}</span>
             {post.url && <a href={post.url} target="_blank" rel="noopener noreferrer">在 YouTube 開啟 ↗</a>}
-            <button type="button" className="short-video-manage" tabIndex={index === active ? 0 : -1} onClick={event => onManage(post, event.currentTarget)}>貼文選項與檢舉</button>
+            <div className="short-video-actions" role="group" aria-label="貼文互動" ref={element => { if (element) { if (index === active) element.removeAttribute('inert'); else element.setAttribute('inert', ''); } }}>
+              <button type="button" className="short-video-action" aria-pressed={post.liked ?? false} aria-label={`${post.liked ? '收回讚' : '按讚'} · ${post.like_count ?? 0}`} disabled={likeBusy === post.post_id} onClick={() => onLike(post)}>{post.liked ? '♥' : '♡'} {post.like_count ?? 0}</button>
+              <button type="button" className="short-video-action" aria-label={`留言 · ${post.comment_count ?? 0}`} onClick={event => onComment(post, event.currentTarget)}>💬 {post.comment_count ?? 0}</button>
+              <span className="short-video-share">{renderShare(post)}</span>
+              <button type="button" className="short-video-action short-video-manage" onClick={event => onManage(post, event.currentTarget)}>貼文選項與檢舉</button>
+            </div>
           </div>
         </article>;
       })}
