@@ -197,6 +197,7 @@ const paymentFixture=createE2eEcpayFixture({freedomEnv:'local',origin,pool:produ
 const app=createApp(productPool??pool,origin,'local',{commerceQueryTransport:paymentFixture.transport,commercePayments:{gateway:paymentFixture.gateway,journal:paymentFixture.journal,profiles:paymentFixture.profiles},commerceEmailSender,commercePorts:{shipping:paymentFixture.shipping},commerceCredentialKeyring,commerceSettings:readCommerceSettings({...process.env,FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_COMMERCE_EMAIL_ENABLED:'true',FREEDOM_COMMERCE_PROVIDER_PROFILES:paymentFixture.profiles.join(',')}),arEnabled:true,arAssetStore:arFixtureStore,shopKeyPolicy:'purpose-bound-only',adminVerifier:e2eAuthorClaimAdminVerifier,linkPreviewFetch,publicGuideAssets,guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,memberBlockingEnabled:process.env.FREEDOM_MEMBER_BLOCKING_ENABLED==='true',tenantWorkAssetStore:new FakeObjectStore(),
   communityDiscoveryEnabled:process.env.FREEDOM_COMMUNITY_DISCOVERY_ENABLED==='true',
   memberReportingEnabled:process.env.FREEDOM_MEMBER_REPORTING_ENABLED==='true',
+  shortVideosEnabled:process.env.FREEDOM_SHORT_VIDEOS_ENABLED==='true',
   // Explicit browser-harness option; product server/Worker release flags remain default OFF.
   communitySearchEnabled:process.env.FREEDOM_E2E_COMMUNITY_SEARCH==='1',
   communityRelationsEnabled:process.env.FREEDOM_E2E_COMMUNITY_RELATIONS==='1',

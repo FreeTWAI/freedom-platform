@@ -33,7 +33,8 @@
     "apps/portal-web/src/modules/short-video-embed.ts",
     "tests/e2e/short-videos.spec.ts",
     "tests/e2e/short-videos-lifecycle.spec.ts",
-    "tests/runtime/short-video-embed.test.ts"
+    "tests/runtime/short-video-embed.test.ts",
+    "tests/runtime/short-video-flag.test.ts"
   ],
   "public_exports": [],
   "dependencies": [
