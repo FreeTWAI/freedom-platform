@@ -210,6 +210,19 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
 
 建立、修改、暫停、恢復與刪除只有主人能做。修改、暫停、恢復、刪除、封面與隱藏都要 `If-Match` 的 `aggregate_version`，並用 Idempotency-Key。刪除是軟刪除（`state=deleted`），同時刪掉封面。暫停只給主人在「我的服務」看見；公開頁與 `/go/` 都回到找不到。平台管理員可隱藏；公會長不行。隱藏後各處都看不到，`/go/` 回到首頁。擁有者停用或是驗收測試帳號時，其他人與公開頁都看不到，主人仍可在會員介面看見自己的有效服務。
 
+會員介面的管理員「隱藏」先顯示後果與「確定隱藏／取消」；此時不送請求，
+取消也不寫入。只有按「確定隱藏」才呼叫原有 hide API。確認會說明主人也
+無法查看或編輯、分享連結失效，且目前沒有復原操作；沒有新增 unhide 或擴權。
+確認狀態同時綁定服務、`hide`／`delete` 及「我的服務列／公開卡片」來源，避免
+重複呈現的同一服務互相展開或取消後回到另一個控制點。觸發按鈕保持掛載，
+以 `aria-expanded`／`aria-controls` 關聯確認區；警告同時是確認區與確認按鈕的
+可存取說明。鍵盤取消後焦點回到原來源的觸發按鈕，不送寫入。
+`member-services.spec.ts` 以真實管理員 session 與隔離 PostgreSQL 驗證自己／
+他人的服務：鍵盤取消後仍公開且版本不變，確認後才隱藏、只寫一次，等待實際
+列表移除後重新登入核對主人／管理員清單與公開頁 404。公開頁既有最長 60 秒
+快取政策不變；原生 HTTP 與 browser `cache: 'no-store'` 讀回不沿用瀏覽器舊快取，
+不能把仍在有效期的舊 200 視為隱藏提交失敗。
+
 封面輸入是 JPEG、PNG 或 WebP，最多 4 MiB，簽名與動畫檢查與其他上傳相同。輸出是 `service_cover`，`cover` 成 1200×675 的 WebP，最多 512 KiB。上傳是帶 Idempotency-Key 與 If-Match 的二進位 PUT。會員看封面走 `GET /api/v1/member-services/:id/cover`（暫停的服務主人仍看得到）；公開封面是 `GET /api/v1/public/member-services/:id/cover`。
 
 公開頁 `GET /services` 每頁 12 筆，分類是連結，下一頁用 `?before=`。不正確的分類或分頁標記回到第一頁，不回應那串原文。`GET /services/:id` 只顯示封面、標題、分類、主人顯示名稱、簡介、說明、價格、地區、方式與聯絡按鈕，不顯示信箱、頭像或登入資料。頁面可被索引。找不到或未公開是同一風格的 404。OG 標題是「{標題}｜{主人} 的服務｜自由工坊」，描述是簡介，圖片是封面，否則是 `/brand/freedom-workshop.webp`。可見的圖片與頁內連結用根相對路徑；canonical 與 OG 用 `runtime.publicOrigin`。
