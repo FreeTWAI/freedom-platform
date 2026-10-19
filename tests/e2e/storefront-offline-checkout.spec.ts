@@ -32,6 +32,40 @@ async function start(page: Page, store: Store) {
   await expect(page.getByText('請先約定時間，在山邊小店門口面交。', {exact: true})).toBeVisible();
   await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
 }
+
+test('merchant navigation connects the public shop, product, cart and order guidance without exposing bank details', async ({browser, e2eAuthPool}, info) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const page = await context.newPage();
+    const checkFrame = async () => {
+      await expect(page.locator('header.shop-top > .shop-top-store')).toHaveText(store.storeName);
+      await expect(page.locator('header.shop-top img')).toHaveCount(0);
+      await expect(page.locator('footer .shop-logo')).toBeVisible();
+      await expect(page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '訂單查詢', exact: true})).toHaveAttribute('href', `/shops/${store.slug}/order-access`);
+      await expect(page.locator('body')).not.toContainText('000000123456');
+      await expect(page.locator('body')).not.toContainText('合成測試銀行');
+    };
+    await page.goto(`/shops/${store.slug}`);
+    await checkFrame();
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-shop-${width}.png`));
+    await page.getByRole('link', {name: `查看商品：${store.products[0].title}`, exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('button', {name: '加入購物車', exact: true})).toBeVisible();
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-product-${width}.png`));
+    await page.getByRole('button', {name: '加入購物車', exact: true}).click();
+    await page.getByRole('link', {name: '查看購物車', exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('購物車');
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-cart-${width}.png`));
+    await page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '訂單查詢', exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('找回訂單');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveCount(0);
+    await page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '商品', exact: true}).click();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText(store.storeName);
+  } finally {await context.close(); await store.close();}
+});
 async function freeze(page: Page, store: Store) {
   const response = page.waitForResponse(r => r.url().endsWith(`/stores/${store.slug}/checkouts`) && r.request().method() === 'POST');
   await page.getByRole('button', {name: '核對訂單', exact: true}).click();
