@@ -125,9 +125,17 @@ JavaScript dates. No feature activation or deployment is implied by this fix.
 `GET /api/v1/community-search/mine` reads the member's taggable content on
 one transaction client, awaiting posts, works, events and book appointments
 sequentially. It does not rely on pg's deprecated implicit concurrent-query
-queue. Source SQL, per-kind limits, current skill-book authority and response
-shape stay unchanged; the final database-clock session check still runs after
-all four projections. This changes neither feature activation nor driver version.
+queue. Per-kind limits, current skill-book authority and response shape stay
+unchanged; the final database-clock session check still runs after all four
+projections. This changes neither feature activation nor driver version.
+
+The work projection includes only the owner's `published` showcases and skill
+submissions. Showcase status is filtered before the combined ordering and
+20-work limit, so newer private drafts cannot displace eligible published works.
+Draft and withdrawn showcases remain available through the private owner
+management APIs, but cannot receive topic writes. Withdrawal retains the
+existing topic set and its version; republishing restores them to the editor.
+This does not change publication consent, other owners' access or pagination.
 
 ## Member reporting and moderation cases
 

@@ -186,7 +186,10 @@ test('store pages stay readable in every theme and width', async ({page, browser
     await expect(pub.getByRole('complementary', {name: '預留與交易說明'})).toContainText('此頁不提供付款，也不會安排出貨。');
     await expect(pub.locator('form,button,script,input')).toHaveCount(0);
     const links = pub.locator('.shop-notice a, .shop-footer a');
-    await expect(links).toHaveCount(2);
+    await expect(links).toHaveCount(4);
+    expect(await links.evaluateAll(elements => elements.map(element => element.getAttribute('href')))).toEqual([
+      `/#reservations/${slug}`, '/', `/shops/${slug}/order-access`, '/#reservations',
+    ]);
     const targets = await links.evaluateAll(elements => elements.map(element => {
       const {left, right, top, bottom, width, height} = element.getBoundingClientRect();
       return {left, right, top, bottom, width, height};
@@ -195,10 +198,15 @@ test('store pages stay readable in every theme and width', async ({page, browser
       expect(target.width).toBeGreaterThanOrEqual(44); expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0); expect(target.right).toBeLessThanOrEqual(width);
     }
-    expect(targets[0].right <= targets[1].left || targets[1].right <= targets[0].left || targets[0].bottom <= targets[1].top || targets[1].bottom <= targets[0].top).toBe(true);
+    for (let i = 0; i < targets.length; i++) for (let j = i + 1; j < targets.length; j++) {
+      const a = targets[i], b = targets[j];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+    }
     await links.nth(0).focus();
     await expect(links.nth(0)).toBeFocused();
-    await pub.keyboard.press('Tab'); await expect(links.nth(1)).toBeFocused();
+    for (let i = 1; i < targets.length; i++) {
+      await pub.keyboard.press('Tab'); await expect(links.nth(i)).toBeFocused();
+    }
     await pub.screenshot({path: testInfo.outputPath(`store-public-${width}.png`), fullPage: true});
     for (const [name, hash] of [['登入查看預留狀態', `#reservations/${slug}`], ['查詢我的預留', '#reservations']]) {
       await pub.goto(`/shops/${slug}`);
