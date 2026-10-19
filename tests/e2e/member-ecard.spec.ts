@@ -142,7 +142,7 @@ async function applyTheme(page:Page,label:string,id:string){
   await page.waitForTimeout(200);
 }
 
-test('sharing a member card from 我的名片 scores one guest click',async({page,browser})=>{
+test('sharing a member card from 我的名片 scores one guest click',async({page,browser,e2eAuthPool})=>{
   test.setTimeout(240000);
   await page.setViewportSize({width:1280,height:900});
   await signup(page,'名片推廣作者');
@@ -204,9 +204,14 @@ test('sharing a member card from 我的名片 scores one guest click',async({pag
   const context=await browser.newContext({userAgent:GUEST_UA,viewport:{width:1280,height:900}});
   const guest=await context.newPage();
   try{
-    const clicked=guest.waitForResponse(response=>response.url().includes('/api/v1/promotion/clicks')&&response.request().method()==='POST');
+    const code=new URL(go).pathname.split('/').at(-1)!;
+    const points=async()=>Number((await e2eAuthPool.query('SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.code=$1',[code])).rows[0].n);
+    const before=await points();
+    const clicked=guest.waitForRequest(request=>request.url().includes('/api/v1/promotion/clicks')&&request.method()==='POST');
     await guest.goto(go);
-    expect((await clicked).ok()).toBe(true);
+    await clicked;
+    // Navigation can discard the old document's keepalive response event; verify the saved credit.
+    await expect.poll(points).toBe(before+1);
     await expect(guest).toHaveURL(/\/member-cards\/[A-Za-z0-9_-]{43}$/);
     await expect(guest.getByRole('heading',{name:'名片推廣作者的工坊名片'})).toBeVisible();
     await expect(guest.getByRole('button',{name:'加入自由工坊／登入'})).toBeVisible();

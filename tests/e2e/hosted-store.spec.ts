@@ -253,8 +253,9 @@ test('store pages stay readable in every theme and width', async ({page, browser
     await expect(pub.locator('form,button,script,input')).toHaveCount(0);
     const links = pub.locator('.shop-notice a, .shop-footer a');
     await expect(links).toHaveCount(4);
-    const destinations = [`/#reservations/${slug}`, '/', `/shops/${slug}/order-access`, '/#reservations'];
-    for (let i = 0; i < destinations.length; i++) await expect(links.nth(i)).toHaveAttribute('href', destinations[i]);
+    expect(await links.evaluateAll(elements => elements.map(element => element.getAttribute('href')))).toEqual([
+      `/#reservations/${slug}`, '/', `/shops/${slug}/order-access`, '/#reservations',
+    ]);
     const targets = await links.evaluateAll(elements => elements.map(element => {
       const {left, right, top, bottom, width, height} = element.getBoundingClientRect();
       return {left, right, top, bottom, width, height};
@@ -269,7 +270,9 @@ test('store pages stay readable in every theme and width', async ({page, browser
     }
     await links.nth(0).focus();
     await expect(links.nth(0)).toBeFocused();
-    for (let i = 1; i < destinations.length; i++) {await pub.keyboard.press('Tab'); await expect(links.nth(i)).toBeFocused();}
+    for (let i = 1; i < targets.length; i++) {
+      await pub.keyboard.press('Tab'); await expect(links.nth(i)).toBeFocused();
+    }
     await pub.screenshot({path: testInfo.outputPath(`store-public-${width}.png`), fullPage: true});
     for (const [name, hash] of [['登入查看預留狀態', `#reservations/${slug}`], ['查詢我的預留', '#reservations']]) {
       await pub.goto(`/shops/${slug}`);
