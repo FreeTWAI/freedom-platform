@@ -214,3 +214,71 @@ test('existing report, withdraw and hide actions stay reachable from a Short, an
     await e2eAuthPool.query('DELETE FROM community_social_posts WHERE title = ANY($1::text[])', [titles]);
   }
 });
+
+test('an older refresh answer that arrives after a newer one never brings a withdrawn post back', async ({page, e2eAuthPool}) => {
+  await recordCommands(page);
+  await answerPlayers(page);
+  await openShortFeed(page);
+  const stamp = Date.now();
+  const titles = [`亂序回應一 ${stamp}`, `亂序回應二 ${stamp}`, `亂序回應三 ${stamp}`];
+  const ids = await seed(e2eAuthPool, ['maker', 'maker', 'maker'], titles);
+  try {
+    const feed = await showFeed(page);
+    const slides = feed.locator('article.short-video-slide');
+    await expect.poll(() => played(page, IDS[0])).toBe(true);
+    // Request A is answered by the server now (the post still exists) but delivered to the page only later.
+    let firstSeen = false;
+    let deliverOld!: () => Promise<void>;
+    const oldAnswerHeld = new Promise<void>(resolve => { deliverOld = async () => resolve(); });
+    let oldDelivered!: () => void;
+    const oldDone = new Promise<void>(resolve => { oldDelivered = resolve; });
+    await page.route('**/api/v1/social-posts?*', async route => {
+      if (firstSeen) { await route.continue(); return; }
+      firstSeen = true;
+      const snapshot = await route.fetch();
+      await oldAnswerHeld;
+      await route.fulfill({response: snapshot});
+      oldDelivered();
+    });
+    await setHidden(page, true);
+    await setHidden(page, false);
+    await expect(feed.getByRole('button', {name: '正在確認影片狀態', exact: true})).toBeVisible();
+    // The post is withdrawn; a newer refresh (B) completes first and removes it.
+    await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1", [ids[0]]);
+    await setHidden(page, true);
+    await setHidden(page, false);
+    await expect(slides.filter({hasText: titles[0]})).toHaveCount(0);
+    await expect.poll(() => played(page, IDS[1])).toBe(true);
+    await clearCommands(page);
+    // Now the old answer A is delivered: it must change nothing.
+    await deliverOld();
+    await oldDone;
+    await page.waitForTimeout(800);
+    await expect(slides.filter({hasText: titles[0]})).toHaveCount(0);
+    await expect(feed.locator(`iframe[src*="${IDS[0]}"]`)).toHaveCount(0);
+    expect(await played(page, IDS[0])).toBe(false);
+  } finally {
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+  }
+});
+
+test('a feed that mounts while the tab is hidden stays silent until the viewer is back and the list is confirmed', async ({page, e2eAuthPool}) => {
+  await recordCommands(page);
+  await answerPlayers(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(document, 'hidden', {configurable: true, get: () => !(window as unknown as {__visible?: boolean}).__visible});
+  });
+  await openShortFeed(page);
+  const stamp = Date.now();
+  const ids = await seed(e2eAuthPool, ['maker'], [`背景載入 ${stamp}`]);
+  try {
+    const feed = await showFeed(page);
+    await expect(feed.locator('iframe')).toHaveCount(1);
+    await page.waitForTimeout(1000);
+    expect(await played(page, IDS[0])).toBe(false);
+    await page.evaluate(() => { (window as unknown as {__visible: boolean}).__visible = true; document.dispatchEvent(new Event('visibilitychange')); });
+    await expect.poll(() => played(page, IDS[0])).toBe(true);
+  } finally {
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+  }
+});

@@ -24,7 +24,8 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
   const idsKey = videos.map(video => video.post_id).join('|');
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [away, setAway] = useState(false);
+  // A feed that mounts while the tab is already hidden must not start playing.
+  const [away, setAway] = useState(() => typeof document !== 'undefined' && document.hidden);
   const [check, setCheck] = useState<'idle' | 'checking' | 'failed'>('idle');
   const [muted, setMuted] = useState(true);
   const [full, setFull] = useState(false);

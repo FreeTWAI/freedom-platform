@@ -174,8 +174,11 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   useEffect(() => { void load(platform); }, [load, platform]);
   // Quiet re-check for the Short feed (no spinner, so the viewer keeps their place): a hidden or withdrawn post drops out
   // of everything already loaded, so it stops playing. Returns null when the list could not be confirmed.
+  // Every refresh owns a generation. A response that is no longer the newest, or that predates a local removal, is
+  // dropped before it can write the list, cursor or canHide.
+  const refreshSequence = useRef(0);
   const refreshShorts = useCallback(async (loadedCount: number): Promise<readonly string[] | null> => {
-    const sequence = loadSequence.current;
+    const sequence = loadSequence.current, generation = ++refreshSequence.current;
     try {
       const kept: Post[] = [];
       let next: string | null | undefined;
@@ -184,7 +187,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         const query = new URLSearchParams({platform: 'youtube'});
         if (next) query.set('cursor', next);
         const page = await client.get<Page>(`/social-posts?${query}`);
-        if (sequence !== loadSequence.current) return null;
+        if (sequence !== loadSequence.current || generation !== refreshSequence.current) return null;
         kept.push(...page.items.filter(post => !kept.some(item => item.post_id === post.post_id)));
         next = page.next_cursor; canHideNow = page.can_hide;
       }
@@ -366,6 +369,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   }
   async function remove(post: Post) {
     if (!client.csrfToken) return;
+    ++refreshSequence.current;
     setSaving(true); setDeleteError('');
     try {
       const response = await accessAwareFetch(`/api/v1/social-posts/${post.post_id}`, {
@@ -373,7 +377,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
       });
       if (!response.ok) { const problem = await response.json().catch(() => ({})) as {detail?: string}; throw new ApiError({message: problem.detail || '貼文未能刪除。', status: response.status}); }
-      setItems(current => current.filter(item => item.post_id !== post.post_id));
+      { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); };
       newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id);
       deleteDialog.current?.close(); setConfirming(null); setNotice('貼文已刪除。');
       composerTrigger.current?.focus({preventScroll: true});
@@ -381,8 +385,9 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     finally { setSaving(false); }
   }
   async function hide(post: Post) {
+    ++refreshSequence.current;
     setSaving(true); setError('');
-    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); setItems(current => current.filter(item => item.post_id !== post.post_id)); setNotice('貼文已隱藏。'); }
+    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; setNotice('貼文已隱藏。'); }
     catch (cause) { setError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
     finally { setSaving(false); }
   }
