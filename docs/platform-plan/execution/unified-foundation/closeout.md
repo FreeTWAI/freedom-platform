@@ -10,6 +10,44 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-19 會員商務後台啟用
+
+**截至18:04 UTC，staging 與 production 都已部署 `12940c71`／schema172，
+Supplier 與 Commerce console 已開啟；checkout 與交易 Email 仍關閉。**
+這次沿用既有 schema，沒有執行 migration；其他旗標、路由與 cron 保持原值。
+供貨素材／上傳與選品照片仍是 staging開、production關。完整版本、旗標與
+逐環境證據見[會員後台發布收據](rollout-member-consoles-2026-10-19.json)。
+使用者已確認供應商與電商公會成員同意參與測試，這不等於真人驗收已完成，
+也不代替店主自己的公開、付款與交付設定或獨立准入。
+
+Staging 的自有合成普通會員，已走正常登入、店主／供應商權限與桌面／手機後台；
+店主訂單清單可見，匿名 API 被拒絕。這次只驗後台進入與閱讀，沒有下單或代填店家設定。
+合成 fixture、session 與臨時 Access 已分別確認清理。Production 完成公開唯讀
+health、版本／旗標、protocol、首頁與匿名拒絕檢查，沒有登入正式會員或建立訂單。
+真人供應商、店主與買家的完整旅程仍待完成。
+
+兩環境都有新的 before／after 資料庫與物件備份、遠端讀回、隔離還原、172 floor
+與清理證據。Production 首次 after-set `9fae9f1d` 在 capture失敗、清理成功，
+根因仍未確定；另用具名、固定雜湊的 diagnostic adapter／wrapper 完成新 set
+`46f64b85`，不改寫舊失敗。Staging 的初次備份初始化、兩次 browser harness失敗，
+以及 production 的 runtime closure拒絕與 cache隔離修復也分開保留。
+
+日常 dispatcher 已安裝為 `bc9cf6f1`，兩個原 timer恢復 active／enabled，排程未改；
+觀察到下一次為10月20日03:30:11 UTC（staging）與04:34:11 UTC（production）。
+**新 wrapper 的自然排程尚未觀察**，不能以手動還原、安裝或既有 service結果代替。
+Schema 證據使用各次成功備份的 authenticated preflight時間窗，還原檢查不冒稱
+新一次 live DB讀取。所有舊失敗、私有內容／授權讀取 floor、production座標約束、
+原168項需求、T-047 與第二操作者未驗項保留。
+
+本輪繼續以公會自主交付、可信商店／供貨、專業介紹／分享三個成果收尾。
+主線 `9df3b76e` 的 #902，以及含 #901、#906–#909 的整合候選
+[#910](https://github.com/FreeTWAI/freedom-platform/pull/910)，與本次實際部署分開記錄；
+其審查與 CI 不代表已部署，店面、介紹與分享改動不包含在 `12940c71`。
+下一步沿既有有限商務交接完成會員設定與適用交易驗收，並完成這些候選的整合驗證；
+不新增第四條工作線，也不把後台啟用稱為完整電商或 Foundation完成。
+
+以下10月17日及更早段落保留當時觀察；當前具日期快照以上方收據與`current-state.json`為準。
+
 ## 2026-10-17 Commerce 與離線買家流程收尾
 
 #863 的後端與 schema168–170 已部署兩環境，接著 #875 補齊買家報價、確認下單、
