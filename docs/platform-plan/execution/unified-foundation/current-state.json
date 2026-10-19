@@ -75,7 +75,14 @@
       "status": "deployed_console_enablement_restore_and_operator_passed",
       "last_operator_release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
       "limitation": "Supplier and Commerce consoles are ON; checkout and transactional email remain OFF. Staging uses owned synthetic ordinary-member console access/readability acceptance; production acceptance is public read-only HTTP. No human usability, payment, bank verification or complete supplier fulfilment is claimed. New operator natural scheduled execution is not yet observed.",
-      "health_observation": "Deployment receipt records exact-release health and HTML; final read-only Worker binding observation separately verifies active version/flags/routes. Production public HTTP smoke was observed at 2026-10-19T17:29:28.276Z."
+      "health_observation": "Passing production public HTTP acceptance checked HTTP200, exact-release health, public mode and no-store, then protocol, homepage and anonymous rejection. The later read-only Worker binding observation verifies active version/flags/routes and is not a fresh HTTP health check.",
+      "worker_binding_observed_at": "2026-10-19T18:04:18.481Z",
+      "health_observed_at": "2026-10-19T17:29:28.276Z",
+      "health_observed_between": {
+        "start": "2026-10-19T17:29:24.755Z",
+        "end": "2026-10-19T17:29:28.276Z"
+      },
+      "health_observed_at_basis": "Completion time of the passing acceptance receipt; the health response has no separate timestamp and was checked within the recorded window."
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
@@ -94,7 +101,14 @@
       "status": "deployed_console_enablement_restore_and_operator_passed",
       "last_operator_release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
       "limitation": "Supplier and Commerce consoles are ON; checkout and transactional email remain OFF. Staging uses owned synthetic ordinary-member console access/readability acceptance; production acceptance is public read-only HTTP. No human usability, payment, bank verification or complete supplier fulfilment is claimed. New operator natural scheduled execution is not yet observed.",
-      "health_observation": "Deployment receipt records exact-release health and HTML; final read-only Worker binding observation separately verifies active version/flags/routes. Production public HTTP smoke was observed at 2026-10-19T17:29:28.276Z."
+      "health_observation": "Passing staging browser acceptance separately checked HTTP200, exact-release health and staging mode before ordinary-member desktop/mobile console checks; the deployment receipt records HTML and no-store health. The later read-only Worker binding observation verifies active version/flags/routes and is not a fresh HTTP health check.",
+      "worker_binding_observed_at": "2026-10-19T18:04:18.481Z",
+      "health_observed_at": "2026-10-19T17:01:17.725Z",
+      "health_observed_between": {
+        "start": "2026-10-19T17:00:56.152Z",
+        "end": "2026-10-19T17:01:17.725Z"
+      },
+      "health_observed_at_basis": "Completion time of the passing acceptance receipt; the health response has no separate timestamp and was checked within the recorded window."
     },
     "last_operator_rollout": {
       "source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
