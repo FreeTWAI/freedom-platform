@@ -704,8 +704,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/published-skills.ts",
-      "bytes": 10604,
-      "sha256": "8e7fdb94aadc4f0c2db99738acc6dcefed7810e5302ba424d2a4fcf5fc7fb52c"
+      "bytes": 11467,
+      "sha256": "0de1677fc8f2884198ab78d061dbe6c117d8e49c716f30c294b63fc2bbe3ced6"
     },
     {
       "path": "apps/platform-api/src/routes/repo-author-claims.ts",
@@ -13964,8 +13964,8 @@
     },
     {
       "path": "docs/development/agent-skill-upload.md",
-      "bytes": 12462,
-      "sha256": "e144c99955ba8c8374aff5950c77c177e710174cc632f3558b39c504cb3a9d6b"
+      "bytes": 13747,
+      "sha256": "4a990034ffa20bd8a199c29764266aea97b32d736f7bd7c8ffaeb45d3f0fcc69"
     },
     {
       "path": "docs/development/ai-sister-guides.md",
@@ -19534,8 +19534,8 @@
     },
     {
       "path": "modules/development/freedom.module.json",
-      "bytes": 1910,
-      "sha256": "29ef6e93fa60a0cd991aa0824465eb4da26e84cdeb84d33e590042a199151c02"
+      "bytes": 1954,
+      "sha256": "b1e47b35e847d58f10021b3f088590f74a1fcfa4a428fe8532c0545af3366840"
     },
     {
       "path": "modules/development/page-github.ts",
@@ -19549,8 +19549,8 @@
     },
     {
       "path": "modules/development/service.ts",
-      "bytes": 42931,
-      "sha256": "1d7a4d097da0802db221b0fc938bfd7b4e9c8ab01c3732b9a5bfea8260e022c2"
+      "bytes": 48313,
+      "sha256": "ab3d9aee5f16d557b1503ccb96fd71feacdba99dd2690389b0efab6a994f1d89"
     },
     {
       "path": "modules/development-access/freedom.module.json",
@@ -22244,8 +22244,8 @@
     },
     {
       "path": "tests/e2e/development-guide.spec.ts",
-      "bytes": 7074,
-      "sha256": "58729222fb0bd96f70b34baee0d9840a2192d1e7161926496adaad6a7f16491b"
+      "bytes": 11315,
+      "sha256": "e877ab89191667738b74a2fc5e600a6fa1e31e6c2d664c8d120bcd669e084c7e"
     },
     {
       "path": "tests/e2e/device-connections-visual.ts",
@@ -22804,8 +22804,8 @@
     },
     {
       "path": "tests/e2e/skill-book-library.spec.ts",
-      "bytes": 36885,
-      "sha256": "db0d2c32c62910164cfbdedf054f37f945c7ce3a565a9ad56cbfe0c2e1e984b8"
+      "bytes": 36924,
+      "sha256": "3ad6c1d458c5d77b82c644ab67132cb5977b9f8d328284a3827213a186cb451b"
     },
     {
       "path": "tests/e2e/skill-book-upgrade.spec.ts",
@@ -24884,8 +24884,8 @@
     },
     {
       "path": "tests/runtime/published-skills.test.ts",
-      "bytes": 5806,
-      "sha256": "30ffd2a07aed9a3670fd0939f53232e2c2730b2cea2c026f8aaec1ebd72b0e6e"
+      "bytes": 7198,
+      "sha256": "5d147c16d8e4cc66fbaf527969799114d4ae9c1052f696b947e8e602c2ca33ac"
     },
     {
       "path": "tests/runtime/repo-author-claims.test.ts",
@@ -25064,8 +25064,8 @@
     },
     {
       "path": "tests/runtime/skill-sharing.test.ts",
-      "bytes": 12614,
-      "sha256": "5085a7c4a86914c5abf6bdc017e2cd6fdc9b96c1fff9d90745a28e4fbad4583f"
+      "bytes": 14444,
+      "sha256": "dbd522dcd524d1fb1c6e28f122d6a95b8e98ad15f976c4a6c48e9933a295c38e"
     },
     {
       "path": "tests/runtime/skill-submission-upgrades.test.ts",
@@ -25074,8 +25074,8 @@
     },
     {
       "path": "tests/runtime/skill-submissions.test.ts",
-      "bytes": 58425,
-      "sha256": "36091a96db5c9af4ca9cab30ddb0d51a3c963329c9518745a596602b0bd3d77c"
+      "bytes": 58856,
+      "sha256": "e153e7cc4fda2f7bef1f188d6e8bd5845719d161c08a8410a99e507f70181504"
     },
     {
       "path": "tests/runtime/skill-upload-chat.test.ts",
