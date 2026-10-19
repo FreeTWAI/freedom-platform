@@ -287,3 +287,61 @@ test('a feed that mounts while the tab is hidden stays silent until the viewer i
     await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
   }
 });
+
+test('a report submitted from a Short reaches the existing reporting command for that post', async ({page, e2eAuthPool}) => {
+  await recordCommands(page);
+  await answerPlayers(page);
+  await openShortFeed(page);
+  const stamp = Date.now();
+  const title = `檢舉送出 ${stamp}`;
+  const ids = await seed(e2eAuthPool, ['reviewer'], [title]);
+  try {
+    const feed = await showFeed(page);
+    await feed.getByRole('button', {name: '貼文選項與檢舉', exact: true}).click();
+    const sheet = page.getByRole('dialog', {name: '貼文選項與檢舉', exact: true});
+    await sheet.getByRole('button', {name: '檢舉貼文', exact: true}).click();
+    const report = page.getByRole('dialog', {name: /檢舉/}).last();
+    await expect(report).toBeVisible();
+    await report.getByLabel('檢舉原因').selectOption('harassment');
+    await report.getByRole('button', {name: '送出檢舉', exact: true}).click();
+    await expect(report.getByRole('status')).toContainText('已收到檢舉');
+    const rows = (await e2eAuthPool.query("SELECT target_kind, target_id FROM member_reports WHERE target_id=$1", [ids[0]])).rows;
+    expect(rows).toEqual([{target_kind: 'post', target_id: ids[0]}]);
+  } finally {
+    await e2eAuthPool.query('DELETE FROM member_reports WHERE target_id = ANY($1::uuid[])', [ids]);
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+  }
+});
+
+test('a platform moderator can hide someone else\'s post from a Short, which stops and unmounts its player', async ({page, e2eAuthPool}) => {
+  await recordCommands(page);
+  await answerPlayers(page);
+  await openShortFeed(page);
+  const stamp = Date.now();
+  const titles = [`版主隱藏 ${stamp}`, `版主保留 ${stamp}`];
+  const maker = (await e2eAuthPool.query('SELECT community_id, user_id, display_name, email_verified_at FROM users WHERE email=$1', ['maker@local.test'])).rows[0];
+  const adminId = (await e2eAuthPool.query("INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES(gen_random_uuid(),$1,'maker@local.test',$2) RETURNING admin_id", [maker.community_id, maker.display_name])).rows[0].admin_id;
+  await e2eAuthPool.query('UPDATE users SET email_verified_at=COALESCE(email_verified_at, now()) WHERE user_id=$1', [maker.user_id]);
+  const ids = await seed(e2eAuthPool, ['reviewer', 'reviewer'], titles);
+  try {
+    const feed = await showFeed(page);
+    const slides = feed.locator('article.short-video-slide');
+    await expect(slides).toHaveCount(2);
+    await expect.poll(() => played(page, IDS[0])).toBe(true);
+    await feed.getByRole('button', {name: '貼文選項與檢舉', exact: true}).first().click();
+    const sheet = page.getByRole('dialog', {name: '貼文選項與檢舉', exact: true});
+    await sheet.locator('summary[aria-label="貼文選項"]').click();
+    await clearCommands(page);
+    await sheet.getByRole('button', {name: '隱藏', exact: true}).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(slides.filter({hasText: titles[0]})).toHaveCount(0);
+    await expect(feed.locator(`iframe[src*="${IDS[0]}"]`)).toHaveCount(0);
+    expect(await played(page, IDS[0])).toBe(false);
+    expect((await e2eAuthPool.query('SELECT state FROM community_social_posts WHERE post_id=$1', [ids[0]])).rows[0].state).toBe('hidden');
+    await expect.poll(() => played(page, IDS[1])).toBe(true);
+  } finally {
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+    await e2eAuthPool.query('DELETE FROM platform_admins WHERE admin_id=$1', [adminId]);
+    await e2eAuthPool.query('UPDATE users SET email_verified_at=$2 WHERE user_id=$1', [maker.user_id, maker.email_verified_at]);
+  }
+});
