@@ -22,7 +22,7 @@
 | 還原 | production 部署後備份的還原還沒成功過（四次嘗試，最後一次在 restore 階段失敗）。T-047：備份後撤銷的成員或邀請，還原後會回到有效；tenant 表沒有 recovery generation，只靠隔離與操作步驟 | `closeout.md:27-54`（main）；`docs/development/daily-recovery-backup-installation.md:96-101` |
 | 預留的寫入下限 | 162 之後，只把 Worker 退回 162 之前的版本不算回退；還原後保持隔離，直到目前的權限與撤銷對帳完成 | `modules/agent-commerce/hosted/inventory-reservations.md:49-55` |
 | 到期預留的排程函式 | `sweepDueCheckoutHolds`：每次最多 200 張訂單，每張在自己的交易處理；已寫好，還沒接到 cron | `modules/agent-commerce/checkout/settlement.ts`（分支 `fc/wp03-core`） |
-| Supplier Console 的開關 | `FREEDOM_SUPPLIER_CONSOLE_ENABLED` 預設關，需要 launchpad；`site.supplier_console_enabled` 取兩者的 AND。Seller Console 的殼由它提供 | SC-SPEC-06 §1（分支 `feat/supplier-console-r1`） |
+| Supplier Console 的開關 | `FREEDOM_SUPPLIER_CONSOLE_ENABLED` 預設關，需要 launchpad；`site.supplier_console_enabled` 取兩者的 AND。Seller Console 共用 `hosted-ui/ConsoleShell` 元件，但開關互不依賴 | SC-SPEC-06 §1（分支 `feat/supplier-console-r1`） |
 
 ## 2. 能力與開關
 
@@ -46,7 +46,7 @@
 
 | 設定 | 預設 | 就緒檢查的依賴 | 打開時 | 關閉或缺少時 |
 | --- | --- | --- | --- | --- |
-| `FREEDOM_COMMERCE_CONSOLE_ENABLED` | 關 | launchpad；`FREEDOM_SUPPLIER_CONSOLE_ENABLED`（殼） | E02～E11 的新頁面與新的讀寫路由（EC-SPEC-01 §7.5）。M2 只有賣家的訂單、付款例外、退款紀錄與立即查詢路由，還沒有 E 頁 | 新路由回 404；E 頁的 slug 回到既有頁面；資料不動 |
+| `FREEDOM_COMMERCE_CONSOLE_ENABLED` | 關 | launchpad | E02～E11 的新頁面與新的讀寫路由（EC-SPEC-01 §7.5）。M2 只有賣家的訂單、付款例外、退款紀錄與立即查詢路由，還沒有 E 頁 | 新路由回 404；E 頁的 slug 回到既有頁面；資料不動 |
 | `FREEDOM_COMMERCE_CHECKOUT_ENABLED` | 關 | console | 新的 checkout、`hosted_checkout` 訂單與付款交接（B04、B05） | 購物車與結帳按鈕隱藏，B03 顯示「目前暫停接單」。已成立訂單的付款通知、查詢、到期釋放、出貨、售後與退款照常 |
 | `FREEDOM_COMMERCE_PROVIDER_PROFILES` | 空 | 每個 ID 都必須是這個 binary 實作的 profile；列有 `ecpay.*` 時必須有 `COMMERCE_CREDENTIAL_KEYS` 與 `COMMERCE_JOURNAL`；只列線下 profile 時不需要（EC-SPEC-11 §8） | 只有列出的 profile 能啟用新服務、出現在結帳選項、發起新的對外操作（付款交接、建單、開票、API 退款） | 不在清單的 profile 照常接收通知與查詢；尚未執行的操作留在佇列，重新列入後繼續，不丟棄 |
 | `FREEDOM_COMMERCE_EMAIL_ENABLED` | 關 | Worker 的 `EMAIL` binding 與 `COMMERCE_JOURNAL`；Node server 打開時就緒失敗 | §6 的交易信件；只有打開期間發生的事實會建立信件列 | 不寄信，也不建立新的信件列，關閉期間的事實事後不補寄；打開時已建立、還沒寄出的列留在佇列，重新打開後在到期前寄出（§6.3） |
@@ -61,12 +61,12 @@
 - 安裝檢查（比照 `media-wrangler.mjs`）加相同的組合規則，部署前就擋下。
 - 正式與 staging 的值由 Ted 經 release wrapper 設定。每次變更都記在 receipt：環境、時間、前後值。
 - 新設定對設定生效後的請求才有作用；處理中的請求以開始時讀到的設定完成。每個命令是單一交易，所以不會停在一半。
-- M1 只有 `CHECKOUT` 與 `QUARANTINE`，`CHECKOUT` 依賴 launchpad。M2 的 wp04-seller 加入 `CONSOLE`，`CHECKOUT` 改依賴 `CONSOLE`：賣家要能處理訂單，才能開放結帳（§7 的回退也一起關）。`CONSOLE` 起初只依賴 launchpad；Supplier Console 的殼進 main 後（2026-10-16），`CONSOLE` 也依賴 `FREEDOM_SUPPLIER_CONSOLE_ENABLED`。就緒與安裝檢查的錯誤碼：`commerce_launchpad_required`（`CONSOLE` 沒有 launchpad）、`commerce_supplier_console_required`（`CONSOLE` 沒有 Supplier Console 的開關）、`commerce_console_required`（`CHECKOUT` 沒有 `CONSOLE`）。
+- M1 只有 `CHECKOUT` 與 `QUARANTINE`，`CHECKOUT` 依賴 launchpad。M2 的 wp04-seller 加入 `CONSOLE`，`CHECKOUT` 改依賴 `CONSOLE`：賣家要能處理訂單，才能開放結帳（§7 的回退也一起關）。`CONSOLE` 依賴 launchpad；2026-10-19 候選移除原本因共用殼元件而加入的 Supplier Console 開關相依。供應商介面維持自己的開關，單純開賣家後台不啟用供應商路由。就緒與安裝檢查保留 `commerce_launchpad_required`（`CONSOLE` 沒有 launchpad）與 `commerce_console_required`（`CHECKOUT` 沒有 `CONSOLE`）。部署前須核對實際 binary 是否已包含此變更，不能把候選行為套用到舊部署。
 
 ### 2.3 `site` 欄位與頁面
 
 - `/api/v1/site` 新增兩個欄位：
-  - `commerce_console_enabled`：console、supplier console 與 launchpad 三者的 AND；
+  - `commerce_console_enabled`：console 與 launchpad 的 AND；不受 supplier console 開關影響；
   - `commerce_checkout_enabled`：checkout 與 console 都開，而且不在隔離模式。
   - M1 只加 `commerce_checkout_enabled`（checkout 開而且不在隔離模式）；`commerce_console_enabled` 在殼進 main 後加入（2026-10-16）。
 - 不公開 profile 清單、金鑰狀態或隔離原因。
