@@ -435,6 +435,11 @@ test('publish imports real pinned GitHub source once, needs consent and current 
  assert.equal((await readPublishedSkillIllustration(pool,id))?.mime_type,'image/webp');
  const html=await platform.request(origin+`/development/submissions/${id}`);assert.equal(html.status,200);
  const markup=await html.text();assert.equal(markup.includes(maliciousTitle),false);assert.match(markup,/&lt;script&gt;/);
+ assert.match(markup,/<h2>開始使用<\/h2>/);assert.ok(markup.includes(payload().use_notes));
+ assert.match(markup,/<bdi>github.com\/example\/project<\/bdi>/);assert.ok(markup.includes('到 GitHub 看原始碼'));
+ assert.ok(!markup.includes('開啟專案線上示範'));assert.ok(markup.includes(sha));
+ for(const secret of [owner.user.email,owner.user.user_id,'grant_hash'])assert.equal(markup.includes(secret),false,secret);
+
  const markdown=await platform.request(origin+`/development/submissions/${id}/SKILL.md`);assert.equal(markdown.status,200);assert.match(await markdown.text(),/example\/project/);
  const listing=(await api('/skill-submissions/published')).data.items;assert.equal(listing[0].submission_id,id);assert.equal('share_introductions' in listing[0],false);
  assert.equal((await api('/skill-submissions/published?limit=1')).data.items.length,1);

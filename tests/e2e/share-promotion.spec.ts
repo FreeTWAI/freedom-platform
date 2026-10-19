@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { navigate, expandHomeSections, selectSocialFeed } from './navigation.js';
 import { test, expect, type Browser, type Page } from './fixtures.js';
 
@@ -46,14 +47,17 @@ async function login(page: Page) {
   await page.locator('.home-personal > summary').click();
 }
 
-async function creditVisit(browser: Browser, url: string, expected: (url: URL) => boolean, intercept?: string) {
+async function creditVisit(browser: Browser, url: string, expected: (url: URL) => boolean, pool: Pool, intercept?: string) {
   const context = await browser.newContext({ userAgent: GUEST_UA });
   const guest = await context.newPage();
   if (intercept) await guest.route(intercept, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>intercepted</title>' }));
-  const clicked = guest.waitForResponse(response => response.url().includes('/api/v1/promotion/clicks') && response.request().method() === 'POST');
+  const clicked = guest.waitForRequest(request => request.url().includes('/api/v1/promotion/clicks') && request.method() === 'POST');
   const landed = guest.waitForURL(expected);
   await guest.goto(url, { waitUntil: 'commit' });
-  expect((await clicked).ok()).toBe(true);
+  await clicked;
+  // The source document may be discarded before a keepalive response event; await persisted credit before closing it.
+  await expect.poll(() => destinationPoints(pool, new URL(url).pathname.split('/').at(-1)!)).toBeGreaterThan(0);
+  if (intercept) await guest.locator('[data-go-destination]').click();
   await landed;
   await context.close();
 }
@@ -80,7 +84,7 @@ function contrast(foreground: string, background: string) {
   return (Math.max(left, right) + 0.05) / (Math.min(left, right) + 0.05);
 }
 
-test('a skill-book share link credits one guest click on the weekly board', async ({ page, browser }) => {
+test('a skill-book share link credits one guest click on the weekly board', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(60_000);
   await login(page);
   await navigate(page, '技能書架');
@@ -98,7 +102,7 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   const go = (await url.innerText()).trim();
   await page.keyboard.press('Escape');
 
-  await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post');
+  await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto('/');
   await navigate(page, '推廣排行榜');
   const skill = board(page, '技能推廣排行榜');
@@ -106,7 +110,7 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   await expect(skill).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
   await expect(skill.locator('li').filter({ hasText: '示範創作者' }).locator('.promotion-rank')).toHaveText('第 1 名');
 
-  await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post');
+  await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto(go);
   await expect(page).toHaveURL(/\/development\/skills\/social-post/);
   await page.goto('/');
@@ -138,7 +142,7 @@ test('an event share link lands on the public page and shows the click', async (
   await expect(field).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
   await expect(card.getByText('推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。')).toBeVisible();
   eventGo = await field.inputValue();
-  await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'));
+  await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
   await expect(report.getByRole('listitem')).toHaveCount(20);
@@ -172,7 +176,7 @@ test('an event share link lands on the public page and shows the click', async (
   }
 });
 
-test('sharing the workshop from home and the leaderboard uses one personal link', async ({ page, browser }) => {
+test('sharing the workshop from home and the leaderboard uses one personal link', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(60_000);
   await login(page);
   await expandHomeSections(page); await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
@@ -186,7 +190,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   platformGo = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
 
-  await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '');
+  await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.goto(platformGo);
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
   await navigate(page, '推廣排行榜');
@@ -195,7 +199,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   const again = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
   await expect(again.locator('.skill-share-url')).toHaveText(platformGo);
   await again.getByRole('button', { name: '關閉分享', exact: true }).click();
-  await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '');
+  await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
@@ -251,7 +255,7 @@ async function sharePost(page: Page, url: string, title?: string) {
   await expect(page.locator('article.social-card')).toHaveCount(before + 1);
 }
 
-test('the social zone previews, shares, replaces and keeps a thumbnail', async ({ page, browser }) => {
+test('the social zone previews, shares, replaces and keeps a thumbnail', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(90_000);
   await login(page);
   await navigate(page, '社群分享');
@@ -271,7 +275,7 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
-  await creditVisit(browser, go, url => url.href === YOUTUBE, 'https://www.youtube.com/**');
+  await creditVisit(browser, go, url => url.href === YOUTUBE, e2eAuthPool, 'https://www.youtube.com/**');
   await page.reload();
   await selectSocialFeed(page,'全部動態');
   await expect(page.locator('article.social-card').filter({ has: page.getByRole('heading', { name: 'E2E 示範影片', level: 3 }) })).toContainText('推廣點擊 1');
@@ -284,7 +288,7 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
   await expect(youtube.getByRole('link', { name: '開啟原文 ↗' })).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
-test('social cards keep a 16:9 thumbnail, a small byline and actions on one row', async ({ page, browser }) => {
+test('social cards keep a 16:9 thumbnail, a small byline and actions on one row', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(60_000);
   await login(page);
   await navigate(page, '社群分享');
@@ -314,7 +318,7 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
-  await creditVisit(browser, go, url => url.pathname === '/');
+  await creditVisit(browser, go, url => url.pathname === '/', e2eAuthPool);
   await page.reload();
   await navigate(page, '推廣排行榜');
   const leader = page.locator('.promotion-person .promotion-avatar').first();
@@ -478,18 +482,11 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
     }
   }
 
-  const context = await browser.newContext({ userAgent: GUEST_UA });
+  const context = await browser.newContext({ userAgent: GUEST_UA, javaScriptEnabled: false });
   const guest = await context.newPage();
-  let release = () => {};
-  const hold = new Promise<void>(resolve => { release = resolve; });
-  await guest.route('**/api/v1/promotion/clicks', async route => { await hold; await route.fulfill({ json: { ok: true } }); });
-  await guest.addInitScript(() => {
-    const native = window.setTimeout.bind(window);
-    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => timeout === 1200 ? native(() => {}, 600_000) : native(handler, timeout, ...args)) as typeof setTimeout;
-  });
   await guest.setViewportSize({ width: 1280, height: 900 });
   await guest.goto(eventGo || platformGo);
-  await expect(guest.getByText(/正在前往/)).toBeVisible();
+  await expect(guest.getByRole('link', { name: '開啟站內內容', exact: true })).toBeVisible();
   await guest.screenshot({ path: `${SHOTS}/interstitial-light-1280.png`, fullPage: true });
   await guest.setViewportSize({ width: 390, height: 844 });
   await guest.screenshot({ path: `${SHOTS}/interstitial-light-390.png`, fullPage: true });
@@ -498,7 +495,6 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   await guest.screenshot({ path: `${SHOTS}/interstitial-dark-1280.png`, fullPage: true });
   await guest.setViewportSize({ width: 390, height: 844 });
   await guest.screenshot({ path: `${SHOTS}/interstitial-dark-390.png`, fullPage: true });
-  release();
   await context.close();
 });
 
@@ -511,4 +507,190 @@ test('the author can delete their social post', async ({ page }) => {
   await youtube.getByRole('button', { name: '刪除', exact: true }).click();
   await page.getByRole('dialog', { name: '刪除貼文？', exact: true }).getByRole('button', { name: '確定刪除', exact: true }).click();
   await expect(youtube).toHaveCount(0);
+});
+
+async function destinationLink(page: Page, kind = 'platform', target = 'workshop') {
+  const signed = await page.request.post('/api/v1/auth/login', {
+    headers: { Origin: new URL(test.info().project.use.baseURL as string).origin },
+    data: { email: 'maker@local.test', password: 'freedom-local-demo' },
+  });
+  expect(signed.status()).toBe(200);
+  const auth = await signed.json();
+  const created = await page.request.post('/api/v1/promotion/links', {
+    headers: { Origin: new URL(test.info().project.use.baseURL as string).origin, 'X-CSRF-Token': auth.csrf_token }, data: { kind, target },
+  });
+  expect(created.status()).toBe(200);
+  return await created.json() as { code: string; path: string };
+}
+
+async function destinationPoints(pool: Pool, code: string) {
+  return (await pool.query('SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.code=$1', [code])).rows[0].n as number;
+}
+
+test('share destination keeps Strict-cookie self exclusion after a cross-site entry without waiting for counting', async ({ page, context, e2eAuthPool, baseURL }) => {
+  const link = await destinationLink(page);
+  const before = await destinationPoints(e2eAuthPool, link.code);
+  const cookies = await context.cookies();
+  const strict = cookies.find(cookie => cookie.sameSite === 'Strict');
+  expect(strict).toBeDefined();
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let arrived!: (cookie: string) => void;
+  const countingCookie = new Promise<string>(resolve => { arrived = resolve; });
+  await context.route('**/api/v1/promotion/clicks', async route => {
+    arrived((await route.request().allHeaders()).cookie ?? '');
+    await held;
+    await route.continue();
+  });
+  const entry = 'https://share-entry.example/';
+  await context.route(entry, route => route.fulfill({ contentType: 'text/html', body: `<meta charset="utf-8"><a href="${baseURL}${link.path}">開啟會員分享</a>` }));
+  await page.goto(entry);
+  const topRequest = page.waitForRequest(request => new URL(request.url()).pathname === link.path && request.isNavigationRequest());
+  try {
+    await page.getByRole('link', { name: '開啟會員分享' }).click();
+    expect((await (await topRequest).allHeaders()).cookie ?? '').not.toContain(strict!.name + '=');
+    expect(await countingCookie).toContain(strict!.name + '=');
+    await expect(page).toHaveURL(baseURL + '/');
+  } finally { release(); }
+  expect(await destinationPoints(e2eAuthPool, link.code)).toBe(before);
+});
+
+test('share destination finishes a delayed guest count after internal navigation', async ({ page, browser, e2eAuthPool, baseURL }) => {
+  const link = await destinationLink(page);
+  const before = await destinationPoints(e2eAuthPool, link.code);
+  const guest = await browser.newContext({ userAgent: GUEST_UA + ' DestinationGuest/1' });
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await guest.route('**/api/v1/promotion/clicks', async route => { await held; await route.continue(); });
+  const visitor = await guest.newPage();
+  const requested = guest.waitForEvent('request', { predicate: request => request.url().endsWith('/api/v1/promotion/clicks') });
+  try {
+    await visitor.goto(baseURL + link.path, { waitUntil: 'commit' });
+    await requested;
+    await expect(visitor).toHaveURL(baseURL + '/');
+  } finally { release(); }
+  // Chromium may detach the old document's response event; the database proves native keepalive delivery.
+  await expect.poll(() => destinationPoints(e2eAuthPool, link.code)).toBe(before + 1);
+  await guest.close();
+
+});
+
+test('share destination opens internal content when counting fails or fetch is unavailable', async ({ page, browser, baseURL }) => {
+  const link = await destinationLink(page, 'skill_book', 'book:social-post');
+  for (const mode of ['network', 'unavailable'] as const) {
+    const context = await browser.newContext({ userAgent: GUEST_UA });
+    if (mode === 'network') await context.route('**/api/v1/promotion/clicks', route => route.abort());
+    else await context.addInitScript(() => {
+      const original = window.fetch;
+      window.fetch = (...args) => {
+        if (String(args[0]).includes('/api/v1/promotion/clicks')) throw Error('Counting unavailable');
+        return original(...args);
+      };
+    });
+    const visitor = await context.newPage();
+    await visitor.goto(baseURL + link.path, { waitUntil: 'commit' });
+    await expect(visitor).toHaveURL(baseURL + '/development/skills/social-post');
+    await expect(visitor.getByRole('heading', { level: 1 })).toContainText('社群貼文');
+    await context.close();
+  }
+});
+
+test('share destination shows the external address until an explicit action, works without JavaScript and hides withdrawn content', async ({ page, browser, e2eAuthPool, baseURL }) => {
+  const postId = randomUUID();
+  const target = 'https://example.com/member-project/a-clear-destination-with-a-long-path?version=2';
+  const title = '會員作品：用真實範例理解工作流程';
+  await e2eAuthPool.query(`INSERT INTO community_social_posts(post_id,community_id,author_user_id,url,platform,title,state)
+    VALUES($1,$2,$3,$4,'other',$5,'active')`, [postId, COMMUNITY, MAKER, target, title]);
+  try {
+    const link = await destinationLink(page, 'social_post', postId);
+    const guest = await browser.newContext({ userAgent: GUEST_UA });
+    const visitor = await guest.newPage();
+    const counted = visitor.waitForResponse(response => response.url().endsWith('/api/v1/promotion/clicks'));
+    await visitor.goto(baseURL + link.path + '?url=https://evil.example/');
+    expect((await counted).status()).toBe(200);
+    // The former 1.2-second timer must never send a visitor to an external site.
+    await visitor.waitForTimeout(1400);
+    await expect(visitor).toHaveURL(baseURL + link.path + '?url=https://evil.example/');
+    await expect(visitor.getByRole('heading', { level: 1 })).toHaveText(title);
+    await expect(visitor.locator('dd')).toHaveText(target.slice('https://'.length));
+    await expect(visitor.getByText('這是外部網站。帳號、費用與資料處理，請依目的地網站說明核對。')).toBeVisible();
+    const action = visitor.getByRole('link', { name: '前往 example.com ↗', exact: true });
+    await expect(action).toHaveAttribute('href', target);
+    await expect(visitor.locator('body')).not.toContainText('evil.example');
+    for (const width of [1280, 390, 320]) {
+      await visitor.setViewportSize({ width, height: width === 1280 ? 900 : 844 });
+      await noOverflow(visitor);
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await shot(visitor, 'share-destination-external-' + width);
+    }
+    await visitor.route(target, route => route.fulfill({ contentType: 'text/html', body: '<title>Destination fixture</title><h1>外部作品</h1>' }));
+    await action.focus();
+    await visitor.keyboard.press('Enter');
+    await expect(visitor).toHaveURL(target);
+    await guest.close();
+
+    const beforeBot = await destinationPoints(e2eAuthPool, link.code);
+    const bot = await browser.newContext({ userAgent: 'facebookexternalhit/1.1' });
+    const botPage = await bot.newPage();
+    const botCounted = botPage.waitForResponse(response => response.url().endsWith('/api/v1/promotion/clicks'));
+    await botPage.goto(baseURL + link.path);
+    expect((await botCounted).status()).toBe(200);
+    expect(await destinationPoints(e2eAuthPool, link.code)).toBe(beforeBot);
+    await bot.close();
+
+    const noScript = await browser.newContext({ javaScriptEnabled: false });
+    const plain = await noScript.newPage();
+    await plain.goto(baseURL + link.path);
+    await expect(plain.locator('dd')).toHaveText(target.slice('https://'.length));
+    await plain.route(target, route => route.fulfill({ contentType: 'text/html', body: '<h1>外部作品</h1>' }));
+    await plain.getByRole('link', { name: '前往 example.com ↗', exact: true }).click();
+    await expect(plain).toHaveURL(target);
+    await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1", [postId]);
+    const unavailable = await plain.goto(baseURL + link.path);
+    expect(unavailable!.status()).toBe(404);
+    await expect(plain.getByRole('heading', { level: 1 })).toHaveText('分享連結目前無法開啟');
+    await expect(plain.locator('body')).not.toContainText(title);
+    await expect(plain.locator('[data-target],meta[property^="og:"]')).toHaveCount(0);
+    await noScript.close();
+  } finally { await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id=$1', [postId]); }
+});
+
+test('share destination rejects tampered executable and off-origin DOM targets and preserves replacement history', async ({ page, browser, baseURL }) => {
+  const link = await destinationLink(page, 'skill_book', 'book:social-post');
+  const go = baseURL + link.path;
+  // Bypass CSP only in this adversarial fixture, so a broken URL guard cannot hide behind CSP.
+  const context = await browser.newContext({ bypassCSP: true });
+  let target = '';
+  await context.route(go, async route => {
+    const response = await route.fetch();
+    const escaped = target.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    const html = (await response.text()).replace(/data-target="[^"]*"/, `data-target="${escaped}"`);
+    await route.fulfill({ response, body: html });
+  });
+  await context.route('**/api/v1/promotion/clicks', route => route.fulfill({ json: { ok: true } }));
+  await context.route('https://outside.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Unexpected external navigation</h1>' }));
+  const visitor = await context.newPage();
+  try {
+    for (const unsafe of [
+      "javascript:document.documentElement.dataset.executed='yes'",
+      "data:text/html,<script>document.documentElement.dataset.executed='yes'</script>",
+      '//outside.example/work', '/\\outside.example/work', '/\n/outside.example/work',
+      'https://outside.example/work', baseURL + '/development/skills/social-post',
+    ]) {
+      target = unsafe;
+      const counted = visitor.waitForResponse(response => response.url().endsWith('/api/v1/promotion/clicks'));
+      await visitor.goto(go);
+      await counted;
+      await expect(visitor).toHaveURL(go);
+      await expect(visitor.locator('html')).not.toHaveAttribute('data-executed', 'yes');
+      await expect(visitor.getByRole('link', { name: '開啟站內內容', exact: true })).toHaveAttribute('href', '/development/skills/social-post');
+    }
+    const previous = baseURL + '/development/skills/social-post?intro=1';
+    await visitor.goto(previous);
+    target = '/development/skills/../skills/social-post?intro=2';
+    await visitor.goto(go, { waitUntil: 'commit' });
+    await expect(visitor).toHaveURL(baseURL + '/development/skills/social-post?intro=2');
+    await visitor.goBack();
+    await expect(visitor).toHaveURL(previous);
+  } finally { await context.close(); }
 });

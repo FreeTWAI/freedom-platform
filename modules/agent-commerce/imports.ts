@@ -78,10 +78,13 @@ function allowedManifestUrl(u:URL){
 export async function fetchManifest(url:string,fetcher:typeof fetch=fetch){
  let u:URL;try{u=new URL(url);}catch{throw new Problem(422,'manifest_url_unsupported',manifestUrlMessage);}
  requireCondition(allowedManifestUrl(u),422,'manifest_url_unsupported',manifestUrlMessage);
- const response=await fetcher(u.href,{redirect:'manual',credentials:'omit',referrer:'no-referrer',signal:AbortSignal.timeout(8000),headers:{Accept:'text/plain, application/json'}});
+ const response=await fetcher(u.href,{redirect:'manual',credentials:'omit',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(8000),headers:{Accept:'text/plain, application/json'}});
  requireCondition(response.status===200&&!response.redirected&&response.body,422,'manifest_fetch_failed',manifestFetchMessage);
  if(response.url){let final:URL;try{final=new URL(response.url);}catch{throw new Problem(422,'manifest_fetch_failed',manifestFetchMessage);}requireCondition(allowedManifestUrl(final),422,'manifest_url_unsupported',manifestUrlMessage);}
  const reader=response.body.getReader();let bytes=0;const chunks:Uint8Array[]=[];
  try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;requireCondition(bytes<=24000,413,'manifest_too_large','成果檔上限 24 KB。');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
- return parseManifestFile(Buffer.concat(chunks).toString('utf8'));
+ let content:string;
+ try{content=new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}
+ catch{throw new Problem(422,'manifest_fetch_failed',manifestFetchMessage);}
+ return parseManifestFile(content);
 }
