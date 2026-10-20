@@ -16024,8 +16024,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/governance-installation-2026-10-04.md",
-      "bytes": 55151,
-      "sha256": "2bf81c489af4914dc7e7e5c86eb97b5964e49edf4822bfbabe88d8489638c286"
+      "bytes": 56056,
+      "sha256": "704ed219c159d99c186d7e5a43a835bf123f0eba61b78320182703714f18bd8a"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/handoff-2026-10-04.md",
@@ -20714,8 +20714,8 @@
     },
     {
       "path": "packages/contribution-tools/suite-runner.mjs",
-      "bytes": 37079,
-      "sha256": "b1c6676c5fab1f280e5b2fb4d4357edf491fb4348737cc0deb8114a71f67f00e"
+      "bytes": 40012,
+      "sha256": "a1c2267ac8dc5f7133a309a2ed3a27bd0c49da783cecf25b43bbeb6a7a93100a"
     },
     {
       "path": "packages/contribution-tools/surface-audit.md",
@@ -20949,8 +20949,8 @@
     },
     {
       "path": "packages/contribution-tools/test/pinned-suite.test.mjs",
-      "bytes": 23355,
-      "sha256": "60dd5f69614323a66213a9a87dd8c862ed0a458f3e458eea3eec6efa945a2ada"
+      "bytes": 35200,
+      "sha256": "8e3477d272ffae02f34e95a9b306f517f65952aa0262084bba3658c2d3f2d3b6"
     },
     {
       "path": "packages/contribution-tools/test/reconcile-issue-closures.test.mjs",
@@ -21974,8 +21974,8 @@
     },
     {
       "path": "scripts/ci/pinned_pytest_evidence.py",
-      "bytes": 3905,
-      "sha256": "37188c20f56b997ba21aeb08c700e014f82d51aa69ba27ceff1525fa477aac11"
+      "bytes": 7770,
+      "sha256": "8fcf65506bdb08dd7e29f99e6bec86973fd06c4affb2a1dbc135002576b073d2"
     },
     {
       "path": "scripts/ci/release-inventory.md",
@@ -22084,8 +22084,8 @@
     },
     {
       "path": "tests/contribution-tools/pinned-pytest.integration.test.mjs",
-      "bytes": 6785,
-      "sha256": "ebe0c6e5383616a89fe559d6edf27ab746e887cd4c31355aa46c20535a6cebb8"
+      "bytes": 8417,
+      "sha256": "ba49199d5d4248ecf0e38d769d335e38ee0138f29c7a14d81a176cb53b45cd89"
     },
     {
       "path": "tests/contribution-tools/runtime-sharding.integration.test.mjs",
