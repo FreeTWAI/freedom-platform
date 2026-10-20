@@ -64,7 +64,12 @@ test('SC-UI-07 matching receipt succeeds; incomplete schema and wrong target rem
  const a=attempt();assert.equal(classifyCommandOutcome(a,{response:{product_id:id,version:'2'}}).state,'success');
  for(const response of [{product_id:id},{product_id:other,version:'2'},{product_id:id,version:'2',unexpected:1}])assert.equal(classifyCommandOutcome(a,{response}).state,'unknown');
  const setup=attempt({kind:'profile.setup',target:i});assert.equal(classifyCommandOutcome(setup,{response:{instance_id:i,version:'1',created:true}}).state,'success');
- assert.deepEqual(Object.keys(ATTEMPT_KINDS).sort(),['material.access','material.copy','material.create','material.grant','material.revoke','material.update','material.withdraw','offer.publish','offer.withdraw','product.create','product.update','profile.setup','profile.update','request.decide','reservation.toggle','terms.update'].sort());
+ for(const kind of ['offer.photo.share','offer.photo.stop'] as const){
+  const photo=attempt({kind,target:id});
+  for(const response of [{state:'shared',seq:'1',matches_current_photo:true},{state:'not_shared',seq:'2',matches_current_photo:false}])assert.equal(classifyCommandOutcome(photo,{response}).state,'success');
+  for(const response of [{state:'shared',seq:'1'},{state:'shared',seq:1,matches_current_photo:true},{state:'shared',seq:'1',matches_current_photo:true,unexpected:true}])assert.equal(classifyCommandOutcome(photo,{response}).state,'unknown');
+ }
+ assert.deepEqual(Object.keys(ATTEMPT_KINDS).sort(),['material.access','material.copy','material.create','material.grant','material.revoke','material.update','material.withdraw','offer.photo.share','offer.photo.stop','offer.publish','offer.withdraw','product.create','product.update','profile.setup','profile.update','request.decide','reservation.toggle','terms.update'].sort());
 });
 for(const [name,error] of [
  ['non-API',new Error('lost')],['network',new ApiError({message:'lost',network:true})],['timeout',new ApiError({message:'late',status:408,timedOut:true})],['500',new ApiError({message:'server',status:500})],['401',new ApiError({message:'expired',status:401})],['accessExpired',new ApiError({message:'access',status:403,accessExpired:true})],['missing status',new ApiError({message:'unknown'})],
