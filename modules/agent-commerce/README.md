@@ -114,6 +114,8 @@ The isolated [identity](../../tests/runtime/shop-service-identity.test.ts), [com
 
 ### Release 1.1.0 and upgrade
 
+Initial supply eligibility follows active membership in `guild_product_quality_supply`, including interns. Initial retail setup requires active membership in `guild_commerce_sales`, including interns. First supply setup also accepts active commerce interns or full members through the same shared rule. Retail denial is `commerce_guild_member_required`; supplier denial remains `guild_member_required`. The common application checks its purpose-specific rule at catalog/plan/launch, and first profile creation checks the corresponding cohort again after lifecycle locks. A supplier installation alone cannot create a retail profile. Existing business capabilities, stock and orders remain valid under their current tenant/instance authorization after later guild changes; membership never grants another business's data or replaces the separate store admission record.
+
 New stores use `hosted-store@1.1.0` / `storefront@1.1.0`, with the original
 storefront contract bytes and twelve registered capabilities. Existing 1.0.0
 instances retain their four keys until their owner invokes the versioned,
