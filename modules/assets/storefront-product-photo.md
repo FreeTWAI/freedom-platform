@@ -2,7 +2,7 @@
 
 Opt-in [offer evaluation photos](../agent-commerce/hosted/distribution.md#opt-in-evaluation-photos-2026-10-20)
 reuse this purpose without granting seller publication rights. Provisional
-migration 173 adds append-only `commerce_hosted_offer_photos` references with
+migration 174 adds append-only `commerce_hosted_offer_photos` references with
 ready identity/object FKs, copied metadata and the fence trigger. Every history
 row retains the supplier object for the offer's lifetime. Backup capture already
 includes all registered objects; any future product-photo GC must count these

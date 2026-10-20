@@ -11,3 +11,5 @@
 .supply-offer-photo { margin:0; padding:1rem; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-elev); }
 .supply-offer-photo img { display:block; max-width:100%; width:auto; height:auto; max-height:28rem; object-fit:contain; align-self:start; border-radius:.5rem; }
 .supply-offer-photo figcaption { font-size:.875rem; }
+.supply-reference-fields > div { display:grid; gap:.5rem; }
+.supply-reference-fields > legend { font-weight:650; padding-block:.25rem; }

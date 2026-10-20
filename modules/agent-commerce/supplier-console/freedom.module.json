@@ -11,7 +11,7 @@
     "apps/platform-api/src/routes/hosted-supply-offer-photos.ts",
     "migrations/171_supply_materials.sql",
     "migrations/172_distribution_photos.sql",
-    "migrations/173_supply_offer_photos.sql",
+    "migrations/174_supply_offer_photos.sql",
     "contracts/guild-launchpad/v1/supplier-console.ts",
     "contracts/guild-launchpad/v1/supplier-console.schema.json",
     "tests/runtime/supplier-console.test.ts",

@@ -42,7 +42,7 @@ const SHAPES = Object.freeze({
   'media.event-highlight.asset.v1': { migration: 104, capabilities: ['media.event-highlight.asset.v1', 'media.server-policy.v1'] },
   'media.skill-image.asset.v1': { migration: 103, capabilities: ['media.skill-image.asset.v1', 'media.server-policy.v1'] },
   'media.storefront-product-photo.asset.v1': { migration: 141, capabilities: ['media.storefront-product-photo.asset.v1', 'media.server-policy.v1'] },
-  'media.supply-offer-photo.asset.v1': { migration: 173, capabilities: ['media.supply-offer-photo.asset.v1', 'media.server-policy.v1'] },
+  'media.supply-offer-photo.asset.v1': { migration: 174, capabilities: ['media.supply-offer-photo.asset.v1', 'media.server-policy.v1'] },
   'media.distribution-photo.asset.v1': { migration: 172, capabilities: ['media.distribution-photo.asset.v1', 'media.server-policy.v1'] },
   'media.supply-material.asset.v1': { migration: 171, capabilities: ['media.supply-material.asset.v1', 'media.server-policy.v1'] },
   'media.comment-image.asset.v1': { migration: 148, capabilities: ['media.comment-image.asset.v1', 'media.server-policy.v1'] },
@@ -198,7 +198,9 @@ const FOUNDATION_NAMES = [
   // recognition grants no persistence, partner visibility or public use.
   '171_supply_materials.sql',
   '172_distribution_photos.sql',
-  '173_supply_offer_photos.sql',
+  // Nullable advisory supply references; recognition enables no business rule.
+  '173_supply_structured_terms.sql',
+  '174_supply_offer_photos.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

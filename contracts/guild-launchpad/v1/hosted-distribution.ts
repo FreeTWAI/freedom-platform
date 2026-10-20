@@ -1,12 +1,10 @@
 import {z} from 'zod';
 import {OpaqueId, Version} from './primitives.js';
 import {IsoTimeSchema} from './tenant.js';
-import {CurrencySchema, ProductInputSchema} from './storefront.js';
-import {SupplyTermsInputSchema} from './hosted-supply-terms.js';
+import {ProductInputSchema} from './storefront.js';
+import {SupplyOfferTermsSchema} from './hosted-supply-terms.js';
+export {SupplyOfferTermsSchema} from './hosted-supply-terms.js';
 
-export const SupplyOfferTermsSchema = SupplyTermsInputSchema.extend({
-  title: ProductInputSchema.shape.title, description: z.string().max(4000), currency: CurrencySchema,
-}).strict();
 // Roles only: the signed snapshot's person/shop identifiers stay on the server.
 export const SupplyArrangementSchema = z.object({
   mode: z.literal('reseller'), seller_of_record: z.literal('seller'), payment_collector: z.literal('seller'),

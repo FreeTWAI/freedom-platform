@@ -1,4 +1,4 @@
--- Provisional 173: explicit, revocable evaluation photos; no terms or activation changes.
+-- Provisional 174: explicit, revocable evaluation photos; no terms or activation changes.
 CREATE TABLE commerce_hosted_offer_photos (
  offer_id uuid NOT NULL REFERENCES commerce_hosted_supply_offers(offer_id),
  seq bigint NOT NULL CHECK(seq>0),

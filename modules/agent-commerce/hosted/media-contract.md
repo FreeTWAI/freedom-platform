@@ -102,6 +102,6 @@ early 304. Stale sequences and a changed authority/share fail closed.
 `asset_objects`, with the same ready-Asset/object composite FKs as publication
 refs and the permanent fence guard. Its entire history retains references,
 including stopped shares. Future product-photo GC must enumerate this table;
-the currently uninstalled GC is not enabled by migration 173. Full backups keep
+the currently uninstalled GC is not enabled by migration 174. Full backups keep
 the table and retained objects together. No deployed activation or restore
 acceptance is implied by source registration.

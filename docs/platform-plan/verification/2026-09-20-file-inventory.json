@@ -143,6 +143,11 @@
       "sha256": "b2ea9cf508adf391789245df2f56f03a6f17add706a895e4a434d8e13f76e2b3"
     },
     {
+      "path": ".github/workflows/codeql.yml",
+      "bytes": 1276,
+      "sha256": "b0377f18ae418ad1645a0141407962207b0caa52f5495dc4fab6cddabddd0565"
+    },
+    {
       "path": ".github/workflows/directory-runtime-profile.yml",
       "bytes": 2975,
       "sha256": "6b6c8785e3374e2049da9bc550e656e93ec68e25836bffe0b98d846767e8c0a2"
@@ -2574,8 +2579,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedDistribution.tsx",
-      "bytes": 15091,
-      "sha256": "44836840cc35df93742121365014c0bb29c42e0139f745a2eb752daa9dd48bd5"
+      "bytes": 15994,
+      "sha256": "9b01a202ea987fe6724d43c0e26292f40079516f52728b6e65712a0f0dbdeff7"
     },
     {
       "path": "apps/portal-web/src/modules/HostedOrder.tsx",
@@ -2624,8 +2629,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyTerms.tsx",
-      "bytes": 6876,
-      "sha256": "561e668fdabb1683a8633230f25ddd534e848b1dd8c6e375004695b440a7a356"
+      "bytes": 7766,
+      "sha256": "39166937bb8bf9d71a34541eff0aa95b79890af3f8f050c529d07e4965a3d77c"
     },
     {
       "path": "apps/portal-web/src/modules/InlineVideo.css",
@@ -13059,13 +13064,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-distribution.schema.json",
-      "bytes": 61076,
-      "sha256": "7180435ba7cae9c6b9393f3f65051d63dbd5b72d67880b09adb741890278c575"
+      "bytes": 64154,
+      "sha256": "bd45c96bbd9964b10818c6967c067923952c00bb655ed6ad353cc740293ffe9f"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-distribution.ts",
-      "bytes": 3805,
-      "sha256": "6bf27c19d864847ebab1290efd07d1b650f1121844ed3ae771c33e8841d48c23"
+      "bytes": 3669,
+      "sha256": "ebc2e4bba54e3eceafd0433e1558104d21f9c9c62d4739dee20443e305447f4d"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-offline-payment.schema.json",
@@ -13139,13 +13144,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-supply-terms.schema.json",
-      "bytes": 6768,
-      "sha256": "4a3860c1ad37dfd4d83e1eae47c589ef8721fb7aad8cb613aa2e3c0e1d89d3eb"
+      "bytes": 8905,
+      "sha256": "95931e49c232cff1e56a7a9c83e0cf99c51564577dc7923790f069d2235366a2"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-supply-terms.ts",
-      "bytes": 1378,
-      "sha256": "04598cdf05649e3c34f9568a9c3a4866086247a199e5ab7c732d80408a178f02"
+      "bytes": 2410,
+      "sha256": "6a5b2b9653006e83794aa028a2a17af9f8544842b824c1e83c2fa9e6c439900e"
     },
     {
       "path": "contracts/guild-launchpad/v1/invitation-accept-result.schema.json",
@@ -13264,13 +13269,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/supplier-console.schema.json",
-      "bytes": 194812,
-      "sha256": "f30b641d7ea3e6bb37387b8192c08b85d41b773e5f6eefbcbf799c333a67858f"
+      "bytes": 197882,
+      "sha256": "64d87766ca79789b94ded636b597506d8262ac71c0b7701c19509dc927a76d74"
     },
     {
       "path": "contracts/guild-launchpad/v1/supplier-console.ts",
-      "bytes": 35666,
-      "sha256": "98d0ad038906b2813f4c56f00a82bcb79b37b9734f62d3bae4a6762a3e2d8835"
+      "bytes": 35848,
+      "sha256": "dd26272402da79e02a086842fce0bea3d2df45b438cd0d7fbc31b8df97f4e9fa"
     },
     {
       "path": "contracts/guild-launchpad/v1/tenant-create-input.schema.json",
@@ -13430,7 +13435,7 @@
     {
       "path": "deploy/cloudflare/environments.json",
       "bytes": 30992,
-      "sha256": "45be24bc9c32fcdf0cf333881ee97ea125065c6a8371a5e6d5aa2a0d3396cae5"
+      "sha256": "df54ae5b1e01bb55e18f21f97ea8311f37aefb5dd244418e4f8731288c4b3b55"
     },
     {
       "path": "deploy/cloudflare/media-preflight.md",
@@ -13564,8 +13569,8 @@
     },
     {
       "path": "deploy/cloudflare/lib/release-compatibility.mjs",
-      "bytes": 47408,
-      "sha256": "5f0eabbc6877279c287a422f322cc3850c627b85468cdb0db96bc08e7b65aa08"
+      "bytes": 47525,
+      "sha256": "64267a776bacb2651e2d5fa4e029ea5a8c727f64a249084fc55c0e9762c87c1b"
     },
     {
       "path": "deploy/cloudflare/lib/wrangler.mjs",
@@ -13650,7 +13655,7 @@
     {
       "path": "deploy/cloudflare/test/migration-plan.test.mjs",
       "bytes": 13117,
-      "sha256": "f57dbfcf5057f3aef853d5649d0230c49e33871d427ba2f6e43d900c5f20178e"
+      "sha256": "d67ccf0806bd3916ee079a500bd305d04b9e665b912d949f0c5548691b304972"
     },
     {
       "path": "deploy/cloudflare/test/migration-reviewed-privileges.test.mjs",
@@ -13684,8 +13689,8 @@
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 75843,
-      "sha256": "9507414dc02a7bd8391afd2311d7da9ed0dba519b2769767a16c3b908cb755fd"
+      "bytes": 78275,
+      "sha256": "2b269c3d5440e1ff8fac21c3c06f77f961e07b4022693d15ea675c1d60476ee8"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
@@ -15560,7 +15565,7 @@
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
       "bytes": 34881,
-      "sha256": "8165f7e0784262fde7ed949260901855f9c3b5b588d38d9d25616ecfc5259772"
+      "sha256": "0591208090a7b963d254b28b951548695dd0f41a55a754f7ce0e1448f7e8d4ba"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -15849,8 +15854,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/pages.md",
-      "bytes": 21077,
-      "sha256": "8c5a2e2c343082595277b573456c80f9ac108ed43b701a04667e1516118df82a"
+      "bytes": 21593,
+      "sha256": "f49d96f74fe08508d5def8f2e5c20e2dab978b9c018bd91cabcb054eb72e0e8c"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/refferq-adoption.md",
@@ -15864,8 +15869,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/work-plan.md",
-      "bytes": 21304,
-      "sha256": "a88c739cf57ee7164461dd0f83a5ef1310bfdfc27491696308a3d983a0b21562"
+      "bytes": 22610,
+      "sha256": "d5e928ee208e008b3e8f5fc484434b5ce0676b6d8bd83b31873732bc0a8d74d0"
     },
     {
       "path": "docs/platform-plan/execution/tools/check_package_dag.py",
@@ -17323,9 +17328,14 @@
       "sha256": "ed86c0aa586bbee580256a0a239d7532c39fa01a70c53d40b46693033e7e6b33"
     },
     {
-      "path": "migrations/173_supply_offer_photos.sql",
+      "path": "migrations/173_supply_structured_terms.sql",
+      "bytes": 373,
+      "sha256": "c7d087e8005483bb2b9cf574c93831689e719c667a74a002e650c8d2221a1e7a"
+    },
+    {
+      "path": "migrations/174_supply_offer_photos.sql",
       "bytes": 6217,
-      "sha256": "3aaa2da95fb2d2d25e3257e0fd64df12155cb9b81d019b5aefba26b23a181c5e"
+      "sha256": "d13938afccc8c769fcac90119f85f2200634ca27899ed3ecf71697d642ac564b"
     },
     {
       "path": "modules/agent-commerce/README.md",
@@ -17609,13 +17619,13 @@
     },
     {
       "path": "modules/agent-commerce/hosted/distribution.md",
-      "bytes": 10955,
-      "sha256": "31c8941b965383ca65fa0607135d620e15df9943db6c762177bf8f408eeb35c6"
+      "bytes": 12434,
+      "sha256": "decae6ec4b35a7291ed8326ab98c9ca6c221eeef8974231448f56f54f3a7776d"
     },
     {
       "path": "modules/agent-commerce/hosted/distribution.ts",
-      "bytes": 24104,
-      "sha256": "ccb5ea83c663618861e006d95872f17010f60232613667d8e329d51a04d47ad9"
+      "bytes": 24573,
+      "sha256": "9b819b55fdd7b64edeaea4489532e6ee1355d4c72cb3eb92b542543de0fa5794"
     },
     {
       "path": "modules/agent-commerce/hosted/format.ts",
@@ -17624,8 +17634,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/freedom.module.json",
-      "bytes": 5441,
-      "sha256": "55871effcdad5733efe71de7d0b6e2f799feae70b452b202ba823f0bcb07b121"
+      "bytes": 5551,
+      "sha256": "f6f12d804904ebcc2d5a876bff18cce3e4792aea25faf8c31398255838844e64"
     },
     {
       "path": "modules/agent-commerce/hosted/inventory-reservations.md",
@@ -17639,8 +17649,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/media-contract.md",
-      "bytes": 6658,
-      "sha256": "6efd6ef9871799b6860fbcd1f0e32a83bd6c7592ac17900d8751e1d94bb4abb7"
+      "bytes": 6835,
+      "sha256": "fd136cf3380d737d7a1d15034de64992dd265cfa7b780a4ec2d2fbe9d7873d31"
     },
     {
       "path": "modules/agent-commerce/hosted/media.ts",
@@ -17754,13 +17764,13 @@
     },
     {
       "path": "modules/agent-commerce/hosted/supply-terms.md",
-      "bytes": 6979,
-      "sha256": "4c30974ed94b9f5e04056c930cfa8f11e6519ebaa59da46eb7cf6b21a2653b47"
+      "bytes": 9435,
+      "sha256": "9ee0bc7055c8284a917095b5dc51d83e6a21040c815ed3b20bc1a56c40d2ef1b"
     },
     {
       "path": "modules/agent-commerce/hosted/supply-terms.ts",
-      "bytes": 4394,
-      "sha256": "ee195bcfb43d9b5c179bd574135b8f1b34c5631df1fc466e5869b1b067c78032"
+      "bytes": 4996,
+      "sha256": "f5603bea3408a58dc0ad43b2bd9f59e606d883c0f9a9d2c74eb113a5bf543364"
     },
     {
       "path": "modules/agent-commerce/hosted/pagination/freedom.module.json",
@@ -17769,8 +17779,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted-ui/CommerceTools.tsx",
-      "bytes": 2236,
-      "sha256": "9fab292e16bff3cbedde7429b75ded6f4a543e2e4426e0d86a57e61941ac1134"
+      "bytes": 3769,
+      "sha256": "d40abe217550a65ee1b0ab695443b99b52f926f4733cecf100538735b97edc3c"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/ConsoleShell.css",
@@ -17784,8 +17794,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOffer.css",
-      "bytes": 1014,
-      "sha256": "681d934fa494e25a4c39cebb7862e858cb25c8358459776fd06e1dee8a0b6e7c"
+      "bytes": 1151,
+      "sha256": "714b552efed398637efb528946309b74857f1127a2d455604d1114cffe21ac57"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOfferPhoto.tsx",
@@ -17794,13 +17804,13 @@
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOfferPresentation.tsx",
-      "bytes": 3046,
-      "sha256": "37d2ea29538b36aacb69e4a525d064363313eb687dac016a65721b8357b25b63"
+      "bytes": 3734,
+      "sha256": "c09bcbb80b40b4f405053b3062105050807ee825ab6f00c5cfd5e8a2a42c0c00"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOfferText.ts",
-      "bytes": 344,
-      "sha256": "84281657218b24d32083299252c208cbb44ed3c34d41fe085d34f4128061e58b"
+      "bytes": 1876,
+      "sha256": "0aea3f6b1f07cc78607b2febf2ca4f19e9d90f498c578775b4f5afbe0957ad3e"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/reseller-arrangement.ts",
@@ -18445,7 +18455,7 @@
     {
       "path": "modules/agent-commerce/supplier-console/freedom.module.json",
       "bytes": 6561,
-      "sha256": "9ee368d41dd9baa456bedea38b6f9c97efa364bdc55ca1ab21217c33922b7445"
+      "sha256": "b5bddc6c57e9f6326c8f658e7c757c33506dfffab7a611487f04c71bc37b18a2"
     },
     {
       "path": "modules/agent-commerce/supplier-console/material-media.ts",
@@ -18464,8 +18474,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/reads.ts",
-      "bytes": 16016,
-      "sha256": "ffaeca866644df6ce4bf625bb095e22fcf9c5738f9140103de6c7d4f736a6f61"
+      "bytes": 16207,
+      "sha256": "cea449864accc38f4c594c0be3afb9bc1ea669c7c21c5eac2203536d9729a2ef"
     },
     {
       "path": "modules/agent-commerce/supplier-console/report.ts",
@@ -18484,8 +18494,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/state/drafts.ts",
-      "bytes": 1472,
-      "sha256": "33b660284052981212232ec2e2bcb7a457232ead08f82c16ba61405e544cac78"
+      "bytes": 1477,
+      "sha256": "c45f1b416740c9cc8c61b7b43731b6e969636c93dafe31c99b20b4ba0aa08ef3"
     },
     {
       "path": "modules/agent-commerce/supplier-console/state/leave.ts",
@@ -18504,8 +18514,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/state/useSupplierConsoleController.ts",
-      "bytes": 28395,
-      "sha256": "18d3f8e2d0eb0ab3a118aaf1214c1d829c641cad6f81192f0a22bfdb5be5c2f4"
+      "bytes": 28572,
+      "sha256": "b648005fcfbbdd759f853faf9a211e00ac68967cae434d7bcdf88e33dd05e91c"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/SupplierConsole.css",
@@ -18534,8 +18544,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/view.ts",
-      "bytes": 9181,
-      "sha256": "ceef96a18e391e6e6748b376bd4854afdce830489773170aca18ae28f8ca9bb3"
+      "bytes": 9661,
+      "sha256": "724c70adf3da811541943f62224d0ddf23ebc7716a4b5b1d7698465c2dd4f83a"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/GettingStarted.tsx",
@@ -18569,8 +18579,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Product.tsx",
-      "bytes": 10133,
-      "sha256": "32877614b751386301c30d382e608acbe97b11bbf73613fc56892aec5077de96"
+      "bytes": 10565,
+      "sha256": "97d08cffdbf7219a37b77c6d16a15b6df0ea454b617a331d7e98d81450e68b75"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Products.tsx",
@@ -18594,8 +18604,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Shared.tsx",
-      "bytes": 8843,
-      "sha256": "ea585e03afc59a58e2a466b82afb39417a7e76564cec6dc8da19878160f77241"
+      "bytes": 9224,
+      "sha256": "d60a083b4b1b16f8eb18dd00aa756ca64507f884a5e539d4800bb4972d318d8e"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Terms.tsx",
@@ -19134,8 +19144,8 @@
     },
     {
       "path": "modules/assets/storefront-product-photo.md",
-      "bytes": 5374,
-      "sha256": "f1826408545173fddebc52c214612c3b0af0c671d79da89f83d92f7ee14436ce"
+      "bytes": 5451,
+      "sha256": "02ff40333240d0592f7045c9019b84a5ed79610286f75523d54e430e3c81173b"
     },
     {
       "path": "modules/assets/storefront-product-photo.ts",
@@ -20049,8 +20059,8 @@
     },
     {
       "path": "modules/module-data/catalog.ts",
-      "bytes": 136289,
-      "sha256": "b7b2d34f1cb2db973c3a84ed3a775dbc7cb6c026931c00a673fcffc4dea70657"
+      "bytes": 136347,
+      "sha256": "96687058176c7a7f8ca11083624cbeb7527dbfbfd12361e1e27374fa6ce7342d"
     },
     {
       "path": "modules/module-data/freedom.module.json",
@@ -22144,8 +22154,8 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 89041,
-      "sha256": "9ff23dc8ca39555f9a37749147aa244bb6452752615884035fa8aa733c327a9d"
+      "bytes": 89703,
+      "sha256": "897dea003bba3264f6c6e13970585712b58f2416feee8b322cbdfac64f3e4d76"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",
@@ -22654,8 +22664,8 @@
     },
     {
       "path": "tests/e2e/hosted-supply-offer.spec.ts",
-      "bytes": 10635,
-      "sha256": "47cacade23ab6b6d044756109702a6ce352679cda7d57e8bbd9aacd0d03e28af"
+      "bytes": 22663,
+      "sha256": "bb5de1ee26db6328bd26c2a931215b38a6f3f2761d0e585e3c6237b87af18b9b"
     },
     {
       "path": "tests/e2e/hosted-supply-terms.spec.ts",
@@ -24049,8 +24059,8 @@
     },
     {
       "path": "tests/runtime/guild-launchpad-contracts.test.ts",
-      "bytes": 58338,
-      "sha256": "0e4a1fb79e9db9eadb51c5654f7f26bd967e665d80db3014551d94495a165bb9"
+      "bytes": 62653,
+      "sha256": "1f903fc9e705c4ee7b821a2aa41736b973bda71d90436f1ba6d22575c71f39cc"
     },
     {
       "path": "tests/runtime/guild-launchpad-deadline.test.ts",
@@ -24364,8 +24374,13 @@
     },
     {
       "path": "tests/runtime/hosted-supply-offer-photos.test.ts",
-      "bytes": 26008,
-      "sha256": "ce1edd2844024a1d3eda99e9b664564165c304df42fe9ca5b65d211c076b9268"
+      "bytes": 28885,
+      "sha256": "fd1af2e9e59c5b8d274728b51e6eb7ba1ad644d139ec3e4c08df84bd099e3c24"
+    },
+    {
+      "path": "tests/runtime/hosted-supply-structured-terms.test.ts",
+      "bytes": 14990,
+      "sha256": "38fc2e7e0031fb41cf35c88859750a651bdd6bc7987d575258ff3ee3834b3ae4"
     },
     {
       "path": "tests/runtime/identity-member.test.ts",
@@ -25414,8 +25429,8 @@
     },
     {
       "path": "tests/runtime/supplier-console-state.test.ts",
-      "bytes": 77062,
-      "sha256": "f729d5b7e37f4ecac34e7008b65b3846fa5bf09b97fb45a1b9bfc7e1cea4befc"
+      "bytes": 78497,
+      "sha256": "03f4618151a38ded47ba7d64c3d619edc304e5dfa1f0aafa3919d951c2325a8e"
     },
     {
       "path": "tests/runtime/supplier-console-writes.test.ts",

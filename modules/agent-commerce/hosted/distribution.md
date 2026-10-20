@@ -10,7 +10,7 @@ complete installation decision. When absent, commands and seller bytes are
 unmounted and both `SupplyOfferPage.photo` and supplier `product.offer_photo`
 are null. Catalog cards keep their existing text presentation.
 
-Provisional migration `173_supply_offer_photos.sql` adds only
+Provisional migration `174_supply_offer_photos.sql` adds only
 `commerce_hosted_offer_photos`. Its `(offer_id,seq)` history is append-only and
 contiguous under the offer row lock. Each share captures the product's current
 ready, unfenced photo and immutable object metadata; an all-null photo tuple
@@ -167,3 +167,24 @@ decision's nonempty note on both surfaces; a re-proposal retains that historical
 note until a new decision. Accepting without a reason stores an empty note.
 Reason is part of the existing command body digest: changing it under the same
 idempotency key conflicts. No migration, deployment or flag change is included.
+
+
+## 2026-10-20 structured reference snapshots
+
+An explicitly published offer may carry `msrp_minor` (1–100000000 minor units),
+`minimum_order_quantity` (1–10000 items) and `lead_time_days` (0–365 days, with
+0 meaning same-day shipping). These optional integers are present only when set;
+unset fields are omitted, never `null`. Every current-product hash caller reads
+all three columns. This preserves the exact seven historical keys and digest
+when unset, unchanged-offer deduplication, and the console's outdated-version
+indicator when only a reference changes. Old selections stay on their frozen
+version, and all snapshot consumers continue to accept it.
+
+The seller sees shared detail rows and the catalog summary. An explicit
+“填入建議售價” button only fills the seller's price input; it never submits or
+prefills automatically. [ADR-027](../../../docs/platform-plan/07-decisions-risks-traceability.md)
+keeps suggested prices advisory: no comparison is added to supplier price review,
+and no price gate, ranking, filtering, reservation or checkout rule uses these
+references. The existing public projection and buyer receipt allowlists exclude
+all three fields. No new cross-store reader, drop-ship authority or supplied-line
+checkout is introduced.

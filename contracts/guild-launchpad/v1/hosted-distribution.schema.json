@@ -51,6 +51,21 @@
               "maxLength": 2000,
               "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
             },
+            "msrp_minor": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            "minimum_order_quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "lead_time_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 365
+            },
             "title": {
               "type": "string",
               "minLength": 1,
@@ -303,6 +318,21 @@
                   "maxLength": 2000,
                   "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                 },
+                "msrp_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "minimum_order_quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "lead_time_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 365
+                },
                 "title": {
                   "type": "string",
                   "minLength": 1,
@@ -539,6 +569,21 @@
                           "minLength": 1,
                           "maxLength": 2000,
                           "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                        },
+                        "msrp_minor": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000000
+                        },
+                        "minimum_order_quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000
+                        },
+                        "lead_time_days": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 365
                         },
                         "title": {
                           "type": "string",
@@ -907,6 +952,21 @@
                     "maxLength": 2000,
                     "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                   },
+                  "msrp_minor": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "minimum_order_quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "lead_time_days": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -1141,6 +1201,21 @@
                   "minLength": 1,
                   "maxLength": 2000,
                   "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                },
+                "msrp_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "minimum_order_quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "lead_time_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 365
                 },
                 "title": {
                   "type": "string",
@@ -1421,6 +1496,21 @@
                         "minLength": 1,
                         "maxLength": 2000,
                         "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                      },
+                      "msrp_minor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000000
+                      },
+                      "minimum_order_quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "lead_time_days": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
                       },
                       "title": {
                         "type": "string",

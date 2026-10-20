@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=240cf677e892f6f20306089c75c34fa914597960 release.staging=240cf677e892f6f20306089c75c34fa914597960 flag.production=true flag.staging=true repo_max_migration=173 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=240cf677e892f6f20306089c75c34fa914597960 release.staging=240cf677e892f6f20306089c75c34fa914597960 flag.production=true flag.staging=true repo_max_migration=174 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 截至 2026-10-19 23:06:51.019348 UTC，staging 與 production 都已部署 `240cf677`／schema172，商店公開說明與獨立 Seller console 啟用邊界已發布。兩環境限定驗收、發布後備份還原與清理通過，dispatcher 已綁定本次來源，原 timer 已恢復；checkout／email 仍 OFF，新 operator 自然排程尚未觀察。發布前沿用原 `10ad8d2d` 已完成備份，不改寫其來源與日期。詳見[商店會員流程發布收據](../unified-foundation/rollout-merchant-readiness-2026-10-19.json)及[現況快照](../unified-foundation/current-state.json)。
 

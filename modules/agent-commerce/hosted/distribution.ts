@@ -26,9 +26,12 @@ function arrangementView(value: Record<string, unknown> | undefined) {
   const expected = resellerArrangement(String(value.seller_of_record), String(value.fulfillment_party));
   return Object.entries(expected).every(([key, role]) => value[key] === role) ? resellerArrangement('seller', 'supplier') : null;
 }
-export function supplyOfferTerms(row: {title: string; description: string; price_minor: string | number; shipping_minor: string | number; shipping_terms: string; return_terms: string}, currency: 'TWD' | 'USD') {
+export function supplyOfferTerms(row: {title: string; description: string; price_minor: string | number; shipping_minor: string | number; shipping_terms: string; return_terms: string; msrp_minor: string | number | null; minimum_order_quantity: number | null; lead_time_days: number | null}, currency: 'TWD' | 'USD') {
   return SupplyOfferTermsSchema.parse({title: row.title, description: row.description, currency,
-    cost_minor: Number(row.price_minor), shipping_minor: Number(row.shipping_minor), shipping_terms: row.shipping_terms, return_terms: row.return_terms});
+    cost_minor: Number(row.price_minor), shipping_minor: Number(row.shipping_minor), shipping_terms: row.shipping_terms, return_terms: row.return_terms,
+    ...(row.msrp_minor==null?{}:{msrp_minor:Number(row.msrp_minor)}),
+    ...(row.minimum_order_quantity==null?{}:{minimum_order_quantity:row.minimum_order_quantity}),
+    ...(row.lead_time_days==null?{}:{lead_time_days:row.lead_time_days})});
 }
 export async function listSupplyOffers(pool: Pool, actor: Actor, tenantId: string, instanceId: string, own = false) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
