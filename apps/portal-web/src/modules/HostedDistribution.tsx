@@ -86,7 +86,7 @@ export function HostedDistribution({client,root,refresh,busy,writable,onDirty,on
         <p className="field-hint" aria-live="polite">找到 {catalog.filter(matches).length}／{catalog.length} 件已載入的供貨商品</p>
         {catalog.length>0&&!catalog.some(matches)&&<p>沒有符合的供貨商品，清除搜尋即可查看全部。</p>}
         {catalog.filter(matches).map(o=><article className="hosted-distribution-item stack" key={o.offer_id}>
-          <h4>{o.terms.title}・{o.supplier_name}</h4><p>{o.terms.description}</p><Terms offer={o}/><div className="actions"><a className="btn btn-ghost" href={detailHref(o.offer_id)}>查看供貨方案</a></div>
+          <h4>{o.terms.title}・{o.supplier_name}</h4><p>{o.terms.description}</p><Terms offer={o}/>{(o.terms.msrp_minor!==undefined||o.terms.minimum_order_quantity!==undefined||o.terms.lead_time_days!==undefined)&&<p className="field-hint">{[o.terms.msrp_minor!==undefined?`建議售價 ${formatMinor(o.terms.msrp_minor,o.terms.currency)}`:null,o.terms.minimum_order_quantity!==undefined?`最低 ${o.terms.minimum_order_quantity} 件`:null,o.terms.lead_time_days!==undefined?o.terms.lead_time_days===0?'當天出貨':`${o.terms.lead_time_days} 天內出貨`:null].filter(Boolean).join('・')}</p>}<div className="actions"><a className="btn btn-ghost" href={detailHref(o.offer_id)}>查看供貨方案</a></div>
           {editing===o.offer_id?<><PriceForm offer={o} busy={busy||!writable||!!error} onDirty={v=>onDirty(o.offer_id,v)} onSubmit={body=>command(distributionProposal(root,body,undefined,()=>{onDirty(o.offer_id,false);setEditing(null);}))}/><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>{onDirty(o.offer_id,false);setEditing(null);}}>取消選品</button></div></>:<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||!writable||!!error||editing!==null} onClick={()=>setEditing(o.offer_id)}>設定我的售價</button></div>}
         </article>)}
       </details>
@@ -112,6 +112,7 @@ export function PriceForm({offer,selection,busy,onDirty,onSubmit}:{offer:SupplyO
   }
   return <form className="hosted-store-form stack" aria-label={`${offer.terms.title}選品售價`} onSubmit={e=>void submit(e)}>
     <label className="field">我的零售價（{offer.terms.currency}）<input inputMode="decimal" required value={price} disabled={busy} onChange={e=>setPrice(e.target.value)}/></label>
+    {offer.terms.msrp_minor!==undefined&&<div className="stack"><p className="field-hint">供應商建議售價 {formatMinor(offer.terms.msrp_minor,offer.terms.currency)}（僅供參考，可自行定價）</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={()=>setPrice((offer.terms.msrp_minor!/100).toFixed(2))}>填入建議售價</button></div></div>}
     <PriceDifference retail={price} cost={offer.terms.cost_minor} shipping={offer.terms.shipping_minor} currency={offer.terms.currency}/>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button className="btn btn-ghost" disabled={busy||(!!selection&&price===initial&&selection.offer.offer_id===offer.offer_id&&!['revoked','declined'].includes(selection.state))}>送出供貨申請</button></div>

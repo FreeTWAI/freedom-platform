@@ -1,3 +1,4 @@
+import {supplyReferenceValue,SUPPLY_REFERENCE_FIELDS,type SupplyReferenceField} from '../../hosted-ui/SupplyOfferText';
 import {SELLABLE_LABEL} from '../../hosted-ui/SupplyOfferText';
 import type {SupplierChange,SupplierMetric,SupplierProduct,SupplierPartner,SupplierProductSelection,SupplierTodo} from '../../../../contracts/guild-launchpad/v1/supplier-console';
 import {SUPPLY_MATERIAL_IMAGE_MAX_BYTES,SUPPLY_MATERIAL_VIDEO_MAX_BYTES} from '../../../../contracts/guild-launchpad/v1/supplier-console';
@@ -24,10 +25,10 @@ export const selectionState=(s:Distribution)=>s.offer.state==='withdrawn'?'供�
 export const offerState=(p:SupplierProduct)=>!p.offer?'尚未公開':p.offer.matches_current_terms?'公開中':'需要重新公開';
 export const priceGap=(s:Distribution)=>formatMinor(s.retail_price_minor-s.offer.terms.cost_minor-s.offer.terms.shipping_minor,s.offer.terms.currency);
 export function commandFields(kind:AttemptKind,fields:Fields):Fields {
- return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,k==='cost_minor'||k==='shipping_minor'?k==='shipping_minor'&&/^0+(?:\.0{1,2})?$/.test(String(v).trim())?0:parseMajorToMinor(String(v)):k==='stock'?/^\d+$/.test(String(v))?Number(v):NaN:v]));
+ return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,SUPPLY_REFERENCE_FIELDS.some(f=>f.key===k)?supplyReferenceValue(k as SupplyReferenceField,v):k==='cost_minor'||k==='shipping_minor'?k==='shipping_minor'&&/^0+(?:\.0{1,2})?$/.test(String(v).trim())?0:parseMajorToMinor(String(v)):k==='stock'?/^\d+$/.test(String(v))?Number(v):NaN:v]));
 }
-export const fieldLabels:Record<string,string>={title:'商品名稱',description:'說明',stock:'庫存',cost_minor:'供貨單價',shipping_minor:'每件運費',shipping_terms:'出貨條件',return_terms:'退貨條件',name:'商品庫名稱',currency:'幣別',decision:'決定',listing_sha256:'申請內容摘要',reservation_enabled:'開放新預留'};
-export function attemptFieldText(field:string,value:unknown,currency:string){return typeof value==='number'&&(field==='cost_minor'||field==='shipping_minor')?formatMinor(value,currency):typeof value==='boolean'?value?'是':'否':field==='decision'?(({accepted:'同意',declined:'不同意',revoked:'撤回同意'} as Record<string,string>)[String(value)]??String(value)):String(value??'（空白）');}
+export const fieldLabels:Record<string,string>={title:'商品名稱',description:'說明',stock:'庫存',cost_minor:'供貨單價',shipping_minor:'每件運費',msrp_minor:'建議售價',minimum_order_quantity:'最低訂量',lead_time_days:'交期',shipping_terms:'出貨條件',return_terms:'退貨條件',name:'商品庫名稱',currency:'幣別',decision:'決定',listing_sha256:'申請內容摘要',reservation_enabled:'開放新預留'};
+export function attemptFieldText(field:string,value:unknown,currency:string){return typeof value==='number'&&(field==='cost_minor'||field==='shipping_minor'||field==='msrp_minor')?formatMinor(value,currency):typeof value==='number'&&field==='minimum_order_quantity'?`${value} 件`:typeof value==='number'&&field==='lead_time_days'?value===0?'當天':`${value} 天`:typeof value==='boolean'?value?'是':'否':field==='decision'?(({accepted:'同意',declined:'不同意',revoked:'撤回同意'} as Record<string,string>)[String(value)]??String(value)):String(value??'（空白）');}
 
 export const CHANGE_LABELS={
  'storefront.supply-catalog.setup':'建立供貨商品庫',
