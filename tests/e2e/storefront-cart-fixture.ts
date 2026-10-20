@@ -1,3 +1,5 @@
+import {Problem} from '../../packages/shared/problem.js';
+import {StoreAdmissionViewSchema} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import { randomUUID } from 'node:crypto';
 import {createHash} from 'node:crypto';
 import {canonicalJSON} from '../../modules/agent-commerce/checkout/terms.js';
@@ -64,7 +66,9 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-export async function openCartListener(db: Pool, offline = false, supplierConsoleEnabled = offline) {
+type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean};
+export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
+  const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
   const schema = e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
   const listenerPool = new Pool({
@@ -91,13 +95,19 @@ export async function openCartListener(db: Pool, offline = false, supplierConsol
       throw Error('Owned loopback listener unavailable.');
     }
     const origin = `http://127.0.0.1:${address.port}`;
+    const adminToken=randomUUID(),adminCsrf=randomUUID(),adminEmail=`admission-${randomUUID()}@example.test`;
+    if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
     app = createApp(listenerPool, origin, 'local', {
+      ...(controls.realAdmission?{adminVerifier:async(request:Request)=>{
+        if(request.headers.get('X-Fixture-Admin')!==adminToken)throw new Problem(403,'admin_required','需要合成管理員。');
+        return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
+      }}:{}),
       guildLaunchpadEnabled: true,
       supplierConsoleEnabled,
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
       commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
-        admission: { allowed: () => true },
+        ...(controls.realAdmission?{}:{admission: { allowed: () => true }}),
         ...(!offline ? {shipping: ports.shipping} : {}),
       },
     });
@@ -105,6 +115,12 @@ export async function openCartListener(db: Pool, offline = false, supplierConsol
     app.get('*', serveStatic({ path: './apps/portal-web/dist/index.html' }));
     return {
       origin,
+      admission: async(path:string,body:unknown)=>{
+        if(!controls.realAdmission)throw Error('Real admission was not enabled for this fixture.');
+        const response=await fetch(origin+'/admin/api/commerce/store-admissions'+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','X-Fixture-Admin':adminToken,'X-Admin-CSRF':adminCsrf,'Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+        const raw=await response.json();expect(response.ok,JSON.stringify(raw)).toBe(true);
+        return StoreAdmissionViewSchema.parse(raw);
+      },
       close: async () => {
         try {
           if ('closeAllConnections' in server) server.closeAllConnections();
@@ -125,9 +141,9 @@ export async function openCartListener(db: Pool, offline = false, supplierConsol
   }
 }
 
-export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline, supplierConsoleEnabled = offline) {
+export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline, controls: CartControls = {}) {
   await ownedSchema(db);
-  const listener = await openCartListener(db, offline, supplierConsoleEnabled);
+  const listener = await openCartListener(db, offline, controls);
   const seller = await member(db);
   await db.query(
     `INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
@@ -291,6 +307,7 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       soldOutProduct,
       revision: initialProjection.revision,
       saveOfflineFixture,
+      admission: listener.admission,
       sellerPost: post,
       updatePriceAndRepublish,
       removeProductAndRepublish,

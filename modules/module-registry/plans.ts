@@ -14,6 +14,7 @@ import { MANUAL_WORKSPACE_RELEASE, PLAN_TTL_MS, type ContractRef, type Requireme
 import { DependencySelectionRequired, InstanceSelectionRequired } from './problems.js';
 import type { ModuleProviderMap } from './providers.js';
 import { assertConfiguration, coversCapabilities, planStale, sameContract } from './validate.js';
+import {assertGuildMembership, launchMembershipRule} from './membership.js';
 
 const INSTANCE_UNAVAILABLE = () => new Problem(409, 'instance_unavailable', '這個模組實例目前無法使用。');
 
@@ -54,13 +55,12 @@ interface CandidateRow {
 
 /** `lock` takes FOR SHARE. Callers that still have a wait ahead must pass false and lock again after that wait. */
 export async function assertFullGuildMember(q: PoolClient, communityId: string, userId: string, guildKey: string, lock: boolean) {
+  return assertApplicationGuildMember(q, communityId, userId, guildKey, 'manual-workspace', lock);
+}
+
+export async function assertApplicationGuildMember(q: PoolClient, communityId: string, userId: string, guildKey: string, applicationKey: string, lock: boolean) {
   await assertGuildKey(q, guildKey);
-  const member = await q.query(
-    `SELECT 1 FROM positioning_profession_memberships
-     WHERE community_id=$1 AND user_id=$2 AND guild_key=$3 AND state='active' AND member_tier='full'${lock ? ' FOR SHARE' : ''}`,
-    [communityId, userId, guildKey],
-  );
-  requireCondition(member.rowCount === 1, 403, 'guild_full_member_required', '需要這個公會的正式會員身分。');
+  await assertGuildMembership(q, communityId, userId, [launchMembershipRule(applicationKey, guildKey)], lock);
 }
 
 async function workspaceStatus(q: PoolClient, tenantId: string, workspaceId: string) {
@@ -132,7 +132,7 @@ export async function createPlan(
   options: { mode: 'general' | 'facade'; providers: ModuleProviderMap; membershipLock?: 'defer' },
 ): Promise<LaunchPlan> {
   const input = PlanInputSchema.parse(body);
-  await assertFullGuildMember(q, context.community_id, actorUserId, input.guild_key, false);
+  await assertApplicationGuildMember(q, context.community_id, actorUserId, input.guild_key, input.application_key, false);
   await workspaceStatus(q, context.tenant_id, input.workspace_id);
   const definition = await loadOfferedDefinition(q, input.guild_key, input.application_key, input.release_ref, context.community_id);
   assertConfiguration(input.configuration ?? {}, definition.customization_schema_ref);
@@ -291,7 +291,7 @@ export async function createPlan(
     ],
   )).rows[0];
   if (options.membershipLock !== 'defer') {
-    await assertFullGuildMember(q, context.community_id, actorUserId, input.guild_key, true);
+    await assertApplicationGuildMember(q, context.community_id, actorUserId, input.guild_key, input.application_key, true);
   }
   return LaunchPlanSchema.parse({
     plan_id: planId,
