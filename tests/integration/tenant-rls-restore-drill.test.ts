@@ -896,7 +896,7 @@ test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs
    assert.equal((await rows(restoredPool)).length,EXPECTED[table]);assert.deepEqual(await rows(restoredPool),await rows(owner));
    assert.equal((await restoredPool.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[spaces.c.tenantId])).rowCount,0);
   }
-  for(const space of [spaces.a,spaces.b])for(const object of galleryObjects.get(space.tenantId)!)assert.deepEqual((await readVerifiedObject(restoredObjects,object.key,object.metadata)).bytes,object.bytes);
+  for(const space of [spaces.a,spaces.b])for(const object of galleryObjects.get(space.tenantId)!)assert.deepEqual(Buffer.from((await readVerifiedObject(restoredObjects,object.key,object.metadata)).bytes),object.bytes);
   for(const object of galleryObjects.get(spaces.c.tenantId)!)assert.equal(await restoredObjects.head(object.key),null);
   const restoredKeys = await foreignKeys(restoredPool);
   assert(restoredKeys.length > 0); assert.deepEqual(restoredKeys, await foreignKeys(owner));
