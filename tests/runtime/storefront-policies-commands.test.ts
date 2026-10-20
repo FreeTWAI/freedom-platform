@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
 import {SellerPoliciesAckSchema,SellerPoliciesDraftSchema,SellerPoliciesWireSchema,emptySellerPolicies,POLICY_KINDS,SELLER_FIELDS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {createHostedStorePhotoHarness,type HostedStorePhotoHarness} from '../helpers/hosted-store-photo.js';
-import {syntheticSeller} from '../helpers/storefront-policies.js';
+import {syntheticSeller,legalHash} from '../helpers/storefront-policies.js';
 let f:HostedStorePhotoHarness,on:ReturnType<HostedStorePhotoHarness['application']>;
 type Store=Awaited<ReturnType<HostedStorePhotoHarness['openStore']>>;
 before(async()=>{f=await createHostedStorePhotoHarness();await f.reset();on=f.application(false,{storePoliciesEnabled:true,storePhotoAssetStore:undefined,storePhotoAssets:undefined});});after(async()=>{await f?.stop();});
@@ -54,13 +54,23 @@ test('POL-CMD-06 maximum structural input reaches field validation under the exi
  const neighboring=await call(s,'PATCH','', {description:'字'.repeat(12000)},(await draft(s)).version);assert.equal(neighboring.status,413);
 });
 test('POL-CMD-07 version 501 maps to fixed 409 and rolls back the whole section',async()=>{
- const s=await f.openStore();await f.h.pool.query(`INSERT INTO commerce_storefront_policy_versions(version_id,tenant_id,instance_id,kind,version_no,created_at_profile_version,body,content_sha256) SELECT gen_random_uuid(),$1,$2,'shipping',n,1,'合成上限政策',repeat('a',64) FROM generate_series(1,500) n ORDER BY n`,[s.tenantId,s.instanceId]);
+ const s=await f.openStore();await f.h.pool.query(`INSERT INTO commerce_storefront_policy_versions(version_id,tenant_id,instance_id,kind,version_no,created_at_profile_version,body,content_sha256) SELECT gen_random_uuid(),$1,$2,'shipping',n,1,'合成上限政策',$3 FROM generate_series(1,500) n ORDER BY n`,[s.tenantId,s.instanceId,legalHash({kind:'shipping',body:'合成上限政策'})]);await f.h.pool.query("INSERT INTO commerce_storefront_policy_drafts(tenant_id,instance_id,kind,version_id) SELECT tenant_id,instance_id,kind,version_id FROM commerce_storefront_policy_versions WHERE instance_id=$1 AND kind='shipping' AND version_no=500",[s.instanceId]);
  const before=await counts(s),r=await call(s,'PUT','/seller-policies',input(),'1');assert.equal(r.status,409);assert.equal(r.data.code,'seller_policies_version_limit');assert.equal(r.data.detail,'賣方資訊與商店政策的版本已達上限（每項 500 個），請聯絡平台協助。');assert.deepEqual(await counts(s),before);
  const seller=await f.openStore();await f.h.pool.query(`INSERT INTO commerce_storefront_seller_versions(version_id,tenant_id,instance_id,version_no,created_at_profile_version,business_name,email,phone,address,service_hours,tax_id,responsible_person,content_sha256)
- SELECT gen_random_uuid(),$1,$2,n,1,'合成測試商行','','','','','','',repeat('a',64) FROM generate_series(1,500) n ORDER BY n`,[seller.tenantId,seller.instanceId]);const sellerBefore=await counts(seller),denied=await call(seller,'PUT','/seller-policies',input(),'1');assert.equal(denied.status,409);assert.equal(denied.data.code,'seller_policies_version_limit');assert.deepEqual(await counts(seller),sellerBefore);
+ SELECT gen_random_uuid(),$1,$2,n,1,'合成測試商行','','','','','','',$3 FROM generate_series(1,500) n ORDER BY n`,[seller.tenantId,seller.instanceId,legalHash({...emptySellerPolicies().seller,business_name:'合成測試商行'})]);await f.h.pool.query('INSERT INTO commerce_storefront_seller_drafts(tenant_id,instance_id,version_id) SELECT tenant_id,instance_id,version_id FROM commerce_storefront_seller_versions WHERE instance_id=$1 AND version_no=500',[seller.instanceId]);const sellerBefore=await counts(seller),denied=await call(seller,'PUT','/seller-policies',input(),'1');assert.equal(denied.status,409);assert.equal(denied.data.code,'seller_policies_version_limit');assert.deepEqual(await counts(seller),sellerBefore);
 });
 test('POL-CMD-08 quarantine blocks save before receipts and flag OFF mounts nothing',async()=>{
  const s=await f.openStore(),quarantine=f.application(false,{storePoliciesEnabled:true,commerceSettings:{checkoutEnabled:false,consoleEnabled:false,quarantine:true,providerProfiles:[]}}),key=randomUUID(),before=await counts(s);
  const r=await call(s,'PUT','/seller-policies',input(),'1',key,quarantine);assert.equal(r.status,503);assert.equal(r.data.code,'commerce_quarantined');assert.deepEqual(await counts(s),before);assert.equal((await call(s,'GET','/seller-policies',undefined,undefined,undefined,quarantine)).status,200);await save(s,input(),'1',key);
  const off=f.application(false,{storePoliciesEnabled:false});for(const method of ['GET','PUT'])assert.equal((await call(s,method,'/seller-policies',method==='PUT'?input():undefined,'2',undefined,off)).status,404);assert.equal((await(await off.request(f.h.origin+'/api/v1/site')).json()).store_policies_enabled,false);
+});
+
+test('POL-CMD-09 supplier selections make privacy relevant; the checkbox versions only its statement and gates no publication',async()=>{
+ const s=await f.openStore(),supplier=await f.openStore();assert.equal((await draft(s)).has_supplied_products,false);
+ const offer=f.ok(await f.post(supplier.root+'/products/'+supplier.productId+'/supply-offer',supplier.owner,{},'1'));
+ const selection=f.ok(await f.post(s.root+'/distribution-selections',s.owner,{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:1500}),201);
+ f.ok(await f.post(supplier.root+'/supply-requests/'+selection.selection_id+'/decision',supplier.owner,{decision:'accepted',listing_sha256:selection.listing_sha256},selection.version));
+ const current=await draft(s);assert.equal(current.has_supplied_products,true);assert.deepEqual(current.seller,emptySellerPolicies().seller);
+ const saved=await save(s);assert.equal(saved.current.policies.privacy.drop_ship_disclosed,false);f.ok(await call(s,'POST','/publish',{},saved.current.version));
+ const before=await counts(s),body=input();body.policies.privacy.drop_ship_disclosed=true;const changed=await save(s,body);assert.equal(changed.current.policies.privacy.drop_ship_disclosed,true);assert.equal((await counts(s)).policies,before.policies+1);assert.equal((await counts(s)).sellers,before.sellers);
 });

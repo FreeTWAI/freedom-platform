@@ -25619,8 +25619,8 @@
     },
     {
       "path": "tests/runtime/storefront-policies-commands.test.ts",
-      "bytes": 11967,
-      "sha256": "3df2bc249a3af0fd5043663478921246852e74545a91d00a6bf283dbd69a6db7"
+      "bytes": 13948,
+      "sha256": "304d5e4d9840d6cf1c057a133e51e30aabe374a38ebb3e0bce168b008dba6438"
     },
     {
       "path": "tests/runtime/storefront-policies-publication.test.ts",
