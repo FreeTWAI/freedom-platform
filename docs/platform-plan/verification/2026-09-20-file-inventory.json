@@ -2644,8 +2644,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStorePolicies.tsx",
-      "bytes": 12858,
-      "sha256": "73a0ff011904a42ccdf02e1a96cee5036d7298b18140e8bb974eb6699b90600d"
+      "bytes": 13303,
+      "sha256": "ed598d397a2d6874d1be324669e1e578f21c7f8e4c9d31a6ba10166c247a3f33"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplierOrders.tsx",
@@ -15569,8 +15569,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
-      "bytes": 58741,
-      "sha256": "292cf8078bde249730ad21cf68a5f0f7c1ace2cd9e37a347c637a262e5659015"
+      "bytes": 59422,
+      "sha256": "5c26327495136bf83c7f980284b24b9fcd1c7821359b8b91d3dbbe531534256b"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-07-operations-skillbooks.md",
@@ -18544,8 +18544,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 13681,
-      "sha256": "cc4fa4ebf5a8ad10de26fea5da33648cc3d7837b0cc7b8b491ab4f61302d3a7f"
+      "bytes": 14247,
+      "sha256": "c8f19c2e974ed1b9101cc233edba45fd4d2213f3added67a28cf9afc55e04733"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -22809,8 +22809,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
-      "bytes": 14864,
-      "sha256": "84a95dda3910a1d240daa570142432fc6b0c9a36293080e346b2dce0181a5d62"
+      "bytes": 15577,
+      "sha256": "3c5b64ab6fd6252d74b79173a8095147c7fa8e6cad60c3e1c8ae88251978f42d"
     },
     {
       "path": "tests/e2e/hosted-store.spec.ts",
