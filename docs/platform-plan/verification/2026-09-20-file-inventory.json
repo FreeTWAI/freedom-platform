@@ -2594,8 +2594,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyCatalog.tsx",
-      "bytes": 28159,
-      "sha256": "ca6431172f2d4bc6488740e94925c8da6a1b6c70f07a46a0ad011fd24e939762"
+      "bytes": 28277,
+      "sha256": "3cf1b92acd3f9fc4fb9497f78627973b45b42cfbb7e3836cac7654a9ea68fd49"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyTerms.tsx",
@@ -22444,8 +22444,8 @@
     },
     {
       "path": "tests/e2e/guild-launchpad-profiles.spec.ts",
-      "bytes": 34151,
-      "sha256": "636f7a806e64319cb9c6d6e3994dc54dce46ead5ea0a363bb5614959a07bcc8e"
+      "bytes": 36277,
+      "sha256": "c2d3c24617936bfd13b50c702d444c53ddbc5b1caa4d3f1da23ea819001512dd"
     },
     {
       "path": "tests/e2e/guild-launchpad.spec.ts",
