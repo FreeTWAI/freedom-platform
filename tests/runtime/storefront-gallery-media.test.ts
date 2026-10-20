@@ -12,7 +12,7 @@ async function current(){return (await(await get('/api/v1/public/stores/'+s.slug
 test('GALLERY-MEDIA-01 draft preview, escaped alt and sixth dirty dimension freeze with atomic publish/retry',async()=>{
  f.ok(await f.upload(s,'1'));f.ok(await f.upload(s,'2'));await f.publish(s);
  const revision=await current(),html=await(await get('/shops/'+s.slug+'/products/P0001')).text();
- assert.match(html,/shop-gallery-thumbnails/);assert.match(html,/合成商品，第 1 張，共 2 張/);assert.match(html,/aria-current="true"/);assert.match(html,/loading="lazy"/);
+ assert.match(html,/shop-gallery-thumbnails/);assert.match(html,/合成商品，第 1 張，共 2 張/);assert.match(html,/role="group" aria-label="選擇商品照片"/);assert.match(html,/data-gallery-status>共 2 張照片/);assert.match(html,/loading="lazy"/);
  const single=await(await get('/api/v1/public/stores/'+s.slug+'/media')).text(),json=await(await get('/api/v1/public/stores/'+s.slug)).text();
  const refs=(await f.h.pool.query('SELECT * FROM commerce_publication_gallery_refs WHERE tenant_id=$1 ORDER BY sku,position',[s.tenantId])).rows;assert.equal(refs.length,2);
  await describe('<img onerror="synthetic"> & \'');

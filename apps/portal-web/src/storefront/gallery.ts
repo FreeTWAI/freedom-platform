@@ -35,5 +35,6 @@ for(const gallery of document.querySelectorAll<HTMLElement>('[data-shop-gallery]
   }
   if(nearest!==current)announce(nearest);
  });
+ announce(0);
  new ResizeObserver(()=>select(current)).observe(stage);
 }

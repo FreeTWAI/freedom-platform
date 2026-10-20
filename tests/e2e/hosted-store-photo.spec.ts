@@ -3720,7 +3720,7 @@ test.describe('C1 own product gallery',()=>{
   await block.getByLabel('新增商品照片',{exact:true}).setInputFiles(file);await expect(block.getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
   await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
  }
- async function publish(page:Page){await storeArea(page,'店面與發布');await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
  for(const width of [390,768,1440])test(`GALLERY-E2E-responsive-${width} editor, frozen detail, keyboard and no-JS photos`,async({browser,e2eAuthPool},info)=>{
   const s=await setup(browser,e2eAuthPool,width),{page}=s;
   const buyer=await browser.newContext({baseURL:server.origin,viewport:{width,height:900}}),noJs=await browser.newContext({baseURL:server.origin,javaScriptEnabled:false,viewport:{width,height:900}});
@@ -3735,17 +3735,22 @@ test.describe('C1 own product gallery',()=>{
    const stage=detail.locator('.shop-gallery-stage'),before=await stage.boundingBox();
    await expect.poll(()=>detail.locator('.shop-gallery-photo img').first().evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(120);
    await detail.screenshot({path:info.outputPath(`gallery-product-${width}.png`),fullPage:true});
-   const first=detail.getByRole('link',{name:'顯示第 1 張照片',exact:true});await first.focus();await detail.keyboard.press('ArrowRight');
+   const first=detail.getByRole('link',{name:'顯示第 1 張照片',exact:true});await expect(first).toHaveAttribute('aria-current','true');await first.focus();await detail.keyboard.press('ArrowRight');
    const selected=detail.getByRole('link',{name:'顯示第 2 張照片',exact:true});await expect(selected).toBeFocused();await expect(selected).toHaveAttribute('aria-current','true');await expect(detail.locator('[data-gallery-status]')).toHaveText('第 2 張，共 2 張');
    await expect.poll(()=>detail.locator('.shop-gallery-photo').nth(1).evaluate(node=>Math.abs(node.getBoundingClientRect().left-node.parentElement!.getBoundingClientRect().left-1))).toBeLessThan(2);
-   expect((await stage.boundingBox())?.height).toBe(before?.height);await detail.screenshot({path:info.outputPath(`gallery-keyboard-${width}.png`),fullPage:true});
+   expect((await stage.boundingBox())?.height).toBe(before?.height);await detail.screenshot({path:info.outputPath(`gallery-keyboard-${width}.png`)});
+   await expect(selected).toHaveAttribute('aria-current','true');await expect(detail.locator('[data-gallery-status]')).toHaveText('第 2 張，共 2 張');
    await detail.keyboard.press('Home');await expect(first).toBeFocused();await expect(first).toHaveAttribute('aria-current','true');
    const images=await detail.locator('.shop-gallery-photo img').evaluateAll(nodes=>nodes.map(node=>({width:node.getAttribute('width'),height:node.getAttribute('height'),fit:getComputedStyle(node).objectFit,loading:node.getAttribute('loading')})));
    expect(images.map(p=>p.loading)).toEqual(['eager','lazy']);for(const image of images){expect(Number(image.width)).toBeGreaterThan(0);expect(Number(image.height)).toBeGreaterThan(0);expect(image.fit).toBe('contain');}
    const plain=await noJs.newPage();await plain.goto('/shops/'+s.slug+'/products/'+s.product.sku);await plain.getByRole('link',{name:'顯示第 2 張照片',exact:true}).click();
    await expect.poll(()=>plain.locator('.shop-gallery-stage').evaluate(node=>node.scrollLeft)).toBeGreaterThan(0);await expect.poll(()=>plain.locator('.shop-gallery-photo img').nth(1).evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(80);
    await expect.poll(()=>plain.locator('.shop-gallery-photo').nth(1).evaluate(node=>Math.abs(node.getBoundingClientRect().left-node.parentElement!.getBoundingClientRect().left-1))).toBeLessThan(2);
-   await plain.screenshot({path:info.outputPath(`gallery-no-js-${width}.png`),fullPage:true});
+   await expect(plain.locator('[data-gallery-status]')).toHaveText('共 2 張照片');await expect(plain.locator('.shop-gallery-thumbnails [aria-current]')).toHaveCount(0);
+   // Chromium full-page capture resets native horizontal scrollers. Capture
+   // these selected states in the actual viewport; product shots stay full-page.
+   await plain.screenshot({path:info.outputPath(`gallery-no-js-${width}.png`)});
+   await expect.poll(()=>plain.locator('.shop-gallery-photo').nth(1).evaluate(node=>Math.abs(node.getBoundingClientRect().left-node.parentElement!.getBoundingClientRect().left-1))).toBeLessThan(2);
    for(const p of [page,detail,plain])expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    const frozen=await detail.content();await storeArea(page,'商品');await second.getByRole('button',{name:'設為主照片',exact:true}).click();await expect(gallery(page).locator('ol > li').first().getByRole('img')).toHaveAttribute('alt','合成商品側面');
    await detail.reload();expect(await detail.content()).toBe(frozen);
@@ -3763,7 +3768,7 @@ test.describe('C1 own product gallery',()=>{
     await detail.keyboard.press('End');await expect(last).toBeFocused();await expect(last).toHaveAttribute('aria-current','true');await expect(detail.locator('[data-gallery-status]')).toHaveText('第 8 張，共 8 張');
     await expect.poll(()=>last.evaluate(node=>{const a=node.getBoundingClientRect(),b=node.parentElement!.getBoundingClientRect();return a.left>=b.left+3&&a.right<=b.right-3;})).toBe(true);
     await expect.poll(()=>detail.locator('.shop-gallery-photo').last().evaluate(node=>Math.abs(node.getBoundingClientRect().left-node.parentElement!.getBoundingClientRect().left-1))).toBeLessThan(2);
-    await detail.screenshot({path:info.outputPath(`gallery-eight-keyboard-${width}.png`),fullPage:true});
+    await detail.screenshot({path:info.outputPath(`gallery-eight-keyboard-${width}.png`)});await expect(last).toBeFocused();await expect(last).toHaveAttribute('aria-current','true');
     expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    }
    await gallery(s.page).locator('ol > li').last().getByRole('button',{name:'移除',exact:true}).click();await expect(gallery(s.page).locator('ol > li')).toHaveCount(7);await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toBeVisible();
