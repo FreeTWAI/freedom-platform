@@ -34,7 +34,8 @@ test('APPEARANCE-ROLLBACK-01 old-binary-shaped SELECT/INSERT preserves v1/photo 
   const oldHtml=await(await f.app.request(url)).text(),oldJson=await(await f.app.request(f.h.origin+'/api/v1/public/stores/'+s.slug)).text();
   await isolatedTransaction(f.h.pool,q=>seedAppearanceRows(q,s));
   assert.equal(await(await f.app.request(url)).text(),oldHtml);assert.equal(await(await f.app.request(f.h.origin+'/api/v1/public/stores/'+s.slug)).text(),oldJson);
-  assert.match(await(await application().request(url)).text(),/合成商店公告|shop-cover/);
+  const branded=await(await application().request(url)).text();
+  assert.match(branded,/合成商店公告/);assert.match(branded,/shop-cover/);
   // Original columns only, with the established tenant binding. This is shape
   // compatibility evidence; it does not claim to execute a deployed old binary.
   const old=await isolatedTransaction(f.runtime,async q=>{

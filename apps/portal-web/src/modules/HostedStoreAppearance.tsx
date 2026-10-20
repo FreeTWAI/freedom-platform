@@ -86,7 +86,7 @@ export function HostedStoreAppearance({client,userId,tenantId,instanceId,draft,w
   }
   function freshSettings(){
     if(frozen||!writable||!metadataDirty||held.current?.hadUnknown)return;
-    const parsed=StorefrontAppearanceInputSchema.safeParse(value);
+    const parsed=StorefrontAppearanceInputSchema.safeParse({...value,announcement:value.announcement.trim()});
     if(!parsed.success){setMessage(parsed.error.issues[0]?.message==='公告列最多 80 個字。'?'公告列最多 80 個字。':'請檢查公告是否為單行文字，並最多選擇 8 件不重複的主打商品。');return;}
     void send(Object.freeze({tenantId,instanceId,kind:'settings',body:appearanceFields(parsed.data),key:crypto.randomUUID(),expected:draft.version,hadUnknown:false}));
   }
@@ -126,8 +126,8 @@ export function HostedStoreAppearance({client,userId,tenantId,instanceId,draft,w
         {ACCENT_PRESETS.map(preset=><label key={preset.id}><input type="radio" name={id+'-accent'} checked={value.accent_preset===preset.id} onChange={()=>change({accent_preset:preset.id})}/>
           <span aria-hidden="true" className="hosted-appearance-swatch" style={{background:preset.fill,borderColor:preset.border,color:preset.text}}>Aa</span><span>{preset.name}</span></label>)}
       </div></fieldset>
-      <label className="field">公告列<input value={value.announcement} maxLength={160} aria-invalid={announcementInvalid||undefined} aria-describedby={id+'-announcement-hint'+(announcementInvalid?' '+id+'-announcement-error':'')} onChange={event=>change({announcement:event.target.value})}/></label>
-      <p id={id+'-announcement-hint'} className="field-hint">單行純文字，最多 80 個字。{[...value.announcement].length}／80</p>
+      <label className="field">公告列<input value={value.announcement} aria-invalid={announcementInvalid||undefined} aria-describedby={id+'-announcement-hint'+(announcementInvalid?' '+id+'-announcement-error':'')} onChange={event=>change({announcement:event.target.value})}/></label>
+      <p id={id+'-announcement-hint'} className="field-hint">單行純文字，最多 80 個字。{[...value.announcement.trim()].length}／80</p>
       {announcementInvalid&&<p id={id+'-announcement-error'} role="alert">公告列最多 80 個字，請使用單行純文字。</p>}
       <fieldset className="hosted-appearance-fields stack"><legend>主打商品</legend>
         <p className="field-hint">最多 8 件，依下列順序顯示在完整目錄前。</p>

@@ -16,8 +16,8 @@ test('appearance accepts only controlled metadata; old presentation and public p
   for(const extra of [{css:'color:red'},{contact_email:'synthetic@invalid.test'},{bank_account:'synthetic'},{accent_preset:'#fff'},{featured_product_ids:[randomUUID(),randomUUID(),...Array.from({length:7},()=>randomUUID())]},{cover:'/caller-selected.png'}])assert.equal(StorefrontAppearanceInputSchema.safeParse({...input,...extra}).success,false);
   assert.equal(StoreAppearanceInputSchema.safeParse(input).success,false);
   assert.equal(PublicStoreProjectionSchema.safeParse({...projection,appearance:input}).success,false);
-  for(const text of ['合'.repeat(80),'🛍️'.repeat(26),'<b>純文字</b>'])assert.equal(AnnouncementSchema.safeParse(text).success,true);
-  for(const text of ['合'.repeat(81),'x\ny','x\ry','x\u0085y','x\u2028y','x\u0000y'])assert.equal(AnnouncementSchema.safeParse(text).success,false);
+  for(const text of ['合'.repeat(80),'🛍️'.repeat(26),'<b>純文字</b>','  合成公告  ','　 ','  '+'𠮷'.repeat(80)+'　'])assert.equal(AnnouncementSchema.safeParse(text).success,true);
+  for(const text of ['合'.repeat(81),' '+'𠮷'.repeat(81)+' ','x\ny','x\ry','x\u0085y','x\u2028y','x\u0000y','\ud800','\udc00'])assert.equal(AnnouncementSchema.safeParse(text).success,false);
 });
 test('publication digest fixes key order, keeps featured order and excludes all volatile fields',()=>{
   const a=randomUUID(),b=randomUUID();const d={...defaultAppearanceSnapshot().document,featured_product_ids:[a,b],featured_skus:['P0002','P0001']};
@@ -54,6 +54,8 @@ test('appearance HTML escapes announcements and excludes stale featured SKUs wit
   const html=storeHtml(projection,'catalog-grid-v1',[],undefined,undefined,appearance);
   assert.match(html,/&lt;script&gt;合成&lt;\/script&gt;/);assert.doesNotMatch(html,/<script>|shop-cover|P9999/);
   assert.equal((html.match(/<article>/g)??[]).length,2);assert.ok(html.indexOf('id="featured-products"')<html.indexOf('id="products"'));
+  const blank=storeHtml(projection,'catalog-grid-v1',[],undefined,undefined,{...appearance,announcement:'　 '});
+  assert.doesNotMatch(blank,/class="shop-announcement"/);
 });
 test('featured products retain configured order above the full catalog and public images bind the current store revision',()=>{
   const store={...projection,products:[...projection.products,{...projection.products[0],sku:'P0002',title:'第二件合成商品'}]};

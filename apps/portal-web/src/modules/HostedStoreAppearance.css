@@ -17,7 +17,5 @@
 .hosted-appearance-saved.logo {max-width: 96px; max-height: 96px;}
 .hosted-appearance-image input[type="file"] {width: 100%; min-height: 44px;}
 .hosted-appearance-featured :focus {outline: 2px solid var(--focus); outline-offset: 4px;}
-.hosted-store-appearance-enabled .hosted-retail-nav {display: flex;}
-.hosted-store-appearance-enabled .hosted-retail-nav .btn {width: fit-content;}
 @media (min-width:768px) {.hosted-appearance-images {grid-template-columns:repeat(2,minmax(0,1fr));}.hosted-appearance-swatches {grid-template-columns:repeat(4,minmax(0,1fr));}}
 @media (max-width:359px) {.hosted-appearance-swatches {grid-template-columns:minmax(0,1fr);}}

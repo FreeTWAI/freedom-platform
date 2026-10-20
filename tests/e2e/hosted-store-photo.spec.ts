@@ -3513,6 +3513,22 @@ async function appearanceScreens(page:Page,info:TestInfo,label:string,editor=fal
   await page.setViewportSize({width:320,height:900});await appearanceGeometry(page,editor?page.locator('.hosted-store'):page.locator('body'),info,label+'-320');
   await page.setViewportSize(viewport);
 }
+async function appearanceInputFocus(page:Page,color:string){
+  // The photo fixture closes checkout. Probe both existing input classes on
+  // the real stylesheet without inventing enabled purchasing controls.
+  await page.evaluate(()=>{
+    const probe=document.createElement('div');probe.id='appearance-focus-probe';
+    for(const name of ['shop-text-input','shop-quantity-input']){const input=document.createElement('input');input.className=name;probe.append(input);}
+    document.body.append(probe);
+  });
+  try{
+    for(const name of ['shop-text-input','shop-quantity-input']){
+      const input=page.locator('#appearance-focus-probe .'+name);await input.focus();
+      await expect(input).toHaveCSS('outline-color',color);await expect(input).toHaveCSS('outline-offset','2px');
+      await expect(input).toHaveCSS('outline-width','3px');await expect(input).toHaveCSS('outline-style','solid');
+    }
+  }finally{await page.locator('#appearance-focus-probe').evaluate(node=>node.remove());}
+}
 
 test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a responsive store',async({page,browser,baseURL,e2eAuthPool},info)=>{
   await page.setViewportSize({width:390,height:900});const s=await appearanceReady(page,e2eAuthPool);
@@ -3521,15 +3537,21 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
   await settings.getByLabel('商店名稱',{exact:true}).fill('山邊合成茶作');await settings.getByLabel('品牌（選填）',{exact:true}).fill('山邊合成茶作');
   await settings.getByLabel('商店介紹',{exact:true}).fill('把一杯茶的時間，留給喜歡的日常。合成茶具與亞麻織品，陪你慢慢過生活。');
   await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已儲存。');await storeArea(page,'店面與發布');
+  await appearanceEditor(page).getByLabel('公告列',{exact:true}).fill('　 ');
+  await appearanceEditor(page).getByRole('button',{name:'儲存店面外觀',exact:true}).click();
+  await expect(appearanceEditor(page).getByRole('status')).toContainText('已儲存店面外觀');
+  await expect(appearanceEditor(page).getByLabel('公告列',{exact:true})).toHaveValue('');
   const firstPreview=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const lime=await firstPreview;
+  await expect(lime.locator('.shop-announcement')).toHaveCount(0);
   await expect(lime.locator('body')).toHaveAttribute('data-shop-accent','lime');
   await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('background-color','rgb(196, 255, 32)');
   await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('color','rgb(23, 34, 0)');
-  await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('border-top-color','rgb(83, 115, 0)');await lime.close();
+  await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('border-top-color','rgb(83, 115, 0)');
+  await appearanceInputFocus(lime,'rgb(83, 115, 0)');await lime.close();
   const second=ProductViewSchema.parse(await post(page,s.root+'/products',{title:'亞麻茶席巾',description:'合成品牌商品',price_minor:18000,stock:5},201));
   await page.reload();await storeArea(page,'店面與發布');
   const editor=appearanceEditor(page);await editor.getByRole('radio',{name:'海洋藍',exact:true}).check();
-  await editor.getByLabel('公告列',{exact:true}).fill('新作已上架，歡迎慢慢挑選。');
+  await editor.getByLabel('公告列',{exact:true}).fill('　 新作已上架，歡迎慢慢挑選。  ');
   await editor.getByRole('combobox',{name:'選擇主打商品',exact:true}).selectOption(s.product.product_id);await editor.getByRole('button',{name:'加入主打商品',exact:true}).click();
   await editor.getByRole('combobox',{name:'選擇主打商品',exact:true}).selectOption(second.product_id);await editor.getByRole('button',{name:'加入主打商品',exact:true}).click();
   await editor.getByRole('button',{name:'上移主打商品：亞麻茶席巾',exact:true}).click();
@@ -3537,6 +3559,7 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
   await expect(appearanceImage(page,'cover').getByRole('button',{name:'儲存封面圖',exact:true})).toBeDisabled();
   await expect(appearanceImage(page,'cover')).toContainText('請先儲存店面外觀，再儲存圖片變更。');
   await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
+  await expect(editor.getByLabel('公告列',{exact:true})).toHaveValue('新作已上架，歡迎慢慢挑選。');
   await saveAppearanceImage(page,'cover');await saveAppearanceImage(page,'logo');
   expect((await appearanceDraft(page,s)).featured_product_ids).toEqual([second.product_id,s.product.product_id]);
   await appearanceScreens(page,info,'appearance-editor-filled',true);
@@ -3553,6 +3576,7 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
     await pub.locator('.shop-brand-header .shop-button').focus();
     await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('outline-color','rgb(29, 78, 216)');await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('outline-style','solid');
     await expect(pub.locator('.shop-cover img')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/cover`);
+    await expect(pub.locator('.shop-cover img')).toHaveAttribute('alt','山邊合成茶作的封面圖');
     await expect.poll(()=>pub.locator('.shop-cover img').evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(1200);
     await expect(pub.locator('.shop-cover img')).toHaveAttribute('width','1200');await expect(pub.locator('.shop-cover img')).toHaveAttribute('height','800');
     await expect(pub.locator('.shop-merchant-logo')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/logo`);
@@ -3667,7 +3691,7 @@ test('APPEARANCE-E2E-05 buyer product, cart, checkout and order shells retain th
       await buyer.goto('/shops/'+s.slug+path);await expect(buyer.locator('body')).toHaveAttribute('data-shop-accent','graphite');
       await expect(buyer.locator('.shop-merchant-logo')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/logo`);await expect(buyer.locator('.shop-announcement')).toHaveText('合成品牌的購物旅程');
       await expect(buyer.locator('footer .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');
-      if(label==='product-dark'){await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('background-color','rgb(51, 65, 85)');await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('color','rgb(255, 255, 255)');}
+      if(label==='product-dark'){await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('background-color','rgb(51, 65, 85)');await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('color','rgb(255, 255, 255)');await appearanceInputFocus(buyer,'rgb(51, 65, 85)');}
       if(label==='product-dark'||label==='cart-dark')await appearanceScreens(buyer,info,'appearance-'+label);
       else expect(await buyer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       expect(await buyer.locator('body').innerText()).not.toContain(s.member.email);

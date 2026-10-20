@@ -27,8 +27,7 @@
           ]
         },
         "announcement": {
-          "type": "string",
-          "maxLength": 160
+          "type": "string"
         },
         "featured_product_ids": {
           "maxItems": 8,
@@ -83,8 +82,7 @@
           ]
         },
         "announcement": {
-          "type": "string",
-          "maxLength": 160
+          "type": "string"
         },
         "featured_product_ids": {
           "maxItems": 8,
@@ -346,8 +344,7 @@
               ]
             },
             "announcement": {
-              "type": "string",
-              "maxLength": 160
+              "type": "string"
             },
             "featured_product_ids": {
               "maxItems": 8,

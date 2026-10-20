@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,after,beforeEach,test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {StorefrontAppearanceDraftSchema,AppearanceCommandAckSchema} from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import {PublicStoreProjectionSchema} from '../../contracts/guild-launchpad/v1/storefront.js';
 import {createHostedStorePhotoHarness,type HostedStorePhotoHarness} from '../helpers/hosted-store-photo.js';
@@ -157,13 +158,34 @@ test('APPEARANCE-11 a draft read waiting on a profile writer returns one coheren
     await q.query("INSERT INTO commerce_storefront_appearance_drafts(tenant_id,instance_id,announcement) VALUES($1,$2,'同一版本的合成公告')",[s.tenantId,s.instanceId]);
     const pid=(await q.query('SELECT pg_backend_pid() pid')).rows[0].pid;
     pending=draft(s);let blocked=false;
-    for(let attempt=0;attempt<100;attempt++){
+    const deadline=Date.now()+10000;
+    while(Date.now()<deadline){
       blocked=(await f.h.pool.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))) blocked',[pid])).rows[0].blocked;
       if(blocked)break;
+      await delay(20);
     }
     assert.equal(blocked,true,'observe the actual shared profile lock wait');
     await q.query('COMMIT');const view=await pending;assert.equal(view.version,'2');assert.equal(view.announcement,'同一版本的合成公告');
   }finally{await q.query('ROLLBACK');q.release();if(pending)await pending.catch(()=>undefined);}
+});
+
+test('APPEARANCE-13 announcement saves trim outer spaces, count Unicode code points after trimming and publish no empty bar',async()=>{
+  const s=await f.openStore();
+  for(const announcement of ['\ud800','\udc00']){
+    const result=await call(s,'PATCH','/appearance-settings',input(s,{announcement}),'1');
+    assert.equal(result.status,422);
+  }
+  assert.equal((await draft(s)).version,'1');
+  for(const [raw,expected] of [['　 合成公告  ','合成公告'],['　　 ',''],['  '+'𠮷'.repeat(80)+'　','𠮷'.repeat(80)]] as const){
+    const saved=await save(s,input(s,{announcement:raw}));assert.equal(saved.current.announcement,expected);
+    const stored=(await f.h.pool.query('SELECT announcement FROM commerce_storefront_appearance_drafts WHERE instance_id=$1',[s.instanceId])).rows[0];
+    assert.equal(stored.announcement,expected);
+    await publish(s);const html=await page(s);
+    if(expected)assert.ok(html.includes(`<p>${expected}</p>`));else assert.doesNotMatch(html,/class="shop-announcement"/);
+  }
+  const current=await draft(s);
+  assert.equal((await call(s,'PATCH','/appearance-settings',input(s,{announcement:' '+'𠮷'.repeat(81)+' '}),current.version)).status,422);
+  assert.equal((await draft(s)).version,current.version);
 });
 
 test('APPEARANCE-12 invalid controls and command headers return fixed zh-TW refusals without changes',async()=>{

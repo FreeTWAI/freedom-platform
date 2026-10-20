@@ -15,7 +15,7 @@ export function storefrontHeader(store: StorefrontHeading, options: {cart?: bool
   const appearance=options.appearance??store.appearance;
   const logo=appearance?.logo?appearanceImage(appearance.logo):null;
   const brand=`${logo?`<img class="shop-merchant-logo" src="${escape(logo.read_path)}" alt="" width="${logo.width}" height="${logo.height}">`:''}${name}`;
-  const announcement=appearance?.announcement?`<div class="shop-announcement"><p>${escape(appearance.announcement)}</p></div>`:'';
+  const announcement=appearance?.announcement.trim()?`<div class="shop-announcement"><p>${escape(appearance.announcement)}</p></div>`:'';
   const identity = options.preview
     ? `<span class="shop-top-store">${brand}</span><span class="shop-preview-label">店面預覽</span>`
     : `<a class="shop-top-store" href="${home}">${brand}</a><nav class="shop-navigation" aria-label="商店導覽"><a href="${home}#products">商品</a>${options.cart ? `<a class="shop-cart-link" href="${home}/cart" data-store-slug="${slug}">購物車</a>` : ''}<a href="${home}/order-access">訂單查詢</a><a href="#shop-information">商店說明</a></nav>`;

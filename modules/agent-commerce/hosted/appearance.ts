@@ -20,7 +20,8 @@ export function parseAppearanceSettingsInput(raw:unknown){
     if(Object.hasOwn(value,'featured_product_ids'))requireCondition(FeaturedProductIdsSchema.safeParse(value.featured_product_ids).success,422,'appearance_featured_invalid','主打商品最多 8 項，請選擇這間商店的商品且不要重複。');
   }
   const parsed=StorefrontAppearanceInputSchema.safeParse(raw);
-  requireCondition(parsed.success,422,'validation_failed','外觀設定格式無效，請檢查主色、公告與主打商品。');return parsed.data;
+  requireCondition(parsed.success,422,'validation_failed','外觀設定格式無效，請檢查主色、公告與主打商品。');
+  return {...parsed.data,announcement:parsed.data.announcement.trim()};
 }
 const invalid=()=>requireCondition(false,500,'storefront_appearance_invalid','店面外觀暫時無法讀取。');
 /** Pin metadata and media to the profile version read below. No writes or

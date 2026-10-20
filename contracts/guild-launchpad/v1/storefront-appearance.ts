@@ -19,7 +19,8 @@ export const ACCENT_PRESETS=[
 ] as const;
 export const AppearanceRoleSchema=z.enum(['cover','logo']);
 export type AppearanceRole=z.infer<typeof AppearanceRoleSchema>;
-export const AnnouncementSchema=z.string().max(160).refine(v=>[...v].length<=80,'公告列最多 80 個字。')
+export const AnnouncementSchema=z.string().refine(v=>v.isWellFormed(),'公告列請使用有效的文字。')
+  .refine(v=>[...v.trim()].length<=80,'公告列最多 80 個字。')
   .refine(v=>!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(v),'公告列請使用單行純文字。');
 export const FeaturedProductIdsSchema=z.array(OpaqueId).max(8).refine(v=>new Set(v).size===v.length);
 export const StorefrontAppearanceInputSchema=z.object({template_id:StoreTemplateSchema,accent_preset:AccentPresetSchema,
