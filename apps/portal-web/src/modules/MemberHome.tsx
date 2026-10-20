@@ -29,7 +29,7 @@ const taskActions = {
 
 type HomeOnboarding = { entry_mode?: string; assessment_completed?: boolean };
 
-export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const [member, setMember] = useState<MemberCardData | null>(null);
@@ -147,7 +147,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
     <div className="home-support">
