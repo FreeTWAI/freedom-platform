@@ -159,7 +159,8 @@ test('structured references are optional information throughout supplier editing
   await legacy.getByRole('textbox',{name:'出貨條件',exact:true}).fill('紙盒包裝，以郵寄寄送；偏遠地區另議。');await legacy.getByRole('textbox',{name:'退貨條件',exact:true}).fill('瑕疵品七日內聯絡換貨，運費由供應商負擔。');
   const note='建議售價低於每件成本合計，店主照這個售價會虧損。';await expect(legacy.getByRole('note')).toHaveText(note);
   await expect(legacy.locator('.supply-reference-fields legend')).toHaveText('給店主的參考（選填）');
-  for(const hint of ['只供店主參考，店主可以自行決定售價；系統不會依建議售價限制上架、供貨或結帳。','店主每次向你訂貨，至少要訂幾件。','收到訂單後幾天內出貨；當天出貨請填 0。'])await expect(legacy.getByText(hint,{exact:true})).toBeVisible();
+  const referenceHints=['只供店主參考，店主可以自行決定售價；系統不會依建議售價限制上架、供貨或結帳。','你建議店主每次至少訂幾件。只供店主參考；系統不會依最低訂量限制預留或結帳。','你預估收到訂單後幾天內出貨；當天出貨請填 0。只供店主參考，系統不保證出貨時間。'];
+  for(const hint of referenceHints)await expect(legacy.getByText(hint,{exact:true})).toBeVisible();
   await legacy.getByLabel('最低訂量（件）',{exact:true}).fill('1.5');await expect(legacy.getByRole('alert')).toHaveText('最低訂量須為 1 至 10,000 的整數。');await legacy.getByLabel('最低訂量（件）',{exact:true}).fill('2');
   for(const width of [390,768,1440]){
    await a.setViewportSize({width,height:900});expect(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -178,6 +179,7 @@ test('structured references are optional information throughout supplier editing
   await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);
   const active=a.locator('.supplier-console [data-sc-active="true"]'),editor=active.getByRole('form',{name:'儲存供貨條件',exact:true});
   await expect(editor.getByLabel('建議售價（TWD）',{exact:true})).toHaveValue('65.00');await expect(editor.getByRole('note')).toHaveText(note);
+  for(const hint of referenceHints)await expect(editor.getByText(hint,{exact:true})).toBeVisible();
   await expect(editor.getByLabel('最低訂量（件）',{exact:true})).toHaveValue('2');await expect(editor.getByLabel('交期（天）',{exact:true})).toHaveValue('3');
   const consoleTerms=active.locator('.sc-section').filter({has:a.getByRole('heading',{name:'供貨條件',exact:true})});
   for(const width of [390,1440]){
@@ -191,7 +193,9 @@ test('structured references are optional information throughout supplier editing
   const sent=savedResponse.request().postDataJSON();expect(sent.msrp_minor).toBe(45000);expect(sent).not.toHaveProperty('minimum_order_quantity');expect(sent).not.toHaveProperty('lead_time_days');
   await expect(editor.getByRole('button',{name:'儲存供貨條件',exact:true})).toBeDisabled();
   await active.locator('.supply-offer-preview > summary').click();const preview=active.locator('.supply-offer-presentation');
-  await expect(preview).toContainText('供應商建議售價');await expect(preview).toContainText('$450.00');await expect(preview).toContainText('最低訂量：每次訂貨至少 2 件');await expect(preview).toContainText('供應商收到訂單後約 3 天內出貨');
+  await expect(preview).toContainText('供應商建議售價');await expect(preview).toContainText('$450.00');await expect(preview).toContainText('建議最低訂量：每次 2 件');await expect(preview).toContainText('預估交期：收到訂單後約 3 天內出貨');
+  const referenceNote='這些是供應商提供的參考資訊。系統不會依最低訂量限制預留或結帳，也不保證出貨時間。';
+  await expect(preview.getByText(referenceNote,{exact:true})).toBeVisible();
   await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
   await a.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();
   await expect(active.getByText('公開中的版本已是目前保存的條件；保存新的內容或供貨條件後才需要重新公開。',{exact:true})).toBeVisible();
@@ -199,10 +203,11 @@ test('structured references are optional information throughout supplier editing
   await post(b,sb.root+'/setup',{name:'海風參考選物店',slug,currency:'TWD'},201);await open(b,sb.hash);await storeArea(b,'供貨合作');
   const catalog=b.locator('.hosted-distribution details').filter({has:b.locator('summary').filter({hasText:'選用其他商店的商品'})});await catalog.locator('summary').click();
   await catalog.getByRole('searchbox',{name:'搜尋供貨商品',exact:true}).fill(title);const card=catalog.locator('article').filter({hasText:title});
-  await expect(card).toContainText('建議售價 $450.00・最低 2 件・3 天內出貨');
+  await expect(card).toContainText('供應商參考：建議售價 $450.00・建議最低 2 件・預估 3 天內出貨');
   for(const width of [390,768,1440]){await b.setViewportSize({width,height:900});expect(await b.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await captureOffer(b,card,info.outputPath(`structured-catalog-card-light-${width}.png`));}
   await card.getByRole('link',{name:'查看供貨方案',exact:true}).click();const detail=b.locator('.hosted-supply-offer');
-  await expect(detail).toContainText('供應商建議售價');await expect(detail).toContainText('建議售價只供參考，你可以自行決定零售價。');await expect(detail).toContainText('最低訂量：每次訂貨至少 2 件');await expect(detail).toContainText('供應商收到訂單後約 3 天內出貨');
+  await expect(detail).toContainText('供應商建議售價');await expect(detail).toContainText('建議售價只供參考，你可以自行決定零售價。');await expect(detail).toContainText('建議最低訂量：每次 2 件');await expect(detail).toContainText('預估交期：收到訂單後約 3 天內出貨');
+  await expect(detail.getByText(referenceNote,{exact:true})).toBeVisible();
   await detail.getByRole('button',{name:'設定我的售價',exact:true}).click();const retail=detail.getByLabel('我的零售價（TWD）',{exact:true});await expect(retail).toHaveValue('');
   const fill=detail.getByRole('button',{name:'填入建議售價',exact:true});await fill.click();await expect(retail).toHaveValue('450.00');await expect(detail.getByText('等待供應商確認',{exact:true})).toHaveCount(0);
   for(const width of [390,768,1440]){
@@ -226,6 +231,6 @@ test('structured references are optional information throughout supplier editing
   const republished=a.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/supply-offer'));
   await a.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();const newOffer=await (await republished).json();expect(newOffer.terms).not.toHaveProperty('lead_time_days');
   await expect(active.getByText('公開中的版本已是目前保存的條件；保存新的內容或供貨條件後才需要重新公開。',{exact:true})).toBeVisible();
-  await b.evaluate(hash=>{location.hash=hash;},sb.hash+'/supply-offers/'+newOffer.offer_id);await expect(detail).toContainText('最低訂量：每次訂貨至少 2 件');await expect(detail).not.toContainText('供應商收到訂單後約 3 天內出貨');await expect(detail).toContainText('供應商建議售價');
+  await b.evaluate(hash=>{location.hash=hash;},sb.hash+'/supply-offers/'+newOffer.offer_id);await expect(detail).toContainText('建議最低訂量：每次 2 件');await expect(detail).not.toContainText('預估交期：收到訂單後約 3 天內出貨');await expect(detail).toContainText('供應商建議售價');
  }finally{await Promise.allSettled(contexts.map(c=>c.close()));}
 });

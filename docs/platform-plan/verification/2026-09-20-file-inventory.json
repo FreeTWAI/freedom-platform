@@ -2574,8 +2574,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedDistribution.tsx",
-      "bytes": 15994,
-      "sha256": "9b01a202ea987fe6724d43c0e26292f40079516f52728b6e65712a0f0dbdeff7"
+      "bytes": 16031,
+      "sha256": "134787fce016d3842222458fc9145decb7eb8cab29532eb91f87e7399b83cc52"
     },
     {
       "path": "apps/portal-web/src/modules/HostedOrder.tsx",
@@ -17789,13 +17789,13 @@
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOfferPresentation.tsx",
-      "bytes": 3734,
-      "sha256": "c09bcbb80b40b4f405053b3062105050807ee825ab6f00c5cfd5e8a2a42c0c00"
+      "bytes": 3850,
+      "sha256": "f4d92c53b51c80f86c2d445f73183b9ad929f6dbe7cb3893453666ed3c99bcc1"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/SupplyOfferText.ts",
-      "bytes": 1876,
-      "sha256": "0aea3f6b1f07cc78607b2febf2ca4f19e9d90f498c578775b4f5afbe0957ad3e"
+      "bytes": 1999,
+      "sha256": "a5ccccd80f8de499357b2c860860d77cf663885bf498b939c9e83758f8c7b08e"
     },
     {
       "path": "modules/agent-commerce/hosted-ui/reseller-arrangement.ts",
@@ -22639,8 +22639,8 @@
     },
     {
       "path": "tests/e2e/hosted-supply-offer.spec.ts",
-      "bytes": 23515,
-      "sha256": "c4324f1c38ed5e21cd9cee0a8c70f946aa77dd1948fa6c65d5d2d02526e891d5"
+      "bytes": 24107,
+      "sha256": "ab2dd101a706554558b832e7543e71dbbab48c31e55f010ce4e4fc4368abe1a0"
     },
     {
       "path": "tests/e2e/hosted-supply-terms.spec.ts",
@@ -24349,8 +24349,8 @@
     },
     {
       "path": "tests/runtime/hosted-supply-structured-terms.test.ts",
-      "bytes": 14990,
-      "sha256": "38fc2e7e0031fb41cf35c88859750a651bdd6bc7987d575258ff3ee3834b3ae4"
+      "bytes": 15367,
+      "sha256": "3715b09176aacbb3febe8b0595ff89ca82f8a15bac367b3e3f32f168c99418ad"
     },
     {
       "path": "tests/runtime/identity-member.test.ts",

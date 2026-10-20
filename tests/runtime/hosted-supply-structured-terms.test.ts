@@ -128,7 +128,10 @@ test('shared presentation preserves byte-identical old markup and adds only supp
  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs'}).code,{module,exports:module.exports,React,Intl,require:(name:string)=>name.endsWith('.css')||name.endsWith('SupplyOfferText')?{}:{formatMinor}});
  const render=(terms:Record<string,unknown>)=>renderToStaticMarkup(React.createElement(module.exports.SupplyOfferPresentation,{terms,supplierName:'合成供應商',arrangement:null}));
  assert.equal(createHash('sha256').update(render(legacy)).digest('hex'),'7ab5902d03adf315d95389ed517b8857a3ada03743ee260658b5b137f4020bb8');
+ const referenceNote='這些是供應商提供的參考資訊。系統不會依最低訂量限制預留或結帳，也不保證出貨時間。';
+ for(const text of ['供應商建議售價','訂貨與交期',referenceNote])assert(!render(legacy).includes(text),text);
  const present=render({...legacy,msrp_minor:45000,minimum_order_quantity:2,lead_time_days:3});
- for(const text of ['供應商建議售價','$450.00','建議售價只供參考，你可以自行決定零售價。','訂貨與交期','最低訂量：每次訂貨至少 2 件','交期：供應商收到訂單後約 3 天內出貨'])assert(present.includes(text),text);
- const sameDay=render({...legacy,lead_time_days:0});assert(sameDay.includes('供應商收到訂單當天出貨'));assert(!sameDay.includes('最低訂量'));assert(!sameDay.includes('供應商建議售價'));
+ for(const text of ['供應商建議售價','$450.00','建議售價只供參考，你可以自行決定零售價。','訂貨與交期',referenceNote,'建議最低訂量：每次 2 件','預估交期：收到訂單後約 3 天內出貨'])assert(present.includes(text),text);
+ assert(!present.includes('每次訂貨至少'));
+ const sameDay=render({...legacy,lead_time_days:0});assert(sameDay.includes(referenceNote));assert(sameDay.includes('預估交期：收到訂單當天出貨'));assert(!sameDay.includes('建議最低訂量：'));assert(!sameDay.includes('供應商建議售價'));
 });
