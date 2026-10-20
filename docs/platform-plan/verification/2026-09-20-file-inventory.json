@@ -15650,7 +15650,7 @@
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
       "bytes": 34881,
-      "sha256": "3acf68305c8615eb91eaed49ecba3ce9aeb632334f187a6b3896280f45f19084"
+      "sha256": "8165f7e0784262fde7ed949260901855f9c3b5b588d38d9d25616ecfc5259772"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -25189,8 +25189,8 @@
     },
     {
       "path": "tests/runtime/resource-scopes.test.ts",
-      "bytes": 32262,
-      "sha256": "447e44389c9843c1155bc6e18d4c356cc581099ce98aeb0f80b1108bf14ccf1b"
+      "bytes": 33829,
+      "sha256": "cb5ab815f0e4901b7f1c8fb93b6318dade5115e5583d951e226724cf9554dded"
     },
     {
       "path": "tests/runtime/runtime-proof.test.ts",
