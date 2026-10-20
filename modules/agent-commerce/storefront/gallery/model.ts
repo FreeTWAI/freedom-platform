@@ -32,7 +32,7 @@ export function gallerySnapshot(raw:unknown){
 /** Three bounded bulk reads, independent of SKU/photo count. Legacy primary is
  * always the authority, including writes made by a pre-gallery binary. */
 export async function draftGalleryData(q:PoolClient,p:Profile,items:readonly PhotoProduct[]){
- const groups=(await q.query(`SELECT * FROM commerce_product_groups WHERE tenant_id=$1 AND instance_id=$2`,[p.tenant_id,p.instance_id])).rows;
+ const groups=(await q.query(`SELECT * FROM commerce_product_groups WHERE tenant_id=$1 AND instance_id=$2 AND anchor_product_id=ANY($3::uuid[])`,[p.tenant_id,p.instance_id,items.map(item=>item.product.product_id)])).rows;
  const rows=(await q.query(`SELECT t.photo_id,t.product_id,t.position,t.alt_text,t.asset_id,t.scope_id,t.representation_id,t.policy_revision,
   o.purpose,o.transform_version,o.content_type,o.byte_size,o.content_sha256,o.pixel_width AS width,o.pixel_height AS height,o.asset_id AS object_asset_id
   FROM commerce_product_gallery_photos t
@@ -40,7 +40,7 @@ export async function draftGalleryData(q:PoolClient,p:Profile,items:readonly Pho
     AND a.purpose=t.purpose AND a.state='ready' AND a.deletion_fence=0 AND a.representation_id=t.representation_id
   LEFT JOIN asset_objects o ON o.asset_id=a.asset_id AND o.scope_id=a.scope_id AND o.representation_id=a.representation_id AND o.policy_revision=t.policy_revision
     AND o.purpose=t.purpose AND o.profile_id='storefront.product-photo'
-  WHERE t.tenant_id=$1 AND t.instance_id=$2 AND t.position IS NOT NULL ORDER BY t.product_id,t.position`,[p.tenant_id,p.instance_id])).rows;
+  WHERE t.tenant_id=$1 AND t.instance_id=$2 AND t.group_id=ANY($3::uuid[]) AND t.position IS NOT NULL ORDER BY t.product_id,t.position`,[p.tenant_id,p.instance_id,groups.map(g=>g.group_id)])).rows;
  const byId=new Map<string,DraftGallery>();
  const products=[];
  for(const item of items){

@@ -69,6 +69,10 @@ CREATE TABLE commerce_product_gallery_photos (
 );
 CREATE UNIQUE INDEX gallery_active_position ON commerce_product_gallery_photos(group_id,position) WHERE position IS NOT NULL;
 CREATE UNIQUE INDEX gallery_active_representation ON commerce_product_gallery_photos(group_id,asset_id,representation_id,policy_revision) WHERE position IS NOT NULL;
+-- Primary swaps reuse an existing retained representation without scanning the
+-- product's growing history. Neither this index nor the active index is a GC list.
+CREATE INDEX gallery_retained_representation ON commerce_product_gallery_photos(group_id,asset_id,representation_id,policy_revision,created_at,photo_id)
+ WHERE position IS NULL AND asset_id IS NOT NULL;
 CREATE FUNCTION preserve_storefront_gallery_draft() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE v bigint;
 BEGIN

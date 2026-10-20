@@ -1,3 +1,4 @@
+import {lockAppearanceRead} from '../../hosted/appearance.js';
 import type {Pool} from 'pg';
 import {OpaqueId,Version} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {STOREFRONT_GALLERY_PROFILE,GalleryPhotoKeySchema,ProductGalleriesSchema} from '../../../../contracts/guild-launchpad/v1/storefront-gallery.js';
@@ -7,13 +8,15 @@ import type {Actor} from '../../../identity-membership/service.js';
 import {profile,ready,storeRead} from '../../hosted/store.js';
 import {photoProducts} from '../../hosted/photo-projection.js';
 import {draftGalleryData,privateGalleryView,type GalleryOptions} from './model.js';
+/** The shared profile read lock makes version, virtual primary and tail coherent.
+ * Each byte snapshot releases it before ObjectStore I/O. */
 export async function listProductGalleries(pool:Pool,actor:Actor,t:string,i:string,options:GalleryOptions={}){
- return storeRead(pool,actor,t,i,'store:read',async q=>{const p=await profile(q,t,i);ready(p);const items=await photoProducts(q,p,{retailOnly:true}),data=await draftGalleryData(q,p,items);
+ return storeRead(pool,actor,t,i,'store:read',async q=>{await lockAppearanceRead(q,t,i);const p=await profile(q,t,i);ready(p);const items=await photoProducts(q,p,{retailOnly:true}),data=await draftGalleryData(q,p,items);
   return ProductGalleriesSchema.parse({profile:STOREFRONT_GALLERY_PROFILE,items:items.map(item=>privateGalleryView(p,item,data.byId.get(item.product.product_id)!,options))});});
 }
 export async function readPrivateGalleryPhoto(pool:Pool,store:ObjectStore,actor:Actor,t:string,i:string,rawProduct:string,rawKey:string,rawVersion:string){
  const product=OpaqueId.parse(rawProduct),key=GalleryPhotoKeySchema.parse(rawKey),version=Version.parse(rawVersion);
- const snapshot=()=>storeRead(pool,actor,t,i,'store:read',async q=>{const p=await profile(q,t,i);ready(p);const items=await photoProducts(q,p,{retailOnly:true}),item=items.find(p=>p.product.product_id===product);
+ const snapshot=()=>storeRead(pool,actor,t,i,'store:read',async q=>{await lockAppearanceRead(q,t,i);const p=await profile(q,t,i);ready(p);const items=await photoProducts(q,p,{retailOnly:true}),item=items.find(p=>p.product.product_id===product);
   requireCondition(item?.product.version===version,404,'not_found','找不到這張商品照片。');const gallery=(await draftGalleryData(q,p,items)).byId.get(product)!;
   const photo=[...gallery.photos,...gallery.retained].find(p=>p.photo_key===key);requireCondition(photo,404,'not_found','找不到這張商品照片。');return photo.ref;});
  const before=await snapshot();

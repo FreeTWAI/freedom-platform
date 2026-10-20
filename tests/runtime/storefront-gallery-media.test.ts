@@ -87,3 +87,17 @@ test('GALLERY-MEDIA-05 a removal queued behind a pending publish changes only th
  const d=await f.draft(s);assert.equal(d.photos.length,1);assert.equal(f.ok(await f.galleryCall(s,'GET','/preview')).dirty,true);
  const revision=await current();assert.equal((await get(publicPath(revision,'2'))).status,200);
 });
+
+
+test('GALLERY-MEDIA-06 private multi-query snapshots wait for the same profile boundary as writers',async()=>{
+ const original=await f.draft(s),blocker=await f.h.pool.connect();await blocker.query('BEGIN');
+ await blocker.query('SELECT 1 FROM commerce_storefront_profiles WHERE instance_id=$1 FOR UPDATE',[s.instanceId]);
+ const pid=(await blocker.query('SELECT pg_backend_pid() pid')).rows[0].pid;
+ const next=(await blocker.query('UPDATE commerce_selections SET aggregate_version=aggregate_version+1 WHERE item_id=$1 RETURNING aggregate_version::text version',[s.productId])).rows[0].version;
+ let settled=false;const read=f.draft(s).finally(()=>{settled=true;});
+ try{
+  let blocked=false;for(let n=0;n<100;n++){blocked=(await f.h.pool.query('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))) blocked',[pid])).rows[0].blocked;if(blocked)break;}
+  assert(blocked,'the gallery read must wait rather than combine product and photo versions');assert.equal(settled,false);await blocker.query('COMMIT');
+  const draft=await read;assert.equal(draft.version,next);assert.equal(BigInt(next),BigInt(original.version)+1n);assert(draft.photos.every(p=>p.read_path.endsWith('/'+next)));
+ }finally{await blocker.query('ROLLBACK');blocker.release();await read;}
+});
