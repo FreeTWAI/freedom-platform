@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
+import {IsoTimeSchema} from './tenant.js';
 
 export const STOREFRONT_POLICIES_PROFILE='freedom.hosted-store-policies/v1' as const;
 export const POLICY_KINDS=['shipping','returns','privacy','terms'] as const;
@@ -61,7 +62,7 @@ export const PublicationSellerPoliciesSchema=z.object({profile:z.literal(STOREFR
  shipping:LegalVersionRefSchema.nullable(),returns:LegalVersionRefSchema.nullable(),privacy:LegalVersionRefSchema.nullable(),terms:LegalVersionRefSchema.nullable(),
 }).strict()}).strict();
 export type PublicationSellerPolicies=z.infer<typeof PublicationSellerPoliciesSchema>;
-export const PolicyVersionReadSchema=z.object({version_id:OpaqueId,policy:PolicyDraftSchema,first_published_at:z.string().datetime(),current:z.boolean()}).strict();
+export const PolicyVersionReadSchema=z.object({version_id:OpaqueId,policy:PolicyDraftSchema,first_published_at:IsoTimeSchema,current:z.boolean()}).strict();
 export type PolicyVersionRead=z.infer<typeof PolicyVersionReadSchema>;
 export const SellerPoliciesDraftSchema=SellerPoliciesInputSchema.extend({profile:z.literal(STOREFRONT_POLICIES_PROFILE),version:Version,dirty:z.boolean(),has_supplied_products:z.boolean()}).strict();
 export type SellerPoliciesDraft=z.infer<typeof SellerPoliciesDraftSchema>;

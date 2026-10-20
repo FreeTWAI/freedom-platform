@@ -47,7 +47,7 @@ test('POL-CMD-06 maximum structural input reaches field validation under the exi
  const s=await f.openStore(),raw=input();for(const k of POLICY_KINDS)raw.policies[k].body='\u0001'.repeat(10000);
  for(const [k,[,max]] of Object.entries(SELLER_FIELDS))raw.seller[k as keyof typeof raw.seller]='\u0001'.repeat(max*2);
  assert(SellerPoliciesWireSchema.safeParse(raw).success);assert(Buffer.byteLength(JSON.stringify(raw))<262144);
- const result=await call(s,'PUT','/seller-policies',raw,'1');assert.equal(result.status,422);assert.equal(result.data.code,'seller_policies_invalid');
+ const result=await call(s,'PUT','/seller-policies',raw,'1');assert.equal(result.status,422);assert.equal(result.data.code,'seller_policies_invalid');assert(result.data.fields.length>0,'largest structural body reached command field validation');
  raw.policies.shipping.body='\u0001'.repeat(10001);assert.equal((await call(s,'PUT','/seller-policies',raw,'1')).status,422);
  for(const k of POLICY_KINDS)raw.policies[k].body='字'.repeat(50000);assert.equal((await call(s,'PUT','/seller-policies',raw,'1')).status,413);
  const near=input();near.policies.shipping.body='😀'.repeat(10000);assert.equal((await call(s,'PUT','/seller-policies',near,'1')).status,200);

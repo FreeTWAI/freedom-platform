@@ -13314,13 +13314,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/storefront-policies.schema.json",
-      "bytes": 32127,
-      "sha256": "42b57f85b1b80ea5ffdf90ff7815460f4fb5e1d277df6b20c2ddff63e59d4122"
+      "bytes": 31935,
+      "sha256": "96b8b6d2c735a551ae55f4cec8b4ff3929fbb1cc12142991e5ef741a9b2bbee7"
     },
     {
       "path": "contracts/guild-launchpad/v1/storefront-policies.ts",
-      "bytes": 8037,
-      "sha256": "5b235017cf8807ca5a2ee9a73e5b52e48af638467df2453cc221ddb7ccb7f29c"
+      "bytes": 8072,
+      "sha256": "3c3bb06e8f542c3dfb7b287a8a5fbfa0624b330d42093a4ac2154cef9501f6b5"
     },
     {
       "path": "contracts/guild-launchpad/v1/storefront-presentation.schema.json",
@@ -25619,8 +25619,8 @@
     },
     {
       "path": "tests/runtime/storefront-policies-commands.test.ts",
-      "bytes": 11872,
-      "sha256": "02c6e45a686496d96c334b4c85c36da23d765213a1bff6d8f34794991fcfa7f7"
+      "bytes": 11967,
+      "sha256": "3df2bc249a3af0fd5043663478921246852e74545a91d00a6bf283dbd69a6db7"
     },
     {
       "path": "tests/runtime/storefront-policies-publication.test.ts",
