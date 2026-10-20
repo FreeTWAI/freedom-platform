@@ -1208,3 +1208,37 @@ test('retained appearance schema175 floor refuses a schema174 observation withou
   assert.deepEqual(f.host.observation.written_shapes,[]);
   assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
 });
+
+
+test('schema176 additive seller policies recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(176),old=prefix(f.scan,175);
+  assert.equal(f.scan.ledger.at(-1).name,'176_storefront_seller_policies.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(175)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(176);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(176);renamed.scan.ledger.at(-1).name='176_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(176);future.scan.ledger.push({name:'177_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema176 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(176);f.scan.ledger.at(-1).name='177_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained seller policies schema176 floor refuses a schema175 observation without adding a written shape',()=>{
+  const f=fixtureAt(176);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,175);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
