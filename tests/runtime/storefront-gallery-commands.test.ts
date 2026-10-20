@@ -59,7 +59,7 @@ test('GALLERY-CMD-05 legacy primary removal yields retained recovery; explicit p
 });
 test('GALLERY-CMD-06 store:read sees metadata and bytes; store:write can edit without store:manage; tenant/session boundaries persist',async()=>{
  const s=await product(),foreign=await f.openStore();f.ok(await f.upload(s,'1'));
- for(const capabilities of [['store:read'],['store:read','store:write']]){
+ for(const capabilities of [['store:read'],['store:read','store:publish'],['store:read','store:manage'],['store:read','store:write']]){
   const person=(await f.h.person('合成圖組成員')).session;
   const principal=f.ok(await f.call('GET',`/tenants/invite-candidates?user_id=${person.user.user_id}`,s.owner)).principal_id;
   const invitation=f.ok(await f.post(`/tenants/${s.tenantId}/invitations`,s.owner,{invitee_principal_id:principal,role:'operator',instance_capabilities:[{instance_id:s.instanceId,capabilities}],expires_at:new Date(Date.now()+86400000).toISOString()}),201);
@@ -70,4 +70,19 @@ test('GALLERY-CMD-06 store:read sees metadata and bytes; store:write can edit wi
   assert.equal(result.status,capabilities.includes('store:write')?200:403);
  }
  assert.equal((await f.galleryCall({...s,productId:foreign.productId},'GET',f.galleryPath({...s,productId:foreign.productId}))).status,404);
+});
+
+
+test('GALLERY-CMD-07 shared pending memory isolates gallery placement and keeps original JSON/key/CAS sticky',async()=>{
+ const {holdPhotoAttempt,restorePhotoAttempt,heldPhotoAttempt,retainedPhotoFailure,reviewPhotoAttempt,releasePhotoAttempt}=await import('../../apps/portal-web/src/modules/hosted-store-photo-state.js');
+ const {galleryAcknowledgement}=await import('../../apps/portal-web/src/modules/hosted-store-photo-client.js');
+ const client={},member='synthetic-gallery-member',attempt={tenantId:shared.tenantId,instanceId:shared.instanceId,productId:shared.productId,expected:'1',key:randomUUID(),file:null,action:'reorder' as const,gallery:true as const,photoKey:null,body:'{"photo_keys":["main"]}',hadUnknown:false};
+ holdPhotoAttempt(client,member,retainedPhotoFailure(attempt,true));const restored=restorePhotoAttempt<typeof attempt>(client,member,attempt)!;
+ assert.equal(restored.body,attempt.body);assert.equal(restored.key,attempt.key);assert.equal(restored.hadUnknown,true);
+ assert.equal(heldPhotoAttempt(client,'another-member',attempt),null);assert.equal(heldPhotoAttempt(client,member,{tenantId:attempt.tenantId,instanceId:attempt.instanceId,productId:attempt.productId}),null);
+ assert.throws(()=>holdPhotoAttempt(client,member,{...attempt,body:'{"photo_keys":[]}'}),/unknown/);assert.throws(()=>reviewPhotoAttempt(restored,'2',randomUUID()),/unknown/);
+ const current={profile:'freedom.hosted-store-gallery/v1',product_id:attempt.productId,version:'3',photos:[],retained_secondary_photos:[],media_installed:true,uploads_enabled:true};
+ const ack={profile:current.profile,product_id:attempt.productId,operation:'reorder',photo_key:null,completed_version:'2',changed:true,current};
+ assert(galleryAcknowledgement(ack,attempt));for(const patch of [{operation:'remove'},{photo_key:'main'},{completed_version:'3'},{asset_id:randomUUID()}])assert.equal(galleryAcknowledgement({...ack,...patch},attempt),null);
+ releasePhotoAttempt(client,member,attempt);assert.equal(heldPhotoAttempt(client,member,attempt),null);
 });

@@ -1,3 +1,5 @@
+import {HostedStoreGallery} from './HostedStoreGallery';
+import {ProductGalleriesSchema,type ProductGalleryDraft} from '../../../../contracts/guild-launchpad/v1/storefront-gallery';
 import {HostedStorePolicies} from './HostedStorePolicies';
 import {SellerPoliciesDraftSchema,type SellerPoliciesDraft} from '../../../../contracts/guild-launchpad/v1/storefront-policies';
 import {HostedStoreAppearance} from './HostedStoreAppearance';
@@ -76,7 +78,7 @@ type Preview = z.infer<typeof StorePreviewSchema>;
 const SupplierConsole = lazy(() => import('../../../../modules/agent-commerce/supplier-console/ui/SupplierConsole').then(m => ({default:m.SupplierConsole})));
 const SellerConsole = lazy(() => import('../../../../modules/agent-commerce/seller-console/ui/SellerConsole').then(m => ({default:m.SellerConsole})));
 type RegisterLeave = (guard: ((nextHash:string|null) => boolean) | null) => void;
-export function HostedStore({client, enabled, appearanceEnabled=false,policiesEnabled=false, locationHash, userId, registerLeave, photosEnabled=false, photoUploadsEnabled=false, materialMediaEnabled=false, materialUploadsEnabled=false, distributionPhotosEnabled=false, supplyOfferPhotosEnabled=false, consoleEnabled=false, commerceConsoleEnabled=false, providerEnvironment='sandbox'}: {policiesEnabled?:boolean;appearanceEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;distributionPhotosEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;commerceConsoleEnabled?:boolean;providerEnvironment?:'sandbox'|'live';consoleEnabled?:boolean;client: PortalClient; photosEnabled?:boolean;photoUploadsEnabled?:boolean;enabled: boolean; locationHash: string; userId: string; registerLeave: RegisterLeave}) {
+export function HostedStore({client, enabled, appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false, locationHash, userId, registerLeave, photosEnabled=false, photoUploadsEnabled=false, materialMediaEnabled=false, materialUploadsEnabled=false, distributionPhotosEnabled=false, supplyOfferPhotosEnabled=false, consoleEnabled=false, commerceConsoleEnabled=false, providerEnvironment='sandbox'}: {galleryEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;distributionPhotosEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;commerceConsoleEnabled?:boolean;providerEnvironment?:'sandbox'|'live';consoleEnabled?:boolean;client: PortalClient; photosEnabled?:boolean;photoUploadsEnabled?:boolean;enabled: boolean; locationHash: string; userId: string; registerLeave: RegisterLeave}) {
   const consoleRoute = parseSupplierConsoleRoute(locationHash);
   if (consoleEnabled && enabled && consoleRoute) {
     const key = `${userId}:${client.sessionGeneration}:${consoleRoute.tenantId}:${consoleRoute.instanceId}`;
@@ -101,8 +103,8 @@ export function HostedStore({client, enabled, appearanceEnabled=false,policiesEn
   const valid = (path.length === 3 || !!offerId || cooperation) && path[0] === 'stores' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success;
   const fallback = sellerSlugFallback(locationHash);
   if (fallback?.orders) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} route={{tenantId:fallback.tenantId,instanceId:fallback.instanceId,supplier:false}} registerLeave={registerLeave}/>;
-  if (fallback) return <StorePage policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
-  return valid ? <StorePage policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}:${offerId??(cooperation?'cooperation':'store')}`} offerId={offerId} cooperation={cooperation} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
+  if (fallback) return <StorePage galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
+  return valid ? <StorePage galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}:${offerId??(cooperation?'cooperation':'store')}`} offerId={offerId} cooperation={cooperation} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
 }
 function BackLink() { return <div className="actions"><a href="#stores" className="btn btn-ghost">返回我的商店</a></div>; }
 function MissingStore() { return <div className="hosted-store stack"><BackLink/><p>找不到這間商店。</p></div>; }
@@ -124,12 +126,13 @@ function StoreList({client}: {client: PortalClient}) {
 
 type Attempt = {targetMissingIsStore?: boolean; method: 'post' | 'patch'; path: string; body: unknown; version?: string; schema: z.ZodType;
   key: string; success: (value: unknown) => void; notice: string; product?: boolean; fieldError?: (error: ApiError) => void};
-function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,appearanceEnabled=false,policiesEnabled=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {supplyOfferPhotosEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
+function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {supplyOfferPhotosEnabled?:boolean;galleryEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [distributionRefresh,setDistributionRefresh]=useState(0);
   const [view, setView] = useState<StoreView | null>(null);
   const [reservationSetting,setReservationSetting] = useState<z.infer<typeof ReservationSettingSchema>|null>(null);
   const [products, setProducts] = useState<ProductView[]>([]);
+  const [galleries,setGalleries]=useState<ProductGalleryDraft[]>([]);
   const [media,setMedia]=useState<ProductMediaView[]>([]);
   const [photoBlocks,setPhotoBlocks]=useState<Record<string,boolean>>({});
   const photoBlockRef=useRef<Record<string,boolean>>({});
@@ -201,24 +204,26 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     setLoading(true);
     try {
       const next = StoreViewSchema.parse(await client.get(root, {signal}));
-      let photos:ProductMediaView[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
+      let photos:ProductMediaView[]=[],galleryDrafts:ProductGalleryDraft[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
       let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null;
       let branding:StorefrontAppearanceDraft|null=null,brandingError=false,legal:SellerPoliciesDraft|null=null,legalError=false;
       if (next.setup_state === 'ready') {
         const results = await Promise.all([client.get(root + '/products', {signal}), client.get(root + '/preview', {signal}), client.get(root + '/appearance', {signal}), photosEnabled ? client.get(root+'/product-media',{signal}) : Promise.resolve(null),
           appearanceEnabled?client.get(root+'/appearance-settings',{signal}).then(value=>StorefrontAppearanceDraftSchema.parse(value)).catch(()=>{brandingError=true;return null;}):Promise.resolve(null),
-          policiesEnabled?client.get(root+'/seller-policies',{signal}).then(value=>SellerPoliciesDraftSchema.parse(value)).catch(()=>{legalError=true;return null;}):Promise.resolve(null)]);
+          policiesEnabled?client.get(root+'/seller-policies',{signal}).then(value=>SellerPoliciesDraftSchema.parse(value)).catch(()=>{legalError=true;return null;}):Promise.resolve(null),
+          galleryEnabled?client.get(root+'/product-galleries',{signal}).then(value=>ProductGalleriesSchema.parse(value)):Promise.resolve(null)]);
         items = ProductPageSchema.parse(results[0]).items; draft = StorePreviewSchema.parse(results[1]); presentation = StoreAppearanceSchema.parse(results[2]);
         if(photosEnabled)photos=ProductMediaPageSchema.parse(results[3]).items;
         if(appearanceEnabled)branding=results[4] as StorefrontAppearanceDraft|null;
         if(policiesEnabled)legal=results[5] as SellerPoliciesDraft|null;
+        if(galleryEnabled)galleryDrafts=(results[6] as z.infer<typeof ProductGalleriesSchema>).items;
         try {setting=ReservationSettingSchema.parse(await client.get(root+'/reservation-setting',{signal}));}
         catch(cause) {if(!(cause instanceof ApiError && [403,404].includes(cause.status))) throw cause;}
       }
       if (!current()) return;
       if(legal||next.setup_state!=='ready')setPoliciesDraft(legal);setPoliciesError(legalError);
       if(branding||next.setup_state!=='ready')setAppearanceDraft(branding);setAppearanceError(brandingError);
-      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos); setPreview(draft); setAppearance(presentation); setError('');
+      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setError('');
     } catch (cause) {
       if (!current()) return;
       if (cause instanceof ApiError && cause.status === 404 && !Object.values(photoBlockRef.current).some(Boolean)) setMissing(true);
@@ -302,6 +307,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
             version:reservationSetting.version,schema:ReservationSettingSchema,notice:reservationSetting.reservation_enabled?'已停止接受新預留。既有預留仍可查看與取消。':'已開放 30 分鐘預留。',success:()=>{}})}/>}
         <section id="store-products-panel" hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
           <p>{view.product_count}／{view.product_limit} 件商品</p>
+          {galleryEnabled&&<p className="field-hint">自有商品每件最多 8 張照片。供貨合作商品的公開頁沿用你選用的公開素材照片，沒有時不顯示照片；供應商分享的照片只供私人評估。</p>}
           {!!products.length&&<ProductSearch value={query} onChange={setQuery} count={products.filter(product=>productMatches(product,query)).length} total={products.length} disabled={locked||hasDraft}/>}
           {!!products.length&&!products.some(product=>productMatches(product,query))&&<p>沒有符合的商品，清除搜尋即可查看全部。</p>}
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更；發布更新後才能複製商品連結。</p>}
@@ -317,7 +323,8 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
               </>}
             {copyFeedback && copyFeedback.url === productCopyUrl(product.sku) && <p className="field-hint" role="status">{copyFeedback.message}</p>}
             {manualUrl !== null && manualUrl === productCopyUrl(product.sku) && <ManualCopy url={manualUrl} fieldRef={manualField}/>}
-            {photosEnabled&&<HostedStorePhoto client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} media={media.find(item=>item.product_id===product.product_id)}
+            {galleryEnabled?<HostedStoreGallery client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} gallery={galleries.find(item=>item.product_id===product.product_id)}
+              writable={can('store:write')} locked={loading||areaLocked||(photoBlocking&&!photoBlocks[product.product_id])} onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={load}/>:photosEnabled&&<HostedStorePhoto client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} media={media.find(item=>item.product_id===product.product_id)}
               writable={can('store:write')} uploadsEnabled={photoUploadsEnabled} locked={areaLocked||(photoBlocking&&!photoBlocks[product.product_id])}
               onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={load}/>}
           </article>)}</div>
