@@ -10,6 +10,7 @@ import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {ProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront.js';
 import {ProductMediaCommandSchema,PublicStoreMediaSchema} from '../../contracts/guild-launchpad/v1/hosted-store-media.js';
 import {DistributionPhotosSchema,PartnerMaterialsSchema} from '../../contracts/guild-launchpad/v1/supplier-console.js';
+import {SupplyCatalogPhotosSchema} from '../../contracts/guild-launchpad/v1/hosted-distribution.js';
 
 // Dedicated local schema + restricted runtime + real Sharp; FakeObjectStore is the only synthetic media provider.
 test.setTimeout(90_000);
@@ -3291,7 +3292,7 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
     await storeArea(b,'供貨合作');
     const catalog=b.locator('.hosted-distribution details').filter({has:b.locator('summary').filter({hasText:'選用其他商店的商品'})});
     await catalog.locator('summary').click();await catalog.getByRole('searchbox',{name:'搜尋供貨商品',exact:true}).fill(title);
-    await expect(catalog.locator('article').filter({hasText:title}).locator('img')).toHaveCount(0);
+    await decoded(catalog.locator('article').filter({hasText:title}).getByRole('img',{name:title+'，供應商提供的商品照片',exact:true}));
     await catalog.locator('article').filter({hasText:title}).getByRole('link',{name:'查看供貨方案',exact:true}).click();
     const detail=b.locator('.hosted-supply-offer'),image=detail.locator('.supply-offer-photo img');
     await decoded(image);await expect(detail).toContainText(caption);
@@ -3339,4 +3340,121 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
     await b.reload();await expect(detail.getByRole('heading',{name:'商品',exact:true})).toBeVisible();
     await expect(detail.locator('.supply-offer-photo')).toHaveCount(0);await privateFieldsAbsent();
   } finally {await Promise.allSettled(contexts.map(c=>c.close()));}
+});
+
+test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog and their selections, with independent failures and refresh',async({browser,baseURL,e2eAuthPool},info)=>{
+  const contexts=await Promise.all([browser.newContext({baseURL}),browser.newContext({baseURL})]);
+  let releaseHold:(()=>void)|undefined;
+  try{
+    const [a,b]=await Promise.all(contexts.map(context=>context.newPage()));
+    const [supplier,seller]=await Promise.all([person(e2eAuthPool),person(e2eAuthPool)]);
+    const suffix=randomUUID().slice(0,6),title='合成縮圖陶杯 '+suffix,withoutTitle='合成無照片茶碟 '+suffix;
+    await login(a,supplier.email);const sa=await launchStore(a,'合成縮圖供貨');
+    await post(a,sa.root+'/setup',{name:'合成陶器供應商',slug:'thumb-source-'+suffix,currency:'TWD'},201);
+    const product=await post(a,sa.root+'/products',{title,description:'完整陶杯評估照片',price_minor:9800,stock:10},201);
+    const without=await post(a,sa.root+'/products',{title:withoutTitle,description:'未提供評估照片',price_minor:5000,stock:10},201);
+    await post(a,sa.root+`/products/${without.product_id}/supply-offer`,{},200,without.version);
+    await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);
+    const active=a.locator('.supplier-console [data-sc-active="true"]'),upload=active.locator('.hosted-store-photo');
+    await expect(active.getByRole('heading',{name:'商品詳情：'+title,exact:true})).toBeVisible();
+    await upload.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-catalog-thumb.png','#387362'));
+    await upload.getByRole('button',{name:'儲存照片',exact:true}).click();
+    await expect(upload.getByRole('status')).toContainText('已儲存照片變更');
+    await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
+    await a.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();
+    const sharing=active.getByRole('region',{name:'方案照片',exact:true});
+    await confirm(a,sharing,'提供目前的商品照片');await expect(sharing).toContainText('已提供目前的商品照片');
+    await login(b,seller.email);const sb=await launchStore(b,'合成縮圖選品');
+    await post(b,sb.root+'/setup',{name:'合成選物店',slug:'thumb-seller-'+suffix,currency:'TWD'},201);
+    await open(b,sb.hash);await storeArea(b,'供貨合作');
+    const cooperation=b.locator('.hosted-distribution');
+    const catalog=cooperation.locator('details').filter({has: b.locator('summary').filter({hasText:'選用其他商店的商品'})});
+    const selections=cooperation.locator('details').filter({has: b.locator('summary').filter({hasText:'我的選品（'})});
+    await catalog.locator('summary').click();await catalog.getByRole('searchbox',{name:'搜尋供貨商品',exact:true}).fill(suffix);
+    const card=catalog.locator('article').filter({hasText:title}),emptyCard=catalog.locator('article').filter({hasText:withoutTitle});
+    const alt=title+'，供應商提供的商品照片',hint='縮圖是供應商提供的評估照片，不屬於供貨條件。',failure='暫時無法載入供貨照片，清單內容不受影響。';
+    await decoded(card.getByRole('img',{name:alt,exact:true}));await expect(emptyCard.locator('img')).toHaveCount(0);
+    await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(1);
+    const listPath='/api/v1'+sb.root+'/supply-catalog-photos';
+    const saved=SupplyCatalogPhotosSchema.parse(await(await b.request.get(listPath)).json());
+    const image=card.getByRole('img',{name:alt,exact:true}),imagePath=(await image.getAttribute('src'))!;
+    const dimensions=saved.items.find(item=>item.photo.read_path===imagePath)!.photo;
+    await expect(image).toHaveAttribute('width',String(dimensions.width));await expect(image).toHaveAttribute('height',String(dimensions.height));
+    await expect(image).toHaveAttribute('loading','lazy');await expect(image).toHaveAttribute('decoding','async');
+    for(const width of [390,768,1440]){
+      await b.setViewportSize({width,height:900});await decoded(image);
+      const geometry=await card.evaluate(el=>{
+        const img=el.querySelector('img')!,heading=el.querySelector('h4')!,box=img.getBoundingClientRect(),text=heading.getBoundingClientRect(),style=getComputedStyle(img);
+        return {image:{x:box.x,y:box.y,width:box.width,height:box.height},text:{x:text.x,y:text.y},fit:style.objectFit,background:style.backgroundColor,border:style.borderWidth};
+      });
+      expect(geometry.image.width).toBe(96);expect(geometry.image.height).toBe(96);expect(geometry.fit).toBe('contain');
+      expect(geometry.background).toBe('rgba(0, 0, 0, 0)');expect(geometry.border).toBe('0px');
+      if(width>=768)expect(geometry.text.x).toBeGreaterThanOrEqual(geometry.image.x+geometry.image.width);
+      expect(await b.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await captureOffer(b,catalog,info.outputPath(`catalog-thumbnails-light-${width}.png`));
+    }
+    await card.getByRole('button',{name:'設定我的售價',exact:true}).click();
+    const price=card.getByRole('form',{name:title+'選品售價',exact:true});
+    await price.getByLabel('我的零售價（TWD）',{exact:true}).fill('180');
+    await price.getByRole('button',{name:'送出供貨申請',exact:true}).click();
+    await selections.locator('summary').click();
+    const selected=selections.locator('article').filter({hasText:title}),selectedImage=selected.getByRole('img',{name:alt,exact:true});
+    await decoded(selectedImage);await expect(selectedImage).toHaveAttribute('src',imagePath);
+    await expect(emptyCard.locator('img')).toHaveCount(0);
+    for(const width of [390,768,1440]){
+      await b.setViewportSize({width,height:900});await decoded(selectedImage);
+      await captureOffer(b,selections,info.outputPath(`selection-thumbnails-light-${width}.png`));
+    }
+    await b.setViewportSize({width:320,height:900});
+    expect(await b.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const buttons=await cooperation.locator('details[open] .actions > .btn').evaluateAll(nodes=>nodes.map(el=>({width:el.getBoundingClientRect().width,parent:el.parentElement!.getBoundingClientRect().width})));
+    expect(buttons.length).toBeGreaterThan(0);for(const button of buttons)expect(button.width).toBeLessThan(button.parent);
+    await b.setViewportSize({width:768,height:900});
+    const reload=cooperation.getByRole('button',{name:'更新供貨狀態',exact:true});
+    const matchList=(url:URL)=>url.pathname===listPath;
+    for(const status of [404,401,403,503,200]){
+      await b.route(matchList,route=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(status===200?{...saved,unexpected:true}:{code:'synthetic_failure'})}));
+      const response=b.waitForResponse(r=>new URL(r.url()).pathname===listPath&&r.status()===status);
+      await reload.click();await response;
+      await expect(cooperation.getByText(failure,{exact:true})).toHaveCount(status===404?0:1);
+      await expect(selectedImage).toHaveCount(0);await expect(selected.getByRole('heading',{name:title+'・合成陶器供應商',exact:true})).toBeVisible();
+      await expect(emptyCard.getByRole('button',{name:'設定我的售價',exact:true})).toBeEnabled();
+      await b.unroute(matchList);
+    }
+    await reload.click();await decoded(selectedImage);await expect(cooperation.getByText(failure,{exact:true})).toHaveCount(0);
+    const imageFailed=b.waitForEvent('requestfailed',{predicate:request=>new URL(request.url()).pathname===imagePath});
+    await b.route('**'+imagePath,route=>route.abort());await reload.click();await imageFailed;
+    await expect(selectedImage).toHaveCount(0);await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);
+    await expect(selected).not.toContainText('照片暫時無法顯示');await expect(selected.getByRole('link',{name:'查看供貨方案',exact:true})).toBeVisible();
+    await b.unroute('**'+imagePath);await reload.click();await decoded(selectedImage);
+    // Hold an old successful list, then replace its reload generation with a real stopped-share read.
+    let entered!:()=>void,finished!:()=>void,heldRequest:Request|undefined;
+    const seen=new Promise<void>(resolve=>{entered=resolve;}),hold=new Promise<void>(resolve=>{releaseHold=resolve;}),done=new Promise<void>(resolve=>{finished=resolve;});
+    let held=false;
+    await b.route(matchList,async route=>{
+      if(held)return route.continue();held=true;heldRequest=route.request();entered();
+      try{await hold;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(saved)});}
+      catch(error){if(!isExpectedBrowserAbort(error,route.request()))throw error;}
+      finally{finished();}
+    });
+    await reload.click();await seen;
+    await confirm(a,sharing,'停止提供照片');await expect(sharing).toContainText('未提供照片');
+    const aborted=b.waitForEvent('requestfailed',{predicate:request=>request===heldRequest});
+    const fresh=b.waitForResponse(r=>new URL(r.url()).pathname===listPath&&r.status()===200);
+    await reload.click();const stopped=await fresh;
+    expect(SupplyCatalogPhotosSchema.parse(await stopped.json()).items.some(item=>item.photo.read_path===imagePath)).toBe(false);
+    expect((await aborted).failure()?.errorText).toBe('net::ERR_ABORTED');
+    releaseHold!();await done;
+    await expect(cooperation.locator('img.supply-offer-thumbnail')).toHaveCount(0);
+    await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);await expect(selected).toContainText(title);
+    await b.unroute(matchList);
+    // Mid-rollout / flag-OFF bundles retain the original text-only markup and send no photo list request.
+    let photoRequests=0;
+    b.on('request',request=>{if(new URL(request.url()).pathname===listPath)photoRequests++;});
+    await b.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),supply_offer_photos_enabled:false}});});
+    await b.reload();await storeArea(b,'供貨合作');await selections.locator('summary').click();await expect(selected).toContainText(title);
+    expect(photoRequests).toBe(0);await expect(cooperation.locator('.supply-offer-photo-row')).toHaveCount(0);
+    await expect(cooperation.locator('img')).toHaveCount(0);await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);
+    await expect(cooperation.getByText(failure,{exact:true})).toHaveCount(0);
+  }finally{releaseHold?.();await Promise.allSettled(contexts.map(context=>context.close()));}
 });
