@@ -17,7 +17,22 @@ client bundle they share (EC-SPEC-01 §3, EC-SPEC-02 §4.2 and §6).
   logo and platform attribution stay in the footer. Order guidance remains
   reachable when new checkout is closed; it does not grant access to any order.
   Private previews show the saved merchant identity without public navigation
-  or checkout actions. No contact or bank settings enter this shared frame.
+  or checkout actions. The shared 「商店說明與聯絡」 section displays the
+  merchant-authored `description` from that same publication (or saved draft
+  in private preview). It is available without JavaScript on shop, product,
+  cart, checkout, order-access, order and payment-return pages, including
+  missing-order guidance for a still-published shop. Empty descriptions say
+  that the merchant has not supplied this information.
+  Member contact details, buyer data, bank settings and supplier agreement
+  terms are never used to fill this section. Text is escaped, line breaks are
+  preserved and URLs are not automatically turned into links. The shop header
+  shows a short introduction; the full text remains in the shared section.
+- Merchants edit the existing 「商店介紹」 field under 「商店資料」, save,
+  preview, then publish. Its guidance asks for their public contact, payment,
+  delivery and after-sales information; it does not invent or verify those
+  claims. Draft changes do not update public pages. Withdrawal and current
+  store visibility checks still govern all pages. No new DTO, migration,
+  payment setting, transaction authority or frozen order term is introduced.
 - Before Ted authorises `FREEDOM_COMMERCE_EMAIL_ENABLED`, B10 shows the
   EC-SPEC-10 §6.2 explanation and collects no Email.
 

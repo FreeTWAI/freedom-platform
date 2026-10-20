@@ -457,7 +457,10 @@ test('T-012 every member text field is escaped in HTML while public JSON preserv
   const pair = await publicPair(settings.slug); const json = JSON.parse(pair.jsonText);
   assert.equal(json.name, attack); assert.equal(json.brand, attack); assert.equal(json.description, attack + '\n第二段'); assert.equal(json.products[0].title, attack); assert.equal(json.products[0].description, attack + '\n第二段');
   assert.doesNotMatch(pair.htmlText, /<script|<img onerror/i);
-  assert.match(pair.htmlText, /&lt;script&gt;/); assert.match(pair.htmlText, /&quot;&gt;&lt;img onerror=x&gt; &amp;/); assert.match(pair.htmlText, /<p>第二段<\/p>/);
+  assert.match(pair.htmlText, /&lt;script&gt;/); assert.match(pair.htmlText, /&quot;&gt;&lt;img onerror=x&gt; &amp;/);
+  // The full published text keeps its line breaks in the shared service section;
+  // the hero now displays only a short, single-paragraph introduction.
+  assert.match(pair.htmlText, /<p class="shop-merchant-copy">&lt;script&gt;x&lt;\/script&gt; &quot;&gt;&lt;img onerror=x&gt; &amp;\n第二段<\/p>/);
 });
 
 test('T-006 public allowlist hides identifiers and all hidden cases return identical bodies and headers', async () => {
