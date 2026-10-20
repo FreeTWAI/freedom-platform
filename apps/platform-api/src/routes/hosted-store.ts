@@ -1,3 +1,4 @@
+import type {AppearanceOptions} from '../../../../modules/agent-commerce/hosted/appearance.js';
 import {SupplyCatalogSetupInputSchema,SupplyProductInputSchema,SupplyProductUpdateInputSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';
 import {readSupplyCatalog,setupSupplyCatalog,listSupplyProducts,addSupplyProduct,updateSupplyProduct} from '../../../../modules/agent-commerce/hosted/supply-catalog.js';
 import { Hono } from 'hono';
@@ -22,7 +23,7 @@ import type { PlatformEnv } from '../module-context.js';
 import { privateCache, singleQuery, commandHeaders, etag } from './tenant-http.js';
 import {createHostedDistributionRoutes} from './hosted-distribution.js';
 
-export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false) {
+export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false, appearanceOptions:AppearanceOptions = {}) {
   const app = new Hono<PlatformEnv>();
   app.route('/', createHostedDistributionRoutes(pool, admissionEnabled, offerPhotosEnabled));
   app.use('*', async (c, next) => { try { await next(); } finally { privateCache(c); } });
@@ -101,7 +102,7 @@ export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, of
     const view = await updateSupplyTerms(pool, c.get('actor'), t, i, OpaqueId.parse(c.req.param('product_id')), body, h.key, h.expected!);
     etag(c, view.version); return c.json(view);
   });
-  app.get(root + '/preview', async c => { EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c); return c.json(await previewStore(pool, c.get('actor'), t, i)); });
+  app.get(root + '/preview', async c => { EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c); return c.json(await previewStore(pool, c.get('actor'), t, i, appearanceOptions)); });
   app.get(root + '/appearance', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
     const view = await readStoreAppearance(pool, c.get('actor'), t, i); etag(c, view.version); return c.json(view);
@@ -114,11 +115,11 @@ export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, of
   app.get(root + '/preview-page', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
     c.header('X-Robots-Tag', 'noindex, nofollow');
-    return c.html(await previewStorePage(pool, c.get('actor'), t, i));
+    return c.html(await previewStorePage(pool, c.get('actor'), t, i, appearanceOptions));
   });
   for (const action of ['publish', 'unpublish'] as const) app.post(root + '/' + action, async c => {
     const h = commandHeaders(c, true); EmptyStoreInputSchema.parse(await c.req.json()); const [t, i] = ids(c);
-    const view = await publishStore(pool, c.get('actor'), t, i, h.key, h.expected!, action === 'unpublish'); if (view.version) etag(c, view.version); return c.json(view);
+    const view = await publishStore(pool, c.get('actor'), t, i, h.key, h.expected!, action === 'unpublish', appearanceOptions); if (view.version) etag(c, view.version); return c.json(view);
   });
   return app;
 }
@@ -127,7 +128,7 @@ export function createPublicHostedStoreRoutes(
   pool: Pool,
   publicOrigin?: string,
   checkout?: HostedCheckoutOptions,
-  options?: { emailEnabled?: boolean },
+  options?: { emailEnabled?: boolean; appearance?:AppearanceOptions },
 ) {
   const app = new Hono<PlatformEnv>();
   const emailEnabled = options?.emailEnabled ?? checkout?.settings?.emailEnabled ?? Boolean(checkout?.email);
@@ -139,55 +140,55 @@ export function createPublicHostedStoreRoutes(
   });
   app.get('/shops/:slug', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
     const purchase = checkout ? await publicPurchaseState(pool, store.projection.slug, checkout) : {open: false as const};
-    return c.html(storeHtml(store.projection, store.template_id, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase));
+    return c.html(storeHtml(store.projection, store.template_id, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase, store.appearance));
   });
   app.get('/shops/:slug/products/:sku', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug')), sku = c.req.param('sku');
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance), sku = c.req.param('sku');
     if (!store || !publicProduct(store.projection, sku)) return c.html(storeMissingHtml(true), 404);
     const purchase = checkout ? await publicPurchaseState(pool, store.projection.slug, checkout, sku) : {open: false as const};
-    const html = productHtml(store.projection, sku, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase);
+    const html = productHtml(store.projection, sku, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase, store.appearance);
     if (!html) return c.html(storeMissingHtml(true), 404);
     return c.html(html);
   });
   app.get('/shops/:slug/cart', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(cartPageHtml(store.projection));
+    return c.html(cartPageHtml({...store.projection,appearance:store.appearance}));
   });
   app.get('/shops/:slug/checkout', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(checkoutPageHtml(store.projection));
+    return c.html(checkoutPageHtml({...store.projection,appearance:store.appearance}));
   });
   app.get('/shops/:slug/orders/:order_ref', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
     const orderRef = c.req.param('order_ref');
-    if (!OpaqueId.safeParse(orderRef).success) return c.html(orderMissingHtml(store.projection), 404);
-    return c.html(orderPageHtml(store.projection, orderRef, { emailEnabled }));
+    if (!OpaqueId.safeParse(orderRef).success) return c.html(orderMissingHtml({...store.projection,appearance:store.appearance}), 404);
+    return c.html(orderPageHtml({...store.projection,appearance:store.appearance}, orderRef, { emailEnabled }));
   });
   app.get('/shops/:slug/order-access', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(orderAccessPageHtml(store.projection, { emailEnabled }));
+    return c.html(orderAccessPageHtml({...store.projection,appearance:store.appearance}, { emailEnabled }));
   });
   app.get('/shops/:slug/payment-return/:attempt_ref', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
-    const store = await readPublicStorePage(pool, c.req.param('slug'));
+    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance);
     if (!store) return c.html(storeMissingHtml(), 404);
     const attemptRef = c.req.param('attempt_ref');
-    if (!OpaqueId.safeParse(attemptRef).success) return c.html(paymentReturnMissingHtml(store.projection), 404);
+    if (!OpaqueId.safeParse(attemptRef).success) return c.html(paymentReturnMissingHtml({...store.projection,appearance:store.appearance}), 404);
     const resolved = await resolvePaymentReturn(pool, store.projection.slug, attemptRef);
-    if (!resolved) return c.html(paymentReturnMissingHtml(store.projection), 404);
-    return c.html(paymentReturnPageHtml(store.projection, resolved.order_ref, attemptRef));
+    if (!resolved) return c.html(paymentReturnMissingHtml({...store.projection,appearance:store.appearance}), 404);
+    return c.html(paymentReturnPageHtml({...store.projection,appearance:store.appearance}, resolved.order_ref, attemptRef));
   });
   return app;
 }

@@ -47,10 +47,10 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/appearance-settings') || path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -319,6 +319,8 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
+  'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance': 'tenant',
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page': 'tenant',
@@ -614,8 +616,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 132, middleware: 18 });
-  assert.equal(selectedRoutes.length, 182);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 134, middleware: 18 });
+  assert.equal(selectedRoutes.length, 184);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -784,6 +786,8 @@ const routes: Route[] = [
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings' },
+  { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings', body: {template_id:'catalog-grid-v1',accent_preset:'ocean',announcement:'合成公告',featured_product_ids:[]}, version:'"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance' },
   { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance', body: { template_id: 'catalog-list-v1' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview-page' },

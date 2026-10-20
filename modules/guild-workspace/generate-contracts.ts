@@ -26,6 +26,7 @@ import {
 
 import * as storefront from '../../contracts/guild-launchpad/v1/storefront.js';
 import * as presentation from '../../contracts/guild-launchpad/v1/storefront-presentation.js';
+import * as appearance from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import * as hostedMedia from '../../contracts/guild-launchpad/v1/hosted-store-media.js';
 import * as sharedOrder from '../../contracts/guild-launchpad/v1/hosted-shared-order.js';
 import * as hostedOrder from '../../contracts/guild-launchpad/v1/hosted-order.js';
@@ -226,6 +227,12 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['product-media-command', hostedMedia.ProductMediaCommandSchema, 'output', ['same_product_identity', 'original_completed_version', 'current_version_not_older_than_completion', 'current_same_instance_store_write']],
     ['public-store-media', hostedMedia.PublicStoreMediaSchema, 'output', ['unique_skus', 'exact_publication_revision_sku_path', 'current_publication_liveness', 'immutable_media_digest']],
     ['remove-photo-input', hostedMedia.RemoveProductPhotoInputSchema, 'input', ['current_same_instance_store_write', 'product_selection_version_cas']],
+  ]],
+  ['storefront-appearance', 'Independent draft and frozen publication appearance; storefront/v1 stays unchanged. Server-only media identities never enter this bundle.', [
+    ['appearance-settings-input', appearance.StorefrontAppearanceInputSchema, 'input', ['unique_ordered_own_retail_product_ids', 'single_line_80_unicode_characters', 'current_store_manage_profile_cas']],
+    ['appearance-draft', appearance.StorefrontAppearanceDraftSchema, 'output', ['same_ordered_featured_ids', 'unique_eligible_products', 'exact_current_profile_role_paths', 'square_logo', 'current_store_read']],
+    ['appearance-command', appearance.AppearanceCommandAckSchema, 'output', ['original_completed_version', 'current_version_not_older_than_completion', 'current_store_manage']],
+    ['remove-appearance-image-input', appearance.RemoveAppearanceImageInputSchema, 'input', ['current_store_manage_profile_cas']],
   ]],
   ['storefront-presentation', 'Additive saved store presentation. Existing storefront/v1 content, releases and capabilities remain unchanged.', [
     ['appearance-input', presentation.StoreAppearanceInputSchema, 'input', []],

@@ -32,6 +32,19 @@ function declared(config) {
   }
 }
 
+test('store appearance accepts exact booleans without media but requires guild launchpad',()=>{
+  for(const value of ['TRUE','1','',true]){
+    const report=fixture(config=>{config.env.next.vars.FREEDOM_STORE_APPEARANCE_ENABLED=value;});
+    assert.equal(report.structural,false);assert(report.errors.includes('next:FREEDOM_STORE_APPEARANCE_ENABLED:invalid_flag'));
+  }
+  const withoutGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_APPEARANCE_ENABLED='true';});
+  assert(withoutGuild.blockers.includes('next:storefront.appearance:guild_launchpad_required'));
+  const withGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_APPEARANCE_ENABLED='true';config.env.next.vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED='true';});
+  assert.equal(withGuild.structural,true);assert(!withGuild.blockers.includes('next:storefront.appearance:guild_launchpad_required'));
+  assert.deepEqual(withGuild.mapping.next.required_capabilities,[]);
+  assert(withGuild.mapping.next.features.every(feature=>feature.declared_enabled===false));
+});
+
 test('actual canonical Wrangler keeps all media flags OFF and reports unavailable bindings, never remote acceptance', () => {
   const report = checkMediaWranglerConfig(resolve(root, 'wrangler.jsonc'), manifest);
   assert.equal(report.structural, true); assert.equal(report.status, 'unavailable');

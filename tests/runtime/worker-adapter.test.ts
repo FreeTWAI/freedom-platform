@@ -65,6 +65,18 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv & { ASSETS: ReturnTy
 const stagingEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'staging', APP_ORIGIN: 'https://staging-next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_A, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 const publicEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'public', APP_ORIGIN: 'https://next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_B, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_REGISTRATION_COMMUNITY_ID: COMMUNITY, FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 
+test('appearance flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeAppearanceEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeAppearanceEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
 test('offer photo flag parses exact booleans and requires supplier console and product-photo reads',()=>{
   for(const flag of [undefined,'false']) {
     const configuration=env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag});

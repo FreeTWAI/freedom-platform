@@ -1,3 +1,4 @@
+import {lockAppearanceRead,draftAppearanceSnapshot,publishedAppearanceDigest,insertPublicationAppearance,renderAppearance,type AppearanceOptions} from './appearance.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { PublicStoreProjectionSchema, StorePreviewSchema, type PublicStoreProjection } from '../../../contracts/guild-launchpad/v1/storefront.js';
@@ -33,25 +34,29 @@ async function buildProjection(q: PoolClient, p: Profile, items: readonly PhotoP
     products: items.map(({product: { sku, title, description, price_minor }}) => ({ sku, title, description, price_minor })),
     revision: await nextRevision(q, p), published_at: now.toISOString(), transaction_state: 'not_enabled' });
 }
-export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
+    if(options.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     let projection = await buildProjection(q, p, items);
-    const dirty = projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || draftMediaSnapshot(items).sha256 !== p.media_sha256;
+    const appearanceDirty=options.enabled===true&&(await draftAppearanceSnapshot(q,p)).sha256!==await publishedAppearanceDigest(q,p);
+    const dirty = appearanceDirty || projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || draftMediaSnapshot(items).sha256 !== p.media_sha256;
     if (!dirty && p.projection) projection = publicProjection(p.projection);
     return StorePreviewSchema.parse({ projection, dirty, current_revision: p.revision });
   });
 }
 /** Private saved-draft preview uses the exact public renderer and its allowlisted projection. */
-export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
+    if(options.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
-    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true});
+    const appearance=options.enabled===true?renderAppearance((await draftAppearanceSnapshot(q,p)).document,{tenantId,instanceId,version:p.version},options.mediaInstalled===true):undefined;
+    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance);
   });
 }
-export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false) {
+export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {}) {
   const operation = unpublish ? 'storefront.unpublish' : 'storefront.publish';
   return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, {}, key, expected, async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
@@ -64,13 +69,16 @@ export async function publishStore(pool: Pool, actor: Actor, tenantId: string, i
       const projection = await buildProjection(q, p, items);
       requireCondition(projection.products.length > 0, 409, 'storefront_has_no_products', '請先新增至少一項商品再公開。');
       const hash = projectionDigest(projection);
-      if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256) return storeView(q, context, inst);
+      const appearance=options.enabled===true?await draftAppearanceSnapshot(q,p):undefined;
+      const appearanceUnchanged=!appearance||appearance.sha256===await publishedAppearanceDigest(q,p);
+      if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256 && appearanceUnchanged) return storeView(q, context, inst);
       const id = randomUUID();
       await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at,template_id,media_sha256)
         SELECT $1,m.instance_id,m.tenant_id,$4,$5,$6,$7,$8,$9,$11,$12 FROM commerce_resource_tenants m
         WHERE m.tenant_id=$2 AND m.instance_id=$3 AND m.resource_id=$10 AND m.mapping_state='confirmed'`,
       [id, tenantId, instanceId, projection.revision, p.slug, projection, hash, context.principal_id, projection.published_at, p.storefront_shop_id, p.template_id, media.sha256]);
       await insertPublicationPhotos(q, id, p, items);
+      if(appearance)await insertPublicationAppearance(q,id,p,appearance);
       await q.query(`UPDATE commerce_storefront_profiles p SET current_publication_id=$3,first_published_at=COALESCE(p.first_published_at,$4),version=p.version+1,updated_at=clock_timestamp()
         FROM commerce_resource_tenants m WHERE m.resource_id=p.storefront_shop_id AND m.tenant_id=$1 AND m.instance_id=$2 AND p.instance_id=m.instance_id`, [tenantId, instanceId, id, projection.published_at]);
     }
