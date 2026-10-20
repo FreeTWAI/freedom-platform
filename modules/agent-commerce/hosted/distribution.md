@@ -24,8 +24,8 @@ Private preview and explicit publication include only currently offered,
 accepted selections. Text comes from the agreed snapshot, with a unique SKU from
 the seller's existing sequence and the seller's price. Source inventory, supplier
 costs, private media, tenant IDs and signatures never enter the public projection.
-This first increment does not copy supplier photos: their separate grant and
-retention rules remain to be implemented. A published page remains immutable;
+The original offer increment did not copy supplier photos. Current selected-line
+photo adoption uses its separate grant and retention rules. A published page remains immutable;
 withdrawal changes the next preview/publication, without rewriting history.
 
 All writes use `storeCommand`, current `store:write`, confirmed own mappings,
@@ -39,24 +39,67 @@ immutable offer bytes and seller/offer identity. The data catalog records the
 supplier-owned snapshot and seller-owned selection separately; this is no export
 or module portability implementation.
 
-## Remaining reservation boundary
+## Direct and shared reservation boundary
 
 The current `hosted_direct_reservation` profile remains limited to its own supply
 shop. It refuses foreign selections even if displayed and accepted. Its SQL guard,
 quote checks, stock adapter, financial exclusions and deployment flags remain
-unchanged. No shared-stock race, supplier order projection, payment or fulfilment
-is claimed here. Next is a reviewed cross-party reservation authority using the
-existing inventory port, including 10 items across B/C, 6+5 concurrency, cancellation
-once, withdrawal fencing, expiry and historical release after suspension. It must
-retain exact source/acceptance references on order lines and must not replace the
-local transaction with an inline remote HTTP request.
+unchanged. The later [shared reservation contract](shared-order-contract.md)
+defines cross-party reservation authority, shared inventory, cancellation,
+withdrawal fencing, expiry and historical release. It retains exact source and
+acceptance references and supplier order projections. Neither reservation profile
+grants payment or drop-ship fulfilment authority.
 
-Migration 144 is an unpublished successor to main's 143. Deployed 001–141 and
-main's 142/143 bytes are unchanged; the only historical gap remains 022. A deploy
-must first apply all pending migrations and retain a compatible backup/restore
-operator. This document does not authorize deployment or claim live acceptance.
+Migration 144 introduced the immutable offer model. Current deployed source and
+ledger evidence belong to the [Foundation closeout entry](../../../docs/platform-plan/execution/unified-foundation/closeout.md),
+not this module's original implementation history. The offer-page increment adds
+no migration and does not authorize deployment or claim live acceptance.
 
 The catalog is capped at 100 and participant lists at 200 with explicit truncation.
-Cursor continuation and cross-supplier photos remain subsequent work, not hidden
+Cursor continuation and supplier photos before adoption remain subsequent work, not hidden
 claims of complete ERP integration. The normal merchant journey and module
 portability milestones retain their separate acceptance requirements.
+
+## 2026-10-20 supply offer page
+
+`GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id`
+requires current `store:write` on the seller's own store, the catalog's community
+and currency boundary, and either an offered version or that store's exact
+selection of a withdrawn version. It accepts no query parameters and returns
+`private, no-store`. The allowlisted response contains the offer, publication
+time, supplier name/public path, this product's own selection, latest decision
+note and `sale_paths`. Tenant/instance/person identifiers, stock and private
+drafts never enter it. The public path is proved by the existing anonymous
+store reader, outside the seller transaction; a final seller read reauthorizes
+the private response. No seller client changes its tenant binding.
+
+`sale_paths.display` uses the same offered/sellable predicate as exact consent.
+Reservation reuses the supplier configuration gate and `sharedLines` exact
+consent/publication validation, without locking or reading inventory. Both
+stores must enable reservations and the environment must admit them. A public
+supplier's existing public reader additionally proves current lifecycle and
+confirmed mappings. For a supplier without a readable public storefront those
+private lifecycle facts cannot be proved through the seller's existing access
+paths: reservation returns `unknown`, rather than rebinding tenant context.
+A complete private-supplier availability projection would need separate schema
+work and is outside this increment. Final buyer quotes still revalidate all
+parties and inventory. `checkout` shares the production quote's own/supplied
+fulfilment classifier and consent-failure function; a supplied line currently
+returns `fulfilment_not_agreed`. Price approval grants neither drop-ship consent
+nor buyer data. Wholesale goods actually purchased and held by the retailer can
+be listed separately as that retailer's own stock.
+
+Supplier preview and seller detail render the same browser-only
+`SupplyOfferPresentation`. Before publication preview uses saved fields; after
+publication it uses the immutable offer. Dates use Asia/Taipei and version labels
+use the first eight hex characters of the terms digest. Responsibility labels
+are a roles-only projection of the existing reseller arrangement, never its
+private person identifiers. Existing `PriceDifference` and command factories
+serve both inline selection and the page.
+
+Decision commands accept optional trimmed `reason` (at most 500 characters),
+stored in the existing append-only acceptance `note`. The seller sees the latest
+decision's nonempty note on both surfaces; a re-proposal retains that historical
+note until a new decision. Accepting without a reason stores an empty note.
+Reason is part of the existing command body digest: changing it under the same
+idempotency key conflicts. No migration, deployment or flag change is included.
