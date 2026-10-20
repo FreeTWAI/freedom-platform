@@ -79,3 +79,33 @@ Runtime 使用 `node --import tsx --test --test-concurrency=1`；registry 篩選
 Root release owner 依 #889 接續已同意會員的實際店家、付款／面交設定、安裝版本及全部未撤銷准入對帳，
 再完成既有有限啟用與會員實際操作。供應商與店主自行完成、真實商品素材及非開發買家的理解仍需實際證據；
 本機合成流程不能代替。原真人、跨供應商履約與 provider 未驗項保持原責任，不升為此次候選的新前置。
+
+## 2026-10-20 同步 main
+
+這段記錄 main 前進後的重新整合，不改上列已記錄的結果。
+
+- 新工作分支：`integration/commerce-cohort-20261020`。由 `02dd8ca9`（上列兩個提交與本文件）合入
+  `main@e0f510c34eb605e5a395b6d239316df677776768`，合併提交為 `93dbcf2f6e0d4d7ed8a4a7033f5734fbb4007b08`。
+  合併訊息修正前的 `35fe9ec9` 是同一個 tree（`56150917`），部分檢查在那一版執行。
+- main 帶入 #911（`240cf677`：店家公開服務資訊，Seller console 不再依賴 Supplier console 開關）與 #912（上線紀錄）。
+- 三個衝突：
+  - `tests/e2e/storefront-cart-fixture.ts` 的 `CartControls` 同時保留 `realAdmission` 與 `supplierConsoleEnabled`，後者預設與 `offline` 相同。
+  - `tests/e2e/storefront-offline-checkout.spec.ts` 合成一條店家旅程。Supplier console 關閉時，店家發布公開服務資訊、設定匯款／面交並完成訂單；下單仍經真實 SQL 准入：准入前不能下單，撤銷後拒絕新單，舊單仍可處理。
+  - inventory 依兩邊聯集重算，共 5152 筆。
+- 仍然沒有新 migration、API 或旗標變更。
+
+| 檢查 | 實際結果 |
+| --- | --- |
+| `npm run typecheck`、`npm run build` | 通過；browser 都在這次 build 之後執行。 |
+| Browser | `storefront-offline-checkout`、三個 `supplier-console*`、`guild-block-composition` 共 28 項通過；另以名稱選取 8 項通過，其中 `guild-launchpad-applications` 的兩項恢復流程與 `hosted-store-member-journey` 的 intern 開店不在上列檔案，共 31 個不同案例。沒有增加 timeout 或 retry。 |
+| Runtime | 受影響的 105 個 runtime 檔（`--test-concurrency=1`）在本段提交時仍在執行；至 04:28 UTC 已通過 978 項、0 失敗。最終結果記在 PR。 |
+| 全套 `npm test` | 同時在另一個一次性資料庫執行，本段提交時尚未完成（至 04:28 UTC 已通過 1370 項、0 失敗）；最終結果記在 PR。 |
+| 契約 | `test:contracts` 的 pytest 969 項通過。本機沒有系統 pytest，改用 uv 安裝 `requirements-static.txt` 固定版本執行同一命令。`check:guild-launchpad-contracts` 通過。 |
+| 治理 | `npm run test:governance` 618 項通過。 |
+| Worker | `npm run worker:dry-run` 的 local／staging-next／next 三次都通過，沒有部署。 |
+| Inventory | `verify:inventory`：5152 hashes、1772 個本機連結、0 failures；`git diff --check e0f510c3` 乾淨。 |
+| 模組歸屬 | 以全部 descriptors 跑 selectImpact，沒有新增無主路徑。 |
+| Context | `prepare --base-ref e0f510c3` 產生 144 chunks／140 sources，`--check complete` 通過、無 blockers。整合者逐一核對本分支改動的規則（agent-commerce、module-registry、guild-supply README 與 module-registry descriptor），其餘與 main 相同的規則沒有逐片重讀。 |
+
+本輪 PostgreSQL 是一次性容器 `fp-pg-575bc725`（磁碟 volume，trust auth 只綁 127.0.0.1）；日誌在
+`/home/thuang/agent-work/fc-575bc725/logs/`。沒有部署、沒有變更旗標或線上資料，也沒有使用共用的本機開發資料庫。
