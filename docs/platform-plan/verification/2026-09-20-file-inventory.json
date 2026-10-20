@@ -2914,8 +2914,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/ShortVideoFeed.tsx",
-      "bytes": 15073,
-      "sha256": "bd3ea3393a2eb4072f11850a280ccbfa629bb0be5374692767eecfced64766d3"
+      "bytes": 16487,
+      "sha256": "8430ecd6492bf0f530eef98b8d9b5ee114dee312a53feb48e430aa8cb9fec368"
     },
     {
       "path": "apps/portal-web/src/modules/ShowcasePanel.tsx",
@@ -19559,8 +19559,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 2483,
-      "sha256": "602baa80d579a58f79711dde17576a2036d7c07723b13b43b3714c551a3ed647"
+      "bytes": 2527,
+      "sha256": "40ba190aa184204930d4d1688b7e1219bd30a45da833c825004f391f2c26a1d1"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -22856,6 +22856,11 @@
       "path": "tests/e2e/sharing-authoring.spec.ts",
       "bytes": 198,
       "sha256": "7c98ef149a073cccb181667c51d9c5ad52a436baa33e452491ec159b769dc4fe"
+    },
+    {
+      "path": "tests/e2e/short-videos-focus.spec.ts",
+      "bytes": 7303,
+      "sha256": "079363df9d79915ad6cc41e52b2367908f3a096cc42b52b1402355066cb46122"
     },
     {
       "path": "tests/e2e/short-videos-lifecycle.spec.ts",
