@@ -2914,8 +2914,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/ShortVideoFeed.tsx",
-      "bytes": 15966,
-      "sha256": "c9a3a0cf40c7e24b948068dff4d786a117ac3d5a549a4feb41eb7787d73b8a95"
+      "bytes": 16487,
+      "sha256": "8430ecd6492bf0f530eef98b8d9b5ee114dee312a53feb48e430aa8cb9fec368"
     },
     {
       "path": "apps/portal-web/src/modules/ShowcasePanel.tsx",
@@ -22849,8 +22849,8 @@
     },
     {
       "path": "tests/e2e/short-videos-focus.spec.ts",
-      "bytes": 5309,
-      "sha256": "648ad9c3f2cbe392ecfa3db4baa9d53574fc4926c8a2f10c02b3a8c857f16a61"
+      "bytes": 7303,
+      "sha256": "079363df9d79915ad6cc41e52b2367908f3a096cc42b52b1402355066cb46122"
     },
     {
       "path": "tests/e2e/short-videos-lifecycle.spec.ts",
