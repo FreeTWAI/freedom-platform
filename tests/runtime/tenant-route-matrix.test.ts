@@ -1174,6 +1174,10 @@ test('T-022 4. Body, header and query substitution', async () => {
   }
   scanForLeaks(candidates, '4 candidates', B);
   for (const actor of [P, N, fixture.people.O, fixture.people.M]) {
+    // Retail eligibility needs commerce membership; add it after the unrelated-guild query above.
+    await owner.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+      VALUES($1,$2,$3,'guild_commerce_sales','active','full')
+      ON CONFLICT (community_id,user_id,guild_key) DO NOTHING`, [randomUUID(), DEMO_COMMUNITY, actor.user.user_id]);
     const launchpad = await call('GET', '/guilds/guild_ai_field/launchpad', actor);
     assert.equal(launchpad.status, 200, JSON.stringify(describe(launchpad)));
     const other = actor === N ? A : B;
@@ -1183,7 +1187,7 @@ test('T-022 4. Body, header and query substitution', async () => {
       application_key, release_ref: application_key === 'hosted-store' ? 'hosted-store@1.1.0' : `${application_key}@1.0.0`,
       display_name: application_key === 'manual-workspace' ? '人工工作空間' : application_key === 'hosted-store' ? '線上商店' : '合成店面',
       eligibility: { can_launch: manages, reason_codes: manages ? [] : ['tenant_manage_required'],
-        policy_revision: '1', required_guild_tier: 'full', tenant_action: manages ? (application_key === 'hosted-store' ? 'select' : 'continue') : 'create' },
+        policy_revision: '1', required_guild_tier: application_key === 'hosted-store' ? 'intern' : 'full', tenant_action: manages ? (application_key === 'hosted-store' ? 'select' : 'continue') : 'create' },
     }));
     assert.deepEqual(launchpad.data.applications, expectedApplications);
     const substituted = await call('GET', `/guilds/guild_ai_field/launchpad?tenant_id=${other.tenantId}&workspace_id=${other.workspaceId}`, actor);

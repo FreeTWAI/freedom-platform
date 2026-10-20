@@ -25,8 +25,8 @@ export async function checkoutHarness(prefix:string,options:{publicSchema?:boole
   const send=(s:{root:string;owner:Session},path:string,body:unknown={},version?:string,method='POST')=>h.call(method,s.root+path,s.owner,body,{'Idempotency-Key':randomUUID(),...(version?{'If-Match':`"${version}"`}:{})},app);
   async function reset(){await h.reset();await h.pool.query(`INSERT INTO guild_application_offerings(offering_id,community_id,guild_key,application_key,release_ref,status,display_order,launch_policy_ref,version)
     VALUES($1,$2,'guild_commerce_sales','hosted-store','hosted-store@1.0.0','offered',10,'{"policy_key":"hosted-store.launch","version":"1"}',1)`,[randomUUID(),DEMO_COMMUNITY]);}
-  async function store(stock=10,withProduct=true){
-    const owner=(await h.person('合成賣家')).session;await h.fullMember(owner.user.user_id,'guild_commerce_sales');const t=await h.createTenant(owner,'合成商店');
+  async function store(stock=10,withProduct=true,tier:'intern'|'full'='full'){
+    const owner=(await h.person('合成賣家')).session;await h.fullMember(owner.user.user_id,'guild_commerce_sales',tier);const t=await h.createTenant(owner,'合成商店');
     const plan=await h.plan(owner,t.tenantId,h.planBody('guild_commerce_sales',t.workspaceId,'hosted-store','hosted-store@1.0.0'));ok(plan,201);assert.equal((await h.launch(owner,t.tenantId,plan)).data.state,'succeeded');
     const instanceId=(await h.pool.query("SELECT instance_id FROM module_instances WHERE tenant_id=$1 AND module_key='storefront'",[t.tenantId])).rows[0].instance_id as string;
     const root=`/tenants/${t.tenantId}/storefronts/${instanceId}`,slug=`s-${randomUUID().slice(0,12)}`,s={...t,owner,instanceId,root,slug};
