@@ -47,7 +47,7 @@ export function HostedStorePolicies({client,userId,tenantId,instanceId,draft,wri
   {writable?<fieldset className="hosted-policies-fields stack" disabled={frozen}>
    <legend>賣方資訊</legend><div className="hosted-policies-seller-grid">{Object.entries(SELLER_FIELDS).map(([key,[label,max]])=>{
     const field='seller.'+key;return <div key={key}><label className="field" htmlFor={id+'-'+field}>{label}<input id={id+'-'+field} autoComplete="off" inputMode={key==='tax_id'?'numeric':key==='email'?'email':key==='phone'?'tel':'text'} value={value.seller[key as keyof typeof value.seller]} aria-invalid={Boolean(errors[field])||undefined} aria-describedby={id+'-'+field+'-hint'+(errors[field]?' '+id+'-'+field+'-error':'')} onChange={e=>setValue(old=>({...old,seller:{...old.seller,[key]:e.target.value}}))}/></label>
-    <p id={id+'-'+field+'-hint'} className="field-hint">{key==='business_name'?'填寫任何賣方欄位時必填；這是零售負責方。':key==='address'?'請填營業地址或可收受文書的地址。':key==='tax_id'?'選填，8 位半形數字；僅檢查格式。':'此階段選填。'}最多 {max} 個字。</p>{errorFor(field)}</div>;
+    <p id={id+'-'+field+'-hint'} className="field-hint">{key==='business_name'?'填寫任何賣方欄位時必填；這是零售負責方。填寫後，商店頁尾才會顯示賣方資訊、「關於本店」與政策連結。':key==='address'?'請填營業地址或可收受文書的地址。':key==='tax_id'?'選填，8 位半形數字；僅檢查格式。':'此階段選填。'}最多 {max} 個字。</p>{errorFor(field)}</div>;
    })}</div>
    <fieldset className="hosted-policies-fields stack"><legend>商店政策</legend>
     <p className="field-hint">只接受純文字，不支援 Markdown、HTML 或自動連結。每項最多 10,000 個字。</p>

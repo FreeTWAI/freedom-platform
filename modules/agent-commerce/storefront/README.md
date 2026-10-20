@@ -135,7 +135,9 @@ An old binary ignores these new tables; an old-style publication without legal
 rows has the original footer and the new information paths return the common 404
 when the feature is installed. No v1 projection/JSON field or release floor changes.
 
-The existing editor's 商店資料 contains 賣方資訊與商店政策. Private API root
+The existing editor's 商店資料 contains 賣方資訊與商店政策. Its business-name
+hint explains that a name enables the footer seller information, About and policy
+links; it introduces no publication requirement. Private API root
 `/api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies` accepts GET
 (`store:read`) and atomic PUT (`store:manage`, profile If-Match and Idempotency-Key).
 This deliberately follows the existing description/contact authority rather than
