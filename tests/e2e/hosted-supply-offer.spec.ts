@@ -155,10 +155,12 @@ test('structured references are optional information throughout supplier editing
   await open(a,sa.hash);await a.getByRole('button',{name:'供貨條件',exact:true}).click();
   const legacy=a.getByRole('form',{name:title+'供貨條件',exact:true});
   await legacy.getByLabel('供貨單價（TWD）',{exact:true}).fill('60');await legacy.getByLabel('每件運費（TWD）',{exact:true}).fill('15');
-  await legacy.getByLabel('建議售價（選填）',{exact:true}).fill('65');await legacy.getByLabel('最低訂量（選填）',{exact:true}).fill('2');await legacy.getByLabel('交期（選填）',{exact:true}).fill('3');
+  await legacy.getByLabel('建議售價（TWD）',{exact:true}).fill('65');await legacy.getByLabel('最低訂量（件）',{exact:true}).fill('2');await legacy.getByLabel('交期（天）',{exact:true}).fill('3');
   await legacy.getByRole('textbox',{name:'出貨條件',exact:true}).fill('紙盒包裝，以郵寄寄送；偏遠地區另議。');await legacy.getByRole('textbox',{name:'退貨條件',exact:true}).fill('瑕疵品七日內聯絡換貨，運費由供應商負擔。');
   const note='建議售價低於每件成本合計，店主照這個售價會虧損。';await expect(legacy.getByRole('note')).toHaveText(note);
-  await legacy.getByLabel('最低訂量（選填）',{exact:true}).fill('1.5');await expect(legacy.getByRole('alert')).toHaveText('最低訂量須為 1 至 10,000 的整數。');await legacy.getByLabel('最低訂量（選填）',{exact:true}).fill('2');
+  await expect(legacy.locator('.supply-reference-fields legend')).toHaveText('給店主的參考（選填）');
+  for(const hint of ['只供店主參考，店主可以自行決定售價；系統不會依建議售價限制上架、供貨或結帳。','店主每次向你訂貨，至少要訂幾件。','收到訂單後幾天內出貨；當天出貨請填 0。'])await expect(legacy.getByText(hint,{exact:true})).toBeVisible();
+  await legacy.getByLabel('最低訂量（件）',{exact:true}).fill('1.5');await expect(legacy.getByRole('alert')).toHaveText('最低訂量須為 1 至 10,000 的整數。');await legacy.getByLabel('最低訂量（件）',{exact:true}).fill('2');
   for(const width of [390,768,1440]){
    await a.setViewportSize({width,height:900});expect(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    await captureOffer(a,legacy,info.outputPath(`structured-supplier-editor-light-${width}.png`));
@@ -175,9 +177,15 @@ test('structured references are optional information throughout supplier editing
   await expect(legacy.getByRole('button',{name:'公開供貨版本',exact:true})).toBeEnabled();
   await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);
   const active=a.locator('.supplier-console [data-sc-active="true"]'),editor=active.getByRole('form',{name:'儲存供貨條件',exact:true});
-  await expect(editor.getByLabel('建議售價（選填）',{exact:true})).toHaveValue('65.00');await expect(editor.getByRole('note')).toHaveText(note);
-  await expect(editor.getByLabel('最低訂量（選填）',{exact:true})).toHaveValue('2');await expect(editor.getByLabel('交期（選填）',{exact:true})).toHaveValue('3');
-  await editor.getByLabel('建議售價（選填）',{exact:true}).fill('450');
+  await expect(editor.getByLabel('建議售價（TWD）',{exact:true})).toHaveValue('65.00');await expect(editor.getByRole('note')).toHaveText(note);
+  await expect(editor.getByLabel('最低訂量（件）',{exact:true})).toHaveValue('2');await expect(editor.getByLabel('交期（天）',{exact:true})).toHaveValue('3');
+  const consoleTerms=active.locator('.sc-section').filter({has:a.getByRole('heading',{name:'供貨條件',exact:true})});
+  for(const width of [390,1440]){
+   await a.setViewportSize({width,height:900});expect(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(consoleTerms.getByRole('note')).toHaveText(note);
+   await captureOffer(a,consoleTerms,info.outputPath(`structured-console-editor-light-${width}.png`));
+  }
+  await editor.getByLabel('建議售價（TWD）',{exact:true}).fill('450');
   const consoleSaved=a.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname.endsWith('/supply-terms'));
   await editor.getByRole('button',{name:'儲存供貨條件',exact:true}).click();const savedResponse=await consoleSaved;expect(savedResponse.status()).toBe(200);
   const sent=savedResponse.request().postDataJSON();expect(sent.msrp_minor).toBe(45000);expect(sent).not.toHaveProperty('minimum_order_quantity');expect(sent).not.toHaveProperty('lead_time_days');
@@ -211,7 +219,7 @@ test('structured references are optional information throughout supplier editing
   await b.reload();await expect(detail).toContainText(SELLABLE_LABEL);await detail.getByRole('link',{name:'返回供貨合作',exact:true}).click();await storeArea(b,'店面與發布');
   await b.getByRole('button',{name:'發布展示頁',exact:true}).click();await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已發布展示頁');
   for(const path of ['/api/v1/public/stores/'+slug,'/shops/'+slug]){const response=await b.request.get(path);expect(response.status()).toBe(200);const text=await response.text();for(const key of ['msrp_minor','minimum_order_quantity','lead_time_days','供應商建議售價','最低訂量','交期'])expect(text).not.toContain(key);}
-  await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);await editor.getByLabel('交期（選填）',{exact:true}).fill('');
+  await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);await editor.getByLabel('交期（天）',{exact:true}).fill('');
   const cleared=a.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname.endsWith('/supply-terms'));
   await editor.getByRole('button',{name:'儲存供貨條件',exact:true}).click();const clearedResponse=await cleared;expect(clearedResponse.request().postDataJSON()).toMatchObject({lead_time_days:null});expect(clearedResponse.request().postDataJSON()).not.toHaveProperty('msrp_minor');
   await expect(active.getByText('需要重新公開',{exact:true})).toBeVisible();await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();

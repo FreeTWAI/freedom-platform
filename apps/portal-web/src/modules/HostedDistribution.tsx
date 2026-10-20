@@ -112,7 +112,7 @@ export function PriceForm({offer,selection,busy,onDirty,onSubmit}:{offer:SupplyO
   }
   return <form className="hosted-store-form stack" aria-label={`${offer.terms.title}選品售價`} onSubmit={e=>void submit(e)}>
     <label className="field">我的零售價（{offer.terms.currency}）<input inputMode="decimal" required value={price} disabled={busy} onChange={e=>setPrice(e.target.value)}/></label>
-    {offer.terms.msrp_minor!==undefined&&<div className="stack"><p className="field-hint">供應商建議售價 {formatMinor(offer.terms.msrp_minor,offer.terms.currency)}（僅供參考，可自行定價）</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={()=>setPrice((offer.terms.msrp_minor!/100).toFixed(2))}>填入建議售價</button></div></div>}
+    {offer.terms.msrp_minor!==undefined&&<div className="stack"><p className="field-hint">供應商建議售價 {formatMinor(offer.terms.msrp_minor,offer.terms.currency)}（僅供參考，可自行定價）</p><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>setPrice((offer.terms.msrp_minor!/100).toFixed(2))}>填入建議售價</button></div></div>}
     <PriceDifference retail={price} cost={offer.terms.cost_minor} shipping={offer.terms.shipping_minor} currency={offer.terms.currency}/>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button className="btn btn-ghost" disabled={busy||(!!selection&&price===initial&&selection.offer.offer_id===offer.offer_id&&!['revoked','declined'].includes(selection.state))}>送出供貨申請</button></div>

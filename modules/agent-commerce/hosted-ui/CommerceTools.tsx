@@ -31,10 +31,10 @@ export function SupplyReferenceFields({values,cost,shipping,currency,onChange}:{
   const prefix=useId(),msrp=supplyReferenceValue('msrp_minor',values.msrp_minor),unit=amount(cost),fee=amount(shipping);
   return <fieldset className="hosted-store-fields stack supply-reference-fields"><legend>給店主的參考（選填）</legend>
     {SUPPLY_REFERENCE_FIELDS.map(f=>{const error=Number.isNaN(supplyReferenceValue(f.key,values[f.key]));return <div key={f.key}>
-      <label className="field">{f.label}<input inputMode={f.money?'decimal':'numeric'} maxLength={24}
+      <label className="field">{f.label}（{f.unit==='currency'?currency:f.unit}）<input inputMode={f.money?'decimal':'numeric'} maxLength={24}
         aria-invalid={error||undefined} aria-describedby={`${prefix}-${f.key}-hint${error?` ${prefix}-${f.key}-error`:''}`}
         value={String(values[f.key]??'')} onChange={e=>onChange(f.key,e.target.value)}/></label>
-      <p id={`${prefix}-${f.key}-hint`} className="field-hint">{f.hint}{f.money?`（${currency}）`:f.key==='minimum_order_quantity'?'（件）':'（天）'}</p>
+      <p id={`${prefix}-${f.key}-hint`} className="field-hint">{f.hint}</p>
       {error&&<p id={`${prefix}-${f.key}-error`} className="field-hint" role="alert">{f.error}</p>}
     </div>;})}
     {msrp!==null&&!Number.isNaN(msrp)&&unit!==null&&fee!==null&&msrp<unit+fee&&<p className="field-hint" role="note">{SUPPLY_LOSS_NOTE}</p>}
