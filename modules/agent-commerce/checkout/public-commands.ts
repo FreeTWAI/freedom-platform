@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives.js';
 import * as wire from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
-import {mapPersonPrincipal} from '../../../packages/resource-scopes/index.js';
+import {member,currentMember,buyerIdentity} from './buyer-identity.js';
 import {Problem,requireCondition} from '../../../packages/shared/problem.js';
 import {resolvePublicStorePage} from '../hosted/public.js';
 import {lockStore} from './authority.js';
@@ -16,7 +16,7 @@ import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,commerceRateLimitIn
 import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CommerceEmailOutbox} from '../operations/notifications/email-port.js';
 export interface HostedCheckoutOptions extends CheckoutPorts {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
-export interface BrowserAccess {deviceToken?:string;sessionToken?:string;network:string}
+export interface BrowserAccess {deviceToken?:string;sessionToken?:string;network:string;expectedBuyer?:wire.CheckoutBuyerIdentity}
 const defaults:CommerceSettings={checkoutEnabled:false,quarantine:false,providerProfiles:[]};
 export function quarantineGate(options:Pick<HostedCheckoutOptions,'settings'>) {requireCondition(!(options.settings??defaults).quarantine,503,'commerce_quarantined','商務服務暫停中。');}
 export function checkoutGate(options:HostedCheckoutOptions) {quarantineGate(options);requireCondition((options.settings??defaults).checkoutEnabled,409,'checkout_not_enabled','尚未開放結帳。');}
@@ -28,37 +28,20 @@ async function resolve(q:PoolClient,slug:string,options:HostedCheckoutOptions,ad
   if(admit)requireCondition(await (options.admission??defaultAdmission).allowed(q,row),409,'checkout_not_enabled','尚未開放結帳。');
   return {...store,...row};
 }
-/** Optional member identity, without authenticate()'s session activity write.
- * Locks serialize deactivation/revocation and a final decision-clock check
- * closes expiry during domain lock waits. Unknown sessions remain guests. */
-async function member(q:PoolClient,token:string|undefined,create=false) {
-  if(!token)return null;
-  const sessionHash=hashKey(token);
-  const row=(await q.query<{user_id:string;principal_id:string|null;principal_exists:boolean}>(`SELECT u.user_id,p.principal_id,
-    EXISTS(SELECT 1 FROM principals existing WHERE existing.user_ref=u.user_id AND existing.kind='person') AS principal_exists
-    FROM sessions s JOIN users u USING(user_id)
-    LEFT JOIN principals p ON p.user_ref=u.user_id AND p.kind='person' AND p.status='active'
-    WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND u.active ${create?'FOR SHARE OF u,s':''}`,[sessionHash])).rows[0];
-  if(!row)return null;
-  const mapped=!row.principal_id&&create?await mapPersonPrincipal(q,row.user_id):null;
-  const principalId=row.principal_id??(mapped?.status==='active'&&mapped.kind==='person'?mapped.principal_id:null);
-  // A first-time buyer has a valid member session before foundation mapping.
-  // Quotes stay read-only; checkout creates that mapping under its write locks.
-  // A disabled existing principal must not be treated as a new member.
-  return {principalId,sessionHash,userId:row.user_id,offlineEligible:principalId!==null||!row.principal_exists};
-}
-async function currentMember(q:PoolClient,identity:Awaited<ReturnType<typeof member>>) {
-  if(identity&&(await q.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[identity.sessionHash,identity.userId])).rowCount!==1)orderAccessNotFound();
-}
 export async function quotePublicCart(pool:Pool,slug:string,input:wire.CartQuoteInput,access:BrowserAccess,options:HostedCheckoutOptions) {
+  return (await quotePublicCartWithIdentity(pool,slug,input,access,options)).value;
+}
+/** The transport can echo the same read transaction's buyer without changing quote JSON. */
+export async function quotePublicCartWithIdentity(pool:Pool,slug:string,input:wire.CartQuoteInput,access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
   if(input.delivery!==undefined)validateBuyerJSON(input.delivery,8192);
-  await chargeCommerceBudgets(pool,access.network,{network:'cartNetwork',store:'cartStore',slug});
+  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'cartNetwork',store:'cartStore',slug});
+  if(access.expectedBuyer===undefined)await charge();
   return isolatedTransaction(pool,async q=>{
     await q.query('SET TRANSACTION READ ONLY');
     const store=await resolve(q,slug,options,true);
-    const identity=await member(q,access.sessionToken,false);
-    return cartQuote(q,store,input,options,Boolean(identity?.offlineEligible));
+    const identity=await member(q,access.sessionToken,false,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge);
+    return {value:await cartQuote(q,store,input,options,Boolean(identity?.offlineEligible)),buyerIdentity:buyerIdentity(identity)};
   });
 }
 export type PublicPurchaseState={open:false}|{open:true;product?:'available'|'sold_out'};
@@ -80,9 +63,10 @@ export async function publicPurchaseState(pool:Pool,slug:string,options:HostedCh
 
 export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutInput,key:string,access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
-  await chargeCommerceBudgets(pool,access.network,{network:'checkoutNetwork',store:'checkoutStore',slug});
+  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'checkoutNetwork',store:'checkoutStore',slug});
+  if(access.expectedBuyer===undefined)await charge();
   return isolatedTransaction(pool,async q=>{
-    const identity=await member(q,access.sessionToken,true),store=await resolve(q,slug,options,true);
+    const identity=await member(q,access.sessionToken,true,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge),store=await resolve(q,slug,options,true);
     // Serialize the replay lookup with the core's existing lifecycle/community
     // lock order, so concurrent requests return exactly one 201.
     await lockStore(q,store,input.lines.map(l=>l.sku));
@@ -101,9 +85,10 @@ export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutI
 }
 export async function placePublicOrder(pool:Pool,slug:string,checkoutRef:string,input:{terms_sha256:string;client_order_id:string;payment_method?:'immediate_card'|'bank_transfer'|'cash_on_meetup'},access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
-  await chargeCommerceBudgets(pool,access.network,{network:'placementNetwork',store:'placementStore',slug});
+  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'placementNetwork',store:'placementStore',slug});
+  if(access.expectedBuyer===undefined)await charge();
   return isolatedTransaction(pool,async q=>{
-    const identity=await member(q,access.sessionToken,true),store=await resolve(q,slug,options,true,true);
+    const identity=await member(q,access.sessionToken,true,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge),store=await resolve(q,slug,options,true,true);
     if(!OpaqueId.safeParse(checkoutRef).success)orderAccessNotFound();
     const device=await liveDevice(q,access.deviceToken,true);
     if(!device||!await hasDeviceGrant(q,device.device_id,checkoutRef))orderAccessNotFound();

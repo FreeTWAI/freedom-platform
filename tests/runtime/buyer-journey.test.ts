@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {CheckoutBuyerState, buyerBindingKey, buyerIntentKey, legacyIntentKey, parkedIntentKey, readCheckoutIdentity} from '../../apps/portal-web/src/storefront/buyer-state.js';
 import {createHash} from 'node:crypto';
 import * as pages from '../../modules/agent-commerce/storefront/pages.js';
 import {storeHtml, productHtml, storeMissingHtml} from '../../modules/agent-commerce/hosted/page.js';
@@ -106,4 +107,55 @@ test('checkout OFF preserves all baseline storefront HTML bytes, including direc
   for (const [name,html] of Object.entries(rendered)) assert.equal(createHash('sha256').update(html).digest('hex'),baselineHashes[name as keyof typeof baselineHashes],name);
   assert.match(pages.orderAccessPageHtml(original,{buyerJourneyEnabled:true}), /登入會員/);
   assert.match(pages.orderPageHtml(original,id,{buyerJourneyEnabled:true}), /data-buyer-journey="true"/);
+});
+
+function tabStorage() {
+  const rows = new Map<string,string>();
+  return {rows,getItem:(key:string)=>rows.get(key)??null,setItem:(key:string,value:string)=>{rows.set(key,value);},removeItem:(key:string)=>{rows.delete(key);}};
+}
+const coordinates = {checkoutRef:id,input:{terms_sha256:'a'.repeat(64),client_order_id:id,payment_method:'bank_transfer' as const}};
+const memberA = `member:${id}`, memberB = 'member:22222222-2222-4222-8222-222222222222';
+test('tab binding detects guest/member and account changes without moving the cart or replaying a parked command',()=>{
+  const storage=tabStorage(),slug='synthetic-shop';
+  storage.setItem('freedom.shop.cart.v1:'+slug,'unchanged cart');
+  let buyer=new CheckoutBuyerState(slug,storage,1000);
+  assert.deepEqual(buyer.observe('guest',1000),{changed:false,previousOrder:false});
+  buyer.saveIntent(coordinates);
+  buyer=new CheckoutBuyerState(slug,storage,1100);
+  const generation=buyer.generation;
+  assert.deepEqual(buyer.observe(memberA,1100),{changed:true,previousOrder:true});
+  assert.equal(buyer.intent,null);assert(storage.getItem(parkedIntentKey(slug,coordinates)));
+  assert.equal(buyer.matches('guest',generation),false);
+  assert.equal(storage.getItem('freedom.shop.cart.v1:'+slug),'unchanged cart');
+  assert.equal(storage.getItem(buyerIntentKey(slug)),null);
+  assert.deepEqual(buyer.observe(memberA,1200),{changed:false,previousOrder:false});
+  const saved=buyer.saveIntent(coordinates);
+  assert.deepEqual(saved.input,coordinates.input); // Fence metadata never changes the original request body.
+  assert.equal(saved.buyer,memberA);assert.equal(saved.version,2);
+  buyer=new CheckoutBuyerState(slug,storage,1300);
+  assert.deepEqual(buyer.observe(memberA,1300),{changed:false,previousOrder:false});
+  assert.deepEqual(buyer.intent,saved); // Same-user new cookie/CSRF is not an identity change.
+  assert.deepEqual(buyer.observe(memberB,1400),{changed:true,previousOrder:true});
+  const before=buyer.generation;
+  assert.deepEqual(buyer.observe('guest',1500),{changed:true,previousOrder:false});
+  assert(!buyer.matches(memberB,before));
+  assert.deepEqual(Object.keys(JSON.parse(storage.getItem(buyerBindingKey(slug))!)).sort(),['buyer','seenAt','slug','version']);
+});
+test('legacy, malformed, wrong-store and expired drafts are untrusted; no session read failure is a guest identity',async()=>{
+  for(const legacy of [JSON.stringify(coordinates),'{broken']) {
+    const storage=tabStorage(),slug='synthetic-shop';storage.setItem(legacyIntentKey(slug),legacy);
+    const buyer=new CheckoutBuyerState(slug,storage,1000);assert.equal(buyer.intent,null);
+    assert.equal(buyer.observe('guest',1000).changed,true);assert.equal(storage.getItem(legacyIntentKey(slug)),null);
+    assert.deepEqual(buyer.observe('guest',1001),{changed:false,previousOrder:false});
+  }
+  for(const metadata of [{version:1,slug:'another-shop',buyer:memberA,seenAt:0},{version:1,slug:'synthetic-shop',buyer:memberA,seenAt:0}]) {
+    const storage=tabStorage();storage.setItem(buyerBindingKey('synthetic-shop'),JSON.stringify(metadata));
+    assert.equal(new CheckoutBuyerState('synthetic-shop',storage,31*60_000).observe(memberA).changed,true);
+  }
+  const storage=tabStorage();storage.setItem(buyerIntentKey('synthetic-shop'),JSON.stringify({...coordinates,version:2,slug:'another-shop',buyer:memberA}));
+  const buyer=new CheckoutBuyerState('synthetic-shop',storage);assert.equal(buyer.intent,null);assert(buyer.observe(memberA).changed);
+  buyer.invalidate();assert.equal(buyer.identity,null);assert(buyer.observe(memberA).changed);
+  assert.equal(await readCheckoutIdentity(replies([json({},401)]).fetcher),'guest');
+  await assert.rejects(readCheckoutIdentity(replies([new Error('offline')]).fetcher));
+  await assert.rejects(readCheckoutIdentity(replies([json({},503)]).fetcher));
 });

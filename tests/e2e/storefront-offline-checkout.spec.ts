@@ -1,4 +1,6 @@
 import {randomUUID} from 'node:crypto';
+import {totpCode} from '../../modules/identity-membership/totp.js';
+import {formatTaipeiDateTime} from '../../apps/portal-web/src/storefront/format.js';
 import {test, expect, type BrowserContext, type Page, type Route} from './fixtures.js';
 import {setupCartFixtureStore, assertCartResponsiveLayout} from './storefront-cart-fixture.js';
 import {storeArea} from './hosted-store-fixture.js';
@@ -634,4 +636,146 @@ for(const outcome of ['committed','never committed','concurrent change'] as cons
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payment_settings WHERE instance_id=$1',[store.instance])).rows[0].n).toBe(2);
   expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM scoped_command_receipts WHERE operation='commerce.offline_payment_settings.save' AND idempotency_key=$1",[requests[0].key])).rows[0].n).toBe(outcome==='concurrent change'?0:1);
  }finally{await context.close();await store.close();}
+});
+
+
+async function portalCredentials(page: Page, email: string, password = DEMO_PASSWORD) {
+  await page.getByLabel('電子郵件', {exact: true}).fill(email);
+  await page.getByLabel('密碼', {exact: true}).fill(password);
+  await page.getByRole('button', {name: '登入', exact: true}).click();
+}
+async function fillBuyerContact(page: Page) {
+  await page.getByLabel('收件人姓名', {exact: true}).fill('合成返回買家');
+  await page.getByLabel('收件人手機', {exact: true}).fill('0900123456');
+  await page.getByLabel('Email', {exact: true}).fill('return-buyer@example.test');
+  await page.getByRole('radio', {name: '面交取貨', exact: true}).check();
+  await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+}
+
+test('buyer journey returns a guest after real login, reconfirms identity and finishes bank checkout with frozen instructions', async ({browser, e2eAuthPool}, info) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const person = await member(e2eAuthPool), page = await context.newPage();
+    const writes: string[] = [];
+    page.on('request', request => {if (request.method() === 'POST' && /\/checkouts(?:\/[^/]+\/orders)?$/.test(new URL(request.url()).pathname)) writes.push(request.postData()!);});
+    await start(page, store);
+    const cart = await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-guest-checkout-${width}.png`));
+    await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await expect(page.getByText('登入後會返回原本的商店頁面。', {exact: true})).toBeVisible();
+    await portalCredentials(page, person.email);
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    expect(writes).toHaveLength(0);
+    expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cart);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-return-notice-${width}.png`));
+    await fillBuyerContact(page);
+    await freeze(page, store);
+    const order = await place(page, '銀行匯款');
+    expect(writes).toHaveLength(2);
+    await expect(page.getByText('000000123456', {exact: true})).toBeVisible();
+    await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await store.saveOfflineFixture(2);
+    await page.reload();
+    await expect(page.getByText('000000123456', {exact: true})).toBeVisible();
+    await expect(page.getByText('新的面交地點。', {exact: true})).toHaveCount(0);
+    expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toMatch(/000000123456|return-buyer@example.test/);
+  } finally {await context.close(); await store.close();}
+});
+
+test('checkout registration returns before guild choice; unavailable stores keep successful login and registration in the portal', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const page = await context.newPage(), email = `buyer-registration-${randomUUID()}@example.test`;
+    await start(page, store);
+    await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await expect(page.getByText('建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。', {exact: true})).toBeVisible();
+    await page.getByLabel('電子郵件', {exact: true}).fill(email);
+    await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+    await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    const user = (await e2eAuthPool.query('SELECT user_id,onboarding_completed_at FROM users WHERE email=$1', [email])).rows[0];
+    expect(user.onboarding_completed_at).toBeNull();
+    expect((await e2eAuthPool.query('SELECT 1 FROM positioning_profession_memberships WHERE user_id=$1', [user.user_id])).rowCount).toBe(0);
+    const version = (await e2eAuthPool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1', [store.instance])).rows[0].version;
+    await store.sellerPost(store.root + '/unpublish', {}, 200, version);
+    const destination = `/?return_to=${encodeURIComponent(`/shops/${store.slug}/checkout`)}`;
+    await context.clearCookies(); await page.goto(destination);
+    const returning = await member(e2eAuthPool);
+    await portalCredentials(page, returning.email);
+    await expect(page.getByText('登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+    await context.clearCookies(); await page.goto(destination);
+    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByLabel('電子郵件', {exact: true}).fill(`buyer-unpublished-${randomUUID()}@example.test`);
+    await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+    await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
+    await expect(page.getByText('帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+  } finally {await context.close(); await store.close();}
+});
+
+test('TOTP and backup login return only with a live session; cross-tab logout and another buyer cannot resume an old intent', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {totpEncryptionKey: Buffer.alloc(32, 0x74).toString('base64')});
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const a = await member(e2eAuthPool), b = await member(e2eAuthPool);
+    const session = await apiLogin(context, store.origin, a.email);
+    const secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+    const counter = Number((await e2eAuthPool.query('SELECT floor(extract(epoch FROM clock_timestamp())/30)::bigint AS counter')).rows[0].counter);
+    const enabled = await context.request.post('/api/v1/me/totp/enable', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID()}, data: {password: DEMO_PASSWORD, secret, code: totpCode(secret, counter)}});
+    expect(enabled.status()).toBe(200);
+    const codes = (await enabled.json()).backup_codes as string[];
+    await context.clearCookies();
+    const page = await context.newPage();
+    await start(page, store); await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await portalCredentials(page, a.email, DEMO_PASSWORD + '-wrong');
+    await expect(page.getByRole('alert')).toBeVisible(); expect(new URL(page.url()).pathname).toBe('/');
+    await portalCredentials(page, a.email);
+    await expect(page.getByRole('textbox', {name: /^驗證器代碼或備用碼/})).toBeVisible();
+    expect((await context.request.get('/api/v1/session')).status()).toBe(401);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill('invalid-synthetic-code');
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page.getByRole('alert')).toBeVisible(); expect(new URL(page.url()).pathname).toBe('/');
+    const now = Number((await e2eAuthPool.query('SELECT floor(extract(epoch FROM clock_timestamp())/30)::bigint AS counter')).rows[0].counter);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(totpCode(secret, Math.max(counter + 1, now)));
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    const destination = `/?return_to=${encodeURIComponent(`/shops/${store.slug}/checkout`)}`;
+    await context.clearCookies(); await page.goto(destination); await portalCredentials(page, a.email);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(codes[0]);
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await context.clearCookies(); await page.goto(destination); await portalCredentials(page, a.email);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => {release = resolve;}), ready = new Promise<void>(resolve => {entered = resolve;});
+    await page.route(`**/api/v1/public/stores/${store.slug}`, async route => {entered(); await gate; await route.continue();});
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(codes[1]);
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await ready;
+    const current = await (await context.request.get('/api/v1/session')).json();
+    const other = await context.newPage();
+    const logout = await other.request.post('/api/v1/auth/logout', {headers: {Origin: store.origin, 'X-CSRF-Token': current.csrf_token, 'Idempotency-Key': randomUUID()}, data: {}});
+    expect(logout.status()).toBe(200); release();
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+    await other.close(); await page.unroute(`**/api/v1/public/stores/${store.slug}`);
+    await apiLogin(context, store.origin, b.email);
+    const oldRef = randomUUID(), oldClient = randomUUID(), posts: string[] = [];
+    await page.evaluate(({slug, owner, ref, client}) => {
+      sessionStorage.setItem(`freedom.shop.order-intent.v2:${slug}`, JSON.stringify({version: 2, slug, buyer: `member:${owner}`, checkoutRef: ref, input: {terms_sha256: 'a'.repeat(64), client_order_id: client, payment_method: 'bank_transfer'}}));
+    }, {slug: store.slug, owner: a.id, ref: oldRef, client: oldClient});
+    page.on('request', request => {if (request.method() === 'POST' && request.url().includes('/checkouts/')) posts.push(request.postData()!);});
+    await page.goto(`/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '重試同一筆訂單', exact: true})).toHaveCount(0);
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false'); expect(posts).toHaveLength(0);
+  } finally {await context.close(); await store.close();}
 });

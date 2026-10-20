@@ -564,8 +564,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-checkout.ts",
-      "bytes": 9387,
-      "sha256": "ade9c31c3e834bda40303e85a8fbc9c90dc1a587779d4671f6053020bb9e5d9e"
+      "bytes": 9734,
+      "sha256": "0bd833f7468113e6c9730c97afcd6ee7fe069602d4c267e473ea31805a814c80"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-commerce-setup.ts",
@@ -3603,14 +3603,19 @@
       "sha256": "e1e77b8499f08236d18d6bf6f4e3bd0c1f74c97374d555170f738141506b1307"
     },
     {
+      "path": "apps/portal-web/src/storefront/buyer-state.ts",
+      "bytes": 4959,
+      "sha256": "f3f3e2bcd3bc11e3c338945f30721bc1e645115d27915fcc85890040a88d80a8"
+    },
+    {
       "path": "apps/portal-web/src/storefront/cart-store.ts",
       "bytes": 4638,
       "sha256": "5a58ad03d0a984f3a1f55ca22e8d2b0a1c8491f4bc140337932fff00309a1261"
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 20998,
-      "sha256": "c0acf5b89fdaa5f50400827afaaf07ddf05778505f8abf80ca29607f0b74487f"
+      "bytes": 27409,
+      "sha256": "4343efb54b5b0b920f22e2d26e968fa6a1899a869c64e4d7d84c04eb109e19ad"
     },
     {
       "path": "apps/portal-web/src/storefront/format.ts",
@@ -13024,13 +13029,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.schema.json",
-      "bytes": 100340,
-      "sha256": "86ff817a7780767324d48ee2d1eec88457852a46e02199825dffa4f6dd372bc6"
+      "bytes": 100922,
+      "sha256": "025c63bd90c55bc84604375d123939e7dd9576b26b1a3b55baf7498714cda0d0"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.ts",
-      "bytes": 17235,
-      "sha256": "82cc86a125ac0e80a9c3a6914b9de226800ba9fb100c53281bbc49dcc3cc936c"
+      "bytes": 17614,
+      "sha256": "7f13b7af567437767a8f98bc3b860d104bbf62e05f23a1bad9f644bc3c1c1c54"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-commerce-setup.schema.json",
@@ -17373,6 +17378,11 @@
       "sha256": "4d955e1e64a12f56a2ec91b82b327470790cf839c94e7997051143847eaf9b61"
     },
     {
+      "path": "modules/agent-commerce/checkout/buyer-identity.ts",
+      "bytes": 2801,
+      "sha256": "8535687352c269065a7bfd04e77ef92484ff3708544b85c39a4b186e323a29cc"
+    },
+    {
       "path": "modules/agent-commerce/checkout/cart-quote.ts",
       "bytes": 6164,
       "sha256": "be1a221a8ce57cb8f7d07511a910485aada82e7ce55a0506f697fd21d57ee691"
@@ -17419,8 +17429,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/public-commands.ts",
-      "bytes": 19299,
-      "sha256": "4578914e43dd94cf0a799c58f28c8c1e02b34011af7b6198fa0accdc347b516b"
+      "bytes": 18317,
+      "sha256": "6c9f32df1abe2d1afdc893309a3ed245852aa5ee6ba2483c153fbf88c02c31cb"
     },
     {
       "path": "modules/agent-commerce/checkout/public-order.ts",
@@ -19739,8 +19749,8 @@
     },
     {
       "path": "modules/guild-workspace/generate-contracts.ts",
-      "bytes": 32781,
-      "sha256": "72ea7cde0ab9890ad2b84ffaa3976a2cf4eedd0423f09f1c72417d790a25fc80"
+      "bytes": 32900,
+      "sha256": "71b40fae548d357b6619f1f28138749676496f1905ae2f4c39adab4e4a9e2b9b"
     },
     {
       "path": "modules/guild-workspace/launchpad-config.ts",
@@ -22979,8 +22989,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart-fixture.ts",
-      "bytes": 17525,
-      "sha256": "607b5dab9e9fde823a44f7bd85afd98a5cd107db5350cec4e2d778b201b93486"
+      "bytes": 17647,
+      "sha256": "5fcfadbaf798fce707353a72f3eac1763ec78b776e2d499f1298d15cafb48c37"
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
@@ -22989,8 +22999,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 55063,
-      "sha256": "b382ddb0da2288a8fa6c96d8f26efc9e165c25956dd4cf1537863e628bee05f1"
+      "bytes": 66612,
+      "sha256": "78dcb72996072649fe5f0e48ba332fe227c866c20b6d38cd7a70d3361bb977a9"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -23474,8 +23484,8 @@
     },
     {
       "path": "tests/runtime/buyer-journey.test.ts",
-      "bytes": 8956,
-      "sha256": "3f6da6def2d757311e1d5ac8938043a21e5aa562a893f73aeb8cef3adde4cbe3"
+      "bytes": 12967,
+      "sha256": "a79e5cdf61d8e157b0386df1f031509298be7ca745b2d95453ece2d7413b5d80"
     },
     {
       "path": "tests/runtime/chat-content.test.ts",
@@ -23486,6 +23496,11 @@
       "path": "tests/runtime/chat-sticker-send.test.ts",
       "bytes": 21574,
       "sha256": "ab4403ebdfcb9ac979ccafab30a65e8a3592a4a547d533459064725b935c5347"
+    },
+    {
+      "path": "tests/runtime/checkout-buyer-identity.test.ts",
+      "bytes": 7354,
+      "sha256": "014aed049302f2c107d6e2603296ef0041a1344c69e03a1f5fa762f6a0a80abe"
     },
     {
       "path": "tests/runtime/client-connections.test.ts",
@@ -24009,8 +24024,8 @@
     },
     {
       "path": "tests/runtime/hosted-checkout-contracts.test.ts",
-      "bytes": 12832,
-      "sha256": "c5e9966743de053f3cbea7c3fe758a61380c5112a837227aee46f691711df82a"
+      "bytes": 14113,
+      "sha256": "97eb56245200da0b84ea24211f40963f2de1fffdee4ccc1e4b22900ceb51d73d"
     },
     {
       "path": "tests/runtime/hosted-checkout-core.test.ts",

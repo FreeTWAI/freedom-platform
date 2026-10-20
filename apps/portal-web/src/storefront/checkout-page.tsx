@@ -1,14 +1,15 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {
   CartQuoteResponseSchema, CheckoutErrorSchema, CheckoutResponseSchema, PlaceOrderInputSchema,
-  PlaceOrderResponseSchema, type ShippingMethodRef,
+  PlaceOrderResponseSchema, CheckoutBuyerIdentitySchema, type CheckoutBuyerIdentity, type ShippingMethodRef,
 } from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {formatMinor} from '../../../../modules/agent-commerce/hosted/format.js';
 import {isValidStoreSlug, readCart, writeCart} from './cart-store.js';
 import {formatTaipeiDateTime} from './format.js';
 import {storefrontLoginHref} from './return-path.js';
+import {CheckoutBuyerState, readCheckoutIdentity, IDENTITY_CHANGED_COPY, PREVIOUS_ORDER_COPY} from './buyer-state.js';
 
 type Quote = ReturnType<typeof CartQuoteResponseSchema.parse>;
 type Checkout = ReturnType<typeof CheckoutResponseSchema.parse>;
@@ -25,10 +26,11 @@ function readIntent(slug: string): Intent | null {
     return id.success && input.success ? {checkoutRef: id.data, input: input.data} : null;
   } catch {return null;}
 }
-async function post(slug: string, path: string, body: unknown, key?: string) {
+async function post(slug: string, path: string, body: unknown, key?: string, buyer?: CheckoutBuyerIdentity, signal?: AbortSignal) {
   const response = await fetch(`/api/v1/public/stores/${encodeURIComponent(slug)}/${path}`, {
     method: 'POST', credentials: 'same-origin', cache: 'no-store',
-    headers: {Accept: 'application/json', 'Content-Type': 'application/json', ...(key ? {'Idempotency-Key': key} : {})},
+    headers: {Accept: 'application/json', 'Content-Type': 'application/json', ...(key ? {'Idempotency-Key': key} : {}), ...(buyer ? {'X-Commerce-Buyer': buyer} : {})},
+    signal,
     body: JSON.stringify(body),
   });
   const data: unknown = await response.json();
@@ -41,6 +43,7 @@ function errorCopy(raw: unknown): string {
   if (error.fields) return error.fields.map(field => `${fieldNames[field.path] ?? '收件資料'}需要修正（${field.code === 'required' ? '必填' : '格式不符'}）。`).join('');
   switch (error.code) {
     case 'terms_changed': case 'publication_changed': return '商品、價格或配送設定已更新。請回購物車重新核對。';
+    case 'checkout_identity_changed': return IDENTITY_CHANGED_COPY;
     case 'offline_payment_requires_member': return unavailable.member_required;
     case 'offline_order_limit': return '這間店目前待付款的訂單較多，請稍後再試或選擇其他付款方式。';
     case 'commerce_rate_limited': case 'too_many_open_orders': return '目前訂單或操作次數較多，請稍後再試。';
@@ -57,8 +60,16 @@ function errorCopy(raw: unknown): string {
 }
 
 function CheckoutPage({slug, name, container}: {slug: string; name: string; container: HTMLElement}) {
+  const enhanced = container.dataset.buyerJourney === 'true';
+  const [buyer] = useState(() => {try {return enhanced ? new CheckoutBuyerState(slug, sessionStorage) : null;} catch {return null;}});
+  const [identityChecking, setIdentityChecking] = useState(enhanced);
+  const [identityError, setIdentityError] = useState('');
+  const [identityNotice, setIdentityNotice] = useState(false);
+  const [previousOrder, setPreviousOrder] = useState(false);
+  const mounted = useRef(true);
+  const checking = useRef<Promise<{identity: CheckoutBuyerIdentity; generation: number; changed: boolean} | null> | null>(null);
   const [cart] = useState(() => readCart(slug));
-  const [intent, setIntent] = useState<Intent | null>(() => readIntent(slug));
+  const [intent, setIntent] = useState<Intent | null>(() => enhanced ? buyer?.intent ?? null : readIntent(slug));
   // A persisted intent has no original cart snapshot. After a reload, the
   // current cart may belong to a newer purchase, so recovery must retain it.
   const submittedCart = useRef(intent === null ? cart : null);
@@ -81,13 +92,66 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   const [freezeUnknown, setFreezeUnknown] = useState(false);
   const inFlight = useRef(false);
   const freezeRequest = useRef<{key: string; body: unknown} | null>(null);
+  type Operation = {controller: AbortController; identity?: CheckoutBuyerIdentity; generation: number};
+  const operation = useRef<Operation | null>(null);
+  const live = (request: Operation) => mounted.current && operation.current === request && (!enhanced || request.identity !== undefined && buyer?.matches(request.identity, request.generation));
   const heading = useRef<HTMLHeadingElement>(null);
   const lines = cart.lines.map(({sku, quantity}) => ({sku, quantity}));
 
-  useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy ? 'true' : 'false');}, [busy, quoteBusy, container]);
+  const checkIdentity = useCallback(() => {
+    if (checking.current) return checking.current;
+    setIdentityChecking(true); setIdentityError('');
+    const pending = (async () => {
+      try {
+        if (!buyer) throw Error('Unavailable tab storage.');
+        const identity = await readCheckoutIdentity();
+        if (!mounted.current) return null;
+        const result = buyer.observe(identity);
+        if (result.changed) {
+          operation.current?.controller.abort(); operation.current = null; inFlight.current = false;
+          freezeRequest.current = null;
+          setIntent(null); setCheckout(null); setQuote(null); setPayment(''); setMethod('');
+          setContactName(''); setEmail(''); setMobile(''); setPostal(''); setAddress('');
+          setFieldErrors({}); setError(''); setFreezeUnknown(false); setBusy(false); setQuoteBusy(false);
+          setIdentityNotice(true); setPreviousOrder(value => value || result.previousOrder);
+          requestAnimationFrame(() => heading.current?.focus());
+        }
+        return {identity, generation: buyer.generation, changed: result.changed};
+      } catch {
+        if (mounted.current) {setIdentityError('無法確認登入狀態，請重試。'); setQuoteBusy(false);}
+        return null;
+      } finally {
+        checking.current = null;
+        if (mounted.current) setIdentityChecking(false);
+      }
+    })();
+    checking.current = pending;
+    return pending;
+  }, [buyer]);
+  useEffect(() => {
+    mounted.current = true;
+    if (!enhanced) return () => {mounted.current = false;};
+    const refreshIdentity = () => {void checkIdentity();};
+    const visible = () => {if (document.visibilityState === 'visible') refreshIdentity();};
+    refreshIdentity();
+    window.addEventListener('pageshow', refreshIdentity); window.addEventListener('focus', refreshIdentity);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      mounted.current = false; operation.current?.controller.abort();
+      window.removeEventListener('pageshow', refreshIdentity); window.removeEventListener('focus', refreshIdentity);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, [enhanced, checkIdentity]);
+  function identityRejected() {
+    buyer?.invalidate(); setIdentityNotice(true); void checkIdentity();
+  }
+  const identityBlocked = enhanced && (identityChecking || Boolean(identityError) || !buyer?.identity);
+  useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy || enhanced && identityChecking ? 'true' : 'false');}, [busy, quoteBusy, container, enhanced, identityChecking]);
   useEffect(() => {document.title = `結帳｜${name}｜自由工坊`;}, [name]);
   useEffect(() => {
-    if (intent || checkout || cart.lines.length === 0) return;
+    if (intent || checkout || cart.lines.length === 0 || identityBlocked) return;
+    const identity = buyer?.identity, generation = buyer?.generation;
+    const controller = new AbortController();
     let active = true;
     // Keep the delivery controls mounted while repricing so keyboard focus and
     // the selected recipient fields are not lost. Stale totals cannot submit.
@@ -96,8 +160,9 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       void post(slug, 'cart-quotes', {
         publication_revision: cart.revision, lines,
         ...(method ? {delivery: {method, ...(method === 'home' && postal ? {postal_code: postal} : {})}} : {}),
-      }).then(({response, data}) => {
-        if (!active) return;
+      }, undefined, enhanced ? identity ?? undefined : undefined, controller.signal).then(({response, data}) => {
+        if (!active || enhanced && (!identity || !buyer?.matches(identity, generation!))) return;
+        if (enhanced && (CheckoutErrorSchema.safeParse(data).data?.code === 'checkout_identity_changed' || response.ok && CheckoutBuyerIdentitySchema.safeParse(response.headers.get('X-Commerce-Buyer')).data !== identity)) {identityRejected(); return;}
         const parsed = CartQuoteResponseSchema.safeParse(data);
         if (!response.ok || !parsed.success) {setQuote(null); setError(errorCopy(data)); return;}
         const result = parsed.data;
@@ -108,11 +173,15 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       }).catch(() => {if (active) {setQuote(null); setError('無法取得最新報價，請稍後重試。');}})
         .finally(() => {if (active) setQuoteBusy(false);});
     }, 300);
-    return () => {active = false; window.clearTimeout(timer);};
-  }, [slug, cart, method, postal, refresh, Boolean(checkout), Boolean(intent)]);
+    return () => {active = false; controller.abort(); window.clearTimeout(timer);};
+  }, [slug, cart, method, postal, refresh, Boolean(checkout), Boolean(intent), identityBlocked]);
 
   async function freeze() {
     if (inFlight.current || (!freezeRequest.current && (!quote || quoteBusy))) return;
+    const observed = enhanced ? await checkIdentity() : null;
+    if (enhanced && (!observed || observed.changed) || inFlight.current) return;
+    const request: Operation = {controller: new AbortController(), identity: observed?.identity, generation: observed?.generation ?? 0};
+    operation.current = request;
     inFlight.current = true; setBusy(true); setError(''); setFieldErrors({});
     if (!freezeRequest.current) freezeRequest.current = {
       key: crypto.randomUUID(),
@@ -122,10 +191,12 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         invoice: null, consents: []},
     };
     try {
-      const {response, data} = await post(slug, 'checkouts', freezeRequest.current.body, freezeRequest.current.key);
+      const {response, data} = await post(slug, 'checkouts', freezeRequest.current.body, freezeRequest.current.key, request.identity, request.controller.signal);
+      if (!live(request)) return;
+      if (CheckoutErrorSchema.safeParse(data).data?.code === 'checkout_identity_changed') {identityRejected(); return;}
       const parsed = CheckoutResponseSchema.safeParse(data);
       if (response.ok && parsed.success) {
-        setCheckout(parsed.data); setFreezeUnknown(false); freezeRequest.current = null;
+        setCheckout(parsed.data); setQuoteBusy(false); setFreezeUnknown(false); freezeRequest.current = null;
         const offered = quote?.payment_options.find(option => option.available && parsed.data.terms.payment_methods.includes(option.method));
         setPayment(offered?.method ?? '');
         heading.current?.focus();
@@ -137,24 +208,30 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         setFreezeUnknown(!definitive);
         if (definitive) freezeRequest.current = null;
       }
-    } catch {setFreezeUnknown(true); setError('還沒收到結帳結果。重試會沿用同一筆請求。');}
-    finally {inFlight.current = false; setBusy(false);}
+    } catch {if (live(request)) {setFreezeUnknown(true); setError('還沒收到結帳結果。重試會沿用同一筆請求。');}}
+    finally {if (operation.current === request) {operation.current = null; inFlight.current = false; if (mounted.current) setBusy(false);}}
   }
 
   async function place() {
     if (inFlight.current || (!intent && (!checkout || !payment))) return;
+    const observed = enhanced ? await checkIdentity() : null;
+    if (enhanced && (!observed || observed.changed) || inFlight.current) return;
+    const request: Operation = {controller: new AbortController(), identity: observed?.identity, generation: observed?.generation ?? 0};
     const current = intent ?? {checkoutRef: checkout!.checkout_ref, input: {terms_sha256: checkout!.terms_sha256, client_order_id: crypto.randomUUID(), payment_method: payment as keyof typeof methodNames}};
     const retrying = intent !== null;
     // Persist only replay coordinates, never contacts, checkout keys or bank data.
     // Saving before the first request makes refresh/unknown ACK replay the same order.
-    try {sessionStorage.setItem(intentKey(slug), JSON.stringify(current));}
+    try {if (enhanced) buyer!.saveIntent(current); else sessionStorage.setItem(intentKey(slug), JSON.stringify(current));}
     catch {setError('瀏覽器無法保留下單結果，請允許此網站儲存資料後再下單。'); return;}
+    operation.current = request;
     setIntent(current); inFlight.current = true; setBusy(true); setError('');
     try {
-      const {response, data} = await post(slug, `checkouts/${encodeURIComponent(current.checkoutRef)}/orders`, current.input);
+      const {response, data} = await post(slug, `checkouts/${encodeURIComponent(current.checkoutRef)}/orders`, current.input, undefined, request.identity, request.controller.signal);
+      if (!live(request)) return;
+      if (CheckoutErrorSchema.safeParse(data).data?.code === 'checkout_identity_changed') {identityRejected(); return;}
       const parsed = PlaceOrderResponseSchema.safeParse(data);
       if (response.ok && parsed.success && parsed.data.order.store.slug === slug && parsed.data.order.payment_method === current.input.payment_method) {
-        sessionStorage.removeItem(intentKey(slug));
+        if (enhanced) buyer!.clearIntent(); else sessionStorage.removeItem(intentKey(slug));
         freezeRequest.current = null;
         // A cart changed in another tab must not be discarded by an older checkout.
         if (submittedCart.current && JSON.stringify(readCart(slug)) === JSON.stringify(submittedCart.current)) writeCart(slug, {revision: '', lines: []});
@@ -170,23 +247,27 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       // frozen checkout. After any uncertain attempt, keep the original replay
       // coordinates even if a later gate refuses it; that order may exist.
       if (!retrying && response.status >= 400 && response.status < 500 && problem.success && problem.data.code !== 'unresolved_order') {
-        sessionStorage.removeItem(intentKey(slug));
+        if (enhanced) buyer!.clearIntent(); else sessionStorage.removeItem(intentKey(slug));
         setIntent(null);
       }
-    } catch {setError('還沒收到下單結果。請重試同一筆訂單，避免重複下單。');}
-    finally {inFlight.current = false; setBusy(false);}
+    } catch {if (live(request)) setError('還沒收到下單結果。請重試同一筆訂單，避免重複下單。');}
+    finally {if (operation.current === request) {operation.current = null; inFlight.current = false; if (mounted.current) setBusy(false);}}
   }
 
-  const quoteReady = Boolean(quote && !quoteBusy && method && quote.shipping.state === 'quoted' && quote.total_minor !== null && quote.lines.every(line => line.state === 'ok' || line.state === 'revision_changed'));
+  const quoteReady = Boolean(!identityBlocked && quote && !quoteBusy && method && quote.shipping.state === 'quoted' && quote.total_minor !== null && quote.lines.every(line => line.state === 'ok' || line.state === 'revision_changed'));
   const deliveryOption = quote?.delivery_options.find(option => option.method === method);
   const paymentOptions = quote?.payment_options ?? [];
   return <>
     <h1 id="shop-checkout-title" tabIndex={-1} ref={heading}>結帳</h1>
+    {enhanced && identityNotice && <p role="status" className="shop-order-alert">{IDENTITY_CHANGED_COPY}</p>}
+    {enhanced && previousOrder && <p>{PREVIOUS_ORDER_COPY}</p>}
+    {enhanced && identityChecking && <p role="status">正在確認登入狀態…</p>}
+    {enhanced && identityError && <div><p role="alert">{identityError}</p><button type="button" className="shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div>}
     {error && <p role="alert" className="shop-order-alert">{error}</p>}
     {intent ? <section className="shop-order-section" aria-labelledby="shop-order-retry-heading">
       <h2 id="shop-order-retry-heading">確認下單結果</h2>
       <p>上次下單結果尚未確認。重試會沿用同一筆訂單。</p>
-      <div className="shop-order-actions"><button className="shop-button shop-pay-primary" disabled={busy} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
+      <div className="shop-order-actions"><button className="shop-button shop-pay-primary" disabled={busy || identityBlocked} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
     </section> : cart.lines.length === 0 ? <p>購物車是空的。<a href={`/shops/${slug}`}>回到商店</a></p> : checkout ? <>
       <section className="shop-order-section" aria-labelledby="shop-checkout-summary">
         <h2 id="shop-checkout-summary">2. 核對商品與配送</h2>
@@ -207,11 +288,11 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       </section>
       <section className="shop-order-section" aria-labelledby="shop-checkout-confirm">
         <h2 id="shop-checkout-confirm">4. 最後確認</h2><p>請確認商品、收件資料與付款方式。報價有效至 {formatTaipeiDateTime(checkout.expires_at)}。</p>
-        <div className="shop-order-actions"><button className="shop-button shop-pay-primary" type="button" disabled={busy || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
-          <button className="shop-button shop-button-secondary" type="button" disabled={busy} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
+        <div className="shop-order-actions"><button className="shop-button shop-pay-primary" type="button" disabled={busy || identityBlocked || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
+          <button className="shop-button shop-button-secondary" type="button" disabled={busy || identityBlocked} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
       </section>
     </> : <form onSubmit={event => {event.preventDefault(); void freeze();}}>
-      <fieldset className="shop-checkout-fields" disabled={busy || freezeUnknown}>
+      <fieldset className="shop-checkout-fields" disabled={busy || identityBlocked || freezeUnknown}>
         <legend>1. 聯絡人與取貨方式</legend>
         <div className="shop-order-access-field"><label htmlFor="checkout-name">收件人姓名</label><input {...fieldProps('delivery.name')} id="checkout-name" className="shop-text-input" autoComplete="name" maxLength={40} required value={contactName} onChange={event => setContactName(event.target.value)} />{fieldError('delivery.name')}</div>
         <div className="shop-order-access-field"><label htmlFor="checkout-mobile">收件人手機</label><input {...fieldProps('delivery.mobile')} id="checkout-mobile" className="shop-text-input" type="tel" autoComplete="tel" maxLength={20} required value={mobile} onChange={event => setMobile(event.target.value)} />{fieldError('delivery.mobile')}</div>
@@ -233,7 +314,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
       </fieldset>
       <div className="shop-order-actions">
-        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
+        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
         {!freezeUnknown && <button className="shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
       </div>
     </form>}
