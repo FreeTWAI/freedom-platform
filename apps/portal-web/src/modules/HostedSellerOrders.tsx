@@ -11,7 +11,7 @@ const word = (order: HostedOrder) => order.state === 'reserved' ? '預留中' : 
 const rootPath = (route: SellerRoute) => `/tenants/${route.tenantId}/storefronts/${route.instanceId}/reservations`;
 
 /** This successful owner-only read, not a role template or guild title, enables the link. */
-export function SellerOrdersLink({client, tenantId, instanceId}: SellerRoute & {client: PortalClient}) {
+export function SellerOrdersLink({client, tenantId, instanceId,readinessHref}: SellerRoute & {client: PortalClient;readinessHref?:string}) {
   const [allowed, setAllowed] = useState(false);
   useEffect(() => {
     const controller = new AbortController(), generation = client.sessionGeneration; setAllowed(false);
@@ -22,7 +22,7 @@ export function SellerOrdersLink({client, tenantId, instanceId}: SellerRoute & {
   }, [client, tenantId, instanceId]);
   // Keep the navigation below this row still while the owner-only read settles.
   // Pending, denied and failed reads reserve space without exposing any links.
-  return <div className="actions hosted-seller-order-links">{allowed && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}</div>;
+  return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{allowed && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}</div>;
 }
 
 /** Mounted by exact account/session/store key. No private order data is persisted. */
