@@ -162,6 +162,49 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   await expect(primary(page).getByRole('button', {name: '進入我的商店', exact: true})).toBeVisible();
 });
 
+test('a late cooperation summary keeps the supply terms button under the pointer', async ({page, e2eAuthPool}) => {
+  const member = await person(e2eAuthPool);
+  await login(page, member.email);
+  const store = await launchStore(page, '延遲供貨摘要工作室');
+  await post(page, store.root + '/supply-profile', {name: '延遲供貨摘要商品庫', currency: 'TWD'}, 201);
+  await post(page, store.root + '/supply-products', {title: '摘要載入測試商品', cost_minor: 35000, stock: 10}, 201);
+  let release!: () => void, entered!: () => void, completed!: () => void;
+  const held = new Promise<void>(resolve => {release = resolve;});
+  const requested = new Promise<void>(resolve => {entered = resolve;});
+  const finished = new Promise<void>(resolve => {completed = resolve;});
+  let intercepted = false;
+  await page.route('**/api/v1' + store.root + '/supply-requests', async route => {
+    intercepted = true;
+    try {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      entered();
+      await held;
+      await route.fulfill({response});
+    } finally {completed();}
+  });
+  try {
+    await page.evaluate(hash => {window.location.hash = hash;}, store.hash + '/supply');
+    await requested;
+    const product = page.locator('.hosted-store-product').filter({hasText: '摘要載入測試商品'});
+    const terms = product.getByRole('button', {name: '供貨條件', exact: true});
+    await expect(terms).toBeEnabled();
+    // Hold the pointer still while the delayed summary finishes, as in a
+    // real click whose down/up events straddle the response.
+    await terms.hover();
+    await page.mouse.down();
+    release();
+    await expect(product.getByText('供貨版本：尚未公開', {exact: true})).toBeVisible();
+    await page.mouse.up();
+    await expect(page.getByRole('form', {name: '摘要載入測試商品供貨條件', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '公開供貨版本', exact: true})).toBeVisible();
+  } finally {
+    release();
+    await page.mouse.up();
+    if (intercepted) await finished;
+  }
+});
+
 test('supplier-only member publishes supply without a slug, retail page or commerce membership', async ({page, e2eAuthPool}) => {
   const member = await person(e2eAuthPool, false, [supplier]);
   try {
