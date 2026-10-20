@@ -64,7 +64,7 @@ export function HostedStoreGallery({client,userId,tenantId,instanceId,product,ga
  function reorder(from:number,to:number){const keys=rows.map(p=>p.photo_key),[key]=keys.splice(from,1);keys.splice(to,0,key);fresh('reorder',null,{photo_keys:keys});}
  function cancel(){serial.current++;setPreparing(false);setFile(null);setAttempt(null);held.current=null;setAlts({});setPhase('idle');if(picker.current)picker.current.value='';setMessage('已取消這次照片變更。');}
  return <section className="hosted-gallery stack" aria-label="商品照片">
-  <div className="hosted-gallery-heading"><h4>商品照片</h4><span>{photos.length} / 8 張</span></div>
+  <div className="hosted-gallery-heading"><h5>商品照片</h5><span>{photos.length} / 8 張</span></div>
   <p className="field-hint">第一張是主照片，用於商品卡片與分享連結。照片與說明需重新發布後，公開頁才會更新。</p>
   {!gallery?<p role="status">商品照片暫時無法讀取，請重新整理商店。</p>:unavailable?<p className="field-hint">商品照片目前無法讀取。</p>:rows.length===0?<p className="field-hint">尚未加入商品照片。</p>:<>
    {retained.length>0&&<p className="banner" role="status">主照片已移除，保留的照片尚未公開。請設為主照片或移除。</p>}

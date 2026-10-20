@@ -24,7 +24,9 @@ function orderedRef(r:GalleryRef):GalleryRef{return {asset_id:r.asset_id,represe
 export function gallerySnapshot(raw:unknown){
  const d=PublicationGalleryDocumentSchema.parse(raw);
  const document:PublicationGalleryDocument={profile:d.profile,products:d.products.sort((a,b)=>a.sku<b.sku?-1:a.sku>b.sku?1:0).map(p=>({sku:p.sku,photos:p.photos.map(p=>({position:p.position,alt_text:p.alt_text,ref:orderedRef(p.ref)}))}))};
- // Snapshot bytes detach all mutable input; callers never mutate a parsed freeze.
+ for(const product of document.products){for(const photo of product.photos){Object.freeze(photo.ref);Object.freeze(photo);}Object.freeze(product.photos);Object.freeze(product);}
+ Object.freeze(document.products);Object.freeze(document);
+ // Canonical bytes are detached and deeply frozen before their digest is used.
  const bytes=JSON.stringify(document);return {document,sha256:createHash('sha256').update(bytes).digest('hex')};
 }
 /** Three bounded bulk reads, independent of SKU/photo count. Legacy primary is

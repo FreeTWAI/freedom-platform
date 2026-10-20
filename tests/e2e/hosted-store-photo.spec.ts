@@ -3698,3 +3698,112 @@ test('APPEARANCE-E2E-05 buyer product, cart, checkout and order shells retain th
     }
   }finally{await context.close();}
 });
+
+// Gallery cases are appended to the existing fixture pass; original 32 cases above are unchanged.
+test.describe('C1 own product gallery',()=>{
+ let server:{origin:string;stop:()=>Promise<void>};
+ test.beforeAll(async()=>{server=await (await import('./hosted-store-fixture.js')).startGalleryBrowserServer();});
+ test.afterAll(async()=>{await server?.stop();});
+ const gallery=(page:Page)=>page.locator('.hosted-gallery');
+ async function setup(browser:import('@playwright/test').Browser,db:Parameters<typeof person>[0],width=390){
+  const context=await browser.newContext({baseURL:server.origin,viewport:{width,height:900}}),page=await context.newPage();
+  try{
+   const member=await person(db);await login(page,member.email);const store=await launchStore(page,'合成圖組工作室'),slug='gallery-'+randomUUID().slice(0,8);
+   await post(page,store.root+'/setup',{name:'合成圖組商店',slug,currency:'TWD'},201);
+   const product=ProductViewSchema.parse(await post(page,store.root+'/products',{title:'合成圖組商品',description:'供圖組驗收使用的合成商品。',price_minor:12000,stock:8},201));
+   await open(page,store.hash);await expect(gallery(page).getByLabel('新增商品照片',{exact:true})).toBeVisible();
+   return {...store,member,slug,product,context,page,base:'/api/v1'+store.root+'/products/'+product.product_id+'/gallery'};
+  }catch(e){await context.close();throw e;}
+ }
+ async function add(page:Page,file:Awaited<ReturnType<typeof source>>){
+  const block=gallery(page),count=await block.locator('ol > li').count();await expect(block.getByLabel('新增商品照片',{exact:true})).toBeEnabled();
+  await block.getByLabel('新增商品照片',{exact:true}).setInputFiles(file);await expect(block.getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
+  await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
+ }
+ async function publish(page:Page){await storeArea(page,'店面與發布');await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ for(const width of [390,768,1440])test(`GALLERY-E2E-responsive-${width} editor, frozen detail, keyboard and no-JS photos`,async({browser,e2eAuthPool},info)=>{
+  const s=await setup(browser,e2eAuthPool,width),{page}=s;
+  const buyer=await browser.newContext({baseURL:server.origin,viewport:{width,height:900}}),noJs=await browser.newContext({baseURL:server.origin,javaScriptEnabled:false,viewport:{width,height:900}});
+  try{
+   await add(page,await source('synthetic-wide.png','#5e8ca0'));await add(page,{name:'synthetic-tall.png',mimeType:'image/png',buffer:await sharp({create:{width:80,height:120,channels:3,background:'#b7a077'}}).png().toBuffer()});
+   const second=gallery(page).locator('ol > li').nth(1);await second.getByLabel('照片說明',{exact:true}).fill('合成商品側面');await second.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(second.getByRole('button',{name:'儲存說明',exact:true})).toBeDisabled();
+   await captureOffer(page,gallery(page),info.outputPath(`gallery-editor-${width}.png`));
+   await storeArea(page,'店面與發布');const popup=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await popup;
+   const link=preview.getByRole('link',{name:'查看商品：合成圖組商品',exact:true});await expect(link).toHaveAttribute('href',new RegExp('/preview-page/products/P0001$'));await link.click();await expect(preview.locator('.shop-gallery-photo')).toHaveCount(2);await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await preview.close();
+   await publish(page);const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/'+s.product.sku);
+   await expect(detail.locator('.shop-gallery-photo')).toHaveCount(2);await expect(detail.locator('meta[property="og:image"]')).toHaveAttribute('content',new RegExp('/media/1/P0001$'));
+   const stage=detail.locator('.shop-gallery-stage'),before=await stage.boundingBox();
+   await expect.poll(()=>detail.locator('.shop-gallery-photo img').first().evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(120);
+   await detail.screenshot({path:info.outputPath(`gallery-product-${width}.png`),fullPage:true});
+   const first=detail.getByRole('link',{name:'顯示第 1 張照片',exact:true});await first.focus();await detail.keyboard.press('ArrowRight');
+   const selected=detail.getByRole('link',{name:'顯示第 2 張照片',exact:true});await expect(selected).toBeFocused();await expect(selected).toHaveAttribute('aria-current','true');await expect(detail.locator('[data-gallery-status]')).toHaveText('第 2 張，共 2 張');
+   expect((await stage.boundingBox())?.height).toBe(before?.height);await detail.screenshot({path:info.outputPath(`gallery-keyboard-${width}.png`),fullPage:true});
+   await detail.keyboard.press('Home');await expect(first).toBeFocused();await expect(first).toHaveAttribute('aria-current','true');
+   const images=await detail.locator('.shop-gallery-photo img').evaluateAll(nodes=>nodes.map(node=>({width:node.getAttribute('width'),height:node.getAttribute('height'),fit:getComputedStyle(node).objectFit,loading:node.getAttribute('loading')})));
+   expect(images.map(p=>p.loading)).toEqual(['eager','lazy']);for(const image of images){expect(Number(image.width)).toBeGreaterThan(0);expect(Number(image.height)).toBeGreaterThan(0);expect(image.fit).toBe('contain');}
+   const plain=await noJs.newPage();await plain.goto('/shops/'+s.slug+'/products/'+s.product.sku);await plain.getByRole('link',{name:'顯示第 2 張照片',exact:true}).click();
+   await expect.poll(()=>plain.locator('.shop-gallery-stage').evaluate(node=>node.scrollLeft)).toBeGreaterThan(0);await expect.poll(()=>plain.locator('.shop-gallery-photo img').nth(1).evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(80);
+   await plain.screenshot({path:info.outputPath(`gallery-no-js-${width}.png`),fullPage:true});
+   for(const p of [page,detail,plain])expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   const frozen=await detail.content();await storeArea(page,'商品');await second.getByRole('button',{name:'設為主照片',exact:true}).click();await expect(gallery(page).locator('ol > li').first().getByRole('img')).toHaveAttribute('alt','合成商品側面');
+   await detail.reload();expect(await detail.content()).toBe(frozen);
+  }finally{await s.context.close();await buyer.close();await noJs.close();}
+ });
+ test('GALLERY-E2E-eight photos show a limit reason and remain whole at every review width',async({browser,e2eAuthPool},info)=>{
+  const s=await setup(browser,e2eAuthPool);try{
+   for(let n=0;n<8;n++)await add(s.page,await source(`synthetic-${n}.png`,['#738fa6','#c5a77a','#98a88b'][n%3]));
+   await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toHaveCount(0);await expect(gallery(s.page)).toContainText('已達 8 張照片上限');
+   await publish(s.page);const detail=await s.context.newPage();await detail.goto('/shops/'+s.slug+'/products/P0001');await expect(detail.locator('.shop-gallery-photo')).toHaveCount(8);
+   for(const width of [390,768,1440]){
+    await s.page.setViewportSize({width,height:900});await storeArea(s.page,'商品');await captureOffer(s.page,gallery(s.page),info.outputPath(`gallery-eight-editor-${width}.png`));
+    await detail.setViewportSize({width,height:900});await detail.screenshot({path:info.outputPath(`gallery-eight-product-${width}.png`),fullPage:true});
+    expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   }
+   await gallery(s.page).locator('ol > li').last().getByRole('button',{name:'移除',exact:true}).click();await expect(gallery(s.page).locator('ol > li')).toHaveCount(7);await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toBeVisible();
+  }finally{await s.context.close();}
+ });
+ test('GALLERY-E2E-unknown upload preserves original file, key, CAS and target until explicit retry',async({browser,e2eAuthPool})=>{
+  const s=await setup(browser,e2eAuthPool),requests:ReturnType<typeof signature>[]=[];try{
+   const pattern=/\/gallery\/photos\/[0-9a-f-]{36}$/;
+   s.page.on('request',request=>{if(request.method()==='POST'&&pattern.test(new URL(request.url()).pathname))requests.push(signature(request));});
+   await s.page.route(pattern,async route=>{await route.fetch();await route.abort('failed');});
+   await gallery(s.page).getByLabel('新增商品照片',{exact:true}).setInputFiles(await source('synthetic-unknown.png','#889b70'));await gallery(s.page).getByRole('button',{name:'儲存照片',exact:true}).click();
+   await expect(gallery(s.page).getByRole('status')).toContainText('尚未確認原操作結果');await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toBeDisabled();await expect(gallery(s.page).getByRole('button',{name:'取消照片變更',exact:true})).toHaveCount(0);
+   await s.page.unroute(pattern);await gallery(s.page).getByRole('button',{name:'重試原照片操作',exact:true}).click();await expect(gallery(s.page).locator('ol > li')).toHaveCount(1);expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);
+   const rows=(await e2eAuthPool.query("SELECT i.intent_id FROM asset_upload_intents i JOIN commerce_product_gallery_photos p ON p.photo_id=i.target_gallery_photo_id WHERE p.product_id=$1",[s.product.product_id])).rows;expect(rows).toHaveLength(1);
+  }finally{await s.context.close();}
+ });
+ test('GALLERY-E2E-unknown descriptions and ordering retry the identical JSON tuple',async({browser,e2eAuthPool})=>{
+  const s=await setup(browser,e2eAuthPool);try{
+   await add(s.page,await source('synthetic-a.png','#668899'));await add(s.page,await source('synthetic-b.png','#aa8866'));
+   for(const action of ['describe','reorder']){
+    const pattern=action==='describe'?/\/gallery\/photos\/main$/:/\/gallery\/reorder$/;const requests:{key:string|undefined;version:string|undefined;body:string|null}[]=[];
+    const record=(request:Request)=>{if(pattern.test(new URL(request.url()).pathname)&&request.method()!=='GET')requests.push({key:request.headers()['idempotency-key'],version:request.headers()['if-match'],body:request.postData()});};s.page.on('request',record);
+    await s.page.route(pattern,async route=>{await route.fetch();await route.abort('failed');});
+    if(action==='describe'){const row=gallery(s.page).locator('ol > li').first();await row.getByLabel('照片說明',{exact:true}).fill('合成完整說明');await row.getByRole('button',{name:'儲存說明',exact:true}).click();}
+    else await gallery(s.page).locator('ol > li').first().getByRole('button',{name:'下移',exact:true}).click();
+    await expect(gallery(s.page).getByRole('status')).toContainText('尚未確認原操作結果');await s.page.unroute(pattern);await gallery(s.page).getByRole('button',{name:'重試原照片操作',exact:true}).click();await expect(gallery(s.page).getByRole('status')).toContainText('已儲存照片變更');
+    await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toBeEnabled();expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);s.page.off('request',record);
+   }
+  }finally{await s.context.close();}
+ });
+ test('GALLERY-E2E-read-only member sees photos and descriptions without gallery controls',async({browser,e2eAuthPool})=>{
+  const s=await setup(browser,e2eAuthPool),context=await browser.newContext({baseURL:server.origin});try{
+   await add(s.page,await source('synthetic-read-only.png','#969fba'));const member=await person(e2eAuthPool);
+   const principal=await(await s.page.request.get('/api/v1/tenants/invite-candidates?user_id='+member.id)).json();
+   const invitation=await post(s.page,`/tenants/${s.hash.split('/')[1]}/invitations`,{invitee_principal_id:principal.principal_id,role:'operator',instance_capabilities:[{instance_id:s.hash.split('/')[2],capabilities:['store:read']}],expires_at:new Date(Date.now()+86400000).toISOString()},201);
+   const page=await context.newPage();await login(page,member.email);await post(page,`/tenants/${s.hash.split('/')[1]}/invitations/${invitation.invitation_id}/accept`,{},200,invitation.version);await open(page,s.hash);
+   await expect(gallery(page).locator('ol > li img')).toBeVisible();await expect(gallery(page).getByRole('button')).toHaveCount(0);await expect(gallery(page).locator('input')).toHaveCount(0);
+  }finally{await s.context.close();await context.close();}
+ });
+ test('GALLERY-E2E-optional alt uses code points; a stale upload needs explicit fresh-version confirmation',async({browser,e2eAuthPool})=>{
+  const s=await setup(browser,e2eAuthPool);try{
+   await add(s.page,await source('synthetic-alt.png','#a5a0ba'));const row=gallery(s.page).locator('ol > li').first();await row.getByLabel('照片說明',{exact:true}).fill('😀'.repeat(121));await row.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(gallery(s.page).getByRole('status')).toContainText('最多 120 字');
+   await row.getByLabel('照片說明',{exact:true}).fill(' 😀'.trim().repeat(120));await row.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(row.getByRole('button',{name:'儲存說明',exact:true})).toBeDisabled();
+   await expect(gallery(s.page).getByLabel('新增商品照片',{exact:true})).toBeEnabled();await gallery(s.page).getByLabel('新增商品照片',{exact:true}).setInputFiles(await source('synthetic-cas.png','#8a9a7b'));await expect(gallery(s.page).getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
+   const session=await(await s.page.request.get('/api/v1/session')).json(),product=(await(await s.page.request.get('/api/v1'+s.root+'/products')).json()).items[0];
+   const changed=await s.page.request.patch('/api/v1'+s.root+'/products/'+s.product.product_id,{data:{title:product.title,description:'另一個編輯頁已更新',price_minor:product.price_minor,stock:product.stock},headers:{Origin:server.origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${product.version}"`}});expect(changed.status()).toBe(200);
+   await gallery(s.page).getByRole('button',{name:'儲存照片',exact:true}).click();await expect(gallery(s.page).getByRole('status')).toContainText('商品已更新，照片仍保留');await gallery(s.page).getByRole('button',{name:'確認以最新商品套用照片變更',exact:true}).click();await expect(gallery(s.page).locator('ol > li')).toHaveCount(2);
+  }finally{await s.context.close();}
+ });
+});

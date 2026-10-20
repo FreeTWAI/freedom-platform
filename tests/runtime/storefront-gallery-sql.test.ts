@@ -94,6 +94,7 @@ test('GALLERY-SQL-02 secondary slots, alt text, immutable identity and cross-ten
  await q.query('UPDATE commerce_product_gallery_photos SET alt_text=$1 WHERE product_id=$2',['😀'.repeat(120),a.item]);
  await fails(q,'UPDATE commerce_product_gallery_photos SET asset_id=$1,representation_id=$2 WHERE product_id=$3',[b.second.asset_id,b.second.representation_id,a.item]);
  const row=(await q.query('SELECT * FROM commerce_product_gallery_photos WHERE product_id=$1',[a.item])).rows[0];
+ await fails(q,`INSERT INTO commerce_product_gallery_photos(photo_id,tenant_id,instance_id,scope_id,group_id,product_id,position,asset_id,representation_id,policy_revision,last_changed_at_product_version) VALUES($1,$2,$3,$4,$5,$6,2,$7,$8,$9,1)`,[randomUUID(),a.tenant,a.instance,a.scope,row.group_id,a.item,a.photo.asset_id,a.photo.representation_id,a.photo.policy_revision],'23505');
  await fails(q,`INSERT INTO commerce_product_gallery_photos(photo_id,tenant_id,instance_id,scope_id,group_id,product_id,position,asset_id,representation_id,policy_revision,last_changed_at_product_version) VALUES($1,$2,$3,$4,$5,$6,3,$7,$8,$9,1)`,[randomUUID(),a.tenant,a.instance,a.scope,row.group_id,a.item,b.second.asset_id,b.second.representation_id,b.second.policy_revision],'23503');
  await fails(q,'UPDATE commerce_product_gallery_photos SET last_changed_at_product_version=99 WHERE product_id=$1',[a.item]);
 }));

@@ -6,7 +6,7 @@ export const STOREFRONT_GALLERY_PROFILE='freedom.hosted-store-gallery/v1' as con
 export const GalleryPhotoKeySchema=z.union([z.literal('main'),OpaqueId]);
 const forbidden=/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 export const GalleryAltTextSchema=z.string().refine(v=>v.isWellFormed()&&!forbidden.test(v)&&[...v.trim()].length<=120,'照片說明請使用有效的單行文字，最多 120 字。');
-export function normalizeGalleryAlt(raw:unknown):string{return GalleryAltTextSchema.parse(raw).trim();}
+export function normalizeGalleryAlt(raw:unknown):string{return GalleryAltTextSchema.parse(raw===undefined?'':raw).trim();}
 const normalizedAlt=GalleryAltTextSchema.refine(v=>v===v.trim());
 const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const path=new RegExp(`^/api/v1/tenants/(${uuid})/storefronts/(${uuid})/products/(${uuid})/gallery/photos/(main|${uuid})/([1-9][0-9]{0,18})$(?![\\s\\S])`);
@@ -20,7 +20,7 @@ export const ProductGalleryDraftSchema=z.object({profile:z.literal(STOREFRONT_GA
 export type ProductGalleryDraft=z.infer<typeof ProductGalleryDraftSchema>;
 export const ProductGalleriesSchema=z.object({profile:z.literal(STOREFRONT_GALLERY_PROFILE),items:z.array(ProductGalleryDraftSchema).max(200)}).strict().refine(d=>new Set(d.items.map(p=>p.product_id)).size===d.items.length);
 export const ReorderGalleryInputSchema=z.object({photo_keys:z.array(GalleryPhotoKeySchema).min(1).max(8).refine(v=>new Set(v).size===v.length)}).strict();
-export const GalleryAltInputSchema=z.object({alt_text:GalleryAltTextSchema}).strict();
+export const GalleryAltInputSchema=z.object({alt_text:GalleryAltTextSchema.optional()}).strict();
 export const RemoveGalleryPhotoInputSchema=z.object({}).strict();
 export const GalleryOperationSchema=z.enum(['upload','reorder','describe','remove']);
 export const GalleryCommandAckSchema=z.object({profile:z.literal(STOREFRONT_GALLERY_PROFILE),product_id:OpaqueId,operation:GalleryOperationSchema,

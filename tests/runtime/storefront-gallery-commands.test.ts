@@ -1,3 +1,5 @@
+import {photoSourcePng} from '../helpers/hosted-store-photo.js';
+import {gallerySnapshot} from '../../modules/agent-commerce/storefront/gallery/model.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
@@ -12,6 +14,7 @@ async function change(s:Store,op:'reorder'|'describe'|'remove',version:string,bo
  return f.galleryCall(s,op==='describe'?'PATCH':'POST',f.galleryPath(s)+(op==='reorder'?'/reorder':'/photos/'+photo+(op==='remove'?'/remove':'')),body,version,key);
 }
 test('GALLERY-CMD-01 optional Unicode alt is normalized, closed, code-point bounded and never interpreted',()=>{
+ assert.equal(normalizeGalleryAlt(undefined),'');
  for(const text of ['😀'.repeat(120),' <img onerror="x"> & \' '])assert.equal(normalizeGalleryAlt(text),text.trim());
  for(const text of ['😀'.repeat(121),'\ud800','a\nb','\u202e','\u2066','\u0000'])assert.equal(GalleryAltTextSchema.safeParse(text).success,false);
  assert.equal(ReorderGalleryInputSchema.safeParse({photo_keys:['main','main']}).success,false);
@@ -56,6 +59,9 @@ test('GALLERY-CMD-05 legacy primary removal yields retained recovery; explicit p
  const d=await f.draft(s);assert.equal(d.photos.length,0);assert.equal(d.retained_secondary_photos.length,1);
  assert.equal((await f.upload(s,d.version)).status,409);
  const restored=f.ok(await change(s,'reorder',d.version,{photo_keys:d.retained_secondary_photos.map(p=>p.photo_key)}));assert.equal(restored.current.photos.length,1);
+ const described=f.ok(await change(s,'describe',restored.current.version,{alt_text:'原主照片的說明'}));
+ const replacement=await f.app.request(f.h.origin+'/api/v1'+s.root+'/products/'+s.productId+'/photo',{method:'POST',headers:{Origin:f.h.origin,Cookie:s.owner.cookie,'X-CSRF-Token':s.owner.csrf,'Content-Type':'image/png','Idempotency-Key':randomUUID(),'If-Match':`"${described.current.version}"`},body:new Uint8Array(photoSourcePng)});assert.equal(replacement.status,200);
+ assert.equal((await f.draft(s)).photos[0].alt_text,'','An old binary replacement cannot inherit the previous primary tuple description');
 });
 test('GALLERY-CMD-06 store:read sees metadata and bytes; store:write can edit without store:manage; tenant/session boundaries persist',async()=>{
  const s=await product(),foreign=await f.openStore();f.ok(await f.upload(s,'1'));
@@ -85,4 +91,11 @@ test('GALLERY-CMD-07 shared pending memory isolates gallery placement and keeps 
  const ack={profile:current.profile,product_id:attempt.productId,operation:'reorder',photo_key:null,completed_version:'2',changed:true,current};
  assert(galleryAcknowledgement(ack,attempt));for(const patch of [{operation:'remove'},{photo_key:'main'},{completed_version:'3'},{asset_id:randomUUID()}])assert.equal(galleryAcknowledgement({...ack,...patch},attempt),null);
  releasePhotoAttempt(client,member,attempt);assert.equal(heldPhotoAttempt(client,member,attempt),null);
+});
+
+
+test('GALLERY-CMD-08 snapshot identity and digest cannot change through a retained input or returned reference',()=>{
+ const raw={profile:'freedom.hosted-store-gallery/v1',products:[{sku:'P0001',photos:[{position:1,alt_text:'',ref:{asset_id:randomUUID(),representation_id:randomUUID(),scope_id:randomUUID(),policy_revision:'synthetic',purpose:'storefront.product-photo',transform_version:'storefront.product-photo.webp.v1',content_type:'image/webp',byte_size:4,width:1,height:1,sha256:'a'.repeat(64)}}]}]};
+ const snapshot=gallerySnapshot(raw);raw.products[0].photos[0].alt_text='changed';assert.equal(snapshot.document.products[0].photos[0].alt_text,'');
+ assert.throws(()=>{snapshot.document.products[0].photos[0].ref.sha256='b'.repeat(64);},TypeError);assert(Object.isFrozen(snapshot.document.products));assert.equal(gallerySnapshot(snapshot.document).sha256,snapshot.sha256);
 });
