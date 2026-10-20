@@ -32,7 +32,7 @@ test('GALLERY-MEDIA-02 verified GET/HEAD use current publication; foreign, draft
  f.ok(await f.upload(foreign,'1'));await f.publish(foreign);
  const newProduct=f.ok(await f.post(s.root+'/products',s.owner,{title:'未發布合成商品',description:'合成',price_minor:100,stock:1}),201),draft={...s,productId:newProduct.product_id};f.ok(await f.upload(draft,'1'));
  const miss=[];
- for(const path of [publicPath(revision,'2','P0001',foreign.slug),publicPath(revision,'1','P0002'),publicPath(revision,'9'),publicPath(revision,'01'),publicPath(revision,'0'),publicPath(revision,'2')+'/unknown']){
+ for(const path of [publicPath(revision,'2','P0001',foreign.slug),publicPath(revision,'1','P0002'),publicPath(revision,'9'),publicPath(revision,'01'),publicPath(revision,'1%0A'),publicPath(revision,'1%0D'),publicPath(revision,'1%0D%0A'),publicPath(revision,'1%E2%80%A8'),publicPath(revision,'0'),publicPath(revision,'2')+'/unknown']){
   const r=await get(path);assert.equal(r.status,404);miss.push(await r.text());
  }
  assert.equal(new Set(miss).size,1);const read=await f.draft(s);assert.equal((await get(read.photos[1].read_path,undefined,'GET',foreign.owner.cookie)).status,404);

@@ -26,7 +26,8 @@ export async function readPrivateGalleryPhoto(pool:Pool,store:ObjectStore,actor:
 
 export async function readPublicGalleryPhoto(pool:Pool,store:ObjectStore,slug:string,rawRevision:string,sku:string,rawPosition:string){
  // Every invalid, foreign, non-current and draft path has the same anonymous miss.
- if(!Version.safeParse(rawRevision).success||!/^P[0-9]{4,23}$/.test(sku)||!/^[1-8]$/.test(rawPosition))return null;
+ // A one-character ordinal also rejects trailing line terminators accepted by RegExp $.
+ if(!Version.safeParse(rawRevision).success||!/^P[0-9]{4,23}$/.test(sku)||rawPosition.length!==1||rawPosition<'1'||rawPosition>'8')return null;
  const {readPublicStorePage}=await import('../../hosted/public.js');
  const snapshot=async()=>{
   const page=await readPublicStorePage(pool,slug,{},{},{enabled:true});
