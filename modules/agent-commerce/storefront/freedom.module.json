@@ -48,7 +48,19 @@
     "tests/runtime/storefront-policies-sql.test.ts",
     "tests/runtime/storefront-policies-commands.test.ts",
     "tests/runtime/storefront-policies-publication.test.ts",
-    "tests/e2e/hosted-store-policies.spec.ts"
+    "tests/e2e/hosted-store-policies.spec.ts",
+    "migrations/177_storefront_product_gallery.sql",
+    "contracts/guild-launchpad/v1/storefront-gallery.ts",
+    "contracts/guild-launchpad/v1/storefront-gallery.schema.json",
+    "apps/platform-api/src/routes/hosted-store-gallery.ts",
+    "apps/portal-web/src/modules/HostedStoreGallery.tsx",
+    "apps/portal-web/src/modules/HostedStoreGallery.css",
+    "apps/portal-web/public/shop-gallery.css",
+    "tests/helpers/storefront-gallery.ts",
+    "tests/runtime/storefront-gallery-sql.test.ts",
+    "tests/runtime/storefront-gallery-commands.test.ts",
+    "tests/runtime/storefront-gallery-media.test.ts",
+    "tests/e2e/hosted-store-gallery-off.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
@@ -63,7 +75,8 @@
     "DESIGN.md",
     "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
     "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
-    "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md"
+    "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
+    "modules/agent-commerce/storefront/gallery/design.md"
   ],
   "invariants": [],
   "tests": [

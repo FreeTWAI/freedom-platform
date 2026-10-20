@@ -18549,13 +18549,18 @@
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
-      "bytes": 3240,
-      "sha256": "d3119b5dd940b5f60ac066498f22be946a1bae381438cb5f0746f26d569fcd83"
+      "bytes": 3956,
+      "sha256": "fa1fc35f9d227c5ea994ff10de3853d670400887ee1a3058b6e8e9cf91d66c30"
     },
     {
       "path": "modules/agent-commerce/storefront/pages.ts",
       "bytes": 7115,
       "sha256": "fe2531782cb6fc2af848890b19663c5c06833728397a92e3426b725cb84f1773"
+    },
+    {
+      "path": "modules/agent-commerce/storefront/gallery/design.md",
+      "bytes": 2296,
+      "sha256": "5f4eb358265bc662e819d09dfaa35ba0fda5cd5b3eae7fc1c630d611954dd021"
     },
     {
       "path": "modules/agent-commerce/storefront/policies/commands.ts",
