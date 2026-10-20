@@ -30,9 +30,10 @@ export function AdminStoreAdmissions({client,busy,onMutate}:{client:AdminClient;
     const next=AdminStoreReadinessPageSchema.parse(await client.request(`${endpoint}?limit=50&offset=${offset}`));
     if(!alive.current)return;
     first??=next;
-    if(next.environment!==first.environment||next.release_sha!==first.release_sha)throw Error('環境版本已變更，請更新後重新下載。');
+    if(next.environment!==first.environment||next.release_sha!==first.release_sha||JSON.stringify(next.platform)!==JSON.stringify(first.platform)||JSON.stringify(next.summary)!==JSON.stringify(first.summary))throw Error('環境或商店範圍已變更，請更新後重新下載。');
     items.push(...next.items);
     if(next.next_offset===null){
+     if(items.length!==first.summary.stores||new Set(items.map(item=>item.instance_id)).size!==items.length)throw Error('商店分頁範圍已變更，請更新後重新下載。');
      const generated_at=new Date().toISOString();
      const receipt={schema:'freedom.commerce-scope-receipt/v1',generated_at,environment:first.environment,release_sha:first.release_sha,platform:first.platform,summary:first.summary,items};
      const url=URL.createObjectURL(new Blob([JSON.stringify(receipt,null,2)+'\n'],{type:'application/json'})),link=document.createElement('a');
@@ -42,7 +43,7 @@ export function AdminStoreAdmissions({client,busy,onMutate}:{client:AdminClient;
     if(next.next_offset<=offset)throw Error('分頁資料已變更，請更新後重新下載。');
     offset=next.next_offset;
    }
-   setNotice('已讀取 20 頁，仍有其他商店；未下載不完整收據，請由平台縮小或另行核對範圍。');
+   setNotice('已讀取 20 頁，仍有其他商店；未下載不完整收據，請由平台另行核對完整範圍。');
   }catch(cause){if(alive.current)setNotice(cause instanceof Error?cause.message:'無法下載範圍收據，請稍後再試。');}
   finally{if(alive.current)setDownloading(false);}
  }
