@@ -64,7 +64,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-export async function openCartListener(db: Pool, offline = false) {
+export async function openCartListener(db: Pool, offline = false, supplierConsoleEnabled = offline) {
   await ownedSchema(db);
   const schema = e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
   const listenerPool = new Pool({
@@ -93,7 +93,7 @@ export async function openCartListener(db: Pool, offline = false) {
     const origin = `http://127.0.0.1:${address.port}`;
     app = createApp(listenerPool, origin, 'local', {
       guildLaunchpadEnabled: true,
-      supplierConsoleEnabled: offline,
+      supplierConsoleEnabled,
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
       commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
@@ -125,9 +125,9 @@ export async function openCartListener(db: Pool, offline = false) {
   }
 }
 
-export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline) {
+export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline, supplierConsoleEnabled = offline) {
   await ownedSchema(db);
-  const listener = await openCartListener(db, offline);
+  const listener = await openCartListener(db, offline, supplierConsoleEnabled);
   const seller = await member(db);
   await db.query(
     `INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)

@@ -570,7 +570,7 @@ test('a create and a cover whose results are unknown survive a real 429 before t
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [rows[0].id])).rows[0].n).toBe(1);
 });
 
-test('another member shares it and a signed-out visitor lands on the public page', async ({ page, browser }) => {
+test('another member shares it and a signed-out visitor lands on the public page', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(120_000);
   await login(page, 'reviewer@local.test');
   await navigate(page, '社員服務');
@@ -591,10 +591,15 @@ test('another member shares it and a signed-out visitor lands on the public page
 
   const context = await browser.newContext({ userAgent: GUEST_UA });
   const guest = await context.newPage();
-  const clicked = guest.waitForResponse(response => response.url().includes('/api/v1/promotion/clicks') && response.request().method() === 'POST');
+  const code = new URL(goUrl).pathname.split('/').at(-1)!;
+  const points = async () => Number((await e2eAuthPool.query('SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.code=$1', [code])).rows[0].n);
+  const before = await points();
+  const clicked = guest.waitForRequest(request => request.url().includes('/api/v1/promotion/clicks') && request.method() === 'POST');
   const landed = guest.waitForURL(/\/services\/[0-9a-f-]{36}$/i);
   await guest.goto(goUrl, { waitUntil: 'commit' });
-  expect((await clicked).ok()).toBe(true);
+  await clicked;
+  // Navigation can discard the old document's keepalive response event; verify the saved credit.
+  await expect.poll(points).toBe(before + 1);
   await landed;
   await expect(guest.getByRole('heading', { name: COVER_TITLE, level: 1 })).toBeVisible();
   await expect(guest.locator('meta[property="og:title"]')).toHaveAttribute('content', `${COVER_TITLE}｜示範創作者 的服務｜自由工坊`);
@@ -759,8 +764,12 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
   await expect(guest.getByRole('heading', { name: '找不到這項服務' })).toBeVisible();
   await guest.setViewportSize({ width: 390, height: 844 });
   await publicLogoFits(guest);
-  await guest.goto(goUrl);
-  await expect.poll(() => new URL(guest.url()).pathname).toBe('/');
+  const withdrawn = await guest.goto(goUrl);
+  expect(withdrawn?.status()).toBe(404);
+  await expect(guest).toHaveURL(goUrl);
+  await expect(guest.getByRole('heading', { name: '分享連結目前無法開啟', exact: true })).toBeVisible();
+  await expect(guest.locator('body')).not.toContainText(COVER_TITLE);
+  await expect(guest.locator('meta[property="og:title"], [data-go-destination]')).toHaveCount(0);
   await context.close();
 
   await page.locator('li.service-mine-row').filter({ hasText: COVER_TITLE }).getByRole('button', { name: '恢復', exact: true }).click();

@@ -243,6 +243,14 @@ test('owner previews all 100 share introductions and explicitly sends with CSRF,
 test('CLI keys keep typed fields on auth errors, show the token once and revoke without If-Match', async ({ page }) => {
   const requests = await mockUploads(page);
   await login(page); await navigate(page, '技能書架');
+  // The guild shelf above the upload button must finish expanding before the pointer click.
+  const unlocked = page.getByRole('button', { name: /^已解鎖 · \d+$/ });
+  await expect(unlocked).toBeVisible();
+  if ((await unlocked.innerText()).endsWith(' · 0')) {
+    await expect(page.getByText('還沒有已解鎖的技能書。加入公會即可領取，也可先免費預覽。', { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByRole('region', { name: '已解鎖技能書', exact: true }).locator('article[data-book-id]').first()).toBeVisible();
+  }
   const trigger = page.getByRole('button', { name: '上傳技能', exact: true });
   await trigger.click();
   const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });

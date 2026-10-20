@@ -14,16 +14,27 @@ for(const flag of ['FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_CONSOLE
   assert.throws(()=>readCommerceSettings({[flag]:value}),(error:unknown)=>error instanceof ReadinessError&&error.message==='Commerce flags must be true or false.');
 });
 test('console depends on the explicit launchpad flag',()=>{for(const dependency of [undefined,'false','TRUE'])assert.throws(()=>readCommerceSettings({FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:dependency}),ReadinessError);});
-test('console depends on the explicit supplier console flag',()=>{
-  for(const dependency of [undefined,'false','TRUE'])assert.throws(()=>readCommerceSettings({FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:dependency}),{name:'ReadinessError',message:'commerce_supplier_console_required'});
+test('seller console and offline checkout can be enabled independently of supplier console on Node and Worker',()=>{
+  for(const supplier of [undefined,'false','true'])for(const checkout of ['false','true']) {
+    const bindings={...env(),FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:checkout,FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:supplier,FREEDOM_COMMERCE_PROVIDER_PROFILES:'offline.bank_transfer.v1,offline.cash_on_meetup.v1'};
+    const settings=readNodeCommerceSettings(bindings),config=readWorkerConfig(bindings),runtime=workerRuntime(bindings,config);
+    assert.equal(settings.consoleEnabled,true);
+    assert.equal(settings.checkoutEnabled,checkout==='true');
+    assert.deepEqual(runtime.commerceSettings,settings);
+    assert.equal(runtime.supplierConsoleEnabled,supplier==='true');
+    assert.equal(runtime.commerceCredentialKeyring,null);
+    assert.equal(runtime.commerceJournal,undefined);
+  }
   assert.equal(readCommerceSettings({FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'}).consoleEnabled,false);
+  assert.throws(()=>readWorkerConfig({...env(),FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'TRUE'}),new ReadinessError('Supplier console flag must be true or false.'));
 });
-test('site reports the seller console only when console, supplier console and launchpad are all on',async()=>{
+test('site reports seller and supplier console independently, both bounded by launchpad',async()=>{
   const pool={query(){throw new Error('site must not query SQL');}} as unknown as Pool;
   for(const consoleEnabled of [false,true])for(const supplierConsoleEnabled of [false,true])for(const guildLaunchpadEnabled of [false,true]) {
     const settings={checkoutEnabled:false,consoleEnabled,quarantine:false,providerProfiles:[]};
     const site=await (await createApp(pool,'http://127.0.0.1:4310','local',{commerceSettings:settings,supplierConsoleEnabled,guildLaunchpadEnabled}).request('http://127.0.0.1:4310/api/v1/site')).json();
-    assert.equal(site.commerce_console_enabled,consoleEnabled&&supplierConsoleEnabled&&guildLaunchpadEnabled);
+    assert.equal(site.commerce_console_enabled,consoleEnabled&&guildLaunchpadEnabled);
+    assert.equal(site.supplier_console_enabled,supplierConsoleEnabled&&guildLaunchpadEnabled);
   }
 });
 test('commerce email requires the Worker EMAIL and COMMERCE_JOURNAL bindings and is refused on Node',()=>{

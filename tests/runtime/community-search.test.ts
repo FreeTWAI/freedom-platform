@@ -1,6 +1,10 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { serve } from '@hono/node-server';
+import { z } from 'zod';
 import { Pool } from 'pg';
 import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_COMMUNITY } from '../../packages/testing/seed.js';
@@ -410,4 +414,74 @@ test('showcase keyset pagination uses the actual showcase ID for tied timestamps
     assert.ok(seen.length <= ids.length, 'cursor cannot repeat a showcase');
   } while (cursor);
   assert.deepEqual(seen, ids);
+});
+
+test('native topic editor follows showcase publication and filters private rows before its limit', async t => {
+  let app = createApp(pool, 'http://127.0.0.1', 'local', { communitySearchEnabled: true, personalContentEnabled: true });
+  const server = serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.fetch(request) });
+  try {
+    if (!server.listening) await once(server, 'listening');
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    app = createApp(pool, origin, 'local', { communitySearchEnabled: true, personalContentEnabled: true });
+    const showcase = z.object({ showcase_id: z.string().uuid(), status: z.string(), aggregate_version: z.coerce.number() });
+    const topicSet = z.object({ aggregate_version: z.number() });
+    const mine = z.object({ items: z.array(z.object({ id: z.string(), kind: z.string(), topics: z.array(z.string()), aggregate_version: z.number().nullable() })) });
+    const personal = z.object({ items: z.array(z.object({ id: z.string(), status: z.string() })) });
+    async function member() {
+      const id = randomUUID(), email = `taggable-${id}@local.test`;
+      await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+        SELECT $1,$2,$3,'主題測試會員',password_hash,$4,false FROM users WHERE user_id=$5`,
+      [id, DEMO_COMMUNITY, email, randomUUID(), DEMO_USERS[0].user_id]);
+      const signed = await fetch(`${origin}/api/v1/auth/login`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
+      assert.equal(signed.status, 200);
+      const session = z.object({ csrf_token: z.string() }).parse(await signed.json());
+      const headers = { Origin: origin, Cookie: signed.headers.get('set-cookie')!.split(';')[0], 'X-CSRF-Token': session.csrf_token, 'Content-Type': 'application/json' };
+      return async (path: string, body?: unknown, version?: number, status = 200) => {
+        const response = await fetch(`${origin}/api/v1/${path}`, { method: body === undefined ? 'GET' : 'POST', headers: {
+          ...headers, ...(body === undefined ? {} : { 'Idempotency-Key': randomUUID() }), ...(version === undefined ? {} : { 'If-Match': `"${version}"` }),
+        }, body: body === undefined ? undefined : JSON.stringify(body) });
+        assert.equal(response.status, status, await response.clone().text());
+        return await response.json() as unknown;
+      };
+    }
+    await t.test('draft, publication, withdrawal and republication retain private management and topic version', async () => {
+      const owner = await member(), other = await member();
+      const draft = showcase.parse(await owner('me/showcases', { title: '主題生命週期855', description: '私人草稿不提供主題寫權' }, undefined, 201));
+      const id = draft.showcase_id;
+      const topic = { kind: 'work', id, topics: ['showcase'] };
+      const listed = async () => mine.parse(await owner('community-search/mine')).items.filter(row => row.id === id);
+      assert.deepEqual(await listed(), []);
+      await owner('community-search/topics', topic, undefined, 404);
+      assert.equal(showcase.parse(await owner(`me/showcases/${id}`)).status, 'draft');
+      await other(`me/showcases/${id}`, undefined, undefined, 404);
+      const published = showcase.parse(await owner(`me/showcases/${id}/publish`, { consent_to_share: true }, draft.aggregate_version));
+      assert.deepEqual((await listed()).map(row => row.id), [id]);
+      assert.equal(topicSet.parse(await owner('community-search/topics', topic)).aggregate_version, 1);
+      assert.equal(mine.parse(await other('community-search/mine')).items.some(row => row.id === id), false);
+      await other('community-search/topics', topic, undefined, 404);
+      const withdrawn = showcase.parse(await owner(`me/showcases/${id}/withdraw`, {}, published.aggregate_version));
+      assert.deepEqual(await listed(), []);
+      await owner('community-search/topics', topic, 1, 404);
+      assert.equal(showcase.parse(await owner(`me/showcases/${id}`)).status, 'withdrawn');
+      assert.equal(personal.parse(await owner('me/content')).items.find(row => row.id === id)?.status, 'withdrawn');
+      await owner(`me/showcases/${id}/publish`, { consent_to_share: true }, withdrawn.aggregate_version);
+      assert.deepEqual((await listed()).map(row => ({ topics: row.topics, version: row.aggregate_version })), [{ topics: ['showcase'], version: 1 }]);
+      assert.equal(topicSet.parse(await owner('community-search/topics', { ...topic, topics: ['tools'] }, 1)).aggregate_version, 2);
+    });
+    await t.test('twenty newer private drafts cannot displace an older published work', async () => {
+      const owner = await member(), other = await member();
+      const published = showcase.parse(await owner('showcases', { title: '較早可編輯作品855', description: '應保留於最近可編輯清單', consent_to_share: true }, undefined, 201));
+      for (let index = 0; index < 20; index++) {
+        await owner('me/showcases', { title: `較新私人草稿855-${index}`, description: '不應占用可編輯名額' }, undefined, 201);
+      }
+      const foreign = showcase.parse(await other('showcases', { title: '他人的公開作品855', description: '不能混入本人清單', consent_to_share: true }, undefined, 201));
+      const works = mine.parse(await owner('community-search/mine')).items.filter(row => row.kind === 'work');
+      assert.deepEqual(works.map(row => row.id), [published.showcase_id]);
+      assert.equal(works.some(row => row.id === foreign.showcase_id), false);
+      assert.equal(showcase.parse(await owner(`me/showcases/${published.showcase_id}`)).status, 'published');
+    });
+  } finally {
+    if ('closeAllConnections' in server) server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
