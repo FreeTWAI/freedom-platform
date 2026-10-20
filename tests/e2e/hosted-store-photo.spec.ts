@@ -3792,7 +3792,7 @@ test.describe('C1 own product gallery',()=>{
  test('GALLERY-E2E-empty publication keeps its placeholder until the first photo is published',async({browser,e2eAuthPool})=>{
   const s=await setup(browser,e2eAuthPool),buyer=await browser.newContext({baseURL:server.origin});try{
    await expect(gallery(s.page)).toContainText('尚未加入商品照片。');await publish(s.page);
-   const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/P0001');await expect(detail.locator('.shop-photo-placeholder')).toHaveText('尚未提供商品照片');await expect(detail.locator('.shop-gallery-photo')).toHaveCount(0);await expect(detail.locator('meta[property="og:image"]')).toHaveCount(0);
+   const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/P0001');await expect(detail.locator('.shop-photo-placeholder')).toHaveText('尚未提供商品照片');await expect(detail.locator('.shop-gallery-photo')).toHaveCount(0);await expect(detail.locator('meta[property="og:image"]')).toHaveAttribute('content',/\/brand\/freedom-workshop\.webp$/);await expect(detail.locator('meta[property="og:image:width"]')).toHaveAttribute('content','1280');
    expect((await e2eAuthPool.query('SELECT count(*)::int n FROM commerce_product_groups WHERE anchor_product_id=$1',[s.product.product_id])).rows[0].n).toBe(0);
    for(const suffix of ['', '/1'])expect((await detail.request.get('/shops/'+s.slug+'/media/1/P0001'+suffix)).status()).toBe(404);
    await storeArea(s.page,'商品');await add(s.page,await source('synthetic-first-photo.png','#859d8a'));await detail.reload();await expect(detail.locator('.shop-photo-placeholder')).toBeVisible();
