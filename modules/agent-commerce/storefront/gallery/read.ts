@@ -20,3 +20,17 @@ export async function readPrivateGalleryPhoto(pool:Pool,store:ObjectStore,actor:
  const bytes=(await readVerifiedObject(store,objectKey({scopeId:before.scope_id,assetId:before.asset_id,representationId:before.representation_id}),{contentType:before.content_type,byteSize:before.byte_size,sha256:before.sha256,transformVersion:before.transform_version,policyRevision:before.policy_revision,profileId:'storefront.product-photo'})).bytes;
  requireCondition(JSON.stringify(before)===JSON.stringify(await snapshot()),404,'not_found','找不到這張商品照片。');return bytes;
 }
+
+export async function readPublicGalleryPhoto(pool:Pool,store:ObjectStore,slug:string,rawRevision:string,sku:string,rawPosition:string){
+ // Every invalid, foreign, non-current and draft path has the same anonymous miss.
+ if(!Version.safeParse(rawRevision).success||!/^P[0-9]{4,23}$/.test(sku)||!/^[1-8]$/.test(rawPosition))return null;
+ const {readPublicStorePage}=await import('../../hosted/public.js');
+ const snapshot=async()=>{
+  const page=await readPublicStorePage(pool,slug,{},{},{enabled:true});
+  const ref=page?.gallery?.document.products.find(p=>p.sku===sku)?.photos[Number(rawPosition)-1]?.ref;
+  return page&&page.projection.revision===rawRevision&&ref?{ref,identity:JSON.stringify({publicationId:page.publicationId,tenantId:page.tenantId,instanceId:page.instanceId,scopeId:page.scopeId,sha256:page.gallery!.sha256,ref})}:null;
+ };
+ const before=await snapshot();if(!before)return null;const r=before.ref;
+ const bytes=(await readVerifiedObject(store,objectKey({scopeId:r.scope_id,assetId:r.asset_id,representationId:r.representation_id}),{contentType:r.content_type,byteSize:r.byte_size,sha256:r.sha256,transformVersion:r.transform_version,policyRevision:r.policy_revision,profileId:'storefront.product-photo'})).bytes;
+ return (await snapshot())?.identity===before.identity?bytes:null;
+}

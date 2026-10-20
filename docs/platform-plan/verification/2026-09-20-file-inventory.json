@@ -394,8 +394,8 @@
     },
     {
       "path": "apps/platform-api/src/platform-app.ts",
-      "bytes": 73255,
-      "sha256": "a79024f000f165857e198abf3abe40d06212d5aac448434283ede5988bfc3c55"
+      "bytes": 73482,
+      "sha256": "89b8c02360c758c4588868bb7160940510b718c8f28648d57f8fe9c1e1f1eaa8"
     },
     {
       "path": "apps/platform-api/src/private-ai-path.ts",
@@ -614,8 +614,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-gallery.ts",
-      "bytes": 5017,
-      "sha256": "03acd9a16ce2437ac4969b42f6ca67d4736a2a0a056bc31597c0ab0b520b0e2a"
+      "bytes": 6815,
+      "sha256": "6d9a3cddf1ce5314f49f7851dd5eb03bd9444957ae500da758bc87af7fd64d06"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-media.ts",
@@ -634,8 +634,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store.ts",
-      "bytes": 15196,
-      "sha256": "c91746f08f0c5a8fe7231c6800cad5015c63c23d15c9f2f2a31eb1b9c02a3fd4"
+      "bytes": 15585,
+      "sha256": "a93cabbfd9bb2c6313997d0e4aa73d3fdcbf162cb061929459370f913f0035f2"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-supplier-console.ts",
@@ -784,8 +784,8 @@
     },
     {
       "path": "apps/portal-web/vite.config.ts",
-      "bytes": 997,
-      "sha256": "ad278122387cb3443ec72e291ce3ec8a5d7d679ab3597359ae31eda4d6c782d3"
+      "bytes": 1095,
+      "sha256": "bca7e0a37fa6c2d7fbf9c71ebff84c47b1a1cfb5ae3fb6992aa3e252a3e27df0"
     },
     {
       "path": "apps/portal-web/guild-preview/index.html",
@@ -831,6 +831,11 @@
       "path": "apps/portal-web/public/services.css",
       "bytes": 3858,
       "sha256": "4869b36f36b7bd8e77864a4f5ec699afda6aac5a1fb59d67c661fe640b01c31a"
+    },
+    {
+      "path": "apps/portal-web/public/shop-gallery.css",
+      "bytes": 1354,
+      "sha256": "cea56cd5840b38915151edadd8eb4612f784687e37c64e79690586f6f0441d49"
     },
     {
       "path": "apps/portal-web/public/shop-policies.css",
@@ -3701,6 +3706,11 @@
       "path": "apps/portal-web/src/storefront/format.ts",
       "bytes": 1600,
       "sha256": "c881b0e9d77930cd69266b09772ed985464e8331530d439c964997e30077a2ee"
+    },
+    {
+      "path": "apps/portal-web/src/storefront/gallery.ts",
+      "bytes": 2218,
+      "sha256": "9b9f74c2e193c584a05eddfc3ec889ef8c38ad21a5ed7e2a59960ffaa37e29bc"
     },
     {
       "path": "apps/portal-web/src/storefront/main.tsx",
@@ -17799,8 +17809,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/page.ts",
-      "bytes": 14820,
-      "sha256": "2278bf0ca781fc71caa8dd240af20830089a6a36ec19c50d4cb294232fca8c2f"
+      "bytes": 15660,
+      "sha256": "536070af7a89db156b41a22aae3aed4bd5ade662f74de9b3b852be500cb092ea"
     },
     {
       "path": "modules/agent-commerce/hosted/photo-authority.ts",
@@ -17839,13 +17849,13 @@
     },
     {
       "path": "modules/agent-commerce/hosted/public.ts",
-      "bytes": 4919,
-      "sha256": "3488e2e13e814ff399f1589a894cead8b5c77db45fcb4737fb45d0fde898faa8"
+      "bytes": 5263,
+      "sha256": "bbcacc31a926fe808ac74c76ac6f4d5169a9fd94c2d08df7ea65eff183551139"
     },
     {
       "path": "modules/agent-commerce/hosted/publish.ts",
-      "bytes": 8573,
-      "sha256": "3dbad100de87097baef52e96ca662f24da4691ce7d75c1972b8941bf07ddc7a3"
+      "bytes": 11213,
+      "sha256": "59a73bfa6699f8e1fea2c2593234fcc7baa16426d05e657cccb129d6a11405fb"
     },
     {
       "path": "modules/agent-commerce/hosted/release-upgrade.ts",
@@ -18593,9 +18603,14 @@
       "sha256": "c1f6a28662daf164e389eead4885fb70159b552ad6ee72d4408842b4e18e571e"
     },
     {
+      "path": "modules/agent-commerce/storefront/gallery/page.ts",
+      "bytes": 1912,
+      "sha256": "19a0b81e344ea27bc6f5dd84bac2f990ef680d6c3b906ddff8ea36c6e667e807"
+    },
+    {
       "path": "modules/agent-commerce/storefront/gallery/read.ts",
-      "bytes": 2571,
-      "sha256": "1b5f114e7cc7464a832783ac165539dbdfc43e34f8c7bacba67d3bd263c741b8"
+      "bytes": 3875,
+      "sha256": "0cf27e4227048b30be43b128eb1ef08a1a4d9be513f940ca48dada7402d6662e"
     },
     {
       "path": "modules/agent-commerce/storefront/gallery/target.ts",
@@ -25668,6 +25683,11 @@
       "sha256": "bc88b67f2ff4b717d3adc57a92c17c14827da823fae93bdc24fd3b1ea4443d75"
     },
     {
+      "path": "tests/runtime/storefront-gallery-media.test.ts",
+      "bytes": 11180,
+      "sha256": "6c4b1e5334610b497b3400dfcbc60b469980022789be69cbab1e37e81a6f7d5a"
+    },
+    {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
       "bytes": 16411,
       "sha256": "ce36102f58d873c56ce97108f1e3e7c05a87fa28dbe94763905f03d1ce9613f5"
@@ -25854,8 +25874,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 141303,
-      "sha256": "6891d2fbd862907cf36e45b00a95c1eb79c1105dabd9d8ada87ca31b6b402c7d"
+      "bytes": 142014,
+      "sha256": "3fa35b62d75e69a98f250ed1836dbe7ae668fac68e4b2b804940b644382ef5e3"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",

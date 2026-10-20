@@ -1,4 +1,4 @@
-import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
+import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
 import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
 import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
 import {createHostedSupplyOfferPhotoRoutes,supplyOfferPhotosInstalled} from './routes/hosted-supply-offer-photos.js';
@@ -619,7 +619,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   if(runtime.guildLaunchpadEnabled===true)app.route('/',createPublicGuildLaunchpadRoutes(pool));
   if(runtime.guildLaunchpadEnabled===true){
     app.route('/',createPublicModuleRegistryRoutes(pool,origin));
-    app.route('/',createPublicHostedStoreRoutes(pool,runtime.publicOrigin,hostedCheckoutOptions(origin,runtime,freedomEnv),{appearance:storeAppearanceOptions(runtime),policies:storePoliciesOptions(runtime)}));
+    app.route('/',createPublicHostedStoreRoutes(pool,runtime.publicOrigin,hostedCheckoutOptions(origin,runtime,freedomEnv),{appearance:storeAppearanceOptions(runtime),policies:storePoliciesOptions(runtime),gallery:storeGalleryOptions(runtime)}));
+    if(storeGalleryInstalled(runtime)&&storePhotosInstalled(runtime))app.route('/',createPublicStoreGalleryRoutes(pool,runtime));
     if(storeAppearanceInstalled(runtime)&&storePhotosInstalled(runtime))app.route('/',createPublicStoreAppearanceMediaRoutes(pool,runtime));
     if(storePhotosInstalled(runtime))app.route('/',createPublicHostedStoreMediaRoutes(pool,runtime));
     if(storePoliciesInstalled(runtime))app.route('/',createPublicStorePoliciesRoutes(pool,runtime));
@@ -776,7 +777,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     app.route('/api/v1',createTenantWorkspaceRoutes(pool));
     app.route('/api/v1',createModuleRegistryRoutes(pool,runtime.moduleProviders,runtime.tenantListCursors));
     app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
-    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime)));
+    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime),storeGalleryOptions(runtime)));
     app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
