@@ -23004,8 +23004,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 71400,
-      "sha256": "b461e04df1cf4d82f5abe52c85da7adbb040e260e63115a2fa32cfd9c953fe03"
+      "bytes": 71540,
+      "sha256": "fe27dec1b39752548f5c5a01a777a7320cc4853fd05ee339ac6cefa32cbf686c"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -23504,8 +23504,8 @@
     },
     {
       "path": "tests/runtime/checkout-buyer-identity.test.ts",
-      "bytes": 9085,
-      "sha256": "e0ddcefd51a42cdefa21bf58c6ee9bd3868dd49588279507352c373d12def764"
+      "bytes": 9104,
+      "sha256": "b3fd09530516b8e68c974c914670d62de48d02552f8d7f806d8560263cc211ac"
     },
     {
       "path": "tests/runtime/client-connections.test.ts",

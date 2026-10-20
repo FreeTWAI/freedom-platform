@@ -222,6 +222,8 @@ test('guest sees member requirement and revoked buyer access clears bank instruc
     await expect(page.getByRole('button', {name: '核對訂單', exact: true})).toBeDisabled();
     await openBuyer(e2eAuthPool, context, store);
     await page.getByRole('button', {name: '更新報價', exact: true}).click();
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await fillBuyerContact(page);
     await freeze(page, store);
     const order = await place(page, '銀行匯款');
     await context.clearCookies();

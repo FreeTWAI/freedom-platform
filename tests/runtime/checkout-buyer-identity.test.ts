@@ -11,7 +11,7 @@ after(async () => {await x?.stop();});
 
 async function persisted() {
   const tables = (await x.h.pool.query(`SELECT tablename FROM pg_tables WHERE schemaname=current_schema()
-    AND (tablename LIKE 'commerce_%' OR tablename IN ('principals','resource_scopes','auth_rate_limits')) ORDER BY tablename`)).rows;
+    AND (tablename LIKE 'commerce_%' OR tablename IN ('users','sessions','principals','resource_scopes','auth_rate_limits')) ORDER BY tablename`)).rows;
   const result: Record<string, string> = {};
   for (const {tablename} of tables) {
     assert.match(tablename, /^[a-z_]+$/);
