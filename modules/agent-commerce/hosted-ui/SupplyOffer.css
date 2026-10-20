@@ -1,0 +1,10 @@
+.supply-offer-presentation { min-width:0; }
+.supply-offer-section { padding:1rem; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-elev); }
+.supply-offer-section h4 { margin:0; }
+.supply-offer-presentation p,.supply-offer-presentation dd,.hosted-supply-offer p { overflow-wrap:anywhere; }
+.supply-offer-text { white-space:pre-wrap; }
+.supply-offer-preview { padding:1rem 0; }
+.supply-offer-preview > summary { cursor:pointer; }
+.supply-offer-preview > .stack { margin-top:1rem; }
+.hosted-supply-offer .sale-path { padding:.75rem 0; border-bottom:1px solid var(--line); }
+.hosted-supply-offer .sale-path:last-child { border-bottom:0; }
