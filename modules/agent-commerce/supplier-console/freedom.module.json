@@ -36,7 +36,6 @@
     "tests/e2e/supplier-console-queries.spec.ts",
     "tests/e2e/supplier-console-report.spec.ts",
     "tests/e2e/supplier-console-materials.spec.ts",
-    "tests/e2e/hosted-supply-offer-photos.spec.ts",
     "docs/platform-plan/execution/supplier-console/**"
   ],
   "public_exports": [],
