@@ -438,3 +438,15 @@ pinned 檢查摘要、rule suite、HTTP 結果與邊界。
 - 其餘邊界同 10 月 7 日：build、typecheck、dry-run 與 `check:*` 等步驟仍由候選定義，候選程式仍與 trusted runner 在同一個 runner 上執行；
   選中 job 被 skipped／cancelled 的 hosted 反例未單獨執行；中央 main 沒有 merge queue；durable App publisher 未安裝；完整 P2 未完成；
   consumer rules `24473806`／`24476100`／`24516222` 與目錄站 queue 未改動。
+
+## 2026-10-20 pinned pytest 失敗檔案計數（來源候選）
+
+pytest 自行以非零代碼結束後，runner 可在原 deadline 內從最多 16 MiB 的 JUnit
+補上每個選取檔案的 counts；既有 CLI 只印未通過檔案。輸出僅有與選取清單完全相同的
+`path` 及安全非負整數 `tests/passed/failed/cancelled/skipped/todo`，不含測試名稱、
+訊息、堆疊或 stdout/stderr；DTD／entity 宣告不解析。XML 缺失、過大、損壞、
+未知路徑、重複案例或 helper 失敗／逾時時，不附 `test_files`，維持原失敗結果。
+這些 counts 僅供診斷，永不作為 pass／coverage evidence；`test_process_failed`、
+失敗時 `test_count: 0`、既有 pass admission 與 evidence hash 不變。
+Timeout、取消、spawn error 與訊號終止不讀 XML。本段描述來源候選，未升級 hosted pin，
+不改寫以上具日期的執行證據。
