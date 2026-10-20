@@ -15533,6 +15533,11 @@
       "sha256": "b17151854d2846b17183cf292ea54619d254ef2cf8213c9b8f7a2f06534a7592"
     },
     {
+      "path": "docs/platform-plan/execution/commerce/handoff-2026-10-20-store-readiness-supply-offer.md",
+      "bytes": 11416,
+      "sha256": "aa20fe4e9a5f9abc8f8f1faa8c933849c97dc88b48d656123a2dd8330ef2a9a3"
+    },
+    {
       "path": "docs/platform-plan/execution/commerce/pages.md",
       "bytes": 18180,
       "sha256": "a4b2c15dc9f2e50cc246075f7501ba3f6dd5694fb5207608980f1c575e5c59b9"
