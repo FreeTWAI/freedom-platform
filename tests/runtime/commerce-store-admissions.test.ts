@@ -8,7 +8,7 @@ import {providerEnvironment} from '../../modules/agent-commerce/operations/admis
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {settleDueCheckoutHolds} from '../../modules/agent-commerce/checkout/settlement.js';
 import {hostedPaymentHarness,seedAdmissionPaymentService} from '../e2e/hosted-payment-fixture.js';
-test('independent admin admissions gate new checkouts without stopping retained orders or hold expiry',async()=>{
+test('commerce intern setup still needs independent admission for orders and retains orders after revocation',async()=>{
   const payment=await hostedPaymentHarness('fp_admissions'),x=payment.x,h=x.h,csrf=randomUUID(),adminEmail=`admin-${randomUUID()}@example.test`,adminId=randomUUID();
   const verifier=async(request:Request)=>{
     const email=request.headers.get('X-Fixture-Admin');if(!email)throw new Problem(403,'admin_required','需要管理員。');
@@ -21,7 +21,22 @@ test('independent admin admissions gate new checkouts without stopping retained 
   };
   try{
     await x.reset();await h.pool.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[adminId,DEMO_COMMUNITY,adminEmail,'合成獨立管理員']);
-    const s=await x.store(),body={tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成環境准入驗證'};
+    const s=await x.store(10,true,'intern'),body={tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成環境准入驗證'};
+    const publicRoot=`/api/v1/public/stores/${s.slug}`;
+    const buyer=async(method:string,path:string,input?:unknown,cookie?:string)=>{
+      const response=await app.request(h.origin+publicRoot+path,{method,headers:{Origin:h.origin,'Content-Type':'application/json','Idempotency-Key':randomUUID(),...(cookie?{Cookie:cookie}:{})},body:input===undefined?undefined:JSON.stringify(input)});
+      return {response,status:response.status,data:await response.json()} as any;
+    };
+    const input=x.input(s.product.sku,5);
+    assert.equal((await buyer('POST','/checkouts',input)).data.code,'checkout_not_enabled');
+    const version=(await h.pool.query('SELECT version::text FROM module_instances WHERE instance_id=$1',[s.instanceId])).rows[0].version;
+    ok(await x.send(s,'/upgrade',{},version));
+    await seedAdmissionPaymentService(x,s,payment.ring);
+    assert.deepEqual((await h.pool.query(`SELECT state,member_tier FROM positioning_profession_memberships
+      WHERE community_id=$1 AND user_id=$2 AND guild_key='guild_commerce_sales'`,[DEMO_COMMUNITY,s.owner.user.user_id])).rows,[{state:'active',member_tier:'intern'}]);
+    assert.equal(await h.count('commerce_store_admissions','WHERE tenant_id=$1 AND instance_id=$2',[s.tenantId,s.instanceId]),0);
+    assert.equal(ok(await buyer('POST','/checkouts',input),409).code,'checkout_not_enabled');
+    assert.equal(await h.count('commerce_orders','WHERE public_shop_id=$1',[s.storefront_shop_id]),0);
     const key=randomUUID(),admitted=ok(await admin('POST','',body,key),201);
     assert.equal(admitted.environment,'sandbox');assert.deepEqual(ok(await admin('POST','',body,key),201),admitted);
     assert.equal((await admin('POST','',body)).data.code,'store_admission_exists');
@@ -45,16 +60,6 @@ test('independent admin admissions gate new checkouts without stopping retained 
     const viewer=(await h.person('合成兼任唯讀管理員')).session,viewerPrincipal=await h.candidate(s.owner,viewer.user.user_id),invitation=await h.invite(s.owner,s.tenantId,viewerPrincipal,'viewer');await h.accept(viewer,s.tenantId,invitation);
     await h.pool.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[randomUUID(),DEMO_COMMUNITY,viewer.user.email,'合成唯讀管理員']);
     assert.equal((await admin('POST','',body,randomUUID(),viewer.user.email)).data.code,'admission_not_independent');
-    const publicRoot=`/api/v1/public/stores/${s.slug}`;
-    const buyer=async(method:string,path:string,input?:unknown,cookie?:string)=>{
-      const response=await app.request(h.origin+publicRoot+path,{method,headers:{Origin:h.origin,'Content-Type':'application/json','Idempotency-Key':randomUUID(),...(cookie?{Cookie:cookie}:{})},body:input===undefined?undefined:JSON.stringify(input)});
-      return {response,status:response.status,data:await response.json()} as any;
-    };
-    const input=x.input(s.product.sku,5);
-    assert.equal((await buyer('POST','/checkouts',input)).data.code,'checkout_not_enabled');
-    const version=(await h.pool.query('SELECT version::text FROM module_instances WHERE instance_id=$1',[s.instanceId])).rows[0].version;
-    ok(await x.send(s,'/upgrade',{},version));
-    await seedAdmissionPaymentService(x,s,payment.ring);
     const checkout=await buyer('POST','/checkouts',input),frozen=ok(checkout,201),cookie=checkout.response.headers.get('set-cookie')!.split(';')[0];
     const order=ok(await buyer('POST',`/checkouts/${frozen.checkout_ref}/orders`,{terms_sha256:frozen.terms_sha256,client_order_id:randomUUID()},cookie),201).order;
     const due=await x.due(s,5),revokeKey=randomUUID(),revokeBody={reason:'合成撤銷驗證'};
@@ -66,8 +71,8 @@ test('independent admin admissions gate new checkouts without stopping retained 
     assert.equal(await x.tx(q=>settleDueCheckoutHolds(q,[s.product.product_id])),1);
     assert.equal((await h.pool.query('SELECT state FROM commerce_inventory_reservations WHERE order_id=$1',[due.order_id])).rows[0].state,'released');
     assert.equal((await h.pool.query('SELECT lifecycle_state FROM commerce_checkout_orders WHERE order_id=$1',[due.order_id])).rows[0].lifecycle_state,'open');
-    assert.equal((await h.pool.query("SELECT * FROM platform_admin_audit WHERE target_type='commerce_store_admission'")).rowCount,2);
-    assert.equal((await h.pool.query("SELECT * FROM commerce_control_events WHERE kind LIKE 'store_admission.%'")).rowCount,2);
+    assert.equal((await h.pool.query("SELECT * FROM platform_admin_audit WHERE target_type='commerce_store_admission' AND target_ref IN (SELECT admission_id::text FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2)",[s.tenantId,s.instanceId])).rowCount,2);
+    assert.equal((await h.pool.query("SELECT * FROM commerce_control_events WHERE kind LIKE 'store_admission.%' AND tenant_id=$1 AND instance_id=$2",[s.tenantId,s.instanceId])).rowCount,2);
     await h.pool.query("UPDATE module_instances SET status='suspended',version=version+1 WHERE instance_id=$1",[s.instanceId]);
     assert.equal((await admin('POST','',body)).data.code,'store_admission_unavailable');
     await h.pool.query("UPDATE module_instances SET status='active',version=version+1 WHERE instance_id=$1",[s.instanceId]);

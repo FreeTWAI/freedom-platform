@@ -11,6 +11,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { Problem, requireCondition } from '../../packages/shared/problem.js';
 import { ConfigValidationError } from '../../contracts/guild-launchpad/v1/config.js';
 import { assertProviderCapabilities } from './validate.js';
+import { launchMembershipRule, meetsMembership, type GuildMembershipRule } from './membership.js';
 
 export interface CatalogQuery {
   guildKey?: string;
@@ -41,13 +42,13 @@ interface OfferingRow {
   offering_policy: { policy_key: string; version: string };
 }
 
-function eligibilityView(full: boolean, manages: boolean, policy: boolean, installed: boolean, policyRevision: string): Eligibility {
-  const reason = !full ? 'guild_full_member_required' : !manages ? 'tenant_manage_required' : !policy ? 'policy_unconfigured' : null;
-  const tenantAction = !full ? 'denied' : !manages ? 'create' : !policy ? 'denied' : installed ? 'continue' : 'select';
+function eligibilityView(member: boolean, manages: boolean, policy: boolean, installed: boolean, policyRevision: string, rule: GuildMembershipRule): Eligibility {
+  const reason = !member ? rule.reason : !manages ? 'tenant_manage_required' : !policy ? 'policy_unconfigured' : null;
+  const tenantAction = !member ? 'denied' : !manages ? 'create' : !policy ? 'denied' : installed ? 'continue' : 'select';
   return EligibilitySchema.parse({
-    can_launch: full && manages && policy,
+    can_launch: member && manages && policy,
     reason_codes: reason ? [reason] : [],
-    required_guild_tier: 'full',
+    required_guild_tier: rule.minimumTier,
     tenant_action: tenantAction,
     policy_revision: policyRevision,
   });
@@ -57,9 +58,9 @@ function isLaunchable(row: Pick<ApplicationView, 'release_status' | 'license_sta
   return row.release_status === 'available' && row.license_state === 'reviewed';
 }
 
-function unavailableEligibility(policyRevision: string): Eligibility {
+function unavailableEligibility(policyRevision: string, rule: GuildMembershipRule): Eligibility {
   return EligibilitySchema.parse({
-    can_launch: false, reason_codes: ['application_not_available'], required_guild_tier: 'full',
+    can_launch: false, reason_codes: ['application_not_available'], required_guild_tier: rule.minimumTier,
     tenant_action: 'denied', policy_revision: policyRevision,
   });
 }
@@ -324,14 +325,15 @@ async function bindOneManagedTenant(q: PoolClient, principalId: string, tenantId
  * invisible until that tenant is bound.
  */
 export async function eligibilityFor(q: PoolClient, actor: Actor, guildKey: string, applicationKey: string, releaseRef: string, policyRevision: string): Promise<Eligibility> {
+  const rule = launchMembershipRule(applicationKey, guildKey);
   const principalId = await personPrincipalId(q, actor.user_id);
   if (principalId) await bindPrincipalOnly(q, principalId);
-  const row = (await q.query<{ full_member: boolean; manages: boolean; policy: boolean; installed: boolean }>(
+  const row = (await q.query<{ eligible_member: boolean; manages: boolean; policy: boolean; installed: boolean }>(
     `WITH me AS (
        SELECT principal_id FROM principals WHERE user_ref=$1 AND kind='person'
-     ), full_member AS (
+     ), eligible_member AS (
        SELECT 1 FROM positioning_profession_memberships
-       WHERE community_id=$2 AND user_id=$1 AND guild_key=$3 AND state='active' AND member_tier='full'
+       WHERE community_id=$2 AND user_id=$1 AND guild_key=$3 AND state='active' AND (member_tier='full' OR member_tier=$6)
      ), managed AS (
        SELECT t.tenant_id
        FROM tenant_memberships m
@@ -348,13 +350,13 @@ export async function eligibilityFor(q: PoolClient, actor: Actor, guildKey: stri
        JOIN managed ON managed.tenant_id=i.tenant_id
        WHERE i.application_key=$4 AND i.release_ref=$5 AND i.status NOT IN ('archived','failed')
      )
-     SELECT EXISTS(SELECT 1 FROM full_member) AS full_member,
+     SELECT EXISTS(SELECT 1 FROM eligible_member) AS eligible_member,
             EXISTS(SELECT 1 FROM managed) AS manages,
             EXISTS(SELECT 1 FROM policy_ok) AS policy,
             EXISTS(SELECT 1 FROM installed) AS installed`,
-    [actor.user_id, actor.community_id, guildKey, applicationKey, releaseRef],
+    [actor.user_id, actor.community_id, rule.guildKey, applicationKey, releaseRef, rule.minimumTier],
   )).rows[0];
-  const full = row.full_member === true;
+  const member = row.eligible_member === true;
   const manages = row.manages === true;
   let policy = row.policy === true;
   let installed = row.installed === true;
@@ -382,7 +384,7 @@ export async function eligibilityFor(q: PoolClient, actor: Actor, guildKey: stri
     }
     await bindPrincipalOnly(q, principalId);
   }
-  const eligibility = eligibilityView(full, manages, policy, installed, policyRevision);
+  const eligibility = eligibilityView(member, manages, policy, installed, policyRevision, rule);
   await assertCurrentSessionClock(q, actor);
   return eligibility;
 }
@@ -396,7 +398,7 @@ export async function browseApplications(pool: Pool, query: CatalogQuery, actor:
     for (const row of page.items) {
       const eligibility = isLaunchable(row)
         ? await eligibilityFor(q, actor, query.guildKey, row.application_key, row.release_ref, row.offering_policy.version)
-        : unavailableEligibility(row.offering_policy.version);
+        : unavailableEligibility(row.offering_policy.version, launchMembershipRule(row.application_key, query.guildKey));
       items.push(applicationView(row, eligibility));
     }
     await assertCurrentSessionClock(q, actor);
@@ -430,12 +432,12 @@ export async function applicationsForGuild(q: PoolClient, actor: Actor, guildKey
     await assertCurrentSessionClock(q, actor);
     return rows.map(row => ({
       application_key: row.application_key, release_ref: row.release_ref, display_name: row.display_name,
-      eligibility: unavailableEligibility(row.offering_policy.version),
+      eligibility: unavailableEligibility(row.offering_policy.version, launchMembershipRule(row.application_key, guildKey)),
     }));
   }
   const principalId = await personPrincipalId(q, actor.user_id);
   if (principalId) await bindPrincipalOnly(q, principalId);
-  const facts = (await q.query<{ full_member: boolean; manages: boolean; policy: boolean; installed: string[] }>(
+  const facts = (await q.query<{ memberships: Record<string, string>; manages: boolean; policy: boolean; installed: string[] }>(
     `WITH me AS (
        SELECT principal_id FROM principals WHERE user_ref=$1 AND kind='person'
      ), managed AS (
@@ -444,10 +446,10 @@ export async function applicationsForGuild(q: PoolClient, actor: Actor, guildKey
        JOIN me ON me.principal_id=m.principal_id
        WHERE m.status='active' AND m.role IN ('owner','admin') AND t.status='active'
      )
-     SELECT EXISTS (
-         SELECT 1 FROM positioning_profession_memberships
-         WHERE community_id=$2 AND user_id=$1 AND guild_key=$3 AND state='active' AND member_tier='full'
-       ) AS full_member,
+     SELECT COALESCE((
+         SELECT jsonb_object_agg(guild_key, member_tier) FROM positioning_profession_memberships
+         WHERE community_id=$2 AND user_id=$1 AND state='active'
+       ), '{}'::jsonb) AS memberships,
        EXISTS (SELECT 1 FROM managed) AS manages,
        EXISTS (
          SELECT 1 FROM managed
@@ -460,9 +462,8 @@ export async function applicationsForGuild(q: PoolClient, actor: Actor, guildKey
          FROM application_installations i JOIN managed ON managed.tenant_id=i.tenant_id
          WHERE i.status NOT IN ('archived','failed')
        ), ARRAY[]::text[]) AS installed`,
-    [actor.user_id, actor.community_id, guildKey],
+    [actor.user_id, actor.community_id],
   )).rows[0];
-  const full = facts.full_member === true;
   const manages = facts.manages === true;
   let policy = facts.policy === true;
   const installedKeys = new Set(facts.installed ?? []);
@@ -489,14 +490,16 @@ export async function applicationsForGuild(q: PoolClient, actor: Actor, guildKey
   if (principalId) await clearTenantContext(q);
   await assertCurrentSessionClock(q, actor);
   return rows.map(row => {
+    const rule = launchMembershipRule(row.application_key, guildKey);
+    const member = meetsMembership(facts.memberships[rule.guildKey], rule);
     const installed = installedKeys.has(`${row.application_key}|${row.release_ref}`);
     return {
       application_key: row.application_key,
       release_ref: row.release_ref,
       display_name: row.display_name,
       eligibility: isLaunchable(row)
-        ? eligibilityView(full, manages, policy, installed, row.offering_policy.version)
-        : unavailableEligibility(row.offering_policy.version),
+        ? eligibilityView(member, manages, policy, installed, row.offering_policy.version, rule)
+        : unavailableEligibility(row.offering_policy.version, launchMembershipRule(row.application_key, guildKey)),
     };
   });
 }

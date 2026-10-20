@@ -560,6 +560,8 @@ test('T-016 a disabled setup admin does not hide a store with a current active o
   const s = await open();
   const setupAdmin = (await h.person('合成設定管理者')).session;
   await join(s, setupAdmin, 'admin');
+  assert.equal(expect(await post(s.root + '/setup', setupAdmin, settings), 403).code, 'commerce_guild_member_required');
+  await h.fullMember(setupAdmin.user.user_id, guild);
   expect(await post(s.root + '/setup', setupAdmin, settings), 201);
   await add(s); expect(await publish(s));
   const profile = (await h.pool.query('SELECT storefront_shop_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0];

@@ -371,7 +371,7 @@ async function sellerScreens(page:Page,output:(width:number)=>string){
 
 test('with supplier console OFF, a merchant publishes public service information, configures bank/cash meetup and fulfils orders for a returning buyer',async({browser,e2eAuthPool},info)=>{
  test.setTimeout(120000);
- const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,false);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,{realAdmission:true,supplierConsoleEnabled:false});
  const seller=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
  seller.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
  try{
@@ -406,6 +406,12 @@ test('with supplier console OFF, a merchant publishes public service information
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
   await expect(sp.getByText('000000123456',{exact:true})).toBeVisible();
   await expect(sp.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  // Merchant pages use the real SQL admission port; the independent local admin identity is synthetic.
+  await bp.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
+  await expect(bp.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await expect(bp.locator('body')).not.toContainText('000000123456');
+  const admission=await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成本機有限營業驗收'});
+  expect(admission.environment).toBe('sandbox');
   // The same merchant can reach the existing publication flow from the seller console.
   await sp.setViewportSize({width:1280,height:900});
   await sp.getByRole('link',{name:'商店首頁',exact:true}).click();
@@ -429,6 +435,8 @@ test('with supplier console OFF, a merchant publishes public service information
    expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   await bp.screenshot({path:info.outputPath('merchant-public-information-390.png'),fullPage:true});
+  let lastCheckoutInput:unknown;
+  bp.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith(`/stores/${store.slug}/checkouts`))lastCheckoutInput=request.postDataJSON();});
   await buyerLogin(bp,person.email,'',store.origin);
   await start(bp,store);await freeze(bp,store);const bank=await place(bp,'銀行匯款');
   await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
@@ -473,12 +481,20 @@ test('with supplier console OFF, a merchant publishes public service information
   await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
   // Existing seller cancellation remains reachable for an unpaid order and releases only its hold.
   await start(bp,store);await freeze(bp,store);const cancelled=await place(bp,'銀行匯款');
+  await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成停止新單，保留既有訂單處理'});
   await sellerOrder(sp,store,cancelled);await sp.getByRole('button',{name:'取消訂單',exact:true}).click();
   await sp.getByRole('dialog',{name:'取消訂單',exact:true}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
   await expect(sp.getByRole('region',{name:'訂單',exact:true})).toContainText('已取消');
   await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
   await expect(bp.getByText(/訂單狀態：已取消/)).toBeVisible();
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
+  await bp.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
+  await expect(bp.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await expect(bp.locator('body')).not.toContainText('000000123456');
+  const refused=await buyer.request.post(`/api/v1/public/stores/${store.slug}/checkouts`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:lastCheckoutInput});
+  expect(refused.status()).toBe(409);expect((await refused.json()).code).toBe('checkout_not_enabled');
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM platform_admin_audit WHERE target_type='commerce_store_admission' AND target_ref IN (SELECT admission_id::text FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2)",[store.tenant,store.instance])).rows[0].n).toBe(2);
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM commerce_control_events WHERE instance_id=$1 AND kind LIKE 'store_admission.%'",[store.instance])).rows[0].n).toBe(2);
  }finally{await seller.close();await buyer.close();await store.close();}
 });
 

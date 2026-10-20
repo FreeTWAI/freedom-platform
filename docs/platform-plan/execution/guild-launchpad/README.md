@@ -6,7 +6,15 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=240cf677e892f6f20306089c75c34fa914597960 release.staging=240cf677e892f6f20306089c75c34fa914597960 flag.production=true flag.staging=true repo_max_migration=173 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=173 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至 2026-10-20 07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，Short 對所有人開啟；Supplier／Commerce console 保持 ON，checkout／email 保持 OFF。四組成功 before／after 備份還原與清理通過，dispatcher `562f005a` 已綁定兩環境，原 timer 已恢復；新 dispatcher 自然排程尚未觀察。依 Ted 指示無 staging acceptance window，會員 UX、真實手機與 Safari 未驗。詳見[Short 發布收據](../unified-foundation/rollout-short-videos-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Production 公開唯讀 smoke 第二次通過14項，首次6項後遇 Access redirect 的失敗保留；兩個 admin 路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。Production 首次 before 備份截斷、第二次成功綁定，以及兩項經審查的 kit 修正均另列收據。`as_of=2026-10-12`、M1／完整計畫、真人三項成果與公會作者自主交付的未接受狀態維持。
+
+### 2026-10-19 23:06 歷史發布
+
+以下原文保留 `240cf677` 當時觀察；最新部署以上方10月20日收據為準。
 
 截至 2026-10-19 23:06:51.019348 UTC，staging 與 production 都已部署 `240cf677`／schema172，商店公開說明與獨立 Seller console 啟用邊界已發布。兩環境限定驗收、發布後備份還原與清理通過，dispatcher 已綁定本次來源，原 timer 已恢復；checkout／email 仍 OFF，新 operator 自然排程尚未觀察。發布前沿用原 `10ad8d2d` 已完成備份，不改寫其來源與日期。詳見[商店會員流程發布收據](../unified-foundation/rollout-merchant-readiness-2026-10-19.json)及[現況快照](../unified-foundation/current-state.json)。
 
