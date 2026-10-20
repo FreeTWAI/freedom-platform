@@ -732,6 +732,61 @@ async function waitForBusinessRead(pid:number,sql:string,finished:()=>boolean) {
 async function businessSessionAlive(hash:string) {
   return z.object({alive:z.boolean()}).parse((await pool.query('SELECT revoked_at IS NULL AND expires_at>clock_timestamp() AS alive FROM sessions WHERE token_hash=$1',[hash])).rows[0]).alive;
 }
+test('home cooperation summary follows real role transitions without private terms or payment claims',async()=>{
+  const provider=await signIn(),client=await signIn(DEMO_USERS[2].email),outsider=await signIn(DEMO_USERS[1].email);
+  const path='/engagements/summary';
+  const summary=async(session:Session,has:boolean,needs:boolean)=>{
+    const result=await request(path,session);assert.equal(result.status,200);
+    assert.deepEqual(result.data,{has_engagements:has,needs_response:needs});
+    assert.equal(result.response.headers.get('cache-control'),'private, no-store');
+    assert.match(result.response.headers.get('vary')??'',/Cookie/i);
+  };
+  assert.equal((await request(path)).status,401);
+  await summary(provider,false,false);await summary(client,false,false);
+  const shared=await request('/showcases',provider,{title:'合成合作',description:'展示作品',consent_to_share:true});assert.equal(shared.status,201);
+  const opportunity=await request('/opportunities',client,{showcase_id:shared.data.showcase_id,need:'私人合作需求'});assert.equal(opportunity.status,201);
+  const proposed=await request(`/opportunities/${opportunity.data.opportunity_id}/engagements`,provider,{scope:'私人交付範圍',acceptance_criteria:'私人驗收條件',amount_minor:120000,currency:'TWD'},String(opportunity.data.aggregate_version));
+  assert.equal(proposed.status,201);let engagement=businessEngagement.parse(proposed.data);
+  await summary(provider,true,false);await summary(client,true,true);await summary(outsider,false,false);
+  assert.deepEqual((await request(`${path}?owner=${provider.user.user_id}`,outsider)).data,{has_engagements:false,needs_response:false});
+  for(const [session,action,body,providerNeeds,clientNeeds] of [
+    [client,'agree',{terms_sha256:engagement.terms_sha256},true,false],
+    [provider,'deliver',{artifact_ref:'artifact:summary-synthetic'},false,true],
+    [client,'accept',{terms_sha256:engagement.terms_sha256},false,false],
+  ] as const){
+    const result=await request(`/engagements/${engagement.engagement_id}:${action}`,session,body,String(engagement.aggregate_version));
+    assert.equal(result.status,200);engagement=businessEngagement.parse(result.data);
+    await summary(provider,true,providerNeeds);await summary(client,true,clientNeeds);
+  }
+  const reported=await request(`/engagements/${engagement.engagement_id}/receipts`,provider,{amount_minor:120000,currency:'TWD',evidence_ref:'receipt:summary-synthetic',received_at:new Date().toISOString()},String(engagement.aggregate_version));
+  assert.equal(reported.status,201);engagement=businessEngagement.parse(reported.data);
+  await summary(provider,true,false);await summary(client,true,true);
+  const confirmed=await request(`/engagements/${engagement.engagement_id}:confirm-receipt`,client,{},String(engagement.aggregate_version));assert.equal(confirmed.status,200);
+  await summary(client,true,false);await summary(outsider,false,false);
+  const token=readSessionCookie(outsider.cookie,origin);assert.ok(token);
+  await pool.query('UPDATE sessions SET revoked_at=clock_timestamp() WHERE token_hash=$1',[tokenHash(token)]);
+  assert.equal((await request(path,outsider)).status,401);
+});
+
+test('home cooperation summary rejects session expiry during the native domain read',async()=>{
+  const provider=await signIn(),client=await signIn(DEMO_USERS[2].email);
+  await privateBusinessFixture(provider,client,'home-summary-expiry');
+  const reader=await signIn(),token=readSessionCookie(reader.cookie,origin);assert.ok(token);const hash=tokenHash(token);
+  await pool.query('UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>2) WHERE token_hash=$1',[hash]);
+  const locker=await pool.connect();let pending:ReturnType<typeof request>|undefined;
+  try{
+    await locker.query('BEGIN');const pid=z.object({pid:z.number()}).parse((await locker.query('SELECT pg_backend_pid() AS pid')).rows[0]).pid;
+    await locker.query('LOCK TABLE engagements IN ACCESS EXCLUSIVE MODE');
+    let finished=false;pending=request('/engagements/summary',reader).finally(()=>{finished=true;});
+    await waitForBusinessRead(pid,'FROM engagements e',()=>finished);
+    const deadline=Date.now()+6000;
+    while(await businessSessionAlive(hash)){assert.ok(Date.now()<deadline,'session did not expire');await delay(10);}
+    await locker.query('COMMIT');const result=await pending;
+    assert.equal(result.status,401);assert.equal(result.data.code,'session_expired');
+    assert.equal('has_engagements' in result.data,false);assert.equal('needs_response' in result.data,false);
+  }finally{await locker.query('ROLLBACK');locker.release();if(pending)await pending.catch(()=>{});}
+});
+
 for(const target of [{path:'/opportunities',table:'opportunities',role:'provider'},{path:'/engagements',table:'receipt_observations',role:'client'}] as const) {
   test(`${target.path} private bilateral projection rejects session expiry after its domain wait`,async()=>{
     const provider=await signIn(),client=await signIn(DEMO_USERS[2].email),foreignProvider=await signIn(DEMO_USERS[1].email);
