@@ -449,9 +449,25 @@ test('two tabs: a cover that never reached the server stops at the version confl
   }
   await themeOf(page, 'light');
 
-  // Loading the latest content is the explicit choice; the chosen file stays and the next save is a new operation.
+  // Loading the latest content is the explicit choice. A failed read is not "gone": the form, conflict and file stay, nothing is written.
+  const writes: string[] = [];
+  page.on('request', request => { if (['POST', 'PUT', 'DELETE'].includes(request.method()) && request.url().includes('/api/v1/member-services')) writes.push(`${request.method()} ${new URL(request.url()).pathname}`); });
+  let failRead = true;
+  await page.route('**/api/v1/member-services/mine', route => {
+    if (failRead && route.request().method() === 'GET') { failRead = false; return route.fulfill({ status: 500, json: { detail: '暫時無法讀取。' } }); }
+    return route.continue();
+  });
+  await form.getByRole('button', { name: '載入最新內容', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('暫時無法讀取最新內容。你的輸入和選好的圖片都還在；請稍後再按「載入最新內容」。');
+  expect(failRead).toBe(false);
+  await expect(form).toBeVisible();
+  await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('原始簡介');
+  expect(await form.locator('input[type="file"]').evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe('cover.png');
+  await expect(form.getByRole('button', { name: '儲存變更', exact: true })).toBeDisabled();
+  expect(writes).toEqual([]);
   await form.getByRole('button', { name: '載入最新內容', exact: true }).click();
   await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('B 分頁先改');
+  expect(writes).toEqual([]);
   await form.getByRole('button', { name: '儲存變更', exact: true }).click();
   await expect(page.getByText('已更新服務。')).toBeVisible();
   expect(keys).toHaveLength(3);
@@ -492,6 +508,66 @@ test('a create whose response is lost is retried with its original key and body,
   expect(posts[1].body).toBe(posts[0].body);
   expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1 AND title='E2E 建立未確認'`, [owner])).rows[0].n).toBe(1);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2', [owner, posts[0].key])).rows[0].n).toBe(1);
+});
+
+test('a create and a cover whose results are unknown survive a real 429 before the receipt and finish with one service and one receipt each', async ({ page, e2eAuthPool }) => {
+  test.setTimeout(180_000);
+  const owner = '20000000-0000-4000-8000-000000000002';
+  const bucket = (scope: string) => createHash('sha256').update(`${scope}/${owner}`).digest('hex');
+  const limit = async (scope: string, attempts: number) => e2eAuthPool.query(`INSERT INTO auth_rate_limits(bucket,attempts,window_start) VALUES($1,$2,now())
+    ON CONFLICT(bucket) DO UPDATE SET attempts=$2,window_start=now()`, [bucket(scope), attempts]);
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const seen: { method: string; path: string; key: string; body: string; status: number; code?: string }[] = [];
+  let lose: 'POST' | 'PUT' | null = null;
+  await page.route(/\/api\/v1\/member-services(\/[0-9a-f-]+\/cover)?$/, async route => {
+    const request = route.request();
+    if (!['POST', 'PUT'].includes(request.method())) return route.continue();
+    const response = await route.fetch();
+    const body = await response.json().catch(() => ({})) as { code?: string };
+    seen.push({ method: request.method(), path: new URL(request.url()).pathname, key: request.headers()['idempotency-key'], body: createHash('sha256').update(request.postDataBuffer() ?? Buffer.alloc(0)).digest('hex'), status: response.status(), code: body.code });
+    if (lose === request.method()) { lose = null; return route.abort('failed'); }
+    return route.fulfill({ response });
+  });
+  const form = await fillService(page, 'E2E 限流恢復', '設計', '429 之前的回放');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: PNG });
+
+  // 1) The create commits (201) and its response is lost.
+  lose = 'POST';
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form.getByRole('button', { name: '重試儲存', exact: true })).toBeVisible();
+  expect(seen.map(item => [item.method, item.status])).toEqual([['POST', 201]]);
+  // 2) The retry meets the real create rate limit, which runs before the receipt lookup; the operation is kept.
+  await limit('member-service-create', 40);
+  await form.getByRole('button', { name: '重試儲存', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('操作次數過多，請稍後再試。儲存結果還沒確認。稍後按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。');
+  expect(seen[1]).toMatchObject({ method: 'POST', status: 429, code: 'auth_rate_limited' });
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toBeDisabled();
+  // 3) After the window, the same key and body replay the committed create; then the cover is sent once and its response is lost.
+  await limit('member-service-create', 0);
+  lose = 'PUT';
+  await form.getByRole('button', { name: '重試儲存', exact: true }).click();
+  await expect(form.getByRole('button', { name: '重試封面', exact: true })).toBeVisible();
+  expect(seen.slice(0, 3).map(item => item.status)).toEqual([201, 429, 201]);
+  expect(new Set(seen.slice(0, 3).map(item => `${item.key}|${item.body}`)).size).toBe(1);
+  expect(seen[3]).toMatchObject({ method: 'PUT', status: 200 });
+  // 4) The cover retry meets the real cover rate limit; it is kept, then the same cover operation replays.
+  await limit('member-service-cover', 20);
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('操作次數過多，請稍後再試。封面上傳結果還沒確認，服務已儲存。稍後按「重試封面」會用同一張圖片和同一個請求再送一次。');
+  expect(seen[4]).toMatchObject({ method: 'PUT', status: 429, code: 'auth_rate_limited' });
+  await limit('member-service-cover', 0);
+  await form.getByRole('button', { name: '重試封面', exact: true }).click();
+  await expect(page.getByText('已更新服務。')).toBeVisible();
+  expect(seen.slice(3).map(item => item.status)).toEqual([200, 429, 200]);
+  expect(new Set(seen.slice(3).map(item => `${item.key}|${item.body}`)).size).toBe(1);
+
+  const rows = (await e2eAuthPool.query(`SELECT service_id::text AS id, aggregate_version::int AS v FROM member_services WHERE owner_user_id=$1 AND title='E2E 限流恢復'`, [owner])).rows;
+  expect(rows).toHaveLength(1);
+  expect(rows[0].v).toBe(2);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2', [owner, seen[0].key])).rows[0].n).toBe(1);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2', [owner, seen[3].key])).rows[0].n).toBe(1);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [rows[0].id])).rows[0].n).toBe(1);
 });
 
 test('another member shares it and a signed-out visitor lands on the public page', async ({ page, browser }) => {
