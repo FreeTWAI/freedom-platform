@@ -53,8 +53,8 @@ export function SupplyCatalogList({client}: {client: PortalClient}) {
     </>}
   </div>;
 }
-export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave}: {
-  client: PortalClient; tenantId: string; instanceId: string; registerLeave: (guard: (() => boolean) | null) => void;
+export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave, supplyOfferPhotosEnabled=false}: {
+  supplyOfferPhotosEnabled?:boolean; client: PortalClient; tenantId: string; instanceId: string; registerLeave: (guard: (() => boolean) | null) => void;
 }) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [view, setView] = useState<Catalog | null>(null);
@@ -224,6 +224,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
             <div className="hosted-supply-toolbar"><h3 id="supply-products-title" ref={productsHeading} tabIndex={-1}>供貨商品</h3>
               {can('store:write') && !adding && !editing && !supplyEditing && view.product_count < view.product_limit && <button type="button" className="btn btn-primary" disabled={locked} onClick={() => openEditor('add')}>新增供貨商品</button>}
             </div>
+            {supplyOfferPhotosEnabled&&<p className="field-hint">方案照片請到<a href={`#stores/${tenantId}/${instanceId}/supply/products`}>供應商營運中心</a>的商品詳情管理。</p>}
             <p className="field-hint">幣別：{catalog.currency} · 共用商品容量：{view.product_count}／{view.product_limit}（含供貨商品與商店選品）</p>
             {!!products.length&&<ProductSearch value={query} onChange={setQuery} count={products.filter(product=>productMatches(product,query)).length} total={products.length} disabled={locked||hasDraft}/>}
             {!!products.length&&!products.some(product=>productMatches(product,query))&&<p>沒有符合的供貨商品，清除搜尋即可查看全部。</p>}

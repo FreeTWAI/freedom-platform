@@ -171,8 +171,8 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  }
  function command(input:Omit<Attempt,'key'|'scope'>){
   if(locked||busyRef.current||attemptRef.current||Object.values(photoRef.current).some(p=>p.blocking)||Object.values(materialRef.current).some(p=>p.blocking)||materialUploadTargets(client,userId,scope).length>0)return;
-  const capability=input.kind==='profile.setup'||input.kind==='profile.update'?'store:manage':input.kind==='offer.publish'?'store:publish':input.kind==='reservation.toggle'?null:'store:write';
-  if(capability&&!can(capability)||input.kind==='offer.publish'&&!can('store:write')||input.kind==='reservation.toggle'&&!ownerAllowed)return;
+  const capability=input.kind==='profile.setup'||input.kind==='profile.update'?'store:manage':(input.kind==='offer.publish'||input.kind==='offer.photo.share')?'store:publish':input.kind==='reservation.toggle'?null:'store:write';
+  if(capability&&!can(capability)||(input.kind==='offer.publish'||input.kind==='offer.photo.share')&&!can('store:write')||input.kind==='reservation.toggle'&&!ownerAllowed)return;
   if(input.kind.startsWith('material.')){const schema=input.kind==='material.create'?SupplyMaterialCreateInputSchema:input.kind==='material.update'?SupplyMaterialUpdateInputSchema:input.kind==='material.copy'?SupplyMaterialCopyInputSchema:input.kind==='material.access'?SupplyMaterialAccessInputSchema:input.kind==='material.grant'?SupplyMaterialGrantInputSchema:SupplyMaterialEmptyInputSchema;const parsed=schema.safeParse(input.body);if(!parsed.success){setError('請檢查素材欄位格式與字數。');return;}input={...input,body:parsed.data};}
   void send(createAttempt({...input,scope}));
  }

@@ -33,10 +33,10 @@ export function Editor({c,name,title,base,version,kind,path,target,productId,fie
   </div>}
  </form>;
 }
-export function ConfirmAction({label,title,children,disabled,onConfirm}:{label:string;title:string;children:ReactNode;disabled:boolean;onConfirm:()=>void}){
+export function ConfirmAction({label,title,children,disabled,onConfirm,small=false}:{label:string;title:string;children:ReactNode;disabled:boolean;onConfirm:()=>void;small?:boolean}){
  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
  const close=()=>{dialog.current?.close();trigger.current?.focus({preventScroll:true});};
- return <><button ref={trigger} type="button" className="btn btn-ghost" disabled={disabled} aria-haspopup="dialog" onClick={()=>dialog.current?.showModal()}>{label}</button>
+ return <><button ref={trigger} type="button" className={`btn btn-ghost${small?' btn-small':''}`} disabled={disabled} aria-haspopup="dialog" onClick={()=>dialog.current?.showModal()}>{label}</button>
   <dialog ref={dialog} aria-labelledby={id} onCancel={e=>{e.preventDefault();close();}} onClose={()=>trigger.current?.focus({preventScroll:true})}><div className="stack"><h2 id={id}>{title}</h2>{children}<p>這是目前資料的影響預覽，送出時會重新確認權限與版本。</p><div className="actions"><button type="button" autoFocus className="btn btn-ghost" onClick={close}>取消</button><button type="button" className="btn btn-primary" disabled={disabled} onClick={()=>{close();onConfirm();}}>確認{label}</button></div></div></dialog>
  </>;
 }
