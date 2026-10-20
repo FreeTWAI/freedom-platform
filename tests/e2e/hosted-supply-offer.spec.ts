@@ -1,23 +1,9 @@
 import {randomUUID} from 'node:crypto';
-import type {Locator,Page} from '@playwright/test';
 import {test,expect} from './member-feature-fixture.js';
-import {person,login,open,post,launchStore,storeArea} from './hosted-store-fixture.js';
+import {person,login,open,post,launchStore,storeArea,captureOffer} from './hosted-store-fixture.js';
 import {SHIPPING_TERMS_HINT,RETURN_TERMS_HINT,SELLABLE_LABEL} from '../../modules/agent-commerce/hosted-ui/SupplyOfferText.js';
 
 test.use({memberFeatures:{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,supplierConsoleEnabled:true}});
-
-async function captureOffer(page:Page,target:Locator,path:string){
-  // Tall element captures scroll beneath the fixed portal chrome. Hide only
-  // that chrome for the capture, then restore its exact original inline style.
-  const chrome=page.locator('.community-header,.floating-messages');
-  const styles=await chrome.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('style')));
-  try{
-    await chrome.evaluateAll(nodes=>nodes.forEach(node=>(node as HTMLElement).style.setProperty('visibility','hidden','important')));
-    await target.screenshot({path});
-  }finally{
-    await chrome.evaluateAll((nodes,styles)=>nodes.forEach((node,i)=>styles[i]===null?node.removeAttribute('style'):node.setAttribute('style',styles[i]!)),styles);
-  }
-}
 
 test('a shop owner understands a saved supply version, its approval and its honest sale paths',async({browser,baseURL,e2eAuthPool},info)=>{
   const contexts=await Promise.all([browser.newContext({baseURL}),browser.newContext({baseURL})]);

@@ -75,6 +75,9 @@ test('OFFER-PHOTO-01 explicit sharing, replacement and stop leave terms, consent
   assert.deepEqual(f.ok(await stop(supplier,offer)),{state:'not_shared',seq:'3',matches_current_photo:false});
   f.ok(await stop(supplier,offer));assert.equal((await rows(offer)).length,3);
   assert.equal((await page(seller,offer)).photo,null);assert.equal((await bytes(seller,offer,'2')).status,404);
+  assert.deepEqual(f.ok(await share(supplier,offer,'2',key)),state,'replay returns its original receipt');
+  assert.equal((await rows(offer)).length,3,'an old share replay cannot re-expose a stopped photo');
+  assert.equal((await page(seller,offer)).photo,null);
   assert.deepEqual(await retained(),before);
   const facts=(await f.h.pool.query("SELECT aggregate_version::text,operation FROM scoped_transition_journal WHERE aggregate_type='hosted_supply_offer_photo' ORDER BY aggregate_version")).rows;
   assert.deepEqual(facts,[{aggregate_version:'1',operation:'storefront.supply-offer.photo.share'},{aggregate_version:'2',operation:'storefront.supply-offer.photo.share'},{aggregate_version:'3',operation:'storefront.supply-offer.photo.stop'}]);
@@ -236,6 +239,7 @@ test('OFFER-PHOTO-09 SQL rejects updates, deletes, sequence gaps, partial tuples
   const insert=(q:PoolClient,seq:string,photo:Record<string,any>={})=>q.query(`INSERT INTO commerce_hosted_offer_photos(offer_id,seq,tenant_id,instance_id,item_id,shared_by_principal_id,scope_id,asset_id,representation_id,policy_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[offer.offer_id,seq,supplier.tenantId,supplier.instanceId,supplier.productId,original.shared_by_principal_id,photo.scope_id??null,photo.asset_id??null,photo.representation_id??null,photo.policy_revision??null]);
   await assert.rejects(rolled(q=>insert(q,'3')),sqlCode('23514'));
   await assert.rejects(rolled(q=>insert(q,'2',{scope_id:original.scope_id})),sqlCode('23514'));
+  await assert.rejects(rolled(q=>q.query(`INSERT INTO commerce_hosted_offer_photos(offer_id,seq,tenant_id,instance_id,item_id,shared_by_principal_id,scope_id,asset_id,representation_id,policy_revision,width) VALUES($1,2,$2,$3,$4,$5,$6,$7,$8,$9,999)`,[offer.offer_id,supplier.tenantId,supplier.instanceId,supplier.productId,original.shared_by_principal_id,original.scope_id,original.asset_id,original.representation_id,original.policy_revision])),sqlCode('23514'));
   await upload(supplier,'2');
   await assert.rejects(rolled(q=>insert(q,'2',original)),sqlCode('23514'));
   assert.equal((await rows(offer)).length,1);

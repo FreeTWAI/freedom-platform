@@ -4,7 +4,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {test,expect,type Page,type Request,type Route} from './fixtures.js';
-import {person,login,open,post,launchStore} from './hosted-store-fixture.js';
+import {person,login,open,post,launchStore,photoSource as source} from './hosted-store-fixture.js';
 import {navigate,signOut} from './navigation.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {ProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront.js';
@@ -16,7 +16,6 @@ test.setTimeout(90_000);
 test.skip(process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE!=='1','Requires the separately scheduled local photo fixture pass.');
 const photo=(page:Page)=>page.locator('.hosted-store-photo');
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
-async function source(name:string,color:string){return {name,mimeType:'image/png',buffer:await sharp({create:{width:120,height:80,channels:3,background:color}}).png().toBuffer()};}
 async function ready(page:Page,db:Parameters<typeof person>[0]){
   const member=await person(db);await login(page,member.email);const store=await launchStore(page,'照片驗收工作室');
   const slug='photos-'+randomUUID().slice(0,8);await post(page,store.root+'/setup',{name:'照片驗收商店',slug,currency:'TWD'},201);
@@ -49,7 +48,7 @@ test.beforeEach(async({e2eAuthPool})=>{
   await e2eAuthPool.query("UPDATE domain_media_storage_policy SET persistence_allowed=true WHERE purpose='storefront.product-photo'");
 });
 
-test('large phone photo is prepared locally, previewed without cropping, and uploaded only after explicit save',async({page,e2eAuthPool})=>{
+test('large phone photo is prepared locally, previewed without cropping, and uploaded only after explicit save',async({page,e2eAuthPool},info)=>{
   await page.setViewportSize({width:390,height:900});const s=await ready(page,e2eAuthPool);
   const pixels=Buffer.alloc(1600*2400*3);for(let i=0;i<pixels.length;i++)pixels[i]=(i*31+(i>>7)*17)%256;
   const buffer=await sharp(pixels,{raw:{width:1600,height:2400,channels:3}}).png({compressionLevel:0}).toBuffer();expect(buffer.length).toBeGreaterThan(2*1024*1024);
@@ -60,7 +59,7 @@ test('large phone photo is prepared locally, previewed without cropping, and upl
   expect(shape.width/shape.height).toBeCloseTo(2/3,2);expect(shape.fit).toBe('contain');
   await photo(page).getByRole('button',{name:'儲存照片',exact:true}).click();await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
   expect(uploads).toHaveLength(1);expect(uploads[0].postDataBuffer()!.length).toBeLessThanOrEqual(2*1024*1024);await expect(photo(page).locator(':scope > img')).toBeVisible();
-  await page.screenshot({path:'.rd/commerce/photo-mobile.png',fullPage:true});
+  await page.screenshot({path:info.outputPath('photo-mobile.png'),fullPage:true});
 });
 
 for(const width of [390,1280])test(`member photo draft, preview, immutable publication and removal at ${width}px`,async({page,browser,baseURL,e2eAuthPool},info)=>{

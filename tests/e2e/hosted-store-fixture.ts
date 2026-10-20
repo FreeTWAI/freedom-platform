@@ -1,6 +1,7 @@
+import sharp from 'sharp';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
-import {expect,type Page} from './fixtures.js';
+import {expect,type Page,type Locator} from './fixtures.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import {CreateResultSchema} from '../../contracts/guild-launchpad/v1/tenant.js';
@@ -53,4 +54,20 @@ export async function launchStore(page: Page, name: string) {
   const installation = InstallationViewSchema.parse(await (await page.request.get(`/api/v1/tenants/${tenant}/application-installations/by-operation/${operation.operation_id}`)).json());
   const instance = installation.modules.find(link => link.requirement_key === 'storefront')!.instance_id;
   return {root: `/tenants/${tenant}/storefronts/${instance}`, hash: `stores/${tenant}/${instance}`};
+}
+
+/** Synthetic raster shared by product-photo browser journeys. */
+export async function photoSource(name:string,color:string){return {name,mimeType:'image/png',buffer:await sharp({create:{width:120,height:80,channels:3,background:color}}).png().toBuffer()};}
+
+export async function captureOffer(page:Page,target:Locator,path:string){
+  // Tall element captures scroll beneath the fixed portal chrome. Hide only
+  // that chrome for the capture, then restore its exact original inline style.
+  const chrome=page.locator('.community-header,.floating-messages');
+  const styles=await chrome.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('style')));
+  try{
+    await chrome.evaluateAll(nodes=>nodes.forEach(node=>(node as HTMLElement).style.setProperty('visibility','hidden','important')));
+    await target.screenshot({path});
+  }finally{
+    await chrome.evaluateAll((nodes,styles)=>nodes.forEach((node,i)=>styles[i]===null?node.removeAttribute('style'):node.setAttribute('style',styles[i]!)),styles);
+  }
 }
