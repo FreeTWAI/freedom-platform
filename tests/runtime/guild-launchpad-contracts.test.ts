@@ -834,14 +834,14 @@ test('generated supply bundles accept old snapshots, set references and nullable
  const terms={title:'商品',description:'介紹',currency:'TWD',cost_minor:400,shipping_minor:50,shipping_terms:'包裝寄送',return_terms:'瑕疵換貨'};
  const offer={offer_id:id,product_id:id,supplier_name:'供應商',source_version:'1',terms,terms_sha256:'a'.repeat(64),state:'offered',version:'1'};
  const selection={selection_id:id,offer,sku:'P0001',seller_name:'店家',retail_price_minor:100,state:'sellable',listing_sha256:'b'.repeat(64),version:'1'};
- const product={product_id:id,sku:'P0001',title:'商品',description:'介紹',currency:'TWD',supply_price_minor:400,shipping_minor:50,stock:10,reserved:0,available:10,version:'1',offer:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+ const product={product_id:id,sku:'P0001',title:'商品',description:'介紹',currency:'TWD',supply_price_minor:400,shipping_minor:50,stock:10,reserved:0,available:10,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
  const cases:{bundle:string;name:string;value:unknown;valid:boolean}[]=[];
  const sample=(bundle:string,name:string,value:unknown,valid=true)=>cases.push({bundle,name,value,valid});
  for(const optional of [{},references]){
   const o={...offer,terms:{...terms,...optional}},l={...selection,offer:o};
   sample('hosted-distribution','offer',o);sample('hosted-distribution','offers',{items:[o],truncated:false});
   sample('hosted-distribution','selection',l);sample('hosted-distribution','selections',{items:[l],truncated:false});
-  sample('hosted-distribution','offer-page',{offer:o,published_at:'2026-10-20T00:00:00.000Z',supplier:{name:'供應商',public_path:null},selection:l,decision_note:null,sale_paths:{display:{available:true,reason:null},reservation:{available:false,reason:'unknown'},checkout:{available:false,reason:'fulfilment_not_agreed'}}});
+  sample('hosted-distribution','offer-page',{photo:null,offer:o,published_at:'2026-10-20T00:00:00.000Z',supplier:{name:'供應商',public_path:null},selection:l,decision_note:null,sale_paths:{display:{available:true,reason:null},reservation:{available:false,reason:'unknown'},checkout:{available:false,reason:'fulfilment_not_agreed'}}});
   sample('supplier-console','request',{profile:'freedom.supplier-console.request/v1',as_of:'2026-10-20T00:00:00.000Z',request:{...l,partner_id:id2},product:{product_id:id,offer:null}});
   sample('supplier-console','partner',{profile:'freedom.supplier-console.partner/v1',as_of:'2026-10-20T00:00:00.000Z',partner:{partner_id:id2,name:'店家',cooperation:product.cooperation,products:1},selections:[l],truncated:false});
  }
