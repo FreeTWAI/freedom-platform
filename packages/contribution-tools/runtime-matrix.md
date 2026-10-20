@@ -1,5 +1,53 @@
 # Diagnostic runtime matrix
 
+## 慢速 DROP 的有界等待（2026-10-20）
+
+目前清理使用一個 **60 秒** absolute deadline，suite 預留 **64 秒**；本節取代下方
+歷史紀錄中的 20 秒／24 秒值。每個 DROP 依 `(remaining - 4000) / 剩餘資料庫數`
+公平分配時間，單庫最多約 56 秒，仍留四秒作 fresh reconciliation。Metadata statement
+仍限兩秒；CREATE 的獨立 20 秒 provisioning budget 不變。兩種診斷的 `elapsed_ms`
+上限同步為 60,000，八秒的一次性 observer 及其 200 ms／500 ms 限制不變。
+
+截至本次調查，近約 300 次 Verify 的 16 個失敗 runtime-full jobs 中，有八個清理失敗，
+跨 main／PR 與 partitions 0、1、3、5、6，均在 16.053–16.056 秒出現 DROP
+`unknown_ack/query_read_timeout`。另外 96 個成功 jobs 的總清理時間為
+min 2.317 秒、p50 4.629 秒、p90 10.748 秒、p95 12.732 秒、max 14.323 秒，
+其中十個至少十秒。成功尾端已接近舊 DROP 上限；失敗 DROP 的自然完成時間未知。
+60 秒是給未知尾端留約 3.5 倍舊 DROP 等待的有界選擇，不是測得的安全上界。
+
+[PR #898 的失敗 partition 3](https://github.com/FreeTWAI/freedom-platform/actions/runs/39139517705/job/117711191116)
+通過 758 個測試後，DROP 的 checkpoint 只花 0.052 秒；8.221 秒的 observer 為
+`unavailable`，16.054 秒失去回覆，verifier 終止 cleaner 後在 16.667 秒讀到
+`database_present`。服務 log 的 administrator termination 與仍在執行的 DROP 相符。
+同次較早 checkpoint 的 sync files 為 306,035／159,323；這是大量檔案工作量的證據，
+並非 DROP 當下目錄檔案數的精確盤點。
+
+[PostgreSQL REL_18_STABLE 的 dropdb](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/commands/dbcommands.c)
+先以持久的 in-place update 標記資料庫 invalid，再 transactionally 刪除 catalog row，
+接著依序等待 immediate checkpoint、SMGRRELEASE ProcSignalBarrier，最後
+`remove_dbtablespaces` 呼叫
+[rmtree](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/common/rmtree.c)
+逐檔 unlink／刪目錄並要求同步 commit。取消或終止在 interrupt processing 時生效；
+rmtree 沒有逐檔 `CHECK_FOR_INTERRUPTS`，不能假設 termination ACK 會立即停止刪檔。
+若在 invalid 標記後、commit 前失敗，catalog row 的刪除會回滾，invalid 狀態保留，
+檔案可能已部分或全部移除。因此 backend 消失或 DROP ACK 都不能證明資料庫已刪除。
+大量檔案在 runner filesystem 的移除延遲是合理推論；log 沒有分開量到 barrier／rmtree，
+不能將 unavailable observer 當作進度或根因證明。
+
+八／六分區仍限 1,500 秒：最多 20 秒 provisioning + 約 1,416 秒測試 + 64 秒 reserve。
+reserve 比原本多 40 秒；以 [commerce 計畫](../../docs/platform-plan/execution/commerce/work-plan.md)
+的 1,150.196 秒最長觀察保守估算，扣完 provisioning 仍有約 266 秒測試餘裕；
+該 run 的測試／清理失敗紀錄保留。40 分鐘 Actions job 為 2,400 秒，partition 外仍留 900 秒供
+setup／build／integration／artifact；不保證任意 runner 延遲都能完成。四分區維持
+1,200 秒、本機 full 維持 900 秒，因此扣相同 provisioning 後分別約 1,116／816 秒；
+這些入口也少 40 秒測試時間，並未增加外層 deadline 或擴張 aggregate window。
+
+正向 fresh absence、owner／session／nonce identity、owner／cleaner settlement、
+所有資料庫仍存在即失敗的規則保留，不重試 DROP，不改 service container 或 durability。
+假 transport／clock regression 涵蓋 30 秒 DROP、遺失 ACK、仍存在及超時；它不是原生
+PostgreSQL I/O 重現。改動後的真實資料庫證據只能來自 hosted CI；
+一次綠燈不代表 flake 已消失，需觀察多次自然執行的清理尾端與失敗率。
+
 Eight separate CI hosts can each run one deterministic partition against their own PostgreSQL server (the tools still accept six and four). This does not change the local `runLocalSuite(..., 'runtime.full')` default four-process behavior. Each matrix invocation creates and cleans exactly one fresh nonce database through the existing owned-database helper, runs one test process with `--test-concurrency=1`, and preserves its original process report. Arbitrary files, commands, partition counts or indexes are refused.
 
 ```sh
