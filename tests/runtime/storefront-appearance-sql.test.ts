@@ -127,7 +127,7 @@ test('APPEARANCE-SQL-06 runtime ACL removes legacy table and column writes on im
 });
 
 test('APPEARANCE-SQL-07 only the two closed appearance target kinds admit the established raster intent',async()=>{
-  const s=await fixture();
+  const s=await fixture(),foreign=await f.openStore();
   await transaction(async q=>{
     const owner=(await q.query('SELECT owner_principal_id,owner_user_id FROM assets WHERE asset_id=$1',[s.object.asset_id])).rows[0];
     async function intent(kind:string,extra:Record<string,unknown>={}){
@@ -146,6 +146,9 @@ test('APPEARANCE-SQL-07 only the two closed appearance target kinds admit the es
     for(const kind of ['storefront.cover','storefront.logo']){
       const row=(await intent(kind)).rows[0];
       await fails(q,'UPDATE asset_upload_intents SET target_appearance_id=$2 WHERE intent_id=$1',[row.intent_id,randomUUID()]);
+      await q.query('SAVEPOINT foreign_target');
+      await assert.rejects(intent(kind,{target_tenant_id:foreign.tenantId}),code('23503'));
+      await q.query('ROLLBACK TO SAVEPOINT foreign_target');
     }
     for(const [kind,extra] of [['storefront.unreviewed',{}],['storefront.cover',{target_product_id:s.productId}],['storefront.cover',{source_byte_size:2097153}],['storefront.logo',{source_content_type:'video/webm'}],['storefront.logo',{reserved_bytes:524288}],['storefront.cover',{expected_version:'0'}]] as const){
       await q.query('SAVEPOINT bad_intent');await assert.rejects(intent(kind,extra),code('23514'));await q.query('ROLLBACK TO SAVEPOINT bad_intent');

@@ -1190,3 +1190,21 @@ test('schema175 additive appearance recognizes exact identity without a new read
   future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
+
+test('schema175 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(175);f.scan.ledger.at(-1).name='176_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained appearance schema175 floor refuses a schema174 observation without adding a written shape',()=>{
+  const f=fixtureAt(175);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,174);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
