@@ -493,7 +493,8 @@ test('with supplier console OFF, a merchant publishes public service information
   await expect(bp.locator('body')).not.toContainText('000000123456');
   const refused=await buyer.request.post(`/api/v1/public/stores/${store.slug}/checkouts`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:lastCheckoutInput});
   expect(refused.status()).toBe(409);expect((await refused.json()).code).toBe('checkout_not_enabled');
-  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM platform_admin_audit WHERE target_type='commerce_store_admission'")).rows[0].n).toBe(2);
+  // Other store journeys retain their own admission audit rows in this schema.
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM platform_admin_audit WHERE target_type='commerce_store_admission' AND target_ref=$1",[admission.admission_id])).rows[0].n).toBe(2);
   expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM commerce_control_events WHERE instance_id=$1 AND kind LIKE 'store_admission.%'",[store.instance])).rows[0].n).toBe(2);
  }finally{await seller.close();await buyer.close();await store.close();}
 });
