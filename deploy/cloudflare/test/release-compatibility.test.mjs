@@ -47,18 +47,18 @@ test('schema174 recognizes offer-photo history without reusing schema173 approva
   assert(codes(evaluate(f)).includes('release_schema_unsupported'));
   const changed=fixtureAt(174);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed=fixtureAt(174);renamed.scan.ledger.at(-1).name='174_renamed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  const renamed=fixtureAt(174);renamed.scan.ledger.at(-1).name='174_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(174);future.scan.ledger.push({name:'175_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
-// A renamed known identity keeps its numeric slot; a genuinely future row must
-// follow the complete current ledger so the sequence guard cannot mask it.
+// Replacing slot 174 with 175 leaves a ledger gap; sequence validation rejects
+// that gap before evaluating whether the migration identity is known.
 test('schema174 rejects a gap before the unknown future migration',()=>{
   const f=fixtureAt(174);f.scan.ledger.at(-1).name='175_unreviewed.sql';
   f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
   assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
-  const future=fixture();future.scan.ledger.push({name:'175_unreviewed.sql',sha256:'e'.repeat(64)});
-  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
-  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
 test('retained offer-photo history preserves schema174 and its reader floor after the flag is off',()=>{
   const f=fixtureAt(174),shape='media.supply-offer-photo.asset.v1';
@@ -124,7 +124,7 @@ test('hosted offer schema recognition still requires exact ledger and independen
   const changed=fixture(); changed.scan.ledger.find(row=>row.name===filename).sha256='d'.repeat(64);
   changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed=fixture(); renamed.scan.ledger.find(row=>row.name===filename).name=filename.slice(0,3)+'_renamed.sql';
+  const renamed=fixture(); renamed.scan.ledger.find(row=>row.name===filename).name='144_unreviewed.sql';
   renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
 });
@@ -156,10 +156,10 @@ test('schema167 recognition keeps schema166 approvals separate and rejects unkno
   const changed = fixtureAt(167); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(167); renamed.scan.ledger.at(-1).name = '167_renamed.sql';
+  const renamed = fixtureAt(167); renamed.scan.ledger.at(-1).name = '167_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(167); future.scan.ledger.push({name: '168_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
@@ -193,10 +193,10 @@ test('schema168 recognition keeps schema167 approvals separate and rejects unkno
   const changed = fixtureAt(168); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(168); renamed.scan.ledger.at(-1).name = '168_renamed.sql';
+  const renamed = fixtureAt(168); renamed.scan.ledger.at(-1).name = '168_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(168); future.scan.ledger.push({name: '169_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
@@ -230,10 +230,10 @@ test('schema169 recognition keeps schema168 approvals separate and rejects unkno
   const changed = fixtureAt(169); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(169); renamed.scan.ledger.at(-1).name = '169_renamed.sql';
+  const renamed = fixtureAt(169); renamed.scan.ledger.at(-1).name = '169_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(169); future.scan.ledger.push({name: '170_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
@@ -247,7 +247,7 @@ test('schema170 adds settings without opening the fulfilment capability', () => 
   assert.deepEqual(current.required_shapes,[]);
   f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
   assert(codes(evaluate(f)).includes('release_schema_unsupported'));
-  const renamed=fixtureAt(170);renamed.scan.ledger.at(-1).name='170_renamed.sql';
+  const renamed=fixtureAt(170);renamed.scan.ledger.at(-1).name='170_unreviewed.sql';
   renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
   const changed=fixtureAt(170);changed.scan.ledger.at(-1).sha256='d'.repeat(64);
@@ -412,7 +412,7 @@ test('social writer floor recognition does not grant schema or deployment approv
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
   const renamed = fixture();
-  renamed.scan.ledger.find(row => row.name === filename).name = filename.slice(0,3)+'_renamed.sql';
+  renamed.scan.ledger.find(row => row.name === filename).name = '116_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
 });
@@ -430,7 +430,7 @@ test('machine admission schema still requires independently approved release and
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
   const renamed = fixture();
-  renamed.scan.ledger.find(row => row.name === filename).name = filename.slice(0,3)+'_renamed.sql';
+  renamed.scan.ledger.find(row => row.name === filename).name = '117_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
 });
@@ -1067,10 +1067,10 @@ test('schema171 recognition keeps schema170 approvals separate and rejects unkno
   const changed = fixtureAt(171); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(171); renamed.scan.ledger.at(-1).name = '171_renamed.sql';
+  const renamed = fixtureAt(171); renamed.scan.ledger.at(-1).name = '171_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(171); future.scan.ledger.push({name: '172_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
@@ -1104,10 +1104,10 @@ test('schema172 recognition keeps schema171 approvals separate and rejects unkno
   const changed = fixtureAt(172); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(172); renamed.scan.ledger.at(-1).name = '172_renamed.sql';
+  const renamed = fixtureAt(172); renamed.scan.ledger.at(-1).name = '172_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(172); future.scan.ledger.push({name: '173_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
@@ -1142,10 +1142,10 @@ test('schema173 recognition keeps schema172 approvals separate and rejects unkno
   const changed = fixtureAt(173); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(173); renamed.scan.ledger.at(-1).name = '173_renamed.sql';
+  const renamed = fixtureAt(173); renamed.scan.ledger.at(-1).name = '173_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixture(); future.scan.ledger.push({name: '175_unreviewed.sql', sha256: 'e'.repeat(64)});
+  const future = fixtureAt(173); future.scan.ledger.push({name: '174_unreviewed.sql', sha256: 'e'.repeat(64)});
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
