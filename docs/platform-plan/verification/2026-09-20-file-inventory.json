@@ -13308,6 +13308,16 @@
       "sha256": "853b56b4ef466f88e828dc59a616646a247e4ead49679f6be8b30bc0d512e771"
     },
     {
+      "path": "contracts/guild-launchpad/v1/storefront-gallery.schema.json",
+      "bytes": 30441,
+      "sha256": "90d7c363b4719020c0a5ae6fdb304775a7ec988ea98381e658f9bac65b599d0a"
+    },
+    {
+      "path": "contracts/guild-launchpad/v1/storefront-gallery.ts",
+      "bytes": 4616,
+      "sha256": "87bb570eb4168996e7076a6a47764f9dfb649e7771a240d9a7b340d2a8190997"
+    },
+    {
       "path": "contracts/guild-launchpad/v1/storefront-pagination.ts",
       "bytes": 773,
       "sha256": "7652a4611941719d2e15e52713c2603e2a1e8b0dfa65d1548a81a912f64acf05"
@@ -18568,6 +18578,11 @@
       "sha256": "5f4eb358265bc662e819d09dfaa35ba0fda5cd5b3eae7fc1c630d611954dd021"
     },
     {
+      "path": "modules/agent-commerce/storefront/gallery/target.ts",
+      "bytes": 6398,
+      "sha256": "3092a86ca3cc8bc7894760d24c7a5a34fbd48aaf05cf7654292b434f4054807f"
+    },
+    {
       "path": "modules/agent-commerce/storefront/policies/commands.ts",
       "bytes": 5248,
       "sha256": "f368192a8f4c674f57e02a6e7b4cc66420465978ef80d0ba021ff439b385e5f2"
@@ -19179,8 +19194,8 @@
     },
     {
       "path": "modules/assets/engine.ts",
-      "bytes": 38114,
-      "sha256": "45dd6800cb07181db4970474ed58a1bb1ed69f8617d9da0cca2b662032c612ab"
+      "bytes": 38385,
+      "sha256": "fcf964d098c0bd866587a6e13dc2d40d2cc87c82cc566c6e77735b94963cecaf"
     },
     {
       "path": "modules/assets/event-banner.ts",
@@ -19303,6 +19318,11 @@
       "sha256": "28705d687b26673cc81b7776e25185de427b3a705dc9a0b5c648647e47a7c364"
     },
     {
+      "path": "modules/assets/storefront-gallery.ts",
+      "bytes": 1588,
+      "sha256": "dea29b73ff903218ad071d0f0b2f2e14b32096e5f40bb408dde04e1aa27061bd"
+    },
+    {
       "path": "modules/assets/storefront-lifecycle-authority.ts",
       "bytes": 2642,
       "sha256": "403b05a9a1e94095f001cf222bfae89b1d67c7f1538d385c32ffc7c06b320579"
@@ -19314,8 +19334,8 @@
     },
     {
       "path": "modules/assets/storefront-product-photo.ts",
-      "bytes": 9385,
-      "sha256": "a2e40f068d3b3f1bb63345ce593fe3ad88f7b27625fcf37690c66f4cb1afec24"
+      "bytes": 10123,
+      "sha256": "d8ec03d8f77a08cb362a9fe1143aa537678c61bd10f4b6db8d0eca0c46b3976f"
     },
     {
       "path": "modules/assets/supply-material.md",
@@ -19984,8 +20004,8 @@
     },
     {
       "path": "modules/guild-workspace/generate-contracts.ts",
-      "bytes": 36214,
-      "sha256": "0a32be1b678e66208b338e5931a8d04de069b724a6299832d15df0fccc03d6fa"
+      "bytes": 37518,
+      "sha256": "a3a8f961175e9ef09dc16cc775e7907219e9d385a2d0faeaf306e018a28398a8"
     },
     {
       "path": "modules/guild-workspace/launchpad-config.ts",
@@ -25624,8 +25644,8 @@
     },
     {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
-      "bytes": 13862,
-      "sha256": "705564abea51d17a2424d0af3cb0e29132529b606b11765ec9bb31d42814de16"
+      "bytes": 16411,
+      "sha256": "ce36102f58d873c56ce97108f1e3e7c05a87fa28dbe94763905f03d1ce9613f5"
     },
     {
       "path": "tests/runtime/storefront-order-pages.test.ts",

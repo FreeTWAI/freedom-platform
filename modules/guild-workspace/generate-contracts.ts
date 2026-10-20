@@ -1,3 +1,4 @@
+import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import * as shipping from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
 import * as commerceSetup from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
@@ -239,6 +240,16 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['seller-policies-command', policies.SellerPoliciesAckSchema, 'output', ['completion_metadata_only_receipt','current_store_manage']],
     ['policy-version', policies.PolicyVersionReadSchema, 'output', ['ever_published_same_store','no_private_version_number']],
     ['publication-seller-policies', policies.PublicationSellerPoliciesSchema, 'output', ['server_only_freeze_refs']],
+  ]],
+  ['storefront-gallery', 'C1 own product galleries, product CAS and immutable server-only publication sidecar; public storefront/v1 unchanged.', [
+    ['gallery-draft',gallery.ProductGalleryDraftSchema,'output',['current_store_read','exact_product_version_paths','virtual_primary','retained_recovery_rows']],
+    ['product-galleries',gallery.ProductGalleriesSchema,'output',['unique_own_products','current_store_read']],
+    ['gallery-command',gallery.GalleryCommandAckSchema,'output',['completion_metadata_only_receipt','current_store_write','product_selection_cas']],
+    ['reorder-gallery-input',gallery.ReorderGalleryInputSchema,'input',['exact_locked_photo_set','current_store_write']],
+    ['gallery-alt-input',gallery.GalleryAltInputSchema,'input',['well_formed_trimmed_120_code_points','no_control_or_bidi','current_store_write']],
+    ['remove-gallery-input',gallery.RemoveGalleryPhotoInputSchema,'input',['current_store_write']],
+    ['publication-gallery',gallery.PublicationGalleryDocumentSchema,'output',['server_only','canonical_digest','exact_frozen_refs','legacy_primary_matches']],
+    ['render-gallery',gallery.RenderGallerySchema,'output',['authorized_same_origin_paths','no_asset_identity']],
   ]],
   ['storefront-appearance', 'Independent draft and frozen publication appearance; storefront/v1 stays unchanged. Server-only media identities never enter this bundle.', [
     ['appearance-settings-input', appearance.StorefrontAppearanceInputSchema, 'input', ['unique_ordered_own_retail_product_ids', 'single_line_80_unicode_characters', 'current_store_manage_profile_cas']],

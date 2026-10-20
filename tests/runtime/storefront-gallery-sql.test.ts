@@ -118,3 +118,24 @@ test('GALLERY-SQL-05 canonical grants remove column and immutable writes',()=>tx
  for(const row of (await q.query(sql)).rows)await q.query(Object.values(row)[0] as string);
  for(const table of galleryTables){const p=(await q.query("SELECT has_table_privilege($1,$2,'SELECT') r,has_table_privilege($1,$2,'INSERT') i,has_table_privilege($1,$2,'UPDATE') u,has_table_privilege($1,$2,'DELETE,TRUNCATE,TRIGGER,REFERENCES') unsafe",[role,table])).rows[0];assert.deepEqual(p,{r:true,i:true,u:['commerce_product_groups','commerce_product_gallery_photos'].includes(table),unsafe:false});}
 }));
+
+test('GALLERY-SQL-06 old binary can create selections and primary pointers after migration177',()=>tx(async q=>{
+ const old=await seed(q);
+ assert.equal((await q.query('SELECT count(*)::int n FROM commerce_product_groups WHERE tenant_id=$1',[old.tenant])).rows[0].n,0);
+ assert.equal((await q.query('SELECT asset_id FROM commerce_product_photo_targets WHERE product_id=$1',[old.item])).rows[0].asset_id,old.photo.asset_id);
+}));
+test('GALLERY-SQL-07 closed gallery intent shape reuses the known purpose and immutable routing',()=>tx(async q=>{
+ const photo=(await q.query('SELECT photo_id FROM commerce_product_gallery_photos WHERE product_id=$1',[a.item])).rows[0].photo_id;
+ const owner=(await q.query('SELECT * FROM assets WHERE asset_id=$1',[a.photo.asset_id])).rows[0];
+ async function intent(extra:Record<string,unknown>={}){
+  const asset=randomUUID(),representation=randomUUID();
+  await insert(q,'assets',{asset_id:asset,representation_id:representation,scope_id:a.scope,scope_kind:'tenant',tenant_ref:a.tenant,owner_principal_id:owner.owner_principal_id,owner_user_id:owner.owner_user_id,purpose:'storefront.product-photo',policy_revision:'synthetic-gallery'});
+  const row={intent_id:randomUUID(),asset_id:asset,representation_id:representation,scope_id:a.scope,owner_principal_id:owner.owner_principal_id,target_user_id:owner.owner_user_id,policy_revision:'synthetic-gallery',prepare_key:randomUUID(),request_digest:'a'.repeat(64),source_content_type:'image/png',source_byte_size:4,source_sha256:'a'.repeat(64),expected_version:1,reserved_bytes:1048576,expires_at:new Date(Date.now()+60000),purpose:'storefront.product-photo',target_kind:'storefront.gallery-photo',target_gallery_photo_id:photo,target_tenant_id:a.tenant,target_instance_id:a.instance,...extra};
+  await insert(q,'asset_upload_intents',row);return row.intent_id;
+ }
+ const id=await intent();await fails(q,'UPDATE asset_upload_intents SET target_gallery_photo_id=$2 WHERE intent_id=$1',[id,randomUUID()]);
+ for(const extra of [{target_kind:'future.gallery'},{target_product_id:a.item},{reserved_bytes:2097152},{source_byte_size:2097153},{source_content_type:'image/gif'}]){
+  await q.query('SAVEPOINT bad_manifest');await assert.rejects(intent(extra),(e:unknown)=>(e as {code:string}).code==='23514');await q.query('ROLLBACK TO SAVEPOINT bad_manifest');
+ }
+ await q.query('SAVEPOINT foreign_manifest');await assert.rejects(intent({target_tenant_id:b.tenant}),(e:unknown)=>(e as {code:string}).code==='23503');await q.query('ROLLBACK TO SAVEPOINT foreign_manifest');
+}));
