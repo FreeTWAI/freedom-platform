@@ -158,7 +158,7 @@ export function createPublicHostedStoreRoutes(
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     const store = await readPublicStorePage(pool, c.req.param('slug'));
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(cartPageHtml(store.projection));
+    return c.html(cartPageHtml(store.projection, buyerJourneyEnabled));
   });
   app.get('/shops/:slug/checkout', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');

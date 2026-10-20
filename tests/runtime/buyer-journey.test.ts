@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {CartQuoteResponseSchema, ShippingUnavailableReasonSchema, type ShippingMethodRef, type ShippingUnavailableReason} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {SHIPPING_REASON_COPY, cartDeliveryNote, deliveryPanels, deliveryAlternatives, deliveryLineTitle} from '../../apps/portal-web/src/storefront/delivery-copy.js';
 import {CheckoutBuyerState, buyerBindingKey, buyerIntentKey, legacyIntentKey, parkedIntentKey, readCheckoutIdentity} from '../../apps/portal-web/src/storefront/buyer-state.js';
 import {createHash} from 'node:crypto';
 import * as pages from '../../modules/agent-commerce/storefront/pages.js';
@@ -11,6 +13,30 @@ const id = '11111111-1111-4111-8111-111111111111';
 const path = '/shops/synthetic-buyer-shop/checkout';
 const session = {user: {user_id: id}, csrf_token: 'synthetic-session-proof'};
 const store = {slug: 'synthetic-buyer-shop', name: '合成商店', brand: null, description: '', currency: 'TWD', revision: '1', published_at: '2026-10-20T00:00:00.000Z', transaction_state: 'not_enabled', products: []};
+
+test('delivery copy is exhaustive; cart notes require every configured method to block the same SKU', () => {
+  assert.deepEqual(Object.keys(SHIPPING_REASON_COPY).sort(), [...ShippingUnavailableReasonSchema.options].sort());
+  const option = (method: ShippingMethodRef, reason?: ShippingUnavailableReason, sku = 'P0001') => ({method, available: !reason, shipping_total_minor: reason ? null : 0, parcel_count: reason ? null : 1, free_over_minor: null, outlying: null, note: null, lines: reason ? [{sku, reason}] : []});
+  const base = {publication_revision: '1', currency: 'TWD', lines: [{sku: 'P0001', title: '合成茶杯', options: [], unit_price_minor: 100, quantity: 1, line_total_minor: 100, state: 'ok'}], merchandise_total_minor: 100, discounts: [], delivery_options: [], shipping: {state: 'not_configured', groups: [], total_minor: null}, total_minor: null, payment_options: []};
+  for (const reason of ShippingUnavailableReasonSchema.options) {
+    const options = [option('meetup', reason), option('home', reason)];
+    const quote = CartQuoteResponseSchema.parse({...base, delivery_options: options});
+    assert.equal(deliveryPanels(quote, '').length, 2);
+    assert.equal(cartDeliveryNote(options, 'P0001'), reason === 'fulfilment_not_agreed' ? '目前無法配送' : '目前沒有可用的取貨方式。');
+    assert.equal(cartDeliveryNote([...options, option('cvs:FAMIC2C')], 'P0001'), null);
+    assert.equal(cartDeliveryNote([options[0], option('home', reason, 'P0002')], 'P0001'), null);
+    assert(SHIPPING_REASON_COPY[reason].length > 0);
+  }
+  assert.equal(cartDeliveryNote([], 'P0001'), null);
+  const quote = CartQuoteResponseSchema.parse({...base, delivery_options: [option('home'), option('meetup'), option('cvs:FAMIC2C')], shipping: {state: 'unavailable', method: 'home', groups: [], total_minor: null, lines: [{sku: 'P0001', reason: 'outlying_unsupported'}]}});
+  assert.deepEqual(deliveryPanels(quote, 'home'), [{method: 'home', lines: [{sku: 'P0001', reason: 'outlying_unsupported'}]}]);
+  assert.deepEqual(deliveryAlternatives(quote, 'home').map(o => o.method), ['meetup']);
+  assert.deepEqual(deliveryPanels(quote, 'home', [{sku: 'P0001', reason: 'too_large'}, {sku: 'P0001', reason: 'too_large'}])[0].lines, [{sku: 'P0001', reason: 'too_large'}]);
+  assert.equal(deliveryLineTitle('P0001', quote, []), '合成茶杯');
+  assert.equal(deliveryLineTitle('P0002', quote, [{sku: 'P0002', title: '合成茶巾'}]), '合成茶巾');
+  assert.equal(deliveryLineTitle('P0003', quote, []), '商品 P0003');
+  assert.deepEqual(deliveryAlternatives(null, ''), []);
+});
 
 test('closed return allowlist rejects encoded path separators, normalization, controls and duplicate query values', () => {
   for (const slug of ['abc', 'a' + 'b'.repeat(38) + 'c']) {

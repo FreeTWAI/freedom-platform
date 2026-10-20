@@ -14,6 +14,7 @@ import type {Pool} from 'pg';
 import {verifyPassword,taipeiDate,command,expireNextSettingsProof} from './seller-console-fixture.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
+import {SupplyOfferSchema, DistributionSchema} from '../../contracts/guild-launchpad/v1/hosted-distribution.js';
 
 type Store = Awaited<ReturnType<typeof setupCartFixtureStore>>;
 async function openBuyer(db: Pool, context: BrowserContext, store: Store) {
@@ -778,4 +779,47 @@ test('TOTP and backup login return only with a live session; cross-tab logout an
     await expect(page.getByRole('button', {name: '重試同一筆訂單', exact: true})).toHaveCount(0);
     await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false'); expect(posts).toHaveLength(0);
   } finally {await context.close(); await store.close();}
+});
+
+test('delivery reasons name blocked supply items; removing them keeps own items buyable and offers only available alternatives', async ({browser, e2eAuthPool}, info) => {
+  const supplier = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  const sellerContext = await browser.newContext({baseURL: store.origin});
+  try {
+    const source = supplier.products[0];
+    const offer = SupplyOfferSchema.parse(await supplier.sellerPost(`${supplier.root}/products/${source.product_id}/supply-offer`, {}, 200, source.version));
+    const selection = DistributionSchema.parse(await store.sellerPost(store.root + '/distribution-selections', {offer_id: offer.offer_id, terms_sha256: offer.terms_sha256, retail_price_minor: 10000}, 201));
+    await supplier.sellerPost(`${supplier.root}/supply-requests/${selection.selection_id}/decision`, {decision: 'accepted', listing_sha256: selection.listing_sha256}, 200, selection.version);
+    const projection = await store.republish(), own = store.products[1];
+    const session = await apiLogin(sellerContext, store.origin, store.seller.email);
+    const profile = await sellerContext.request.put('/api/v1' + store.root + '/shipping-profile', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID(), 'If-Match': '"1"'}, data: {schema: 'freedom.shipping-profile/v1', working_days: [1,2,3,4,5], services: [], delivery_options: [{method: 'meetup', note: '請先約定面交。'}, {method: 'home', fee_per_parcel_minor: 6000, free_over_minor: null, outlying: {kind: 'excluded'}}], drop_ship: null}});
+    expect(profile.status(), await profile.text()).toBe(200);
+    await openBuyer(e2eAuthPool, context, store);
+    const page = await context.newPage();
+    await page.goto(`/shops/${store.slug}`);
+    await page.evaluate(({slug, revision, lines}) => localStorage.setItem('freedom.shop.cart.v1:' + slug, JSON.stringify({revision, lines})), {slug: store.slug, revision: projection.revision, lines: [selection.sku, own.sku].map(sku => {const product = projection.products.find(p => p.sku === sku)!; return {sku, title: product.title, quantity: 1, price_minor: product.price_minor, currency: projection.currency};})});
+    await page.goto(`/shops/${store.slug}/cart`);
+    const suppliedLine = page.locator('.shop-cart-line').filter({hasText: source.title});
+    await expect(suppliedLine).toContainText('目前無法配送');
+    await expect(page.locator('.shop-cart-line').filter({hasText: own.title})).not.toContainText('目前沒有可用的取貨方式。');
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-cart-delivery-note-${width}.png`));
+    await page.getByRole('link', {name: '前往結帳', exact: true}).click();
+    await expect(page.getByRole('region', {name: '以下商品無法使用「面交取貨」：'})).toContainText(source.title + '：目前無法配送');
+    await expect(page.getByText('這些商品目前無法一起配送，請回購物車調整或分開下單。', {exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: /^改用/})).toHaveCount(0);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-delivery-blocked-${width}.png`));
+    await page.getByRole('link', {name: '回購物車調整', exact: true}).click();
+    await page.locator('.shop-cart-line').filter({hasText: source.title}).getByRole('button', {name: /移除/}).click();
+    await expect(page.locator('.shop-cart-line')).toHaveCount(1);
+    await page.getByRole('link', {name: '前往結帳', exact: true}).click();
+    await expect(page.getByRole('button', {name: '改用面交取貨', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '改用宅配', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('region', {name: '以下商品無法使用「宅配」：'})).toContainText(own.title);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-delivery-alternative-${width}.png`));
+    await page.getByRole('button', {name: '改用面交取貨', exact: true}).click();
+    await fillBuyerContact(page); await freeze(page, store);
+    await expect(page.getByRole('region', {name: '2. 核對商品與配送'})).toContainText(own.title);
+    await expect(page.getByRole('region', {name: '2. 核對商品與配送'})).not.toContainText(source.title);
+  } finally {await context.close(); await sellerContext.close(); await store.close(); await supplier.close();}
 });

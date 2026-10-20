@@ -8,13 +8,13 @@ function storefrontShell(store: StorefrontStoreHeading, title: string, content: 
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="/shops.css">${script}</head><body>${storefrontHeader(store, {cart: includeScript})}<main id="main" tabindex="-1">${content}</main>${storefrontFooter(store, {orderAccess: false})}</body></html>`;
 }
 
-export function cartPageHtml(store: StorefrontStoreHeading): string {
+export function cartPageHtml(store: StorefrontStoreHeading, buyerJourneyEnabled = false): string {
   const slug = escapeHtml(store.slug);
   const name = escapeHtml(store.name);
   return storefrontShell(
     store,
     `購物車｜${store.name}｜自由工坊`,
-    `<section class="shop-cart" id="shop-cart" data-store-slug="${slug}" data-store-name="${name}" aria-labelledby="shop-cart-title" aria-busy="true"><h1 id="shop-cart-title" tabindex="-1">購物車</h1><p role="status">正在讀取購物車…</p><noscript><p>使用購物車需要開啟瀏覽器的 JavaScript。</p></noscript></section>`,
+    `<section class="shop-cart" id="shop-cart"${buyerJourneyEnabled ? ' data-buyer-journey="true"' : ''} data-store-slug="${slug}" data-store-name="${name}" aria-labelledby="shop-cart-title" aria-busy="true"><h1 id="shop-cart-title" tabindex="-1">購物車</h1><p role="status">正在讀取購物車…</p><noscript><p>使用購物車需要開啟瀏覽器的 JavaScript。</p></noscript></section>`,
     true,
   );
 }

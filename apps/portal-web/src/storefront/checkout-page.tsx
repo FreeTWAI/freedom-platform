@@ -8,6 +8,7 @@ import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {formatMinor} from '../../../../modules/agent-commerce/hosted/format.js';
 import {isValidStoreSlug, readCart, writeCart} from './cart-store.js';
 import {formatTaipeiDateTime} from './format.js';
+import {DELIVERY_NAMES, SHIPPING_REASON_COPY, deliveryPanels, deliveryAlternatives, deliveryLineTitle, type BlockedDeliveryLine} from './delivery-copy.js';
 import {storefrontLoginHref} from './return-path.js';
 import {CheckoutBuyerState, readCheckoutIdentity, IDENTITY_CHANGED_COPY, PREVIOUS_ORDER_COPY} from './buyer-state.js';
 
@@ -15,7 +16,7 @@ type Quote = ReturnType<typeof CartQuoteResponseSchema.parse>;
 type Checkout = ReturnType<typeof CheckoutResponseSchema.parse>;
 type Intent = {checkoutRef: string; input: ReturnType<typeof PlaceOrderInputSchema.parse>};
 const methodNames = {immediate_card: '信用卡', bank_transfer: '銀行匯款', cash_on_meetup: '面交付款'};
-const deliveryNames: Record<ShippingMethodRef, string> = {meetup: '面交取貨', home: '宅配', 'cvs:UNIMARTC2C': '7-ELEVEN 取貨', 'cvs:FAMIC2C': '全家取貨', 'cvs:HILIFEC2C': '萊爾富取貨'};
+const deliveryNames = DELIVERY_NAMES;
 const unavailable = {member_required: '登入會員後才能選擇匯款或面交', meetup_required: '面交付款只能搭配面交取貨', payment_profile_unavailable: '這個付款方式目前無法使用'};
 const fieldNames: Record<string, string> = {'delivery.name': '收件人姓名', 'delivery.mobile': '收件人手機', 'delivery.postal_code': '郵遞區號', 'delivery.address': '收件地址', 'delivery.method': '取貨方式'};
 const intentKey = (slug: string) => `freedom.shop.order-intent.v1:${slug}`;
@@ -86,6 +87,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [deliveryFailure, setDeliveryFailure] = useState<BlockedDeliveryLine[]>([]);
   const fieldProps = (path: string) => ({'aria-invalid': Boolean(fieldErrors[path]), 'aria-describedby': fieldErrors[path] ? `checkout-error-${path}` : undefined});
   const fieldError = (path: string) => fieldErrors[path] ? <p id={`checkout-error-${path}`} className="shop-order-alert">{fieldErrors[path]}</p> : null;
   const [refresh, setRefresh] = useState(0);
@@ -112,7 +114,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           freezeRequest.current = null;
           setIntent(null); setCheckout(null); setQuote(null); setPayment(''); setMethod('');
           setContactName(''); setEmail(''); setMobile(''); setPostal(''); setAddress('');
-          setFieldErrors({}); setError(''); setFreezeUnknown(false); setBusy(false); setQuoteBusy(false);
+          setFieldErrors({}); setDeliveryFailure([]); setError(''); setFreezeUnknown(false); setBusy(false); setQuoteBusy(false);
           setIdentityNotice(true); setPreviousOrder(value => value || result.previousOrder);
           requestAnimationFrame(() => heading.current?.focus());
         }
@@ -169,7 +171,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         if (result.lines.length !== lines.length || result.lines.some((line, index) => line.sku !== lines[index].sku || line.quantity !== lines[index].quantity)) {
           setQuote(null); setError('報價與購物車不符，請重新讀取。'); return;
         }
-        setQuote(result);
+        setQuote(result); setDeliveryFailure([]);
       }).catch(() => {if (active) {setQuote(null); setError('無法取得最新報價，請稍後重試。');}})
         .finally(() => {if (active) setQuoteBusy(false);});
     }, 300);
@@ -203,6 +205,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       } else {
         setError(errorCopy(data));
         const problem = CheckoutErrorSchema.safeParse(data);
+        if (enhanced && problem.success && problem.data.lines) {setDeliveryFailure(problem.data.lines); setRefresh(value => value + 1);}
         if (problem.success && problem.data.fields) setFieldErrors(Object.fromEntries(problem.data.fields.map(field => [field.path, `${fieldNames[field.path] ?? '收件資料'}${field.code === 'required' ? '為必填' : '格式不符'}，請修正後再試。`])));
         const definitive = response.status >= 400 && response.status < 500 && CheckoutErrorSchema.safeParse(data).success;
         setFreezeUnknown(!definitive);
@@ -257,6 +260,9 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   const quoteReady = Boolean(!identityBlocked && quote && !quoteBusy && method && quote.shipping.state === 'quoted' && quote.total_minor !== null && quote.lines.every(line => line.state === 'ok' || line.state === 'revision_changed'));
   const deliveryOption = quote?.delivery_options.find(option => option.method === method);
   const paymentOptions = quote?.payment_options ?? [];
+  const panels = enhanced ? deliveryPanels(quote, method, deliveryFailure) : [];
+  const alternatives = deliveryAlternatives(quote, method);
+  const needsAlternative = panels.length > 0 && (!method || quote?.shipping.state === 'unavailable' || deliveryFailure.length > 0);
   return <>
     <h1 id="shop-checkout-title" tabIndex={-1} ref={heading}>結帳</h1>
     {enhanced && identityNotice && <p role="status" className="shop-order-alert">{IDENTITY_CHANGED_COPY}</p>}
@@ -299,9 +305,17 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         <div className="shop-order-access-field"><label htmlFor="checkout-email">Email</label><input id="checkout-email" className="shop-text-input" type="email" autoComplete="email" maxLength={254} required value={email} onChange={event => setEmail(event.target.value)} /></div>
         {quoteBusy && <p role="status">正在取得配送報價…</p>}
         {quote?.delivery_options.map(option => <label className="shop-checkout-choice" key={option.method}>
-          <input type="radio" name="delivery" required checked={method === option.method} disabled={!option.available || option.method.startsWith('cvs:')} onChange={() => setMethod(option.method)} />
+          <input type="radio" name="delivery" aria-describedby={enhanced && panels.some(panel => panel.method === option.method) ? `delivery-blocked-${option.method}` : undefined} required checked={method === option.method} disabled={!option.available || option.method.startsWith('cvs:')} onChange={() => setMethod(option.method)} />
           <span>{deliveryNames[option.method]}{!option.available && <span className="shop-checkout-reason">目前商品無法使用這個取貨方式</span>}{option.method.startsWith('cvs:') && <span className="shop-checkout-reason">門市選擇尚未開放</span>}</span>
         </label>)}
+        {panels.map(panel => <section className="shop-order-section" key={panel.method} aria-labelledby={`delivery-blocked-title-${panel.method}`} id={`delivery-blocked-${panel.method}`}>
+          <h2 id={`delivery-blocked-title-${panel.method}`}>以下商品無法使用「{deliveryNames[panel.method]}」：</h2>
+          <ul>{panel.lines.map(line => <li key={line.sku}>{deliveryLineTitle(line.sku, quote, cart.lines)}：{SHIPPING_REASON_COPY[line.reason]}</li>)}</ul>
+        </section>)}
+        {needsAlternative && (alternatives.length > 0 ? <div className="shop-order-actions">
+          {alternatives.map(option => <button className="shop-button shop-button-secondary" type="button" key={option.method} disabled={quoteBusy || identityBlocked} onClick={() => {setDeliveryFailure([]); setMethod(option.method);}}>改用{deliveryNames[option.method]}</button>)}
+          <p>選擇後將重新報價。</p>
+        </div> : <div><p>這些商品目前無法一起配送，請回購物車調整或分開下單。</p><div className="shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車調整</a></div></div>)}
         {method === 'home' && <>
           <div className="shop-order-access-field"><label htmlFor="checkout-postal">郵遞區號</label><input {...fieldProps('delivery.postal_code')} id="checkout-postal" className="shop-text-input" autoComplete="postal-code" inputMode="numeric" maxLength={10} required value={postal} onChange={event => setPostal(event.target.value)} />{fieldError('delivery.postal_code')}</div>
           <div className="shop-order-access-field"><label htmlFor="checkout-address">收件地址</label><input {...fieldProps('delivery.address')} id="checkout-address" className="shop-text-input" autoComplete="street-address" maxLength={120} required value={address} onChange={event => setAddress(event.target.value)} />{fieldError('delivery.address')}</div>
