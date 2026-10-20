@@ -50,7 +50,7 @@ const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, t
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -616,8 +616,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 132, middleware: 18 });
-  assert.equal(selectedRoutes.length, 182);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 133, middleware: 19 });
+  assert.equal(selectedRoutes.length, 184);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
