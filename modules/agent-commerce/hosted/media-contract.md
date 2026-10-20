@@ -84,3 +84,22 @@ runs. Source/type/pure success is not those results. DC-08/catalog and retained
 quota registration do not claim export/restore authority or enable photo GC.
 Initial broad context `surface_unmapped` remains in the artifact packet; final
 context completeness is not a runtime scheduling or execution proof.
+
+## Supplier offer evaluation photos
+
+The default-OFF `FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED` installs an explicit
+supplier share/stop pair and a seller-root `supply-catalog/:offer_id/photo/:seq`
+GET/HEAD. [Distribution](distribution.md#opt-in-evaluation-photos-2026-10-20)
+defines its audience, product/offer CAS and owner preview query. It introduces
+no new storage purpose, upload pipeline, signed URL or publication grant.
+The existing offer visibility function runs in both authority snapshots;
+`readVerifiedObject` runs outside SQL between them, including HEAD. There is no
+early 304. Stale sequences and a changed authority/share fail closed.
+
+`commerce_hosted_offer_photos` stores immutable metadata copied from
+`asset_objects`, with the same ready-Asset/object composite FKs as publication
+refs and the permanent fence guard. Its entire history retains references,
+including stopped shares. Future product-photo GC must enumerate this table;
+the currently uninstalled GC is not enabled by migration 173. Full backups keep
+the table and retained objects together. No deployed activation or restore
+acceptance is implied by source registration.

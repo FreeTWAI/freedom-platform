@@ -134,3 +134,11 @@ S3 → D-11 素材進公開店面（先通知 Commerce）
 - 每個候選一次完整 CI；本機驗證用拋棄式 PostgreSQL（`postgres:18-alpine`），資料放磁碟 volume 並設 `dynamic_shared_memory_type=mmap`，不碰開發資料庫 54339。
 - 測試暫存依 Ted 2026-10-09 的規則放磁碟：資料庫、SQLite、pytest 與 Git scratch 都不用 `/dev/shm` 或任何 tmpfs；pytest 用 `pytest-disktmp uv run pytest -q ...`，其他暫存用 `~/agent-work/tmp/` 下的唯一目錄；結束時清掉自己建立的 container、volume 與暫存目錄。做法見 [Runtime CI PostgreSQL storage and cleanup](../../../development/runtime-ci-postgres.md)。
 - 各 job 的實際投入與返工原因記在 [sources.md](sources.md) 的方法表。
+
+## 2026-10-20：選用前商品照片
+
+此輪補上選用前評估照片：供應商逐份方案明確分享目前商品照片、換圖或停止；同社群、原本可讀這份方案的店主在方案頁看得到，供應商預覽同一張圖。照片與供貨條件摘要及同意版本分開，操作不產生新供貨版本、不改選品、同意、庫存、預留或結帳。重發新版本在同一交易沿用分享決定與目前照片，沒有照片時略過。
+
+新增 `FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED` 預設關閉，所有真實環境維持關閉；本輪沒有部署、開旗標、修改 secrets 或真人試用。新路由只在 launchpad、supplier console、此旗標與商品照片讀取均安裝後掛載；不需要素材媒體或上傳開關。Migration `173_supply_offer_photos.sql` 是合併前暫定編號，整合時須同步所有名稱及 schema 下限。
+
+尚未涵蓋：代出貨同意、供貨商品結帳、商品卡縮圖。店主若要在自己的店面使用供應商照片，仍需 D-11 的另外素材授權與複本；評估照片不授予此權利。分享歷史在方案存續期間釘住供應商資產，停止提供不刪除、不釋放配額。商品照片 GC 目前仍未安裝，將來啟用前必須把新表納入引用計數與保留政策。自動測試與合成瀏覽器驗證的實跑結果記於交付報告，不作已部署或真人驗收證明。

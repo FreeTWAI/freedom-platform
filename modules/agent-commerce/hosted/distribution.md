@@ -1,5 +1,66 @@
 # Hosted supply cooperation
 
+## Opt-in evaluation photos (2026-10-20)
+
+`FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED` defaults OFF. Installation additionally
+requires guild launchpad, supplier console and installed product-photo reads;
+material media and new-upload admission are independent. Source changes do not
+enable any environment. `/api/v1/site.supply_offer_photos_enabled` reports the
+complete installation decision. When absent, commands and seller bytes are
+unmounted and both `SupplyOfferPage.photo` and supplier `product.offer_photo`
+are null. Catalog cards keep their existing text presentation.
+
+Provisional migration `173_supply_offer_photos.sql` adds only
+`commerce_hosted_offer_photos`. Its `(offer_id,seq)` history is append-only and
+contiguous under the offer row lock. Each share captures the product's current
+ready, unfenced photo and immutable object metadata; an all-null photo tuple
+records a stop. The supplier binding must match the offer. SELECT permits the
+owner or an offer visible through the offers table's own RLS policy; INSERT
+requires the owner tenant. Runtime-role tests additionally tighten the offer
+policy in a rolled-back disposable transaction and prove the photo subquery
+also becomes unreadable. The application never treats this RLS audience as
+sufficient route authority.
+
+Under the supplier's own `/tenants/:tenant_id/storefronts/:instance_id`, POST
+`/supply-offers/:offer_id/photo/share` requires `store:write` and `store:publish`;
+its If-Match is the **product** selection version, including photo edits. POST
+`/supply-offers/:offer_id/photo/stop` requires `store:write`; its If-Match is the
+**offer** version, and withdrawn offers may be stopped. Both use empty JSON,
+the existing command receipts and current authorization before replay. New rows
+write `hosted_supply_offer_photo` facts at their sequence. Repeated current
+choices are no-ops. The supplier read reports state, sequence and whether the
+shared identity is still the current product photo. Explicitly publishing a
+replacement offer carries a previous current share decision to the new offer
+with the current product photo in the same transaction, skipping a missing photo.
+Withdrawal preserves all history; a stopped decision does not revive an older share.
+
+GET/HEAD `/supply-catalog/:offer_id/photo/:seq` belongs to the **seller's** root.
+It reuses `findVisibleSupplyOffer` with the detail page: current `store:write`,
+same community/currency, and offered or already adopted by this store. Only the
+current shared sequence reads. It snapshots, releases SQL, fully verifies
+`readVerifiedObject`, then reauthorizes and compares offer/share identity. HEAD
+performs the same verification. Both responses are private/no-store with Cookie
+variation, nosniff, noindex, no-referrer and same-origin resource policy. No
+supplier tenant, scope, Asset/object ID, stock or private draft enters the DTO,
+and no seller connection changes to the supplier tenant.
+
+The supplier preview reuses its own existing product-photo route with the strict
+`?offer_id=<offer>&seq=<seq>` query pair. This opt-in branch requires the new flag,
+the own live product/version and own currently offered/shared sequence before
+and after verification. It can show the retained shared image even after the
+current product image is replaced or removed. It grants no cross-store read.
+The preview derives intrinsic dimensions from the decoded image; seller image
+dimensions come directly from immutable metadata.
+
+Photos are illustrative and excluded from `terms_sha256`, offer versions and
+consent. Share/replace/stop changes no selection, approval, stock, reservation or
+checkout. Using supplier images in a seller's own store still requires D-11's
+explicit material grant and owned copy. All rows pin their supplier Assets for
+the offer's lifetime, including stopped and replaced history. Existing backup
+capture includes every registered unfenced object. Product-photo GC remains
+uninstalled; **every future GC reference count must include this table** before
+claiming a fence. Stopping exposure does not delete bytes or release quota.
+
 This increment follows Mini's fixed [supplier/seller direction](supply-terms.md)
 and SP-10. Any authorized shop operator can publish its own supply offers or
 propose selections from other shops; guild membership does not grant another
