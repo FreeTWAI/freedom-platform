@@ -74,11 +74,33 @@ test('overview authorizes store reads first, with capability-scoped counts equal
   const overview=await h.f.x.h.call('GET',s.root+'/overview',actor,undefined,{},h.f.app),sibling=await h.f.x.h.call('GET',s.root,actor,undefined,{},h.f.app);
   assert.equal(overview.status,sibling.status);assert.equal(overview.data.code,sibling.data.code);
  }
+ for(const root of [`/tenants/${s.tenantId}/storefronts/${randomUUID()}`,`/tenants/${randomUUID()}/storefronts/${s.instanceId}`]){
+  const overview=await h.f.x.h.call('GET',root+'/overview',s.owner,undefined,{},h.f.app),sibling=await h.f.x.h.call('GET',root,s.owner,undefined,{},h.f.app);
+  assert.equal(overview.status,sibling.status);assert.equal(overview.data.code,sibling.data.code);
+ }
  assert.equal((await h.request(s,'GET','/overview?unknown=true')).status,422);
  const response=await h.request(s,'GET','/overview');assert.equal(response.response.headers.get('Cache-Control'),'private, no-store');
  const serialized=JSON.stringify(response.data);for(const forbidden of [privateBank.account,privateBank.name,'合成准入理由不可出現在賣家頁','admitted_by','provider_profiles','quarantine'])assert.equal(serialized.includes(forbidden),false,'seller projection is explicitly safe');
  h.f.settings.quarantine=true;const during=h.expect(await h.request(s,'GET','/overview'));assert.equal(state(during,'platform'),'paused');
  const direct=await readStoreOverview(h.f.x.runtime,await h.actor(s),s.tenantId,s.instanceId,deps());assert.equal(direct.accepting_orders,false);
+});
+
+test('overview caps real open-order counts at 99 while retaining the more indicator',async()=>{
+ const s=await h.f.x.store(200),release=h.expect(await h.request(s,'GET','/release'));
+ h.expect(await h.request(s,'POST','/upgrade',{},release.version));
+ for(let index=0;index<100;index++)await h.f.x.place(s,await h.f.x.frozen(s,1));
+ const overview=StoreOverviewSchema.parse(h.expect(await h.request(s,'GET','/overview')));assert.deepEqual(overview.orders!.open,{count:99,more:true});
+ const page=h.expect(await h.request(s,'GET','/checkout-orders?lifecycle=open&limit=50'));assert.equal(page.items.length,50);assert(page.next_cursor);
+ const next=h.expect(await h.request(s,'GET','/checkout-orders?lifecycle=open&limit=50&cursor='+encodeURIComponent(page.next_cursor)));assert.equal(next.items.length,50);assert.equal(next.next_cursor,null);
+ assert.deepEqual(overview.orders!.awaiting_offline_payment,{count:0,more:false});
+});
+
+test('readiness quotes publications larger than one cart and follows live own-stock availability',async()=>{
+ const s=await h.f.x.store(0);
+ for(let index=0;index<50;index++)h.expect(await h.request(s,'POST','/products',{title:'合成批次商品 '+index,price_minor:10000,stock:1}),201);
+ await h.f.x.publish(s);
+ const r=await readiness(s),products=r.items.find(item=>item.key==='products')!;
+ assert.equal(products.published_count,51);assert.equal(products.sellable_count,50);assert.equal(products.own_stock_count,51);assert.equal(products.state,'done');
 });
 
 test('admin receipt list includes inactive and unready stores, all active admissions, community totals and stable pages',async()=>{
@@ -87,6 +109,8 @@ test('admin receipt list includes inactive and unready stores, all active admiss
  const blankTenant=await h.f.x.h.createTenant(blankOwner,'合成尚未建檔空間'),blankPlan=await h.f.x.h.plan(blankOwner,blankTenant.tenantId,h.f.x.h.planBody('guild_commerce_sales',blankTenant.workspaceId,'hosted-store','hosted-store@1.0.0'));
  h.expect(blankPlan,201);assert.equal(h.expect(await h.f.x.h.launch(blankOwner,blankTenant.tenantId,blankPlan)).state,'succeeded');
  const admission=h.expect(await adminPost('',{tenant_id:inactive.tenantId,instance_id:inactive.instanceId,reason:'合成保留准入'}),201);
+ const adminId=h.expect(await h.f.http('GET','/admin/api/bootstrap')).admin.admin_id;
+ await h.f.x.h.pool.query("INSERT INTO commerce_store_admissions(tenant_id,instance_id,environment,admitted_by,reason) VALUES($1,$2,'live',$3,'合成其他環境准入')",[ready.tenantId,ready.instanceId,adminId]);
  await h.f.x.h.pool.query("UPDATE module_instances SET status='suspended',version=version+1 WHERE instance_id=$1",[inactive.instanceId]);
  await h.f.x.h.pool.query("UPDATE tenants SET status='suspended',version=version+1 WHERE tenant_id=$1",[inactive.tenantId]);
  const otherCommunity=randomUUID(),otherAdmin=randomUUID(),otherEmail=`synthetic-${randomUUID()}@example.test`;
@@ -113,6 +137,7 @@ test('admin receipt list includes inactive and unready stores, all active admiss
  assert.equal(firstReply.response.headers.get('Cache-Control'),'private, no-store');assert.deepEqual(first.summary,{stores:4,active_admissions:1,accepting_orders:0});assert.equal(first.release_sha,'a'.repeat(40));assert.equal(first.next_offset,1);
  const all=[];for(let offset=0;offset<4;offset++){const page=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?limit=1&offset='+offset)));assert.deepEqual(page.summary,first.summary);all.push(...page.items);assert.equal(page.next_offset,offset===3?null:offset+1);}
  assert.equal(new Set(all.map(item=>item.instance_id)).size,4);assert.equal(all.some(item=>item.instance_id===foreignInstance),false);assert.equal(all.find(item=>item.tenant_id===blankTenant.tenantId)!.store,null);assert.equal(all.find(item=>item.instance_id===inactive.instanceId)!.admission.active!.admission_id,admission.admission_id);
+ assert.equal(all.find(item=>item.instance_id===ready.instanceId)!.admission.active,null,'another provider environment is excluded');
  assert.equal(state(all.find(item=>item.instance_id===unready.instanceId)!.readiness,'storefront'),'missing');
  assert.equal(all.find(item=>item.instance_id===inactive.instanceId)!.tenant_status,'suspended');
  const memberAdmin=randomUUID();await h.f.x.h.pool.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[memberAdmin,DEMO_COMMUNITY,ready.owner.user.email,'合成成員管理員']);
@@ -120,4 +145,6 @@ test('admin receipt list includes inactive and unready stores, all active admiss
  const memberResult=AdminStoreReadinessPageSchema.parse(await (await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness')).json());assert.equal(memberResult.items.find(item=>item.instance_id===ready.instanceId)!.admin_is_member,true);
  assert.equal(JSON.stringify(memberResult).includes(ready.owner.user.email),false);assert.equal(JSON.stringify(memberResult).includes('account_number'),false);
  for(const query of ['limit=0','limit=51','offset=-1','limit=1&limit=2','unknown=1'])assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness?'+query)).status,422);
+ await h.f.x.h.pool.query('UPDATE platform_admins SET active=false,aggregate_version=aggregate_version+1 WHERE admin_id=$1',[memberAdmin]);
+ assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness')).status,403);
 });

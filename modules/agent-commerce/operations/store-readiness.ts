@@ -46,7 +46,7 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
       ARRAY(SELECT option->>'method' FROM jsonb_array_elements(document->'delivery_options') option) AS methods
       FROM commerce_shipping_profile_versions WHERE tenant_id=$1 AND instance_id=$2 ORDER BY version DESC LIMIT 1`,[tenantId,instanceId])).rows[0];
     let deliveryReady=false;
-    if(p&&checkout.shipping?.cart){
+    if(p&&shipping?.methods.length&&checkout.shipping?.cart){
       // Evaluate actual own-stock lines independently: a supply line the cart
       // cannot fulfil must not hide a usable own-stock delivery choice.
       for(const item of own){
