@@ -8,6 +8,8 @@ import {navigate, selectSocialFeed} from './navigation.js';
  */
 const SHORT = 'aaaaaaaaaaa', WATCH = 'bbbbbbbbbbb';
 const ORIGIN = 'https://www.youtube-nocookie.com';
+/** Compares the parsed origin, never a string prefix, so a look-alike host such as <origin>.example.net cannot match. */
+const isPlayer = (raw: string) => { try { return new URL(raw).origin === ORIGIN; } catch { return false; } };
 
 async function prepare(page: Page) {
   // A system share sheet would block a headless run; the permalink dialog is the fallback under test.
@@ -170,7 +172,7 @@ test.describe('sharing around Short, feature ON', () => {
 
   test('an ordinary YouTube link plays inside its card only after the viewer asks, and a Short carries a badge', async ({page, e2eAuthPool}) => {
     const contacted: string[] = [];
-    page.on('request', request => { if (request.url().startsWith(ORIGIN)) contacted.push(request.url()); });
+    page.on('request', request => { if (isPlayer(request.url())) contacted.push(request.url()); });
     await prepare(page);
     const stamp = Date.now();
     const titles = [`一般影片 ${stamp}`, `標示短影音 ${stamp}`];
@@ -191,7 +193,10 @@ test.describe('sharing around Short, feature ON', () => {
       const frame = card.locator('iframe');
       await expect(frame).toHaveCount(1);
       const src = (await frame.getAttribute('src'))!;
-      expect(src).toMatch(new RegExp(`^${ORIGIN}/embed/${WATCH}\\?`));
+      const player = new URL(src);
+      expect(player.origin).toBe(ORIGIN);
+      expect(player.pathname).toBe(`/embed/${WATCH}`);
+      expect(player.search).not.toBe('');
       expect(src).not.toContain('tracking');
       expect(src).not.toContain('PLx');
       await card.getByRole('button', {name: '收起影片', exact: true}).click();
@@ -223,7 +228,7 @@ test.describe('sharing around Short, feature OFF (default)', () => {
 
   test('no in-card player, badge, hint promise or Short on the home timeline', async ({page, e2eAuthPool}) => {
     const contacted: string[] = [];
-    page.on('request', request => { if (request.url().startsWith(ORIGIN)) contacted.push(request.url()); });
+    page.on('request', request => { if (isPlayer(request.url())) contacted.push(request.url()); });
     await prepare(page);
     const stamp = Date.now();
     const ids = await seed(e2eAuthPool, [{title: `關閉狀態 ${stamp}`, url: `https://www.youtube.com/shorts/${SHORT}`}, {title: `關閉狀態影片 ${stamp}`, url: `https://www.youtube.com/watch?v=${WATCH}`}]);
