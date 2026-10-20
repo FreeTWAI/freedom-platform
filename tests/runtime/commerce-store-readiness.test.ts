@@ -5,7 +5,9 @@ import {shippingSettingsHarness,type ShippingSettingsHarness,type ShippingTestSt
 import {createShippingQuotePort} from '../../modules/agent-commerce/fulfilment/quote/index.js';
 import {hostedCheckoutOptions} from '../../apps/platform-api/src/routes/hosted-checkout.js';
 import {storeReadiness,readStoreOverview} from '../../modules/agent-commerce/operations/store-readiness.js';
-import {publicPurchaseState,createPublicCheckout,placePublicOrder} from '../../modules/agent-commerce/checkout/public-commands.js';
+import {publicPurchaseState,publicPurchaseStateWithClient,createPublicCheckout,placePublicOrder} from '../../modules/agent-commerce/checkout/public-commands.js';
+import {createStoreAdmissionPort} from '../../modules/agent-commerce/operations/admissions.js';
+import {assertCommerceReadinessPrivacy} from '../../packages/testing/commerce-readiness-privacy.js';
 import {bindStore} from '../../modules/agent-commerce/checkout/authority.js';
 import {StoreOverviewSchema,AdminStoreReadinessPageSchema,type StoreReadiness} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
@@ -25,16 +27,20 @@ async function readiness(s:ShippingTestStore){
  assert.deepEqual(r.items.map(item=>item.key),['storefront','products','store_information','release','payment','delivery','admission','platform']);return r;
 }
 async function bank(s:ShippingTestStore){
- const account=Array.from({length:12},()=>randomInt(10)).join(''),name='合成收款'+randomUUID().slice(0,8);
+ const account=Array.from({length:12},()=>randomInt(10)).join(''),name='合成收款'+randomUUID().slice(0,8),branch='合成分行'+randomUUID().slice(0,8);
  h.expect(await h.request(s,'PUT','/offline-payment-settings',{schema:'freedom.offline-payment-settings/v1',fresh_auth_verification_id:await h.fresh(s),
-  bank_transfer:{bank_code:'000',bank_name:'合成銀行',account_number:account,account_name:name},cash_on_meetup:{}}),201);
- return {account,name};
+  bank_transfer:{bank_code:'000',bank_name:'合成銀行',branch_name:branch,account_number:account,account_name:name},cash_on_meetup:{}}),201);
+ return {account,name,branch};
 }
 async function meetup(s:ShippingTestStore){h.expect(await h.request(s,'PUT','/shipping-profile',{...h.document(),delivery_options:[{method:'meetup',note:'請先約定面交時間。'}]}),201);}
 async function adminPost(path:string,body:unknown){const bootstrap=h.expect(await h.f.http('GET','/admin/api/bootstrap'));return h.f.http('POST','/admin/api/commerce/store-admissions'+path,body,undefined,{'X-Admin-CSRF':bootstrap.csrf_token,'Idempotency-Key':randomUUID()});}
 
 test('real setup progression shares buyer admission, cart availability and delivery decisions',async()=>{
  const s=await h.f.x.store(10,false);
+ await h.f.x.tx(async q=>{
+  await bindStore(q,s.tenantId);
+  assert.equal(await createStoreAdmissionPort('sandbox',['offline.bank_transfer.v1']).allowed(q,{storefront_shop_id:randomUUID()}),false,'missing storefront profiles are denied without throwing');
+ });
  let r=await readiness(s);for(const key of ['storefront','products','store_information','payment','delivery'] as const)assert.equal(state(r,key),'missing');
  assert.equal(state(r,'release'),'upgrade_required');assert.equal(state(r,'admission'),'not_admitted');
  s.product=h.expect(await h.request(s,'POST','/products',{title:'合成自有商品',price_minor:10000,stock:10}),201);await h.f.x.publish(s);
@@ -49,9 +55,13 @@ test('real setup progression shares buyer admission, cart availability and deliv
  install(['offline.bank_transfer.v1','offline.cash_on_meetup.v1']);await meetup(s);assert.equal(state(await readiness(s),'delivery'),'done');
  const admitted=h.expect(await adminPost('',{tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成範圍核對完成'}),201);
  r=await readiness(s);assert(r.items.every(item=>item.state==='done'));assert.equal(r.accepting_orders,true);
- const text=JSON.stringify(r);for(const privateValue of [privateBank.account,privateBank.name,'合成範圍核對完成'])assert.equal(text.includes(privateValue),false,'readiness excludes private values and reasons');
+ assertCommerceReadinessPrivacy(JSON.stringify(r),[...Object.values(privateBank),s.owner.user.email,'合成範圍核對完成']);
+ h.f.settings.checkoutEnabled=false;r=await readiness(s);assert.equal(state(r,'delivery'),'done');assert.equal(state(r,'platform'),'paused');assert.equal(r.accepting_orders,false);
+ const withoutShipping=await h.f.x.tx(async q=>{await bindStore(q,s.tenantId);return storeReadiness(q,s.tenantId,s.instanceId,{...deps(),checkout:{...deps().checkout,shipping:undefined}});});
+ assert.equal(state(withoutShipping,'delivery'),'done','meetup readiness uses checkout delivery choices even without an optional port');assert.equal(state(withoutShipping,'platform'),'paused');assert.equal(withoutShipping.accepting_orders,false);
+ h.f.settings.checkoutEnabled=true;
  h.expect(await adminPost('/'+admitted.admission_id+'/revoke',{reason:'合成停止新單'}));r=await readiness(s);assert.equal(state(r,'admission'),'revoked');assert.equal(r.accepting_orders,false);
- h.f.settings.checkoutEnabled=false;assert.equal(state(await readiness(s),'platform'),'paused');
+ h.f.settings.checkoutEnabled=false;r=await readiness(s);assert.equal(state(r,'platform'),'paused');assert.equal(state(r,'delivery'),'done');assert.equal(r.accepting_orders,false);
  h.f.settings.checkoutEnabled=true;h.f.settings.quarantine=true;r=await readiness(s);assert.equal(state(r,'platform'),'paused');assert.equal(JSON.stringify(r).includes('quarantine'),false);
 });
 
@@ -80,7 +90,9 @@ test('overview authorizes store reads first, with capability-scoped counts equal
  }
  assert.equal((await h.request(s,'GET','/overview?unknown=true')).status,422);
  const response=await h.request(s,'GET','/overview');assert.equal(response.response.headers.get('Cache-Control'),'private, no-store');
- const serialized=JSON.stringify(response.data);for(const forbidden of [privateBank.account,privateBank.name,'合成准入理由不可出現在賣家頁','admitted_by','provider_profiles','quarantine'])assert.equal(serialized.includes(forbidden),false,'seller projection is explicitly safe');
+ const adminEmail=(await h.f.x.h.pool.query('SELECT email FROM platform_admins WHERE admin_id=$1',[h.expect(await h.f.http('GET','/admin/api/bootstrap')).admin.admin_id])).rows[0].email;
+ const serialized=JSON.stringify(response.data);assertCommerceReadinessPrivacy(serialized,[...Object.values(privateBank),s.owner.user.email,reader.email,adminEmail]);
+ for(const forbidden of ['合成准入理由不可出現在賣家頁','admitted_by','provider_profiles','quarantine'])assert.equal(serialized.includes(forbidden),false,'seller projection is explicitly safe');
  h.f.settings.quarantine=true;const during=h.expect(await h.request(s,'GET','/overview'));assert.equal(state(during,'platform'),'paused');
  const direct=await readStoreOverview(h.f.x.runtime,await h.actor(s),s.tenantId,s.instanceId,deps());assert.equal(direct.accepting_orders,false);
 });
@@ -105,6 +117,8 @@ test('readiness quotes publications larger than one cart and follows live own-st
 
 test('admin receipt list includes inactive and unready stores, all active admissions, community totals and stable pages',async()=>{
  const ready=await h.store(),unready=await h.f.x.store(10,false),inactive=await h.store();
+ const privateBank=await bank(ready);await meetup(ready);const member=await h.member(ready,['store:read']);
+ const readyAdmission=h.expect(await adminPost('',{tenant_id:ready.tenantId,instance_id:ready.instanceId,reason:'合成可以接單'}),201);
  const blankOwner=(await h.f.x.h.person('合成尚未建檔店主')).session;await h.f.x.h.fullMember(blankOwner.user.user_id,'guild_commerce_sales');
  const blankTenant=await h.f.x.h.createTenant(blankOwner,'合成尚未建檔空間'),blankPlan=await h.f.x.h.plan(blankOwner,blankTenant.tenantId,h.f.x.h.planBody('guild_commerce_sales',blankTenant.workspaceId,'hosted-store','hosted-store@1.0.0'));
  h.expect(blankPlan,201);assert.equal(h.expect(await h.f.x.h.launch(blankOwner,blankTenant.tenantId,blankPlan)).state,'succeeded');
@@ -134,16 +148,35 @@ test('admin receipt list includes inactive and unready stores, all active admiss
  const foreign=await foreignApp.request(h.f.origin+'/admin/api/commerce/store-readiness');assert.equal(foreign.status,200);assert.deepEqual(AdminStoreReadinessPageSchema.parse(await foreign.json()).items.map(item=>item.instance_id),[foreignInstance]);
  install(['offline.bank_transfer.v1','offline.cash_on_meetup.v1']);
  const firstReply=await h.f.http('GET','/admin/api/commerce/store-readiness?limit=1&offset=0'),first=AdminStoreReadinessPageSchema.parse(h.expect(firstReply));
- assert.equal(firstReply.response.headers.get('Cache-Control'),'private, no-store');assert.deepEqual(first.summary,{stores:4,active_admissions:1,accepting_orders:0});assert.equal(first.release_sha,'a'.repeat(40));assert.equal(first.next_offset,1);
+ assert.equal(firstReply.response.headers.get('Cache-Control'),'private, no-store');assert.deepEqual(first.summary,{stores:4,active_admissions:2,accepting_orders:1});assert.equal(first.release_sha,'a'.repeat(40));assert.equal(first.next_offset,1);
  const all=[];for(let offset=0;offset<4;offset++){const page=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?limit=1&offset='+offset)));assert.deepEqual(page.summary,first.summary);all.push(...page.items);assert.equal(page.next_offset,offset===3?null:offset+1);}
  assert.equal(new Set(all.map(item=>item.instance_id)).size,4);assert.equal(all.some(item=>item.instance_id===foreignInstance),false);assert.equal(all.find(item=>item.tenant_id===blankTenant.tenantId)!.store,null);assert.equal(all.find(item=>item.instance_id===inactive.instanceId)!.admission.active!.admission_id,admission.admission_id);
- assert.equal(all.find(item=>item.instance_id===ready.instanceId)!.admission.active,null,'another provider environment is excluded');
+ assert.equal(all.find(item=>item.instance_id===ready.instanceId)!.admission.active!.admission_id,readyAdmission.admission_id,'another provider environment is excluded');
+ assert.equal(all.filter(item=>item.readiness.accepting_orders).length,first.summary.accepting_orders,'whole-community summary equals the same buyer decision on all pages');
+ const full=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?limit=50')));
+ assert.deepEqual(full.summary,first.summary);assert.equal(full.items.filter(item=>item.readiness.accepting_orders).length,full.summary.accepting_orders);
+ const publicPath=full.items.find(item=>item.instance_id===ready.instanceId)!.store!.public_path!;
+ assert.equal(publicPath,h.expect(await h.request(ready,'GET','')).publication.public_path);assert.equal((await h.f.app.request(h.f.origin+publicPath)).status,200,'admin link is served by the public storefront router');
+ let deliveryQuotes=0;const shipping=createShippingQuotePort({environment:'sandbox'}),cart=shipping.cart!;
+ h.f.install({commercePorts:{shipping:{...shipping,cart:async(...args)=>{deliveryQuotes++;return cart(...args);}}}});
+ const beyond=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?offset=4')));
+ assert.deepEqual(beyond.summary,full.summary);assert.deepEqual(beyond.items,[]);assert.equal(deliveryQuotes,0,'off-page summary skips product and delivery quotes');
+ // Measure SQL-only work without logging query text or bound private values.
+ await h.f.x.tx(async q=>{
+  await bindStore(q,ready.tenantId);let queries=0;
+  const counted=new Proxy(q,{get(target,key){if(key==='query')return (...args:unknown[])=>{queries++;return Reflect.apply(target.query,target,args);};return Reflect.get(target,key);}});
+  await storeReadiness(counted,ready.tenantId,ready.instanceId,deps());const fullQueries=queries;queries=0;
+  await publicPurchaseStateWithClient(counted,ready.slug,deps().checkout);
+  console.log(JSON.stringify({readiness_sql_queries:fullQueries,buyer_gate_sql_queries:queries,published_products:1,own_stock_delivery_choices:1}));
+ });
  assert.equal(state(all.find(item=>item.instance_id===unready.instanceId)!.readiness,'storefront'),'missing');
  assert.equal(all.find(item=>item.instance_id===inactive.instanceId)!.tenant_status,'suspended');
  const memberAdmin=randomUUID();await h.f.x.h.pool.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[memberAdmin,DEMO_COMMUNITY,ready.owner.user.email,'合成成員管理員']);
  const memberApp=h.f.install({adminVerifier:async()=>({email:ready.owner.user.email,subject:'synthetic-member',csrfToken:randomUUID()}),commercePorts:{shipping:createShippingQuotePort({environment:'sandbox'})}});
  const memberResult=AdminStoreReadinessPageSchema.parse(await (await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness')).json());assert.equal(memberResult.items.find(item=>item.instance_id===ready.instanceId)!.admin_is_member,true);
- assert.equal(JSON.stringify(memberResult).includes(ready.owner.user.email),false);assert.equal(JSON.stringify(memberResult).includes('account_number'),false);
+ const adminEmail=(await h.f.x.h.pool.query('SELECT email FROM platform_admins WHERE admin_id=$1',[adminId])).rows[0].email;
+ const privateValues=[...Object.values(privateBank),ready.owner.user.email,unready.owner.user.email,inactive.owner.user.email,blankOwner.user.email,otherPerson.email,otherEmail,member.email,adminEmail];
+ for(const document of [full,memberResult])assertCommerceReadinessPrivacy(JSON.stringify(document),privateValues);
  for(const query of ['limit=0','limit=51','offset=-1','limit=1&limit=2','unknown=1'])assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness?'+query)).status,422);
  await h.f.x.h.pool.query('UPDATE platform_admins SET active=false,aggregate_version=aggregate_version+1 WHERE admin_id=$1',[memberAdmin]);
  assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness')).status,403);

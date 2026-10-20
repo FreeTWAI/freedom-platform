@@ -3,7 +3,8 @@ import {CartQuoteResponseSchema} from '../../../contracts/guild-launchpad/v1/hos
 import {AdminStoreReadinessPageSchema,StoreOverviewSchema,StoreReadinessSchema,type StoreReadiness,type AdminStoreReadinessPage} from '../../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import {Problem,requireCondition} from '../../../packages/shared/problem.js';
 import {bindPlatformAdminContext,isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
-import {profile,storeRead} from '../hosted/store.js';
+import {profile,storeRead,publicStorePath} from '../hosted/store.js';
+import {createShippingQuotePort} from '../fulfilment/quote/index.js';
 import {effectiveStoreCapabilities} from '../hosted/capabilities.js';
 import type {Actor} from '../../identity-membership/service.js';
 import type {AdminActor} from '../../platform-admin/service.js';
@@ -46,12 +47,15 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
       ARRAY(SELECT option->>'method' FROM jsonb_array_elements(document->'delivery_options') option) AS methods
       FROM commerce_shipping_profile_versions WHERE tenant_id=$1 AND instance_id=$2 ORDER BY version DESC LIMIT 1`,[tenantId,instanceId])).rows[0];
     let deliveryReady=false;
-    if(p&&shipping?.methods.length&&checkout.shipping?.cart){
+    // Node and Worker install this same SQL-local port even with checkout off.
+    // Direct authorized callers also get its delivery choices when no port was supplied.
+    const shippingCart=checkout.shipping?.cart??createShippingQuotePort({environment}).cart!;
+    if(p&&shipping?.methods.length){
       // Evaluate actual own-stock lines independently: a supply line the cart
       // cannot fulfil must not hide a usable own-stock delivery choice.
       for(const item of own){
         const price=Number(item.price_minor);
-        const result=await checkout.shipping.cart(q,p,{lines:[{sku:item.sku,item_id:item.item_id,quantity:1,unit_price_minor:price,supplier_shop_id:p.supply_shop_id,own:true}],merchandise_net_minor:price,delivery:null});
+        const result=await shippingCart(q,p,{lines:[{sku:item.sku,item_id:item.item_id,quantity:1,unit_price_minor:price,supplier_shop_id:p.supply_shop_id,own:true}],merchandise_net_minor:price,delivery:null});
         const choices=CartQuoteResponseSchema.shape.delivery_options.parse((result as {delivery_options:unknown}).delivery_options);
         if(choices.some(option=>option.available)){deliveryReady=true;break;}
       }
@@ -104,29 +108,32 @@ export async function listAdminStoreReadiness(pool:Pool,admin:AdminActor,deps:St
   const items:AdminStoreReadinessPage['items']=[];
   const summary={stores:0,active_admissions:0,accepting_orders:0};
   for(const {tenant_id} of tenants){
-    const entries=await isolatedTransaction(pool,async q=>{
+    await isolatedTransaction(pool,async q=>{
       await authorizeAdmin(q,admin);await bindTenantScope(q,tenant_id);
       const tenant=(await q.query('SELECT display_name,status FROM tenants WHERE tenant_id=$1 AND community_id=$2',[tenant_id,admin.community_id])).rows[0];
-      if(!tenant)return [];
+      if(!tenant)return;
       const instances=(await q.query<{instance_id:string;status:string;module_release_ref:string}>("SELECT instance_id,status,module_release_ref FROM module_instances WHERE tenant_id=$1 AND module_key='storefront' ORDER BY instance_id",[tenant_id])).rows;
-      const member=await admissionAdminIsMember(q,admin,tenant_id),result:AdminStoreReadinessPage['items']=[];
+      const member=await admissionAdminIsMember(q,admin,tenant_id);
       for(const inst of instances){
         const p=await profile(q,tenant_id,inst.instance_id);
         const rows=(await q.query('SELECT * FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2 AND environment=$3 ORDER BY admitted_at DESC,admission_id DESC',[tenant_id,inst.instance_id,deps.environment])).rows;
-        result.push({tenant_id,tenant_display_name:tenant.display_name,tenant_status:tenant.status,instance_id:inst.instance_id,instance_status:inst.status,
-          store:p?{name:p.name,slug:p.slug,public_path:p.slug&&p.current_publication_id?`/shops/${p.slug}`:null}:null,module_release_ref:inst.module_release_ref,
-          admission:{active:rows.find(row=>row.revoked_at===null)?storeAdmissionView(rows.find(row=>row.revoked_at===null)!):null,
+        const active=rows.find(row=>row.revoked_at===null),index=summary.stores++;
+        if(active)summary.active_admissions++;
+        if(index<offset||index>=offset+limit){
+          // Summary uses the buyer gate without cart/product/delivery quotes.
+          try{if(p?.slug&&(await publicPurchaseStateWithClient(q,p.slug,deps.checkout)).open)summary.accepting_orders++;}
+          finally{await bindPlatformAdminContext(q,admin.admin_id);}
+          continue;
+        }
+        const readiness=await storeReadiness(q,tenant_id,inst.instance_id,deps);
+        if(readiness.accepting_orders)summary.accepting_orders++;
+        items.push({tenant_id,tenant_display_name:tenant.display_name,tenant_status:tenant.status,instance_id:inst.instance_id,instance_status:inst.status,
+          store:p?{name:p.name,slug:p.slug,public_path:p.slug&&p.current_publication_id?publicStorePath(p.slug):null}:null,module_release_ref:inst.module_release_ref,
+          admission:{active:active?storeAdmissionView(active):null,
             last_revoked:rows.find(row=>row.revoked_at!==null)?storeAdmissionView(rows.find(row=>row.revoked_at!==null)!):null},admin_is_member:member,
-          readiness:await storeReadiness(q,tenant_id,inst.instance_id,deps)});
+          readiness});
       }
-      return result;
     });
-    for(const entry of entries){
-      const index=summary.stores++;
-      if(entry.admission.active)summary.active_admissions++;
-      if(entry.readiness.accepting_orders)summary.accepting_orders++;
-      if(index>=offset&&index<offset+limit)items.push(entry);
-    }
   }
   return AdminStoreReadinessPageSchema.parse({environment:deps.environment,checked_at:new Date().toISOString(),release_sha:releaseSha,
     platform:{checkout_enabled:deps.checkout.settings?.checkoutEnabled===true,quarantine:deps.checkout.settings?.quarantine===true,provider_profiles:[...deps.checkout.settings?.providerProfiles??[]]},
