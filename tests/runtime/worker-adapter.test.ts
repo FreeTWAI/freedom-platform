@@ -14,6 +14,7 @@ import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/see
 import { tokenHash } from '../../modules/identity-membership/service.js';
 import { createWorkerHandler, cloudflareSourceNetwork, rateLimitNetworkKey, readWorkerConfig, workerRuntime, workerScope, type WorkerEnv } from '../../apps/platform-api/src/worker.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import {createPlatformApp} from '../../apps/platform-api/src/platform-app.js';
 import { authoredUploadText } from '../../apps/platform-api/src/routes/published-skills.js';
 import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
 import { assertPublicDatabase, assertStagingDatabase } from '../../apps/platform-api/src/readiness.js';
@@ -89,6 +90,25 @@ test('offer photo flag parses exact booleans and requires supplier console and p
   assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,true);
   for(const key of ['FREEDOM_GUILD_LAUNCHPAD_ENABLED','FREEDOM_SUPPLIER_CONSOLE_ENABLED','FREEDOM_HOSTED_STORE_PHOTOS_ENABLED'] as const)
     assert.throws(()=>readWorkerConfig(env({...configured,[key]:'false'})),{name:'ReadinessError'});
+});
+
+test('worker mounts the optional catalog photo list with the existing complete offer-photo installation only',async()=>{
+  for(const enabled of [false,true]){
+    let mounted=false;
+    const pool=fakePool(),configuration=env({FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',
+      FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:String(enabled),
+      MEDIA:{get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA']});
+    const handler=createWorkerHandler({createPool:()=>pool as unknown as Pool,createApp:(...args)=>{
+      const app=createPlatformApp(...args);
+      mounted=app.routes.some(route=>route.method==='GET'&&route.path==='/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos');
+      return app;
+    }});
+    const pending:Promise<unknown>[]=[];
+    const response=await handler.fetch(new Request('http://127.0.0.1:8787/api/v1/site'),configuration,{waitUntil:work=>pending.push(work)});
+    assert.equal(response.status,200);assert.equal(mounted,enabled);
+    assert.equal((await response.json() as {supply_offer_photos_enabled:boolean}).supply_offer_photos_enabled,enabled);
+    await Promise.all(pending);
+  }
 });
 
 test('incomplete outcome enablement fails closed before pools or browser fallback',async()=>{

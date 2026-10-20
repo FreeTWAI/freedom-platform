@@ -149,6 +149,7 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['offer', distribution.SupplyOfferSchema, 'output', ['explicit_supplier_publication']],
     ['offer-photo-state', distribution.SupplyOfferPhotoStateSchema, 'output', ['explicit_supplier_choice','independent_photo_sequence']],
     ['offer-photo', distribution.SupplyOfferPhotoSchema, 'output', ['seller_route_only','no_supplier_asset_identity']],
+    ['catalog-photos', distribution.SupplyCatalogPhotosSchema, 'output', ['current_seller_store_write','same_catalog_window','current_offered_share_only']],
     ['offer-photo-preview-query', distribution.SupplyOfferPhotoPreviewQuerySchema, 'input', ['own_product_photo_route','current_shared_offer_and_sequence']],
     ['offer-page', distribution.SupplyOfferPageSchema, 'output', ['current_seller_store_write','community_offer_visibility','no_private_supplier_fields']],
     ['offers', distribution.SupplyOffersSchema, 'output', ['bounded_catalog']],

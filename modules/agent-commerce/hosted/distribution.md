@@ -8,7 +8,8 @@ material media and new-upload admission are independent. Source changes do not
 enable any environment. `/api/v1/site.supply_offer_photos_enabled` reports the
 complete installation decision. When absent, commands and seller bytes are
 unmounted and both `SupplyOfferPage.photo` and supplier `product.offer_photo`
-are null. Catalog cards keep their existing text presentation.
+are null. Seller catalog/selection thumbnails use a separate optional list below;
+with the flag OFF the existing text-only markup and requests are unchanged.
 
 Provisional migration `174_supply_offer_photos.sql` adds only
 `commerce_hosted_offer_photos`. Its `(offer_id,seq)` history is append-only and
@@ -103,6 +104,51 @@ immutable offer bytes and seller/offer identity. The data catalog records the
 supplier-owned snapshot and seller-owned selection separately; this is no export
 or module portability implementation.
 
+## Seller catalog evaluation thumbnails (2026-10-20)
+
+GET `/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos`
+is mounted only by the existing complete `supplyOfferPhotosInstalled` decision.
+It accepts an empty query and returns strict `SupplyCatalogPhotosSchema`:
+`{items: [{offer_id, photo: SupplyOfferPhotoSchema}], truncated: boolean}` (at most
+100). No existing catalog, own offers, detail or selection response/schema gains
+a field. Older strict portal bundles retain their existing responses; newer
+bundles treat 404 from an older API as an absent optional route.
+
+One seller-bound `storeRead` requires current `store:write`, the same profile
+and readiness checks as `listSupplyOffers(own=false)`. Both reads use the same
+query helper: same community, offered state, other instances, same currency,
+`offer_id` order, and first 100 of a 101-row probe. Only after choosing that
+window does one batch read the latest share per offer, using numeric sequence
+ordering and retaining all-null stop rows. Missing/stopped shares are omitted;
+`truncated` comes from the catalog probe even when no photo remains. The list
+does not extend its window to find more photos or include historical selections.
+It exposes only offer IDs and the same seller-root read path, sequence and
+intrinsic dimensions as the detail page. Supplier tenant/instance, Asset/scope
+IDs, stock, drafts and contact details never leave the server. Existing RLS,
+authorization, byte GET/HEAD, object verification and private headers remain in
+force; no seller connection changes tenant context.
+
+`HostedDistribution` fetches this projection independently from its text lists,
+only for sellers with the flag enabled. A 404 is quiet; other failures show one
+quiet hint and the next “更新供貨狀態” retries. Refresh, abort, scope and session
+generation fences reject obsolete results. Refresh clears old thumbnails while
+preserving the text/form subtree. Failed images disappear quietly. At tablet
+and desktop widths a neutral 96px square sits beside the text, with contain
+scaling, intrinsic width/height attributes, lazy loading and asynchronous decode;
+on narrow screens it sits above. One hint identifies the visible thumbnails as
+supplier evaluation photos, outside the supply terms. Own supplier lists are
+unchanged. These are the retained evaluation bytes (up to 1920px), with no
+separate thumbnail rendition. No new audience, consent, terms digest, schema
+change, store-publication grant, drop-ship consent or supplied-line checkout is
+introduced.
+
+Runtime coverage: `CATALOG-PHOTO-01` through `07` live in
+[`hosted-supply-catalog-photos.test.ts`](../../../tests/runtime/hosted-supply-catalog-photos.test.ts),
+including the 101 real offers that prove the shared catalog window. Offer sharing
+and byte-route cases remain in
+[`hosted-supply-offer-photos.test.ts`](../../../tests/runtime/hosted-supply-offer-photos.test.ts).
+Both files register the same isolated harness hooks through one shared test helper.
+
 ## Direct and shared reservation boundary
 
 The current `hosted_direct_reservation` profile remains limited to its own supply
@@ -120,7 +166,7 @@ not this module's original implementation history. The offer-page increment adds
 no migration and does not authorize deployment or claim live acceptance.
 
 The catalog is capped at 100 and participant lists at 200 with explicit truncation.
-Cursor continuation and supplier photos before adoption remain subsequent work, not hidden
+Cursor continuation remains subsequent work, not hidden
 claims of complete ERP integration. The normal merchant journey and module
 portability milestones retain their separate acceptance requirements.
 

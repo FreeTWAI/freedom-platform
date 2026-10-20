@@ -27,6 +27,8 @@
     "tests/runtime/distribution-photos.test.ts",
     "tests/runtime/distribution-photos-sql.test.ts",
     "tests/runtime/hosted-supply-offer-photos.test.ts",
+    "tests/runtime/hosted-supply-catalog-photos.test.ts",
+    "tests/helpers/hosted-supply-offer-photos.ts",
     "tests/runtime/partner-materials-recovery.test.ts",
     "tests/e2e/supplier-console.spec.ts",
     "tests/e2e/supplier-console-cooperation.spec.ts",
@@ -36,7 +38,6 @@
     "tests/e2e/supplier-console-queries.spec.ts",
     "tests/e2e/supplier-console-report.spec.ts",
     "tests/e2e/supplier-console-materials.spec.ts",
-    "tests/e2e/hosted-supply-offer-photos.spec.ts",
     "docs/platform-plan/execution/supplier-console/**"
   ],
   "public_exports": [],
@@ -174,6 +175,7 @@
       "operations": [
         "storefront.supply-offer.photo.share",
         "storefront.supply-offer.photo.stop",
+        "storefront.supply-catalog-photos.read",
         "storefront.supply-offer.photo.read"
       ]
     }

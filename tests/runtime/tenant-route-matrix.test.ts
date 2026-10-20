@@ -51,7 +51,7 @@ const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, t
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -219,6 +219,8 @@ const routeTable: Record<string, string> = {
   'ALL /shops/:slug/appearance-media/*': 'middleware',
   'GET /shops/:slug/appearance-media/:revision/:role': 'global',
   'HEAD /shops/:slug/appearance-media/:revision/:role': 'global',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'middleware',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop': 'tenant',
@@ -628,8 +630,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 140, middleware: 21 });
-  assert.equal(selectedRoutes.length, 195);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 141, middleware: 22 });
+  assert.equal(selectedRoutes.length, 197);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -667,6 +669,7 @@ function assertSameAsRandom(route: string, actor: string, real: Reply, random: R
 
 type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean; contentType?:string };
 const routes: Route[] = [
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share',body:{},version:'"1"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop',body:{},version:'"1"'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq'},
