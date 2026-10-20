@@ -29,7 +29,7 @@ export function createPublicStorePoliciesRoutes(pool:Pool,runtime:PlatformRuntim
  const app=new Hono<PlatformEnv>();
  const headers=(c:Context<PlatformEnv>)=>{c.header('Cache-Control','no-store');c.header('X-Robots-Tag','noindex');c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy','no-referrer');};
  for(const path of ['/shops/:slug/about','/shops/:slug/policies/:kind','/shops/:slug/policies/:kind/v/:version_id'])app.get(path,async c=>{
-  headers(c);if(Object.keys(c.req.query()).length)return c.notFound();const html=await publicLegalPage(pool,c.req.param('slug')!,storeAppearanceOptions(runtime),c.req.param('kind'),c.req.param('version_id'));return html===null?c.notFound():c.html(html);
+  headers(c);const html=await publicLegalPage(pool,c.req.param('slug')!,storeAppearanceOptions(runtime),c.req.param('kind'),c.req.param('version_id'));return html===null?c.notFound():c.html(html);
  });
  // Install only with the feature. OFF must retain the host's existing assets /
  // SPA fallback for these paths; an unconditional guard would change its bytes.

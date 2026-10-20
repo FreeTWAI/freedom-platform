@@ -13,6 +13,7 @@ function input(){const v=emptySellerPolicies();v.seller={...syntheticSeller};for
 async function save(s:Store,body=input()){const version=f.ok(await call(s,'GET','/seller-policies')).version;return f.ok(await call(s,'PUT','/seller-policies',body,version));}
 async function publish(s:Store,app=on){const v=f.ok(await call(s,'GET','',undefined,undefined,undefined,app));return f.ok(await call(s,'POST','/publish',{},v.version,undefined,app));}
 const response=(s:Store,path='',app=on)=>app.request(f.h.origin+'/shops/'+s.slug+path);
+async function snapshot(r:Response){return {status:r.status,headers:[...r.headers],body:Buffer.from(await r.arrayBuffer())};}
 async function html(s:Store,path='',app=on){const r=await response(s,path,app);assert.equal(r.status,200,await r.clone().text());assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('x-robots-tag'),'noindex');return r.text();}
 async function ids(s:Store){return (await f.h.pool.query("SELECT version_id,kind,version_no FROM commerce_storefront_policy_versions WHERE tenant_id=$1 AND instance_id=$2 ORDER BY version_no DESC,kind",[s.tenantId,s.instanceId])).rows;}
 test('POL-PUB-01 saved drafts are private, preview includes seller and publishing freezes the fifth dimension',async()=>{
@@ -29,6 +30,15 @@ test('POL-PUB-02 history proves published same-store kind and opaque 404 for for
  const failures=[];for(const id of [draftId,foreign,randomUUID(),'malformed']){const r=await response(a,'/policies/shipping/v/'+id);failures.push({status:r.status,body:await r.text(),type:r.headers.get('content-type')});}for(const r of failures){assert.equal(r.status,404);assert.deepEqual(r,failures[0]);}
  assert.equal((await response(a,'/policies/returns/v/'+first.version_id)).status,404);
  await publish(a);const current=await html(a,'/policies/shipping'),old=await html(a,'/policies/shipping/v/'+first.version_id);assert.match(current,/目前版本/);assert.match(current,/合成新版配送/);assert.match(old,/歷史版本/);assert.match(old,/合成shipping政策/);assert.match(old,/首次發布於/);assert.doesNotMatch(old,/版本 [0-9]|version_no/);
+ const query='?fbclid=synthetic&utm_source=line';
+ for(const path of ['/about','/policies/shipping','/policies/shipping/v/'+first.version_id]){
+  assert.deepEqual(await snapshot(await response(a,path+query)),await snapshot(await response(a,path)));
+ }
+ const missing=await snapshot(await response(a,'/policies/invalid'));assert.equal(missing.status,404);
+ for(const path of ['/policies/invalid','/policies/shipping/v/'+foreign,'/about/extra','/policies/shipping/extra']){
+  assert.deepEqual(await snapshot(await response(a,path)),missing);assert.deepEqual(await snapshot(await response(a,path+query)),missing);
+ }
+ for(const path of ['/preview-page/about','/preview-page/policies/shipping'])assert.equal((await call(a,'GET',path+query)).response.status,422);
  const unchanged=input();unchanged.policies.shipping.body='合成新版配送';unchanged.policies.terms.body='合成新版條款';await save(a,unchanged);await publish(a);const reused=await html(a,'/policies/shipping');assert.equal(/<time[^>]*>[^<]+<\/time>/.exec(current)?.[0],/<time[^>]*>[^<]+<\/time>/.exec(reused)?.[0]);
 });
 test('POL-PUB-03 every storefront shell has one responsibility sentence, B03 links and no private source data',async()=>{

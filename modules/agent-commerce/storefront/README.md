@@ -156,7 +156,9 @@ Public HTML routes are `/shops/:slug/about`, `/shops/:slug/policies/:kind` and
 `/shops/:slug/policies/:kind/v/:version_id`. They require the current publication's
 liveness and legal sidecar; history additionally requires a same-store, same-kind,
 ever-published nonempty policy. Foreign, unpublished and missing versions share
-one opaque 404. Every page remains noindex/no-store. Plain text is escaped, blank
+one opaque 404. Public information pages ignore query strings, including sharing
+and campaign tags; private previews reject query strings with 422.
+Every page remains noindex/no-store. Plain text is escaped, blank
 lines form paragraphs, single newlines form line breaks, and there is no Markdown,
 HTML or auto-linking. Seller Email/phone are text. Only rendered legal content
 loads `shop-policies.css`. Products link to published shipping/returns. Terms are
