@@ -24,8 +24,8 @@
     },
     {
       "path": "CONTRIBUTING.md",
-      "bytes": 4326,
-      "sha256": "76a77140cceea13088e60bde21b847f2a409acc21e11032eff59025382ae98ac"
+      "bytes": 4647,
+      "sha256": "433893d160eb49e3accb95179f5d0efb7497ce20a9c73c812aa79e8b2b1ac663"
     },
     {
       "path": "DESIGN.md",
@@ -14093,6 +14093,11 @@
       "sha256": "f1cf1430ecf057e228ad32b4863c3d9c75dfcdabb1f9a28ed951b43a96b04866"
     },
     {
+      "path": "docs/development/contribution-release-paths.md",
+      "bytes": 5164,
+      "sha256": "8290767a5a119869ce74c7aff8e2c18974471ff5ca9ce0326d3e43b1737c963c"
+    },
+    {
       "path": "docs/development/daily-recovery-backup-installation.md",
       "bytes": 14610,
       "sha256": "1e6fa54344f357620252b1d031fb8c94dd4745b99618c44ddfecbebbe55eff0d"
@@ -21179,8 +21184,8 @@
     },
     {
       "path": "packages/guild-presentation/README.md",
-      "bytes": 10946,
-      "sha256": "c4c3990416b89a55b616710f1c32c31412428d27811a531efae83b36ed6bcbe5"
+      "bytes": 11100,
+      "sha256": "f37508a69cf5a481568a0ec926136141981fca13e61fb863796e6857deca681c"
     },
     {
       "path": "packages/guild-presentation/block.ts",
