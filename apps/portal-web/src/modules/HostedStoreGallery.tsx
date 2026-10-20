@@ -67,7 +67,7 @@ export function HostedStoreGallery({client,userId,tenantId,instanceId,product,ga
   <div className="hosted-gallery-heading"><h5>商品照片</h5><span>{photos.length} / 8 張</span></div>
   <p className="field-hint">第一張是主照片，用於商品卡片與分享連結。照片與說明需重新發布後，公開頁才會更新。</p>
   {!gallery?<p role="status">商品照片暫時無法讀取，請重新整理商店。</p>:unavailable?<p className="field-hint">商品照片目前無法讀取。</p>:rows.length===0?<p className="field-hint">尚未加入商品照片。</p>:<>
-   {retained.length>0&&<p className="banner" role="status">主照片已移除，保留的照片尚未公開。請設為主照片或移除。</p>}
+   {retained.length>0&&<p className="banner" role="status">主照片已移除，請先設為主照片或移除保留的照片。</p>}
    <ol className="hosted-gallery-list">{rows.map((photo,n)=><li key={photo.photo_key}>
     {failed[photo.read_path]?<p className="field-hint">照片暫時無法讀取。</p>:<img src={photo.read_path} alt={photo.alt_text||(retained.length?`${product.title}，保留的照片`:`${product.title}，第 ${photo.position} 張，共 ${photos.length} 張`)} width={photo.width} height={photo.height} loading={n===0?'eager':'lazy'} onError={()=>setFailed(old=>({...old,[photo.read_path]:true}))}/>}
     <div className="hosted-gallery-copy"><p className="hosted-gallery-position">{photo.photo_key==='main'?'主照片':retained.length?'保留的照片':`第 ${n+1} 張`}</p>

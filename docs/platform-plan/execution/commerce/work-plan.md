@@ -18,7 +18,7 @@ offer 圖片只供私人評估。舊版移除主照後的保留照片不自動�
 主照說明依 tuple digest 綁定，舊 binary 的主照替換不繼承舊說明。
 
 驗證維持三個 gallery runtime 檔（SQL、commands、media）；瀏覽器在既有 photo pass 最後追加
-八例，另有兩例 default-mode OFF。還原保留原 17 個物件，再精確加入八個 gallery 物件；
+九例，另有兩例 default-mode OFF。還原保留原 17 個物件，再精確加入八個 gallery 物件；
 A／B gallery 圖均非空，tenant RLS sealed drill 另精確包含兩個 Work 與四個照片物件。
 以 exact-base Git blobs 編譯舊 reader／renderer，撤銷五表 SELECT 比較現有 publication。
 詳細行為、命令與驗證入口見 storefront README；本機合成資料不等於部署或真人採用驗收。
