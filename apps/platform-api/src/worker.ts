@@ -1,3 +1,4 @@
+import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
 import {runDueCommerceWork,runAfterResponseWork} from '../../../modules/agent-commerce/operations/due-work.js';
 import {createEcpayQueryTransport,type PaymentQueryTransport} from '../../../modules/agent-commerce/payments/query-transport.js';
@@ -483,6 +484,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           runtime.storePhotoUploadsEnabled=env.FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED==='true';
           // Keep the closed service installed for retained original receipts; admission remains separate.
           runtime.storePhotoAssets=createStorefrontProductPhotoLifecycle(pool,{store:runtime.avatarAssetStore});
+          if(runtime.storeAppearanceEnabled===true)runtime.storeAppearanceAssets=createStorefrontAppearanceLifecycle(pool,{store:runtime.avatarAssetStore});
         }
         if(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED==='true'&&runtime.avatarAssetStore){
           runtime.supplyMaterialAssetStore=runtime.avatarAssetStore;

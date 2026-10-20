@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 import {readFile} from 'node:fs/promises';
 import {tokenHash} from '../../modules/identity-membership/service.js';
 import {sevenMediaFixtures,mediaApp,memberHeaders,origin,restoreMember} from './helpers/media-restore-fixtures.js';
-import {storefrontPhotoFixtures,storefrontPhotoSnapshot,storefrontPhotoApp,assertRestoredStorefrontPhotos} from './helpers/storefront-photo-restore-fixtures.js';
+import {storefrontPhotoFixtures,storefrontPhotoSnapshot,storefrontPhotoApp,assertRestoredStorefrontPhotos,storefrontAppearanceFixtures,assertRestoredStorefrontAppearance,storefrontAppearanceApp} from './helpers/storefront-photo-restore-fixtures.js';
 import sharp from 'sharp';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { migrate } from '../../scripts/database.js';
@@ -65,7 +65,7 @@ before(async()=>{
   backup=createR2ObjectStore(await mf.getR2Bucket('BACKUP') as unknown as AssetR2Binding);
   destination=createR2ObjectStore(await mf.getR2Bucket('RESTORED') as unknown as AssetR2Binding);
   await pool.query(`UPDATE asset_maintenance_policy SET enabled=true,revision='synthetic-backup',orphan_retention_seconds=1,
-    retired_retention_seconds=1,delete_lease_seconds=30,capture_seconds=60,pin_seconds=60,max_capture_objects=15`);
+    retired_retention_seconds=1,delete_lease_seconds=30,capture_seconds=60,pin_seconds=60,max_capture_objects=17`);
 });
 after(async()=>{
   await mf?.dispose();await restoredRuntime?.end();await restored?.end();await runtime.end();await pool.end();await Promise.all(closedClients);
@@ -146,8 +146,12 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   const baselineIds=(await pool.query('SELECT asset_id FROM asset_objects ORDER BY asset_id')).rows.map(r=>r.asset_id);
   assert.equal(baselineIds.length,12);
   const photos=await storefrontPhotoFixtures(pool,runtime,source),photoIds=[photos.a.assetId,photos.b.assetId,photos.c.assetId].sort();
+  const productPhotoIds=(await pool.query('SELECT asset_id FROM assets ORDER BY asset_id')).rows.map(r=>r.asset_id);
+  assert.deepEqual(productPhotoIds,[...baselineIds,...photoIds].sort());assert.equal(productPhotoIds.length,15);
+  const appearance=await storefrontAppearanceFixtures(pool,runtime,source,photos),appearanceIds=Object.values(appearance.images).map(image=>image.assetId).sort();
+  assert.equal(appearanceIds.length,2);
   const pointers=await pointerSnapshot(pool),snapshotIds=(await pool.query('SELECT asset_id FROM assets ORDER BY asset_id')).rows.map(r=>r.asset_id),maintenance=createAssetMaintenance(pool,{store:source,enabled:true});
-  assert.deepEqual(snapshotIds,[...baselineIds,...photoIds].sort());assert.equal(snapshotIds.length,15);
+  assert.deepEqual(snapshotIds,[...baselineIds,...photoIds,...appearanceIds].sort());assert.equal(snapshotIds.length,17);
   const target={database:sourceDatabase,sourceSchema:schema,sourceRelease:'a'.repeat(40)};
   let dump:Buffer|undefined,late:Awaited<ReturnType<typeof asset>>|undefined;
   const manifest=await createConsistentAssetBackup(pool,{enabled:true,target,maintenance,source,destination:backup,databaseSnapshot:{async write(input){
@@ -157,19 +161,20 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
       '--format=custom','--no-owner','--no-privileges']);
     return {sha256:createHash('sha256').update(dump).digest('hex'),byteSize:dump.length};
   }}});
-  assert.equal(manifest.status,'database_snapshot_and_objects_verified');assert.equal(manifest.objects.objects.length,15);
+  assert.equal(manifest.status,'database_snapshot_and_objects_verified');assert.equal(manifest.objects.objects.length,17);
   const capturedIds=manifest.objects.capture.references.map(r=>r.asset_id).sort();
   assert.deepEqual(capturedIds.filter(id=>baselineIds.includes(id)),baselineIds);
-  assert.deepEqual(capturedIds.filter(id=>!baselineIds.includes(id)),photoIds,'Replaced A, current B and removed-product C are each captured once.');
-  assert.equal(new Set(capturedIds).size,15,'Repeated publication refs never multiply objects.');
-  for(const photo of [photos.a,photos.b,photos.c])assert.deepEqual(manifest.objects.objects.find(entry=>entry.key===photo.key)?.metadata,photo.metadata);
+  assert.deepEqual(capturedIds.filter(id=>photoIds.includes(id)),photoIds,'Replaced A, current B and removed-product C are each captured once.');
+  assert.deepEqual(capturedIds.filter(id=>appearanceIds.includes(id)),appearanceIds,'Frozen cover and logo are each captured once.');
+  assert.equal(new Set(capturedIds).size,17,'Repeated publication refs never multiply objects.');
+  for(const photo of [photos.a,photos.b,photos.c,...Object.values(appearance.images)])assert.deepEqual(manifest.objects.objects.find(entry=>entry.key===photo.key)?.metadata,photo.metadata);
   assert(late&&dump);const lateAsset=late;assert(!manifest.objects.objects.some(o=>o.key===lateAsset.key));
   await assert.rejects(maintenance.claimDelete(retired.assetId),(e:any)=>e.code==='23514','pins block actual GC');
   const photoMaintenance=createAssetMaintenance(pool,{store:source,enabled:true,domainMediaEnabled:true});
   await assert.rejects(photoMaintenance.claimDelete(photos.a.assetId),(e:any)=>e.code==='23514'&&e.message==='Maintenance profile not supported','Photo GC remains uninstalled even with the constructor opted in.');
   await pgTool('pg_restore',['--dbname',restoredDatabase,'--single-transaction','--exit-on-error','--no-owner','--no-privileges'],dump);
   const restoredIds=(await restored!.query('SELECT asset_id FROM assets ORDER BY asset_id')).rows.map(r=>r.asset_id);
-  assert.deepEqual(restoredIds,snapshotIds);assert.equal(restoredIds.length,15);assert(!restoredIds.includes(late.assetId));
+  assert.deepEqual(restoredIds,snapshotIds);assert.equal(restoredIds.length,17);assert(!restoredIds.includes(late.assetId));
   assert.deepEqual(restoredIds.filter(id=>baselineIds.includes(id)),baselineIds);
   assert.equal((await restored!.query('SELECT count(*)::int AS n FROM asset_backup_pins')).rows[0].n,0,'dump imports original pre-pin snapshot');
   assert.deepEqual((await restored!.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows,
@@ -178,6 +183,9 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   assert.deepEqual(await storefrontPhotoSnapshot(restored!,photos.tenantId,photos.instanceId),photos.snapshot,
     'Canonical items/selections, retained targets/intents/effects, immutable publications/refs and object dimensions survive together.');
   assert.equal((await restored!.query("SELECT count(*)::int n FROM schema_migrations WHERE name='141_storefront_product_photos.sql'")).rows[0].n,1);
+  assert.deepEqual(await storefrontPhotoSnapshot(restored!,appearance.tenantId,appearance.instanceId),appearance.snapshot,
+    'Non-empty appearance draft, both typed targets, frozen sidecar and refs survive with their immutable bytes.');
+  assert.equal((await restored!.query("SELECT count(*)::int n FROM schema_migrations WHERE name='175_storefront_appearance.sql'")).rows[0].n,1);
   assert.deepEqual((await restored!.query("SELECT a.asset_id,a.purpose,a.scope_kind,a.community_ref,o.variant,o.profile_id,o.content_sha256,o.byte_size,o.object_key FROM assets a JOIN asset_objects o USING(asset_id) WHERE a.owner_user_id=$1 ORDER BY a.asset_id",[seven.member.actor.user_id])).rows,seven.rows);
   await assert.rejects(restoredRuntime!.query(`SELECT * FROM ${schema}.schema_migrations`),(e:any)=>e.code==='42501','No ACLs imported from --no-privileges dump.');
   await restoredRuntime!.end();restoredRuntime=undefined;
@@ -220,7 +228,7 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
       [entry.key,entry.metadata.sha256,entry.metadata.byteSize,entry.metadata.policyRevision])).rowCount;
     assert.equal(found,1);
   }});
-  assert.equal(recovered.objectCount,15);
+  assert.equal(recovered.objectCount,17);
   for(const f of [first,retired])assert.deepEqual((await readVerifiedObject(destination,f.key,f.metadata)).bytes,f.bytes);
   const restoredApp=mediaApp(restoredRuntime!,destination,seven.community);
   assert.deepEqual((await restored!.query('SELECT * FROM member_direct_messages WHERE community_id=$1 ORDER BY message_id',[dm.community])).rows,dm.messages);
@@ -228,6 +236,7 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   const dmApp=mediaApp(restoredRuntime!,destination,dm.community);
   const photoApp=storefrontPhotoApp(restoredRuntime!,destination);
   assert.equal((await photoApp.request(origin+photos.b.privatePath,{headers:memberHeaders(photos.member)})).status,401,'Imported photo-owner session stays fenced.');
+  assert.equal((await storefrontAppearanceApp(restoredRuntime!,destination).request(origin+appearance.images.cover.privatePath,{headers:memberHeaders(appearance.member)})).status,401,'Imported appearance-owner session stays fenced.');
   const dmPath=(peer:string,id=dm.message.message_id)=>`/api/v1/me/conversations/${peer}/messages/${id}/image`;
   for(const [member,peer] of [[dm.sender,dm.recipient],[dm.recipient,dm.sender]])assert.equal((await dmApp.request(origin+dmPath(peer.actor.user_id),{headers:memberHeaders(member)})).status,401,'Imported DM sessions remain fenced');
 
@@ -235,6 +244,7 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   // New recovery sessions are issued only after fencing the imported sessions.
   for(const member of [seven.member,seven.other,dm.sender,dm.recipient,dm.third,dm.outsider,photos.member,photos.other]){const token=randomBytes(32).toString('base64url'),hash=tokenHash(token);await restored!.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,'synthetic',clock_timestamp()+interval '1 hour')",[hash,member.actor.user_id]);member.token=token;member.actor={...member.actor,session_hash:hash};}
   await assertRestoredStorefrontPhotos(restored!,restoredRuntime!,destination,photos);
+  await assertRestoredStorefrontAppearance(restored!,restoredRuntime!,destination,appearance);
   for(const read of seven.reads){
    const result=await restoredApp.request(origin+read.path,{headers:memberHeaders(seven.member)});assert.equal(result.status,200,await result.clone().text());assert.deepEqual(Buffer.from(await result.arrayBuffer()),read.bytes,read.purpose+' original URL and SHA');
    if(read.publicPath){const publicRead=await restoredApp.request(origin+read.publicPath);assert.equal(publicRead.status,200,await publicRead.clone().text());assert.deepEqual(Buffer.from(await publicRead.arrayBuffer()),read.bytes);if(read.publicPath.includes('/public/')){
@@ -263,7 +273,7 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   const missing=manifest.objects.objects[0];await(await mf!.getR2Bucket('BACKUP')).delete(missing.key);
   const incomplete=createR2ObjectStore(await mf!.getR2Bucket('INCOMPLETE') as unknown as AssetR2Binding);
   await assert.rejects(transferRestore(manifest.objects,backup,incomplete,{async assertAllowed(){}}),'Missing native backup object cannot produce a verified restore.');
-  assert((await(await mf!.getR2Bucket('INCOMPLETE')).list()).objects.length<15);
+  assert((await(await mf!.getR2Bucket('INCOMPLETE')).list()).objects.length<17);
 });
 
 test('Backup default-off, mismatched target and single-connection pool fail before snapshot/dump authority',async()=>{

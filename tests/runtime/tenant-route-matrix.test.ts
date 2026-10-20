@@ -1,3 +1,4 @@
+import {photoSourcePng} from '../helpers/hosted-store-photo.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -50,7 +51,7 @@ const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, t
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/appearance-settings') || path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -213,6 +214,8 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'GET /shops/:slug/appearance-media/:revision/:role': 'global',
+  'HEAD /shops/:slug/appearance-media/:revision/:role': 'global',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'middleware',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop': 'tenant',
@@ -319,6 +322,12 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo/remove': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version': 'tenant',
+  'HEAD /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance': 'tenant',
@@ -616,8 +625,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 134, middleware: 18 });
-  assert.equal(selectedRoutes.length, 184);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 140, middleware: 18 });
+  assert.equal(selectedRoutes.length, 192);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -653,7 +662,7 @@ function assertSameAsRandom(route: string, actor: string, real: Reply, random: R
   }
 }
 
-type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean };
+type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean; contentType?:string };
 const routes: Route[] = [
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share',body:{},version:'"1"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop',body:{},version:'"1"'},
@@ -786,6 +795,12 @@ const routes: Route[] = [
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview' },
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove',body:{},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo/remove',body:{},version:'"1"'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
+  {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings' },
   { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings', body: {template_id:'catalog-grid-v1',accent_preset:'ocean',announcement:'合成公告',featured_product_ids:[]}, version:'"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance' },
@@ -805,7 +820,7 @@ const isSellerOrderRoute = (path: string) => /\/storefronts\/[^/]+\/(?:orders|re
 type TenantData = Awaited<ReturnType<typeof buildFixture>>['A'];
 function ids(data: TenantData, route: Route): Record<string, string> {
   return { tenant_id: data.tenantId, workspace_id: data.workspaceId, work_id: data.workId, result_id: data.resultId,
-    seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
+    role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
     principal_id: data.principalId, product_id: data.workId, order_id: data.workId, offer_id: data.workId, selection_id: data.workId,
     location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
     instance_id: data.instanceId, operation_id: data.operationId, plan_id: data.planId,
@@ -854,7 +869,7 @@ async function execute(route: Route, session: Session | undefined, replacements:
       ? `"${data.workVersion}"` : route.version.startsWith(':') ? replacements[route.version.slice(1)] : route.version;
   }
   if (['POST', 'PATCH', 'PUT'].includes(route.method)) headers['Idempotency-Key'] = randomUUID();
-  if (body !== undefined) headers['Content-Type'] = route.isRaw ? 'text/plain' : 'application/json';
+  if (body !== undefined) headers['Content-Type'] = route.contentType ?? (route.isRaw ? 'text/plain' : 'application/json');
   return call(route.method, substitute(route.path, replacements), session,
     body === undefined ? undefined : route.isRaw ? body : JSON.stringify(body), headers);
 }
@@ -900,12 +915,19 @@ test('T-022 3b. Own tenant in path, other tenant resource', async () => {
       assert.equal(invalid.data.code, 'validation_failed');
       scanForLeaks(invalid, `3b invalid service purpose ${route.path}`, fixture.B);
     }
+    if(route.path.includes('/:role')){
+      const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),role:randomUUID()});
+      assert.equal(invalid.status,422,JSON.stringify(describe(invalid)));
+      if(route.method==='HEAD')assert.equal(invalid.bytes.length,0,'HEAD must omit the error body.');
+      else assert.equal(invalid.data.code,'validation_failed');
+      scanForLeaks(invalid,`3b invalid appearance role ${route.path}`,fixture.B);
+    }
     if(route.path.includes('/:service_key')){
       const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),service_key:randomUUID()});
       assert.equal(invalid.status,422,JSON.stringify(describe(invalid)));assert.equal(invalid.data.code,'validation_failed');
       scanForLeaks(invalid,`3b invalid logistics service key ${route.path}`,fixture.B);
     }
-    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
+    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'role' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
     for (const position of positions) {
       for (const name of ['P', 'O'] as const) {
         const realIds = { ...ids(fixture.A, route), [position]: ids(fixture.B, route)[position] };

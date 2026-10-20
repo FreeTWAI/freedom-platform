@@ -24,12 +24,14 @@
     "apps/platform-api/src/routes/hosted-store-appearance.ts",
     "tests/runtime/storefront-appearance.test.ts",
     "tests/runtime/storefront-appearance-contracts.test.ts",
-    "tests/runtime/storefront-appearance-contrast.test.ts"
+    "tests/runtime/storefront-appearance-contrast.test.ts",
+    "tests/runtime/storefront-appearance-media.test.ts"
   ],
   "public_exports": [],
   "dependencies": [
     "agent-commerce",
-    "hosted-checkout"
+    "hosted-checkout",
+    "asset-lifecycle"
   ],
   "contract_families": [],
   "client_profiles": [],

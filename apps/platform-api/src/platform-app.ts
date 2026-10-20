@@ -1,4 +1,4 @@
-import {createHostedStoreAppearanceRoutes,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
+import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
 import {createHostedSupplyOfferPhotoRoutes,supplyOfferPhotosInstalled} from './routes/hosted-supply-offer-photos.js';
 import {createHostedDistributionPhotoRoutes,distributionPhotosInstalled} from './routes/hosted-distribution-photos.js';
 import {createHostedSupplyMaterialRoutes} from './routes/hosted-supply-materials.js';
@@ -283,6 +283,9 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         checkEventVideoUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isSocialThumbnailUpload(c.req.method,c.req.path)) {
         checkSocialThumbnailHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
+      } else if(isStoreAppearanceUpload(c.req.method,c.req.path)) {
+        requireCondition(storeAppearanceInstalled(runtime)&&storePhotosInstalled(runtime),404,'not_found','找不到這個頁面。');
+        checkStoreAppearanceHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isStorePhotoUpload(c.req.method,c.req.path)) {
         requireCondition(runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),404,'not_found','找不到這個頁面。');
         checkStorePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
@@ -611,6 +614,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   if(runtime.guildLaunchpadEnabled===true){
     app.route('/',createPublicModuleRegistryRoutes(pool,origin));
     app.route('/',createPublicHostedStoreRoutes(pool,runtime.publicOrigin,hostedCheckoutOptions(origin,runtime,freedomEnv),{appearance:storeAppearanceOptions(runtime)}));
+    if(storeAppearanceInstalled(runtime)&&storePhotosInstalled(runtime))app.route('/',createPublicStoreAppearanceMediaRoutes(pool,runtime));
     if(storePhotosInstalled(runtime))app.route('/',createPublicHostedStoreMediaRoutes(pool,runtime));
   }
   for (const path of ['/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/:product_id/photo/:version', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/versions/:version_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/partner-materials/:material_id/versions/:version_id/content', '/api/v1/hosted-stores/*', '/api/v1/me/hosted-orders/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders/*']) app.use(path, async (c, next) => {
