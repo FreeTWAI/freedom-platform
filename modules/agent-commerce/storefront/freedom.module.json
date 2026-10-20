@@ -33,7 +33,22 @@
     "apps/portal-web/src/modules/hosted-store-appearance-state.ts",
     "tests/runtime/storefront-appearance-state.test.ts",
     "tests/runtime/storefront-appearance-rollback.test.ts",
-    "tests/e2e/hosted-store-appearance.spec.ts"
+    "tests/e2e/hosted-store-appearance.spec.ts",
+    "migrations/176_storefront_seller_policies.sql",
+    "contracts/guild-launchpad/v1/storefront-policies.ts",
+    "contracts/guild-launchpad/v1/storefront-policies.schema.json",
+    "apps/platform-api/src/routes/hosted-store-policies.ts",
+    "apps/portal-web/src/modules/HostedStorePolicies.tsx",
+    "apps/portal-web/src/modules/HostedStorePolicies.css",
+    "apps/portal-web/src/modules/hosted-store-policies-client.ts",
+    "apps/portal-web/src/modules/hosted-store-policies-state.ts",
+    "apps/portal-web/public/shop-policies.css",
+    "tests/helpers/storefront-policies.ts",
+    "tests/runtime/storefront-policies-render.test.ts",
+    "tests/runtime/storefront-policies-sql.test.ts",
+    "tests/runtime/storefront-policies-commands.test.ts",
+    "tests/runtime/storefront-policies-publication.test.ts",
+    "tests/e2e/hosted-store-policies.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
@@ -47,7 +62,8 @@
     "modules/agent-commerce/storefront/README.md",
     "DESIGN.md",
     "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-    "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md"
+    "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
+    "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md"
   ],
   "invariants": [],
   "tests": [
