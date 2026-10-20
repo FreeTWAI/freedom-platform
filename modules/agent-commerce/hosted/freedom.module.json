@@ -92,6 +92,7 @@
       "kind": "page",
       "entry": "apps/portal-web/src/modules/HostedDistribution.tsx",
       "operations": [
+        "storefront.supply-catalog-photos.read",
         "store.supply-offer.list",
         "store.supply-offer.publish",
         "store.supply-offer.withdraw",

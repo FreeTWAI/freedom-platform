@@ -3,7 +3,7 @@ import type {Pool} from 'pg';
 import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {EmptyStoreInputSchema} from '../../../../contracts/guild-launchpad/v1/storefront.js';
 import {shareSupplyOfferPhoto,stopSupplyOfferPhoto} from '../../../../modules/agent-commerce/supplier-console/offer-photos.js';
-import {readSupplyOfferPhoto} from '../../../../modules/agent-commerce/hosted/distribution.js';
+import {listSupplyCatalogPhotos,readSupplyOfferPhoto} from '../../../../modules/agent-commerce/hosted/distribution.js';
 import type {PlatformEnv} from '../module-context.js';
 import type {PlatformRuntime} from '../runtime.js';
 import {storePhotosInstalled} from './hosted-store-media.js';
@@ -16,6 +16,10 @@ export function createHostedSupplyOfferPhotoRoutes(pool:Pool,runtime:PlatformRun
   const app=new Hono<PlatformEnv>(),root='/tenants/:tenant_id/storefronts/:instance_id';
   app.use('*',async(c,next)=>{try{await next();}finally{privateCache(c);}});
   const ids=(c:Parameters<typeof singleQuery>[0])=>[OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;
+  app.get(root+'/supply-catalog-photos',async c=>{
+    EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);
+    return c.json(await listSupplyCatalogPhotos(pool,c.get('actor'),t,i));
+  });
   app.post(root+'/supply-offers/:offer_id/photo/share',async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));EmptyStoreInputSchema.parse(await c.req.json());
     const [t,i]=ids(c),h=commandHeaders(c,true);

@@ -42,6 +42,10 @@ export const SupplyOfferPhotoSchema = z.object({
   read_path: z.string().regex(/^\/api\/v1\/tenants\/[0-9a-f-]+\/storefronts\/[0-9a-f-]+\/supply-catalog\/[0-9a-f-]+\/photo\/[1-9][0-9]*$/),
   seq: Version, width: z.number().int().min(1).max(1920), height: z.number().int().min(1).max(1920),
 }).strict();
+export const SupplyCatalogPhotosSchema = z.object({
+  items: z.array(z.object({offer_id: OpaqueId, photo: SupplyOfferPhotoSchema}).strict()).max(100),
+  truncated: z.boolean(),
+}).strict();
 /** Owner preview on the existing private product-photo route. Both pins are required. */
 export const SupplyOfferPhotoPreviewQuerySchema = z.object({offer_id:OpaqueId,seq:Version}).strict();
 export const SupplyOfferPageSchema = z.object({

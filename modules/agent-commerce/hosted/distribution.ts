@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {checkVersion, digest} from '../../../packages/db/index.js';
 import {Problem, requireCondition} from '../../../packages/shared/problem.js';
-import {SupplyOfferPageSchema, SupplyOfferSchema, SupplyOffersSchema, SupplyOfferTermsSchema, DistributionInputSchema, DistributionDecisionSchema,
+import {SupplyCatalogPhotosSchema, SupplyOfferPageSchema, SupplyOfferSchema, SupplyOffersSchema, SupplyOfferTermsSchema, DistributionInputSchema, DistributionDecisionSchema,
   DistributionSchema, DistributionsSchema, type SupplyOffer} from '../../../contracts/guild-launchpad/v1/hosted-distribution.js';
 import type {Actor} from '../../identity-membership/service.js';
 import {resellerArrangement} from '../distribution.js';
@@ -33,13 +33,34 @@ export function supplyOfferTerms(row: {title: string; description: string; price
     ...(row.minimum_order_quantity==null?{}:{minimum_order_quantity:row.minimum_order_quantity}),
     ...(row.lead_time_days==null?{}:{lead_time_days:row.lead_time_days})});
 }
+/** Text and evaluation photos share this window, before filtering out missing photos. */
+async function supplyOfferRows(q: PoolClient, communityId: string, p: Profile, own = false) {
+  return (await q.query(`SELECT * FROM commerce_hosted_supply_offers WHERE community_id=$1
+      AND state='offered' AND ($2::boolean AND instance_id=$3 OR NOT $2::boolean AND instance_id<>$3 AND terms->>'currency'=$4)
+      ORDER BY offer_id LIMIT 101`, [communityId, own, p.instance_id, p.currency])).rows;
+}
 export async function listSupplyOffers(pool: Pool, actor: Actor, tenantId: string, instanceId: string, own = false) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
     const p = await profile(q, tenantId, instanceId); ready(p);
-    const rows = (await q.query(`SELECT * FROM commerce_hosted_supply_offers WHERE community_id=$1
-      AND state='offered' AND ($2::boolean AND instance_id=$3 OR NOT $2::boolean AND instance_id<>$3 AND terms->>'currency'=$4)
-      ORDER BY offer_id LIMIT 101`, [context.community_id, own, instanceId, p.currency])).rows;
+    const rows = await supplyOfferRows(q, context.community_id, p, own);
     return SupplyOffersSchema.parse({items: rows.slice(0, 100).map(offerView), truncated: rows.length>100});
+  });
+}
+/** Seller-bound read only. Latest rows include stops, so older shares cannot revive. */
+export async function listSupplyCatalogPhotos(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+  return storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
+    const p = await profile(q, tenantId, instanceId); ready(p);
+    const rows = await supplyOfferRows(q, context.community_id, p);
+    const ids = rows.slice(0, 100).map(row=>row.offer_id as string);
+    // Batched equivalent of currentOfferPhoto; never query supplier Assets or rebind a tenant.
+    const photos = ids.length ? (await q.query(`SELECT DISTINCT ON (p.offer_id) p.offer_id,p.seq::text,p.asset_id,p.width,p.height
+      FROM commerce_hosted_offer_photos p WHERE p.offer_id=ANY($1::uuid[]) ORDER BY p.offer_id,p.seq DESC`, [ids])).rows : [];
+    const byOffer = new Map(photos.map(photo=>[photo.offer_id, photo]));
+    return SupplyCatalogPhotosSchema.parse({items: ids.flatMap(offerId=>{
+      const photo = byOffer.get(offerId);
+      return photo?.asset_id ? [{offer_id: offerId, photo: {seq:photo.seq,width:photo.width,height:photo.height,
+        read_path:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/supply-catalog/${offerId}/photo/${photo.seq}`}}] : [];
+    }), truncated: rows.length>100});
   });
 }
 /** Publish only the named product's explicit supply allowlist. Saving private terms

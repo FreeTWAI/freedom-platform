@@ -173,6 +173,7 @@
       "operations": [
         "storefront.supply-offer.photo.share",
         "storefront.supply-offer.photo.stop",
+        "storefront.supply-catalog-photos.read",
         "storefront.supply-offer.photo.read"
       ]
     }

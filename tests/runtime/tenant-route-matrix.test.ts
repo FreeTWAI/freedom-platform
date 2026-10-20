@@ -213,6 +213,8 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'middleware',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop': 'tenant',
@@ -653,6 +655,7 @@ function assertSameAsRandom(route: string, actor: string, real: Reply, random: R
 
 type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean };
 const routes: Route[] = [
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share',body:{},version:'"1"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop',body:{},version:'"1"'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq'},
