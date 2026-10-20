@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {OfflineOrder} from './offline-order.js';
 import {bootCheckoutPage} from './checkout-page.js';
+import {storefrontLoginHref} from './return-path.js';
 import type { PublicOrder } from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import { formatMinor } from '../../../../modules/agent-commerce/hosted/format.js';
 import {
@@ -799,6 +800,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         <p role="status">這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。</p>
         {errorBlock}
         <div className="shop-order-actions">
+          {container.dataset.buyerJourney === 'true' && <a href={storefrontLoginHref(`/shops/${activeSlug}/orders/${orderRef}`)}>登入會員</a>}
           <a href={`/shops/${activeSlug}/order-access`}>找回訂單</a>
           <a href={`/shops/${activeSlug}`}>回到「{activeStoreName}」</a>
         </div>
@@ -2787,6 +2789,7 @@ function OrderAccessPage({
     <>
       <h1 id="shop-order-access-title" tabIndex={-1}>找回訂單</h1>
       <p>輸入下單時填寫的 Email 與訂單編號（例如 261015-ABCDEF），我們會把一次性查看連結寄到你的信箱。</p>
+      {container.dataset.buyerJourney === 'true' && <div className="shop-order-actions"><a href={storefrontLoginHref(`/shops/${storeSlug}/order-access`)}>登入會員</a></div>}
       <form className="shop-order-section" noValidate onSubmit={event => void handleSubmit(event)}>
         <div className="shop-order-access-field">
           <label className="shop-add-label" htmlFor="shop-order-access-email">Email</label>

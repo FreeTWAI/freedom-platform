@@ -8,6 +8,7 @@ import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import {formatMinor} from '../../../../modules/agent-commerce/hosted/format.js';
 import {isValidStoreSlug, readCart, writeCart} from './cart-store.js';
 import {formatTaipeiDateTime} from './format.js';
+import {storefrontLoginHref} from './return-path.js';
 
 type Quote = ReturnType<typeof CartQuoteResponseSchema.parse>;
 type Checkout = ReturnType<typeof CheckoutResponseSchema.parse>;
@@ -229,7 +230,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         {quote?.lines.some(line => line.state === 'revision_changed') && <p>商品內容或價格已更新，請在下一步核對最新報價。</p>}
         {quote?.lines.some(line => line.state === 'insufficient' || line.state === 'unavailable') && <p>商品庫存已改變，請回購物車調整。</p>}
         {paymentOptions.map(option => <p key={option.method}>{methodNames[option.method]}：{option.reason ? unavailable[option.reason] : '可使用'}</p>)}
-        {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href="/">登入會員</a></div>}
+        {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
       </fieldset>
       <div className="shop-order-actions">
         <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>

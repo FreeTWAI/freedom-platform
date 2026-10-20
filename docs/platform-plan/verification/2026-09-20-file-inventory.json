@@ -184,8 +184,8 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4186,
-      "sha256": "45bba9498b219c048d49cedc4fa1f7ea8888fa024bce0418afb2b901c5be293c"
+      "bytes": 4213,
+      "sha256": "0d695919a26f11c5ec4ea018daed7e5e7ac7da9859343a7c47fb33cb7e9de747"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -614,8 +614,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store.ts",
-      "bytes": 13868,
-      "sha256": "ee15e1d4325641d2979da70fc6e314d6c9a8359fffb82199aeed49fe2e2018d3"
+      "bytes": 14007,
+      "sha256": "8a7990748d617458de0391d7a4df7d551c90b182fcbd78ac5b7e5f73c38f5c09"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-supplier-console.ts",
@@ -1844,8 +1844,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 65844,
-      "sha256": "0e23887872882b17e481a2b014e8098fbd43c0b0cabdceae0b9288fabe6de80c"
+      "bytes": 67176,
+      "sha256": "2ffce83653761785afe98aaec7e958d220c779418cd965680ce770b8ae1a3c99"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -2274,8 +2274,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/Community.tsx",
-      "bytes": 12533,
-      "sha256": "a8a6b6b20f01f160b825637bd8a5155163f049d8b5a77cc1529a9720031c778e"
+      "bytes": 12570,
+      "sha256": "4f163d676a37d4cd568e36ec29b7a736a2869d80b69b1817470e752c0bb2aee5"
     },
     {
       "path": "apps/portal-web/src/modules/CommunityHistory.css",
@@ -3609,8 +3609,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 20849,
-      "sha256": "7321f19a124848a92fbeeb2060e8b44a0f1980e69cc076e018355f570188e0c4"
+      "bytes": 20998,
+      "sha256": "c0acf5b89fdaa5f50400827afaaf07ddf05778505f8abf80ca29607f0b74487f"
     },
     {
       "path": "apps/portal-web/src/storefront/format.ts",
@@ -3619,8 +3619,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/main.tsx",
-      "bytes": 102556,
-      "sha256": "ca0f2a06df49af50283545a911e028e3fbf94dd31b74f84b9afee7eaf0147497"
+      "bytes": 102935,
+      "sha256": "8c464f60811066bc1fe9cc10c84885fe06870624a80bdfd7ad31819251077e1c"
     },
     {
       "path": "apps/portal-web/src/storefront/offline-order.tsx",
@@ -3631,6 +3631,11 @@
       "path": "apps/portal-web/src/storefront/payment-view.ts",
       "bytes": 9142,
       "sha256": "e550b155f9d9e40d62fbacce9bc8345500e3cbf43307eba2c674a9e13c1597dc"
+    },
+    {
+      "path": "apps/portal-web/src/storefront/return-path.ts",
+      "bytes": 3562,
+      "sha256": "dec27157abb17b105090113ff9383efaff4c3731dd8363db0da27c71b0b6e43b"
     },
     {
       "path": "apps/private-ai-authority/README.md",
@@ -18354,8 +18359,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/pages.ts",
-      "bytes": 6965,
-      "sha256": "fdd82eac5f95eec13d2b29a398fde7a6d7db2f727be43de77d21e06403ef9d91"
+      "bytes": 7452,
+      "sha256": "9aa6bd4a72a6696914cf0a584ff4aa06c9fac8bd0a8fb9223e141294083d3739"
     },
     {
       "path": "modules/agent-commerce/supplier-console/changes.ts",
@@ -23466,6 +23471,11 @@
       "path": "tests/runtime/bootstrap-status.test.ts",
       "bytes": 21795,
       "sha256": "c73ddc545ac8711d7b16d6d0d5752e20bbf0e2d007e53c4df925b9ab89f54c61"
+    },
+    {
+      "path": "tests/runtime/buyer-journey.test.ts",
+      "bytes": 8956,
+      "sha256": "3f6da6def2d757311e1d5ac8938043a21e5aa562a893f73aeb8cef3adde4cbe3"
     },
     {
       "path": "tests/runtime/chat-content.test.ts",
