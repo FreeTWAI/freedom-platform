@@ -49,6 +49,10 @@ const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, t
 
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
+function isOfferOrDistributionPhotoPath(path: string) {
+  return path.includes('/distribution-photos') || /\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+}
+
 let created = false;
 let runtimeConnection: { current_user: string; session_user: string; rolsuper: boolean; rolbypassrls: boolean; pg_backend_pid: number };
 const requestEvidence: { method: string; path: string; pid: number; settings: Record<string, string | null> }[] = [];
@@ -78,7 +82,7 @@ async function call(method: string, path: string, session?: Session, body?: stri
   const sent: Record<string, string> = { Origin: origin, ...headers };
   if (session) { sent.Cookie = session.cookie; sent['X-CSRF-Token'] = session.csrf; }
   const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
-  const target=path.includes('/distribution-photos')||path.includes('/photo/')?distributionApp:app;
+  const target=isOfferOrDistributionPhotoPath(path)?distributionApp:app;
   const response = await target.request(origin + (path.startsWith('/admin/') ? path : '/api/v1' + path), { method, headers: sent, body: payload as any });
   const bytes = new Uint8Array(await response.arrayBuffer());
   const type = response.headers.get('content-type') ?? '';
@@ -605,7 +609,7 @@ test('T-022 1. Route inventory guard', () => {
   for (const suffix of ['', '/reconcile', '/cancel']) {
     assert.equal(relevantPaths.test(`/api/v1/tenants/:tenant_id/operations/:operation_id${suffix}`), true);
   }
-  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>r.method!=='ALL'&&(r.path.includes('/distribution-photos')||r.path.includes('/photo/')))];
+  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>r.method!=='ALL'&&(isOfferOrDistributionPhotoPath(r.path)))];
   const counts = Object.values(routeTable).reduce<Record<string, number>>((all, kind) => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
@@ -901,7 +905,7 @@ test('T-022 3b. Own tenant in path, other tenant resource', async () => {
     for (const position of positions) {
       for (const name of ['P', 'O'] as const) {
         const realIds = { ...ids(fixture.A, route), [position]: ids(fixture.B, route)[position] };
-        const replies = await pair(route, fixture.people[name], realIds, { ...realIds, [position]: position==='version'?'2':randomUUID() });
+        const replies = await pair(route, fixture.people[name], realIds, { ...realIds, [position]: ['version', 'seq'].includes(position)?'2':randomUUID() });
         assertSameAsRandom(`${route.method} ${route.path} position=${position}`, name, ...replies);
         for (const reply of replies) {
           assert.ok([403, 404, 405].includes(reply.status), JSON.stringify(describe(reply)));
@@ -927,7 +931,7 @@ test('T-022 3c. P as viewer of B', async () => {
         assert.equal(reply.data.items[0].role, 'viewer');
       } else assert.ok(JSON.stringify(reply.data).includes(fixture.B.tenantId));
     } else if (route.method === 'HEAD') {
-      assert.equal(reply.status, route.path.includes('/distribution-photos/')?404:405, JSON.stringify(describe(reply)));
+      assert.equal(reply.status, isOfferOrDistributionPhotoPath(route.path)?404:405, JSON.stringify(describe(reply)));
     } else if (/\/ownership-transfers\/:id|\/invitations\/:id\/revoke/.test(route.path) || route.method === 'GET' && route.path.endsWith('/ownership-transfers')) {
       assert.equal(reply.status, 404, `${route.method} ${route.path}: ${JSON.stringify(describe(reply))}`);
       const randomIds = Object.fromEntries(Object.entries(realIds).map(([key, value]) =>
