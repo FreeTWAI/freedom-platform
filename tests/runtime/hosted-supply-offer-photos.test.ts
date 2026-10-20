@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {after,before,beforeEach,test} from 'node:test';
 import type {PoolClient} from 'pg';
 import {createHostedStorePhotoHarness,photoSourcePng,type HostedStorePhotoHarness} from '../helpers/hosted-store-photo.js';
@@ -267,4 +268,19 @@ test('OFFER-PHOTO-10 runtime RLS inherits offer visibility without widening its 
     await bindPrincipalContext(q,await principal(seller));const scope=(await f.h.pool.query("SELECT scope_id FROM resource_scopes WHERE kind='tenant' AND tenant_ref=$1",[seller.tenantId])).rows[0].scope_id;await bindTenantContext(q,{tenantId:seller.tenantId,tenantScopeId:scope});
     const row=(await rows(offer))[0];await q.query(`INSERT INTO commerce_hosted_offer_photos(offer_id,seq,tenant_id,instance_id,item_id,shared_by_principal_id) VALUES($1,2,$2,$3,$4,$5)`,[offer.offer_id,supplier.tenantId,supplier.instanceId,supplier.productId,row.shared_by_principal_id]);
   }),sqlCode('42501','P0002'));
+});
+
+
+test('OFFER-PHOTO-14 actual runtime grant block leaves history readable and insertable without mutation grants',async()=>{
+  const template=await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql',import.meta.url),'utf8');
+  const query=template.split('-- BEGIN OFFER PHOTO HISTORY GRANTS\n')[1].split('\n\\gexec')[0]
+    .replaceAll(":'runtime'",`'${f.role}'`).replace("n.nspname='public'",`n.nspname='${f.h.schema}'`);
+  await rolled(async q=>{
+    const statements=(await q.query(query)).rows;assert.equal(statements.length,1);
+    for(const row of statements)await q.query(row.format);
+    const privileges=(await q.query(`SELECT has_table_privilege($1,$2,'SELECT') AS read,
+      has_table_privilege($1,$2,'INSERT') AS append,has_table_privilege($1,$2,'UPDATE') AS update,
+      has_table_privilege($1,$2,'DELETE') AS delete,has_table_privilege($1,$2,'TRUNCATE') AS truncate`,[f.role,`${f.h.schema}.commerce_hosted_offer_photos`])).rows[0];
+    assert.deepEqual(privileges,{read:true,append:true,update:false,delete:false,truncate:false});
+  });
 });
