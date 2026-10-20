@@ -128,3 +128,25 @@ test('quarantine blocks seller policy saves and receipt replay without changing 
  const before=await snapshot();h.f.settings.quarantine=true;assert.equal((await save()).status,503);assert.deepEqual(await snapshot(),before);assert.equal((await read()).status,200);
  h.f.settings.quarantine=false;h.expect(await save());const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await save()).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
 });
+
+test('quarantine blocks gallery upload, ordering, descriptions, removal and receipt replay before effects',async()=>{
+ const {FakeObjectStore}=await import('../../packages/asset-storage/fake-store.js');
+ const {createStorefrontGalleryLifecycle}=await import('../../modules/assets/storefront-gallery.js');
+ const {photoSourcePng}=await import('../helpers/hosted-store-photo.js');
+ const s=await h.f.x.store(),store=new FakeObjectStore(),pool=h.f.x.runtime;
+ const app=createApp(pool,h.f.x.h.origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storeGalleryEnabled:true,
+  storePhotoAssetStore:store,storeGalleryAssets:createStorefrontGalleryLifecycle(pool,{store}),storePhotoUploadsEnabled:true,commerceSettings:h.f.settings});
+ const root=s.root+'/products/'+s.product.product_id+'/gallery',key=randomUUID(),id=randomUUID();
+ const read=()=>h.f.x.h.call('GET',root,s.owner,undefined,{},app);
+ const upload=()=>app.request(h.f.x.h.origin+'/api/v1'+root+'/photos/'+id,{method:'POST',headers:{Origin:h.f.x.h.origin,Cookie:s.owner.cookie,'X-CSRF-Token':s.owner.csrf,'Content-Type':'image/png','Idempotency-Key':key,'If-Match':'"1"'},body:new Uint8Array(photoSourcePng)});
+ const before=await snapshot();h.f.settings.quarantine=true;
+ assert.equal((await upload()).status,503);
+ for(const [method,suffix,body] of [['POST','/reorder',{photo_keys:['main']}],['PATCH','/photos/main',{alt_text:'合成說明'}],['POST','/photos/main/remove',{}]] as const){
+  assert.equal((await h.f.x.h.call(method,root+suffix,s.owner,body,{'Idempotency-Key':randomUUID(),'If-Match':'"1"'},app)).status,503);
+ }
+ assert.deepEqual(await snapshot(),before);assert.equal((await read()).status,200);
+ h.f.settings.quarantine=false;
+ await h.f.x.h.pool.query("UPDATE domain_media_storage_policy SET mode='r2_only',persistence_allowed=true,policy_revision='synthetic-quarantine-gallery',retained_byte_limit=16777216 WHERE purpose='storefront.product-photo'");
+ const saved=await upload();assert.equal(saved.status,200,await saved.clone().text());
+ const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await upload()).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
+});

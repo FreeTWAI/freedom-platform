@@ -21,7 +21,7 @@ export function checkStorePhotoHeaders(contentType?:string,contentLength?:string
   requireCondition((PRODUCT_PHOTO_POLICY.input_content_types as readonly string[]).includes(contentType??''),415,'product_photo_format','請選擇 JPEG、PNG 或 WebP 照片。');
   if(contentLength!==undefined)requireCondition(/^\d+$/.test(contentLength)&&Number(contentLength)<=PRODUCT_PHOTO_POLICY.input_max_bytes,413,'product_photo_too_large','照片需為 2 MB 以下的檔案。');
 }
-async function sourceBytes(request:Request){
+export async function storePhotoSourceBytes(request:Request){
   requireCondition(request.body,422,'invalid_product_photo','請先選擇照片。');
   try{const bytes=await readBounded(request.body,PRODUCT_PHOTO_POLICY.input_max_bytes);requireCondition(bytes.length>0,422,'invalid_product_photo','請先選擇照片。');return Buffer.from(bytes);}
   catch(error){if(error instanceof AssetStorageError&&error.code==='too_large')throw new Problem(413,'product_photo_too_large','照片需為 2 MB 以下的檔案。');throw error;}
@@ -40,7 +40,7 @@ export function createHostedStoreMediaRoutes(pool:Pool,runtime:PhotoRuntime){
   app.post(root+'/products/:product_id/photo',async c=>{
     RemoveProductPhotoInputSchema.parse(singleQuery(c));checkStorePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
     const h=commandHeaders(c,true),[t,i]=ids(c),productId=OpaqueId.parse(c.req.param('product_id'));
-    const view=await uploadProductPhoto(pool,c.get('actor'),t,i,productId,h.key,h.expected!,{bytes:await sourceBytes(c.req.raw),mime:c.req.header('Content-Type')!},runtime.storePhotoAssets,runtime.storePhotoUploadsEnabled===true,scope);
+    const view=await uploadProductPhoto(pool,c.get('actor'),t,i,productId,h.key,h.expected!,{bytes:await storePhotoSourceBytes(c.req.raw),mime:c.req.header('Content-Type')!},runtime.storePhotoAssets,runtime.storePhotoUploadsEnabled===true,scope);
     etag(c,view.current.version);return c.json(view);
   });
   app.post(root+'/products/:product_id/photo/remove',async c=>{

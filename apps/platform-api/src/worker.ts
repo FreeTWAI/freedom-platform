@@ -1,3 +1,4 @@
+import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
 import {runDueCommerceWork,runAfterResponseWork} from '../../../modules/agent-commerce/operations/due-work.js';
@@ -105,6 +106,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED?: string;
   FREEDOM_STORE_APPEARANCE_ENABLED?: string;
   FREEDOM_STORE_POLICIES_ENABLED?: string;
+  FREEDOM_STORE_GALLERY_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTOS_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED?: string;
   /** Dedicated secret: canonical base64url encoding of 32 random bytes, unique per environment. */
@@ -210,6 +212,8 @@ export function readWorkerConfig(env: WorkerEnv): WorkerConfig {
   for(const flag of [env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED,env.FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED,env.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED,env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED])if(flag!==undefined&&!['true','false'].includes(flag))throw new ReadinessError('Supply material flags must be true or false.');
   if(env.FREEDOM_STORE_APPEARANCE_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_APPEARANCE_ENABLED))throw new ReadinessError('Store appearance flag must be true or false.');
   if(env.FREEDOM_STORE_APPEARANCE_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store appearance requires guild launchpad.');
+  if(env.FREEDOM_STORE_GALLERY_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_GALLERY_ENABLED))throw new ReadinessError('Store gallery flag must be true or false.');
+  if(env.FREEDOM_STORE_GALLERY_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store gallery requires guild launchpad.');
   if(env.FREEDOM_STORE_POLICIES_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_POLICIES_ENABLED))throw new ReadinessError('Store policies flag must be true or false.');
   if(env.FREEDOM_STORE_POLICIES_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store policies requires guild launchpad.');
   if(env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true'&&(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'||env.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true'||env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED!=='true'))throw new ReadinessError('Supply offer photos require guild launchpad, supplier console and hosted store photos.');
@@ -331,6 +335,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     supplyOfferPhotosEnabled:env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true',
     storeAppearanceEnabled:env.FREEDOM_STORE_APPEARANCE_ENABLED==='true',
     storePoliciesEnabled:env.FREEDOM_STORE_POLICIES_ENABLED==='true',
+    storeGalleryEnabled:env.FREEDOM_STORE_GALLERY_ENABLED==='true',
     tenantListCursors: createTenantListCursorCodec(env.FREEDOM_TENANT_CURSOR_SIGNING_KEY, { environment: config.freedomEnv, origin: config.origin }),
     communityDiscoveryEnabled: env.FREEDOM_COMMUNITY_DISCOVERY_ENABLED === 'true',
     memberBlockingEnabled: env.FREEDOM_MEMBER_BLOCKING_ENABLED === 'true',
@@ -488,6 +493,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           runtime.storePhotoUploadsEnabled=env.FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED==='true';
           // Keep the closed service installed for retained original receipts; admission remains separate.
           runtime.storePhotoAssets=createStorefrontProductPhotoLifecycle(pool,{store:runtime.avatarAssetStore});
+          if(runtime.storeGalleryEnabled===true)runtime.storeGalleryAssets=createStorefrontGalleryLifecycle(pool,{store:runtime.avatarAssetStore});
           if(runtime.storeAppearanceEnabled===true)runtime.storeAppearanceAssets=createStorefrontAppearanceLifecycle(pool,{store:runtime.avatarAssetStore});
         }
         if(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED==='true'&&runtime.avatarAssetStore){

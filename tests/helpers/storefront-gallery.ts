@@ -30,3 +30,29 @@ export async function seedGalleryRows(q:PoolClient,input:{tenantId:string;instan
  for(const product of products)for(const photo of product.photos)await q.query(`INSERT INTO commerce_publication_gallery_refs(publication_id,sku,position,tenant_id,instance_id,scope_id,asset_id,representation_id,policy_revision,alt_text) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[p.current_publication_id,product.sku,photo.position,t,i,photo.ref.scope_id,photo.ref.asset_id,photo.ref.representation_id,photo.ref.policy_revision,photo.alt_text]);
  return {groupId,photoId,document};
 }
+
+// Shared by the three bounded gallery runtime files. One schema per file.
+export async function createGalleryHarness(){
+ const {readFile}=await import('node:fs/promises');
+ const {createHostedStorePhotoHarness,photoSourcePng}=await import('./hosted-store-photo.js');
+ const {createStorefrontGalleryLifecycle}=await import('../../modules/assets/storefront-gallery.js');
+ const f=await createHostedStorePhotoHarness();
+ const text=await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql',import.meta.url),'utf8');
+ const sql=text.split('-- BEGIN STOREFRONT GALLERY GRANTS\n')[1].split('\n\\gexec')[0].replaceAll(":'runtime'",`'${f.role}'`).replaceAll("n.nspname='public'",`n.nspname='${f.h.schema}'`);
+ for(const row of (await f.h.pool.query(sql)).rows)await f.h.pool.query(Object.values(row)[0] as string);
+ const assets=createStorefrontGalleryLifecycle(f.runtime,{store:f.store});
+ const application=(enabled=true,uploads=true,extra:NonNullable<Parameters<typeof f.application>[1]>={})=>f.application(uploads,{storeGalleryEnabled:enabled,storeGalleryAssets:assets,...extra});
+ const app=application();
+ async function enable(){await f.h.pool.query("UPDATE domain_media_storage_policy SET mode='r2_only',persistence_allowed=true,policy_revision='synthetic-gallery-1',retained_byte_limit=16777216 WHERE purpose='storefront.product-photo'");}
+ type Store=Awaited<ReturnType<typeof f.openStore>>;
+ const call=(s:Store,method:string,suffix:string,body?:unknown,version?:string,key=randomUUID(),target=app,member=s.owner)=>f.h.call(method,s.root+suffix,member,body,{'Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})},target);
+ const path=(s:Store)=>'/products/'+s.productId+'/gallery';
+ async function draft(s:Store,target=app){return f.ok(await call(s,'GET',path(s),undefined,undefined,undefined,target)) as import('../../contracts/guild-launchpad/v1/storefront-gallery.js').ProductGalleryDraft;}
+ async function upload(s:Store,version:string,key=randomUUID(),id=randomUUID(),target=app,bytes=photoSourcePng){
+  const response=await target.request(f.h.origin+'/api/v1'+s.root+path(s)+'/photos/'+id,{method:'POST',headers:{Origin:f.h.origin,Cookie:s.owner.cookie,'X-CSRF-Token':s.owner.csrf,'Content-Type':'image/png','Idempotency-Key':key,'If-Match':`"${version}"`},body:new Uint8Array(bytes)});
+  return {status:response.status,data:await response.json() as any,response};
+ }
+ async function publish(s:Store,target=app,action='publish'){const view=f.ok(await call(s,'GET','',undefined,undefined,undefined,target));return f.ok(await call(s,'POST','/'+action,{},view.version,undefined,target));}
+ return {...f,galleryAssets:assets,galleryApplication:application,galleryApp:app,enable,galleryCall:call,galleryPath:path,draft,upload,publish};
+}
+export type GalleryHarness=Awaited<ReturnType<typeof createGalleryHarness>>;

@@ -1,3 +1,4 @@
+import type {StoreGalleryAssets} from '../../../modules/assets/storefront-gallery.js';
 import type {StoreAppearanceAssets} from '../../../modules/assets/storefront-appearance.js';
 import type { SupplyMaterialAssets } from '../../../modules/agent-commerce/supplier-console/material-media.js';
 import type {PaymentQueryTransport} from '../../../modules/agent-commerce/payments/query-transport.js';
@@ -119,6 +120,8 @@ export type PlatformRuntime = {
   /** Additive store branding, independent of media installation; default OFF. */
   storeAppearanceEnabled?: boolean;
   storePoliciesEnabled?: boolean;
+  storeGalleryEnabled?: boolean;
+  storeGalleryAssets?: StoreGalleryAssets;
   /** Independent installed read port and new-upload admission; both absent by default. */
   storePhotoAssetStore?: ObjectStore;
   storePhotoAssets?: StorePhotoAssets;
