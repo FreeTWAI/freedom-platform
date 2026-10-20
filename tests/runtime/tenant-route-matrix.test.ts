@@ -1174,6 +1174,10 @@ test('T-022 4. Body, header and query substitution', async () => {
   }
   scanForLeaks(candidates, '4 candidates', B);
   for (const actor of [P, N, fixture.people.O, fixture.people.M]) {
+    // Retail eligibility needs commerce membership; add it after the unrelated-guild query above.
+    await owner.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+      VALUES($1,$2,$3,'guild_commerce_sales','active','full')
+      ON CONFLICT (community_id,user_id,guild_key) DO NOTHING`, [randomUUID(), DEMO_COMMUNITY, actor.user.user_id]);
     const launchpad = await call('GET', '/guilds/guild_ai_field/launchpad', actor);
     assert.equal(launchpad.status, 200, JSON.stringify(describe(launchpad)));
     const other = actor === N ? A : B;
