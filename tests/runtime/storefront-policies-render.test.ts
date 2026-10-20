@@ -81,6 +81,29 @@ test('POL-PAGE-03 B03 links, escaping, paragraphs and public version labels',()=
  assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;<br>javascript:alert\(2\)<\/p><p>שלום/);assert.doesNotMatch(html,/<script>|href="javascript:|版本 [0-9]/);assert.match(html,/首次發布於/);assert.match(html,/歷史版本/);
  const p=productHtml(store,'P0001',[],undefined,undefined,undefined,legal)!;assert.match(p,/aria-label="配送與退換貨政策"/);assert.match(p,/policies\/shipping/);assert.match(p,/policies\/returns/);
  assert.equal(legalParagraphs('a\nb\n\nc'),'<p>a<br>b</p><p>c</p>');
+ i.policies.privacy.drop_ship_disclosed=true;const privacy={...store,policies:renderDraftLegal(i)};
+ for(const preview of [false,true]){
+  const text=policyHtml(privacy,'privacy',{policy:i.policies.privacy},preview);
+  assert.equal(text.split('<p>由供應商直接出貨的商品，本店只會把出貨所需的收件資料提供給負責出貨的供應商。</p>').length-1,1);
+  assert.doesNotMatch(text,/已說明代出貨時會把必要收件資料提供給負責出貨的供應商/);
+ }
+});
+test('POL-PAGE-04 About renders each seller field once and retains one information target and responsibility sentence',()=>{
+ const legal=renderDraftLegal(input()),s={...store,description:'合成唯一商店介紹',policies:legal};
+ for(const preview of [false,true]){
+  const html=aboutHtml(s,preview),main=/<main\b[^>]*>([\s\S]*?)<\/main>/.exec(html)![1];
+  for(const value of Object.values(syntheticSeller)){
+   assert.equal(main.split(value).length-1,1);assert.equal(html.split('<dd>'+value+'</dd>').length-1,1);
+   // The required footer responsibility sentence also names the business.
+   assert.equal(html.split(value).length-1,value===syntheticSeller.business_name?2:1);
+  }
+  assert.equal(html.split(s.description).length-1,1);assert.equal(html.split('class="shop-seller-details"').length-1,1);
+  assert.equal(html.split('id="shop-information"').length-1,1);assert.match(main,/<section aria-labelledby="shop-information"><h2 id="shop-information" tabindex="-1">賣方資訊<\/h2>/);
+  assert.equal(html.split('自由工坊提供網站服務，不是賣方。').length-1,1);assert.doesNotMatch(html,/shop-merchant-info/);
+  assert.match(html,/src="\/brand\/freedom-workshop.webp"/);if(!preview)assert.match(html,/href="\/shops\/synthetic-shop\/order-access">找回訂單/);
+  if(preview){assert.equal(html.split('店主已儲存的預覽，尚未對外發布。').length-1,1);assert(main.indexOf('店主已儲存的預覽，尚未對外發布。')<main.indexOf('<article'));}
+ }
+ const empty=aboutHtml({...store,policies:renderDraftLegal(emptySellerPolicies())});assert.equal(empty.split('id="shop-information"').length-1,1);assert.doesNotMatch(empty,/shop-merchant-info/);
 });
 test('POL-PAGE-07 draft seller follows the unchanged preview notice and uses private links',()=>{
  const legal=renderDraftLegal(input(),'/api/v1/tenants/synthetic/storefronts/synthetic/preview-page');const html=storeHtml({...store,description:''},undefined,[],{preview:true},undefined,undefined,legal);

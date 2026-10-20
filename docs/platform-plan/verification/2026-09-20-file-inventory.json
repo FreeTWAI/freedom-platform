@@ -17864,8 +17864,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/storefront-shell.ts",
-      "bytes": 5338,
-      "sha256": "4cc044166274a088aa9e9ec8a33fd7152967dd8f59733e7db163a614cb7e1641"
+      "bytes": 5434,
+      "sha256": "e24f675422204726bfdaba7e162452a2d02b5d41a736d24b8b395881e57f070d"
     },
     {
       "path": "modules/agent-commerce/hosted/supplier-orders.ts",
@@ -18544,8 +18544,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 13131,
-      "sha256": "50ff126614288f0f983707ea05824771ff3a79ca1d412700261356d8466a9072"
+      "bytes": 13532,
+      "sha256": "644e016bc1e201143c159349bd4894086eb6b8daf237538f14ed35367f41b231"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -18569,8 +18569,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/policies/pages.ts",
-      "bytes": 4338,
-      "sha256": "ae22821d2e1f699e173443e15234567cd9f11a885850d3ccf873551a51cd3b4e"
+      "bytes": 4430,
+      "sha256": "ff7a142a677827722a6346fb86b0f103b884eb3bab9544cd96bc195bb6099295"
     },
     {
       "path": "modules/agent-commerce/storefront/policies/read.ts",
@@ -25624,13 +25624,13 @@
     },
     {
       "path": "tests/runtime/storefront-policies-publication.test.ts",
-      "bytes": 12489,
-      "sha256": "d59b93eb520180727165fe2f00623b085f7daf620ef50ee8943958d16d467d05"
+      "bytes": 12533,
+      "sha256": "ff143ab44b10f36e7f030234515c81659647d7daf10c110a46566b2e03a3a845"
     },
     {
       "path": "tests/runtime/storefront-policies-render.test.ts",
-      "bytes": 11885,
-      "sha256": "3dd4156271344afdcb09aa2fdbffaaa2fb6ea3a9fd0d43949da1db83d240f4b0"
+      "bytes": 14065,
+      "sha256": "840059a1f3f243b8cac43aa7fd9c1dd33f2ed168ff802aab8b457253a2bc0a05"
     },
     {
       "path": "tests/runtime/storefront-policies-sql.test.ts",

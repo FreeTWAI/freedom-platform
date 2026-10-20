@@ -168,6 +168,11 @@ A published business name replaces the original responsibility statement with th
 fixed seller sentence. Empty descriptions omit the contradictory missing-contact
 placeholder. Preview keeps the original saved-draft notice followed by the draft
 seller sentence. With no business name the footer is exactly the old branch.
+About puts the seller fields and policy links in its main content only; its seller
+heading owns `#shop-information`. About omits the footer information card while
+retaining the responsibility sentence, Freedom logo and existing order links.
+Other pages retain their footer information card. The privacy page and preview
+address buyers directly; the owner's drop-ship checkbox label remains unchanged.
 Historical policy footers always use the current seller; there is no old-seller
 endpoint. Republishing removed phone/address withdraws it from all public pages.
 Old policy prose may still contain personal data: withdrawal/erasure is an explicit

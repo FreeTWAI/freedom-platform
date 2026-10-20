@@ -45,7 +45,7 @@ test('POL-PUB-03 every storefront shell has one responsibility sentence, B03 lin
  const s=await f.openStore();await save(s);await publish(s);
  for(const path of ['', '/about','/policies/privacy','/products/P0001','/cart','/checkout','/orders/'+randomUUID(),'/order-access']){const text=await html(s,path);assert.equal(text.split('自由工坊提供網站服務，不是賣方。').length-1,1);assert.doesNotMatch(text,/商品資訊與訂單服務由/);assert.match(text,/關於本店/);for(const value of [s.tenantId,s.instanceId,s.owner.user.email,s.productId])assert(!text.includes(value));assert.doesNotMatch(text,/account_number|contact_email|member_email|mailto:|tel:/);}
  for(const path of ['/orders/invalid','/payment-return/'+randomUUID()]){const r=await response(s,path);assert.equal(r.status,404);assert.match(await r.text(),/本店由合成測試商行經營/);}
- assert.match(await html(s,'/policies/returns'),/7 天/);assert.match(await html(s,'/policies/returns'),/14 天/);assert.match(await html(s,'/policies/privacy'),/已說明代出貨時會把必要收件資料提供給負責出貨的供應商/);
+ assert.match(await html(s,'/policies/returns'),/7 天/);assert.match(await html(s,'/policies/returns'),/14 天/);assert.match(await html(s,'/policies/privacy'),/<p>由供應商直接出貨的商品，本店只會把出貨所需的收件資料提供給負責出貨的供應商。<\/p>/);
  assert.match(await html(s,'/products/P0001'),/aria-label="配送與退換貨政策"/);
  const receipts=(await f.h.pool.query("SELECT to_jsonb(r)::text AS value FROM scoped_command_receipts r WHERE operation='storefront.seller-policies.save'")).rows;for(const r of receipts)assert.doesNotMatch(r.value,/seller@example.test|測試市|合成shipping政策|00000000/);
 });
