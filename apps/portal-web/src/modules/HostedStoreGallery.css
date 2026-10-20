@@ -10,6 +10,7 @@
 .hosted-gallery-copy label { display: grid; gap: 4px; }
 .hosted-gallery-copy input { width: 100%; min-width: 0; }
 .hosted-gallery .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hosted-gallery .actions:empty { display: none; }
 .hosted-gallery .btn-small { min-height: 44px; width: fit-content; padding: 6px 12px; font-size: .85rem; }
 .hosted-gallery input[type="file"] { max-width: 100%; }
 @media(max-width: 600px) { .hosted-gallery-list > li { grid-template-columns: 1fr; } .hosted-gallery-list > li > img { width: 100%; height: 180px; } }

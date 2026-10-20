@@ -3764,7 +3764,18 @@ test.describe('C1 own product gallery',()=>{
    for(const width of [390,768,1440]){
     await s.page.setViewportSize({width,height:900});await storeArea(s.page,'商品');await captureOffer(s.page,gallery(s.page),info.outputPath(`gallery-eight-editor-${width}.png`));
     await detail.setViewportSize({width,height:900});const first=detail.getByRole('link',{name:'顯示第 1 張照片',exact:true}),last=detail.getByRole('link',{name:'顯示第 8 張照片',exact:true});
-    await first.focus();await detail.keyboard.press('Home');await expect(first).toHaveAttribute('aria-current','true');await detail.screenshot({path:info.outputPath(`gallery-eight-product-${width}.png`),fullPage:true});
+    await first.focus();await detail.keyboard.press('Home');await expect(first).toHaveAttribute('aria-current','true');
+    const rail=detail.locator('.shop-gallery-thumbnails');await expect.poll(()=>rail.evaluate(node=>node.scrollLeft)).toBe(0);
+    const metrics=await rail.evaluate(node=>{
+     const rect=node.getBoundingClientRect(),style=getComputedStyle(node),firstStyle=getComputedStyle(node.firstElementChild!);
+     return {clientWidth:node.clientWidth,scrollWidth:node.scrollWidth,contentWidth:node.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,focusExtent:parseFloat(firstStyle.outlineWidth)+parseFloat(firstStyle.outlineOffset),thumbnails:[...node.children].map(photo=>{const box=photo.getBoundingClientRect();return {width:box.width,height:box.height,left:box.left,right:box.right,top:box.top,bottom:box.bottom};})};
+    });
+    await writeFile(info.outputPath(`gallery-rail-${width}.json`),JSON.stringify({viewport:width,...metrics},null,2));
+    for(const thumb of metrics.thumbnails){expect(thumb.width).toBeGreaterThanOrEqual(56);expect(Math.abs(thumb.width-thumb.height)).toBeLessThan(.1);}
+    const home=metrics.thumbnails[0];expect(home.left-metrics.focusExtent).toBeGreaterThanOrEqual(metrics.left);expect(home.top-metrics.focusExtent).toBeGreaterThanOrEqual(metrics.top);expect(home.bottom+metrics.focusExtent).toBeLessThanOrEqual(metrics.bottom);
+    if(width===1440){expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);const lastBox=metrics.thumbnails[7];expect(lastBox.right+metrics.focusExtent).toBeLessThanOrEqual(metrics.right);expect(lastBox.left).toBeGreaterThanOrEqual(metrics.left);}
+    else expect(metrics.scrollWidth).toBeGreaterThan(metrics.clientWidth);
+    await detail.screenshot({path:info.outputPath(`gallery-eight-product-${width}.png`),fullPage:true});
     await detail.keyboard.press('End');await expect(last).toBeFocused();await expect(last).toHaveAttribute('aria-current','true');await expect(detail.locator('[data-gallery-status]')).toHaveText('第 8 張，共 8 張');
     await expect.poll(()=>last.evaluate(node=>{const a=node.getBoundingClientRect(),b=node.parentElement!.getBoundingClientRect();return a.left>=b.left+3&&a.right<=b.right-3;})).toBe(true);
     await expect.poll(()=>detail.locator('.shop-gallery-photo').last().evaluate(node=>Math.abs(node.getBoundingClientRect().left-node.parentElement!.getBoundingClientRect().left-1))).toBeLessThan(2);
