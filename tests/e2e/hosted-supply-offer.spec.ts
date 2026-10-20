@@ -89,7 +89,8 @@ test('a shop owner understands a saved supply version, its approval and its hone
     for(const heading of ['商品','價格','出貨與退貨','合作方式','供應商同意的範圍','目前可以怎麼賣'])await expect(detail.getByRole('heading',{name:heading,exact:true})).toBeVisible();
     await expect(detail).toContainText('每件成本合計');await expect(detail).toContainText('$75.00');
     await expect(detail).toContainText('幣別：新臺幣（TWD）');
-    await expect(detail).toContainText('目前不能透過結帳購買：供貨商品需要供應商的代出貨同意，這項功能尚未開放。');
+    await expect(detail.getByRole('heading',{name:'展示：供應商同意後可加入',exact:true})).toBeVisible();
+    await expect(detail).toContainText('供貨商品需要供應商的代出貨同意，這項功能尚未開放。');
     await expect(detail).toContainText('自行持有商品');
     for(const width of [390,768,1440]){
       await b.setViewportSize({width,height:900});
@@ -105,6 +106,7 @@ test('a shop owner understands a saved supply version, its approval and its hone
     await detail.getByLabel('我的零售價（TWD）',{exact:true}).fill('120');
     await detail.getByRole('button',{name:'送出供貨申請',exact:true}).click();
     await expect(detail).toContainText('等待供應商確認');
+    await expect(detail.getByRole('heading',{name:'展示：目前無法加入展示頁',exact:true})).toBeVisible();
     // Review both decisions in the real supplier console UI.
     await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/terms');
     await active.getByRole('link',{name:title+' · 海風選物店',exact:true}).click();
@@ -114,6 +116,7 @@ test('a shop owner understands a saved supply version, its approval and its hone
     await dialog.getByRole('button',{name:'確認不同意',exact:true}).click();
     await expect(active.locator('.badge')).toHaveText('未同意');
     await b.reload();await expect(detail).toContainText(reason);
+    await expect(detail.getByRole('heading',{name:'展示：目前無法加入展示頁',exact:true})).toBeVisible();
     await detail.getByRole('link',{name:'返回供貨合作',exact:true}).click();
     const own=b.locator('.hosted-distribution details').filter({has:b.locator('summary').filter({hasText:'我的選品'})});
     await own.locator('summary').click();await expect(own).toContainText(reason);
@@ -136,5 +139,6 @@ test('a shop owner understands a saved supply version, its approval and its hone
     for(const text of [supplier.email,'73491','銀行帳號'])await expect(detail).not.toContainText(text);
     await detail.getByRole('button',{name:'停止採用',exact:true}).click();
     await expect(detail).toContainText('已撤回供貨');
+    await expect(detail.getByRole('heading',{name:'展示：目前無法加入展示頁',exact:true})).toBeVisible();
   }finally{await Promise.allSettled(contexts.map(c=>c.close()));}
 });

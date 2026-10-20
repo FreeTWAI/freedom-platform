@@ -2599,8 +2599,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyOffer.tsx",
-      "bytes": 6180,
-      "sha256": "28a54659702bb13943412d51f4c3fd51698ea0c1763625152e7f38d85ee76842"
+      "bytes": 6288,
+      "sha256": "c47510ebbb3e18c953b414ee37ead52364a5b1e9690bdcaa6027742812b7f72a"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyTerms.tsx",
@@ -22559,8 +22559,8 @@
     },
     {
       "path": "tests/e2e/hosted-supply-offer.spec.ts",
-      "bytes": 10982,
-      "sha256": "cc0f5bec7aeaeb4ca775deedbf1a04642b7f0ad49056a927fe9dfda7d0a0414b"
+      "bytes": 11421,
+      "sha256": "91f185360ff2dfee50064642b2f73f6f4d4f19a84ec1a6d017b51cb70d9fdf03"
     },
     {
       "path": "tests/e2e/hosted-supply-terms.spec.ts",
