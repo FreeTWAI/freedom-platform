@@ -33,7 +33,7 @@ export function HostedSupplyOffer({client,root,offerId,refresh,busy,writable,onD
   return <section className="hosted-supply-offer stack"><div className="actions"><a className="btn btn-ghost" href={back}>返回供貨合作</a></div><h2>供貨方案</h2>
     {error&&<><p className="banner banner-error" role="alert">{error}</p><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>setReload(n=>n+1)}>重試讀取供貨方案</button></div></>}
     {!data&&!error&&<p role="status">正在讀取供貨方案…</p>}
-    {data&&<><SupplyOfferPresentation terms={data.offer.terms} supplierName={data.supplier.name} publishedAt={data.published_at} versionHash={data.offer.terms_sha256} arrangement={data.selection?.arrangement??data.offer.arrangement}/>
+    {data&&<><SupplyOfferPresentation terms={data.offer.terms} supplierName={data.supplier.name} publishedAt={data.published_at} versionHash={data.offer.terms_sha256} arrangement={data.selection?data.selection.arrangement:data.offer.arrangement}/>
       {data.supplier.public_path&&<div className="actions"><a className="btn btn-ghost" href={data.supplier.public_path} target="_blank" rel="noopener">查看供應商商店</a></div>}
       <section className="supply-offer-section stack"><h3>目前可以怎麼賣</h3>
         <div className="sale-path stack"><h4>展示：{data.sale_paths.display.available?'可加入展示頁':'目前無法加入展示頁'}</h4><p>{data.offer.state==='withdrawn'?'這份供貨版本已撤回。':data.sale_paths.display.available&&data.selection?'供應商已同意；下次發布後，商品會出現在你的商店。':'取得供應商同意，並在你的商店發布後，商品才會出現在展示頁。'}</p></div>
