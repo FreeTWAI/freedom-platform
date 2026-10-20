@@ -38,6 +38,12 @@ B03 網址維持 `/shops/:slug/products/:sku`；sku 可以是 group 中任一變
 - 新表 `commerce_product_gallery_photos`（group、順序、asset 參照、可選的 selection），沿用 141 的 asset FK 模式；發布時凍結到新表 `commerce_publication_gallery_refs`。
 - 公開路徑另加一個 schema（例如 `/shops/:slug/media/:revision/:sku/:n`），既有單張路徑不變。
 
+**2026-10-20 C1 商品圖組本機候選（schema177，未部署）**：採 lazy groups；未編輯圖組的自有商品視為一成員 group，沒有 backfill。新增 `commerce_product_groups`、`commerce_product_group_members`、`commerce_product_gallery_photos`、`commerce_publication_galleries` 與 `commerce_publication_gallery_refs`。141 指標仍是唯一主照片來源；新照片列使用 2–8 的 secondary slots，讀取與發布轉成連續次序。主照片說明綁定其 asset／representation／scope／policy tuple digest，舊版替換主照片不會錯套舊說明。沒有 live-selection FK 或舊版寫入同步 trigger；移除商品保留 group、成員、照片及歷史參照。
+
+店主可新增、上移／下移、設為主照片、移除，以及填選用的照片說明（trim 後最多 120 個 Unicode code points，拒絕不完整字串、控制字元及 bidi 控制字元）。空白說明以「商品名稱，第 n 張，共 m 張」顯示。既有裝置端縮圖、2 MiB 輸入、1 MiB／1920px WebP 輸出、結果未知原操作重試、保留配額與 `readVerifiedObject` 都沿用；新 target kind 是 `storefront.gallery-photo`，purpose 仍是 `storefront.product-photo`。最多 200 件 × 8 張的現有照片上界為 1,677,721,600 bytes（1,600 MiB）；這不是容量 entitlement，歷史照片、Work、封面／店標及未完成上傳仍受既有兩層儲存政策限制，沒有調高任何政策或實際配額。
+
+商品頁有整張大圖與縮圖連結，可用鍵盤、螢幕閱讀器或無 JavaScript 橫向捲動；每張圖片都有尺寸，首張 eager，其餘 lazy。商品卡片、主打、OG 與商店備用封面只使用主照片。供貨合作商品的買家頁仍只顯示可用的 D-11 店主副本，沒有副本就顯示尚未提供照片；供應商明確分享的 offer 照片仍僅供私人評估，不會自動進入買家頁，也沒有供貨商品圖組編輯。變體軸／切換、代表照與分類仍是後續切片。
+
 ### 1.3 分類
 
 `commerce_storefront_categories`（最多 30 個、名稱 ≤ 40 字、排序）與 `commerce_storefront_category_members`（category、group、排序）。一個 group 可在多個分類。
@@ -96,6 +102,10 @@ v1 projection 與公開 stores JSON 不擴欄。About、目前政策與歷史政
 新資訊路徑回共同 404。`FREEDOM_STORE_POLICIES_ENABLED` 預設 OFF，site 另加 `store_policies_enabled`；
 OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既有 SPA fallback，且不刪資料。
 這不實作本節完整 catalog 文件、買家 consents、訂單政策連結或下一節的任何結帳門檻。
+
+**2026-10-20 商品圖組發布切片（schema177，未部署）**：獨立 `freedom.hosted-store-gallery/v1` 文件與 typed refs 在同一次發布交易凍結，第一張必須與既有 `commerce_publication_photo_refs` 相同；gallery digest 是第六個 dirty／發布去重維度。產品選擇版本的 CAS 與同一 profile boundary 序列化照片／發布；私有多次查詢也共用 profile read lock。預覽讀已儲存草稿，公開頁只讀同店目前 publication。unpublish 不刪資料，republish 才凍結目前草稿；沒有 gallery sidecar 的舊版 publication 合成既有 frozen singleton，絕不讀目前草稿補圖。
+
+`FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF。依 appearance／policies 的 site 慣例，`GET /api/v1/site` **永遠輸出** `store_gallery_enabled`；OFF 時為 false，這是 OFF site JSON 唯一新增欄位。OFF 不查五張 gallery 表、不掛新照片／namespace 路由，原單張編輯器、店面／商品／購物車／結帳／訂單／About／政策 HTML、公開 stores JSON、既有 media JSON 與單張照片路徑保持原行為與 bytes。新的多段 media 路徑與未知尾段保留 host 原 SPA fallback；`shops.css` 與既有 storefront script entry 不變。關閉旗標不刪圖組，舊 binary 仍可讀寫主照片。舊版移除主照片後留下的 secondary rows 只顯示保留通知與「設為主照片／移除」，GET 或發布不自動修復。
 
 ### 2.3 開放結帳的條件（C2）
 
@@ -213,6 +223,8 @@ OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既�
 | 公開讀取、報價、checkout、下單 | 匿名；訂單讀寫依 §4.2 |
 
 **本切片的明確差異（2026-10-20）**：外觀的所有寫入（含版型、封面與店標）統一要求既有 `store:manage`，沿用現行版型命令的管理邊界，避免商品 `store:write` 自動取得品牌修改權；發布仍是 `store:publish`，草稿與私有圖片讀取仍是 `store:read`。這取代上表對本切片外觀的 `store:write` 提議，不更動商品照片、供貨或其他既有能力，也不宣告政策／賣方揭露已實作。唯讀與僅商品寫入的成員看不到外觀編輯控制，伺服器直接命令也拒絕。
+
+**商品圖組權限（2026-10-20）**：上傳、排序、照片說明、設主照片與移除均要求 `store:write`，並使用產品 selection `If-Match` 與 `Idempotency-Key`；`store:manage` 或 `store:publish` 單獨不授予照片寫入。私有草稿／圖片與預覽為 `store:read`，唯讀成員看照片且沒有編輯控制。發布仍為 `store:publish`；公開圖片只接受目前同店、同 revision、同 SKU 的 frozen refs，其他商店、未發布草稿與越界次序共用 404。
 
 新能力名稱（訂單、出貨、收款等）在 EC-SPEC-09 §2；都需要新的 storefront 模組版本（`storefront@1.0.0` 的能力清單是凍結的，`migrations/134_hosted_storefronts.sql:88`）。
 

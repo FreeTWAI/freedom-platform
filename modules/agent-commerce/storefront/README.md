@@ -195,3 +195,86 @@ runtime files and the default-mode `hosted-store-policies.spec.ts` (ten tests, r
 per-test feature hosts, no media fixture). Restore/retarget fixtures cover all six
 nonempty tenant tables. These are synthetic local checks, not hosted CI, deployment,
 legal certification, Safari or real-member adoption evidence.
+
+## Product gallery (local candidate, 2026-10-20)
+
+Migration `177_storefront_product_gallery.sql` is provisional. Five new retained
+tenant tables implement lazy groups, membership, secondary photos and immutable
+publication documents/refs. No backfill, selection FK or legacy write trigger is
+installed. Migration 141 remains the only primary pointer; secondary slots are
+2–8, normalized to dense effective order. Primary alt binds its exact tuple
+digest, so a legacy replacement cannot inherit the previous description. Reads
+select only current product groups; retained primary lookup is indexed.
+
+`FREEDOM_STORE_GALLERY_ENABLED` defaults OFF independently of appearance/policies.
+Site always adds `store_gallery_enabled` (false OFF); every other site field is
+unchanged. OFF mounts no gallery route and reads none of its five tables. The
+original photo editor, storefront/product/cart/checkout/order/About/policy HTML,
+v1 public store JSON, media JSON and single-photo paths keep their old bytes.
+New ordinal media paths and unknown suffixes still reach the host's original SPA
+fallback. Both the source and built `shops.css` / existing storefront entry stay
+unchanged. No real activation, deploy or policy/limit change is included.
+
+ON, owners manage up to eight ordered own-product photos with optional alt text
+(trimmed, well formed, at most 120 Unicode code points; controls/bidi rejected).
+Additions share the existing browser preparation, native decoder, closed upload
+lifecycle, access-aware requests and retained unknown-result machinery. A new
+`storefront.gallery-photo` target uses the established `storefront.product-photo`
+purpose, limits, quota and backup profile. Unknown original File/JSON/key/CAS
+stays in member/product-scoped RAM; retry never changes that original tuple.
+Known CAS refusal requires explicit review before a fresh key/version.
+
+All gallery mutations require `store:write`; `store:manage` or `store:publish`
+alone does not grant it. Private reads need `store:read`. Routes below are relative
+to `/api/v1/tenants/:tenant_id/storefronts/:instance_id`:
+
+- GET `product-galleries`, GET `products/:product_id/gallery`.
+- POST `products/:product_id/gallery/photos/:photo_id` (bounded raw image).
+- POST `products/:product_id/gallery/reorder` (exact complete ordered key set).
+- PATCH `products/:product_id/gallery/photos/:photo_key` (optional `alt_text`).
+- POST `products/:product_id/gallery/photos/:photo_key/remove` (strict empty JSON).
+- GET/HEAD `products/:product_id/gallery/photos/:photo_key/:version`.
+- GET `preview-page/products/:sku` (saved draft detail).
+
+Mutations use `Idempotency-Key` and product selection `If-Match`; receipts retain
+completion metadata, then reproject the current draft under current authority.
+Version conflict is 412, stale order/full gallery is 409, invalid description is 422.
+Private snapshots share the profile read boundary; byte I/O holds no transaction.
+Quarantine blocks new writes and receipt replay before effects. Original legacy
+single-photo routes, capabilities, copy and tests remain in place.
+
+Publishing freezes a separate canonical gallery document and refs under the same
+profile boundary as the existing five dimensions. Its digest is the sixth dirty /
+deduplication dimension; primary refs must equal the legacy freeze. Preview uses
+saved draft; public `/shops/:slug/media/:revision/:sku/:n` uses only the same store's
+current publication, with verified object readback between two authority snapshots.
+GET/HEAD are no-store/noindex; foreign, draft, old or out-of-range paths share 404.
+Unpublish retains history; republish freezes the current draft. A missing old
+sidecar derives a singleton from the old frozen refs, never from a live draft.
+
+Buyer figures show whole images in a reserved square stage. Dimensioned thumbnails
+are real anchors; the separate `storefront-gallery.js` enhances selection, focus,
+arrow/Home/End keys and a polite current-photo announcement. No JS still exposes
+all figures through scrolling and anchors. Gallery CSS is independent. Cards,
+featured products, OG and fallback cover still use only the primary. Supplied
+products show one usable D-11 seller copy or the existing placeholder; explicitly
+shared offer photos remain private evaluation media. No supplied gallery controls
+or variant/category UI is added.
+
+Legacy removal of the primary retains secondary rows. The editor shows only the
+recovery notice and explicit promote/remove controls for those rows; GET/publish
+never repairs them. Alt stays optional. 200 × 8 × 1 MiB is 1,677,721,600 bytes of current
+photos before cover/logo, replacements, historical and unfinished objects. Existing
+purpose and shared tenant retention budgets can refuse earlier; this is not an
+entitlement and no collector or quota release is introduced (OPEN-07).
+
+Verification uses exactly `storefront-gallery-{sql,commands,media}.test.ts`, the
+original single-photo/appearance/policy regressions, global route/RLS/quarantine /
+media bridge guards, eight appended photo-browser cases and two default OFF cases.
+Screens cover 390/768/1440, eight photos, keyboard and no JS. The media restore drill
+preserves its original 17 objects plus exactly 8 gallery objects; its two gallery
+stores include promotion, removal, a deleted product, frozen revisions and stored
+pending bytes. The separate tenant drill has nonempty A/B graphs and six captured
+objects (two Work/four product photos). Exact-base reader/rendering proof revokes
+SELECT on all five gallery tables. The contract generator emits the independent
+`storefront-gallery.schema.json`; original contract families remain unchanged.

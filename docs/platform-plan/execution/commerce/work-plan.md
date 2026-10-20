@@ -4,6 +4,25 @@
 
 本文件把計畫 §20 的 EC-WP00～11 對到規格、里程碑與實際分支。進度以 commit、測試證據與 PR 為準；「現況」欄只記錄 2026-10-15 的狀態，之後不在這裡追進度。
 
+## 2026-10-20：C1 商品圖組本機候選
+
+在 store-policies 基準 `e17364831414bf4bd9a77eab2adf11945762f3df` 上加入單一 migration
+`177_storefront_product_gallery.sql`（暫定編號）。五張 retained tenant 表、lazy singleton groups 與
+141 唯一主照指標支援自有商品最多八張、選填說明、排序、預覽及第六個發布 dirty 維度。
+公開 v1 projection／media JSON、舊照片 URL、既有 storefront entry 與 shops.css 不擴充。
+`FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF；site 唯一新增 `store_gallery_enabled:false`，
+其餘 OFF 頁面、媒體與 host SPA fallback 保留。沒有部署、真實開關、秘密或容量政策變更。
+
+這不完成整個 C1：變體、分類、供貨商品圖組仍在後續。供貨買家頁只用 D-11 店主副本，
+offer 圖片只供私人評估。舊版移除主照後的保留照片不自動重接，必須明確設主照或移除。
+主照說明依 tuple digest 綁定，舊 binary 的主照替換不繼承舊說明。
+
+驗證維持三個 gallery runtime 檔（SQL、commands、media）；瀏覽器在既有 photo pass 最後追加
+八例，另有兩例 default-mode OFF。還原保留原 17 個物件，再精確加入八個 gallery 物件；
+A／B gallery 圖均非空，tenant RLS sealed drill 另精確包含兩個 Work 與四個照片物件。
+以 exact-base Git blobs 編譯舊 reader／renderer，撤銷五表 SELECT 比較現有 publication。
+詳細行為、命令與驗證入口見 storefront README；本機合成資料不等於部署或真人採用驗收。
+
 ## 2026-10-20：C1 賣方資訊與商店政策本機候選
 
 在 appearance follow-up `1b2c5dc12555212840dc5713cc1153b72c31ff05` 上新增單一 migration

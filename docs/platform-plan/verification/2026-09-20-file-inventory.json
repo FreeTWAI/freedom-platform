@@ -15584,8 +15584,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
-      "bytes": 26021,
-      "sha256": "c5a221869ce71fb2c3af7bf7337bc90b9261ba95a1e3692385c48fca346a6411"
+      "bytes": 29975,
+      "sha256": "443ecdc70606f789e7e4af92e5900f662a1805aaedb69c220ab2a25c14a232b9"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-03-order-inventory.md",
@@ -15664,8 +15664,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/pages.md",
-      "bytes": 18941,
-      "sha256": "597681acd3d8774c467d3b33181e174689277ee3407ceb4c051771481c28ca70"
+      "bytes": 19138,
+      "sha256": "3f756342d4a9663cfea85235026678bfd23565bcc76e82f82995ccc4ff2e4c51"
     },
     {
       "path": "docs/platform-plan/execution/commerce/sources.md",
@@ -15674,8 +15674,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 93125,
-      "sha256": "1c6af825a46d336fb376f8b76ae6d33662eac114d09d481f659f9171df7b02b2"
+      "bytes": 94692,
+      "sha256": "b7785c844e6653200f9acef8799addbc2f3f0c7350e983b45811157a4dedb9c6"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -18584,8 +18584,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 13681,
-      "sha256": "cc4fa4ebf5a8ad10de26fea5da33648cc3d7837b0cc7b8b491ab4f61302d3a7f"
+      "bytes": 19322,
+      "sha256": "868e615097bc26d0a99281d4a2c8d1822cb6abfbf18f0c6481857e2d7a3ca0c6"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -21574,8 +21574,8 @@
     },
     {
       "path": "packages/media-migration/README.md",
-      "bytes": 13562,
-      "sha256": "c2c5fc6e1270518b48788a74ae27aae3711143fa17d11659c129c0f807998ff2"
+      "bytes": 14993,
+      "sha256": "87f9826bca6bd5962bd211740afb4c17159444228f1beb56890ea4cf75e5eb30"
     },
     {
       "path": "packages/media-migration/backup-archive-fs.ts",
