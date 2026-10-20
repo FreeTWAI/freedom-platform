@@ -426,6 +426,14 @@ async function buildFixture() {
     await makeMember(M, 'leader');
     await makeMember(I, 'intern');
     await makeMember(F, 'full');
+    // The substitution cases below test tenant authority after application
+    // eligibility. Retail launch independently requires full commerce membership;
+    // satisfy that prerequisite without granting any tenant capability.
+    for (const actor of [P, O, N, M]) await q.query(`INSERT INTO positioning_profession_memberships
+      (membership_id,community_id,user_id,guild_key,state,member_tier)
+      VALUES($1,$2,$3,'guild_commerce_sales','active','full')
+      ON CONFLICT (community_id,user_id,guild_key) DO UPDATE SET state='active',member_tier='full'`,
+    [randomUUID(),DEMO_COMMUNITY,actor.user.user_id]);
   } finally {
     q.release();
   }
@@ -602,8 +610,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 10, guild: 9, principal: 8, global: 4, tenant: 126, middleware: 16 });
-  assert.equal(selectedRoutes.length, 173);
+  assert.deepEqual(counts, { admin: 10, guild: 9, principal: 8, global: 4, tenant: 127, middleware: 16 });
+  assert.equal(selectedRoutes.length, 174);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
