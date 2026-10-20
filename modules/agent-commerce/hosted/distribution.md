@@ -142,6 +142,13 @@ separate thumbnail rendition. No new audience, consent, terms digest, schema
 change, store-publication grant, drop-ship consent or supplied-line checkout is
 introduced.
 
+Runtime coverage: `CATALOG-PHOTO-01` through `07` live in
+[`hosted-supply-catalog-photos.test.ts`](../../../tests/runtime/hosted-supply-catalog-photos.test.ts),
+including the 101 real offers that prove the shared catalog window. Offer sharing
+and byte-route cases remain in
+[`hosted-supply-offer-photos.test.ts`](../../../tests/runtime/hosted-supply-offer-photos.test.ts).
+Both files register the same isolated harness hooks through one shared test helper.
+
 ## Direct and shared reservation boundary
 
 The current `hosted_direct_reservation` profile remains limited to its own supply

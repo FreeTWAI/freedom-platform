@@ -27,6 +27,8 @@
     "tests/runtime/distribution-photos.test.ts",
     "tests/runtime/distribution-photos-sql.test.ts",
     "tests/runtime/hosted-supply-offer-photos.test.ts",
+    "tests/runtime/hosted-supply-catalog-photos.test.ts",
+    "tests/helpers/hosted-supply-offer-photos.ts",
     "tests/runtime/partner-materials-recovery.test.ts",
     "tests/e2e/supplier-console.spec.ts",
     "tests/e2e/supplier-console-cooperation.spec.ts",

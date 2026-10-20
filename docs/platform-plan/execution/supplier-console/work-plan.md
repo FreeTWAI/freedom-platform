@@ -158,3 +158,10 @@ S3 → D-11 素材進公開店面（先通知 Commerce）
 新增一條獨立、嚴格且受同一安裝判斷限制的 `supply-catalog-photos` GET，沿用供貨目錄相同的排序、100 筆視窗及截斷，批次讀最新分享；既有四種讀取 schema／回應保持原狀。前端不因照片失敗清空或阻擋清單，舊 API 的 404 安靜略過，其他失敗由原更新動作重試。無照片或單張失敗不放佔位圖；96px 中性方框保持比例、不裁切，平板／桌面並排，手機可在標題上方。原評估照片最多 1920px，沒有另外生成較小縮圖。
 
 代出貨同意、供貨商品結帳與 D-11 店面使用授權仍保留原界線。這個增量沒有 migration、SQL 物件變更、相依套件、部署、真實旗標或 secret 變更。SC-E2E-87 留在既有照片 pass 檔案，預設 pass 沿用原供貨旅程；實跑結果與截圖檢視記於交付報告，不宣稱真人採用或線上啟用。
+
+清單照片的 runtime 覆蓋 `CATALOG-PHOTO-01`～`07` 位於
+[`hosted-supply-catalog-photos.test.ts`](../../../../tests/runtime/hosted-supply-catalog-photos.test.ts)，
+供貨方案照片的 `OFFER-PHOTO-01`～`16` 留在
+[`hosted-supply-offer-photos.test.ts`](../../../../tests/runtime/hosted-supply-offer-photos.test.ts)。
+兩檔共用一份隔離 harness 與原有 hooks，測試內容與斷言不變（包含 101 筆真實 offer）；
+拆檔讓固定的 runtime CI 分區可分別排程，不改分區權重或預算。
