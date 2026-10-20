@@ -14,7 +14,7 @@ export function SupplyOfferPresentation({terms, supplierName, publishedAt, versi
       <p className="supply-offer-text">{terms.description || '供應商未填寫'}</p><p>供應商：{supplierName}</p>
       <p className="field-hint">供貨版本：{publishedAt ? <time dateTime={publishedAt}>{new Intl.DateTimeFormat('zh-TW', {timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(publishedAt))}（臺北時間）</time> : '尚未公開'}{versionHash && ` · ${versionHash.slice(0, 8)}`}</p>
     </section>
-    <section className="supply-offer-section stack"><h3>價格</h3><dl className="detail-list">
+    <section className="supply-offer-section stack"><h3>價格</h3><p className="field-hint">幣別：{terms.currency === 'TWD' ? '新臺幣（TWD）' : '美元（USD）'}</p><dl className="detail-list">
       <div><dt>供貨單價</dt><dd>{formatMinor(terms.cost_minor, terms.currency)}</dd></div>
       <div><dt>每件運費</dt><dd>{formatMinor(terms.shipping_minor, terms.currency)}</dd></div>
       <div><dt>每件成本合計</dt><dd>{formatMinor(terms.cost_minor + terms.shipping_minor, terms.currency)}</dd></div>
