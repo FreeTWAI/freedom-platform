@@ -3422,8 +3422,13 @@ test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog an
       await b.unroute(matchList);
     }
     await reload.click();await decoded(selectedImage);await expect(cooperation.getByText(failure,{exact:true})).toHaveCount(0);
-    const imageFailed=b.waitForEvent('requestfailed',{predicate:request=>new URL(request.url()).pathname===imagePath});
-    await b.route('**'+imagePath,route=>route.abort());await reload.click();await selected.scrollIntoViewIfNeeded();await imageFailed;
+    // A fresh document guarantees a byte request instead of reusing a decoded resource.
+    let imageFailures=0;
+    await b.route('**'+imagePath,async route=>{imageFailures++;await route.abort();});
+    await b.reload();await storeArea(b,'供貨合作');
+    await catalog.locator('summary').click();await catalog.getByRole('searchbox',{name:'搜尋供貨商品',exact:true}).fill(suffix);
+    await selections.locator('summary').click();await selected.scrollIntoViewIfNeeded();
+    await expect.poll(()=>imageFailures).toBeGreaterThan(0);
     await expect(selectedImage).toHaveCount(0);await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);
     await expect(selected).not.toContainText('照片暫時無法顯示');await expect(selected.getByRole('link',{name:'查看供貨方案',exact:true})).toBeVisible();
     await b.unroute('**'+imagePath);await reload.click();await selected.scrollIntoViewIfNeeded();await decoded(selectedImage);
