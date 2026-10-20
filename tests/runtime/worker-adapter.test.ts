@@ -65,6 +65,20 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv & { ASSETS: ReturnTy
 const stagingEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'staging', APP_ORIGIN: 'https://staging-next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_A, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 const publicEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'public', APP_ORIGIN: 'https://next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_B, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_REGISTRATION_COMMUNITY_ID: COMMUNITY, FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 
+test('offer photo flag parses exact booleans and requires supplier console and product-photo reads',()=>{
+  for(const flag of [undefined,'false']) {
+    const configuration=env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag})),{name:'ReadinessError'});
+  const media={get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA'];
+  const configured:Partial<WorkerEnv>={FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',MEDIA:media};
+  const configuration=env(configured);
+  assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,true);
+  for(const key of ['FREEDOM_GUILD_LAUNCHPAD_ENABLED','FREEDOM_SUPPLIER_CONSOLE_ENABLED','FREEDOM_HOSTED_STORE_PHOTOS_ENABLED'] as const)
+    assert.throws(()=>readWorkerConfig(env({...configured,[key]:'false'})),{name:'ReadinessError'});
+});
+
 test('incomplete outcome enablement fails closed before pools or browser fallback',async()=>{
  const h=harness(),configuration=env({FREEDOM_EVENT_OUTCOMES_ENABLED:'true',FREEDOM_SQUAD_OUTCOMES_ENABLED:'false'});
  const {result:value}=await quietly(()=>h.fetch('http://127.0.0.1:8787/squad-outcomes/'+randomUUID(),configuration));

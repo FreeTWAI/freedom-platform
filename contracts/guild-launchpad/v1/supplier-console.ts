@@ -3,7 +3,7 @@ import {OpaqueId, Version, NonNegativeDecimal, NON_NEGATIVE_DECIMAL_PATTERN} fro
 import {CurrencySchema, ProductViewSchema} from './storefront.js';
 import {SupplyCatalogSetupInputSchema} from './hosted-supply-catalog.js';
 import {SupplyTermsInputSchema, SupplyTermsSchema} from './hosted-supply-terms.js';
-import {DistributionSchema, SupplyOfferSchema} from './hosted-distribution.js';
+import {DistributionSchema, SupplyOfferSchema, SupplyOfferPhotoStateSchema} from './hosted-distribution.js';
 import {OrderPageQuerySchema} from './hosted-order.js';
 import {SupplierReservationSchema} from './hosted-shared-order.js';
 
@@ -71,6 +71,7 @@ export const SupplierProductSchema = z.object({
   /** Product version used as If-Match by the existing supply-product, supply-terms and supply-offer commands. */
   version: Version,
   offer: SupplierProductOfferSchema.nullable(),
+  offer_photo: SupplyOfferPhotoStateSchema.nullable(),
   cooperation: SupplierCooperationCountsSchema,
 }).strict().refine(row => row.available === row.stock - row.reserved, 'available must equal stock minus reserved');
 export const SupplierProductsSchema = z.object({
@@ -190,6 +191,7 @@ const changeKinds = {
   'storefront.supply-terms.update': 'product', 'storefront.product.photo.upload': 'product',
   'storefront.product.photo.remove': 'product',
   'storefront.supply-offer.publish': 'offer', 'storefront.supply-offer.withdraw': 'offer',
+  'storefront.supply-offer.photo.share': 'offer', 'storefront.supply-offer.photo.stop': 'offer',
   'storefront.distribution.decide': 'request',
 } as const;
 export const SupplierChangeOperationSchema = z.enum(Object.keys(changeKinds) as [keyof typeof changeKinds, ...(keyof typeof changeKinds)[]]);

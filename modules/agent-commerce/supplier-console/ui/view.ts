@@ -42,6 +42,8 @@ export const CHANGE_LABELS={
  'storefront.product.photo.remove':'移除商品照片',
  'storefront.supply-offer.publish':'公開新的供貨版本',
  'storefront.supply-offer.withdraw':'撤回供貨版本',
+ 'storefront.supply-offer.photo.share':'提供或更換方案照片',
+ 'storefront.supply-offer.photo.stop':'停止提供方案照片',
  'storefront.distribution.decide':'處理售價申請',
 } satisfies Record<SupplierChange['operation'],string>;
 export const changeLabel=(change:Pick<SupplierChange,'operation'|'version'>)=>change.operation==='storefront.supply-offer.publish'&&change.version!=='1'?'供貨版本由新版本取代':CHANGE_LABELS[change.operation];

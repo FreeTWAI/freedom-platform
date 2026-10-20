@@ -114,6 +114,7 @@ export type PlatformRuntime = {
   /** Supplier console reads, profile update and console-scope photos; default OFF, effective only with guildLaunchpadEnabled. */
   supplierConsoleEnabled?: boolean;
   distributionPhotosEnabled?: boolean;
+  supplyOfferPhotosEnabled?: boolean;
   /** Independent installed read port and new-upload admission; both absent by default. */
   storePhotoAssetStore?: ObjectStore;
   storePhotoAssets?: StorePhotoAssets;

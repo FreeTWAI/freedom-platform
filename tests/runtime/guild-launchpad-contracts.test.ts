@@ -766,7 +766,7 @@ test('supplier console strict schemas accept private projections and reject inco
   assert.equal(SupplierTodoSchema.safeParse({...todo,extra:1}).success,false);
   assert.equal(SupplierTodosSchema.safeParse({state:'ready',items:Array(21).fill(todo),truncated:true}).success,false);
   const product={product_id:id,sku:'P0001',title:'商品',description:'介紹',currency:'TWD',supply_price_minor:400,shipping_minor:50,
-    stock:10,reserved:3,available:7,version:'1',offer:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+    stock:10,reserved:3,available:7,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
   assert.equal(SupplierProductSchema.safeParse(product).success,true);
   for(const value of [{...product,available:8},{...product,sku:'bad sku'},{...product,cost_minor:400}])assert.equal(SupplierProductSchema.safeParse(value).success,false);
   const products={profile:'freedom.supplier-console.products/v1',as_of:overview.as_of,items:[product],limit:200};

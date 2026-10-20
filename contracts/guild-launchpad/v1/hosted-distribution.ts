@@ -37,8 +37,18 @@ export const DistributionSchema = z.object({
 }).strict();
 export const DistributionsSchema = z.object({items: z.array(DistributionSchema).max(200), truncated: z.boolean()}).strict();
 export const SalePathSchema = z.object({available: z.boolean(), reason: z.string().nullable()}).strict();
+export const SupplyOfferPhotoStateSchema = z.object({
+  state: z.enum(['shared', 'not_shared']), seq: Version.nullable(), matches_current_photo: z.boolean(),
+}).strict();
+export const SupplyOfferPhotoSchema = z.object({
+  read_path: z.string().regex(/^\/api\/v1\/tenants\/[0-9a-f-]+\/storefronts\/[0-9a-f-]+\/supply-catalog\/[0-9a-f-]+\/photo\/[1-9][0-9]*$/),
+  seq: Version, width: z.number().int().min(1).max(1920), height: z.number().int().min(1).max(1920),
+}).strict();
+/** Owner preview on the existing private product-photo route. Both pins are required. */
+export const SupplyOfferPhotoPreviewQuerySchema = z.object({offer_id:OpaqueId,seq:Version}).strict();
 export const SupplyOfferPageSchema = z.object({
   offer: SupplyOfferSchema, published_at: IsoTimeSchema,
+  photo: SupplyOfferPhotoSchema.nullable(),
   supplier: z.object({name: z.string(), public_path: z.string().regex(/^\/shops\/[a-z0-9-]+$/).nullable()}).strict(),
   selection: DistributionSchema.nullable(), decision_note: z.string().max(500).nullable(),
   sale_paths: z.object({display: SalePathSchema, reservation: SalePathSchema, checkout: SalePathSchema}).strict(),

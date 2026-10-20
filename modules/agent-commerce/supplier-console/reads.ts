@@ -7,6 +7,7 @@ import type {Actor} from '../../identity-membership/service.js';
 import {effectiveStoreCapabilities} from '../hosted/capabilities.js';
 import {offerView, selectionView, supplyOfferTerms} from '../hosted/distribution.js';
 import {profile, ready, storeRead, type Profile} from '../hosted/store.js';
+import {offerPhotoState,offerPhotoStates} from './offer-photos.js';
 
 // Each composed statement below owns its clock and all domain rows. Capability,
 // profile and the final storeRead session fence remain outside this snapshot.
@@ -64,6 +65,7 @@ export function productView(row: Row, currency: Profile['currency']): SupplierPr
   return {product_id:row.item_id,sku:row.sku,title:row.title,description:row.description,currency,
     supply_price_minor:Number(row.price_minor),shipping_minor:Number(row.shipping_minor),stock:row.stock,reserved:row.reserved,
     available:row.available,version:row.product_version,cooperation:row.cooperation,
+    offer_photo:row.offer_photo??null,
     offer:o?{offer_id:o.offer_id,version:String(o.version),terms_sha256:o.terms_sha256,
       matches_current_terms:digest(supplyOfferTerms(row as Parameters<typeof supplyOfferTerms>[0],currency))===o.terms_sha256}:null};
 }
@@ -125,16 +127,20 @@ export async function readSupplierSummary(pool: Pool, actor: Actor, tenantId: st
       outdated_offers:items.filter(i=>i.offer&&!i.offer.matches_current_terms).length,out_of_stock_products:items.filter(i=>i.available===0).length}});
   });
 }
-export async function listSupplierProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+export async function listSupplierProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerPhotosEnabled = false) {
   return storeRead(pool,actor,tenantId,instanceId,'store:write',async q=>{
     const p = await profile(q, tenantId, instanceId); ready(p);
     const row=(await q.query(`/* supplier-console:products */ WITH ${productCtes} SELECT ${asOf},
       COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.sku) FROM products i),'[]') AS items FROM clock`,params(p))).rows[0];
     requireCondition(row.items.length<=200,500,'supplier_product_limit','供貨商品數量超出上限。');
+    if(offerPhotosEnabled) {
+      const states=await offerPhotoStates(q,row.items.flatMap((item:Row)=>item.current_offer?[item.current_offer.offer_id]:[]));
+      for(const item of row.items)if(item.current_offer)item.offer_photo=states.get(item.current_offer.offer_id);
+    }
     return SupplierProductsSchema.parse({profile:'freedom.supplier-console.products/v1',as_of:row.as_of,items:row.items.map((row:Row)=>productView(row,p.currency)),limit:200});
   });
 }
-export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string) {
+export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, offerPhotosEnabled = false) {
   return storeRead(pool,actor,tenantId,instanceId,'store:write',async q=>{
     const p = await profile(q, tenantId, instanceId); ready(p);
     const row=(await q.query(`/* supplier-console:product */ WITH ${productCtes} SELECT ${asOf},
@@ -142,6 +148,7 @@ export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: st
       COALESCE((SELECT jsonb_agg(to_jsonb(l) ORDER BY l.rank,l.selection_id) FROM (
         SELECT * FROM selections WHERE item_id=$5 ORDER BY rank,selection_id LIMIT 201) l),'[]') AS selections FROM clock`,[...params(p),productId])).rows[0];
     requireCondition(row.product,404,'not_found','找不到這項商品。');
+    if(offerPhotosEnabled&&row.product.current_offer)row.product.offer_photo=await offerPhotoState(q,row.product.current_offer.offer_id);
     return SupplierProductDetailSchema.parse({profile:'freedom.supplier-console.product/v1',as_of:row.as_of,product:productView(row.product,p.currency),
       shipping_terms:row.product.shipping_terms,return_terms:row.product.return_terms,
       current_offer:row.product.current_offer?offerView(row.product.current_offer):null,

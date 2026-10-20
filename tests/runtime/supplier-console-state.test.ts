@@ -102,7 +102,7 @@ test('SC-UI-14 leave guard permits in-scope routes but guards other scopes and l
   for(const key of ['sending','held','photoBlocking'] as const)assert.equal(leaveDecision(next,scope,{...state,[key]:true}).allow,false);
  }
 });
-const product=(n:number,offer:SupplierProduct['offer'],available:number):SupplierProduct=>({product_id:`p${n}`,sku:`P000${n}`,title:`商品 ${n}`,description:'茶杯',currency:'TWD',supply_price_minor:100,shipping_minor:0,stock:10,reserved:10-available,available,version:'1',offer,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}});
+const product=(n:number,offer:SupplierProduct['offer'],available:number):SupplierProduct=>({product_id:`p${n}`,sku:`P000${n}`,title:`商品 ${n}`,description:'茶杯',currency:'TWD',supply_price_minor:100,shipping_minor:0,stock:10,reserved:10-available,available,version:'1',offer,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}});
 const offered={offer_id:id,version:'1',terms_sha256:'a'.repeat(64),matches_current_terms:true};
 const products=[product(1,offered,10),product(2,{...offered,matches_current_terms:false},3),product(3,null,0),product(4,offered,0)];
 test('SC-UI-15 complete-set product filters have exactly the overview definitions',()=>{
@@ -205,7 +205,7 @@ test('SC-UI-S2-05 change labels exhaust the wire enum and preserve publish versi
   'storefront.supply-catalog.setup':'建立供貨商品庫','storefront.supply-profile.update':'更新商品庫資料','storefront.reservations.configure':'變更預留設定',
   'storefront.supply-product.create':'新增商品','storefront.product.create':'在商店新增商品','storefront.supply-product.update':'更新商品內容或庫存',
   'storefront.product.update':'在商店更新商品','storefront.supply-terms.update':'更新供貨條件','storefront.product.photo.upload':'上傳商品照片',
-  'storefront.product.photo.remove':'移除商品照片','storefront.supply-offer.publish':'公開新的供貨版本','storefront.supply-offer.withdraw':'撤回供貨版本','storefront.distribution.decide':'處理售價申請',
+  'storefront.product.photo.remove':'移除商品照片','storefront.supply-offer.publish':'公開新的供貨版本','storefront.supply-offer.withdraw':'撤回供貨版本','storefront.supply-offer.photo.share':'提供或更換方案照片','storefront.supply-offer.photo.stop':'停止提供方案照片','storefront.distribution.decide':'處理售價申請',
  };
  assert.deepEqual(Object.keys(CHANGE_LABELS).sort(),[...SupplierChangeOperationSchema.options].sort());assert.deepEqual(CHANGE_LABELS,expected);
  for(const operation of SupplierChangeOperationSchema.options)assert.equal(changeLabel({operation,version:'1'}),expected[operation]);

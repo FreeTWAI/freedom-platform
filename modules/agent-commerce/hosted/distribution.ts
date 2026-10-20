@@ -1,3 +1,6 @@
+import {objectKey, readVerifiedObject, type ObjectStore} from '../../../packages/asset-storage/index.js';
+import {OpaqueId, Version} from '../../../contracts/guild-launchpad/v1/primitives.js';
+import {currentOfferPhoto, appendCurrentOfferPhoto} from '../supplier-console/offer-photos.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {checkVersion, digest} from '../../../packages/db/index.js';
@@ -38,7 +41,7 @@ export async function listSupplyOffers(pool: Pool, actor: Actor, tenantId: strin
 }
 /** Publish only the named product's explicit supply allowlist. Saving private terms
  * never enters this member-visible catalog, and publishing does not accept a seller. */
-export async function publishSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, key: string, expected: string) {
+export async function publishSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, key: string, expected: string, offerPhotosEnabled = false) {
   return storeCommand(pool, actor, tenantId, instanceId, ['store:write','store:publish'], 'storefront.supply-offer.publish', {}, key, expected, async (q, context) => {
     const p = await profile(q, tenantId, instanceId, true); ready(p);
     const row = (await q.query(`SELECT i.*,l.aggregate_version::text AS version FROM commerce_items i
@@ -53,10 +56,17 @@ export async function publishSupplyOffer(pool: Pool, actor: Actor, tenantId: str
       await q.query(`UPDATE commerce_hosted_supply_offers SET state='withdrawn',version=version+1 WHERE offer_id=$1`, [prior.offer_id]);
       await storeFact(q, context, prior.offer_id, String(BigInt(prior.version)+1n), 'storefront.supply-offer.publish', 'hosted_supply_offer');
     }
+    const previousPhoto = offerPhotosEnabled ? (await q.query(`SELECT p.asset_id FROM commerce_hosted_supply_offers o
+      LEFT JOIN LATERAL (SELECT asset_id FROM commerce_hosted_offer_photos WHERE offer_id=o.offer_id ORDER BY seq DESC LIMIT 1) p ON true
+      WHERE o.item_id=$1 AND o.tenant_id=$2 AND o.instance_id=$3 ORDER BY o.created_at DESC,o.offer_id DESC LIMIT 1`,[productId,tenantId,instanceId])).rows[0] : null;
     const id = randomUUID();
     const saved = (await q.query(`INSERT INTO commerce_hosted_supply_offers(offer_id,tenant_id,instance_id,item_id,community_id,supplier_name,source_version,terms,terms_sha256)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [id, tenantId, instanceId, productId, context.community_id, p.name, row.version, terms, hash])).rows[0];
     await storeFact(q, context, id, '1', 'storefront.supply-offer.publish', 'hosted_supply_offer');
+    if (previousPhoto?.asset_id) {
+      const seq = await appendCurrentOfferPhoto(q, saved, context.principal_id);
+      if (seq) await storeFact(q, context, id, seq, 'storefront.supply-offer.publish', 'hosted_supply_offer_photo');
+    }
     return offerView(saved);
   }, productId);
 }
@@ -91,23 +101,24 @@ export function selectionView(row: Record<string, any>) {
     listing_sha256: row.listing_sha256, version: row.selection_version, decision_note: row.decision_note ?? null,
     arrangement: arrangementView(row.snapshot?.arrangement)});
 }
-/** Seller authority stays bound to the seller. Only the existing community offer,
- * selection and profile paths are read here; supplier drafts/stock never enter. */
-export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerId: string, admissionEnabled: boolean) {
-  const findOffer = async (q: PoolClient, communityId: string, p: Profile) => {
+export async function findVisibleSupplyOffer(q: PoolClient, communityId: string, p: Profile, offerId: string) {
     const row = (await q.query(`SELECT o.*,source.slug,source.reservation_enabled,source.supply_shop_id,source.current_publication_id
       FROM commerce_hosted_supply_offers o
       JOIN commerce_storefront_profiles source ON source.tenant_id=o.tenant_id AND source.instance_id=o.instance_id
       WHERE o.offer_id=$1 AND o.community_id=$2 AND o.instance_id<>$3 AND o.terms->>'currency'=$4
       AND (o.state='offered' OR EXISTS(SELECT 1 FROM commerce_selections l
         WHERE l.shop_id=$5 AND l.hosted_offer_id=o.offer_id AND l.item_id=o.item_id))`,
-    [offerId, communityId, instanceId, p.currency, p.storefront_shop_id])).rows[0];
+    [offerId, communityId, p.instance_id, p.currency, p.storefront_shop_id])).rows[0];
     requireCondition(row, 404, 'supply_offer_not_found', '找不到可選用的供貨版本。');
     return row;
-  };
+  }
+
+/** Seller authority stays bound to the seller. Only the existing community offer,
+ * selection and profile paths are read here; supplier drafts/stock never enter. */
+export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerId: string, admissionEnabled: boolean, offerPhotosEnabled = false) {
   const slugs = await storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
     const p = await profile(q, tenantId, instanceId); ready(p);
-    return {supplier: (await findOffer(q, context.community_id, p)).slug as string | null, seller: p.slug};
+    return {supplier: (await findVisibleSupplyOffer(q, context.community_id, p, offerId)).slug as string | null, seller: p.slug};
   });
   // The existing anonymous reader owns its own transaction. Release the seller
   // client first (including on a one-client pool), then reauthorize the entire
@@ -118,7 +129,7 @@ export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string
   ]);
   return storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId); ready(p);
-    const row = await findOffer(q, context.community_id, p);
+    const row = await findVisibleSupplyOffer(q, context.community_id, p, offerId);
     const publiclyLive = publicStore?.publicationId === row.current_publication_id && slugs.supplier === row.slug;
     const selected = (await selections(q, p, false, undefined, row.item_id))[0];
     const selection = selected ? selectionView(selected) : null;
@@ -150,11 +161,32 @@ export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string
       }
     }
     const checkoutReason = fulfilmentConsentFailure(hostedLineFulfilment(row.instance_id === instanceId));
-    return SupplyOfferPageSchema.parse({offer: offerView(row), published_at: row.created_at.toISOString(),
+    const photo = offerPhotosEnabled ? await currentOfferPhoto(q, offerId) : null;
+    return SupplyOfferPageSchema.parse({photo: photo?.asset_id ? {seq:photo.seq,width:photo.width,height:photo.height,read_path:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/supply-catalog/${offerId}/photo/${photo.seq}`} : null, offer: offerView(row), published_at: row.created_at.toISOString(),
       supplier: {name: row.supplier_name, public_path: publiclyLive ? `/shops/${row.slug}` : null},
       selection, decision_note: selection?.decision_note ?? null,
       sale_paths: {display, reservation, checkout: {available: checkoutReason === null, reason: checkoutReason}}});
   });
+}
+/** Both snapshots authorize the seller and the same current offer/share. No
+ * supplier tenant binding, private Asset query, signed URL or SQL lock spans I/O. */
+export async function readSupplyOfferPhoto(pool:Pool, store:ObjectStore, actor:Actor, tenantId:string, instanceId:string, rawOfferId:string, rawSeq:string) {
+  const offerId=OpaqueId.parse(rawOfferId),seq=Version.parse(rawSeq);
+  const snapshot=()=>storeRead(pool,actor,tenantId,instanceId,'store:write',async(q,context)=>{
+    const p=await profile(q,tenantId,instanceId);ready(p);
+    const offer=await findVisibleSupplyOffer(q,context.community_id,p,offerId);
+    const photo=await currentOfferPhoto(q,offerId);
+    requireCondition(photo?.asset_id && photo.seq===seq,404,'not_found','找不到這張方案照片。');
+    return {offerVersion:String(offer.version),photo};
+  });
+  const before=await snapshot(),photo=before.photo;
+  const bytes=(await readVerifiedObject(store,objectKey({scopeId:photo.scope_id,assetId:photo.asset_id,representationId:photo.representation_id}),{
+    contentType:photo.content_type,byteSize:photo.byte_size,sha256:photo.content_sha256,transformVersion:photo.transform_version,
+    policyRevision:photo.policy_revision,profileId:'storefront.product-photo',
+  })).bytes;
+  const after=await snapshot();
+  requireCondition(JSON.stringify(before)===JSON.stringify(after),404,'not_found','找不到這張方案照片。');
+  return bytes;
 }
 export async function listDistributions(pool: Pool, actor: Actor, tenantId: string, instanceId: string, supplier = false) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:write', async q => {
