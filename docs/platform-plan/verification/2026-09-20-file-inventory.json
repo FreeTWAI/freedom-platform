@@ -15459,8 +15459,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-      "bytes": 29185,
-      "sha256": "00dbce07e8ef5473f6dd8a5914ffe4f2fee583aac32d618563052b86373c3a22"
+      "bytes": 30541,
+      "sha256": "daeda9392f5fa8d132a76ce3bfe69b7604ddb51c4039cceb5eb36dcd9e3a7641"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
@@ -15479,8 +15479,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-05-fulfilment.md",
-      "bytes": 88733,
-      "sha256": "688608a187d396b591cd08e14c403c1b2b9b783992e351806ba623c82222d59c"
+      "bytes": 89671,
+      "sha256": "85dc2fcc6d9870cb9cca69da62c60a8aac988e7842c281a08ea299c70e9e49a6"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
@@ -15509,8 +15509,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-11-offline-payment.md",
-      "bytes": 24389,
-      "sha256": "510a08709a747f5804acc36ab976ee727cb69ddc1908039c90b70c047dc71ef5"
+      "bytes": 24944,
+      "sha256": "36bcfbaba7a97167c2eaca482a1952ffb9aa3bc15c4f15b57175cfe1fdb640cc"
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
@@ -15539,8 +15539,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/pages.md",
-      "bytes": 18100,
-      "sha256": "d534e93815df73d9f0f57f1c51302f51dd8e8756f26bc14a09c065dccd9813e9"
+      "bytes": 19508,
+      "sha256": "419df9caabd390d495fdf2b697853b566599a21590c62becba8abb27846d7676"
     },
     {
       "path": "docs/platform-plan/execution/commerce/sources.md",
@@ -17369,8 +17369,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/README.md",
-      "bytes": 35425,
-      "sha256": "cedc05578a221345a7e02b7cfcfdb51edc348e43516cb314caa200656648e652"
+      "bytes": 36733,
+      "sha256": "f350d172288745a7f9abbfe7cb30c1c0970c0f0533807724dcc7ebb2ff5dce63"
     },
     {
       "path": "modules/agent-commerce/checkout/access.ts",
@@ -18364,8 +18364,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 4669,
-      "sha256": "b640b1c2c5e6466a3d6c1fab5ddecb90299ca2f53551146cfa9ffbec6e7c8ee9"
+      "bytes": 6278,
+      "sha256": "153d50577816f230ebab697e290a964e1dbadf8f547badbb522c73d7f4129964"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
