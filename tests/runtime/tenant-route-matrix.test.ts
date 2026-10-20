@@ -428,6 +428,10 @@ async function buildFixture() {
     await makeMember(M, 'leader');
     await makeMember(I, 'intern');
     await makeMember(F, 'full');
+    // The launchpad comparison below varies tenant authority, not application
+    // cohort eligibility. Give all compared actors the current commerce tier.
+    for(const actor of [P,N,O,M])await q.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+      VALUES($1,$2,$3,'guild_commerce_sales','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active',member_tier='full'`,[randomUUID(),DEMO_COMMUNITY,actor.user.user_id]);
   } finally {
     q.release();
   }
@@ -593,7 +597,7 @@ async function buildFixture() {
 let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
 test('T-022 1. Route inventory guard', () => {
-  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-admissions(?:\/|$))/;
+  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-(?:admissions|readiness)(?:\/|$))/;
   // Member search telemetry has an operations path, but is not tenant authority.
   assert.equal(relevantPaths.test('/api/v1/community-search/operations/*'), false);
   for (const suffix of ['', '/reconcile', '/cancel']) {
@@ -604,8 +608,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 10, guild: 9, principal: 8, global: 4, tenant: 126, middleware: 16 });
-  assert.equal(selectedRoutes.length, 173);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 127, middleware: 17 });
+  assert.equal(selectedRoutes.length, 176);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
