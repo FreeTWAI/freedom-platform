@@ -299,6 +299,7 @@ const routeTable: Record<string, string> = {
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-terms': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-offer': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/withdraw': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections': 'tenant',
@@ -604,8 +605,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 127, middleware: 17 });
-  assert.equal(selectedRoutes.length, 176);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 128, middleware: 17 });
+  assert.equal(selectedRoutes.length, 177);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -756,6 +757,7 @@ const routes: Route[] = [
     body: { cost_minor: 100, shipping_minor: 0, shipping_terms: '合成出貨條件', return_terms: '合成退貨條件' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-offers' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-catalog' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-offer', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/withdraw', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections' },

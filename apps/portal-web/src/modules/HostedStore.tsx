@@ -1,3 +1,4 @@
+import {HostedSupplyOffer} from './HostedSupplyOffer';
 import {parseSellerConsoleRoute,sellerSlugFallback,sellerConsoleHref} from '../../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../../modules/agent-commerce/supplier-console/ui/route';
 import {PartnerMaterials} from '../../../../modules/agent-commerce/supplier-console/ui/partner/PartnerMaterials';
@@ -91,11 +92,13 @@ export function HostedStore({client, enabled, locationHash, userId, registerLeav
   if (path.length === 1 && path[0] === 'stores') return <StoreList key={userId} client={client}/>;
   if (path.length === 2 && path[0] === 'stores' && path[1] === 'supply') return <SupplyCatalogList key={`${userId}:${client.sessionGeneration}`} client={client}/>;
   if (path.length === 4 && path[0] === 'stores' && path[3] === 'supply' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success) return <HostedSupplyCatalog key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}`} client={client} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave}/>;
-  const valid = path.length === 3 && path[0] === 'stores' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success;
+  const offerId = path.length===5&&path[3]==='supply-offers'&&OpaqueId.safeParse(path[4]).success?path[4]:undefined;
+  const cooperation = path.length===4&&path[3]==='cooperation';
+  const valid = (path.length === 3 || !!offerId || cooperation) && path[0] === 'stores' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success;
   const fallback = sellerSlugFallback(locationHash);
   if (fallback?.orders) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} route={{tenantId:fallback.tenantId,instanceId:fallback.instanceId,supplier:false}} registerLeave={registerLeave}/>;
   if (fallback) return <StorePage key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
-  return valid ? <StorePage key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}`} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
+  return valid ? <StorePage key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}:${offerId??(cooperation?'cooperation':'store')}`} offerId={offerId} cooperation={cooperation} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
 }
 function BackLink() { return <div className="actions"><a href="#stores" className="btn btn-ghost">返回我的商店</a></div>; }
 function MissingStore() { return <div className="hosted-store stack"><BackLink/><p>找不到這間商店。</p></div>; }
@@ -117,7 +120,7 @@ function StoreList({client}: {client: PortalClient}) {
 
 type Attempt = {targetMissingIsStore?: boolean; method: 'post' | 'patch'; path: string; body: unknown; version?: string; schema: z.ZodType;
   key: string; success: (value: unknown) => void; notice: string; product?: boolean; fieldError?: (error: ApiError) => void};
-function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
+function StorePage({offerId,cooperation=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [distributionRefresh,setDistributionRefresh]=useState(0);
   const [view, setView] = useState<StoreView | null>(null);
@@ -151,7 +154,7 @@ function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEna
   const statusLine = useRef<HTMLParagraphElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [supplyEditing, setSupplyEditing] = useState<string | null>(null);
-  const [area,setArea]=useState<'products'|'cooperation'|'publish'|'settings'>('products');
+  const [area,setArea]=useState<'products'|'cooperation'|'publish'|'settings'>(cooperation?'cooperation':'products');
   const [query,setQuery]=useState('');
   const [manualUrl, setManualUrl] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<{url: string; message: string} | null>(null);
@@ -260,6 +263,12 @@ function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEna
   const publicationText = publication?.state === 'published' ? `已發布・第 ${publication.current_revision} 版・${formatIsoLocal(publication.published_at)}`
     : publication?.state === 'unpublished' ? '已停止公開' : '尚未發布';
   const productCopyUrl = (sku: string) => store && publishedSkus?.has(sku) ? absoluteUrl(productSharePath(store.slug, sku)) : null;
+  if (offerId) return <div className="hosted-store stack">
+    <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{status}</p>
+    {error&&<p className="banner banner-error" role="alert">{error}</p>}
+    {(retry||error)&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void (retry?send(retry):load())}>{retry?'重試':'重新載入'}</button></div>}
+    {view?<HostedSupplyOffer client={client} root={root} offerId={offerId} refresh={distributionRefresh} busy={locked} writable={can('store:write')} onDirty={value=>markDirty('distribution/offer',value)} onCommand={command}/>:!error&&<p>正在確認商店權限…</p>}
+  </div>;
   return <div className="hosted-store stack">
     <BackLink/>
     <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{loading && !view ? '正在載入商店…' : [status, store ? publicationText : ''].filter(Boolean).join(' ')}</p>
@@ -285,7 +294,7 @@ function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEna
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更；發布更新後才能複製商品連結。</p>}
           {!products.length && <p>{view.product_count ? '這間店目前使用合作選品；下方可管理供貨合作。' : '還沒有商品。新增第一件商品後就能發布。'}</p>}
           <div className="hosted-store-products">{products.map(product => <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
-            {supplyEditing === product.product_id && can('store:write') ? <HostedSupplyTerms key={product.version} client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} busy={areaLocked} onPublish={can('store:publish') ? version => command({method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined} onDirty={value => markDirty('supply', value)} onCancel={() => {if (leaveOk()) {setSupplyEditing(null); markDirty('supply', false);}}} onSave={(body, version, success) => command({method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, product: true, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}/>
+            {supplyEditing === product.product_id && can('store:write') ? <HostedSupplyTerms key={product.version} client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} description={product.description} supplierName={store.name} busy={areaLocked} onPublish={can('store:publish') ? version => command({method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined} onDirty={value => markDirty('supply', value)} onCancel={() => {if (leaveOk()) {setSupplyEditing(null); markDirty('supply', false);}}} onSave={(body, version, success) => command({method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, product: true, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}/>
               : editing === product.product_id && can('store:write') ? <ProductForm key={product.version} product={product} currency={store.currency} busy={areaLocked} onDirty={value => markDirty('edit', value)} onCancel={() => {if (leaveOk()) {setEditing(null); markDirty('edit', false);}}} onSave={(body, success) => command({method: 'patch', path: root + '/products/' + product.product_id, body, version: product.version, schema: ProductViewSchema, product: true, notice: '已儲存。', success: value => {success(value); setEditing(null); markDirty('edit', false);}})}/>
               : <><h4>{product.title}</h4><p>{formatMinor(product.price_minor, product.currency)}</p><p>庫存 {product.stock}</p><p className="hosted-store-description">{product.description}</p>
                 {can('store:write') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (leaveOk()) {setSupplyEditing(null); setEditing(product.product_id); markDirty('edit', false);}}}>編輯</button>

@@ -146,6 +146,7 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
   ]],
   ['hosted-distribution', 'Explicit supplier offer and exact seller listing consent. One supplier item; no payment authority.', [
     ['offer', distribution.SupplyOfferSchema, 'output', ['explicit_supplier_publication']],
+    ['offer-page', distribution.SupplyOfferPageSchema, 'output', ['current_seller_store_write','community_offer_visibility','no_private_supplier_fields']],
     ['offers', distribution.SupplyOffersSchema, 'output', ['bounded_catalog']],
     ['proposal', distribution.DistributionInputSchema, 'input', ['exact_offer_digest']],
     ['decision', distribution.DistributionDecisionSchema, 'input', ['exact_listing_digest_and_version']],
