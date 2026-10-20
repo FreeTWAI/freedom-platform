@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {formatIsoLocal} from '../format';
 import {SHORT_VIDEO_EMBED_ORIGIN, playableShortVideos, playerCommand, shortVideoEmbedUrl, type PlayerCommand, type ShortVideoSource} from './short-video-embed';
 import './ShortVideoFeed.css';
@@ -75,6 +75,12 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
     const focused = document.activeElement, root = scroller.current;
     if (root && focused instanceof HTMLElement && focused !== root && root.contains(focused) && focused.closest('.short-video-caption')) root.focus({preventScroll: true});
   }, []);
+  // "Next" is disabled on the last slide and "previous" on the first. A disabled button cannot hold focus, so hand it to
+  // the feed as soon as the current slide changes under it (before any further key press can leave the dialog from it).
+  useLayoutEffect(() => {
+    const focused = document.activeElement, root = scroller.current;
+    if (root && focused instanceof HTMLButtonElement && focused.disabled && root.parentElement?.contains(focused)) root.focus({preventScroll: true});
+  }, [active]);
   // The list changed (refresh, withdrawal, hide): keep the viewer on the same post, or the nearest one if it is gone.
   useEffect(() => {
     const list = latest.current.videos;

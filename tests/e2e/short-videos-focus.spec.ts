@@ -79,3 +79,32 @@ test('only the slide on screen offers focusable controls, and long Tab runs neve
     await session.send('Emulation.setCPUThrottlingRate', {rate: 1});
   } finally { await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]); }
 });
+
+test('focus on "next" survives the feed reaching the last slide, where that button becomes disabled', async ({page, e2eAuthPool}) => {
+  const {dialog, ids} = await openFullScreen(page, e2eAuthPool, '焦點下一支');
+  try {
+    const next = dialog.getByRole('button', {name: '下一支短影音', exact: true});
+    await next.focus();
+    await expect(next).toBeFocused();
+    // The feed moves on to the last slide while "next" has focus, so "next" is disabled from here on (the CI trace of #903).
+    await dialog.locator('.short-video-scroller').evaluate(element => element.scrollTo({top: element.clientHeight * 2, behavior: 'instant'}));
+    await expect(dialog.locator('article.short-video-slide').nth(2)).toBeInViewport({ratio: 0.9});
+    await expect(next).toBeDisabled();
+    await expect.poll(() => inside(dialog)).toBe(true);
+    // Focus is handed on, not left sitting on a button that can no longer take it.
+    await expect.poll(() => dialog.evaluate(() => document.activeElement instanceof HTMLButtonElement && document.activeElement.disabled)).toBe(false);
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press(i % 4 === 3 ? 'Shift+Tab' : 'Tab');
+      expect(await inside(dialog), `key ${i}`).toBe(true);
+    }
+    // The same at the other end: "previous" is disabled on the first slide.
+    await dialog.getByRole('button', {name: '上一支短影音', exact: true}).focus();
+    await dialog.locator('.short-video-scroller').evaluate(element => element.scrollTo({top: 0, behavior: 'instant'}));
+    await expect(dialog.locator('article.short-video-slide').nth(0)).toBeInViewport({ratio: 0.9});
+    await expect.poll(() => inside(dialog)).toBe(true);
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press(i % 3 === 2 ? 'Shift+Tab' : 'Tab');
+      expect(await inside(dialog), `key ${i} at the first slide`).toBe(true);
+    }
+  } finally { await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]); }
+});
