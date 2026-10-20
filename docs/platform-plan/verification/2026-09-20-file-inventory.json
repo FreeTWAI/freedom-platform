@@ -179,8 +179,13 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4186,
-      "sha256": "45bba9498b219c048d49cedc4fa1f7ea8888fa024bce0418afb2b901c5be293c"
+      "bytes": 4215,
+      "sha256": "a3bb60aee06b6cd265f23eea3095b98bd28e450f047984af9bfaafd92d18e95d"
+    },
+    {
+      "path": "apps/admin/freedom.module.json",
+      "bytes": 1744,
+      "sha256": "67e2d14726e3795f15283a8ea1610fec2473d33e0c7f65687519ec6cc57afefc"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -2139,13 +2144,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminCredentials.css",
-      "bytes": 2856,
-      "sha256": "f5c5dc5c1ce776017a61edf3232e490f1926d2237f40a31826c6c6ebfee9dab2"
+      "bytes": 3440,
+      "sha256": "87a7f7f5e037dae0586b449bcfc275d79b7020ed9c64022fc50b234ff86eb973"
     },
     {
       "path": "apps/portal-web/src/modules/AdminCredentials.tsx",
-      "bytes": 6450,
-      "sha256": "b1ff2f03ca96c900a501a06a9c7efff19f8a88ae2e54429501ee103c5ca98802"
+      "bytes": 7389,
+      "sha256": "954478b72e96dcb080cf5f1eb0994c2250c013f4d9759706b86984f928f2dc90"
     },
     {
       "path": "apps/portal-web/src/modules/AdminGitHubSetup.tsx",
@@ -2164,13 +2169,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminLayout.css",
-      "bytes": 7633,
-      "sha256": "4ddd498a17fa740a90146e9cd9ce3fa311fbabfda9e27bee815bedafa7c4a8c2"
+      "bytes": 17009,
+      "sha256": "65505da1ce004fe64dcf2e62cbbd3f410be3b4ef6493fee2543995a4e1a7b387"
     },
     {
       "path": "apps/portal-web/src/modules/AdminPanel.tsx",
-      "bytes": 33597,
-      "sha256": "f10e403fc0fba7fdc3ea6105abe9a307edd685fdd0470043e466ebc840e19f5b"
+      "bytes": 42278,
+      "sha256": "99c8e4f7fc04a6769a7d94a50da319deb5ac83e7c9b0eebd6940d1a78e565d1b"
     },
     {
       "path": "apps/portal-web/src/modules/AdminPermissions.css",
@@ -14299,8 +14304,8 @@
     },
     {
       "path": "docs/development/platform-admin-api.md",
-      "bytes": 29024,
-      "sha256": "5999c5859350de9b24977172a121e768d943e33f8774ab0fb24f6c27c0bfa593"
+      "bytes": 31001,
+      "sha256": "a51edcaf710f637e207bf4fb5cb6e24db9e53c73ca0f42a8431595cceb4b27ed"
     },
     {
       "path": "docs/development/post-migration-site-audit-2026-10-04.md",
@@ -20664,8 +20669,8 @@
     },
     {
       "path": "packages/contribution-tools/pinned-e2e.mjs",
-      "bytes": 20017,
-      "sha256": "3e31eb0e4199c7749620382d7989e49aaf653d4ad52dd528a6eabb0e69d5658e"
+      "bytes": 20039,
+      "sha256": "85a1cbc346007aa9052a0a26aa0a9817a8ec08dc29254ad9e05fbd8f97cd9085"
     },
     {
       "path": "packages/contribution-tools/pinned-suites.mjs",
@@ -21924,8 +21929,8 @@
     },
     {
       "path": "scripts/ci/affected-jobs.md",
-      "bytes": 8593,
-      "sha256": "4c47f7af1fe44c98af1426c061960d1cbd8d0b9fc16f1ab1d8e1c590b56ce72b"
+      "bytes": 9629,
+      "sha256": "05ed1818c7b307b2073b2ba241cc32c9e68043540957db6e5b83d64baf5609d7"
     },
     {
       "path": "scripts/ci/broker-bridge-check.mjs",
@@ -21944,8 +21949,8 @@
     },
     {
       "path": "scripts/ci/guild-presentation-profile.test.mjs",
-      "bytes": 14651,
-      "sha256": "e072bc0ee9cc81b60848285ba0d95938c91dea19445ad671e37781677b20320a"
+      "bytes": 17881,
+      "sha256": "4fa5f9f5d8243835874633c2adce1c4b9de37895800184958c16f36a96dec66a"
     },
     {
       "path": "scripts/ci/native-cli-audit-readback.mjs",
@@ -22124,13 +22129,13 @@
     },
     {
       "path": "tests/e2e/admin-review-center.spec.ts",
-      "bytes": 38559,
-      "sha256": "4cf259c4f47c3f8a8db71649af695703c6a2d9ca5584e7505c6ae84a21d862d5"
+      "bytes": 38648,
+      "sha256": "cf9a918627f4362a86b21de288bcceceac40ca168301fc6db8f5ce458e65cfc6"
     },
     {
       "path": "tests/e2e/admin.spec.ts",
-      "bytes": 26816,
-      "sha256": "8a6fce676039829d9b6a769717b0a764ef5b35dfd4c40e5fb4d387e18918d8b9"
+      "bytes": 38433,
+      "sha256": "d8a14110bdf48863960c84de2efe26b951d46f46c3411e64092f6c2885e57792"
     },
     {
       "path": "tests/e2e/agent-shops.spec.ts",
