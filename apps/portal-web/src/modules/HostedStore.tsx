@@ -1,3 +1,5 @@
+import {HostedStoreAppearance} from './HostedStoreAppearance';
+import {StorefrontAppearanceDraftSchema,type StorefrontAppearanceDraft} from '../../../../contracts/guild-launchpad/v1/storefront-appearance';
 import {HostedSupplyOffer} from './HostedSupplyOffer';
 import {parseSellerConsoleRoute,sellerSlugFallback,sellerConsoleHref} from '../../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../../modules/agent-commerce/supplier-console/ui/route';
@@ -132,10 +134,11 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
   const photoBlocking=Object.values(photoBlocks).some(Boolean);
   function photoState(id:string,dirty:boolean,blocking:boolean){
     photoBlockRef.current={...photoBlockRef.current,[id]:blocking};
-    setPhotoBlocks(old=>old[id]===blocking?old:{...old,[id]:blocking});markDirty('photo/'+id,dirty);
+    setPhotoBlocks(old=>old[id]===blocking?old:{...old,[id]:blocking});markDirty(id==='appearance'?'appearance':'photo/'+id,dirty);
   }
   const [preview, setPreview] = useState<Preview | null>(null);
   const [appearance, setAppearance] = useState<StoreAppearance | null>(null);
+  const [appearanceDraft,setAppearanceDraft]=useState<StorefrontAppearanceDraft|null>(null),[appearanceError,setAppearanceError]=useState(false);
   const [templateChoice, setTemplateChoice] = useState<StoreTemplate | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState('');
@@ -171,7 +174,7 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
     setManualUrl(null);
   }, [root, storeCopyUrl, publishedSkuKey, editing, supplyEditing, publication?.current_revision]);
   function leaveOk() {
-    if (Object.values(photoBlockRef.current).some(Boolean)) {announce('照片操作尚未確認，請先重試原照片操作。');return false;}
+    if (Object.values(photoBlockRef.current).some(Boolean)) {announce(photoBlockRef.current.appearance?'外觀操作尚未確認，請先重試原操作。':'照片操作尚未確認，請先重試原照片操作。');return false;}
     if (busyRef.current || held.current) {
       announce(busyRef.current ? '正在確認原操作，請等候完成後再離開。' : '尚未確認原操作的結果，請按「重試」確認後再離開。');
       return false;
@@ -197,14 +200,18 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
       const next = StoreViewSchema.parse(await client.get(root, {signal}));
       let photos:ProductMediaView[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
       let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null;
+      let branding:StorefrontAppearanceDraft|null=null,brandingError=false;
       if (next.setup_state === 'ready') {
-        const results = await Promise.all([client.get(root + '/products', {signal}), client.get(root + '/preview', {signal}), client.get(root + '/appearance', {signal}), photosEnabled ? client.get(root+'/product-media',{signal}) : Promise.resolve(null)]);
+        const results = await Promise.all([client.get(root + '/products', {signal}), client.get(root + '/preview', {signal}), client.get(root + '/appearance', {signal}), photosEnabled ? client.get(root+'/product-media',{signal}) : Promise.resolve(null),
+          appearanceEnabled?client.get(root+'/appearance-settings',{signal}).then(value=>StorefrontAppearanceDraftSchema.parse(value)).catch(()=>{brandingError=true;return null;}):Promise.resolve(null)]);
         items = ProductPageSchema.parse(results[0]).items; draft = StorePreviewSchema.parse(results[1]); presentation = StoreAppearanceSchema.parse(results[2]);
         if(photosEnabled)photos=ProductMediaPageSchema.parse(results[3]).items;
+        if(appearanceEnabled)branding=results[4] as StorefrontAppearanceDraft|null;
         try {setting=ReservationSettingSchema.parse(await client.get(root+'/reservation-setting',{signal}));}
         catch(cause) {if(!(cause instanceof ApiError && [403,404].includes(cause.status))) throw cause;}
       }
       if (!current()) return;
+      if(branding||next.setup_state!=='ready')setAppearanceDraft(branding);setAppearanceError(brandingError);
       setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos); setPreview(draft); setAppearance(presentation); setError('');
     } catch (cause) {
       if (!current()) return;
@@ -212,7 +219,7 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
       else setError(errorText(cause));
     } finally {if (current()) setLoading(false);}
   }
-  useEffect(() => {markDirty('appearance', templateChoice !== null && templateChoice !== appearance?.template_id);}, [templateChoice, appearance?.template_id]);
+  useEffect(() => {if(!appearanceEnabled)markDirty('appearance', templateChoice !== null && templateChoice !== appearance?.template_id);}, [appearanceEnabled,templateChoice, appearance?.template_id]);
   useEffect(() => {
     if (!manualUrl) return;
     manualField.current?.focus();
@@ -269,7 +276,7 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
     {(retry||error)&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void (retry?send(retry):load())}>{retry?'重試':'重新載入'}</button></div>}
     {view?<HostedSupplyOffer client={client} root={root} offerId={offerId} refresh={distributionRefresh} busy={locked} writable={can('store:write')} onDirty={value=>markDirty('distribution/offer',value)} onCommand={command}/>:!error&&<p>正在確認商店權限…</p>}
   </div>;
-  return <div className="hosted-store stack">
+  return <div className={appearanceEnabled?"hosted-store hosted-store-appearance-enabled stack":"hosted-store stack"}>
     <BackLink/>
     <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{loading && !view ? '正在載入商店…' : [status, store ? publicationText : ''].filter(Boolean).join(' ')}</p>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
@@ -318,16 +325,22 @@ function StorePage({offerId,cooperation=false,appearanceEnabled=false,client, us
         <section id="store-publish-panel" hidden={area!=='publish'} className="hosted-supply-panel stack" aria-labelledby="store-publish-title"><h3 id="store-publish-title">預覽與發布</h3>
           <p>{publication?.state === 'published' ? `目前公開第 ${publication.current_revision} 版。` : publication?.state === 'unpublished' ? '已停止公開。' : '尚未發布。'}</p>
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更。</p>}
-          {appearance && <fieldset disabled={areaLocked || !can('store:manage')} className="hosted-store-templates">
+          {!appearanceEnabled && appearance && <fieldset disabled={areaLocked || !can('store:manage')} className="hosted-store-templates">
             <legend>商店版型</legend>
             {([['catalog-grid-v1', '格狀目錄', '商品並排展示，手機改為單欄。'], ['catalog-list-v1', '直列目錄', '商品逐項排列，方便閱讀較長說明。']] as const).map(([id, label, hint]) => <label key={id}>
               <input type="radio" name="store-template" value={id} checked={(templateChoice ?? appearance.template_id) === id} onChange={() => {setTemplateChoice(id); markDirty('appearance', id !== appearance.template_id);}}/>
               <span>{label}<small>{hint}</small></span>
             </label>)}
           </fieldset>}
-          {appearance && can('store:manage') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={areaLocked || !templateChoice || templateChoice === appearance.template_id} onClick={() => void command({method: 'patch', path: root + '/appearance', body: {template_id: templateChoice}, version: appearance.version, schema: StoreAppearanceSchema, notice: '已儲存版型。重新發布後，公開頁才會更新。', success: () => {setTemplateChoice(null); markDirty('appearance', false);}})}>儲存版型</button></div>}
+          {!appearanceEnabled && appearance && can('store:manage') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={areaLocked || !templateChoice || templateChoice === appearance.template_id} onClick={() => void command({method: 'patch', path: root + '/appearance', body: {template_id: templateChoice}, version: appearance.version, schema: StoreAppearanceSchema, notice: '已儲存版型。重新發布後，公開頁才會更新。', success: () => {setTemplateChoice(null); markDirty('appearance', false);}})}>儲存版型</button></div>}
+          {appearanceEnabled&&<>
+            {appearanceError&&<div><p role="alert">店面外觀暫時無法讀取。請重試。</p><div className="actions"><button type="button" className="btn btn-ghost btn-sm" disabled={loading||locked} onClick={()=>void load()}>重新讀取店面外觀</button></div></div>}
+            {appearanceDraft?<HostedStoreAppearance client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} draft={appearanceDraft} writable={can('store:manage')}
+              locked={busy||retry!==null||!!otherDraft||appearanceError||Object.entries(photoBlocks).some(([id,blocking])=>id!=='appearance'&&blocking)}
+              onState={(dirty,blocking)=>photoState('appearance',dirty,blocking)} onSaved={load}/>:!appearanceError&&<p role="status">正在讀取店面外觀…</p>}
+          </>}
           {preview && <div className="actions"><a href={`/api/v1${root}/preview-page`} target="_blank" rel="noopener">預覽已儲存的展示頁</a></div>}
-          {dirtyForms.appearance && <p className="field-hint">請先儲存版型，再開啟預覽；公開頁會保留目前發布的版本。</p>}
+          {dirtyForms.appearance && <p className="field-hint">{appearanceEnabled?'請先儲存店面外觀，再開啟預覽；公開頁會保留目前發布的版本。':'請先儲存版型，再開啟預覽；公開頁會保留目前發布的版本。'}</p>}
           {can('store:publish') && <div className="actions">
             {(publication?.state !== 'published' || preview?.dirty) && <button type="button" className={preview?.projection.products.length ? 'btn btn-primary' : 'btn btn-ghost'} disabled={areaLocked || hasDraft || !preview?.projection.products.length} onClick={() => void command({method: 'post', path: root + '/publish', body: {}, version: view.version!, schema: StoreViewSchema, notice: '已發布展示頁。', success: () => {}})}>{publication?.state === 'published' ? '發布更新' : '發布展示頁'}</button>}
             {publication?.state === 'published' && <button type="button" className="btn btn-ghost" disabled={areaLocked || hasDraft} onClick={() => {if (window.confirm(`停止公開後，/shops/${store.slug} 會顯示找不到這間商店。`)) void command({method: 'post', path: root + '/unpublish', body: {}, version: view.version!, schema: StoreViewSchema, notice: '已停止公開。', success: () => {}});}}>停止公開</button>}

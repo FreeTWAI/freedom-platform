@@ -25,7 +25,14 @@
     "tests/runtime/storefront-appearance.test.ts",
     "tests/runtime/storefront-appearance-contracts.test.ts",
     "tests/runtime/storefront-appearance-contrast.test.ts",
-    "tests/runtime/storefront-appearance-media.test.ts"
+    "tests/runtime/storefront-appearance-media.test.ts",
+    "apps/portal-web/src/modules/HostedStoreAppearance.tsx",
+    "apps/portal-web/src/modules/HostedStoreAppearance.css",
+    "apps/portal-web/src/modules/hosted-store-appearance-client.ts",
+    "apps/portal-web/src/modules/hosted-store-appearance-state.ts",
+    "tests/runtime/storefront-appearance-state.test.ts",
+    "tests/runtime/storefront-appearance-rollback.test.ts",
+    "tests/e2e/hosted-store-appearance.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [

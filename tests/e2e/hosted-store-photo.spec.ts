@@ -3244,3 +3244,215 @@ test('SC-E2E-85 a malformed committed photo upload ack retains the original File
     await writeFile(info.outputPath('photo-malformed-upload-ack.json'), JSON.stringify({requests, statuses, retainedFile, baseline, committed, publicMedia, refs}, null, 2));
   } finally {await anonymous.close(); await page.unrouteAll({behavior:'wait'});}
 });
+
+// Store appearance journeys: fixture ON cases belong to this trusted store-photo pass.
+import {captureOffer} from './hosted-store-fixture.js';
+import type {TestInfo,Locator} from './fixtures.js';
+import {AppearanceCommandAckSchema,StorefrontAppearanceDraftSchema} from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
+const appearanceEditor=(page:Page)=>page.locator('.hosted-store-appearance');
+const appearanceImage=(page:Page,role:'cover'|'logo')=>appearanceEditor(page).getByRole('region',{name:role==='cover'?'封面圖':'店標',exact:true});
+async function appearanceReady(page:Page,db:Parameters<typeof person>[0]){
+  const s=await ready(page,db);await storeArea(page,'店面與發布');await expect(appearanceEditor(page).getByRole('heading',{name:'店面外觀',exact:true})).toBeVisible();return s;
+}
+async function appearanceDraft(page:Page,s:Awaited<ReturnType<typeof ready>>){return StorefrontAppearanceDraftSchema.parse(await(await page.request.get('/api/v1'+s.root+'/appearance-settings')).json());}
+async function patchAppearance(page:Page,s:Awaited<ReturnType<typeof ready>>,patch:Record<string,unknown>){
+  const current=await appearanceDraft(page,s),session=await(await page.request.get('/api/v1/session')).json();
+  const response=await page.request.patch('/api/v1'+s.root+'/appearance-settings',{data:{template_id:current.template_id,accent_preset:current.accent_preset,
+    announcement:current.announcement,featured_product_ids:current.featured_product_ids,...patch},headers:{Origin:new URL(page.url()).origin,
+    'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${current.version}"`}});
+  expect(response.status()).toBe(200);return AppearanceCommandAckSchema.parse(await response.json());
+}
+async function chooseAppearanceImage(page:Page,role:'cover'|'logo',color='#386d61'){
+  const file=role==='cover'?{name:'synthetic-cover.png',mimeType:'image/png',buffer:await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#eae5d9"/><circle cx="915" cy="200" r="250" fill="#d6dfcc"/><path d="M0 600 Q380 475 1200 625V800H0Z" fill="${color}"/><ellipse cx="580" cy="635" rx="335" ry="50" fill="#263f35" opacity=".2"/><path d="M805 410h65a65 65 0 0 1 0 130h-65" fill="none" stroke="#a36540" stroke-width="35"/><path d="M430 380h390l-30 210q-160 110-330 0Z" fill="#bc8058"/><ellipse cx="625" cy="380" rx="195" ry="48" fill="#e0b992"/><ellipse cx="625" cy="380" rx="165" ry="29" fill="#5b4530"/><path d="M210 600q20-190 110-310M250 465q-95-100-110-55t110 55M280 385q-30-105 35-115t-35 115" fill="#60795b" stroke="#60795b" stroke-width="8" stroke-linecap="round"/></svg>`)).png().toBuffer()}:{name:'synthetic-logo.png',mimeType:'image/png',buffer:await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="37" fill="${color}"/><path d="M23 56Q18 23 59 18Q62 51 23 56Z" fill="#f0e6ce"/><path d="M21 61L52 29" stroke="${color}" stroke-width="4" stroke-linecap="round"/></svg>`)).png().toBuffer()};
+  const panel=appearanceImage(page,role);await panel.getByLabel(role==='cover'?'封面圖':'店標',{exact:true}).setInputFiles(file);
+  await expect(panel.getByRole('img',{name:role==='cover'?'待儲存的完整封面圖':'待儲存的完整店標',exact:true})).toBeVisible();return file;
+}
+async function saveAppearanceImage(page:Page,role:'cover'|'logo',replace=false){
+  const name=role==='cover'?'封面圖':'店標';await appearanceImage(page,role).getByRole('button',{name:(replace?'儲存替換':'儲存')+name,exact:true}).click();
+  await expect(appearanceEditor(page).getByRole('status')).toContainText('已儲存'+name+'變更');
+}
+async function publishAppearance(page:Page,revision:number){
+  await page.getByRole('button',{name:revision===1?'發布展示頁':'發布更新',exact:true}).click();
+  await expect(page.locator('.hosted-store')).toContainText(`已發布・第 ${revision} 版`);
+}
+async function appearanceGeometry(page:Page,target:Locator,info:TestInfo,label:string){
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const controls=await target.locator('.btn,.shop-button').evaluateAll(nodes=>nodes.map(node=>{
+    const rect=node.getBoundingClientRect(),parent=node.parentElement!.getBoundingClientRect();
+    return {text:node.textContent?.trim(),width:rect.width,height:rect.height,parentWidth:parent.width,primary:node.classList.contains('btn-primary')||node.classList.contains('shop-add-submit')};
+  }).filter(row=>row.width>0&&row.height>0));
+  for(const box of controls){expect(box.height,box.text).toBeGreaterThanOrEqual(44);if(!box.primary)expect(box.width,box.text).toBeLessThan(box.parentWidth-1);}
+  await info.attach(label+'-geometry',{body:JSON.stringify({viewport:page.viewportSize(),controls}),contentType:'application/json'});
+}
+async function appearanceScreens(page:Page,info:TestInfo,label:string,editor=false){
+  const viewport=page.viewportSize()!;
+  for(const width of [390,768,1440]){
+    await page.setViewportSize({width,height:900});const target=editor?page.locator('.hosted-store'):page.locator('body');
+    await appearanceGeometry(page,target,info,label+'-'+width);
+    if(editor)await captureOffer(page,target,info.outputPath(label+'-'+width+'.png'));
+    else await page.screenshot({path:info.outputPath(label+'-'+width+'.png'),fullPage:true});
+  }
+  await page.setViewportSize({width:320,height:900});await appearanceGeometry(page,editor?page.locator('.hosted-store'):page.locator('body'),info,label+'-320');
+  await page.setViewportSize(viewport);
+}
+
+test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a responsive store',async({page,browser,baseURL,e2eAuthPool},info)=>{
+  await page.setViewportSize({width:390,height:900});const s=await appearanceReady(page,e2eAuthPool);
+  await appearanceScreens(page,info,'appearance-editor-empty',true);
+  await storeArea(page,'商店資料');const settings=page.getByRole('form',{name:'商店資料',exact:true});
+  await settings.getByLabel('商店名稱',{exact:true}).fill('山邊合成茶作');await settings.getByLabel('品牌（選填）',{exact:true}).fill('山邊合成茶作');
+  await settings.getByLabel('商店介紹',{exact:true}).fill('把一杯茶的時間，留給喜歡的日常。合成茶具與亞麻織品，陪你慢慢過生活。');
+  await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已儲存。');await storeArea(page,'店面與發布');
+  const firstPreview=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const lime=await firstPreview;
+  await expect(lime.locator('body')).toHaveAttribute('data-shop-accent','lime');
+  await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('background-color','rgb(196, 255, 32)');
+  await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('color','rgb(23, 34, 0)');
+  await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('border-top-color','rgb(83, 115, 0)');await lime.close();
+  const second=ProductViewSchema.parse(await post(page,s.root+'/products',{title:'亞麻茶席巾',description:'合成品牌商品',price_minor:18000,stock:5},201));
+  await page.reload();await storeArea(page,'店面與發布');
+  const editor=appearanceEditor(page);await editor.getByRole('radio',{name:'海洋藍',exact:true}).check();
+  await editor.getByLabel('公告列',{exact:true}).fill('新作已上架，歡迎慢慢挑選。');
+  await editor.getByRole('combobox',{name:'選擇主打商品',exact:true}).selectOption(s.product.product_id);await editor.getByRole('button',{name:'加入主打商品',exact:true}).click();
+  await editor.getByRole('combobox',{name:'選擇主打商品',exact:true}).selectOption(second.product_id);await editor.getByRole('button',{name:'加入主打商品',exact:true}).click();
+  await editor.getByRole('button',{name:'上移主打商品：亞麻茶席巾',exact:true}).click();
+  await chooseAppearanceImage(page,'cover');await chooseAppearanceImage(page,'logo','#72532e');
+  await expect(appearanceImage(page,'cover').getByRole('button',{name:'儲存封面圖',exact:true})).toBeDisabled();
+  await expect(appearanceImage(page,'cover')).toContainText('請先儲存店面外觀，再儲存圖片變更。');
+  await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
+  await saveAppearanceImage(page,'cover');await saveAppearanceImage(page,'logo');
+  expect((await appearanceDraft(page,s)).featured_product_ids).toEqual([second.product_id,s.product.product_id]);
+  await appearanceScreens(page,info,'appearance-editor-filled',true);
+  const event=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await event;
+  const anonymous=await browser.newContext({baseURL});
+  try{
+    await expect(preview.locator('.shop-announcement')).toHaveText('新作已上架，歡迎慢慢挑選。');await expect(preview.locator('.shop-cover img')).toBeVisible();
+    await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await expect(preview.locator('.shop-featured h3')).toHaveText(['亞麻茶席巾','手作茶杯']);
+    const privatePath=(await appearanceDraft(page,s)).cover!.read_path;expect((await anonymous.request.get(privatePath)).status()).toBe(401);
+    expect((await anonymous.request.get('/shops/'+s.slug)).status()).toBe(404);await publishAppearance(page,1);
+    const pub=await anonymous.newPage();await pub.goto('/shops/'+s.slug);await expect(pub.locator('body')).toHaveAttribute('data-shop-accent','ocean');
+    await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('background-color','rgb(29, 78, 216)');
+    await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('color','rgb(255, 255, 255)');
+    await pub.locator('.shop-brand-header .shop-button').focus();
+    await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('outline-color','rgb(29, 78, 216)');await expect(pub.locator('.shop-brand-header .shop-button')).toHaveCSS('outline-style','solid');
+    await expect(pub.locator('.shop-cover img')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/cover`);
+    await expect.poll(()=>pub.locator('.shop-cover img').evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(1200);
+    await expect(pub.locator('.shop-cover img')).toHaveAttribute('width','1200');await expect(pub.locator('.shop-cover img')).toHaveAttribute('height','800');
+    await expect(pub.locator('.shop-merchant-logo')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/logo`);
+    await expect(pub.locator('.shop-featured h3')).toHaveText(['亞麻茶席巾','手作茶杯']);await expect(pub.locator('.shop-catalog:not(.shop-featured) h3')).toHaveText(['手作茶杯','亞麻茶席巾']);
+    await expect(pub.locator('meta[property="og:image"]')).toHaveAttribute('content',`${LIVE_PUBLIC_ORIGIN}/shops/${s.slug}/appearance-media/1/cover`);
+    await expect(pub.locator('footer .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');await expect(pub.locator('footer')).toContainText('使用自由工坊開店');
+    for(const width of [390,768,1440]){await pub.setViewportSize({width,height:900});const layout=await pub.locator('.shop-hero').evaluate(node=>{
+      const text=node.querySelector('.shop-brand-header')!.getBoundingClientRect(),image=node.querySelector('.shop-cover')!.getBoundingClientRect();
+      return {below:image.y>=text.bottom-1,beside:image.x>=text.right-1};});expect(width===1440?layout.beside:layout.below).toBe(true);}
+    await appearanceScreens(pub,info,'appearance-public-cover');
+    await editor.getByLabel('公告列',{exact:true}).fill('下一版的草稿公告');await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
+    await expect(page.locator('.hosted-store')).toContainText('有尚未發布的變更');await pub.reload();await expect(pub.locator('.shop-announcement')).toHaveText('新作已上架，歡迎慢慢挑選。');
+    await preview.reload();await expect(preview.locator('.shop-announcement')).toHaveText('下一版的草稿公告');
+  }finally{await preview.close();await anonymous.close();}
+});
+
+test('APPEARANCE-E2E-02 cover replacement and removal remain frozen until publication',async({page,browser,baseURL,e2eAuthPool},info)=>{
+  const s=await appearanceReady(page,e2eAuthPool);await save(page,await source('synthetic-catalog-photo.png','#c4a26c'));await storeArea(page,'店面與發布');
+  await chooseAppearanceImage(page,'cover');await saveAppearanceImage(page,'cover');await publishAppearance(page,1);
+  const anonymous=await browser.newContext({baseURL});try{
+    const pub=await anonymous.newPage();await pub.goto('/shops/'+s.slug);const first=`/shops/${s.slug}/appearance-media/1/cover`,original=digest(await(await anonymous.request.get(first)).body());
+    const portrait={name:'synthetic-portrait-cover.png',mimeType:'image/png',buffer:await sharp({create:{width:40,height:120,channels:3,background:'#b08cbd'}}).png().toBuffer()};
+    await appearanceImage(page,'cover').getByLabel('封面圖',{exact:true}).setInputFiles(portrait);await expect(appearanceImage(page,'cover').getByRole('img',{name:'待儲存的完整封面圖',exact:true})).toBeVisible();
+    await saveAppearanceImage(page,'cover',true);await pub.reload();expect(digest(await(await anonymous.request.get(first)).body())).toBe(original);
+    await expect(pub.locator('.shop-cover img')).toHaveAttribute('src',first);await publishAppearance(page,2);expect((await anonymous.request.get(first)).status()).toBe(404);
+    await pub.reload();const second=`/shops/${s.slug}/appearance-media/2/cover`;await expect(pub.locator('.shop-cover img')).toHaveAttribute('src',second);
+    const shape=await pub.locator('.shop-cover img').evaluate(node=>{const image=node as HTMLImageElement,box=image.getBoundingClientRect();return {width:image.naturalWidth,height:image.naturalHeight,ratio:box.width/box.height,maxHeight:getComputedStyle(image).maxHeight};});
+    expect(shape.width).toBe(40);expect(shape.height).toBe(120);expect(shape.ratio).toBeCloseTo(1/3,3);
+    const removePath='/api/v1'+s.root+'/appearance-media/cover/remove';
+    await page.route('**'+removePath,route=>route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({type:'about:blank',title:'synthetic_refusal',status:409,code:'synthetic_refusal',detail:'合成移除操作未套用。'})}));
+    page.once('dialog',dialog=>dialog.accept());await appearanceImage(page,'cover').getByRole('button',{name:'移除封面圖',exact:true}).click();await expect(appearanceEditor(page).getByRole('status')).toHaveText('合成移除操作未套用。');
+    await appearanceImage(page,'cover').getByRole('button',{name:'取消封面圖變更',exact:true}).click();await expect(appearanceEditor(page).getByRole('status')).toHaveText('已取消這次封面圖變更。');
+    expect((await anonymous.request.get(second)).status()).toBe(200);expect((await appearanceDraft(page,s)).cover).not.toBeNull();await page.unroute('**'+removePath);
+    page.once('dialog',dialog=>dialog.accept());await appearanceImage(page,'cover').getByRole('button',{name:'移除封面圖',exact:true}).click();await expect(appearanceEditor(page).getByRole('status')).toContainText('已儲存封面圖變更');
+    expect((await anonymous.request.get(second)).status()).toBe(200);await pub.reload();await expect(pub.locator('.shop-cover img')).toHaveCount(1);
+    await publishAppearance(page,3);expect((await anonymous.request.get(second)).status()).toBe(404);await pub.reload();
+    await expect(pub.locator('.shop-cover,.shop-hero')).toHaveCount(0);await expect(pub.locator('.shop-brand-header h1')).toHaveText('照片驗收商店');
+    const catalog=PublicStoreMediaSchema.parse(await(await anonymous.request.get('/api/v1/public/stores/'+s.slug+'/media')).json());
+    await expect(pub.locator('meta[property="og:image"]')).toHaveAttribute('content',LIVE_PUBLIC_ORIGIN+catalog.photos[0].photo.read_path);
+    await appearanceScreens(pub,info,'appearance-public-no-cover');
+    expect((await e2eAuthPool.query("SELECT count(*)::int n FROM assets WHERE tenant_ref=$1 AND purpose='storefront.product-photo'",[s.hash.split('/')[1]])).rows[0].n).toBe(3);
+  }finally{await anonymous.close();}
+});
+
+test('APPEARANCE-E2E-03 metadata and image saves preserve unknown originals and explicitly recover CAS conflicts',async({page,e2eAuthPool},info)=>{
+  const s=await appearanceReady(page,e2eAuthPool),editor=appearanceEditor(page),metadataPath='/api/v1'+s.root+'/appearance-settings',imagePath='/api/v1'+s.root+'/appearance-media/cover';
+  const metadata:ReturnType<typeof signature>[]=[],images:ReturnType<typeof signature>[]=[],metadataStatuses:number[]=[],imageStatuses:number[]=[];
+  await page.route('**'+metadataPath,async route=>{
+    if(route.request().method()!=='PATCH')return route.continue();metadata.push(signature(route.request()));const response=await route.fetch();metadataStatuses.push(response.status());
+    if(metadata.length===1){expect(response.status()).toBe(200);await route.abort('failed');}else await route.fulfill({response});
+  });
+  await editor.getByLabel('公告列',{exact:true}).fill('保留原操作的合成公告');await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();
+  await expect(editor.getByRole('button',{name:'重試原外觀操作',exact:true})).toBeVisible();await expect(editor.getByLabel('公告列',{exact:true})).toHaveValue('保留原操作的合成公告');
+  await appearanceScreens(page,info,'appearance-editor-unknown',true);expect(metadata).toHaveLength(1);
+  const hash=page.url();await page.getByRole('link',{name:'返回我的商店',exact:true}).click();await expect(page).toHaveURL(hash);
+  await editor.getByRole('button',{name:'重試原外觀操作',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');expect(metadata[1]).toEqual(metadata[0]);
+  await editor.getByLabel('公告列',{exact:true}).fill('店主保留的外觀修改');await patchAppearance(page,s,{announcement:'另一視窗更新的公告'});
+  await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('button',{name:'確認以最新版本儲存外觀',exact:true})).toBeEnabled();
+  await expect(editor.getByLabel('公告列',{exact:true})).toHaveValue('店主保留的外觀修改');await expect(editor).toContainText('另一視窗更新的公告');
+  await editor.getByRole('button',{name:'確認以最新版本儲存外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
+  expect(metadataStatuses).toEqual([200,200,412,200]);expect(metadata[3].key).not.toBe(metadata[2].key);expect(metadata[3].sha256).toBe(metadata[2].sha256);expect(metadata[3].version).not.toBe(metadata[2].version);
+  await page.route('**'+imagePath,async route=>{
+    if(route.request().method()!=='POST')return route.continue();images.push(signature(route.request()));const response=await route.fetch();imageStatuses.push(response.status());
+    if(images.length===1){expect(response.status()).toBe(200);await route.abort('failed');}else await route.fulfill({response});
+  });
+  await chooseAppearanceImage(page,'cover');await appearanceImage(page,'cover').getByRole('button',{name:'儲存封面圖',exact:true}).click();
+  await expect(editor.getByRole('button',{name:'重試原封面圖操作',exact:true})).toBeVisible();await expect(appearanceImage(page,'cover').getByRole('img',{name:'待儲存的完整封面圖',exact:true})).toBeVisible();
+  await expect(editor.getByRole('button',{name:'儲存店面外觀',exact:true})).toBeDisabled();await expect(editor).toContainText('請先確認圖片操作結果，再儲存店面外觀。');
+  await editor.getByRole('button',{name:'重試原封面圖操作',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存封面圖變更');expect(images[1]).toEqual(images[0]);expect(images[0].mime).toBe('image/webp');
+  await chooseAppearanceImage(page,'cover','#675291');await patchAppearance(page,s,{announcement:'圖片衝突前的另一視窗更新'});
+  await appearanceImage(page,'cover').getByRole('button',{name:'儲存替換封面圖',exact:true}).click();await expect(editor.getByRole('button',{name:'確認以最新版本套用封面圖變更',exact:true})).toBeEnabled();
+  await editor.getByRole('button',{name:'確認以最新版本套用封面圖變更',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存封面圖變更');
+  expect(imageStatuses).toEqual([200,200,412,200]);expect(images[3].key).not.toBe(images[2].key);expect(images[3].sha256).toBe(images[2].sha256);expect(images[3].version).not.toBe(images[2].version);
+  await info.attach('appearance-original-recovery',{body:JSON.stringify({metadata,metadataStatuses,images,imageStatuses}),contentType:'application/json'});
+  await page.unrouteAll({behavior:'wait'});
+});
+
+test('APPEARANCE-E2E-04 read-only and product writers can read branding without appearance controls or write authority',async({page,browser,baseURL,e2eAuthPool},info)=>{
+  const s=await appearanceReady(page,e2eAuthPool);await chooseAppearanceImage(page,'cover');await saveAppearanceImage(page,'cover');await publishAppearance(page,1);
+  const saved=await appearanceDraft(page,s);let captured=false;
+  for(const capabilities of [['store:read'],['store:read','store:write']]){
+    const member=await person(e2eAuthPool),context=await browser.newContext({baseURL});try{
+      const other=await context.newPage();await login(other,member.email);
+      const candidate=await(await page.request.get('/api/v1/tenants/invite-candidates?user_id='+member.id)).json();
+      const invitation=await post(page,'/tenants/'+s.hash.split('/')[1]+'/invitations',{invitee_principal_id:candidate.principal_id,role:'operator',
+        instance_capabilities:[{instance_id:s.hash.split('/')[2],capabilities}],expires_at:new Date(Date.now()+86400000).toISOString()},201);
+      await post(other,'/tenants/'+s.hash.split('/')[1]+'/invitations/'+invitation.invitation_id+'/accept',{},200,invitation.version);
+      await open(other,s.hash);await storeArea(other,'店面與發布');const read=appearanceEditor(other);
+      await expect(read).toContainText('你目前只有檢視權限，無法修改店面外觀。');await expect(read.locator('input,select,button,textarea')).toHaveCount(0);
+      await expect(read.getByRole('img',{name:'已儲存的封面圖',exact:true})).toBeVisible();expect((await context.request.get(saved.cover!.read_path)).status()).toBe(200);
+      if(!captured){await appearanceScreens(other,info,'appearance-editor-readonly',true);captured=true;}
+      const session=await(await context.request.get('/api/v1/session')).json(),headers={Origin:new URL(other.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${saved.version}"`};
+      const refused=await context.request.patch('/api/v1'+s.root+'/appearance-settings',{headers,data:{template_id:saved.template_id,accent_preset:'rose',announcement:'不得寫入',featured_product_ids:[]}});expect(refused.status()).toBe(403);
+      for(const role of ['cover','logo']){
+        expect((await context.request.post('/api/v1'+s.root+'/appearance-media/'+role,{headers:{...headers,'Idempotency-Key':randomUUID(),'Content-Type':'image/png'},data:(await source('synthetic-refused.png','#336577')).buffer})).status()).toBe(403);
+        expect((await context.request.post('/api/v1'+s.root+'/appearance-media/'+role+'/remove',{headers:{...headers,'Idempotency-Key':randomUUID()},data:{}})).status()).toBe(403);
+      }
+    }finally{await context.close();}
+  }
+  expect((await appearanceDraft(page,s)).version).toBe(saved.version);
+});
+
+test('APPEARANCE-E2E-05 buyer product, cart, checkout and order shells retain the published dark accent and logo',async({page,browser,baseURL,e2eAuthPool},info)=>{
+  const s=await appearanceReady(page,e2eAuthPool),editor=appearanceEditor(page);await editor.getByRole('radio',{name:'石墨灰',exact:true}).check();
+  await editor.getByLabel('公告列',{exact:true}).fill('合成品牌的購物旅程');await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
+  await chooseAppearanceImage(page,'logo');await saveAppearanceImage(page,'logo');await publishAppearance(page,1);
+  // This photo fixture installs only ecpay.aio.credit.v1; offline checkout is proved
+  // with the branded runtime journey and the unchanged default offline browser suite.
+  const context=await browser.newContext({baseURL});try{
+    const buyer=await context.newPage();
+    for(const [path,label] of [[`/products/${s.product.sku}`,'product-dark'],['/cart','cart-dark'],['/checkout','checkout-dark'],['/orders/'+randomUUID(),'order-dark']] as const){
+      await buyer.goto('/shops/'+s.slug+path);await expect(buyer.locator('body')).toHaveAttribute('data-shop-accent','graphite');
+      await expect(buyer.locator('.shop-merchant-logo')).toHaveAttribute('src',`/shops/${s.slug}/appearance-media/1/logo`);await expect(buyer.locator('.shop-announcement')).toHaveText('合成品牌的購物旅程');
+      await expect(buyer.locator('footer .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');
+      if(label==='product-dark'){await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('background-color','rgb(51, 65, 85)');await expect(buyer.locator('.shop-detail-copy .shop-button')).toHaveCSS('color','rgb(255, 255, 255)');}
+      if(label==='product-dark'||label==='cart-dark')await appearanceScreens(buyer,info,'appearance-'+label);
+      else expect(await buyer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      expect(await buyer.locator('body').innerText()).not.toContain(s.member.email);
+    }
+  }finally{await context.close();}
+});
