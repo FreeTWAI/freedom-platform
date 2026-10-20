@@ -16,6 +16,14 @@
 
 Production 公開唯讀 smoke 第二次通過14項，首次6項後遇 Access redirect 的失敗保留；兩個 admin 路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。Production 首次 before 備份截斷、第二次成功綁定，以及兩項經審查的 kit 修正均另列收據。`as_of=2026-10-12`、M1／完整計畫、真人三項成果與公會作者自主交付的未接受狀態維持。
 
+### 2026-10-20 賣方資訊與政策分支候選
+
+本工作分支在 appearance follow-up `1b2c5dc1` 上另有 schema176（暫定）六表 sidecar，
+`FREEDOM_STORE_POLICIES_ENABLED`／`store_policies_enabled` 預設 OFF。
+只包含 C1 自行填寫、草稿、發布凍結與 About／政策公開頁；不更動 readiness 八項、准入、
+付款、出貨、訂單或供貨能力。旗標 OFF 連未知資訊路徑的 host SPA fallback 也保持原樣。
+這是 repository 候選上限，沒有正式部署、旗標、秘密或真人驗收聲明；以下收據保持原日期。
+
 ### 2026-10-19 23:06 歷史發布
 
 以下原文保留 `240cf677` 當時觀察；最新部署以上方10月20日收據為準。

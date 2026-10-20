@@ -115,3 +115,74 @@ retained throughout OFF and rollback. No GC or retention policy is enabled.
 See the [media contract](../hosted/media-contract.md#store-appearance-media-local-candidate-2026-10-20)
 and [closed asset profile](../../assets/storefront-appearance.md) for byte routes,
 shared-purpose compatibility and storage boundaries.
+
+## Seller information and store policies (2026-10-20 local C1 candidate)
+
+Migration `176_storefront_seller_policies.sql` is provisional and additive: seller
+and four policy components have immutable changed-save versions, mutable draft
+pointers, and a separate immutable publication document plus typed policy refs.
+A normalized no-op leaves component rows and profile version unchanged; a command
+receipt still records completion metadata. Each seller/per-kind sequence is dense
+and capped at 500, including unpublished and removal versions. There is no prune
+or erasure executor. A limit failure returns `409 seller_policies_version_limit`
+and rolls the whole section back.
+
+`FREEDOM_STORE_POLICIES_ENABLED` defaults OFF independently of appearance, photos,
+supply, checkout and admission. `/api/v1/site` exposes `store_policies_enabled`.
+OFF installs neither routes nor the unmatched namespace guard, performs no legal
+SELECTs, retains the host's current SPA fallback and renders the original footer.
+An old binary ignores these new tables; an old-style publication without legal
+rows has the original footer and the new information paths return the common 404
+when the feature is installed. No v1 projection/JSON field or release floor changes.
+
+The existing editor's 商店資料 contains 賣方資訊與商店政策. Private API root
+`/api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies` accepts GET
+(`store:read`) and atomic PUT (`store:manage`, profile If-Match and Idempotency-Key).
+This deliberately follows the existing description/contact authority rather than
+SPEC-02's proposed `store:write`. Public/private fields are never inferred from
+member accounts or guild profiles. The command receipt, journal, audit details,
+logs and analytics retain no seller fields or policy prose. PUT alone has a 512 KiB
+wire bound; raw structural string bounds keep its snapshot below the unchanged
+256 KiB shared cap. Other routes retain their existing bounds.
+
+Only saving changes drafts; preview renders saved drafts and publish freezes the
+same IDs/digests under the fifth dirty dimension. Reads and retries reauthorize;
+unknown results retain the original key/body/CAS in RAM and require an explicit
+resend. A known 412 retains input for explicit review against refreshed data.
+Quarantine blocks PUT and receipt replay before writes, while authorized reads
+and published pages remain available. Publishing empty legal information succeeds.
+
+Public HTML routes are `/shops/:slug/about`, `/shops/:slug/policies/:kind` and
+`/shops/:slug/policies/:kind/v/:version_id`. They require the current publication's
+liveness and legal sidecar; history additionally requires a same-store, same-kind,
+ever-published nonempty policy. Foreign, unpublished and missing versions share
+one opaque 404. Every page remains noindex/no-store. Plain text is escaped, blank
+lines form paragraphs, single newlines form line breaks, and there is no Markdown,
+HTML or auto-linking. Seller Email/phone are text. Only rendered legal content
+loads `shop-policies.css`. Products link to published shipping/returns. Terms are
+linked in About/footer only and imply no buyer consent.
+
+A published business name replaces the original responsibility statement with the
+fixed seller sentence. Empty descriptions omit the contradictory missing-contact
+placeholder. Preview keeps the original saved-draft notice followed by the draft
+seller sentence. With no business name the footer is exactly the old branch.
+Historical policy footers always use the current seller; there is no old-seller
+endpoint. Republishing removed phone/address withdraws it from all public pages.
+Old policy prose may still contain personal data: withdrawal/erasure is an explicit
+open product question for Ted, alongside evidence retention and future order links.
+
+C1 format choices: seller limits in the independent `storefront-policies` contract;
+8 ASCII tax digits without checksum; optional returns window 7–3650 days; return-by
+1–3650, default 14; all display only. The editor's checklist contains headings only.
+The privacy statement is versioned and highlighted for supplier-sourced selections;
+accepted supply pricing is not a drop-ship agreement (`fulfilment/rules/consent.ts`
+still supplies `not_agreed`). No checkout gate, consent, AI drafting, order link,
+payment/admission rule or readiness item is added. Existing checkout terms already
+retain publication identity/revision; later order evidence can build on that without
+this slice changing checkout or orders. The strict readiness contract stays eight.
+
+Verification entry points: four `storefront-policies-{render,sql,commands,publication}`
+runtime files and the default-mode `hosted-store-policies.spec.ts` (ten tests, real
+per-test feature hosts, no media fixture). Restore/retarget fixtures cover all six
+nonempty tenant tables. These are synthetic local checks, not hosted CI, deployment,
+legal certification, Safari or real-member adoption evidence.

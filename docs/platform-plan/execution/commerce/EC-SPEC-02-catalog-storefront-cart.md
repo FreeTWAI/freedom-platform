@@ -58,6 +58,16 @@ E04 提供 CSV 匯出與匯入：先驗證並顯示差異（新增／修改／�
 
 封面與店標需要新的 asset 用途（例如 `storefront.cover`、`storefront.logo`），比照 141 新增 purpose、大小與 profile。
 
+**2026-10-20 賣方資訊與政策 C1 本機候選（schema176，未部署）**：本切片以兩張 draft pointer 表
+`commerce_storefront_seller_drafts`／`commerce_storefront_policy_drafts`，指向不可改的
+`commerce_storefront_seller_versions`／`commerce_storefront_policy_versions`，取代本節提議的兩張合併表。
+每次有變更的儲存只為變更的項目新增版本；正規化後未變更不新增內容列或推進 profile 版本。
+每店的賣方與每種政策各有稠密序號及 500 版上限；沒有清理或刪除歷史的工作。
+所有欄位由店主自行填寫，沒有會員或公會資料預填。營業名稱在任一賣方欄位非空時必填；
+其他賣方欄位在 C1 選填，統編只驗 8 位半形數字。政策為最多 10,000 個 Unicode code points 的純文字。
+`returns.window_days` 可空或 7–3650，`return_by_days` 為 1–3650、預設 14；只顯示，不執行售後規則。
+隱私的代出貨說明勾選隨版本保留；既有供貨價接受不是代出貨同意，正式履約同意模型仍未實作。
+
 ### 2.2 發布
 
 發布命令（既有 `publishStore`）在同一交易內多寫一列 `commerce_storefront_publication_catalogs`：
@@ -75,6 +85,17 @@ E04 提供 CSV 匯出與匯入：先驗證並顯示差異（新增／修改／�
 這份獨立的 `freedom.hosted-store-appearance/v1` sidecar 不冒充上述完整 catalog 文件；其 canonical digest 加入第四個 dirty／發布去重維度，與原 projection／template／media 一起比較、同交易凍結後切換 current publication。v1 projection 與 `GET /api/v1/public/stores/:slug` 保持原樣。預覽只讀已儲存草稿；公開頁只讀目前發布的外觀。過時或移除的草稿主打可保留設定，但新發布只顯示該 projection 中的商品，不洩露其他商品名稱。
 
 `FREEDOM_STORE_APPEARANCE_ENABLED` 預設 OFF，`/api/v1/site` 提供 `store_appearance_enabled`。OFF 不掛新路由、不查外觀、不刪資料；舊版形狀的讀寫可忽略 sidecar，舊版新發布沒有 sidecar 時，新版回預設外觀。封面替換／移除不刪舊物件與歷史 refs，也不釋放保留配額。這是本機候選，沒有正式環境開關、部署、hosted CI 或真人驗收宣告。
+
+**2026-10-20 賣方資訊與政策發布切片（schema176，未部署）**：獨立
+`freedom.hosted-store-policies/v1` 文件凍結到 `commerce_publication_seller_policies`，政策版本另外以
+`commerce_publication_policy_refs` 的複合 FK 固定租戶、商店與種類。只凍結已儲存版本 ID／digest，
+未修改的 ID 重用；第五個 dirty／發布去重維度與原四維度同交易切換。沒有 seller 或政策也能發布。
+v1 projection 與公開 stores JSON 不擴欄。About、目前政策與歷史政策 HTML 都為 noindex／no-store；
+歷史政策僅允許曾在同店發布的非空版本，不公開未發布草稿或歷史賣方版本。公開頁不顯示含草稿的序號，
+只顯示首次發布時間與目前／歷史版本。舊版 binary 忽略 sidecar；舊版發布沒有 sidecar 時，新版保持舊頁尾、
+新資訊路徑回共同 404。`FREEDOM_STORE_POLICIES_ENABLED` 預設 OFF，site 另加 `store_policies_enabled`；
+OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既有 SPA fallback，且不刪資料。
+這不實作本節完整 catalog 文件、買家 consents、訂單政策連結或下一節的任何結帳門檻。
 
 ### 2.3 開放結帳的條件（C2）
 
@@ -194,6 +215,13 @@ E04 提供 CSV 匯出與匯入：先驗證並顯示差異（新增／修改／�
 **本切片的明確差異（2026-10-20）**：外觀的所有寫入（含版型、封面與店標）統一要求既有 `store:manage`，沿用現行版型命令的管理邊界，避免商品 `store:write` 自動取得品牌修改權；發布仍是 `store:publish`，草稿與私有圖片讀取仍是 `store:read`。這取代上表對本切片外觀的 `store:write` 提議，不更動商品照片、供貨或其他既有能力，也不宣告政策／賣方揭露已實作。唯讀與僅商品寫入的成員看不到外觀編輯控制，伺服器直接命令也拒絕。
 
 新能力名稱（訂單、出貨、收款等）在 EC-SPEC-09 §2；都需要新的 storefront 模組版本（`storefront@1.0.0` 的能力清單是凍結的，`migrations/134_hosted_storefronts.sql:88`）。
+
+
+**賣方資訊與政策的明確權限差異（2026-10-20）**：整節原子儲存採 `store:manage`，
+與現行「商店介紹／商店說明與聯絡」及外觀的管理權限一致。賣方身分是零售責任聲明，
+商品 `store:write` 不授予這項權限。草稿讀取與已儲存預覽仍需 `store:read`，發布仍需
+`store:publish`；不增加能力鍵，不改訂單、供貨、付款、准入或 readiness 的規則。
+這明確取代上表對本次政策／賣方揭露的 `store:write` 提議。
 
 ## 8. 測試（全部 not_run）
 
