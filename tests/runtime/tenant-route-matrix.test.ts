@@ -946,12 +946,17 @@ test('T-022 3b. Own tenant in path, other tenant resource', async () => {
       else assert.equal(invalid.data.code,'validation_failed');
       scanForLeaks(invalid,`3b invalid appearance role ${route.path}`,fixture.B);
     }
+    if(route.path.includes('/:kind')){
+      const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),kind:randomUUID()});
+      assert.equal(invalid.status,404,JSON.stringify(describe(invalid)));assert.equal(Buffer.from(invalid.bytes).toString('utf8'),'404 Not Found');
+      scanForLeaks(invalid,`3b invalid policy kind ${route.path}`,fixture.B);
+    }
     if(route.path.includes('/:service_key')){
       const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),service_key:randomUUID()});
       assert.equal(invalid.status,422,JSON.stringify(describe(invalid)));assert.equal(invalid.data.code,'validation_failed');
       scanForLeaks(invalid,`3b invalid logistics service key ${route.path}`,fixture.B);
     }
-    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'role' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
+    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'kind' && key !== 'role' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
     for (const position of positions) {
       for (const name of ['P', 'O'] as const) {
         const realIds = { ...ids(fixture.A, route), [position]: ids(fixture.B, route)[position] };

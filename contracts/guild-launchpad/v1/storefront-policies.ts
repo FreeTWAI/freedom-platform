@@ -67,7 +67,7 @@ export type PolicyVersionRead=z.infer<typeof PolicyVersionReadSchema>;
 export const SellerPoliciesDraftSchema=SellerPoliciesInputSchema.extend({profile:z.literal(STOREFRONT_POLICIES_PROFILE),version:Version,dirty:z.boolean(),has_supplied_products:z.boolean()}).strict();
 export type SellerPoliciesDraft=z.infer<typeof SellerPoliciesDraftSchema>;
 export const SellerPoliciesAckSchema=z.object({profile:z.literal(STOREFRONT_POLICIES_PROFILE),completed_version:Version,changed:z.boolean(),current:SellerPoliciesDraftSchema}).strict()
- .refine(v=>BigInt(v.completed_version)<=BigInt(v.current.version));
+ .refine(v=>v.completed_version.length<v.current.version.length||v.completed_version.length===v.current.version.length&&v.completed_version<=v.current.version);
 export type SellerPoliciesAck=z.infer<typeof SellerPoliciesAckSchema>;
 
 /** Normalize only after structural snapshot admission; no account defaults. */

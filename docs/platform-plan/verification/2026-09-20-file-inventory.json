@@ -3254,8 +3254,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/hosted-store-policies-state.ts",
-      "bytes": 3517,
-      "sha256": "4c1c93beba837eafb3dc77e09aa6a0c55b4794868cfb743a02488c2aa4b59b25"
+      "bytes": 3640,
+      "sha256": "ae925a0783ca015f91c804c9792d56d5a4743b2abe0c8c485621ebd5cf6b870e"
     },
     {
       "path": "apps/portal-web/src/modules/member-device-client.ts",
@@ -13319,8 +13319,8 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/storefront-policies.ts",
-      "bytes": 8072,
-      "sha256": "3c3bb06e8f542c3dfb7b287a8a5fbfa0624b330d42093a4ac2154cef9501f6b5"
+      "bytes": 8164,
+      "sha256": "0f1ded0595718e922f6902e90c26e42289c483906775d22b18870d40551e97d1"
     },
     {
       "path": "contracts/guild-launchpad/v1/storefront-presentation.schema.json",
@@ -17864,8 +17864,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/storefront-shell.ts",
-      "bytes": 5222,
-      "sha256": "4aabe9d2bc500c89086835736ca58dc87d70e55dec8561d56ca7724c6fd1308f"
+      "bytes": 5338,
+      "sha256": "4cc044166274a088aa9e9ec8a33fd7152967dd8f59733e7db163a614cb7e1641"
     },
     {
       "path": "modules/agent-commerce/hosted/supplier-orders.ts",
@@ -18569,8 +18569,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/policies/pages.ts",
-      "bytes": 4151,
-      "sha256": "ba4739b0db8f703fe3e662ca43071b4113ec96c80690ae9ac53992ef4abb731c"
+      "bytes": 4338,
+      "sha256": "ae22821d2e1f699e173443e15234567cd9f11a885850d3ccf873551a51cd3b4e"
     },
     {
       "path": "modules/agent-commerce/storefront/policies/read.ts",
@@ -25629,8 +25629,8 @@
     },
     {
       "path": "tests/runtime/storefront-policies-render.test.ts",
-      "bytes": 11172,
-      "sha256": "d7ace4aa4f519468c91eaf54679e01ba325d417ed30c75bf058f7c36d824e785"
+      "bytes": 11885,
+      "sha256": "3dd4156271344afdcb09aa2fdbffaaa2fb6ea3a9fd0d43949da1db83d240f4b0"
     },
     {
       "path": "tests/runtime/storefront-policies-sql.test.ts",
@@ -25789,8 +25789,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 138410,
-      "sha256": "ebaaad41e658a64229527b5709d4d3ce08def7c35510c30567c022ccb4657c12"
+      "bytes": 138802,
+      "sha256": "4ba1cc77066dd04b4649f6131cc12c8d4c7672f118f63b0434a06b6733acebf0"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
-import {emptySellerPolicies,SellerPoliciesInputSchema,SellerPoliciesWireSchema,normalizeSellerPolicies,PolicyDraftSchema,PublicationSellerPoliciesSchema,POLICY_KINDS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
+import {emptySellerPolicies,SellerPoliciesInputSchema,SellerPoliciesWireSchema,SellerPoliciesAckSchema,normalizeSellerPolicies,PolicyDraftSchema,PublicationSellerPoliciesSchema,POLICY_KINDS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {legalParagraphs,aboutHtml,policyHtml} from '../../modules/agent-commerce/storefront/policies/pages.js';
 import {digest} from '../../packages/db/index.js';
 import {renderDraftLegal,policyFromRow,sellerFromRow} from '../../modules/agent-commerce/storefront/policies/model.js';
@@ -84,13 +84,14 @@ test('POL-PAGE-03 B03 links, escaping, paragraphs and public version labels',()=
 });
 test('POL-PAGE-07 draft seller follows the unchanged preview notice and uses private links',()=>{
  const legal=renderDraftLegal(input(),'/api/v1/tenants/synthetic/storefronts/synthetic/preview-page');const html=storeHtml({...store,description:''},undefined,[],{preview:true},undefined,undefined,legal);
- assert.equal(html.split('店主已儲存的預覽，尚未對外發布。').length-1,1);assert(html.indexOf('店主已儲存的預覽，尚未對外發布。')<html.indexOf('本店由合成測試商行經營'));
+ assert.equal(html.split('店主已儲存的預覽，尚未對外發布。').length-1,1);assert(html.indexOf('店主已儲存的預覽，尚未對外發布。')<html.indexOf('本店由合成測試商行經營'));assert(html.indexOf('店主已儲存的預覽，尚未對外發布。')<html.indexOf('shop-seller-details'));const about=aboutHtml({...store,policies:legal},true);assert.equal(about.split('店主已儲存的預覽，尚未對外發布。').length-1,1);assert(about.indexOf('店主已儲存的預覽，尚未對外發布。')<about.indexOf('shop-seller-details'));
  assert.match(html,/preview-page\/about/);assert.match(html,/preview-page\/policies\/shipping/);assert.doesNotMatch(html,/href="\/shops\/synthetic-shop\/policies/);
 });
 test('POL-STATE-01 frozen attempts retain exact body, key and CAS across remount and unknown 412',()=>{
  const client={},user='synthetic-user',body=frozenPolicyFields(input()),a:PoliciesAttempt=Object.freeze({tenantId:randomUUID(),instanceId:randomUUID(),key:randomUUID(),expected:'1',body,hadUnknown:false});
  assert(Object.isFrozen(body.policies.privacy));holdPoliciesAttempt(client,user,a);const restored=restorePoliciesAttempt(client,user,a)!;assert(restored.hadUnknown);assert.equal(restored.body,a.body);assert.equal(restored.key,a.key);assert.throws(()=>reviewPoliciesAttempt(restored,'2',randomUUID()));assert.throws(()=>holdPoliciesAttempt(client,user,{...restored,key:randomUUID()}));assert.equal(heldPoliciesAttempt(client,'other-user',a),null);assert.equal(heldPoliciesAttempt({},user,a),null);releasePoliciesAttempt(client,user,a);assert.equal(heldPoliciesAttempt(client,user,a),null);
  const ack={profile:'freedom.hosted-store-policies/v1',completed_version:'2',changed:true,current:{profile:'freedom.hosted-store-policies/v1',version:'2',dirty:true,has_supplied_products:false,...input()}};
+ for(const version of ['abc','1.2','0','01','9223372036854775808']){assert.equal(SellerPoliciesAckSchema.safeParse({...ack,completed_version:version}).success,false);assert.equal(policiesAcknowledgement({...ack,current:{...ack.current,version}},a),null);}assert.equal(policiesAcknowledgement(ack,{...a,expected:'abc'}),null);
  assert(policiesAcknowledgement(ack,a));assert.equal(policiesAcknowledgement({...ack,completed_version:'3'},a),null);assert.equal(policiesAcknowledgement({...ack,current:{...ack.current,seller:{...ack.current.seller,phone:''}}},a),null);
 });
 
