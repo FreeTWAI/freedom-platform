@@ -63,7 +63,7 @@ test('commerce and supplier recommend hosted-store then manual-workspace while p
     assert.equal(result.data.config.revision, '5'); assert.equal(result.data.config.pointer_version, '1');
   }
 });
-for (const guild of [commerce, supplier]) test(`full ${guild} members can start with no space; supplier interns can launch and commerce interns cannot`, async () => {
+for (const guild of [commerce, supplier]) test(`full and intern ${guild} members can start with no space`, async () => {
   const session = (await h.person('商店資格會員')).session;
   await h.fullMember(session.user.user_id, guild);
   async function eligibility() {
@@ -72,18 +72,17 @@ for (const guild of [commerce, supplier]) test(`full ${guild} members can start 
     const item = ApplicationPageSchema.parse(result.data).items.find(app => app.application_key === 'hosted-store');
     assert.ok(item?.eligibility); return item.eligibility;
   }
-  const requiredTier = guild === supplier ? 'intern' : 'full';
+  const requiredTier = 'intern';
   assert.deepEqual(await eligibility(), {can_launch: false, reason_codes: ['tenant_manage_required'], required_guild_tier: requiredTier, tenant_action: 'create', policy_revision: '1'});
   await h.createTenant(session, '選物工作室');
   assert.deepEqual(await eligibility(), {can_launch: true, reason_codes: [], required_guild_tier: requiredTier, tenant_action: 'select', policy_revision: '1'});
   await h.fullMember(session.user.user_id, guild, 'intern');
-  const expected = guild === supplier
-    ? {can_launch: true, reason_codes: [], required_guild_tier: 'intern', tenant_action: 'select', policy_revision: '1'}
-    : {can_launch: false, reason_codes: ['guild_full_member_required'], required_guild_tier: 'full', tenant_action: 'denied', policy_revision: '1'};
+  const expected = {can_launch: true, reason_codes: [], required_guild_tier: 'intern', tenant_action: 'select', policy_revision: '1'};
   assert.deepEqual(await eligibility(), expected);
   const launchpad = await h.call('GET', `/guilds/${guild}/launchpad`, session);
   assert.deepEqual(launchpad.data.applications.find((app: {application_key: string}) => app.application_key === 'hosted-store').eligibility, expected);
-  assert.equal(launchpad.data.applications.find((app: {application_key: string}) => app.application_key === 'manual-workspace').eligibility.can_launch, false);
+  assert.deepEqual(launchpad.data.applications.find((app: {application_key: string}) => app.application_key === 'manual-workspace').eligibility,
+    {can_launch: false, reason_codes: ['guild_full_member_required'], required_guild_tier: 'full', tenant_action: 'denied', policy_revision: '1'});
 });
 test('withdrawn hosted offering makes the commerce default fall back to manual-workspace', async () => {
   const session = (await h.person('商店撤回會員')).session;
@@ -101,13 +100,13 @@ test('another guild full membership cannot substitute for commerce eligibility o
   const space = await h.createTenant(person.session, '不可繞過電商資格');
   const page = await h.call('GET', `/applications?guild_key=${production}`, person.session);
   const eligible = ApplicationPageSchema.parse(page.data).items.find(app => app.application_key === 'hosted-store')!.eligibility!;
-  assert.deepEqual(eligible.reason_codes, ['commerce_guild_full_member_required']);
+  assert.deepEqual(eligible, {can_launch: false, reason_codes: ['commerce_guild_member_required'], required_guild_tier: 'intern', tenant_action: 'denied', policy_revision: '1'});
   const plan = await h.plan(person.session, space.tenantId, h.planBody(production, space.workspaceId, 'hosted-store', 'hosted-store@1.1.0'));
-  assert.equal(plan.status, 403); assert.equal(plan.data.code, 'commerce_guild_full_member_required');
-  assert.equal(await h.count('module_launch_plans'), 0);
+  assert.equal(plan.status, 403); assert.equal(plan.data.code, 'commerce_guild_member_required');
+  assert.equal(await h.count('module_launch_plans', 'WHERE tenant_id=$1', [space.tenantId]), 0);
 });
 
-for (const [guild, change, allowed] of [[supplier, 'intern', true], [supplier, 'left', false], [commerce, 'intern', false]] as const) {
+for (const [guild, change, allowed] of [[supplier, 'intern', true], [supplier, 'left', false], [commerce, 'intern', true], [commerce, 'left', false]] as const) {
   test(`${guild} launch rechecks ${change} after waiting on the workspace`, {timeout: 20000}, async () => {
     const person = await h.person('等待資格核對');
     await h.fullMember(person.id, guild);
@@ -134,9 +133,9 @@ for (const [guild, change, allowed] of [[supplier, 'intern', true], [supplier, '
       if (allowed) {assert.ok([200,202].includes(result.status), JSON.stringify(result.data)); assert.equal(result.data.state, 'succeeded');}
       else {
         assert.equal(result.status, 403, JSON.stringify(result.data));
-        assert.equal(result.data.code, guild === supplier ? 'guild_member_required' : 'guild_full_member_required');
-        assert.equal(await h.count('application_installations'), 0);
-        assert.equal(await h.count('module_instances'), 0);
+        assert.equal(result.data.code, guild === supplier ? 'guild_member_required' : 'commerce_guild_member_required');
+        assert.equal(await h.count('application_installations', 'WHERE tenant_id=$1', [space.tenantId]), 0);
+        assert.equal(await h.count('module_instances', 'WHERE tenant_id=$1', [space.tenantId]), 0);
       }
     } finally {await holder.query('ROLLBACK'); holder.release(); await pending?.catch(() => {});}
   });

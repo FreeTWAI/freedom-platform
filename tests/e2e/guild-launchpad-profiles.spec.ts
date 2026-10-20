@@ -84,6 +84,7 @@ test('guild navigation separates working, resources and management without dupli
     if (profile.key === commerce || profile.key === supplier) {
       await expect(primary(page).getByRole('heading', {level: 2})).toHaveText(profile.title);
       await expect(primary(page).getByRole('button', {name: profile.key === supplier ? '開始供貨設定' : '建立我的商店', exact: true})).toBeEnabled();
+      await expect(primary(page).getByRole('button')).toHaveCount(1);
       await expect(page.locator('.my-work')).toBeHidden();
     } else {
       await expect(primary(page)).toHaveCount(0);
@@ -101,10 +102,10 @@ test('guild navigation separates working, resources and management without dupli
       WHERE community_id=$1 AND user_id=$2 AND guild_key=$3`, [DEMO_COMMUNITY, member.id, key]);
     await open(page, key);
     const current = key === talent ? page.locator('.guild-launchpad-content > section:visible') : primary(page);
-    // Under the cohort rule, supplier-guild interns may start supply setup; retail still needs a full commerce member.
-    if (key === supplier) {
-      await expect(current.getByRole('heading', {level: 2})).toHaveText('商品與供貨');
-      await expect(current.getByRole('button', {name: '開始供貨設定', exact: true})).toBeEnabled();
+    // Under the cohort rule, supplier and commerce guild interns may start their own supply and retail setup.
+    if (key === supplier || key === commerce) {
+      await expect(current.getByRole('heading', {level: 2})).toHaveText(key === supplier ? '商品與供貨' : '線上商店');
+      await expect(current.getByRole('button', {name: key === supplier ? '開始供貨設定' : '建立我的商店', exact: true})).toBeEnabled();
       await expect(current.getByRole('button')).toHaveCount(1);
       await expect(current).not.toContainText('你是這個公會的實習成員');
       continue;

@@ -451,13 +451,12 @@ test('the 200-product bound counts supplier-only items and concurrent creates ca
 });
 
 
-test('supplier interns create and operate their own catalog; first retail setup requires active full commerce membership', async () => {
+test('supplier interns retain their catalog; first retail setup accepts an active commerce intern', async () => {
   const s = await open('供應商實習會員', supplierGuild, undefined, 'intern');
   const retail = {name: '合成零售店', slug: 'cohort-shop', currency: 'TWD'};
-  assert.equal(ok(await send(s, '/setup', retail), 403).code, 'commerce_guild_full_member_required');
-  assert.equal(await h.count('commerce_shops'), 0);
-  await h.fullMember(s.owner.user.user_id, retailGuild, 'intern');
-  assert.equal(ok(await send(s, '/setup', retail), 403).code, 'commerce_guild_full_member_required');
+  assert.equal(ok(await send(s, '/setup', retail), 403).code, 'commerce_guild_member_required');
+  assert.equal(await h.count('commerce_shops', 'WHERE owner_id=$1', [s.owner.user.user_id]), 0);
+  assert.equal(await h.count('commerce_resource_tenants', 'WHERE tenant_id=$1 AND instance_id=$2', [s.tenantId, s.instanceId]), 0);
   ok(await send(s, '/supply-profile', catalog), 201);
   await createSupplyProduct(s);
   const stranger = (await h.person('另一位供應商')).session;
@@ -468,10 +467,95 @@ test('supplier interns create and operate their own catalog; first retail setup 
   ok(await send(s, '/supply-profile', catalog));
   await createSupplyProduct(s, {...product, title: '既有授權下繼續供貨'});
   const shop = await open('準備零售', supplierGuild, undefined, 'intern');
-  await h.fullMember(shop.owner.user.user_id, retailGuild);
-  ok(await send(shop, '/setup', retail), 201);
   await h.fullMember(shop.owner.user.user_id, retailGuild, 'intern');
+  ok(await send(shop, '/setup', retail), 201);
+  await h.pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE community_id=$1 AND user_id=$2 AND guild_key=$3", [DEMO_COMMUNITY, shop.owner.user.user_id, retailGuild]);
   ok(await send(shop, '/setup', retail));
+});
+
+test('commerce intern catalog, plan, launch and first retail setup use the same cohort', async () => {
+  const owner = (await h.person('電商實習店主')).session;
+  await h.fullMember(owner.user.user_id, retailGuild, 'intern');
+  const {tenantId, workspaceId} = await h.createTenant(owner, '實習零售事業');
+  for (const guild of [retailGuild, 'guild_ai_field']) {
+    const page = ok(await h.call('GET', `/applications?guild_key=${guild}`, owner, undefined, {}, app));
+    assert.deepEqual(page.items.find((item: {application_key: string}) => item.application_key === 'hosted-store').eligibility,
+      {can_launch: true, required_guild_tier: 'intern', reason_codes: [], tenant_action: 'select', policy_revision: '1'});
+  }
+  const body = h.planBody(retailGuild, workspaceId, 'hosted-store', 'hosted-store@1.0.0');
+  const planned = ok(await command(`/tenants/${tenantId}/application-launch-plans`, owner, body), 201);
+  const launched = await command(`/tenants/${tenantId}/application-installations`, owner,
+    {plan_id: planned.plan_id, expected_plan_version: planned.version, configuration_digest: planned.configuration_digest});
+  assert.ok([200, 202].includes(launched.status), JSON.stringify(launched.data));
+  assert.equal(launched.data.state, 'succeeded');
+  const instanceId = (await h.pool.query("SELECT instance_id FROM module_instances WHERE tenant_id=$1 AND module_key='storefront'", [tenantId])).rows[0].instance_id;
+  const s = {owner, tenantId, instanceId, root: `/tenants/${tenantId}/storefronts/${instanceId}`};
+  ok(await send(s, '/setup', {name: '實習商店', slug: 'intern-retail', currency: 'TWD'}), 201);
+  assert.deepEqual((await h.pool.query(`SELECT state,member_tier FROM positioning_profession_memberships
+    WHERE community_id=$1 AND user_id=$2 AND guild_key=$3`, [DEMO_COMMUNITY, owner.user.user_id, retailGuild])).rows,
+  [{state: 'active', member_tier: 'intern'}]);
+  assert.equal(await h.count('commerce_storefront_profiles', 'WHERE tenant_id=$1 AND instance_id=$2', [tenantId, instanceId]), 1);
+  const supply = await open('電商實習供貨目錄', retailGuild, undefined, 'intern');
+  assert.equal(ok(await send(supply, '/supply-profile', catalog), 201).created, true);
+  assert.equal(ok(await get(supply, '/supply-profile')).retail_enabled, false);
+});
+
+for (const scenario of ['left', 'other-guild-intern', 'other-guild-full', 'supplier-intern', 'other-community', 'other-user'] as const) {
+  test(`retail catalog, plan and first setup reject ${scenario} without partial rows`, async () => {
+    const s = await open('尚未設定的實習事業', retailGuild, undefined, 'intern');
+    const userId = s.owner.user.user_id;
+    await h.pool.query('DELETE FROM positioning_profession_memberships WHERE community_id=$1 AND user_id=$2 AND guild_key=$3', [DEMO_COMMUNITY, userId, retailGuild]);
+    if (scenario === 'left') {
+      // The membership state constraint permits active and left; left is its only inactive state.
+      await h.fullMember(userId, retailGuild, 'intern');
+      await h.pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE community_id=$1 AND user_id=$2 AND guild_key=$3", [DEMO_COMMUNITY, userId, retailGuild]);
+    } else if (scenario === 'other-guild-intern' || scenario === 'other-guild-full') {
+      await h.fullMember(userId, 'guild_ai_field', scenario === 'other-guild-intern' ? 'intern' : 'full');
+    } else if (scenario === 'supplier-intern') {
+      await h.fullMember(userId, supplierGuild, 'intern');
+    } else if (scenario === 'other-community') {
+      const community = randomUUID();
+      await h.pool.query("INSERT INTO communities(community_id,name) VALUES($1,'其他合成社群')", [community]);
+      await h.pool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+        VALUES($1,$2,$3,$4,'active','intern')`, [randomUUID(), community, userId, retailGuild]);
+    } else {
+      await h.fullMember((await h.person('另一位電商實習會員')).id, retailGuild, 'intern');
+    }
+    for (const guild of [retailGuild, 'guild_ai_field']) {
+      const page = ok(await h.call('GET', `/applications?guild_key=${guild}`, s.owner, undefined, {}, app));
+      assert.deepEqual(page.items.find((item: {application_key: string}) => item.application_key === 'hosted-store').eligibility,
+        {can_launch: false, required_guild_tier: 'intern', reason_codes: ['commerce_guild_member_required'], tenant_action: 'denied', policy_revision: '1'});
+    }
+    const workspaceId = (await h.pool.query('SELECT workspace_id FROM workspaces WHERE tenant_id=$1', [s.tenantId])).rows[0].workspace_id;
+    const planKey = randomUUID();
+    const plan = await command(`/tenants/${s.tenantId}/application-launch-plans`, s.owner, h.planBody(retailGuild, workspaceId, 'hosted-store', 'hosted-store@1.0.0'), undefined, planKey);
+    assert.equal(ok(plan, 403).code, 'commerce_guild_member_required');
+    const key = randomUUID();
+    assert.equal(ok(await send(s, '/setup', {name: '不可建立', slug: 'refused-retail', currency: 'TWD'}, undefined, key), 403).code, 'commerce_guild_member_required');
+    assert.equal(await h.count('commerce_storefront_profiles', 'WHERE tenant_id=$1 AND instance_id=$2', [s.tenantId, s.instanceId]), 0);
+    assert.equal(await h.count('commerce_shops', 'WHERE owner_id=$1', [userId]), 0);
+    assert.equal(await h.count('commerce_resource_tenants', 'WHERE tenant_id=$1 AND instance_id=$2', [s.tenantId, s.instanceId]), 0);
+    assert.equal(await h.count('scoped_command_receipts', 'WHERE idempotency_key=ANY($1::text[])', [[key, planKey]]), 0);
+  });
+}
+
+test('commerce interns owning stores cannot substitute another tenant, instance or launch plan', async () => {
+  const a = await open('實習店主 A', retailGuild, undefined, 'intern');
+  const b = await open('實習店主 B', retailGuild, undefined, 'intern');
+  ok(await send(a, '/setup', {name: '自己的店', slug: 'own-intern-shop', currency: 'TWD'}), 201);
+  const workspaceId = (await h.pool.query('SELECT workspace_id FROM workspaces WHERE tenant_id=$1', [b.tenantId])).rows[0].workspace_id;
+  const body = h.planBody(retailGuild, workspaceId, 'hosted-store', 'hosted-store@1.0.0');
+  assert.equal(ok(await command(`/tenants/${b.tenantId}/application-launch-plans`, a.owner, body), 404).code, 'tenant_not_found');
+  const plan = (await h.pool.query('SELECT plan_id,version::text,configuration_digest FROM module_launch_plans WHERE tenant_id=$1', [b.tenantId])).rows[0];
+  assert.equal(ok(await command(`/tenants/${b.tenantId}/application-installations`, a.owner,
+    {plan_id: plan.plan_id, expected_plan_version: plan.version, configuration_digest: {algorithm: 'sha256', value: plan.configuration_digest}}), 404).code, 'tenant_not_found');
+  for (const root of [b.root, `/tenants/${a.tenantId}/storefronts/${b.instanceId}`, `/tenants/${b.tenantId}/storefronts/${a.instanceId}`]) {
+    const target = {...a, root};
+    assert.equal(ok(await get(target, ''), 404).code, 'not_found');
+    assert.equal(ok(await send(target, '/setup', {name: '不可代建', slug: 'foreign-intern-shop', currency: 'TWD'}), 404).code, 'not_found');
+  }
+  assert.equal(await h.count('commerce_storefront_profiles', 'WHERE tenant_id=$1 AND instance_id=$2', [b.tenantId, b.instanceId]), 0);
+  ok(await get(a, ''));
 });
 
 test('first supply setup rechecks membership after an instance lock wait and leaves no partial profile', {timeout: 20000}, async () => {

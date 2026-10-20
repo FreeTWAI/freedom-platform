@@ -6,7 +6,7 @@ export const COMMERCE_GUILD = 'guild_commerce_sales';
 export type GuildMembershipRule = {
   guildKey: string;
   minimumTier: 'intern' | 'full';
-  reason: 'guild_member_required' | 'guild_full_member_required' | 'commerce_guild_full_member_required';
+  reason: 'guild_member_required' | 'guild_full_member_required' | 'commerce_guild_member_required';
   detail: string;
 };
 export const supplierMembership: GuildMembershipRule = {
@@ -14,15 +14,15 @@ export const supplierMembership: GuildMembershipRule = {
   detail: '需要商品品質與供應公會的有效成員身分。',
 };
 export const commerceMembership: GuildMembershipRule = {
-  guildKey: COMMERCE_GUILD, minimumTier: 'full', reason: 'commerce_guild_full_member_required',
-  detail: '建立零售商店需要電商公會的正式成員身分。',
+  guildKey: COMMERCE_GUILD, minimumTier: 'intern', reason: 'commerce_guild_member_required',
+  detail: '建立零售商店需要電商公會的有效成員身分，實習成員也可以開始。',
 };
 
 /** Application eligibility does not grant access to an existing business. */
 export function launchMembershipRule(applicationKey: string, guildKey: string): GuildMembershipRule {
   if (applicationKey === 'hosted-store') {
     if (guildKey === SUPPLIER_GUILD) return supplierMembership;
-    return guildKey === COMMERCE_GUILD ? {...commerceMembership, reason: 'guild_full_member_required'} : commerceMembership;
+    return commerceMembership;
   }
   return {guildKey, minimumTier: 'full', reason: 'guild_full_member_required', detail: '需要這個公會的正式會員身分。'};
 }
