@@ -91,6 +91,91 @@
           "minimum": 0,
           "maximum": 1000000
         },
+        "current_offer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "terms": {
+                  "type": "object",
+                  "properties": {
+                    "cost_minor": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100000000
+                    },
+                    "shipping_minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000000
+                    },
+                    "shipping_terms": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000,
+                      "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                    },
+                    "return_terms": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000,
+                      "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "TWD",
+                        "USD"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "cost_minor",
+                    "shipping_minor",
+                    "shipping_terms",
+                    "return_terms",
+                    "title",
+                    "description",
+                    "currency"
+                  ],
+                  "additionalProperties": false
+                },
+                "supplier_name": {
+                  "type": "string"
+                },
+                "published_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "terms_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "terms",
+                "supplier_name",
+                "published_at",
+                "terms_sha256"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "version": {
           "type": "string",
           "maxLength": 19,

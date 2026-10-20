@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {OpaqueId, Version} from './primitives.js';
-import {CurrencySchema} from './storefront.js';
+import {CurrencySchema, ProductInputSchema} from './storefront.js';
 
 const money = z.number().int().min(0).max(100000000);
 const terms = z.string().regex(/^[^\u0000-\u0009\u000b-\u001f\u007f]*$/).trim().min(1).max(2000);
@@ -13,6 +13,8 @@ export const SupplyTermsSchema = SupplyTermsInputSchema.extend({
   stock: z.number().int().min(0).max(1000000),
   reserved: z.number().int().min(0).max(1000000),
   available: z.number().int().min(0).max(1000000),
+  current_offer: z.object({terms: SupplyTermsInputSchema.extend({title: ProductInputSchema.shape.title, description: z.string().max(4000), currency: CurrencySchema}).strict(),
+    supplier_name: z.string(), published_at: z.string().datetime(), terms_sha256: z.string().regex(/^[a-f0-9]{64}$/)}).strict().nullable().optional(),
   version: Version, transaction_state: z.literal('not_enabled'),
 }).strict();
 export type SupplyTerms = z.infer<typeof SupplyTermsSchema>;
