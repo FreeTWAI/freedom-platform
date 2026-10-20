@@ -18504,8 +18504,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
-      "bytes": 2242,
-      "sha256": "82d8990d812b45bcdb222c9fee9b2b8508f6ddf0c1acf37e5e39b780f7303234"
+      "bytes": 2303,
+      "sha256": "ca3f6e807b621812a851375d9c238f148427c2ad65a46095f7c5b81310b8f108"
     },
     {
       "path": "modules/agent-commerce/storefront/pages.ts",

@@ -19,6 +19,7 @@
     "migrations/175_storefront_appearance.sql",
     "tests/helpers/storefront-appearance.ts",
     "tests/runtime/storefront-appearance-sql.test.ts",
+    "tests/runtime/storefront-appearance-migration.test.ts",
     "contracts/guild-launchpad/v1/storefront-appearance.ts",
     "contracts/guild-launchpad/v1/storefront-appearance.schema.json",
     "apps/platform-api/src/routes/hosted-store-appearance.ts",
