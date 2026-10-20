@@ -19284,8 +19284,8 @@
     },
     {
       "path": "modules/community/community-author-skills.ts",
-      "bytes": 70311,
-      "sha256": "74c2118f9ae39c683c45cebcbe3ffa18a9266099d6cc332bcc05d13b94200b04"
+      "bytes": 70338,
+      "sha256": "a8039f9627c5e0fb87a440eb1554e2679b4fb6526e617812b7a5e63bf36dc2ca"
     },
     {
       "path": "modules/community/content-relations.ts",
@@ -25339,8 +25339,8 @@
     },
     {
       "path": "tests/runtime/skill-book-guides.test.ts",
-      "bytes": 5844,
-      "sha256": "14e2ea06ed81360b83ba50159000f3647e74df9befe55652c1641a474c6095cb"
+      "bytes": 6684,
+      "sha256": "f34b298435a04b34d2c16286fde76e4839356602af6346d8d1d018dc6741baa1"
     },
     {
       "path": "tests/runtime/skill-book-star-gate.test.ts",
