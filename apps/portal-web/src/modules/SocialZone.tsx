@@ -188,7 +188,9 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       let next: string | null | undefined;
       let canHideNow = false;
       for (let pages = 0; pages < 10 && (pages === 0 || (next && kept.length < loadedCount)); pages++) {
+        // The same query the feed was loaded with, including the active hashtag, so a refresh never swaps the list.
         const query = new URLSearchParams({platform: 'youtube'});
+        if (tag) query.set('tag', tag);
         if (next) query.set('cursor', next);
         const page = await client.get<Page>(`/social-posts?${query}`);
         if (sequence !== loadSequence.current || generation !== refreshSequence.current) return null;
@@ -198,7 +200,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       setItems(kept); setCursor(next ?? null); setCanHide(canHideNow);
       return kept.map(post => post.post_id);
     } catch { return null; }
-  }, [client]);
+  }, [client, tag]);
   useEffect(()=>{
     const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;setDirectPost(next);}};
     window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);

@@ -175,9 +175,15 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
   return <section ref={dialog} className={`short-video-feed${full ? ' is-full' : ''}`} aria-label="短影音" {...(full ? {role: 'dialog', 'aria-modal': true} : {})}>
     {full && <button ref={closeFull} type="button" className="short-video-close" aria-label="離開全螢幕" onClick={leaveFull}>✕</button>}
     <div ref={scroller} className="short-video-scroller" tabIndex={0} onScroll={follow} onKeyDown={event => {
+      // Shortcuts belong to the feed itself and its tap surface. Keys pressed on the action buttons or inside the share /
+      // options dialogs keep their native meaning (Space activates a button; it must not pause the video).
+      const target = event.target as HTMLElement;
+      if (target.closest('dialog')) return;
+      const own = target === event.currentTarget || target.classList.contains('short-video-tap');
+      if (!own) return;
       if (event.key === 'ArrowDown') { event.preventDefault(); go(active + 1); }
       if (event.key === 'ArrowUp') { event.preventDefault(); go(active - 1); }
-      if (event.key === ' ') { event.preventDefault(); toggle(); }
+      if (event.key === ' ' && target === event.currentTarget) { event.preventDefault(); toggle(); }
     }}>
       {videos.map((post, index) => {
         const embed = Math.abs(index - active) <= 1 ? shortVideoEmbedUrl(post.url) : null;

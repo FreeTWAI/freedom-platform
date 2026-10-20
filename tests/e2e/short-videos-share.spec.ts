@@ -81,6 +81,80 @@ test.describe('sharing around Short, feature ON', () => {
     }
   });
 
+  test('keys pressed on the action buttons and inside the share dialog keep their meaning; Space on the feed itself still pauses', async ({page, e2eAuthPool}) => {
+    await prepare(page);
+    const stamp = Date.now();
+    const ids = await seed(e2eAuthPool, [{title: `鍵盤短影音 ${stamp}`, url: `https://www.youtube.com/shorts/${SHORT}`, author: 'reviewer'}]);
+    try {
+      await page.reload();
+      await navigate(page, '社群分享');
+      await selectSocialFeed(page, 'Short');
+      const feed = page.getByRole('region', {name: '短影音', exact: true});
+      await expect(feed.getByRole('button', {name: '暫停', exact: true})).toBeVisible();
+      // Space activates the focused like button; the video keeps playing.
+      const like = feed.getByRole('button', {name: '按讚 · 0', exact: true});
+      await like.focus();
+      await page.keyboard.press('Space');
+      await expect(feed.getByRole('button', {name: '收回讚 · 1', exact: true})).toHaveAttribute('aria-pressed', 'true');
+      await expect(feed.getByRole('button', {name: '暫停', exact: true})).toBeVisible();
+      // Inside the share dialog, Space closes it with its own button and does not reach the player.
+      await feed.getByRole('button', {name: '分享貼文連結', exact: true}).click();
+      const share = page.getByRole('dialog', {name: '分享貼文連結', exact: true});
+      await expect(share).toBeVisible();
+      await share.getByRole('button', {name: '關閉分享', exact: true}).focus();
+      await page.keyboard.press('Space');
+      await expect(share).toHaveCount(0);
+      await expect(feed.getByRole('button', {name: '暫停', exact: true})).toBeVisible();
+      // On the feed itself the shortcut still works.
+      await feed.locator('.short-video-scroller').focus();
+      await page.keyboard.press('Space');
+      await expect(feed.getByRole('button', {name: '繼續播放', exact: true})).toBeVisible();
+      await page.keyboard.press('Space');
+      await expect(feed.getByRole('button', {name: '暫停', exact: true})).toBeVisible();
+    } finally { await cleanup(e2eAuthPool, ids); }
+  });
+
+  test('returning to the tab refreshes the same hashtag-filtered list, across pages, and never swaps it for all YouTube posts', async ({page, e2eAuthPool}) => {
+    test.setTimeout(90000);
+    await prepare(page);
+    const stamp = Date.now();
+    const maker = (await e2eAuthPool.query('SELECT community_id, user_id FROM users WHERE email=$1', ['maker@local.test'])).rows[0];
+    const mark = `標籤${stamp}`;
+    // 27 tagged Shorts (more than one page) and one untagged Short that must never appear while the tag is active.
+    const tagged = (await e2eAuthPool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,url,platform,title,note,tags,state,created_at)
+      SELECT $1,$2,'link','https://www.youtube.com/shorts/'||substr(md5(n::text),1,11),'youtube','標籤影片 '||n||' ${stamp}','#'||$3,ARRAY[lower($3)],'active',now()-n*interval '1 second'
+      FROM generate_series(1,27) n RETURNING post_id`, [maker.community_id, maker.user_id, mark])).rows.map(row => row.post_id as string);
+    const plain = (await e2eAuthPool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,url,platform,title,state,created_at)
+      VALUES($1,$2,'link','https://www.youtube.com/shorts/zzzzzzzzzzz',$4,$3,'active',now()) RETURNING post_id`, [maker.community_id, maker.user_id, `未標籤影片 ${stamp}`, 'youtube'])).rows[0].post_id as string;
+    const listRequests: string[] = [];
+    page.on('request', request => { const url = new URL(request.url()); if (url.pathname === '/api/v1/social-posts' && request.method() === 'GET') listRequests.push(url.search); });
+    try {
+      await page.reload();
+      await navigate(page, '社群分享');
+      await selectSocialFeed(page, 'YouTube');
+      await page.locator('article.social-card').filter({hasText: `標籤影片 1 ${stamp}`}).getByRole('button', {name: `#${mark.toLowerCase()}`, exact: true}).click();
+      await expect(page.locator('.social-active-tag')).toContainText(`#${mark.toLowerCase()}`);
+      await selectSocialFeed(page, 'Short');
+      const feed = page.getByRole('region', {name: '短影音', exact: true});
+      const slides = feed.locator('article.short-video-slide');
+      await expect(slides.first()).toBeVisible();
+      await expect(slides.filter({hasText: `未標籤影片 ${stamp}`})).toHaveCount(0);
+      // Reach the end of the first page so the next page loads (with the tag).
+      await feed.locator('.short-video-scroller').evaluate(element => element.scrollTo({top: element.clientHeight * 24, behavior: 'instant'}));
+      await expect(slides).toHaveCount(27);
+      // Return to the tab: every refresh request carries the tag, and the list is still the tagged one.
+      listRequests.length = 0;
+      await page.evaluate(() => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => true}); document.dispatchEvent(new Event('visibilitychange')); });
+      await page.evaluate(() => { delete (document as unknown as {hidden?: boolean}).hidden; document.dispatchEvent(new Event('visibilitychange')); });
+      await expect.poll(() => listRequests.length).toBeGreaterThanOrEqual(2);
+      await expect(feed.getByRole('button', {name: '暫停', exact: true})).toBeVisible();
+      for (const search of listRequests) expect(new URLSearchParams(search).get('tag')).toBe(mark.toLowerCase());
+      await expect(slides).toHaveCount(27);
+      await expect(slides.filter({hasText: `未標籤影片 ${stamp}`})).toHaveCount(0);
+      await expect(page.locator('.social-active-tag')).toContainText(`#${mark.toLowerCase()}`);
+    } finally { await cleanup(e2eAuthPool, [...tagged, plain]); }
+  });
+
   test('the home timeline offers the same Short feed', async ({page, e2eAuthPool}) => {
     await prepare(page);
     const stamp = Date.now();
