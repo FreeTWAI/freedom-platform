@@ -289,4 +289,10 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('model_broker_authorizations','credential_ingest_authorizations','execution_machine_broker_authorizations') AND c.relkind='r'
 \gexec
 -- END MODEL BROKER AUTHORIZATION EXCLUSIONS
+-- BEGIN OFFER PHOTO HISTORY GRANTS
+SELECT format('REVOKE UPDATE, DELETE ON TABLE %s FROM %I; GRANT SELECT, INSERT ON TABLE %s TO %I;',c.oid::regclass,:'runtime',c.oid::regclass,:'runtime')
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relname='commerce_hosted_offer_photos' AND c.relkind='r'
+\gexec
+-- END OFFER PHOTO HISTORY GRANTS
 COMMIT;

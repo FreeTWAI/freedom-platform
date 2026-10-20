@@ -581,7 +581,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
     'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
-    'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets',
+    'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
     'tenant_capacity_policies', 'tenant_module_permissions', 'work_items', 'scoped_command_receipts', 'scoped_transition_journal', 'scoped_outbox',
     'supply_materials', 'supply_material_versions', 'supply_material_grants',
   ].sort(), 'RLS discovery must match the merged schema; new tables need A/B fixture coverage or an explicit uncovered reason');
@@ -635,6 +635,13 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     }
   } finally {
     await owner.query("UPDATE domain_media_storage_policy SET persistence_allowed=false WHERE purpose='storefront.product-photo'");
+  }
+  for(let index=0;index<hosted.length;index++) {
+    const data=index===0?A:B,store=hosted[index];
+    await owner.query(`INSERT INTO commerce_hosted_offer_photos(offer_id,seq,tenant_id,instance_id,item_id,scope_id,asset_id,representation_id,policy_revision,shared_by_principal_id)
+      SELECT o.offer_id,1,o.tenant_id,o.instance_id,o.item_id,t.scope_id,t.asset_id,t.representation_id,t.policy_revision,$2
+      FROM commerce_hosted_supply_offers o JOIN commerce_product_photo_targets t ON t.tenant_id=o.tenant_id AND t.instance_id=o.instance_id AND t.product_id=o.item_id
+      WHERE o.instance_id=$1`,[store.instanceId,data.principalId]);
   }
   // A/B distribution rows retain an own ready Asset with foreign material
   // provenance. They exercise retargeting with every FK and trigger enabled.
@@ -724,6 +731,22 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     if (!aRow || !bRow) {
       assert.ok(DOCUMENTED_UNCOVERED_RLS_TABLES[table], `${table}: missing A/B fixture without documented reason`);
       record.push({ table, mechanism: 'documented_exception', update_covered: false, outcome: 'uncovered', reason: DOCUMENTED_UNCOVERED_RLS_TABLES[table] });
+      continue;
+    }
+    if (table === 'commerce_hosted_offer_photos') {
+      await isolatedTransaction(runtime,async q=>{
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted}`)).rowCount,0);
+        await bindPrincipalContext(q,A.principalId);await bindTenantContext(q,{tenantId:A.tenantId,tenantScopeId:A.scopeId});
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted} WHERE offer_id=$1`,[aRow.offer_id])).rowCount,1);
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted} WHERE offer_id=$1`,[bRow.offer_id])).rowCount,1,'photo history inherits the same-community offer audience');
+        assert.equal((await q.query(`UPDATE ${quoted} SET tenant_id=$1 WHERE offer_id=$2`,[bKey,aRow.offer_id])).rowCount,0,'append-only history has no UPDATE policy');
+        await q.query('SAVEPOINT foreign_photo');
+        await assert.rejects(q.query(`INSERT INTO ${quoted}(offer_id,seq,tenant_id,instance_id,item_id,shared_by_principal_id) VALUES($1,2,$2,$3,$4,$5)`,[bRow.offer_id,bKey,bRow.instance_id,bRow.item_id,A.principalId]),(e:unknown)=>['42501','P0002'].includes((e as {code:string}).code));
+        await q.query('ROLLBACK TO SAVEPOINT foreign_photo');
+      });
+      assert.deepEqual((await owner.query(`SELECT * FROM ${quoted} WHERE offer_id=$1`,[aRow.offer_id])).rows[0],aRow);
+      assert.deepEqual((await owner.query(`SELECT * FROM ${quoted} WHERE offer_id=$1`,[bRow.offer_id])).rows[0],bRow);
+      record.push({table,mechanism:'policy_assertion',update_covered:false,outcome:'append-only UPDATE hidden; foreign INSERT rejected; same-community offer audience retained',select:1,own_select:1,policies:['commerce_hosted_offer_photos_insert','commerce_hosted_offer_photos_read']});
       continue;
     }
     if (table === 'commerce_hosted_supply_offers') {

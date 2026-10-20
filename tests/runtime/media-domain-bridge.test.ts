@@ -61,6 +61,6 @@ test('canonical installed resolver still rejects an intent pinned to a changed d
 
 test('distribution photos reuse the product-photo policy and do not add a weaker purpose',async()=>{
  const policy=(await pool.query("SELECT purpose FROM domain_media_storage_policy WHERE purpose LIKE '%distribution%'")).rows;assert.deepEqual(policy,[]);
- const tables=(await pool.query("SELECT tgrelid::regclass::text AS table_name FROM pg_trigger WHERE tgname='reject_fenced_asset_reference' AND tgrelid IN ('commerce_distribution_photo_copies'::regclass,'commerce_distribution_photo_targets'::regclass) ORDER BY table_name")).rows;
- assert.deepEqual(tables.map(row=>row.table_name),['commerce_distribution_photo_copies','commerce_distribution_photo_targets']);
+ const tables=(await pool.query("SELECT tgrelid::regclass::text AS table_name FROM pg_trigger WHERE tgname='reject_fenced_asset_reference' AND tgrelid IN ('commerce_distribution_photo_copies'::regclass,'commerce_distribution_photo_targets'::regclass,'commerce_hosted_offer_photos'::regclass) ORDER BY table_name")).rows;
+ assert.deepEqual(tables.map(row=>row.table_name),['commerce_distribution_photo_copies','commerce_distribution_photo_targets','commerce_hosted_offer_photos']);
 });

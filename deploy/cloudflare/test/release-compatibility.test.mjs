@@ -39,6 +39,29 @@ function prefix(value, last) {
   return { ...value, ledger: rows, ledger_digest: compatibilityLedgerDigest(rows) };
 }
 
+test('schema173 recognizes offer-photo history without reusing schema172 approvals',()=>{
+  const f=fixtureAt(173),old=prefix(f.scan,172);
+  assert.equal(f.scan.ledger.at(-1).name,'173_supply_offer_photos.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(173);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(173);renamed.scan.ledger.at(-1).name='173_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+});
+test('retained offer-photo history preserves schema173 and its reader floor after the flag is off',()=>{
+  const f=fixtureAt(173),shape='media.supply-offer-photo.asset.v1';
+  f.host.observation.written_shapes=[shape];
+  assert(evaluate(f).issues.some(i=>i.code==='release_capability_missing'&&i.capability===shape));
+  f.host.release_records[0].capabilities.push(shape,'media.server-policy.v1');
+  assert.equal(evaluate(f).status,'compatible');
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  const old=prefix(f.scan,172);f.host.observation.schema_ledger=old.ledger;f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
 test('persisted historical avatar representation fences every old reader even after the feature is disabled',()=>{
  const f=fixture(),old={source_sha:'c'.repeat(40),artifact_sha256:'d'.repeat(64)};
  f.host.observation.written_shapes=['avatar.legacy-bytes.v1'];
