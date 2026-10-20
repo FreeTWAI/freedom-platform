@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
 import {after, before, test} from 'node:test';
+import {Pool} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {checkoutHarness, ports, type CheckoutHarness} from './hosted-checkout-harness.js';
 
@@ -66,6 +67,21 @@ test('HTTP identity fence precedes every effect; original member can explicitly 
   assert.equal(retried.response.status, 200);
   assert.equal(retried.data.order.order_ref, placed.data.order.order_ref);
   assert.equal((await x.h.pool.query("SELECT count(*)::int n FROM commerce_orders WHERE order_profile='hosted_checkout'")).rows[0].n, 1);
+  // Even a single available runtime connection must serve concurrent fenced
+  // requests. A nested budget transaction would exhaust this pool.
+  const single = new Pool({...x.runtime.options, max: 1, connectionTimeoutMillis: 2000});
+  try {
+    const narrow = createApp(single, x.h.origin, 'local', {guildLaunchpadEnabled: true, commerceSettings: {checkoutEnabled: true, quarantine: false, providerProfiles: []}, commercePorts: ports});
+    const responses = await Promise.all(Array.from({length: 3}, () => narrow.request(x.h.origin + root + '/cart-quotes', {method: 'POST', headers: {Origin: x.h.origin, 'Content-Type': 'application/json', Cookie: renewed.cookie, 'X-Commerce-Buyer': aIdentity}, body: JSON.stringify(quote)})));
+    for (const response of responses) assert.equal(response.status, 200, await response.text());
+    const beforeRejected = await persisted();
+    const rejected = await narrow.request(x.h.origin + root + '/checkouts', {method: 'POST', headers: {Origin: x.h.origin, 'Content-Type': 'application/json', Cookie: renewed.cookie, 'X-Commerce-Buyer': aIdentity, 'Idempotency-Key': randomUUID()}, body: JSON.stringify({...x.input(s.product.sku, 1), publication_revision: '999'})});
+    assert.equal(rejected.status, 409, await rejected.text());
+    const afterRejected = await persisted();
+    assert.notEqual(afterRejected.auth_rate_limits, beforeRejected.auth_rate_limits, 'rejected commands retain accepted attempt charges');
+    delete beforeRejected.auth_rate_limits; delete afterRejected.auth_rate_limits;
+    assert.deepEqual(afterRejected, beforeRejected, 'rejected effects and principal mapping roll back to the post-budget savepoint');
+  } finally {await single.end();}
   const legacy = await request('/cart-quotes', quote);
   assert.equal(legacy.response.status, 200, 'omitting the optional fence preserves the existing public API');
   const off = createApp(x.runtime, x.h.origin, 'local', {guildLaunchpadEnabled: true, commerceSettings: {checkoutEnabled: false, quarantine: false, providerProfiles: []}});

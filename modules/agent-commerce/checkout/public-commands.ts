@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives.js';
 import * as wire from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
-import {member,currentMember,buyerIdentity} from './buyer-identity.js';
+import {member,currentMember,buyerIdentity,fencedBuyerTransaction} from './buyer-identity.js';
 import {Problem,requireCondition} from '../../../packages/shared/problem.js';
 import {resolvePublicStorePage} from '../hosted/public.js';
 import {lockStore} from './authority.js';
@@ -12,7 +12,7 @@ import {cancelUnpaidOrder,placeCheckoutOrder} from './orders.js';
 import {cartQuote} from './cart-quote.js';
 import {publicOrder} from './public-order.js';
 import {liveDevice,ensureDevice,grantDevice,hasDeviceGrant,assertDeviceLive,assertAccessLinkLive,redeemAccessLink,forgetDevice,shopCookie,orderAccessNotFound} from './access.js';
-import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,commerceRateLimitInTransaction,lockOpenOrderBudgets,enforceOpenOrderLimits} from './limits.js';
+import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,chargeCommerceBudgetsInTransaction,commerceRateLimitInTransaction,lockOpenOrderBudgets,enforceOpenOrderLimits} from './limits.js';
 import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CommerceEmailOutbox} from '../operations/notifications/email-port.js';
 export interface HostedCheckoutOptions extends CheckoutPorts {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
@@ -35,12 +35,16 @@ export async function quotePublicCart(pool:Pool,slug:string,input:wire.CartQuote
 export async function quotePublicCartWithIdentity(pool:Pool,slug:string,input:wire.CartQuoteInput,access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
   if(input.delivery!==undefined)validateBuyerJSON(input.delivery,8192);
-  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'cartNetwork',store:'cartStore',slug});
-  if(access.expectedBuyer===undefined)await charge();
+  const charges={network:'cartNetwork' as const,store:'cartStore' as const,slug};
+  if(access.expectedBuyer!==undefined)return fencedBuyerTransaction(pool,access.sessionToken,access.expectedBuyer,false,
+    q=>chargeCommerceBudgetsInTransaction(q,access.network,charges),async(q,identity)=>{
+      const store=await resolve(q,slug,options,true);
+      return {value:await cartQuote(q,store,input,options,Boolean(identity?.offlineEligible)),buyerIdentity:buyerIdentity(identity)};
+    });
+  await chargeCommerceBudgets(pool,access.network,charges);
   return isolatedTransaction(pool,async q=>{
     await q.query('SET TRANSACTION READ ONLY');
-    const store=await resolve(q,slug,options,true);
-    const identity=await member(q,access.sessionToken,false,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge);
+    const store=await resolve(q,slug,options,true),identity=await member(q,access.sessionToken);
     return {value:await cartQuote(q,store,input,options,Boolean(identity?.offlineEligible)),buyerIdentity:buyerIdentity(identity)};
   });
 }
@@ -63,10 +67,9 @@ export async function publicPurchaseState(pool:Pool,slug:string,options:HostedCh
 
 export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutInput,key:string,access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
-  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'checkoutNetwork',store:'checkoutStore',slug});
-  if(access.expectedBuyer===undefined)await charge();
-  return isolatedTransaction(pool,async q=>{
-    const identity=await member(q,access.sessionToken,true,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge),store=await resolve(q,slug,options,true);
+  const charges={network:'checkoutNetwork' as const,store:'checkoutStore' as const,slug};
+  const run=async(q:PoolClient,identity:Awaited<ReturnType<typeof member>>)=>{
+    const store=await resolve(q,slug,options,true);
     // Serialize the replay lookup with the core's existing lifecycle/community
     // lock order, so concurrent requests return exactly one 201.
     await lockStore(q,store,input.lines.map(l=>l.sku));
@@ -81,14 +84,17 @@ export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutI
     await grantDevice(q,ensured.device.device_id,{tenant_id:store.tenantId,instance_id:store.instanceId,checkout_id:saved.checkout_id});
     await assertDeviceLive(q,ensured.device.device_id);await currentMember(q,identity);
     return {created:!replay,cookie:ensured.cookie,value:wire.CheckoutResponseSchema.parse({checkout_ref:saved.checkout_id,terms:publicCheckoutTerms(saved.terms),terms_sha256:saved.terms_sha256,expires_at:saved.expires_at.toISOString()})};
-  });
+  };
+  if(access.expectedBuyer!==undefined)return fencedBuyerTransaction(pool,access.sessionToken,access.expectedBuyer,true,
+    q=>chargeCommerceBudgetsInTransaction(q,access.network,charges),run);
+  await chargeCommerceBudgets(pool,access.network,charges);
+  return isolatedTransaction(pool,async q=>run(q,await member(q,access.sessionToken,true)));
 }
 export async function placePublicOrder(pool:Pool,slug:string,checkoutRef:string,input:{terms_sha256:string;client_order_id:string;payment_method?:'immediate_card'|'bank_transfer'|'cash_on_meetup'},access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
-  const charge=()=>chargeCommerceBudgets(pool,access.network,{network:'placementNetwork',store:'placementStore',slug});
-  if(access.expectedBuyer===undefined)await charge();
-  return isolatedTransaction(pool,async q=>{
-    const identity=await member(q,access.sessionToken,true,access.expectedBuyer,access.expectedBuyer===undefined?undefined:charge),store=await resolve(q,slug,options,true,true);
+  const charges={network:'placementNetwork' as const,store:'placementStore' as const,slug};
+  const run=async(q:PoolClient,identity:Awaited<ReturnType<typeof member>>)=>{
+    const store=await resolve(q,slug,options,true,true);
     if(!OpaqueId.safeParse(checkoutRef).success)orderAccessNotFound();
     const device=await liveDevice(q,access.deviceToken,true);
     if(!device||!await hasDeviceGrant(q,device.device_id,checkoutRef))orderAccessNotFound();
@@ -114,7 +120,11 @@ export async function placePublicOrder(pool:Pool,slug:string,checkoutRef:string,
     if(!await hasDeviceGrant(q,device!.device_id,checkoutRef))orderAccessNotFound();
     await currentMember(q,identity);
     return {created:!replay,value:wire.PlaceOrderResponseSchema.parse({order:await publicOrder(q,store,saved.order_id,options.payment),payment})};
-  });
+  };
+  if(access.expectedBuyer!==undefined)return fencedBuyerTransaction(pool,access.sessionToken,access.expectedBuyer,true,
+    q=>chargeCommerceBudgetsInTransaction(q,access.network,charges),run);
+  await chargeCommerceBudgets(pool,access.network,charges);
+  return isolatedTransaction(pool,async q=>run(q,await member(q,access.sessionToken,true)));
 }
 export async function cancelPublicOrder(pool:Pool,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions){
   quarantineGate(options);

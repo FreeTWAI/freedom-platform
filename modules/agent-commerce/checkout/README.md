@@ -16,6 +16,11 @@ fence, never authentication: the actual active session remains authoritative.
 `buyer-identity.ts` compares it inside the commerce transaction before principal
 mapping, rate-budget charging or domain effects. A mismatch returns 409
 `checkout_identity_changed` with 「登入身分已變更，請重新確認」 and writes nothing.
+Fenced requests use one connection: after equality, accepted attempt budgets
+precede a savepoint. A rejected command rolls back its effects to that savepoint
+and commits the budgets, preserving denial accounting without nesting pool
+acquisitions. Rejected budgets roll back together. Quote computation remains
+read-only; only its existing attempt budgets write in this transaction.
 Successful quotes echo the actual identity in the same header. Existing clients
 without the header keep their existing command and budget behaviour. The fence
 does not change browser order-access tokens, tenant binding or RLS.

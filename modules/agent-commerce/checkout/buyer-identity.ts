@@ -1,4 +1,5 @@
-import type {PoolClient} from 'pg';
+import type {Pool,PoolClient} from 'pg';
+import {isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
 import type {CheckoutBuyerIdentity} from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {mapPersonPrincipal} from '../../../packages/resource-scopes/index.js';
 import {Problem} from '../../../packages/shared/problem.js';
@@ -33,4 +34,30 @@ export async function member(q:PoolClient,token:string|undefined,create=false,ex
 }
 export async function currentMember(q:PoolClient,identity:Awaited<ReturnType<typeof member>>) {
   if(identity&&(await q.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[identity.sessionHash,identity.userId])).rowCount!==1)orderAccessNotFound();
+}
+
+/** One connection avoids pool starvation under concurrent fenced requests.
+ * Commit accepted attempt budgets even when the command is rejected, as the
+ * legacy independent budget transaction does. Only command effects roll back.
+ * Identity mismatches and rejected budgets occur before the savepoint and
+ * roll back the entire transaction. Session locks precede the savepoint. */
+export async function fencedBuyerTransaction<T>(pool:Pool,token:string|undefined,expected:CheckoutBuyerIdentity,create:boolean,
+  charge:(q:PoolClient)=>Promise<unknown>,run:(q:PoolClient,identity:Awaited<ReturnType<typeof member>>)=>Promise<T>):Promise<T> {
+  const result=await isolatedTransaction(pool,async q=>{
+    let charged=false;
+    try {
+      const identity=await member(q,token,create,expected,async()=>{
+        await charge(q);
+        await q.query('SAVEPOINT checkout_buyer_effects');
+        charged=true;
+      });
+      return {ok:true as const,value:await run(q,identity)};
+    } catch(error) {
+      if(!charged)throw error;
+      await q.query('ROLLBACK TO SAVEPOINT checkout_buyer_effects');
+      return {ok:false as const,error};
+    }
+  });
+  if(!result.ok)throw result.error;
+  return result.value;
 }
