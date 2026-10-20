@@ -14394,8 +14394,8 @@
     },
     {
       "path": "docs/development/runtime-ci-postgres.md",
-      "bytes": 20543,
-      "sha256": "3e103787f2d780625c78d501d11602a044cd05f468de5b0ba477619b0066bd5e"
+      "bytes": 21534,
+      "sha256": "4b2c295d9e89aec35f278a707a88940b1fc37718d233337c4f7693933e3d18aa"
     },
     {
       "path": "docs/development/service-cover-worker.md",
@@ -20809,8 +20809,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-databases.mjs",
-      "bytes": 17129,
-      "sha256": "32a7777a00a195b6fd6e85ed2019a0e1ab5643ddc01281fd029d99f634a5bf87"
+      "bytes": 17119,
+      "sha256": "e7987f0292e80f1b4c59b114b771957c47995bcd21a1adba26881182e7f06af2"
     },
     {
       "path": "packages/contribution-tools/runtime-file-weights.mjs",
@@ -20819,8 +20819,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-matrix.md",
-      "bytes": 24024,
-      "sha256": "791a2de450e840f941e4f056ad8bcffe763e2613170c8d40db30d6243b9207aa"
+      "bytes": 27918,
+      "sha256": "3f36ce0abba53f6246e8b767b05d805594ccd7cfb65f4f0fb9b0c15deedcf199"
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
@@ -20839,8 +20839,8 @@
     },
     {
       "path": "packages/contribution-tools/suite-runner.mjs",
-      "bytes": 40012,
-      "sha256": "a1c2267ac8dc5f7133a309a2ed3a27bd0c49da783cecf25b43bbeb6a7a93100a"
+      "bytes": 40002,
+      "sha256": "02dd377120b19d38296f118468eb7b0e6617178d5bf7bc9b5f5b91b1845ddca4"
     },
     {
       "path": "packages/contribution-tools/surface-audit.md",
@@ -21089,8 +21089,8 @@
     },
     {
       "path": "packages/contribution-tools/test/runtime-cleanup-diagnostics.test.mjs",
-      "bytes": 18791,
-      "sha256": "61721b618858c45c88220afe0c42e208972f2588cb6130a80a5bb6e08ca7f2c0"
+      "bytes": 22359,
+      "sha256": "0c3b32e2a3524532bc0ad4f461b34814b652ba8b86cf7b7e98d56fd67fb3a7d3"
     },
     {
       "path": "packages/contribution-tools/test/runtime-matrix.test.mjs",
@@ -21100,7 +21100,7 @@
     {
       "path": "packages/contribution-tools/test/runtime-sharding.test.mjs",
       "bytes": 7508,
-      "sha256": "e2deb2c4d236d59589a701e4dd55884e0f657ee03f7f02ac879f942616b9f5dc"
+      "sha256": "91214eb9418ffa7c66e1966626bec9965c19cb27a54cbe9b879a1a19cf514ccc"
     },
     {
       "path": "packages/contribution-tools/test/runtime-weights.test.mjs",
@@ -22219,8 +22219,8 @@
     },
     {
       "path": "tests/contribution-tools/runtime-sharding.integration.test.mjs",
-      "bytes": 20449,
-      "sha256": "f292180f9e6794b52fba502b3da6eb1a6ce3be22f3b05ac7281dd054e9898161"
+      "bytes": 20460,
+      "sha256": "8f7d513efa2c8ee34cd8b6fe7894bcb9e47c8a0ffc8a0253d9b3d52d2ab0029b"
     },
     {
       "path": "tests/contribution-tools/runtime-union.integration.test.mjs",
