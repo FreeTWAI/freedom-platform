@@ -1173,3 +1173,20 @@ test('distribution copies retain a schema172 reader capability after the flag is
  f.host.observation.schema_ledger=prefix(f.scan,171).ledger;f.host.observation.schema_ledger_digest=compatibilityLedgerDigest(f.host.observation.schema_ledger);
  assert(evaluate(f).issues.some(i=>i.code==='observed_shape_schema_missing'&&i.shape==='media.distribution-photo.asset.v1'));
 });
+
+
+test('schema175 additive appearance recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(175),old=prefix(f.scan,174);
+  assert.equal(f.scan.ledger.at(-1).name,'175_storefront_appearance.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(174)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(175);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(175);renamed.scan.ledger.at(-1).name='175_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(175);future.scan.ledger.push({name:'176_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});

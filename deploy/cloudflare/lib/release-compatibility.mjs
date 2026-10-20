@@ -201,6 +201,7 @@ const FOUNDATION_NAMES = [
   // Nullable advisory supply references; recognition enables no business rule.
   '173_supply_structured_terms.sql',
   '174_supply_offer_photos.sql',
+  '175_storefront_appearance.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
