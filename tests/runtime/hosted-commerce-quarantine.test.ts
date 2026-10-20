@@ -1,3 +1,6 @@
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
+import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import {createHash, randomBytes, randomInt, randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
@@ -115,4 +118,13 @@ test('supply offer detail remains a private authorized read during quarantine',a
   assert.equal(during.response.headers.get('Cache-Control'),'private, no-store');
   assert.equal((await h.request(seller,'GET',path,undefined,undefined,reader.session)).status,403);
   assert.deepEqual(await snapshot(),persisted);
+});
+
+test('quarantine blocks seller policy saves and receipt replay without changing evidence; authorized reads remain',async()=>{
+ const s=await h.f.x.store(),app=createApp(h.f.x.runtime,h.f.x.h.origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePoliciesEnabled:true,commerceSettings:h.f.settings});
+ const body=emptySellerPolicies();body.seller.business_name='合成測試商行';const key=randomUUID();
+ const read=()=>h.f.x.h.call('GET',s.root+'/seller-policies',s.owner,undefined,{},app),version=h.expect(await read()).version;
+ const save=()=>h.f.x.h.call('PUT',s.root+'/seller-policies',s.owner,body,{'Idempotency-Key':key,'If-Match':`"${version}"`},app);
+ const before=await snapshot();h.f.settings.quarantine=true;assert.equal((await save()).status,503);assert.deepEqual(await snapshot(),before);assert.equal((await read()).status,200);
+ h.f.settings.quarantine=false;h.expect(await save());const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await save()).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
 });

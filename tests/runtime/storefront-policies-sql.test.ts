@@ -105,6 +105,7 @@ test('POL-SQL-05 RLS denies unbound and foreign reads and writes',async()=>{awai
  await bindTenantContext(q,{tenantId:randomUUID(),tenantScopeId:randomUUID()});
  for(const table of legalTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);
  await fails(q,'INSERT INTO commerce_storefront_seller_drafts(tenant_id,instance_id,version_id) VALUES($1,$2,$3)',[tenant,instance,fixture.sellerId]);
+ await fails(q,'INSERT INTO commerce_publication_seller_policies(publication_id,tenant_id,instance_id,document,policies_sha256) VALUES($1,$2,$3,$4,$5)',[fixture.profile.current_publication_id,tenant,instance,{profile:'freedom.hosted-store-policies/v1',seller:null,policies:{shipping:null,returns:null,privacy:null,terms:null}},'a'.repeat(64)],'42501');
  },runtime);await tx(async q=>{
  await bindTenantContext(q,{tenantId:tenant,tenantScopeId:scope});
  for(const table of legalTables){assert((await q.query(`SELECT 1 FROM ${table}`)).rowCount);assert.equal((await q.query(`DELETE FROM ${table}`)).rowCount,0);}
@@ -129,4 +130,10 @@ test('POL-SQL-07 composite FKs reject foreign seller and policy refs; deferred f
  const own=(await q.query("SELECT version_id FROM commerce_storefront_policy_versions WHERE tenant_id=$1 AND kind='shipping'",[b.tenant_id])).rows[0];
  await q.query("INSERT INTO commerce_publication_policy_refs(publication_id,tenant_id,instance_id,kind,version_id) VALUES($1,$2,$3,'shipping',$4)",[id,b.tenant_id,b.instance_id,own.version_id]);
  await assert.rejects(q.query('SET CONSTRAINTS ALL IMMEDIATE'),(e:unknown)=>(e as {code:string}).code==='23514');await q.query('ROLLBACK TO SAVEPOINT inconsistent');
+}));
+test('POL-SQL-08 seller format and code-point limits are enforced independently of commands',()=>tx(async q=>{
+ const seller={business_name:'合成測試商行',email:'seller@example.test',phone:'+886-2-0000-0000',address:'測試市範例路 1 號',service_hours:'合成客服時間',tax_id:'00000000',responsible_person:'合成負責人'},columns=Object.keys(seller);
+ const sql=`INSERT INTO commerce_storefront_seller_versions(version_id,tenant_id,instance_id,version_no,created_at_profile_version,${columns.join(',')},content_sha256) VALUES(gen_random_uuid(),$1,$2,2,1,${columns.map((_,i)=>'$'+(i+3)).join(',')},repeat('a',64))`;
+ for(const patch of [{business_name:''},{business_name:'字'.repeat(121)},{email:'invalid'},{phone:'javascript:123456'},{address:'字'.repeat(301)},{service_hours:'line\nline'},{tax_id:'00000000\n'},{tax_id:'１２３４５６７８'},{responsible_person:'a\u202eb'}])await fails(q,sql,[tenant,instance,...Object.values({...seller,...patch})]);
+ await q.query(sql,[tenant,instance,...Object.values({...seller,business_name:'😀'.repeat(120),address:'😀'.repeat(300),service_hours:'😀'.repeat(300),responsible_person:'😀'.repeat(80)})]);
 }));

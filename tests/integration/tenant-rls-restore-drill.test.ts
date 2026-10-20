@@ -1,3 +1,4 @@
+import {seedSellerPolicyRows,legalTables} from '../helpers/storefront-policies.js';
 import {ensureDevice,grantDevice} from '../../modules/agent-commerce/checkout/access.js';
 // Real coordinator -> sealed archive -> quarantine restore proves complete tenant
 // rows, references, bytes and restored runtime isolation after migration 125.
@@ -293,6 +294,7 @@ async function insertHostedQuote(q: PoolClient, data: { tenantId: string; princi
   await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at)
     VALUES($1,$2,$3,1,$4,$5,$6,$7,$8)`, [publicationId, instanceId, data.tenantId, slug, projection, projectionDigest(projection), data.principalId, now]);
   await q.query(`UPDATE commerce_storefront_profiles SET current_publication_id=$2,first_published_at=$3,version=version+1 WHERE instance_id=$1`, [instanceId, publicationId, now]);
+  await seedSellerPolicyRows(q,{tenantId:data.tenantId,instanceId});
   const bindings = [{ selection_id: selectionId, item_id: itemId, version: '1', sku: 'P0001', quantity: 1 }];
   const terms = { profile: HOSTED_ORDER_PROFILE, store: { slug, name }, publication_revision: '1', currency: 'TWD',
     items: [{ sku: 'P0001', title, quantity: 1, unit_price_minor: 100, line_total_minor: 100 }], merchandise_total_minor: 100,
@@ -540,7 +542,7 @@ const EXPECTED: Record<string, number> = {
   // Photo-bearing restore is exercised by media-backup-restore; this fixture
   // must still preserve both empty tables and their tenant policies.
   commerce_product_photo_targets: 0, commerce_publication_photo_refs: 0, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0, commerce_hosted_offer_photos: 0,
-  commerce_storefront_seller_drafts: 0, commerce_storefront_policy_drafts: 0, commerce_storefront_seller_versions: 0, commerce_storefront_policy_versions: 0, commerce_publication_seller_policies: 0, commerce_publication_policy_refs: 0,
+  commerce_storefront_seller_drafts: 2, commerce_storefront_policy_drafts: 8, commerce_storefront_seller_versions: 2, commerce_storefront_policy_versions: 8, commerce_publication_seller_policies: 2, commerce_publication_policy_refs: 8,
   commerce_storefront_appearance_drafts: 0, commerce_storefront_appearance_targets: 0, commerce_publication_appearances: 0, commerce_publication_appearance_refs: 0,
   tenant_work_results: 2, tenant_work_result_targets: 2, tenant_capacity_policies: 3,
   work_items: 3, scoped_command_receipts: 3, scoped_transition_journal: 3, scoped_outbox: 3,
@@ -920,20 +922,21 @@ test('J6-R4 lockdown precedes grants; one restored runtime connection cycles A, 
 test('J6-R4 restored checkout PII requires the exact tenant context and disappears without context', async () => {
   for (const space of [spaces.a, spaces.b]) {
     await isolatedTransaction(runtimePool, async q => {
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindPrincipalContext(q, space === spaces.a ? people.p1.principalId : people.p2.principalId);
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindTenantContext(q, { tenantId: space.tenantId, tenantScopeId: space.scopeId });
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) {
-        const order = table === 'commerce_checkout_contacts' ? ' ORDER BY contact_id' : '';
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) {
+        const policyKinds=['commerce_storefront_policy_drafts','commerce_storefront_policy_versions','commerce_publication_policy_refs'].includes(table);
+        const order = table === 'commerce_checkout_contacts' ? ' ORDER BY contact_id' : policyKinds?' ORDER BY kind':'';
         const rows = (await q.query(`SELECT * FROM ${table}${order}`)).rows;
-        assert.equal(rows.length, ['commerce_checkout_contacts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
+        assert.equal(rows.length, policyKinds?4:['commerce_checkout_contacts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
         assert.deepEqual(rows, (await restoredPool.query(`SELECT * FROM ${table} WHERE tenant_id=$1${order}`, [space.tenantId])).rows);
       }
     });
   }
   await isolatedTransaction(runtimePool, async q => {
-    for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+    for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
   });
 });
 

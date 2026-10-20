@@ -9,7 +9,7 @@ let f:HostedStorePhotoHarness,on:ReturnType<HostedStorePhotoHarness['application
 type Store=Awaited<ReturnType<HostedStorePhotoHarness['openStore']>>;
 before(async()=>{f=await createHostedStorePhotoHarness();await f.reset();on=f.application(false,{storePoliciesEnabled:true,storePhotoAssetStore:undefined,storePhotoAssets:undefined});off=f.application(false,{storePoliciesEnabled:false,storePhotoAssetStore:undefined,storePhotoAssets:undefined});});after(async()=>{await f?.stop();});
 const call=(s:Store,method:string,suffix:string,body?:unknown,version?:string,key=randomUUID(),app=on)=>f.h.call(method,s.root+suffix,s.owner,body,{'Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})},app);
-function input(){const v=emptySellerPolicies();v.seller={...syntheticSeller};for(const k of POLICY_KINDS)v.policies[k].body='合成'+k+'政策\n單一換行\n\n第二段';return v;}
+function input(){const v=emptySellerPolicies();v.seller={...syntheticSeller};for(const k of POLICY_KINDS)v.policies[k].body='合成'+k+'政策\n單一換行\n\n第二段';v.policies.returns.window_days=7;v.policies.privacy.drop_ship_disclosed=true;return v;}
 async function save(s:Store,body=input()){const version=f.ok(await call(s,'GET','/seller-policies')).version;return f.ok(await call(s,'PUT','/seller-policies',body,version));}
 async function publish(s:Store,app=on){const v=f.ok(await call(s,'GET','',undefined,undefined,undefined,app));return f.ok(await call(s,'POST','/publish',{},v.version,undefined,app));}
 const response=(s:Store,path='',app=on)=>app.request(f.h.origin+'/shops/'+s.slug+path);
@@ -35,6 +35,7 @@ test('POL-PUB-03 every storefront shell has one responsibility sentence, B03 lin
  const s=await f.openStore();await save(s);await publish(s);
  for(const path of ['', '/about','/policies/privacy','/products/P0001','/cart','/checkout','/orders/'+randomUUID(),'/order-access']){const text=await html(s,path);assert.equal(text.split('自由工坊提供網站服務，不是賣方。').length-1,1);assert.doesNotMatch(text,/商品資訊與訂單服務由/);assert.match(text,/關於本店/);for(const value of [s.tenantId,s.instanceId,s.owner.user.email,s.productId])assert(!text.includes(value));assert.doesNotMatch(text,/account_number|contact_email|member_email|mailto:|tel:/);}
  for(const path of ['/orders/invalid','/payment-return/'+randomUUID()]){const r=await response(s,path);assert.equal(r.status,404);assert.match(await r.text(),/本店由合成測試商行經營/);}
+ assert.match(await html(s,'/policies/returns'),/7 天/);assert.match(await html(s,'/policies/returns'),/14 天/);assert.match(await html(s,'/policies/privacy'),/已說明代出貨時會把必要收件資料提供給負責出貨的供應商/);
  assert.match(await html(s,'/products/P0001'),/aria-label="配送與退換貨政策"/);
  const receipts=(await f.h.pool.query("SELECT to_jsonb(r)::text AS value FROM scoped_command_receipts r WHERE operation='storefront.seller-policies.save'")).rows;for(const r of receipts)assert.doesNotMatch(r.value,/seller@example.test|測試市|合成shipping政策|00000000/);
 });
