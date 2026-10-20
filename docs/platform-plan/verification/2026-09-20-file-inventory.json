@@ -25299,8 +25299,8 @@
     },
     {
       "path": "tests/runtime/storefront-order-pages.test.ts",
-      "bytes": 12782,
-      "sha256": "6c27c40950345295eb64462c03c3df269003bed84bf2a8df61223024fbe69723"
+      "bytes": 12836,
+      "sha256": "12cff65e873d1738f570c86af505a38ff97d9ab45805482c5ca4465a1aa7d104"
     },
     {
       "path": "tests/runtime/storefront-payment-pages.test.ts",
