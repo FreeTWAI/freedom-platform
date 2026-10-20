@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {OpaqueId, Version} from './primitives.js';
+import {IsoTimeSchema} from './tenant.js';
 import {CurrencySchema, ProductInputSchema} from './storefront.js';
 import {SupplyTermsInputSchema} from './hosted-supply-terms.js';
 
@@ -16,7 +17,7 @@ export const SupplyOfferSchema = z.object({
   offer_id: OpaqueId, product_id: OpaqueId, supplier_name: z.string(), source_version: Version,
   terms: SupplyOfferTermsSchema, terms_sha256: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.enum(['offered', 'withdrawn']), version: Version,
-  published_at: z.string().datetime().optional(), arrangement: SupplyArrangementSchema.nullable().optional(),
+  published_at: IsoTimeSchema.optional(), arrangement: SupplyArrangementSchema.nullable().optional(),
 }).strict();
 export const SupplyOffersSchema = z.object({items: z.array(SupplyOfferSchema).max(100), truncated: z.boolean()}).strict();
 export const DistributionInputSchema = z.object({
@@ -37,7 +38,7 @@ export const DistributionSchema = z.object({
 export const DistributionsSchema = z.object({items: z.array(DistributionSchema).max(200), truncated: z.boolean()}).strict();
 export const SalePathSchema = z.object({available: z.boolean(), reason: z.string().nullable()}).strict();
 export const SupplyOfferPageSchema = z.object({
-  offer: SupplyOfferSchema, published_at: z.string().datetime(),
+  offer: SupplyOfferSchema, published_at: IsoTimeSchema,
   supplier: z.object({name: z.string(), public_path: z.string().regex(/^\/shops\/[a-z0-9-]+$/).nullable()}).strict(),
   selection: DistributionSchema.nullable(), decision_note: z.string().max(500).nullable(),
   sale_paths: z.object({display: SalePathSchema, reservation: SalePathSchema, checkout: SalePathSchema}).strict(),

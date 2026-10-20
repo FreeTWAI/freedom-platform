@@ -13014,13 +13014,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-distribution.schema.json",
-      "bytes": 57060,
-      "sha256": "edf6ad91909cf39cac1e5853e207d10ea50e746595a2e24998d614ec89ad144d"
+      "bytes": 55680,
+      "sha256": "01232cd28a0a3f6a49a4f8846c8579ab05c467acd016771b7b8d8f98a92f6a5a"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-distribution.ts",
-      "bytes": 3068,
-      "sha256": "02cd1f868bba119307fa961d01442a3aa7b8479e29e9f8568cc36d76af6e5321"
+      "bytes": 3095,
+      "sha256": "0f5cdf00d1d4860956f1ce710c9fa89dbc88f42d8fca100bb765bd1f82f7ddae"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-offline-payment.schema.json",
@@ -13094,13 +13094,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-supply-terms.schema.json",
-      "bytes": 6968,
-      "sha256": "dc80f5fca555b8466c83761e40a2bbb6d3be9fc5e952d601a4ab66abdac6c8d1"
+      "bytes": 6768,
+      "sha256": "4a3860c1ad37dfd4d83e1eae47c589ef8721fb7aad8cb613aa2e3c0e1d89d3eb"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-supply-terms.ts",
-      "bytes": 1343,
-      "sha256": "ea5c2601263f5251cf5d98d3108ae7f38ef53a9f8a98a6f2cabb1b4b0e96e368"
+      "bytes": 1378,
+      "sha256": "04598cdf05649e3c34f9568a9c3a4866086247a199e5ab7c732d80408a178f02"
     },
     {
       "path": "contracts/guild-launchpad/v1/invitation-accept-result.schema.json",
@@ -13219,8 +13219,8 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/supplier-console.schema.json",
-      "bytes": 192099,
-      "sha256": "086f54545dce13a7651a3f777d24829c796538a9ffcb72f28bb426d22d12de0f"
+      "bytes": 191295,
+      "sha256": "ab58365a849a230a37a8bf9a31063414feaf51f018b2f61e268bf4d77bfeb033"
     },
     {
       "path": "contracts/guild-launchpad/v1/supplier-console.ts",
