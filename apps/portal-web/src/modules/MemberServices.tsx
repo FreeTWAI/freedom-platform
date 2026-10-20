@@ -28,6 +28,10 @@ const BLANK: Draft = {title: '', category: '', summary: '', description: '', pri
 // No response, a 5xx or an unreadable success body leaves a write's outcome unknown.
 const unknownOutcome = (cause: unknown) => !(cause instanceof ApiError) || cause.network
 const conflictOf = (cause: unknown) => cause instanceof ApiError && cause.code === 'version_conflict'
+// Rejections the command itself returns after its receipt lookup. A retry of an operation whose earlier outcome is
+// unknown is only settled by these or by success; anything earlier (429, session, 5xx, no response) keeps the operation.
+const DECIDED = new Set(['version_conflict', 'validation_failed', 'idempotency_conflict', 'member_service_limit', 'not_found'])
+const settled = (cause: unknown, retried: boolean) => cause instanceof ApiError && !cause.network && cause.status !== 429 && (!retried || DECIDED.has(cause.code ?? ''))
 
 function Cover({service}: {service: Service}) {
   const [broken, setBroken] = useState(false)
@@ -114,12 +118,22 @@ export function MemberServices({client}: {client: PortalClient}) {
   }
   async function reloadLatest() {
     const keep = conflict === 'cover' ? file : null, id = editing?.service_id
-    setConflict(null)
-    const latest = (await refreshMine().catch(() => null))?.find(item => item.service_id === id)
-    void load(category)
-    if (!latest) { setFormOpen(false); setError('找不到這項服務的最新內容，請重新整理頁面。'); return }
-    openEdit(latest)
-    setFile(keep)
+    setSaving(true)
+    try {
+      let items: Service[]
+      try { items = await refreshMine() }
+      catch {
+        // A failed read is not proof that the service is gone: keep the form, the conflict and the chosen file.
+        setError('暫時無法讀取最新內容。你的輸入和選好的圖片都還在；請稍後再按「載入最新內容」。')
+        return
+      }
+      setConflict(null)
+      void load(category)
+      const latest = items.find(item => item.service_id === id)
+      if (!latest) { setFormOpen(false); setError('這項服務已不在你的服務清單裡，可能已被刪除或隱藏。'); return }
+      openEdit(latest)
+      setFile(keep)
+    } finally { setSaving(false) }
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -131,7 +145,7 @@ export function MemberServices({client}: {client: PortalClient}) {
       op = {stage: 'save', method: editing ? 'PUT' : 'POST', path: editing ? `/member-services/${editing.service_id}` : '/member-services', body: parsed.value,
         key: crypto.randomUUID(), version: editing ? editing.aggregate_version : null, file, coverKey: crypto.randomUUID()}
     }
-    const created = op.stage === 'save' && op.method === 'POST'
+    const created = op.stage === 'save' && op.method === 'POST', retried = pending
     setIssues([]); setSaving(true); setError(''); setNotice(''); setConflict(null)
     try {
       if (op.stage === 'save') {
@@ -142,10 +156,10 @@ export function MemberServices({client}: {client: PortalClient}) {
             ? await send('PUT', save.path, save.body, save.version!, save.key)
             : await client.post<Service>(save.path, save.body, {idempotencyKey: save.key})
         } catch (cause) {
-          const unknown = unknownOutcome(cause)
-          setPending(unknown ? save : null)
+          const open = !settled(cause, retried?.stage === 'save')
+          setPending(open ? save : null)
           if (conflictOf(cause)) setConflict('save')
-          setError(unknown ? '儲存結果還沒確認。按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。'
+          setError(open ? `${unknownOutcome(cause) ? '' : (cause as Error).message}儲存結果還沒確認。${unknownOutcome(cause) ? '' : '稍後'}按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。`
             : conflictOf(cause) ? '這項服務已在其他地方更新，你這次的修改沒有存入。輸入還在表單裡；需要的內容先複製，再按「載入最新內容」。'
             : cause instanceof Error ? cause.message : '服務未能儲存。')
           return
@@ -157,11 +171,11 @@ export function MemberServices({client}: {client: PortalClient}) {
       const cover = op
       try { await uploadCover(cover) }
       catch (cause) {
-        const unknown = unknownOutcome(cause)
-        setPending(unknown ? cover : null)
+        const open = !settled(cause, retried?.stage === 'cover')
+        setPending(open ? cover : null)
         await Promise.all([load(category), refreshMine().catch(() => null)])
         if (conflictOf(cause)) setConflict('cover')
-        setError(unknown ? '封面上傳結果還沒確認，服務已儲存。按「重試封面」會用同一張圖片和同一個請求再送一次。'
+        setError(open ? `${unknownOutcome(cause) ? '' : (cause as Error).message}封面上傳結果還沒確認，服務已儲存。${unknownOutcome(cause) ? '' : '稍後'}按「重試封面」會用同一張圖片和同一個請求再送一次。`
           : conflictOf(cause) ? '這項服務已在其他地方更新，這次的封面沒有換上。你選的圖片還在；按「載入最新內容」確認後，再儲存一次即可換上。'
           : `${cause instanceof Error ? cause.message : '封面未能換上。'}服務已儲存。`)
         return
