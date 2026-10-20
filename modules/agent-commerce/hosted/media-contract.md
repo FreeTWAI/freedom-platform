@@ -92,7 +92,9 @@ supplier share/stop pair and a seller-root `supply-catalog/:offer_id/photo/:seq`
 GET/HEAD. [Distribution](distribution.md#opt-in-evaluation-photos-2026-10-20)
 defines its audience, product/offer CAS and owner preview query. It introduces
 no new storage purpose, upload pipeline, signed URL or publication grant.
-The existing offer visibility function runs in both authority snapshots;
+只有公開中的版本會顯示方案照片；版本撤回或被新版本取代後，即使店主曾選用該版本，也不再顯示照片。
+The existing offer visibility function and an offered-state requirement run in
+both authority snapshots;
 `readVerifiedObject` runs outside SQL between them, including HEAD. There is no
 early 304. Stale sequences and a changed authority/share fail closed.
 

@@ -35,9 +35,12 @@ with the current product photo in the same transaction, skipping a missing photo
 Withdrawal preserves all history; a stopped decision does not revive an older share.
 
 GET/HEAD `/supply-catalog/:offer_id/photo/:seq` belongs to the **seller's** root.
+只有公開中的版本會顯示方案照片；版本撤回或被新版本取代後，即使店主曾選用該版本，也不再顯示照片。
+
 It reuses `findVisibleSupplyOffer` with the detail page: current `store:write`,
-same community/currency, and offered or already adopted by this store. Only the
-current shared sequence reads. It snapshots, releases SQL, fully verifies
+same community/currency, and offered or already adopted by this store for base
+offer authority. Photos additionally require the offered state and current
+shared sequence. It snapshots, releases SQL, fully verifies
 `readVerifiedObject`, then reauthorizes and compares offer/share identity. HEAD
 performs the same verification. Both responses are private/no-store with Cookie
 variation, nosniff, noindex, no-referrer and same-origin resource policy. No

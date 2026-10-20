@@ -161,7 +161,7 @@ export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string
       }
     }
     const checkoutReason = fulfilmentConsentFailure(hostedLineFulfilment(row.instance_id === instanceId));
-    const photo = offerPhotosEnabled ? await currentOfferPhoto(q, offerId) : null;
+    const photo = offerPhotosEnabled && row.state==='offered' ? await currentOfferPhoto(q, offerId) : null;
     return SupplyOfferPageSchema.parse({photo: photo?.asset_id ? {seq:photo.seq,width:photo.width,height:photo.height,read_path:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/supply-catalog/${offerId}/photo/${photo.seq}`} : null, offer: offerView(row), published_at: row.created_at.toISOString(),
       supplier: {name: row.supplier_name, public_path: publiclyLive ? `/shops/${row.slug}` : null},
       selection, decision_note: selection?.decision_note ?? null,
@@ -175,6 +175,7 @@ export async function readSupplyOfferPhoto(pool:Pool, store:ObjectStore, actor:A
   const snapshot=()=>storeRead(pool,actor,tenantId,instanceId,'store:write',async(q,context)=>{
     const p=await profile(q,tenantId,instanceId);ready(p);
     const offer=await findVisibleSupplyOffer(q,context.community_id,p,offerId);
+    requireCondition(offer.state==='offered',404,'not_found','找不到這張方案照片。');
     const photo=await currentOfferPhoto(q,offerId);
     requireCondition(photo?.asset_id && photo.seq===seq,404,'not_found','找不到這張方案照片。');
     return {offerVersion:String(offer.version),photo};

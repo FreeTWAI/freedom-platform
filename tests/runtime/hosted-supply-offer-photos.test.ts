@@ -145,7 +145,7 @@ test('OFFER-PHOTO-05 GET and HEAD verify bytes and exact private headers; metada
   }
 });
 
-test('OFFER-PHOTO-06 byte authority matches the offer page, including withdrawn adoption and quarantine reads',async()=>{
+test('OFFER-PHOTO-06 adopted withdrawn offers retain terms but hide photos; quarantine preserves active photo reads',async()=>{
   const {supplier,seller,offer}=await fixture();f.ok(await share(supplier,offer));
   const reader=await granted(seller,['store:read']);
   assert.equal((await bytes(seller,offer,'1','GET',reader)).status,403);
@@ -153,12 +153,15 @@ test('OFFER-PHOTO-06 byte authority matches the offer page, including withdrawn 
   assert.equal((await bytes(seller,offer,'99')).status,404);
   const peer=await f.openStore();
   f.ok(await send(seller,'/distribution-selections',undefined,{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:2000}),201);
-  f.ok(await send(supplier,`/supply-offers/${offer.offer_id}/withdraw`,'1'));
-  assert.equal((await bytes(peer,offer)).status,404);assert.equal((await get(peer,`/supply-catalog/${offer.offer_id}`)).status,404);
-  assert.equal((await bytes(seller,offer)).status,200);
   const quarantined=f.application(true,{supplierConsoleEnabled:true,supplyOfferPhotosEnabled:true,commerceSettings:{consoleEnabled:true,checkoutEnabled:false,quarantine:true,providerProfiles:[]}});
   assert.equal((await bytes(seller,offer,'1','GET',seller.owner,quarantined)).status,200);
   assert.equal((await page(seller,offer,quarantined)).photo?.seq,'1');
+  f.ok(await send(supplier,`/supply-offers/${offer.offer_id}/withdraw`,'1'));
+  assert.equal((await bytes(peer,offer)).status,404);assert.equal((await get(peer,`/supply-catalog/${offer.offer_id}`)).status,404);
+  assert.equal((await page(seller,offer)).photo,null);
+  for(const method of ['GET','HEAD'])assert.equal((await bytes(seller,offer,'1',method)).status,404);
+  assert.equal((await page(seller,offer,quarantined)).photo,null);
+  assert.equal((await bytes(seller,offer,'1','GET',seller.owner,quarantined)).status,404);
   const blocked=await send(supplier,`/supply-offers/${offer.offer_id}/photo/stop`,'2',{},'POST',randomUUID(),supplier.owner,quarantined);
   f.ok(blocked,503);assert.equal(blocked.data.code,'commerce_quarantined');
 });
@@ -283,4 +286,41 @@ test('OFFER-PHOTO-14 actual runtime grant block leaves history readable and inse
       has_table_privilege($1,$2,'DELETE') AS delete,has_table_privilege($1,$2,'TRUNCATE') AS truncate`,[f.role,`${f.h.schema}.commerce_hosted_offer_photos`])).rows[0];
     assert.deepEqual(privileges,{read:true,append:true,update:false,delete:false,truncate:false});
   });
+});
+
+
+test('OFFER-PHOTO-15 republishing hides a selected old version and stopping the current version closes every seller photo',async()=>{
+  const {supplier,seller,offer}=await fixture(),peer=await f.openStore();
+  f.ok(await share(supplier,offer));
+  f.ok(await send(seller,'/distribution-selections',undefined,{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:2000}),201);
+  const edit=f.ok(await send(supplier,`/products/${supplier.productId}/supply-terms`,'2',{cost_minor:1500,shipping_minor:0,shipping_terms:'合成新版條件',return_terms:'合成退貨條件'},'PATCH'));
+  const next=f.ok(await send(supplier,`/products/${supplier.productId}/supply-offer`,edit.version));
+  const oldPage=await page(seller,offer);assert.equal(oldPage.offer.state,'withdrawn');assert.equal(oldPage.photo,null);
+  for(const method of ['GET','HEAD']){
+    const old=await bytes(seller,offer,'1',method);assert.equal(old.status,404);
+    if(method==='GET')assert.equal((await old.json() as any).code,'not_found');
+  }
+  for(const store of [seller,peer]){
+    assert.equal((await page(store,next)).photo?.seq,'1');
+    for(const method of ['GET','HEAD'])assert.equal((await bytes(store,next,'1',method)).status,200);
+  }
+  f.ok(await stop(supplier,next));
+  for(const store of [seller,peer]){
+    assert.equal((await page(store,next)).photo,null);
+    for(const version of [offer,next])for(const method of ['GET','HEAD'])assert.equal((await bytes(store,version,'1',method)).status,404);
+  }
+  assert.equal((await page(seller,offer)).photo,null);
+  assert.equal((await get(peer,`/supply-catalog/${offer.offer_id}`)).status,404);
+  assert.equal((await rows(offer)).length,1,'withdrawn share history is retained');
+  assert.equal((await rows(next)).length,2,'only the explicit current-version stop appends a row');
+});
+
+for(const method of ['GET','HEAD'])test(`OFFER-PHOTO-16 ${method} refuses a selected offer withdrawn during verified object I/O`,async()=>{
+  const {supplier,seller,offer}=await fixture();f.ok(await share(supplier,offer));
+  f.ok(await send(seller,'/distribution-selections',undefined,{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:2000}),201);
+  f.store.afterGet=async()=>{f.store.afterGet=undefined;f.ok(await send(supplier,`/supply-offers/${offer.offer_id}/withdraw`,'1'));};
+  const response=await bytes(seller,offer,'1',method);assert.equal(response.status,404);
+  if(method==='GET')assert.equal((await response.json() as any).code,'not_found');
+  assert.equal((await page(seller,offer)).photo,null);
+  assert.equal((await rows(offer)).length,1);
 });

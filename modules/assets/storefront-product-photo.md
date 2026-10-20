@@ -9,6 +9,7 @@ includes all registered objects; any future product-photo GC must count these
 references as well as targets, publications and distribution copies. No existing
 GC function, policy or trigger is changed or enabled. Seller bytes keep their
 own tenant context and recheck the current offer/share around verified object I/O;
+only offered versions expose evaluation photos, including to prior adopters;
 the supplier preview uses its own product-photo route's pinned offer/seq query.
 
 This source profile is disabled by default. Migration 141 adds the purpose and
