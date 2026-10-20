@@ -23054,8 +23054,8 @@
     },
     {
       "path": "tests/e2e/skill-book-library.spec.ts",
-      "bytes": 38172,
-      "sha256": "f3a011217cf5123a5155eea429c9fb0cce275fa605013ef508bdf991d0296946"
+      "bytes": 38248,
+      "sha256": "40988baa6342c2f1088f480407d0b2d651073bb1691584958a2d82716312bbbb"
     },
     {
       "path": "tests/e2e/skill-book-upgrade.spec.ts",
@@ -23075,7 +23075,7 @@
     {
       "path": "tests/e2e/skill-sharing.spec.ts",
       "bytes": 17983,
-      "sha256": "ac29b137b1c122a120b5a1fedcf8ea01d0b98196adf8f09d172e152bf0985e48"
+      "sha256": "f4342a35d130c8b1a83a7390bc529466b174e1a4a2490815bebadf07281e8b88"
     },
     {
       "path": "tests/e2e/skill-upload.spec.ts",

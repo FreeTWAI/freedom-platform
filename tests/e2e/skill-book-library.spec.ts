@@ -321,7 +321,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await expect(page.getByRole('heading',{name:'公會指定技能書',level:2,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'社群技能書',level:2,exact:true})).toBeVisible();
   const shelf=page.locator('.community-skill-library'),cards=shelf.locator('article.skill-library-book');
-  await expect(shelf.getByRole('status')).toHaveText('顯示 13 / 13 本社群技能書');
+  const shelfTotal=communityBookIds.length+1;await expect(shelf.getByRole('status')).toHaveText(`顯示 ${shelfTotal} / ${shelfTotal} 本社群技能書`);
   // Newest member works lead the shelf, in the same card as the catalog books after them.
   const card=cards.first();await expect(card).toHaveAttribute('data-submission-id',id);
   await expect(card.getByRole('heading',{name:item.title,level:3,exact:true})).toBeVisible();
@@ -358,7 +358,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await share.getByRole('button',{name:'關閉分享預覽',exact:true}).click();
   const search=shelf.getByLabel('搜尋社群技能書',{exact:true});
   await search.fill('綠豆');await expect(cards).toHaveCount(1);await expect(cards.first()).toHaveAttribute('data-book-id','ai-manga-translator');
-  await expect(shelf.getByRole('status')).toHaveText('顯示 1 / 13 本社群技能書');
+  await expect(shelf.getByRole('status')).toHaveText(`顯示 1 / ${shelfTotal} 本社群技能書`);
   await search.fill('沒有這本書');await expect(cards).toHaveCount(0);await expect(shelf.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/community-skill-books.png'});
 });
