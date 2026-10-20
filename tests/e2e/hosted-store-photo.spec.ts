@@ -3423,10 +3423,10 @@ test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog an
     }
     await reload.click();await decoded(selectedImage);await expect(cooperation.getByText(failure,{exact:true})).toHaveCount(0);
     const imageFailed=b.waitForEvent('requestfailed',{predicate:request=>new URL(request.url()).pathname===imagePath});
-    await b.route('**'+imagePath,route=>route.abort());await reload.click();await imageFailed;
+    await b.route('**'+imagePath,route=>route.abort());await reload.click();await selected.scrollIntoViewIfNeeded();await imageFailed;
     await expect(selectedImage).toHaveCount(0);await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);
     await expect(selected).not.toContainText('照片暫時無法顯示');await expect(selected.getByRole('link',{name:'查看供貨方案',exact:true})).toBeVisible();
-    await b.unroute('**'+imagePath);await reload.click();await decoded(selectedImage);
+    await b.unroute('**'+imagePath);await reload.click();await selected.scrollIntoViewIfNeeded();await decoded(selectedImage);
     // Hold an old successful list, then replace its reload generation with a real stopped-share read.
     let entered!:()=>void,finished!:()=>void,heldRequest:Request|undefined;
     const seen=new Promise<void>(resolve=>{entered=resolve;}),hold=new Promise<void>(resolve=>{releaseHold=resolve;}),done=new Promise<void>(resolve=>{finished=resolve;});
@@ -3443,8 +3443,8 @@ test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog an
     const fresh=b.waitForResponse(r=>new URL(r.url()).pathname===listPath&&r.status()===200);
     await reload.click();const stopped=await fresh;
     expect(SupplyCatalogPhotosSchema.parse(await stopped.json()).items.some(item=>item.photo.read_path===imagePath)).toBe(false);
-    expect((await aborted).failure()?.errorText).toBe('net::ERR_ABORTED');
     releaseHold!();await done;
+    expect((await aborted).failure()?.errorText).toBe('net::ERR_ABORTED');
     await expect(cooperation.locator('img.supply-offer-thumbnail')).toHaveCount(0);
     await expect(cooperation.getByText(hint,{exact:true})).toHaveCount(0);await expect(selected).toContainText(title);
     await b.unroute(matchList);
