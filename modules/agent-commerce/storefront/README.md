@@ -270,7 +270,7 @@ entitlement and no collector or quota release is introduced (OPEN-07).
 
 Verification uses exactly `storefront-gallery-{sql,commands,media}.test.ts`, the
 original single-photo/appearance/policy regressions, global route/RLS/quarantine /
-media bridge guards, nine appended photo-browser cases and two default OFF cases.
+media bridge guards, ten appended photo-browser cases and two default OFF cases.
 Screens cover 390/768/1440, eight photos, keyboard and no JS. The media restore drill
 preserves its original 17 objects plus exactly 8 gallery objects; its two gallery
 stores include promotion, removal, a deleted product, frozen revisions and stored

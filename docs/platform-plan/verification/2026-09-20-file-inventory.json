@@ -15675,7 +15675,7 @@
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
       "bytes": 94692,
-      "sha256": "8c2039ccc56a399661d57362baa614a51241dd69b5318f2600e99ee703cc9db8"
+      "sha256": "7d343d4cfb8b20b51771d88bb1308084cca8e3fc6ff5a0d3396afa4c5984fb10"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -18584,8 +18584,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 19321,
-      "sha256": "7fb41c646aa52d9df061c6af0856b24804facdce4d94308a919679ecb8bf3f5a"
+      "bytes": 19320,
+      "sha256": "a9e8dbf7c677ddf1666a43ae9f655a13013bc52a3445b567a70a05c30020c061"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -22884,8 +22884,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 273722,
-      "sha256": "92d083529c527b72afe6adafca195dce4155e8e68167db614c601adb17d579ca"
+      "bytes": 275418,
+      "sha256": "bace682102a5a48714997d118b54f33784e89f9ba5890db114b1399056a32d8c"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
