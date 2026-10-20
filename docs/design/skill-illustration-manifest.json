@@ -2,7 +2,7 @@
   "generated_at": "2026-09-23",
   "mode": "builtin-imagegen",
   "style_anchor": "apps/portal-web/public/brand/freedom-workshop.webp",
-  "description": "41 distinct functional workflow illustrations for skill introduction pages and social thumbnails; mechanical WebP encoding with contain fit, original logo unchanged.",
+  "description": "53 distinct functional workflow illustrations for skill introduction pages and social thumbnails; mechanical WebP encoding with contain fit, original logo unchanged.",
   "assets": [
     {
       "id": "agent-kit",
@@ -416,7 +416,151 @@
       "generated_at": "2026-10-01",
       "mode": "builtin-imagegen",
       "source_path": "/home/ted-h/.codex/generated_images/01a0f709-e0a6-7ac0-874d-ab6bd6244c6b/call_ZmlewBpINUUWAZKJo9hcu6SR.png"
+    },
+    {
+      "id": "hrflow",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: employee folders and calendar cards flowing through a local attendance clock and approval gate into payroll envelopes.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/hrflow.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 96284,
+      "sha256": "947f361ddf20a992a7f161a8554b4780896365e7e3e1ed6eed868a73dca8c879",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-440f136a-16ba-4b46-a959-c21f7932ae24.png"
+    },
+    {
+      "id": "hdsljp-api",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: a fictional birth calendar and clock feeding an ephemeris orbit engine and emerging as an abstract node-connected bodygraph, no medical imagery.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/hdsljp-api.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 94810,
+      "sha256": "235d97bd14d48d0c528b91d38b1e64bb6409091aa96d07fad6998a8e8526cb2c",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-710eb95d-f436-4652-bf41-cbaca8ed3765.png"
+    },
+    {
+      "id": "usage",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: local log folders flowing into a desktop gauge, beside a small token bead counter and clock, no cloud.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/usage.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 59060,
+      "sha256": "1d2058706abd55f51daa6862058ae4a2a7e6f73561c50a550c8ca5033381e085",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-c787351a-761f-4777-bca7-20fab9f6722f.png"
+    },
+    {
+      "id": "photo-border-remover",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: several abstract landscape picture tiles with white rims passing through a crop frame and emerging as clean rimless image tiles.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/photo-border-remover.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 65778,
+      "sha256": "1b8232724a99b3120544657f52f4c46d995aa8e94c57af33923e5dba9145a22e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-1d266446-4da5-4e64-a3a7-dc3951da2199.png"
+    },
+    {
+      "id": "ga4-lp-analytics",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: section tiles, scroll and click markers feeding aggregate event beads through a proxy bridge to a funnel and review cards.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/ga4-lp-analytics.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 81692,
+      "sha256": "954eddafd299233d440f2be79a70bbd6e7da986d01802778b0ddff61fbfae00e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-be5d6fd4-ef38-491d-b843-3700d663a544.png"
+    },
+    {
+      "id": "sns-feedback-collect",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: generic post cards and visible reaction beads moving to a local collection tray and then to comparison cards for human review.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/sns-feedback-collect.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 101158,
+      "sha256": "df4405d16dca98c6164e0c5abee456ddd742f155a7529f2c1d33faccbd4b256c",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-fa70e8c8-ee46-4e97-af4b-a5ebb288204f.png"
+    },
+    {
+      "id": "ultracode-token-optimization",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: three agent cubes sharing a small concise task card instead of repeated large stacks of blank sheets, a compact output folder at right.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/ultracode-token-optimization.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 58870,
+      "sha256": "c9f90f11d29405f01b8836b931d640ba1cafc180f41961355bd427ad433e0550",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-f28bb4a2-727f-4867-9f41-a4d0f662dacb.png"
+    },
+    {
+      "id": "keynote-pptx-doctor",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: a backed up presentation folder, a magnifying lens examining slide package layers, then a repaired slide tile beside the retained original.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/keynote-pptx-doctor.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 77880,
+      "sha256": "c59ae8881639ae53e3d2714601e03355cbfc4bfc2bc5d3dc39de41db3486c988",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-df246f86-34f5-429e-8af0-21bdfcec7575.png"
+    },
+    {
+      "id": "webchat-mcp",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: a generic chat bubble crossing a locally held browser bridge into several blank web page cards, with an explicit approval gate beside a tool action cube.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/webchat-mcp.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 65692,
+      "sha256": "1a59dded7a8e3ebd9dbaf50a50c9e7d53f41136f949db65690ff3f5613a82b9e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-1c167cd6-29cc-472e-a265-8c73f381afdc.png"
+    },
+    {
+      "id": "gemini-voice-lab",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: a script sheet passing into a voice generation orb, headphones for listening, feedback cards returning through an iteration loop to a revised waveform.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/gemini-voice-lab.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 72340,
+      "sha256": "5779763c5c8a58381f5209bdd702cbcb77d9849a1a8af8d7f7d7e3bfb5c862b8",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-273fbf4f-b619-4da8-a022-6a831d4298a0.png"
+    },
+    {
+      "id": "story-bible",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: an abstract fictional character token, a landscape tile and a world map tile organized into a consistent reference binder, linked to a sequence of storyboard frames.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/story-bible.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 144008,
+      "sha256": "ce8053ba5eee2d13360aba5df65d767aa034be9542122f11a753d48e8e4c6860",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-8a5bb383-b007-4ce0-9ec9-e5cbab8327b1.png"
+    },
+    {
+      "id": "human-mode",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: wide landscape 1200x630 functional illustration, no books; clear left-to-right input/action/output scene: five simple prompt stepping stones moving from a blank question card through a pause space to a branching idea tree and a self-written notebook.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/human-mode.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 73648,
+      "sha256": "73e70a2ba53a1e84aa7377d32aa44ecd2c303d1d030c0b88515cf6439e3f994e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-593370c3-8c93-4272-b1cf-4b19c6c51b0b.png"
     }
   ],
-  "updated_at": "2026-10-01"
+  "updated_at": "2026-10-20"
 }

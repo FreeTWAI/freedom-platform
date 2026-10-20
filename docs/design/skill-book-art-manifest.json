@@ -2,7 +2,7 @@
   "generated_at": "2026-09-23",
   "mode": "builtin-imagegen",
   "style_anchor": "apps/portal-web/public/brand/freedom-workshop.webp",
-  "description": "41 separately generated original skill-book covers. No original logo edits; only mechanical WebP encoding for delivery.",
+  "description": "53 separately generated original skill-book covers. No original logo edits; only mechanical WebP encoding for delivery.",
   "assets": [
     {
       "id": "career-guide",
@@ -441,7 +441,151 @@
       "generated_at": "2026-10-01",
       "mode": "builtin-imagegen",
       "source_path": "/home/ted-h/.codex/generated_images/01a0f708-ed78-78e2-98c3-b171b562105a/call_uGDPZGn37Grsu7hgA4xGFAoA.png"
+    },
+    {
+      "id": "hrflow",
+      "prompt": "Use case: stylized-concept. Asset type: one original skill-book cover for Freedom Workshop, landscape 3:2 composition. Floating polished chrome hardcover at three-quarter angle, cobalt blue cover, lime page edges, charcoal backdrop, acid lime #c4ff20 and cobalt #3044ff, restrained orbital line and star accents, generous margins, premium 3D render, clear thumbnail silhouette. Subject emblem: an organized employee folder, calendar tiles and a small clock, representing an open source HR workflow. No people, text, letters, numbers, logos, trademarks, watermark, UI screenshots. Workshop reading-guide art, not a product image.",
+      "path": "apps/portal-web/public/art/skills/hrflow.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 27356,
+      "sha256": "0f8bed98e707c011a2be9ecaccbc864768e2b4878fa2ed86efe2bfaf2f82da81",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-cbff71da-3680-42a1-b357-7dbe61b5bf56.png"
+    },
+    {
+      "id": "hdsljp-api",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: an abstract geometric bodygraph constellation and a small ephemeris orbit disc.",
+      "path": "apps/portal-web/public/art/skills/hdsljp-api.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 42496,
+      "sha256": "53c5b09261d91871c593152972c29f12502944ea683d0c46075ccfb22d548a0a",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-7dfa4ac6-b967-47a5-b61d-6fcbfb7c75cd.png"
+    },
+    {
+      "id": "usage",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a tiny desktop status bar represented by a polished arc gauge with a token bead counter.",
+      "path": "apps/portal-web/public/art/skills/usage.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 32380,
+      "sha256": "a7d06e3e2468752f7956d775574bcdc0c1e73500697f070afe3b43428a9ac94e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-98e66fbc-78db-4232-bd6c-60d47a9e8e31.png"
+    },
+    {
+      "id": "photo-border-remover",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a landscape picture tile with a white outer rim lifting away cleanly.",
+      "path": "apps/portal-web/public/art/skills/photo-border-remover.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 38470,
+      "sha256": "071ecd43a887c5d0f4bc7c9c3f5fb716d53557c1b5c5447dc18d33221279c01b",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-d13a1104-f306-40f8-a4da-ce2f32f3bf7f.png"
+    },
+    {
+      "id": "ga4-lp-analytics",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: stepped landing page section tiles and a funnel with a magnifying lens.",
+      "path": "apps/portal-web/public/art/skills/ga4-lp-analytics.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 50150,
+      "sha256": "dcaa96f1af5fc9acb3df3a91277c71f3919fa16983b37adab2adb0c5fee69bf6",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-7a2aa598-c562-4a62-b84b-6b1371ca587d.png"
+    },
+    {
+      "id": "sns-feedback-collect",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: speech bubbles and reaction beads gathered into an organized notebook tray.",
+      "path": "apps/portal-web/public/art/skills/sns-feedback-collect.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 45248,
+      "sha256": "ba67f77fd66fb6ebac9ab27de4f796b235ffcea4b1823aaa660dee1769afd55a",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-84802744-0742-44b3-bb70-044a0c6994c7.png"
+    },
+    {
+      "id": "ultracode-token-optimization",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a bundle of luminous token beads compacting between three linked agent cubes.",
+      "path": "apps/portal-web/public/art/skills/ultracode-token-optimization.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 43542,
+      "sha256": "865c6f943ca1befdcdb7bcc126a898e5e9293716be89497d652a46fa244ece4e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-dd6702d8-0c6f-4852-a168-c4c17dddc6af.png"
+    },
+    {
+      "id": "keynote-pptx-doctor",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a presentation slide tile repaired by a delicate chrome tool at its corner.",
+      "path": "apps/portal-web/public/art/skills/keynote-pptx-doctor.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 36594,
+      "sha256": "3a35a96cc15ce58f14758949b4de3acfbe2ccda6513aab662f48cb68e7ef8f8e",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-c4ef1e54-9039-41e5-a7a6-0700eb52807f.png"
+    },
+    {
+      "id": "webchat-mcp",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a chat bubble joined to a browser window outline by a chrome bridge.",
+      "path": "apps/portal-web/public/art/skills/webchat-mcp.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 38418,
+      "sha256": "c77f8f06f0288de88f9c10d1a242f09e0966dec09d0798b383a10d10eb44e360",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-f8a9aa68-3888-483f-80d1-ecf43d340d90.png"
+    },
+    {
+      "id": "gemini-voice-lab",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: a microphone and speech waveform encircled by three small iteration arrows.",
+      "path": "apps/portal-web/public/art/skills/gemini-voice-lab.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 40842,
+      "sha256": "1701794b15e3680c5de9cd57a9fb2e32ea4480a899cf036c7d4e19f802a0eed2",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-d435fb15-0980-4bc0-9aa0-b08eb1854bca.png"
+    },
+    {
+      "id": "story-bible",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: three interlocking blank character silhouette, scenery and worldbuilding cards.",
+      "path": "apps/portal-web/public/art/skills/story-bible.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 51272,
+      "sha256": "fd18a64c626b6f67bed9ed68e4b2357befa48b5d969dcca048ba395955c465f7",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-acd847f2-0bc9-4cee-b7f2-317844c37a01.png"
+    },
+    {
+      "id": "human-mode",
+      "prompt": "Use case: stylized-concept. One original Freedom Workshop reading-guide artwork. Black charcoal backdrop, acid lime #c4ff20, electric cobalt #3044ff and polished chrome, restrained orbital lines and four-point star accents, premium 3D editorial rendering with generous margins. No real people, text, letters, numbers, brands, logos, trademarks, watermark or UI screenshots. Not a product screenshot. Asset: landscape 3:2 skill-book cover. Floating chrome hardcover book at three-quarter angle, cobalt cover with lime page edges, a clear sculpted emblem: five ascending prompt tiles beside a pause symbol and a branching thought tree.",
+      "path": "apps/portal-web/public/art/skills/human-mode.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 47144,
+      "sha256": "cfa60a65826af800739b8803b07b11aeb559006d48b49e1c96a0f6ed3ba9fa22",
+      "generated_at": "2026-10-20",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a157b2-9554-7321-8a83-205eee4f556b/exec-63a87a87-01b9-4772-952d-841827386bef.png"
     }
   ],
-  "updated_at": "2026-10-01"
+  "updated_at": "2026-10-20"
 }

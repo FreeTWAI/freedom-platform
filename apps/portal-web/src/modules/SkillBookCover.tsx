@@ -2,7 +2,7 @@ import {useContext} from 'react';
 import {GitHubBookSocial,SkillBookStarGateContext} from './GitHubSocial';
 
 type BookIdentity = { id?: string; book_id?: string; cover_url?: string };
-type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string };
+type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string; guide?: {credit_role?: '維護'|'策展'} };
 
 export function skillBookCoverUrl(book: BookIdentity) {
   // Platform books and 社群技能書 share one cover format; see docs/design/*-art-manifest.json.
@@ -28,7 +28,7 @@ export function SkillBookCover({ book, className = '' }: { book: BookIdentity; c
 
 export function SkillBookStar({ book,compact=false }: { book: BookSource;compact?:boolean }) {
   const url = skillBookStarUrl(book),id=book.id??book.book_id;
-  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact}/> : null;
+  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact} sourceCredit={Boolean(book.guide?.credit_role)}/> : null;
 }
 
 export function SkillBookStarGate({books}:{books:(BookSource&{title:string})[]}){

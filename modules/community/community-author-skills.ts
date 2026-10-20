@@ -3,9 +3,10 @@ import type {SkillBookGuide} from './skill-book-guides.js';
 
 // Community names were supplied by the platform owner, except for the three 手動登錄作品 works; no member identity is inferred.
 // video-to-podcast-toolkit, autovtuber and coding-audit-harness are works members registered through 手動登錄作品, credited with the member's own community display name and self-declared author relationship (not verified against the GitHub account), converted at the platform owner's request.
+// Member-shared books reviewed 2026-10-20 use community display names and self-declared relationships, not verified GitHub identities.
 // Empty `guilds` keeps a work as a 社群技能書 instead of a guild designation.
 // Pinned upstream documentation reviewed on each source's `reviewed` date; upstream apps were not run.
-type AuthorSource={author:string;repo:string;sha:string;title:string;reading:string;evidence:string[];guilds:string[];license:string;reviewed:string};
+type AuthorSource={author:string;relationship?:'author'|'maintainer'|'curator';repo:string;sha:string;title:string;reading:string;evidence:string[];guilds:string[];license:string;reviewed:string};
 const communityAuthorSourceList = {
   'bidding-radar-concept':{author:'綠豆',repo:'greenQQQ/bidding-radar-concept',sha:'a02db6cb6ef754bff3622e88eb10167cf772ca72',title:'領標雷達：標案與補助設計',reading:'README.md',evidence:['README.md','實作指南.md','LICENSE'],guilds:['guild_opportunity_partnership'],license:'MIT',reviewed:'2026-09-24'},
   'aiwff-runtime':{author:'隊長',repo:'zaxardery8011-design/aiwff-runtime',sha:'94b94abf6d0656de0a5998da4c4141d2e9971a7c',title:'小主腦：本機 AI 任務系統',reading:'README.zh-TW.md',evidence:['README.zh-TW.md','AGENTS.md','LICENSE'],guilds:['guild_ai_vibe','guild_ai_field'],license:'MIT',reviewed:'2026-09-30'},
@@ -19,12 +20,144 @@ const communityAuthorSourceList = {
   'video-to-podcast-toolkit':{author:'jasonlee(J太郎)',repo:'Lee-unhn/video-to-podcast-toolkit',sha:'2ea2f0e6f11533ec08cff4d9db3a46859ec7ed4f',title:'自動 Podcast 剪輯：訪談影片轉上架素材',reading:'README.md',evidence:['README.md','快速上手.md','NOTICE.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-01'},
   'autovtuber':{author:'jasonlee(J太郎)',repo:'Lee-unhn/AutoVtuber',sha:'1c4d045d5bf602561953adfe914e033364131600',title:'AutoVtuber：表單生成 VTuber 模型',reading:'README.md',evidence:['README.md','AUTOVTUBER.md','docs/RELEASE_READINESS.md','docs/LICENSES.md','docs/AUTHORIZED_BASE_IMPORT.md'],guilds:[],license:'NOASSERTION',reviewed:'2026-10-01'},
   'coding-audit-harness':{author:'小艾老師',repo:'weiwei-alvin/Coding-Audit-Harness',sha:'c4526624f65530c009c57b9add233b1060fa01df',title:'Coding Audit Harness：AI 寫的程式，驗過才算數',reading:'README.md',evidence:['README.md','LICENSE','skills/matt-upstream/UPSTREAM.md'],guilds:[],license:'MIT',reviewed:'2026-10-01'},
+  'hrflow':{author:'Shiang',relationship:'author',repo:'tesdano-crypto/HRSystem-OpenSource',sha:'a60cd7b14d25b5a8ab90574247e48a4b4038b11c',title:'HRFlow：開源人資管理系統',reading:'README.md',evidence:['README.md','LICENSE','NOTICE'],guilds:[],license:'Apache-2.0',reviewed:'2026-10-20'},
+  'hdsljp-api':{author:'ken-kk',relationship:'author',repo:'kieiken/hdsljp-api',sha:'a3fc3b4ff2a3acf0df541da1b83a3688e0be8a19',title:'hdsljp-api：日文人類圖命盤計算 API',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'AGPL-3.0',reviewed:'2026-10-20'},
+  'usage':{author:'ken-kk',relationship:'maintainer',repo:'kieiken/usage',sha:'e6298d1af0e2127b587b2ff609942896635bdd66',title:'usage：macOS 選單列 Claude／Codex 用量',reading:'README.md',evidence:['README.md','LICENSE','NOTICE.md'],guilds:[],license:'AGPL-3.0',reviewed:'2026-10-20'},
+  'photo-border-remover':{author:'ken-kk',relationship:'author',repo:'kieiken/photo-border-remover',sha:'92df7927148ce6bab202114393365c8bc9e652d1',title:'照片白邊移除工具',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'ga4-lp-analytics':{author:'ken-kk',relationship:'author',repo:'kieiken/ga4-lp-analytics',sha:'2c2b18d564a6bd6de24cd1057bed197af1b97c32',title:'ga4-lp-analytics：GA4 著陸頁跳出分析',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'sns-feedback-collect':{author:'ken-kk',relationship:'author',repo:'kieiken/sns-feedback-collect',sha:'6d9578f2773a645ac4fea9ed322e0144254202a3',title:'SNS Feedback Collect：貼文反應收集與調整判讀',reading:'README.md',evidence:['README.md','LICENSE','references/dashboard-contract.md','references/hao-evaluation.md'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'ultracode-token-optimization':{author:'ken-kk',relationship:'author',repo:'kieiken/ultracode-token-optimization',sha:'aa7b2bd43da2364602554e954deeecc02e903b7e',title:'ultracode-token-optimization：多代理工作流程省 token 規則',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'keynote-pptx-doctor':{author:'ken-kk',relationship:'author',repo:'kieiken/keynote-pptx-doctor',sha:'b7d2a1299f2776e481681d8fa326095cae5053f6',title:'keynote-pptx-doctor：修復 Keynote 打不開的 pptx',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'webchat-mcp':{author:'星語',relationship:'author',repo:'JS-PACKAGE/WebChatMCP.js',sha:'a9b5f77874cdb4de669c89a3b7d7fd76d2cd8a44',title:'WebChatMCP.js',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'Apache-2.0',reviewed:'2026-10-20'},
+  'gemini-voice-lab':{author:'Nico',relationship:'author',repo:'Rumi-3653/gemini-voice-lab',sha:'c8f6933127ca1d6ba65d0ce47075cfab4b5a0285',title:'gemini-voice-lab：回合制台灣口語配音',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'story-bible':{author:'Nico',relationship:'author',repo:'Rumi-3653/story-bible',sha:'d0fa28c9a2bf7f26eaf8f01a8b03c2f4508a9ef5',title:'story-bible：角色 × 場景 × 世界觀設定聖經',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'human-mode':{author:'啪哩啪啦',relationship:'curator',repo:'madeofroc-arch/AI-Detox-Center',sha:'b2f5bc19f2f22b18285dfe360a5d77acbda63ca1',title:'Human Mode：五階提示與自主思考',reading:'README.md',evidence:['README.md','LICENSE','skill/README.md'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
 } satisfies Record<string,AuthorSource>;
 type Id=keyof typeof communityAuthorSourceList;
 export const communityAuthorSources:Record<Id,AuthorSource>=communityAuthorSourceList;
 type Details=Omit<SkillBookGuide,'author_name'|'reading_url'|'source_commit'|'reviewed_at'|'source_evidence'|'contribution_url'>;
 const details:Record<Id,Details>={
-  'bidding-radar-concept':{
+  'hrflow':{
+    format:'模組化人資管理系統',summary:'從員工、出勤、請假到薪資，研究台灣情境的人資管理流程。',
+    audience:['想研究人資系統的開發者','需要整理出勤與核准流程的團隊'],
+    status:'Apache-2.0 自有程式；SQL Server、第三方依賴與政府行事曆資料另有條款，依 NOTICE 核對。.NET 10 與隔離 SQL Server 必備；SQL 整合測試限定 Windows、SQL Express 與整合驗證。這份獨立快照不是既有安裝的升級路徑。補休到期僅是 metadata，尚未自動到期或轉薪；LINE bridge 與外部出勤排程預設停用，需另外設定。台灣薪資與日曆規則須由採用者自行核對；工坊未執行上游程式。',
+    features:['員工、部門、角色與帳號管理','公司日曆、班表、出勤證據與計算','請假核准、加班、薪資及保險紀錄'],
+    prerequisites:['.NET SDK 10.0.302 與相容更新、PowerShell','空白且隔離的 SQL Server 資料庫；不接既有公司資料','閱讀 README、NOTICE 與依賴授權檢查；本人私下設定初始管理員'],
+    first_steps:['先讀 README 的資料庫、設定與安全章節，畫出自己的隔離測試環境。','依原作文件還原工具、建置，確認目標為空白測試資料庫後再初始化。','只用虛構員工走一次出勤與請假核准，記錄政策差異，保持外部串接關閉。'],
+    first_result:'一份以虛構員工核對的出勤／請假流程與環境限制紀錄。',
+    contribution:'向 Shiang 分享的原作回饋去識別重現、政策差異或安裝文件；保留 Apache-2.0、NOTICE 與行事曆來源，不上傳員工或薪資資料。',
+    beginner:{category:'小隊與協作',purpose:'從員工、出勤、請假到薪資，研究台灣情境的人資管理流程。',for_whom:'想研究人資系統的開發者、需要整理出勤與核准流程的團隊。',make:'一份以虛構員工核對的出勤／請假流程與環境限制紀錄。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流模組化人資管理系統的使用與改進。',next_step:'先讀 README 的資料庫、設定與安全章節，畫出自己的隔離測試環境。'},
+  },  'hdsljp-api':{
+    format:'Python／Flask 命盤計算 API',summary:'閱讀出生資料經星曆計算轉成人類圖欄位的 API 設計。',
+    audience:['研究人類圖計算的開發者','想練習 Flask API 的夥伴'],
+    status:'AGPL-3.0；本書只描述與連結，未複製上游程式碼。修改版透過網路供使用者互動時，須依 AGPL 提供對應原始碼；Swiss Ephemeris 另採 AGPL／專業授權雙軌，採用前核對其條款。Repo 不附必要的 .se1 星曆資料。需 Python 3.10 以上，原作建議 Linux。出生資料須本人同意；這是文化與自我探索工具，不作健康、命運或任職能力判定。工坊未驗證計算準確度。',
+    features:['以出生日期、時間、地點與時區接收計算請求','回傳類型、權威、輪廓、閘門與線位','健康檢查與 X-API-Key 計算入口'],
+    prerequisites:['Python 3.10 以上及原作 requirements，建議 Linux','另備 seas_18.se1、semo_18.se1、sepl_18.se1 並設定 EPHE_PATH','虛構出生資料與本人私下設定的 API key；先閱讀 LICENSE'],
+    first_steps:['先讀 README 的授權與外部星曆章節，確認資料與部署條件。','依原作安裝說明準備自己的隔離環境與星曆檔，先看 health 回覆。','以虛構日期和時區送一筆 calculate 請求，核對回傳欄位並記錄尚未驗證的準確度。'],
+    first_result:'一份使用虛構出生資料、列出輸入時區與回傳欄位的 API 閱讀及試用紀錄。',
+    contribution:'向 ken-kk 分享的原作回饋日文／繁中欄位說明或合成時區案例；不附真實出生資料，保留 AGPL 與星曆來源要求。',
+    beginner:{category:'定位與社群',purpose:'閱讀出生資料經星曆計算轉成人類圖欄位的 API 設計。',for_whom:'研究人類圖計算的開發者、想練習 Flask API 的夥伴。',make:'一份使用虛構出生資料、列出輸入時區與回傳欄位的 API 閱讀及試用紀錄。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流Python／Flask 命盤計算 API的使用與改進。',next_step:'先讀 README 的授權與外部星曆章節，確認資料與部署條件。'},
+  },  'usage':{
+    format:'macOS 本機用量檢視工具',summary:'在 macOS 選單列整理本機 Claude 與 Codex 紀錄中的用量。',
+    audience:['使用 macOS 的 AI 工具使用者','研究本機用量呈現的開發者'],
+    status:'ken-kk 自述為維護者，這是 lollapalooza 的 aqua5230/usage 二次修改版，須保留 NOTICE.md 原始署名。AGPL-3.0（原作標示 AGPL-3.0-only）；本書未複製程式碼，修改版若供網路互動須依 AGPL 提供對應原始碼。限 macOS，來源採 Python 3.13；安裝包未簽章，會安裝每分鐘更新的 LaunchAgent。依本機紀錄推算，數值與成本不是官方帳務；原作說明不呼叫 Anthropic／OpenAI API、不讀 Keychain。工坊未安裝或讀取任何個人日誌。',
+    features:['讀取 Claude Desktop 推算檔與 Claude Code statusLine 資料','讀取 Codex session 紀錄，缺少時隱藏該欄','檢視工作階段、每週、專案 token 與概算成本'],
+    prerequisites:['macOS；從原始碼研究時依原作 Python 3.13 環境準備','先讀 README 與 NOTICE.md，理解本機日誌存取與 LaunchAgent','自己有權使用的本機紀錄；先以 mock 模式看畫面'],
+    first_steps:['先讀 NOTICE.md，分清原作者、修改版維護與用量推算來源。','依開發者章節在自己的 macOS 環境啟動 --mock 預覽，不先接私人日誌。','本人決定是否接入本機紀錄；比較顯示與來源，記下推算限制及移除 LaunchAgent 的方式。'],
+    first_result:'一份 macOS mock 預覽及用量來源、推算限制與解除安裝方式的核對紀錄。',
+    contribution:'向維護者 ken-kk 的修改版回饋 mock 重現或文件問題，保留 lollapalooza 與 aqua5230/usage 的歸屬，不上傳 session 日誌。',
+    beginner:{category:'作品與開源',purpose:'在 macOS 選單列整理本機 Claude 與 Codex 紀錄中的用量。',for_whom:'使用 macOS 的 AI 工具使用者、研究本機用量呈現的開發者。',make:'一份 macOS mock 預覽及用量來源、推算限制與解除安裝方式的核對紀錄。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流macOS 本機用量檢視工具的使用與改進。',next_step:'先讀 NOTICE.md，分清原作者、修改版維護與用量推算來源。'},
+  },  'photo-border-remover':{
+    format:'瀏覽器圖片白邊處理工具',summary:'批次移除照片外側白邊，調整倍率與 DPI 後匯出 PNG。',
+    audience:['整理照片素材的創作者','研究瀏覽器影像處理的人'],
+    status:'MIT；原作說明照片處理留在瀏覽器，工坊未實測資料流或裁切品質。瀏覽器版不需安裝；資料夾自動儲存路徑需 macOS 與 Node.js 本機伺服器。輸入限 PNG／JPEG／WebP；倍率 1–3 倍及 DPI 設定不代表恢復原圖細節，應保留原檔並人工檢查白色主體邊緣。',
+    features:['拖放 PNG、JPEG、WebP，支援多張處理','調整白邊削除強度、DPI 與 1–3 倍輸出','瀏覽器下載 PNG，或透過 Mac 本機服務自動儲存'],
+    prerequisites:['可使用的瀏覽器及自製、有權使用的測試圖片','需要自動存資料夾時另備 macOS 與 Node.js','保留原始圖片並先閱讀 README 的設定項目'],
+    first_steps:['先讀 README，選瀏覽器下載或 Mac 資料夾自動儲存模式。','用一張自製白邊圖與一張白色主體圖試不同裁切強度。','匯出 PNG，逐張比較邊緣、尺寸與 DPI，保留原檔。'],
+    first_result:'一組保留原檔、可比較裁切邊緣及輸出規格的 PNG 範例。',
+    contribution:'向 ken-kk 的原作提供自製邊界範例、瀏覽器版本及預期裁切結果；不附未授權照片，保留 MIT 署名。',
+    beginner:{category:'內容與行銷',purpose:'批次移除照片外側白邊，調整倍率與 DPI 後匯出 PNG。',for_whom:'整理照片素材的創作者、研究瀏覽器影像處理的人。',make:'一組保留原檔、可比較裁切邊緣及輸出規格的 PNG 範例。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流瀏覽器圖片白邊處理工具的使用與改進。',next_step:'先讀 README，選瀏覽器下載或 Mac 資料夾自動儲存模式。'},
+  },  'ga4-lp-analytics':{
+    format:'GA4 計測模板與診斷頁',summary:'用區段到達、捲動與 CTA 事件，整理著陸頁的閱讀及離開線索。',
+    audience:['維護著陸頁的行銷夥伴','需要檢查 GA4 串接的網站開發者'],
+    status:'MIT 模板；不錄影的設計仍會把事件送到 Google GA4，不能把原作「不收個資」描述推成零隱私負擔。自訂 page、section、cta 值須避免個資，並核對自己的告知與資料設定。自動取數需 GA4、GCP 服務帳號與 PHP 同源 proxy；私鑰放 Web root 外，proxy 與診斷頁置於 Basic 認證下。API 有配額與並行限制，原作不保證轉換成效；工坊未接真實分析帳號。',
+    features:['lp_section_view、lp_scroll_depth、lp_cta_click 事件','PHP proxy 透過 GA4 Data API 取得彙總數字','可手填數字或自動取得的漏斗、信號與待辦診斷頁'],
+    prerequisites:['自己的測試著陸頁、GA4 property 與可執行 PHP 的環境','本人私下設定的服務帳號金鑰與 GA4 閱讀權限','先規劃不含個資的 section id、page key 及 data-cta'],
+    first_steps:['先閱讀 README 的事件表與保護設定，用合成數字熟悉手填診斷。','在自有測試頁加入區段及 CTA 標記，再依原作設定 GA4 自訂維度。','需要自動取數時才配置同源 PHP proxy，核對認證與金鑰位置，人工比較報表。'],
+    first_result:'一份以合成數字整理的著陸頁漏斗與事件命名、proxy 保護檢查表。',
+    contribution:'向 ken-kk 的原作回饋去識別事件案例、繁中說明或設定重現；不提交服務帳號金鑰、訪客資料或內部分析數字。',
+    beginner:{category:'內容與行銷',purpose:'用區段到達、捲動與 CTA 事件，整理著陸頁的閱讀及離開線索。',for_whom:'維護著陸頁的行銷夥伴、需要檢查 GA4 串接的網站開發者。',make:'一份以合成數字整理的著陸頁漏斗與事件命名、proxy 保護檢查表。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流GA4 計測模板與診斷頁的使用與改進。',next_step:'先閱讀 README 的事件表與保護設定，用合成數字熟悉手填診斷。'},
+  },  'sns-feedback-collect':{
+    format:'貼文發布後的反應整理 Skill',summary:'整理 Facebook 與 Threads 的可見貼文反應，留下調整方向的依據。',
+    audience:['執行社群貼文計畫的人','研究反應紀錄與資料契約的開發者'],
+    status:'MIT；用於發布後計測與診斷，不直接產生或發布貼文。README 依賴 Codex Desktop、Chrome 外掛、已登入服務與作者本機的 kiei-dashboard／tracking.test.js，外部儀表板不在本 repo，需自備或改接相同保存契約。不要把 README 的外掛敘述當成工坊已驗證的可用功能。讀取只限本人有權查看的畫面，仍受 Facebook／Threads 規範與存取狀態限制；工坊未登入或擷取反應。',
+    features:['以既有腳本摘要已保存的貼文反應','記錄 Facebook／Threads 畫面可見數字','依保存契約與 Hao 式判讀備忘整理調整建議'],
+    prerequisites:['能閱讀 Skill 的自己的 Agent，以及有權查看的貼文','自備本機保存位置與相容儀表板，先讀 dashboard-contract','若使用瀏覽器自動化，先自行確認外掛能力、權限與平台規範'],
+    first_steps:['先讀 README 與保存契約，列出原作作者本機路徑需要替換的地方。','用合成貼文數字做一筆保存與摘要，不先連登入中的瀏覽器。','對照判讀備忘寫維持觀察或調整的理由，缺數字時明記未知，不估造觀看數。'],
+    first_result:'一筆符合保存契約的合成貼文反應紀錄，附調整理由與缺漏欄位。',
+    contribution:'向 ken-kk 的原作回饋合成反應資料、儀表板契約或移植說明；不附登入狀態、私人貼文或聯絡人資料。',
+    beginner:{category:'內容與行銷',purpose:'整理 Facebook 與 Threads 的可見貼文反應，留下調整方向的依據。',for_whom:'執行社群貼文計畫的人、研究反應紀錄與資料契約的開發者。',make:'一筆符合保存契約的合成貼文反應紀錄，附調整理由與缺漏欄位。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流貼文發布後的反應整理 Skill的使用與改進。',next_step:'先讀 README 與保存契約，列出原作作者本機路徑需要替換的地方。'},
+  },  'ultracode-token-optimization':{
+    format:'Ultracode Workflow 操作規則 Skill',summary:'以角色分工、摘要與完成證據，減少多代理流程反覆退回重做。',
+    audience:['撰寫 Ultracode Workflow 的開發者','整理多代理交接規則的團隊'],
+    status:'MIT 文字規則集，屬軟性行為引導，不保證 token 硬上限或特定節省比例。需自己的 Claude Code／Ultracode Workflow 環境；agentType、模型名稱、繼承與 budget 敘述依作者的特定環境，採用前須逐項查核，不代表所有安裝都支援。模型服務可能另計費，工坊未啟動代理或測量節省效果。',
+    features:['依 orchestrator、executor、reviewer 分配職責','以摘要取代大量生紀錄並保留可核對證據','提供工作流程規則、提交前檢查及效果限制說明'],
+    prerequisites:['自己的 Claude Code／Ultracode Workflow 環境與服務額度','閱讀固定版本 SKILL，逐項對照實際可用 agentType','一個小型練習任務與可比較的真實用量紀錄'],
+    first_steps:['先讀 README 的前提與限制，再讀 SKILL 的角色與交接規則。','在紙上拆一個小任務，列清決策者、執行者、審查者及每次交接內容。','自行驗證環境後才試跑，記錄失敗、重工與用量，不以規則存在推定節省成功。'],
+    first_result:'一份可對照環境能力、角色分工與完成證據的多代理任務草案。',
+    contribution:'向 ken-kk 的原作回饋環境差異或可去識別的重工案例，附實際觀察與未驗項，不承諾固定節省率。',
+    beginner:{category:'小隊與協作',purpose:'以角色分工、摘要與完成證據，減少多代理流程反覆退回重做。',for_whom:'撰寫 Ultracode Workflow 的開發者、整理多代理交接規則的團隊。',make:'一份可對照環境能力、角色分工與完成證據的多代理任務草案。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流Ultracode Workflow 操作規則 Skill的使用與改進。',next_step:'先讀 README 的前提與限制，再讀 SKILL 的角色與交接規則。'},
+  },  'keynote-pptx-doctor':{
+    format:'簡報封裝診斷與修復 Skill',summary:'檢查 pptx 封裝結構，為 PowerPoint 能開而 Keynote 拒絕的檔案找線索。',
+    audience:['跨平台交付簡報的人','產生 pptx 的工具開發者'],
+    status:'MIT；原作提供瀏覽器本機處理、Claude Code Skill 與只用 Python 標準庫的腳本。檢查封裝關聯、媒體格式與 XML，不保證所有問題都能自動修復；修復後仍須在目標 Keynote 核對版面與備註，macOS Quick Look 驗證也需 Mac。原作說明不修改投影片內容，工坊未執行或驗證修復結果，請保留原檔。',
+    features:['診斷缺少 notes master、關聯遺失與 Content Types 問題','檢查副檔名與媒體位元、XML 格式及元素順序','單檔或資料夾批次診斷，另存修復副本'],
+    prerequisites:['一份自製測試 pptx 與原始備份','瀏覽器，或 Python 3 標準庫環境','要確認 Keynote／Quick Look 匯入結果時需 macOS'],
+    first_steps:['先讀 README 的檢查範圍，用自製簡報留一份原始備份。','先以 diagnose.py 診斷單檔，再視結果用 --fix 另存副本。','在目標 Keynote 開修復版，逐頁比較版面、媒體與備註，記錄仍未解決的問題。'],
+    first_result:'一份保留原檔的簡報封裝診斷紀錄，以及需人工核對的修復副本清單。',
+    contribution:'向 ken-kk 的原作回饋最小自製 pptx、診斷狀態與 Keynote 版本；不附公司機密簡報或未授權媒體。',
+    beginner:{category:'內容與行銷',purpose:'檢查 pptx 封裝結構，為 PowerPoint 能開而 Keynote 拒絕的檔案找線索。',for_whom:'跨平台交付簡報的人、產生 pptx 的工具開發者。',make:'一份保留原檔的簡報封裝診斷紀錄，以及需人工核對的修復副本清單。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流簡報封裝診斷與修復 Skill的使用與改進。',next_step:'先讀 README 的檢查範圍，用自製簡報留一份原始備份。'},
+  },  'webchat-mcp':{
+    format:'內建瀏覽器的本機 MCP server',summary:'透過本機瀏覽器橋接網頁聊天服務，將回覆交回 MCP client。',
+    audience:['研究 MCP 與瀏覽器橋接的開發者','需要理解模型工具資料流的人'],
+    status:'Apache-2.0；需 Node.js 22 以上、Playwright Chromium；Claude／Grok 要登入，訪客與暫存對話狀態依服務而異，不能保證零保存。提示、歷史、工具結果會送到所選第三方聊天服務，仍受其條款、額度與收費限制，並非官方 API 或繞過付費方案。本機持久瀏覽器 profile 保留登入。工具回合由 host 依自己的權限與確認執行，不是沙箱。Codex 等外掛安裝會關閉應用並改設定，服務停止可能影響官方模型連線；Windows 腳本未實機驗證。工坊未安裝或登入。',
+    features:['內建持久 Chromium，提供 stdio 與本機 HTTP MCP','查詢登入／暫存狀態、模型與思考深度，回傳聊天文字','可選外掛把網頁模型工具請求交回 host 原生工具回合'],
+    prerequisites:['Node.js 22 以上與 Chromium；本人自行處理登入','自己的 MCP client 與無敏感內容的測試提示','先讀 README 與要採用的外掛文件，確認 profile 保存及資料出口'],
+    first_steps:['先讀 README 的資料流與安裝副作用，從單純 MCP server 開始，不先安裝外掛。','依原作準備自己的測試環境，使用預設 loopback 連線並查 webchat_status。','用合成提示測一個 provider，核對登入、暫存狀態與回覆；unknown 就保留未知，完成後自行關閉。'],
+    first_result:'一份單一 provider 的 MCP 橋接閱讀／試用紀錄，列明資料出口與狀態未知項。',
+    contribution:'向星語分享的原作回饋去識別狀態重現、文件或 selector 差異；保留 Apache-2.0，不提供 profile、cookie 或私人聊天。',
+    beginner:{category:'作品與開源',purpose:'透過本機瀏覽器橋接網頁聊天服務，將回覆交回 MCP client。',for_whom:'研究 MCP 與瀏覽器橋接的開發者、需要理解模型工具資料流的人。',make:'一份單一 provider 的 MCP 橋接閱讀／試用紀錄，列明資料出口與狀態未知項。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流內建瀏覽器的本機 MCP server的使用與改進。',next_step:'先讀 README 的資料流與安裝副作用，從單純 MCP server 開始，不先安裝外掛。'},
+  },  'gemini-voice-lab':{
+    format:'Gemini TTS 配音迭代 Skill',summary:'每回合只改一個聲音變因，讓試聽評語累積成自己的配音規則。',
+    audience:['製作 AI 配音的創作者','想整理台灣口語發音規則的人'],
+    status:'MIT；真實生成需 Google Gemini API，文字與聲音樣本會送到 Google。免費層次數、模型與造聲 API 能力以自己的專案為準；固定版本記載 API 造聲免費層與 language_code 等仍未實測，不保證免費或台灣腔效果。複製聲音只限本人，須完成同意；私人音檔與 ID 不進 Git。配樂、音效與混音不在範圍，工坊未呼叫 API 或試聽。',
+    features:['以 voice、style、text 分類評語並做單變數回合','內建 TTS 引擎、配音譜與風格表，提供 dry-run','記錄規則為驗證中、定案、推翻或爭議，保留證據'],
+    prerequisites:['Python 3.10 以上、google-genai 與 ffmpeg','真實生成由本人私下設定 GEMINI_API_KEY 與額度','一段自寫 UTF-8 測試稿及願意親自試聽的創作者'],
+    first_steps:['先讀 README 的限制，用 voices.py --selfcheck 與 tts_gemini.py --dry-run 核對離線流程。','需要真實試聽時才由本人設定 key，以 --one-request 做一回合基線。','聽完只挑一個評語分類並改一個變因；換句子再確認，才把規則從驗證中升成定案。'],
+    first_result:'一張單變數配音回合紀錄，包含基線、本人評語與仍待確認的規則。',
+    contribution:'向 Nico 的原作回饋去識別發音案例、dry-run 文件或規則 schema；不附金鑰、本人複製音色 ID 或未授權聲音。',
+    beginner:{category:'內容與行銷',purpose:'每回合只改一個聲音變因，讓試聽評語累積成自己的配音規則。',for_whom:'製作 AI 配音的創作者、想整理台灣口語發音規則的人。',make:'一張單變數配音回合紀錄，包含基線、本人評語與仍待確認的規則。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流Gemini TTS 配音迭代 Skill的使用與改進。',next_step:'先讀 README 的限制，用 voices.py --selfcheck 與 tts_gemini.py --dry-run 核對離線流程。'},
+  },  'story-bible':{
+    format:'Markdown 創作設定卡與檢查工具',summary:'把角色、場景與世界觀留成唯一正本，讓生圖、編劇與配音共用設定。',
+    audience:['製作系列 AI 影像的創作者','需要管理角色設定與交接的團隊'],
+    status:'MIT；Markdown 卡可手填，Python 3.8 以上的 check／export 只用標準庫。本工具管理設定，不會自行生成影像、聲音或保證一致性；下游模型費用及資料傳輸另計。範例視覺鎖句與聲線參數未經平台實測；部分下游是作者自用或第三方工具，不在 repo。library 預設忽略版本控制，仍須自己保護未發表 IP；參考圖與聲音需有權使用。工坊未執行匯出。',
+    features:['角色卡分視覺、敘事與聲演三層','場景、世界觀卡與封存劇透路徑','check 檢查卡片，export 產出指定下游角色 JSON'],
+    prerequisites:['Markdown 編輯器與自創角色設定','要用檢查／匯出時需 Python 3.8 以上','自己有權使用的參考圖、聲音與私人卡保存位置'],
+    first_steps:['先讀 README，把 templates 的空白角色卡放到自己的 library/IP 資料夾。','用自創角色分開填視覺、敘事與聲演，逐鏡道具另記 props。','依原作先做 check；需要相容下游時才 export，修改設定後回存正本並保留版本日期。'],
+    first_result:'一張三層自創角色卡與檢查紀錄，附下游取用欄位和正本更新方式。',
+    contribution:'向 Nico 的原作提供自創卡片範例、欄位檢查或匯出問題；不公開未發表 IP、封存劇透或未授權參考素材。',
+    beginner:{category:'內容與行銷',purpose:'把角色、場景與世界觀留成唯一正本，讓生圖、編劇與配音共用設定。',for_whom:'製作系列 AI 影像的創作者、需要管理角色設定與交接的團隊。',make:'一張三層自創角色卡與檢查紀錄，附下游取用欄位和正本更新方式。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流Markdown 創作設定卡與檢查工具的使用與改進。',next_step:'先讀 README，把 templates 的空白角色卡放到自己的 library/IP 資料夾。'},
+  },  'human-mode':{
+    format:'思辨問答遊戲與提示階梯 Skill',summary:'先留下自己的答案，再檢查論證；用五階提示練習保留自主思考。',
+    audience:['想練習判讀 AI 論證的人','研究教學提示與可及性的夥伴'],
+    status:'啪哩啪啦自述為策展者，原作為 madeofroc-arch/AI-Detox-Center，不能據此稱其為作者。MIT；固定版本的遊戲採預寫題目、本機計算，不需帳號、推論或 API key。結果是遊玩樣本比例，不是心理診斷或個人能力判決；部分題目仍有可辨識線索，重要觀察需多次遊玩。安裝到聊天服務的 Skill 後，對話資料依該服務處理，不能將遊戲本機隱私延伸到所有平台。舊 tracker 歷史保留封存；工坊未執行遊戲或證明訓練效果。',
+    features:['先選暫定答案才開提示，揭露真實論證與誤導論證','本機紀錄遊玩比例，產生提示階梯 YAML','跨平台 Skill 使用五階提示，仍可隨時要求完整答案'],
+    prerequisites:['先讀 README 與 skill/README.md，選遊戲或提示 Skill 路線','遊戲需 Node.js 20 以上；裝置版另依 Expo 說明','一個願意自行作答及回看推理過程的練習題'],
+    first_steps:['先讀原作限制與隱私說明，區分遊戲、本機紀錄與外部聊天平台。','依自己的環境選遊戲或複製提示指引，先記下自己的暫定答案。','回看論證後只描述這次遊玩的觀察，若使用 Skill 可隨時要求完整答案，記錄對自己有幫助的提示層。'],
+    first_result:'一份先作答、再檢查論證的練習紀錄，附本人選擇的提示層與觀察樣本限制。',
+    contribution:'沿啪哩啪啦策展的原作入口回饋可查證題目、誤導論證或螢幕閱讀器紀錄；保留原作 MIT 與作者資訊，不把遊玩比例寫成人格評分。',
+    beginner:{category:'定位與社群',purpose:'先留下自己的答案，再檢查論證；用五階提示練習保留自主思考。',for_whom:'想練習判讀 AI 論證的人、研究教學提示與可及性的夥伴。',make:'一份先作答、再檢查論證的練習紀錄，附本人選擇的提示層與觀察樣本限制。',workshop_use:'帶著小型範例與限制紀錄，和社群夥伴交流思辨問答遊戲與提示階梯 Skill的使用與改進。',next_step:'先讀原作限制與隱私說明，區分遊戲、本機紀錄與外部聊天平台。'},
+  },  'bidding-radar-concept':{
     format:'概念與設計文件（不含程式碼）',summary:'從公開資料設計標案搜尋、追蹤、決標分析與公司補助資格比對。',
     audience:['尋找標案或補助的團隊','想依自己的需求開發資料工具的人'],
     status:'原作僅公開概念與設計，沒有可安裝程式。可交給 AI 參考再自行開發；資料取得須依來源規範，資格與期限回到官方公告確認。',
@@ -159,7 +292,7 @@ const details:Record<Id,Details>={
   },
 };
 export const communityAuthorGuides:Record<string,SkillBookGuide>=Object.fromEntries(Object.entries(communityAuthorSources).map(([id,source])=>[id,{
-  ...details[id as Id],author_name:source.author,reading_url:`https://github.com/${source.repo}/blob/${source.sha}/${source.reading}`,
+  ...details[id as Id],author_name:source.author,credit_role:source.relationship==='maintainer'?'維護':source.relationship==='curator'?'策展':undefined,reading_url:`https://github.com/${source.repo}/blob/${source.sha}/${source.reading}`,
   source_commit:source.sha,reviewed_at:source.reviewed,contribution_url:`https://github.com/${source.repo}/issues`,
   source_evidence:source.evidence.map(path=>({path,url:`https://github.com/${source.repo}/blob/${source.sha}/${path}`})),
 }]));

@@ -40,7 +40,7 @@ export function skillMarkdown(id:string,editorial?:SkillEditorial|null){
  const collaboration=getSkillCollaboration(id,editorial);
  return [`# ${book.title}：技能書與協作來源`,(editorial?.summary||guide.beginner.purpose),
   '## 工坊收錄說明',guide.beginner.category,guide.beginner.for_whom,guide.beginner.make,guide.beginner.workshop_use,guide.beginner.next_step,
-  '## 封面與原作者',...(guide.author_name?[`作者：${guide.author_name}`]:[]),`封面插畫：${book.cover_url}`,`原作者 GitHub：${book.star_url}`,'登入自由工坊並連結自己的 GitHub，即可在技能書加星或取消星星。',`原作數據：/api/v1/github/books/${book.id}/metrics`,'Stars、Forks、追蹤數、未結 Issues 與 PR 合計、最近程式更新時間以 GitHub 回覆為準；數據附核對時間，讀取失敗不冒充零。',
+  '## 封面與來源署名',...(guide.author_name?[`${guide.credit_role??'作者'}：${guide.author_name}`]:[]),`封面插畫：${book.cover_url}`,`${guide.credit_role?'原作':'原作者'} GitHub：${book.star_url}`,'登入自由工坊並連結自己的 GitHub，即可在技能書加星或取消星星。',`原作數據：/api/v1/github/books/${book.id}/metrics`,'Stars、Forks、追蹤數、未結 Issues 與 PR 合計、最近程式更新時間以 GitHub 回覆為準；數據附核對時間，讀取失敗不冒充零。',
   '## 讀者與格式',guide.format,...guide.audience.map(value=>'- '+value),
   '## 功能與使用範圍',guide.status,...guide.features.map(value=>'- '+value),
   '## 開始前準備',...guide.prerequisites.map(value=>'- '+value),
@@ -140,16 +140,16 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
   const count=(value:number|null|undefined)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?String(value):'—';
   const date=(value:string|null|undefined)=>value&&!Number.isNaN(Date.parse(value))?escape(new Date(value).toISOString().slice(0,10)):'—';
   const original=escape(book.upstream_url),author=escape(new URL(book.upstream_url).origin+'/'+new URL(book.upstream_url).pathname.split('/')[1]);
-  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-repository="'+original+'" aria-label="原作者 GitHub 數據"><div class="public-skill-support">'
+  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-repository="'+original+'" aria-label="'+(book.guide.credit_role?'原作':'原作者')+' GitHub 數據"><div class="public-skill-support">'
     +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗">☆ Stars '+count(metrics?.stargazers_count)+'</a>'
     +'<a href="'+original+'/fork" target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗">Forks '+count(metrics?.forks_count)+'</a>'
     +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="追蹤專案（Watch）↗">Watch '+count(metrics?.subscribers_count)+'</a>'
-    +'<a href="'+author+'" target="_blank" rel="noopener noreferrer">Follow 原作者 ↗</a></div><p>未結 Issues／PR '+count(metrics?.open_issues_count)+' · 程式更新 '+date(metrics?.pushed_at)+'</p><p>'+(metrics?.checked_at?(metrics.stale?'上次取得的數據':'數據更新')+' · '+date(metrics.checked_at):'尚未取得 GitHub 數據')+'</p></section>';
+    +'<a href="'+author+'" target="_blank" rel="noopener noreferrer">Follow '+(book.guide.credit_role?'來源帳號':'原作者')+' ↗</a></div><p>未結 Issues／PR '+count(metrics?.open_issues_count)+' · 程式更新 '+date(metrics?.pushed_at)+'</p><p>'+(metrics?.checked_at?(metrics.stale?'上次取得的數據':'數據更新')+' · '+date(metrics.checked_at):'尚未取得 GitHub 數據')+'</p></section>';
   // Discovery also counts administrator-approved guild bindings; without it the static designation decides.
   const official=(discovery?.official_guild_keys??officialGuildKeys(book.id)).length>0;
   const guildBadges=official?(discovery?.official_guilds?.length?discovery.official_guilds.map(guild=>'<span title="自由工坊公會指定技能；不代表原作者背書">✦ '+escape(guild.name)+'指定技能</span>').join(''):'<span title="自由工坊公會指定技能；不代表原作者背書">✦ 官方公會技能</span>'):'<span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span>';
   const badges='<div class="public-skill-badges" aria-label="技能書徽章">'+guildBadges+(discovery?.is_new_today?'<span>每日新技能</span>':'')+(discovery?.week_rank?'<span>工坊週榜 #'+discovery.week_rank+'</span>':'')+(discovery?.month_rank?'<span>工坊月榜 #'+discovery.month_rank+'</span>':'')+'</div>';
-  const entry='<section class="public-skill-entry">'+cover+'<div><p class="public-skill-purpose">'+escape(editorial?.summary||book.guide.beginner.purpose)+'</p>'+(book.guide.author_name?'<p>來源標示的作者：'+escape(book.guide.author_name)+'</p>':'')+authorClaimMarkup(authorClaim)+badges+stats+'<div class="public-skill-actions">'+actions+'</div><p class="public-skill-example">'+escape(book.guide.first_result)+'</p></div></section>';
+  const entry='<section class="public-skill-entry">'+cover+'<div><p class="public-skill-purpose">'+escape(editorial?.summary||book.guide.beginner.purpose)+'</p>'+(book.guide.author_name?'<p>來源標示的'+escape(book.guide.credit_role??'作者')+'：'+escape(book.guide.author_name)+'</p>':'')+authorClaimMarkup(authorClaim)+badges+stats+'<div class="public-skill-actions">'+actions+'</div><p class="public-skill-example">'+escape(book.guide.first_result)+'</p></div></section>';
   const cooperation=getSkillCollaboration(book.id,editorial);
   const content=shareContentFor(book.id),selected=shareIntroNumber(intro,content.introductions.length),selectedText=selected?content.introductions[selected-1]:null;
   const illustration=content.illustration?'<figure class="public-skill-illustration"><img src="'+escape(content.illustration.url)+'" alt="'+escape(content.illustration.alt)+'" width="1200" height="630" loading="lazy" decoding="async"><figcaption>功能示意圖，非實際操作截圖。</figcaption></figure>':'';

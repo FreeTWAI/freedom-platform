@@ -1,3 +1,15 @@
+import memberShared0 from './share-introductions/hrflow.json' with {type:'json'};
+import memberShared1 from './share-introductions/hdsljp-api.json' with {type:'json'};
+import memberShared2 from './share-introductions/usage.json' with {type:'json'};
+import memberShared3 from './share-introductions/photo-border-remover.json' with {type:'json'};
+import memberShared4 from './share-introductions/ga4-lp-analytics.json' with {type:'json'};
+import memberShared5 from './share-introductions/sns-feedback-collect.json' with {type:'json'};
+import memberShared6 from './share-introductions/ultracode-token-optimization.json' with {type:'json'};
+import memberShared7 from './share-introductions/keynote-pptx-doctor.json' with {type:'json'};
+import memberShared8 from './share-introductions/webchat-mcp.json' with {type:'json'};
+import memberShared9 from './share-introductions/gemini-voice-lab.json' with {type:'json'};
+import memberShared10 from './share-introductions/story-bible.json' with {type:'json'};
+import memberShared11 from './share-introductions/human-mode.json' with {type:'json'};
 import communityAuthor0 from './share-introductions/bidding-radar-concept.json' with {type:'json'};
 import communityAuthor1 from './share-introductions/aiwff-runtime.json' with {type:'json'};
 import communityAuthor2 from './share-introductions/n8n-marketing-flows.json' with {type:'json'};
@@ -41,10 +53,23 @@ import supplierClient from './share-introductions/supplier-client.json' with {ty
 import typoStudio from './share-introductions/typo-studio.json' with {type:'json'};
 import videoAutopilot from './share-introductions/video-autopilot.json' with {type:'json'};
 
-export const skillShareContentVersion='2026-10-01.1';
+export const skillShareContentVersion='2026-10-20.1';
 export type SkillShareContent = {introductions:string[];illustration_url:string;illustration_alt:string};
 
 const content:Record<string,{introductions:string[];illustration_alt:string}> = {
+  'hrflow':{introductions:memberShared0,illustration_alt:"員工資料夾與行事曆經出勤時鐘及核准關卡，整理成薪資信封的工坊導讀示意。"},
+  'hdsljp-api':{introductions:memberShared1,illustration_alt:"虛構日期與時鐘進入星曆軌道裝置，再形成節點相連的抽象人類圖示意。"},
+  'usage':{introductions:memberShared2,illustration_alt:"本機日誌資料夾連到桌面用量刻度、token 珠粒計數器與重設時鐘的示意。"},
+  'photo-border-remover':{introductions:memberShared3,illustration_alt:"數張帶白框的風景圖塊通過裁切框，形成移除外側白邊的圖片輸出。"},
+  'ga4-lp-analytics':{introductions:memberShared4,illustration_alt:"頁面區段、捲動與點擊標記聚成事件，經代理橋接到漏斗與待覆核卡片。"},
+  'sns-feedback-collect':{introductions:memberShared5,illustration_alt:"貼文卡及可見反應珠粒進入本機收集盤，再整理成供人工判讀的比較卡。"},
+  'ultracode-token-optimization':{introductions:memberShared6,illustration_alt:"三個代理方塊共用精簡任務卡，取代重複的大疊資料，再交回小型成果資料夾。"},
+  'keynote-pptx-doctor':{introductions:memberShared7,illustration_alt:"備份簡報資料夾旁的放大鏡檢查投影片封裝，保留原件並另存修復圖塊。"},
+  'webchat-mcp':{introductions:memberShared8,illustration_alt:"聊天氣泡經本機瀏覽器橋接到空白網頁卡，工具請求旁保留 host 核准關卡。"},
+  'gemini-voice-lab':{introductions:memberShared9,illustration_alt:"稿紙進入配音裝置，耳機試聽後把評語送回迭代環，產生修訂的聲音波形。"},
+  'story-bible':{introductions:memberShared10,illustration_alt:"虛構角色、場景與世界地圖卡整理進同一套參考資料，再連到分鏡圖框。"},
+  'human-mode':{introductions:memberShared11,illustration_alt:"五個提示階梯從問題卡跨過暫停空間，通往分枝思考樹與自行書寫的筆記。"},
+
   'bidding-radar-concept':{introductions:communityAuthor0,illustration_alt:"公司描述與補助文件逐條比對後分組，旁邊的雷達掃描標案資料，呈現設計概念。"},
   'aiwff-runtime':{introductions:communityAuthor1,illustration_alt:"任務卡進入本機背景執行器，依序顯示進度並把完成檔案放回資料夾。"},
   'n8n-marketing-flows':{introductions:communityAuthor2,illustration_alt:"新聞資料通過串接的工作流節點與模型，輸出可供人工確認的貼文草稿。"},
