@@ -25499,8 +25499,8 @@
     },
     {
       "path": "tests/runtime/storefront-appearance-media.test.ts",
-      "bytes": 23002,
-      "sha256": "b6b0e0e5318b21024f99f83ebe42975e0a3ca0e6740e066d0487d319e4926135"
+      "bytes": 29374,
+      "sha256": "3c7b79af95a621c47488d6b6faee603a41519927e3683785a4dc64ecd0cdaba7"
     },
     {
       "path": "tests/runtime/storefront-appearance-migration.test.ts",

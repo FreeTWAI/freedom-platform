@@ -1,7 +1,7 @@
 import {LIVE_PUBLIC_ORIGIN} from '../../apps/platform-api/src/routes/published-skills.js';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {before,after,beforeEach,test} from 'node:test';
+import {before,after,beforeEach,test,type TestContext} from 'node:test';
 import sharp from 'sharp';
 import type {Pool} from 'pg';
 import {createAssetLifecycleWithAuthority,type LifecycleProfile,type LifecyclePrepare} from '../../modules/assets/engine.js';
@@ -222,4 +222,76 @@ test('APPEARANCE-MEDIA-15 appearance routers preserve unrelated API and static r
     assert.equal(after.status,before.status);assert.equal(await after.text(),await before.text());
     assert.deepEqual(Object.fromEntries(after.headers),Object.fromEntries(before.headers),'Appearance cache/noindex/Vary headers belong only to appearance routes.');
   }
+});
+
+function delayedPut(t:TestContext){
+  let entered!:()=>void,release!:()=>void,first=true;
+  const reached=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+  const put=f.store.putImmutable.bind(f.store);
+  t.mock.method(f.store,'putImmutable',async(...args:Parameters<typeof put>)=>{
+    const wait=first;first=false;const result=await put(...args);
+    if(wait){entered();await gate;}return result;
+  });
+  return {release,async reached(pending:Promise<Response>){await Promise.race([reached,pending.then(()=>assert.fail('The upload must reach the unlocked object-store gate.'))]);}};
+}
+async function refusedPublication(s:Store,role:AppearanceRole,key:string){
+  const row=(await f.h.pool.query(`SELECT i.intent_id,i.state,a.state AS asset_state,t.asset_id AS pointer FROM asset_upload_intents i
+    JOIN assets a USING(asset_id) JOIN commerce_storefront_appearance_targets t ON t.tenant_id=i.target_tenant_id AND t.instance_id=i.target_instance_id AND t.kind=i.target_kind
+    WHERE i.target_instance_id=$1 AND i.target_kind=$2`,[s.instanceId,'storefront.'+role])).rows;
+  assert.equal(row.length,1);assert.equal(row[0].asset_state,'pending');assert.equal(row[0].pointer,null);assert.notEqual(row[0].state,'finalized');
+  assert.equal((await f.h.pool.query(`SELECT count(*)::int n FROM scoped_command_receipts
+    WHERE (target_id=$1 AND operation=$2 AND idempotency_key=$3) OR (target_id=$4 AND operation='asset.upload.finalize')`,
+  [s.instanceId,'storefront.'+role+'.upload',key,row[0].intent_id])).rows[0].n,0);
+  assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM scoped_transition_journal WHERE aggregate_id=$1 AND operation=$2',
+    [s.instanceId,'storefront.'+role+'.upload'])).rows[0].n,0);
+  return row[0];
+}
+test('APPEARANCE-MEDIA-16 a profile edit during delayed object IO refuses stale cover finalization and its success receipt',async t=>{
+  const s=await f.openStore();await enable();const gate=delayedPut(t),key=randomUUID(),pending=upload(s,'cover',photoSourcePng,'1',key);
+  try{
+    await gate.reached(pending);
+    f.ok(await f.h.call('PATCH',s.root+'/appearance-settings',s.owner,{template_id:'catalog-grid-v1',accent_preset:'forest',announcement:'合成同步修改',featured_product_ids:[]},
+      {'Idempotency-Key':randomUUID(),'If-Match':'"1"'},application()));
+  }finally{gate.release();}
+  const response=await pending;assert.equal(response.status,412);assert.equal((await response.json() as any).code,'version_conflict');
+  await refusedPublication(s,'cover',key);assert.equal((await draft(s)).version,'2');
+});
+test('APPEARANCE-MEDIA-17 lease takeover during delayed object IO fences the original writer without a ready pointer or receipt',async t=>{
+  const s=await f.openStore();await enable();const gate=delayedPut(t),key=randomUUID(),pending=upload(s,'logo',photoSourcePng,'1',key);
+  try{
+    await gate.reached(pending);
+    const intent=(await f.h.pool.query("SELECT intent_id,fence,lease_token FROM asset_upload_intents WHERE target_kind='storefront.logo'")).rows[0];
+    await f.h.pool.query("UPDATE asset_upload_intents SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE intent_id=$1",[intent.intent_id]);
+    const api=await assets.forRole('logo',{mime:'image/png',bytes:photoSourcePng});
+    const lease=await api.claim({...s.actor,tenant_id:s.tenantId,instance_id:s.instanceId},{key:randomUUID(),intentId:intent.intent_id});
+    assert.equal(lease.fence,String(BigInt(intent.fence)+1n));assert.notEqual(lease.leaseToken,intent.lease_token);
+  }finally{gate.release();}
+  const response=await pending;assert.equal(response.status,409);assert.equal((await response.json() as any).code,'asset_lease_stale');
+  const row=await refusedPublication(s,'logo',key);assert.equal(row.state,'processing');assert.equal((await draft(s)).version,'1');
+  assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts WHERE target_id=$1 AND operation=\'asset.upload.write\'',[row.intent_id])).rows[0].n,0);
+});
+test('APPEARANCE-MEDIA-18 session expiry during delayed object IO refuses storage completion, ready publication and the success receipt',async t=>{
+  const s=await f.openStore();await enable();const gate=delayedPut(t),key=randomUUID(),pending=upload(s,'cover',photoSourcePng,'1',key);
+  try{
+    await gate.reached(pending);
+    await f.h.pool.query("UPDATE sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE token_hash=$1",[s.actor.session_hash]);
+  }finally{gate.release();}
+  const response=await pending;assert.equal(response.status,401);assert.equal((await response.json() as any).code,'session_expired');
+  const row=await refusedPublication(s,'cover',key);assert.equal(row.state,'processing');
+  assert.equal((await f.h.pool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1',[s.instanceId])).rows[0].version,'1');
+  assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts WHERE target_id=$1 AND operation=\'asset.upload.write\'',[row.intent_id])).rows[0].n,0);
+});
+test('APPEARANCE-MEDIA-19 cover and logo finalizations serialize on the same profile CAS across delayed object IO',async t=>{
+  const s=await f.openStore();await enable();const gate=delayedPut(t),key=randomUUID(),pending=upload(s,'cover',photoSourcePng,'1',key);
+  let winner!:Awaited<ReturnType<typeof saved>>;
+  try{
+    await gate.reached(pending);winner=await saved(await upload(s,'logo',photoSourcePng,'1'));
+    assert.equal(winner.completed_version,'2');assert.equal(winner.current.cover,null);assert.ok(winner.current.logo);
+  }finally{gate.release();}
+  const response=await pending;assert.equal(response.status,412);assert.equal((await response.json() as any).code,'version_conflict');
+  await refusedPublication(s,'cover',key);
+  const current=await draft(s);assert.equal(current.version,'2');assert.equal(current.cover,null);assert.deepEqual(current.logo,winner.current.logo);
+  assert.equal((await f.h.pool.query("SELECT count(*)::int n FROM assets WHERE state='ready'")).rows[0].n,1);
+  assert.deepEqual((await f.h.pool.query("SELECT operation,count(*)::int n FROM scoped_command_receipts WHERE operation IN ('storefront.cover.upload','storefront.logo.upload') GROUP BY operation")).rows,
+    [{operation:'storefront.logo.upload',n:1}]);
 });
