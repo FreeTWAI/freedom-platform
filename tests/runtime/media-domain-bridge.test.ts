@@ -70,3 +70,9 @@ test('appearance keeps the established product-photo purpose and fences both new
  assert.deepEqual((await pool.query("SELECT purpose FROM domain_media_storage_policy WHERE purpose IN ('storefront.cover','storefront.logo')")).rows,[]);
  assert.deepEqual((await pool.query("SELECT tgrelid::regclass::text AS table_name FROM pg_trigger WHERE tgname='reject_fenced_asset_reference' AND tgrelid IN ('commerce_storefront_appearance_targets'::regclass,'commerce_publication_appearance_refs'::regclass) ORDER BY table_name")).rows.map(r=>r.table_name),['commerce_publication_appearance_refs','commerce_storefront_appearance_targets']);
 });
+
+
+test('gallery keeps product-photo quota and backup identity and fences both retained reference tables',async()=>{
+ assert.deepEqual((await pool.query("SELECT purpose FROM domain_media_storage_policy WHERE purpose LIKE '%gallery%'")).rows,[]);
+ assert.deepEqual((await pool.query("SELECT tgrelid::regclass::text AS table_name FROM pg_trigger WHERE tgname='reject_fenced_asset_reference' AND tgrelid IN ('commerce_product_gallery_photos'::regclass,'commerce_publication_gallery_refs'::regclass) ORDER BY table_name")).rows.map(r=>r.table_name),['commerce_product_gallery_photos','commerce_publication_gallery_refs']);
+});

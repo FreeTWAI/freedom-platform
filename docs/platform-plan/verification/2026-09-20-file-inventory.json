@@ -13510,7 +13510,7 @@
     {
       "path": "deploy/cloudflare/environments.json",
       "bytes": 30992,
-      "sha256": "7c72266b9f8ecf33f3cc998052176225a5e4d5a1cd5974aaf8ada258653e34b1"
+      "sha256": "c0febd43599dd86c40338ef95a244eac90dc95a73d2c3be99b9f88a2ebcaec13"
     },
     {
       "path": "deploy/cloudflare/media-preflight.md",
@@ -13644,8 +13644,8 @@
     },
     {
       "path": "deploy/cloudflare/lib/release-compatibility.mjs",
-      "bytes": 47600,
-      "sha256": "bc7944a56468fe4e452aa613d242acd522c14cb33a27dcba455f5fd3995ce5f3"
+      "bytes": 47640,
+      "sha256": "9e385d9da0a1d45e9d1111ca87ffce0aaf4c590310443812b2ab68369473bd50"
     },
     {
       "path": "deploy/cloudflare/lib/wrangler.mjs",
@@ -13659,8 +13659,8 @@
     },
     {
       "path": "deploy/cloudflare/sql/20-runtime-grants.psql",
-      "bytes": 25609,
-      "sha256": "365391cbad6782b49a46976decbe6e819d06bc70b569053004aafed5e10ddb2e"
+      "bytes": 28128,
+      "sha256": "a72ae1bef6f5e9467eb7ed390ada8bd03ef0562da7da1553e642046ce2dfc15d"
     },
     {
       "path": "deploy/cloudflare/sql/30-verify-readonly.psql",
@@ -13730,7 +13730,7 @@
     {
       "path": "deploy/cloudflare/test/migration-plan.test.mjs",
       "bytes": 13124,
-      "sha256": "6f71daf6d2a0411ce9c061f2bae2dc3938257444c0859e986543aeb208636f1a"
+      "sha256": "a06a5d52006dacc5f5e1ff3680df7b643362191129369c585f819e38099177a8"
     },
     {
       "path": "deploy/cloudflare/test/migration-reviewed-privileges.test.mjs",
@@ -13764,8 +13764,8 @@
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 83306,
-      "sha256": "08670c50d4251e9a94b974e0e263f4532c644f0e24e128efdcd55e69fdc28d16"
+      "bytes": 85489,
+      "sha256": "a48fa7e7c75ab88ec10cf7e96bde6991eb6be4c3d77642279734779fc9fa1698"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
@@ -17433,6 +17433,11 @@
       "sha256": "f48f77f1d3bee1cace934db9588a155702bcec46a61a09d0116cd394f69fab5e"
     },
     {
+      "path": "migrations/177_storefront_product_gallery.sql",
+      "bytes": 22096,
+      "sha256": "0cde2d2e4bb47ea23a6db7cfd945a93e8564ef292d765e0f4deae995bec9f45e"
+    },
+    {
       "path": "modules/agent-commerce/README.md",
       "bytes": 34585,
       "sha256": "22f7e927e8673874a07248b66f71276ba9a76faf6154b10206d2703533b1d873"
@@ -20219,8 +20224,8 @@
     },
     {
       "path": "modules/module-data/catalog.ts",
-      "bytes": 141042,
-      "sha256": "213c8be82be44f008eefed0fafc2bed84e187db96e62a7ec871fe26355d6abcc"
+      "bytes": 143657,
+      "sha256": "14f272c5b07b6b375d675a829215fce8923f23909affc8c9fdfc2f3763adaf1a"
     },
     {
       "path": "modules/module-data/freedom.module.json",
@@ -23403,6 +23408,11 @@
       "sha256": "d486b8ae7a0c4bb1db799cc606b83894c7b1649fd26ad6da4ad3d13a8bf01a1a"
     },
     {
+      "path": "tests/helpers/storefront-gallery.ts",
+      "bytes": 4381,
+      "sha256": "101e66adae9d89e30eb4d801853489a31a2a73383f5525288827f58460b80c2a"
+    },
+    {
       "path": "tests/helpers/storefront-policies.ts",
       "bytes": 3288,
       "sha256": "da10a98b80de0b30241305507ffd6f5a23721c657632803c8c876bd52eb8d7f2"
@@ -23499,8 +23509,8 @@
     },
     {
       "path": "tests/integration/tenant-rls-restore-drill.test.ts",
-      "bytes": 84155,
-      "sha256": "19a9432dab62fed3d6067fb2d3d88436e10b4e6813bda317e60abf8021b4dd7f"
+      "bytes": 84324,
+      "sha256": "8ffa23b62b866bd5d8b4e7efc8e688d22b0c66749aef268dd87b0a138520a7ba"
     },
     {
       "path": "tests/integration/helpers/media-restore-fixtures.ts",
@@ -24694,8 +24704,8 @@
     },
     {
       "path": "tests/runtime/media-domain-bridge.test.ts",
-      "bytes": 21490,
-      "sha256": "23e7c4d4e4c40c89e4b1443f22d5ddea232bafc278623c217e4b9ce916c1d529"
+      "bytes": 22112,
+      "sha256": "43fb112538b7c888718dac840ea72c04a274b144e6eef2bbe6cd1925d587d340"
     },
     {
       "path": "tests/runtime/media-inventory.test.ts",
@@ -25613,6 +25623,11 @@
       "sha256": "bbaa4fcef292f6fbb512e505a4ffda201433e4bd7918a5010833cabb265305a3"
     },
     {
+      "path": "tests/runtime/storefront-gallery-sql.test.ts",
+      "bytes": 13862,
+      "sha256": "705564abea51d17a2424d0af3cb0e29132529b606b11765ec9bb31d42814de16"
+    },
+    {
       "path": "tests/runtime/storefront-order-pages.test.ts",
       "bytes": 12782,
       "sha256": "6c27c40950345295eb64462c03c3df269003bed84bf2a8df61223024fbe69723"
@@ -25784,8 +25799,8 @@
     },
     {
       "path": "tests/runtime/tenant-rls-retarget.test.ts",
-      "bytes": 75450,
-      "sha256": "4ebcea1fcfdb2e0649e29d637e8fd30e1a4dcf1bf08b6036d974dcdbd48015f3"
+      "bytes": 75851,
+      "sha256": "b1104b0f694aefe5457cb2e12088987fdb0f3f653a1d4a5351d06a84816c0db3"
     },
     {
       "path": "tests/runtime/tenant-rls-runtime-role.test.ts",
