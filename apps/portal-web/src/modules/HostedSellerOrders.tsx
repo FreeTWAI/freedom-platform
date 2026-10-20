@@ -21,7 +21,8 @@ export function SellerOrdersLink({client, tenantId, instanceId,readinessHref}: S
     return () => controller.abort();
   }, [client, tenantId, instanceId]);
   // Keep the navigation below this row still while the owner-only read settles.
-  // Pending, denied and failed reads reserve space without exposing any links.
+  // Pending, denied and failed reads keep the order links hidden; readiness
+  // uses the store read already authorized by the parent.
   return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{allowed && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}</div>;
 }
 
