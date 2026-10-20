@@ -1,4 +1,4 @@
-import {Hono,type Context} from 'hono';
+import {Hono,type Context,type MiddlewareHandler} from 'hono';
 import type {Pool} from 'pg';
 import {OpaqueId} from '../../../../contracts/common/v1/identity.js';
 import {EmptyStoreInputSchema} from '../../../../contracts/guild-launchpad/v1/storefront.js';
@@ -36,7 +36,8 @@ function imageResponse(c:Context<PlatformEnv>,bytes:Uint8Array,privateImage=fals
 export function createHostedStoreAppearanceRoutes(pool:Pool,runtime:PlatformRuntime){
   const app=new Hono<PlatformEnv>(),options=storeAppearanceOptions(runtime);
   const root='/tenants/:tenant_id/storefronts/:instance_id/appearance-settings';
-  app.use('*',async(c,next)=>{try{await next();}finally{privateCache(c);}});
+  const cache:MiddlewareHandler<PlatformEnv>=async(c,next)=>{try{await next();}finally{privateCache(c);}};
+  app.use(root,cache);
   const ids=(c:Parameters<typeof singleQuery>[0])=>[OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;
   app.get(root,async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);
@@ -50,6 +51,7 @@ export function createHostedStoreAppearanceRoutes(pool:Pool,runtime:PlatformRunt
   });
   if(storePhotosInstalled(runtime)){
     const mediaRoot='/tenants/:tenant_id/storefronts/:instance_id/appearance-media';
+    app.use(mediaRoot+'/*',cache);
     for(const role of ['cover','logo'] as const){
       app.post(mediaRoot+'/'+role,async c=>{
         EmptyStoreInputSchema.parse(singleQuery(c));checkStoreAppearanceHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
@@ -71,7 +73,7 @@ export function createHostedStoreAppearanceRoutes(pool:Pool,runtime:PlatformRunt
 }
 export function createPublicStoreAppearanceMediaRoutes(pool:Pool,runtime:PlatformRuntime){
   const app=new Hono<PlatformEnv>();
-  app.use('*',async(c,next)=>{c.header('Cache-Control','no-store');c.header('X-Robots-Tag','noindex, nofollow');await next();});
+  app.use('/shops/:slug/appearance-media/*',async(c,next)=>{c.header('Cache-Control','no-store');c.header('X-Robots-Tag','noindex, nofollow');await next();});
   app.on(['GET','HEAD'],'/shops/:slug/appearance-media/:revision/:role',async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));const role=AppearanceRoleSchema.parse(c.req.param('role'));
     const bytes=await readPublicAppearanceImage(pool,runtime.storePhotoAssetStore!,c.req.param('slug'),c.req.param('revision'),role);

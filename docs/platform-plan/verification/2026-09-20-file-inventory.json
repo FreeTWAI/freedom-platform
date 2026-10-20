@@ -609,8 +609,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-appearance.ts",
-      "bytes": 6528,
-      "sha256": "b40663e74adf9ef9b1edfdba62582b084f320ed04e934fe1181396302675084d"
+      "bytes": 6669,
+      "sha256": "88f1cb22b2a7250487a923ee0a9dfe41277b6b9ae4cdc56837c1f6574541e1f3"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-media.ts",
@@ -25494,8 +25494,8 @@
     },
     {
       "path": "tests/runtime/storefront-appearance-media.test.ts",
-      "bytes": 21704,
-      "sha256": "ae9b76066f8af5527e5cc2bb4edf4b2bfc15e2c20fe5b9084a761ca8390dcdc3"
+      "bytes": 23002,
+      "sha256": "b6b0e0e5318b21024f99f83ebe42975e0a3ca0e6740e066d0487d319e4926135"
     },
     {
       "path": "tests/runtime/storefront-appearance-rollback.test.ts",
@@ -25684,8 +25684,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 136076,
-      "sha256": "6d85b78138c74dfa84d2f76a2b7064e8d56a91edadb228c399dbbc80bf1e5965"
+      "bytes": 136399,
+      "sha256": "b251fa4939c03980b98d186d5e7951facc4740f4c62f872cc211546ade078f10"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",

@@ -214,6 +214,9 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/*': 'middleware',
+  'ALL /shops/:slug/appearance-media/*': 'middleware',
   'GET /shops/:slug/appearance-media/:revision/:role': 'global',
   'HEAD /shops/:slug/appearance-media/:revision/:role': 'global',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'middleware',
@@ -620,13 +623,13 @@ test('T-022 1. Route inventory guard', () => {
   for (const suffix of ['', '/reconcile', '/cancel']) {
     assert.equal(relevantPaths.test(`/api/v1/tenants/:tenant_id/operations/:operation_id${suffix}`), true);
   }
-  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>r.method!=='ALL'&&(isOfferOrDistributionPhotoPath(r.path)))];
+  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media'))&&isOfferOrDistributionPhotoPath(r.path))];
   const counts = Object.values(routeTable).reduce<Record<string, number>>((all, kind) => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 140, middleware: 18 });
-  assert.equal(selectedRoutes.length, 192);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 140, middleware: 21 });
+  assert.equal(selectedRoutes.length, 195);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;

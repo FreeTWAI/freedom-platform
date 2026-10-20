@@ -11,6 +11,9 @@ import {createStorefrontLifecycleAuthority} from '../../modules/assets/storefron
 import {createStorefrontAppearanceLifecycleAuthority} from '../../modules/assets/storefront-appearance-authority.js';
 import {FakeObjectStore} from '../../packages/asset-storage/fake-store.js';
 import {Problem} from '../../packages/shared/problem.js';
+import {Hono} from 'hono';
+import {nodeRuntime} from '../../apps/platform-api/src/app.js';
+import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes} from '../../apps/platform-api/src/routes/hosted-store-appearance.js';
 import {AppearanceCommandAckSchema,type AppearanceRole} from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import {createStorefrontAppearanceLifecycle} from '../../modules/assets/storefront-appearance.js';
 import {createHostedStorePhotoHarness,photoSourcePng,type HostedStorePhotoHarness} from '../helpers/hosted-store-photo.js';
@@ -205,4 +208,18 @@ test('APPEARANCE-MEDIA-14 the closed manage authority cannot substitute for prod
   for(const targetKind of ['storefront.product-photo','storefront.distribution-photo','storefront.supply-material','work.tenant-result'] as const)
     assert.throws(()=>make({...definition,targetKind}),(e:unknown)=>e instanceof Problem&&e.code==='asset_authority_profile_invalid');
   assert.equal(touched,false);
+});
+
+test('APPEARANCE-MEDIA-15 appearance routers preserve unrelated API and static response headers',async()=>{
+  const runtime=nodeRuntime('local',f.h.origin,{guildLaunchpadEnabled:true,storeAppearanceEnabled:true,storePhotoAssetStore:f.store});
+  for(const [mount,router,path] of [
+    ['/api/v1',createHostedStoreAppearanceRoutes(f.runtime,runtime),'/api/v1/unrelated-fixture'],
+    ['/',createPublicStoreAppearanceMediaRoutes(f.runtime,runtime),'/unrelated-fixture.css'],
+  ] as const){
+    const baseline=new Hono().get(path,c=>c.text('synthetic unaffected response'));
+    const installed=new Hono().route(mount,router).get(path,c=>c.text('synthetic unaffected response'));
+    const before=await baseline.request(f.h.origin+path),after=await installed.request(f.h.origin+path);
+    assert.equal(after.status,before.status);assert.equal(await after.text(),await before.text());
+    assert.deepEqual(Object.fromEntries(after.headers),Object.fromEntries(before.headers),'Appearance cache/noindex/Vary headers belong only to appearance routes.');
+  }
 });
