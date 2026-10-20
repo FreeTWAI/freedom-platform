@@ -105,6 +105,20 @@ C2 是受控營業（計畫 §5）。staging 與正式環境的店都要經 Ted 
 - seed 不建立商店，所以也不建准入；runtime 測試與 E2E 經同一個准入函式建立。
 - 擴大使用（計畫 §18.2 的第三步）要改成「符合條件即可開」，是另一個決定（§12）。在那之前不加自動准入。
 
+2026-10-20 的「平台管理 → 商店與交易 → 商店准入」沿用上述命令、獨立性檢查、
+CSRF、冪等及稽核；不新增自動准入，也不替店主提供設定或同意。
+`GET /admin/api/commerce/store-readiness?limit=&offset=` 只供目前有效管理員讀取自己的社群，
+每個 tenant 綁定既有 RLS scope 後讀取全部 storefront instances，包括尚未設定、停用及暫停事業。
+列表以 tenant／instance ID 穩定排序；摘要統計整個社群，准入只列目前 provider environment。
+版本、發布／自有庫存、付款／配送種類與設定版本及全部未撤銷准入均在同一列表，
+接單狀態共用買家判斷；店主的 overview 則不回准入理由、管理員身分、host profiles 或隔離原因。
+
+管理頁可「下載範圍收據（JSON）」，格式為 `freedom.commerce-scope-receipt/v1`，
+含產生時間、環境、執行版本（未知時 null）、平台接單／隔離／profile 狀態、整體摘要及全部頁面的商店。
+最多讀 20 頁；超過時明示未能產生完整收據，不下載截斷結果。收據不含聯絡資料、會員信箱、
+銀行帳號／戶名或憑證狀態。分頁是逐次觀察，核對及啟用前仍須確認店主同意、實際部署／schema、
+console／Supplier 的全域曝光及期間變更；下載本身不開旗標、不授予部署權限。
+
 ### 2.6 能力清單（提議 `modules/agent-commerce/operations/commerce-capabilities.json`）
 
 計畫 §18.1 要求每個 provider profile 與功能標出驗證程度。清單是版本化的資料檔，格式 `freedom.commerce-capabilities/v1`。每一項的欄位：

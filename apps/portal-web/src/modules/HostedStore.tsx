@@ -1,4 +1,4 @@
-import {parseSellerConsoleRoute,sellerSlugFallback} from '../../../../modules/agent-commerce/seller-console/route';
+import {parseSellerConsoleRoute,sellerSlugFallback,sellerConsoleHref} from '../../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../../modules/agent-commerce/supplier-console/ui/route';
 import {PartnerMaterials} from '../../../../modules/agent-commerce/supplier-console/ui/partner/PartnerMaterials';
 import {PageLoadBoundary} from '../LazyPage';
@@ -94,8 +94,8 @@ export function HostedStore({client, enabled, locationHash, userId, registerLeav
   const valid = path.length === 3 && path[0] === 'stores' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success;
   const fallback = sellerSlugFallback(locationHash);
   if (fallback?.orders) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} route={{tenantId:fallback.tenantId,instanceId:fallback.instanceId,supplier:false}} registerLeave={registerLeave}/>;
-  if (fallback) return <StorePage key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
-  return valid ? <StorePage key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}`} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
+  if (fallback) return <StorePage key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
+  return valid ? <StorePage key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}`} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
 }
 function BackLink() { return <div className="actions"><a href="#stores" className="btn btn-ghost">返回我的商店</a></div>; }
 function MissingStore() { return <div className="hosted-store stack"><BackLink/><p>找不到這間商店。</p></div>; }
@@ -117,7 +117,7 @@ function StoreList({client}: {client: PortalClient}) {
 
 type Attempt = {targetMissingIsStore?: boolean; method: 'post' | 'patch'; path: string; body: unknown; version?: string; schema: z.ZodType;
   key: string; success: (value: unknown) => void; notice: string; product?: boolean; fieldError?: (error: ApiError) => void};
-function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
+function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [distributionRefresh,setDistributionRefresh]=useState(0);
   const [view, setView] = useState<StoreView | null>(null);
@@ -268,7 +268,7 @@ function StorePage({client, userId,tenantId, instanceId, registerLeave,photosEna
       : error && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void load()}>重新載入</button>}</div>
     {view && <>
       <h2>{store?.name ?? '設定我的商店'}</h2>
-      {store && <SellerOrdersLink client={client} tenantId={tenantId} instanceId={instanceId}/>}
+      {store && <SellerOrdersLink client={client} tenantId={tenantId} instanceId={instanceId} readinessHref={commerceConsoleEnabled?sellerConsoleHref({tenantId,instanceId},'overview'):undefined}/>}
       {!view.writable && <p>{view.capabilities.some(key => key !== 'store:read') ? '這間商店目前暫停，無法修改。' : '你可以檢視這間商店，但不能修改。'}</p>}
       {!store ? can('store:manage') ? <SettingsForm key="setup" client={client} root={root} busy={locked} onMissing={() => setMissing(true)} onDirty={value => markDirty('settings', value)} onSave={(body, success, fieldError) => command({method: 'post', path: root + '/setup', body, schema: StoreViewSchema, notice: '已建立商店。', success, fieldError})}/>
         : <p>這間商店還沒完成設定，請業務空間擁有者或管理員設定。</p> : <>

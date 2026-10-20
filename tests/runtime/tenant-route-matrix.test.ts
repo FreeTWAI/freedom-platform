@@ -232,6 +232,8 @@ const routeTable: Record<string, string> = {
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id/actions/:action': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/release': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/overview': 'tenant',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/overview': 'middleware',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/upgrade': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations/:location_id': 'middleware',
@@ -262,6 +264,7 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/provider-accounts/:account_id/services/payment/activation-payments': 'tenant',
   'POST /admin/api/commerce/store-admissions': 'admin',
   'GET /admin/api/commerce/store-admissions': 'admin',
+  'GET /admin/api/commerce/store-readiness': 'admin',
   'POST /admin/api/commerce/store-admissions/:admission_id/revoke': 'admin',
   // Cache and quarantine middleware are inventoried separately, never sent as a synthetic ALL request.
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id': 'middleware',
@@ -590,7 +593,7 @@ async function buildFixture() {
 let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
 test('T-022 1. Route inventory guard', () => {
-  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-admissions(?:\/|$))/;
+  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-(?:admissions|readiness)(?:\/|$))/;
   // Member search telemetry has an operations path, but is not tenant authority.
   assert.equal(relevantPaths.test('/api/v1/community-search/operations/*'), false);
   for (const suffix of ['', '/reconcile', '/cancel']) {
@@ -601,8 +604,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 10, guild: 9, principal: 8, global: 4, tenant: 126, middleware: 16 });
-  assert.equal(selectedRoutes.length, 173);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 127, middleware: 17 });
+  assert.equal(selectedRoutes.length, 176);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -659,6 +662,7 @@ const routes: Route[] = [
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id/actions/:action', body: { code: 'confirmed' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/release' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/overview' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/upgrade', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations', body: {label:'合成倉'+randomUUID().slice(0,8),sender_name:'合成星禾',mobile:'09'+String(randomBytes(4).readUInt32BE()).padStart(10,'0').slice(-8),postal_code:'100',address:'合成星禾路'+randomUUID().slice(0,8)+'號',ships:true,receives_returns:true} },

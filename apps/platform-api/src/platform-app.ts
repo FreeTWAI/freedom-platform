@@ -12,6 +12,7 @@ import {isPaymentHandoffPath} from '../../../modules/agent-commerce/payments/han
 import {createHostedPaymentRoutes,hostedPaymentOptions} from './routes/hosted-payments.js';
 import {providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
 import {createHostedCheckoutRoutes,hostedCheckoutOptions} from './routes/hosted-checkout.js';
+import {createHostedStoreOverviewRoutes} from './routes/hosted-store-overview.js';
 import {createHostedSupplierConsoleRoutes} from './routes/hosted-supplier-console.js';
 import {isArUpload,checkArUploadHeaders,createPublicArRoutes,createMemberArRoutes} from './routes/community-ar.js';
 import {readWithMemberSession} from '../../../packages/db/member-session.js';
@@ -359,7 +360,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     });
   });
   registerGuideReleaseRoute(app,runtime.publicGuideAssets);
-  app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal));
+  app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv),releaseSha:runtime.health?.release_sha??null}));
   const skillEventBacklinks=runtime.eventOutcomesEnabled===true?async(id:string,c:Context)=>{
     let actor:Actor|null=null;
     const session=readSessionCookie(c.req.header('Cookie'),origin);
@@ -762,6 +763,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
     app.route('/api/v1',createHostedStoreRoutes(pool));
     app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
+    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));
