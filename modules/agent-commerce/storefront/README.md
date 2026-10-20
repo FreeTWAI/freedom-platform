@@ -180,6 +180,14 @@ endpoint. Republishing removed phone/address withdraws it from all public pages.
 Old policy prose may still contain personal data: withdrawal/erasure is an explicit
 open product question for Ted, alongside evidence retention and future order links.
 
+2026-10-20 editor-warning follow-up (OPEN-07): editable policy fields now explain
+that published policy versions retain public URLs after replacement or clearing,
+and that no individual-version withdrawal is available. The warning distinguishes
+current seller disclosure, whose phone/address can be removed by republishing,
+and directs personal contact details to seller fields rather than policy prose.
+Private-history access/retention and public-prose withdrawal remain Ted's decision
+before real-content activation. This copy changes no history or public reads.
+
 C1 format choices: seller limits in the independent `storefront-policies` contract;
 8 ASCII tax digits without checksum; optional returns window 7–3650 days; return-by
 1–3650, default 14; all display only. The editor's checklist contains headings only.

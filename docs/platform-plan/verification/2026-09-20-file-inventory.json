@@ -2664,8 +2664,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStorePolicies.tsx",
-      "bytes": 12858,
-      "sha256": "73a0ff011904a42ccdf02e1a96cee5036d7298b18140e8bb974eb6699b90600d"
+      "bytes": 13303,
+      "sha256": "ed598d397a2d6874d1be324669e1e578f21c7f8e4c9d31a6ba10166c247a3f33"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplierOrders.tsx",
@@ -15604,8 +15604,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
-      "bytes": 58741,
-      "sha256": "292cf8078bde249730ad21cf68a5f0f7c1ace2cd9e37a347c637a262e5659015"
+      "bytes": 59422,
+      "sha256": "5c26327495136bf83c7f980284b24b9fcd1c7821359b8b91d3dbbe531534256b"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-07-operations-skillbooks.md",
@@ -15679,8 +15679,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 36911,
-      "sha256": "b4958b52260b62c8061acd0fe7af1cf99b94f065175ed0856ea0ef1f34dda0d8"
+      "bytes": 36999,
+      "sha256": "a57db02d622579f6e6eae424f53cafcc2479776b0d9bdc9eda05a5a5cc5e7bfe"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -18584,8 +18584,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 19320,
-      "sha256": "a9e8dbf7c677ddf1666a43ae9f655a13013bc52a3445b567a70a05c30020c061"
+      "bytes": 19886,
+      "sha256": "acd1631ebf1269b6ee23bacfa294d4b4cc6c682bd5c61323d431d83716f489aa"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -22889,8 +22889,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
-      "bytes": 14864,
-      "sha256": "84a95dda3910a1d240daa570142432fc6b0c9a36293080e346b2dce0181a5d62"
+      "bytes": 15577,
+      "sha256": "3c5b64ab6fd6252d74b79173a8095147c7fa8e6cad60c3e1c8ae88251978f42d"
     },
     {
       "path": "tests/e2e/hosted-store.spec.ts",
