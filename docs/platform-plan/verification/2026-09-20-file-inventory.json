@@ -143,6 +143,11 @@
       "sha256": "b2ea9cf508adf391789245df2f56f03a6f17add706a895e4a434d8e13f76e2b3"
     },
     {
+      "path": ".github/workflows/codeql.yml",
+      "bytes": 1276,
+      "sha256": "b0377f18ae418ad1645a0141407962207b0caa52f5495dc4fab6cddabddd0565"
+    },
+    {
       "path": ".github/workflows/directory-runtime-profile.yml",
       "bytes": 2975,
       "sha256": "6b6c8785e3374e2049da9bc550e656e93ec68e25836bffe0b98d846767e8c0a2"
@@ -22009,8 +22014,8 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 89041,
-      "sha256": "9ff23dc8ca39555f9a37749147aa244bb6452752615884035fa8aa733c327a9d"
+      "bytes": 89703,
+      "sha256": "897dea003bba3264f6c6e13970585712b58f2416feee8b322cbdfac64f3e4d76"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",
