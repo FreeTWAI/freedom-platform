@@ -39,7 +39,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     expect(new URL(page.url()).hash).toBe('');
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
-    await expect(page.getByRole('status')).toHaveText(
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText(
       '這個訂單連結只能使用一次。開啟後，這個瀏覽器會記住這筆訂單，之後可以直接查看。',
     );
     expect(recordedRequests.some(req => req.method === 'POST')).toBe(false);
@@ -106,7 +106,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
       await page2.getByRole('button', { name: '在這個瀏覽器開啟訂單', exact: true }).click();
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page2.getByRole('status')).toHaveText(
+      await expect(page2.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       await expect(page2.getByRole('link', { name: '找回訂單', exact: true })).toHaveAttribute(
@@ -142,7 +142,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await page3.goto(`${seeded.orderPath}#access=abc`);
       expect(new URL(page3.url()).hash).toBe('');
       await expect(page3.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page3.getByRole('status')).toHaveText(
+      await expect(page3.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       expect(thirdPosts).toEqual([]);
@@ -199,7 +199,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     await expect(forgottenHeading).toBeVisible();
     await expect(forgottenHeading).toBeFocused();
     await expect(page).toHaveTitle('訂單｜山邊小店｜自由工坊');
-    await expect(page.getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
     await expect(page.getByRole('link', { name: '回到「山邊小店」', exact: true })).toHaveAttribute(
       'href',
       `/shops/${store.slug}`,
@@ -255,7 +255,7 @@ test('member-owned order opens for the logged-in buyer without a device cookie a
     const strangerPage = await strangerContext.newPage();
     await strangerPage.goto(memberOrder.orderPath);
     await expect(strangerPage.getByRole('heading', { level: 1 })).toHaveText('找不到這筆訂單');
-    await expect(strangerPage.getByRole('status')).toHaveText(
+    await expect(strangerPage.locator('#shop-order').getByRole('status')).toHaveText(
       '這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。',
     );
   } finally {
