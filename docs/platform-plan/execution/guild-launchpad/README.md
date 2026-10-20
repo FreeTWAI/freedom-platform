@@ -6,7 +6,11 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=174 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=175 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+本機候選另外包含店面外觀的 migration175（堆疊於173／174），所有新外觀旗標預設 OFF；
+這只是 repository 上限，不代表 staging／production 已套用175或已啟用店面外觀。
+目前部署與已套用 schema 仍以以下具日期的 operator 觀察為準。
 
 截至 2026-10-20 07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，Short 對所有人開啟；Supplier／Commerce console 保持 ON，checkout／email 保持 OFF。四組成功 before／after 備份還原與清理通過，dispatcher `562f005a` 已綁定兩環境，原 timer 已恢復；新 dispatcher 自然排程尚未觀察。依 Ted 指示無 staging acceptance window，會員 UX、真實手機與 Safari 未驗。詳見[Short 發布收據](../unified-foundation/rollout-short-videos-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
 

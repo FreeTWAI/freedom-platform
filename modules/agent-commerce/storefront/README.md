@@ -67,3 +67,51 @@ No bank instructions or contact data are persisted in browser storage.
 confirmation and deadlines, and offers refresh and buyer cancellation. It never
 starts a payment attempt. An optional `meetup_notes` order field supplies public
 notes from the frozen shipping groups, rather than current merchant settings.
+
+## Store appearance (local candidate, 2026-10-20)
+
+Migration 175 adds retained appearance drafts/targets and immutable publication
+sidecars/refs. `FREEDOM_STORE_APPEARANCE_ENABLED` defaults OFF in Node and Worker;
+`GET /api/v1/site` exposes `store_appearance_enabled`. This source does not enable
+any environment or claim deployment, hosted CI, merchant adoption or full C1
+acceptance. Categories, variants, policies and seller disclosure remain later work.
+
+With the flag ON, 「店面與發布 → 店面外觀」 edits the existing template together
+with eight named accent presets, a one-line announcement of at most 80 Unicode
+characters, and an ordered list of up to eight own retail products. Supplied
+products remain outside the picker. All appearance writes require `store:manage`
+(the same boundary as the existing template); publish still requires
+`store:publish`. This is the explicit EC-SPEC-02 §7 deviation from its proposed
+`store:write` rule. Read-only members see saved values and images without controls.
+
+Metadata works without media installation. Cover/logo reads and mutations require
+`storePhotosInstalled`; new uploads also require the existing upload predicates,
+a closed appearance lifecycle port and canonical persistence/quota admission.
+Each media send uses the current storefront profile version, while metadata saves
+combine template/accent/announcement/featured IDs in one CAS command. Local images
+can coexist with text edits; sends wait until text is saved, and text waits during
+an unresolved image operation. Unknown results retain the original key, version,
+body/File and require explicit retry, including after same-member re-login.
+Known CAS refusals retain input for explicit review against the refreshed draft.
+These in-memory Files are not promised to survive a full document reload.
+
+Publish freezes a separate canonical appearance digest alongside the unchanged
+projection, template and product-media dimensions. Public shop, product, cart,
+checkout, order and payment-return shells read only the current publication.
+The announcement stays static; logo and store name lead the header; the original
+Freedom logo and 「使用自由工坊開店」 remain in the footer. Covers display the
+whole image at its own aspect ratio, without overlay/crop/tinted framing, with
+frozen width/height and capped height. Text precedes the cover on mobile/tablet
+and sits beside it on desktop. No cover means a text-only hero. `og:image` uses a
+frozen cover when media is installed, then the existing first published product
+photo, then the original Freedom asset. Product OG images retain their own rule.
+Featured products appear in frozen order only when present in that publication.
+
+The v1 public projection and `GET /api/v1/public/stores/:slug` remain unchanged.
+OFF ignores every appearance row and mounts no new routes. A legacy-shaped
+publisher can create a publication with no appearance sidecar; ON renders defaults
+for that publication. Drafts, replaced/removed images and historical refs are
+retained throughout OFF and rollback. No GC or retention policy is enabled.
+See the [media contract](../hosted/media-contract.md#store-appearance-media-local-candidate-2026-10-20)
+and [closed asset profile](../../assets/storefront-appearance.md) for byte routes,
+shared-purpose compatibility and storage boundaries.

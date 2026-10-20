@@ -68,6 +68,14 @@ E04 提供 CSV 匯出與匯入：先驗證並顯示差異（新增／修改／�
 
 回退相容：舊版本只讀 v1 projection，看不到附加內容但能正常顯示；舊版本發布的新 revision 沒有附加列時，新版本退回「每個 SKU 一個 group」的顯示，不報錯。
 
+**2026-10-20 店面外觀本機候選（schema175，未部署）**：本次只實作外觀切片，新增 `commerce_storefront_appearance_drafts`、`commerce_storefront_appearance_targets`、`commerce_publication_appearances` 與 `commerce_publication_appearance_refs`。既有版型與主色／公告／主打 ID 以同一個 `PATCH …/appearance-settings`、profile `If-Match` 與冪等鍵保存；封面／店標各有明確的上傳與移除命令，同樣使用 profile 版本。公告最多 80 個 Unicode 字元；主打最多八件自有、零售啟用的商品，候選清單上限 200 與既有 product_limit 相同。供貨選品主打、分類、變體、政策、賣方揭露與 §2.3 條件不在本次範圍。
+
+§2.1 提議的新 purpose 實作為既有 `storefront.product-photo` 下的封閉 `storefront.cover`／`storefront.logo` target kinds：共用已知 profile、配額與備份，以維持舊版計數／還原相容；不替換 asset purpose/admission/policy/profile 基線。封面與店標需要既有照片安裝條件，上傳另需既有 upload predicates、封閉 port 與資料庫政策；主色、公告與主打沒有媒體依賴。店標限定方形，不提供裁切。
+
+這份獨立的 `freedom.hosted-store-appearance/v1` sidecar 不冒充上述完整 catalog 文件；其 canonical digest 加入第四個 dirty／發布去重維度，與原 projection／template／media 一起比較、同交易凍結後切換 current publication。v1 projection 與 `GET /api/v1/public/stores/:slug` 保持原樣。預覽只讀已儲存草稿；公開頁只讀目前發布的外觀。過時或移除的草稿主打可保留設定，但新發布只顯示該 projection 中的商品，不洩露其他商品名稱。
+
+`FREEDOM_STORE_APPEARANCE_ENABLED` 預設 OFF，`/api/v1/site` 提供 `store_appearance_enabled`。OFF 不掛新路由、不查外觀、不刪資料；舊版形狀的讀寫可忽略 sidecar，舊版新發布沒有 sidecar 時，新版回預設外觀。封面替換／移除不刪舊物件與歷史 refs，也不釋放保留配額。這是本機候選，沒有正式環境開關、部署、hosted CI 或真人驗收宣告。
+
 ### 2.3 開放結帳的條件（C2）
 
 店家設定 `checkout_enabled` 只有在下列都成立時才能打開，任何一項之後失效，新的 checkout 立即停止（已成立的訂單不受影響）：
@@ -182,6 +190,8 @@ E04 提供 CSV 匯出與匯入：先驗證並顯示差異（新增／修改／�
 | 優惠 | `store:write` |
 | 開放／關閉結帳 | `store:manage`，並檢查 §2.3 |
 | 公開讀取、報價、checkout、下單 | 匿名；訂單讀寫依 §4.2 |
+
+**本切片的明確差異（2026-10-20）**：外觀的所有寫入（含版型、封面與店標）統一要求既有 `store:manage`，沿用現行版型命令的管理邊界，避免商品 `store:write` 自動取得品牌修改權；發布仍是 `store:publish`，草稿與私有圖片讀取仍是 `store:read`。這取代上表對本切片外觀的 `store:write` 提議，不更動商品照片、供貨或其他既有能力，也不宣告政策／賣方揭露已實作。唯讀與僅商品寫入的成員看不到外觀編輯控制，伺服器直接命令也拒絕。
 
 新能力名稱（訂單、出貨、收款等）在 EC-SPEC-09 §2；都需要新的 storefront 模組版本（`storefront@1.0.0` 的能力清單是凍結的，`migrations/134_hosted_storefronts.sql:88`）。
 
