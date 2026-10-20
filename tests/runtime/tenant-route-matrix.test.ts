@@ -1,3 +1,4 @@
+import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {photoSourcePng} from '../helpers/hosted-store-photo.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
@@ -48,10 +49,11 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
+const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -214,6 +216,18 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'ALL /shops/*': 'middleware',
+  'GET /shops/:slug/about': 'global',
+  'GET /shops/:slug/policies/:kind': 'global',
+  'GET /shops/:slug/policies/:kind/v/:version_id': 'global',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/about': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'tenant',
+  'PUT /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/about': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind': 'tenant',
+
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/*': 'middleware',
   'ALL /shops/:slug/appearance-media/*': 'middleware',
@@ -625,13 +639,13 @@ test('T-022 1. Route inventory guard', () => {
   for (const suffix of ['', '/reconcile', '/cancel']) {
     assert.equal(relevantPaths.test(`/api/v1/tenants/:tenant_id/operations/:operation_id${suffix}`), true);
   }
-  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media'))&&isOfferOrDistributionPhotoPath(r.path))];
+  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media')||isPolicyPath(r.path))&&isOfferOrDistributionPhotoPath(r.path))];
   const counts = Object.values(routeTable).reduce<Record<string, number>>((all, kind) => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 6, tenant: 141, middleware: 22 });
-  assert.equal(selectedRoutes.length, 197);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 9, tenant: 145, middleware: 26 });
+  assert.equal(selectedRoutes.length, 208);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -807,6 +821,10 @@ const routes: Route[] = [
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo/remove',body:{},version:'"1"'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
   {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/seller-policies'},
+  {method:'PUT',path:'/tenants/:tenant_id/storefronts/:instance_id/seller-policies',body:emptySellerPolicies(),version:'"1"'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/about'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind'},
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings' },
   { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings', body: {template_id:'catalog-grid-v1',accent_preset:'ocean',announcement:'合成公告',featured_product_ids:[]}, version:'"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance' },
@@ -826,7 +844,7 @@ const isSellerOrderRoute = (path: string) => /\/storefronts\/[^/]+\/(?:orders|re
 type TenantData = Awaited<ReturnType<typeof buildFixture>>['A'];
 function ids(data: TenantData, route: Route): Record<string, string> {
   return { tenant_id: data.tenantId, workspace_id: data.workspaceId, work_id: data.workId, result_id: data.resultId,
-    role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
+    kind:'shipping',version_id:randomUUID(),slug:'synthetic-matrix',role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
     principal_id: data.principalId, product_id: data.workId, order_id: data.workId, offer_id: data.workId, selection_id: data.workId,
     location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
     instance_id: data.instanceId, operation_id: data.operationId, plan_id: data.planId,

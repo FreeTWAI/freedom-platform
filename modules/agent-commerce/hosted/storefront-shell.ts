@@ -1,8 +1,10 @@
+import type {RenderPolicies} from '../storefront/policies/model.js';
+import {sellerDetails,policyLinks} from '../storefront/policies/pages.js';
 import {AccentPresetSchema,PrivateAppearanceImageSchema,PublicAppearanceImageSchema} from '../../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import type {RenderAppearance} from './appearance.js';
 import {escapeHtml as escape} from '../../../packages/shared/html.js';
 
-export interface StorefrontHeading {slug: string; name: string; description?: string; appearance?: RenderAppearance}
+export interface StorefrontHeading {slug: string; name: string; description?: string; appearance?: RenderAppearance; policies?: RenderPolicies}
 
 export function storefrontBodyAttributes(appearance?:RenderAppearance){
   return appearance?` data-store-appearance="v1" data-shop-accent="${AccentPresetSchema.parse(appearance.accent_preset)}"`:'';
@@ -10,7 +12,7 @@ export function storefrontBodyAttributes(appearance?:RenderAppearance){
 export function appearanceImage(image:NonNullable<RenderAppearance['logo']>){return PublicAppearanceImageSchema.or(PrivateAppearanceImageSchema).parse(image);}
 
 /** Public pages receive the immutable publication; private preview receives the saved draft. */
-export function storefrontHeader(store: StorefrontHeading, options: {cart?: boolean; preview?: boolean; appearance?: RenderAppearance} = {}) {
+export function storefrontHeader(store: StorefrontHeading, options: {cart?: boolean; preview?: boolean; appearance?: RenderAppearance; policies?: RenderPolicies} = {}) {
   const slug = escape(encodeURIComponent(store.slug)), name = escape(store.name), home = `/shops/${slug}`;
   const appearance=options.appearance??store.appearance;
   const logo=appearance?.logo?appearanceImage(appearance.logo):null;
@@ -29,6 +31,12 @@ export function storefrontFooter(store: StorefrontHeading, options: {preview?: b
   // supply agreements, buyer contact data or private payment settings. Keep URLs
   // as text: authoring a description does not create an external redirect.
   const description = store.description?.trim();
+  if(store.policies?.seller.business_name){
+    const legal=store.policies,about=legal.previewBase?legal.previewBase+'/about':`/shops/${encodeURIComponent(store.slug)}/about`;
+    const sentence=`本店由${escape(legal.seller.business_name)}經營，負責商品、收款、出貨安排與售後；自由工坊提供網站服務，不是賣方。`;
+    const information=`<section class="shop-merchant-info shop-seller-info" aria-labelledby="shop-information"><h2 id="shop-information" tabindex="-1">商店說明與聯絡</h2>${description?`<p class="shop-merchant-copy">${escape(description)}</p>`:''}${sellerDetails(legal)}<nav class="shop-policy-links" aria-label="商店資訊與政策"><a href="${escape(about)}">關於本店</a>${policyLinks(store.slug,legal)}</nav></section>`;
+    return `${information}<footer class="shop-footer"><div class="shop-footer-about">${options.preview?'<p>店主已儲存的預覽，尚未對外發布。</p>':''}<p>${sentence}</p><a class="shop-platform" href="/" aria-label="自由工坊首頁"><img class="shop-logo" src="/brand/freedom-workshop.webp" alt="自由工坊" width="1280" height="720"><span>使用自由工坊開店</span></a></div>${links}</footer>`;
+  }
   const information = `<section class="shop-merchant-info" aria-labelledby="shop-information"><h2 id="shop-information" tabindex="-1">商店說明與聯絡</h2>${description ? `<p class="shop-merchant-copy">${escape(description)}</p>` : '<p class="shop-merchant-empty">店主尚未補充商店說明與聯絡方式。</p>'}</section>`;
   return `${information}<footer class="shop-footer"><div class="shop-footer-about"><p>${responsibility}</p><a class="shop-platform" href="/" aria-label="自由工坊首頁"><img class="shop-logo" src="/brand/freedom-workshop.webp" alt="自由工坊" width="1280" height="720"><span>使用自由工坊開店</span></a></div>${links}</footer>`;
 }
