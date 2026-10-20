@@ -664,6 +664,41 @@ test('buyer journey returns a guest after real login, reconfirms identity and fi
     page.on('request', request => {if (request.method() === 'POST' && /\/checkouts(?:\/[^/]+\/orders)?$/.test(new URL(request.url()).pathname)) writes.push(request.postData()!);});
     await start(page, store);
     const cart = await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug);
+    // Returning to the tab with the same identity preserves typing and does
+    // not spend another cart quote. Hold the real session response so the
+    // assertions cover the entire pending check, then advance the debounce.
+    let quoteRequests = 0;
+    page.on('request', request => {if (request.url().endsWith('/cart-quotes')) quoteRequests++;});
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    for (const event of ['focus', 'visibilitychange'] as const) {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {release = resolve;});
+      const holdSession = async (route: Route) => {await gate; await route.continue();};
+      await page.route('**/api/v1/session', holdSession);
+      const session = page.waitForRequest(request => request.url().endsWith('/api/v1/session'));
+      const response = page.waitForResponse(result => result.url().endsWith('/api/v1/session'));
+      const name = page.getByLabel('收件人姓名', {exact: true});
+      await name.focus();
+      const beforeQuotes = quoteRequests;
+      await page.evaluate(event => {
+        if (event === 'focus') window.dispatchEvent(new Event('focus'));
+        else document.dispatchEvent(new Event('visibilitychange'));
+      }, event);
+      await session;
+      await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'true');
+      await expect(name).toBeEnabled(); await expect(name).toBeFocused();
+      await expect(name).toHaveValue('合成買家甲');
+      await name.fill('合成買家甲');
+      expect(quoteRequests).toBe(beforeQuotes);
+      release(); await response;
+      await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+      await page.clock.runFor(350);
+      await expect(name).toBeFocused(); await expect(name).toBeEnabled();
+      expect(quoteRequests).toBe(beforeQuotes);
+      await page.unroute('**/api/v1/session', holdSession);
+    }
+    await page.clock.resume();
     await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-guest-checkout-${width}.png`));
     await page.getByRole('link', {name: '登入會員', exact: true}).click();
     await expect(page.getByText('登入後會返回原本的商店頁面。', {exact: true})).toBeVisible();

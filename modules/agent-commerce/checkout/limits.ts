@@ -43,14 +43,13 @@ export async function commerceRateLimitInTransaction(q:PoolClient,name:CommerceB
 /** Commit attempt budgets before starting the command; rejected budgets roll back together.
  * Store resolution is a plain public read, without admission or lifecycle locks. */
 export async function chargeCommerceBudgets(pool:Pool,network:string,charges:{network:CommerceBucket;store?:CommerceBucket;slug?:string}) {
-  await isolatedTransaction(pool,q=>chargeCommerceBudgetsInTransaction(q,network,charges));
-}
-export async function chargeCommerceBudgetsInTransaction(q:PoolClient,network:string,charges:{network:CommerceBucket;store?:CommerceBucket;slug?:string}) {
-  await commerceRateLimitInTransaction(q,charges.network,network);
-  if(charges.store&&charges.slug!==undefined) {
-    const store=await resolvePublicStorePage(q,charges.slug);
-    if(store)await commerceRateLimitInTransaction(q,charges.store,store.instanceId);
-  }
+  await isolatedTransaction(pool,async q=>{
+    await commerceRateLimitInTransaction(q,charges.network,network);
+    if(charges.store&&charges.slug!==undefined) {
+      const store=await resolvePublicStorePage(q,charges.slug);
+      if(store)await commerceRateLimitInTransaction(q,charges.store,store.instanceId);
+    }
+  });
 }
 /** Store-local device/email locks precede lifecycle locks. */
 export async function lockOpenOrderBudgets(q:PoolClient,deviceId:string,email:string,instanceId:string,offline?:{principalId:string|null}) {

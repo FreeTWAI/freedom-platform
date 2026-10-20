@@ -3614,8 +3614,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 29203,
-      "sha256": "4f77ee153404abbf1371b9407a52c30925ba36abe436351301a4367cf7ac86cf"
+      "bytes": 29491,
+      "sha256": "510b9acad83ccd92f2c6de5278916a33e87798c2d41df40640ed7e924d650d5a"
     },
     {
       "path": "apps/portal-web/src/storefront/delivery-copy.ts",
@@ -17369,8 +17369,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/README.md",
-      "bytes": 37115,
-      "sha256": "a7930fd86329a724a970b53efc2eb6f780fb0627dd11b83d20b076a56247ab2e"
+      "bytes": 37558,
+      "sha256": "354aac1c06c7e81f9ff454b584179a0097e4428eea507793400758b056ed0b7b"
     },
     {
       "path": "modules/agent-commerce/checkout/access.ts",
@@ -17384,8 +17384,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/buyer-identity.ts",
-      "bytes": 4113,
-      "sha256": "2fc5a42e2a7c4998dfc00aaa059573ca7469adfab2e842f018d6937af3aa043e"
+      "bytes": 3272,
+      "sha256": "817cdad504d2e735d106289a9b151e9adac6b74de4eedd023de21bf7af6a4cab"
     },
     {
       "path": "modules/agent-commerce/checkout/cart-quote.ts",
@@ -17419,8 +17419,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/limits.ts",
-      "bytes": 8579,
-      "sha256": "d306ab2bf140762187b64e9d3950f6905a76f5eec3aee75b183770675a54d5c1"
+      "bytes": 8389,
+      "sha256": "a6841e7e4c1c22bef0a79c6704bdef05db39279908f415f57ee5c416fc2e9b1c"
     },
     {
       "path": "modules/agent-commerce/checkout/orders.ts",
@@ -17434,8 +17434,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/public-commands.ts",
-      "bytes": 19025,
-      "sha256": "0a41bf25348e265d5dd2e3c5cf336573fb587d84ff43c5ac74861bdf5eb58df0"
+      "bytes": 18498,
+      "sha256": "808e8065a8532174b65ad495404dfa61bb88b8e2c1c7ab5f6ddf13a058ef370d"
     },
     {
       "path": "modules/agent-commerce/checkout/public-order.ts",
@@ -23004,8 +23004,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 71540,
-      "sha256": "fe27dec1b39752548f5c5a01a777a7320cc4853fd05ee339ac6cefa32cbf686c"
+      "bytes": 73538,
+      "sha256": "854fc758d19d3328d33e0b84e76d6247a335942a49dbbeb96eb160f93147f5f0"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -23504,8 +23504,8 @@
     },
     {
       "path": "tests/runtime/checkout-buyer-identity.test.ts",
-      "bytes": 9104,
-      "sha256": "b3fd09530516b8e68c974c914670d62de48d02552f8d7f806d8560263cc211ac"
+      "bytes": 15116,
+      "sha256": "a8b890a827e1c0d1c647b3197224a5fff80fc3431604ea7298ed69814746578c"
     },
     {
       "path": "tests/runtime/client-connections.test.ts",

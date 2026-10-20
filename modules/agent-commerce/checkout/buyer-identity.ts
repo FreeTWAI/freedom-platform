@@ -14,8 +14,8 @@ export function assertBuyerIdentity(expected:CheckoutBuyerIdentity|undefined,ide
 /** Optional member identity, without authenticate()'s session activity write.
  * Locks serialize deactivation/revocation and a final decision-clock check
  * closes expiry during domain lock waits. Unknown sessions remain guests. */
-export async function member(q:PoolClient,token:string|undefined,create=false,expected?:CheckoutBuyerIdentity,beforeEffects?:()=>Promise<unknown>) {
-  if(!token){assertBuyerIdentity(expected,null);await beforeEffects?.();return null;}
+export async function member(q:PoolClient,token:string|undefined,create=false,expected?:CheckoutBuyerIdentity) {
+  if(!token){assertBuyerIdentity(expected,null);return null;}
   const sessionHash=hashKey(token);
   const row=(await q.query<{user_id:string;principal_id:string|null;principal_exists:boolean}>(`SELECT u.user_id,p.principal_id,
     EXISTS(SELECT 1 FROM principals existing WHERE existing.user_ref=u.user_id AND existing.kind='person') AS principal_exists
@@ -23,7 +23,6 @@ export async function member(q:PoolClient,token:string|undefined,create=false,ex
     LEFT JOIN principals p ON p.user_ref=u.user_id AND p.kind='person' AND p.status='active'
     WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND u.active ${create?'FOR SHARE OF u,s':''}`,[sessionHash])).rows[0];
   assertBuyerIdentity(expected,row?{userId:row.user_id}:null);
-  await beforeEffects?.();
   if(!row)return null;
   const mapped=!row.principal_id&&create?await mapPersonPrincipal(q,row.user_id):null;
   const principalId=row.principal_id??(mapped?.status==='active'&&mapped.kind==='person'?mapped.principal_id:null);
@@ -36,28 +35,12 @@ export async function currentMember(q:PoolClient,identity:Awaited<ReturnType<typ
   if(identity&&(await q.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[identity.sessionHash,identity.userId])).rowCount!==1)orderAccessNotFound();
 }
 
-/** One connection avoids pool starvation under concurrent fenced requests.
- * Commit accepted attempt budgets even when the command is rejected, as the
- * legacy independent budget transaction does. Only command effects roll back.
- * Identity mismatches and rejected budgets occur before the savepoint and
- * roll back the entire transaction. Session locks precede the savepoint. */
-export async function fencedBuyerTransaction<T>(pool:Pool,token:string|undefined,expected:CheckoutBuyerIdentity,create:boolean,
-  charge:(q:PoolClient)=>Promise<unknown>,run:(q:PoolClient,identity:Awaited<ReturnType<typeof member>>)=>Promise<T>):Promise<T> {
-  const result=await isolatedTransaction(pool,async q=>{
-    let charged=false;
-    try {
-      const identity=await member(q,token,create,expected,async()=>{
-        await charge(q);
-        await q.query('SAVEPOINT checkout_buyer_effects');
-        charged=true;
-      });
-      return {ok:true as const,value:await run(q,identity)};
-    } catch(error) {
-      if(!charged)throw error;
-      await q.query('ROLLBACK TO SAVEPOINT checkout_buyer_effects');
-      return {ok:false as const,error};
-    }
+/** Reject stale callers before charging budgets. Always read-only and released
+ * before the independent budget and command transactions acquire connections. */
+export async function precheckBuyerIdentity(pool:Pool,token:string|undefined,expected:CheckoutBuyerIdentity|undefined) {
+  if(expected===undefined)return;
+  await isolatedTransaction(pool,async q=>{
+    await q.query('SET TRANSACTION READ ONLY');
+    await member(q,token,false,expected);
   });
-  if(!result.ok)throw result.error;
-  return result.value;
 }

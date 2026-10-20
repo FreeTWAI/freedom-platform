@@ -65,6 +65,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   const [buyer] = useState(() => {try {return enhanced ? new CheckoutBuyerState(slug, sessionStorage) : null;} catch {return null;}});
   const [identityChecking, setIdentityChecking] = useState(enhanced);
   const [identityError, setIdentityError] = useState('');
+  const [identityGeneration, setIdentityGeneration] = useState(0);
   const [identityNotice, setIdentityNotice] = useState(false);
   const [previousOrder, setPreviousOrder] = useState(false);
   const mounted = useRef(true);
@@ -102,13 +103,14 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
 
   const checkIdentity = useCallback(() => {
     if (checking.current) return checking.current;
-    setIdentityChecking(true); setIdentityError('');
+    setIdentityChecking(true);
     const pending = (async () => {
       try {
         if (!buyer) throw Error('Unavailable tab storage.');
         const identity = await readCheckoutIdentity();
         if (!mounted.current) return null;
         const result = buyer.observe(identity);
+        setIdentityError(''); setIdentityGeneration(buyer.generation);
         if (result.changed) {
           operation.current?.controller.abort(); operation.current = null; inFlight.current = false;
           freezeRequest.current = null;
@@ -147,7 +149,9 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   function identityRejected() {
     buyer?.invalidate(); setIdentityNotice(true); void checkIdentity();
   }
-  const identityBlocked = enhanced && (identityChecking || Boolean(identityError) || !buyer?.identity);
+  // A confirmed tab stays editable during a background read. Failed reads
+  // remain blocked until a successful check; actions still await that check.
+  const identityBlocked = enhanced && (Boolean(identityError) || !buyer?.identity);
   useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy || enhanced && identityChecking ? 'true' : 'false');}, [busy, quoteBusy, container, enhanced, identityChecking]);
   useEffect(() => {document.title = `結帳｜${name}｜自由工坊`;}, [name]);
   useEffect(() => {
@@ -176,7 +180,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         .finally(() => {if (active) setQuoteBusy(false);});
     }, 300);
     return () => {active = false; controller.abort(); window.clearTimeout(timer);};
-  }, [slug, cart, method, postal, refresh, Boolean(checkout), Boolean(intent), identityBlocked]);
+  }, [slug, cart, method, postal, refresh, Boolean(checkout), Boolean(intent), identityBlocked, identityGeneration]);
 
   async function freeze() {
     if (inFlight.current || (!freezeRequest.current && (!quote || quoteBusy))) return;
@@ -267,7 +271,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     <h1 id="shop-checkout-title" tabIndex={-1} ref={heading}>結帳</h1>
     {enhanced && identityNotice && <p role="status" className="shop-order-alert">{IDENTITY_CHANGED_COPY}</p>}
     {enhanced && previousOrder && <p>{PREVIOUS_ORDER_COPY}</p>}
-    {enhanced && identityChecking && <p role="status">正在確認登入狀態…</p>}
+    {enhanced && identityChecking && identityBlocked && <p role="status">正在確認登入狀態…</p>}
     {enhanced && identityError && <div><p role="alert">{identityError}</p><button type="button" className="shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div>}
     {error && <p role="alert" className="shop-order-alert">{error}</p>}
     {intent ? <section className="shop-order-section" aria-labelledby="shop-order-retry-heading">
