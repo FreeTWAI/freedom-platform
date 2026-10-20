@@ -10,6 +10,40 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-20 Short 短影音發布完成
+
+**截至07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，
+Short 已對所有人開啟；四組成功 before／after 備份、隔離還原與清理通過，
+兩環境 dispatcher 已綁定本次來源，原 timer 已恢復 active／enabled。會員 UX 驗收未執行。**
+來源為 #917 的正常 merge，帶入 TSY3991 的 #897「Short — 成員分享的 YouTube Shorts 上滑瀏覽」
+（refs #739）；main Verify 39376522961 的17個 jobs 與 CodeQL 39376522955 的3個 jobs 全部通過。
+本輪沒有 migration；唯一新增 `FREEDOM_SHORT_VIDEOS_ENABLED=true`，兩環境 feature bindings
+由26增至27；Supplier／Commerce console 保持 ON，checkout／交易 Email 保持 OFF，
+其他旗標、路由與 cron 未變。完整證據見[Short 發布收據](rollout-short-videos-2026-10-20.json)。
+
+Ted 於04:50:30.325 UTC 指示：「我覺得他那個如果測試都好 就不用在 staging 測成這樣了, 可以直接先上線給大家測了」。
+依此無 staging acceptance window，member UX acceptance 為 `not_run`；真實手機與 Safari 未驗。
+Production 第二次公開唯讀 smoke 通過14項：`/` 線上 header 已確認
+`frame-src https://www.youtube-nocookie.com;`，`/pay/ecpay/` 加43個 A 的線上 Worker CSP 無 frame-src。
+`/admin` 與 `/admin/github/callback` 的匿名請求在 Worker 前被 Access 以302攔截，
+**未觀察線上 admin Worker CSP**；僅補驗精確部署來源函式
+（`liveAdminWorkerCsp=not_observed_access_protected`、`adminCspSource=exact_source_function`）。
+未登入正式會員或建立訂單，不能以 smoke 通過代替真人使用。
+
+Production 首次 before-set `217429d6` 因 docker exec pg_dump 退出0卻產生截斷 dump，
+在 `pg_restore: … end of file` 失敗，清理通過；第二次 `0416acf8` 完成還原後才綁定。
+本輪 before 為10月20日新擷取的 `240cf677` 備份，run dir 位於前輪 kit，沒有沿用10月19日舊 set。
+兩環境各次成功備份均還原66個／48個物件、核對172 floor與素材政策；production 另核對10項座標約束。
+最初 plan 因 deploy out dir 不存在而拒絕，另行完成後才 seal／deploy，原拒絕紀錄保留。
+
+兩項 kit 修正經 orchestrator 審查：`kit-quiescence` 改以 `MainPID=0` 且 service inactive
+判斷停止，保留 systemd 的歷史 `ExecMainPID`；`smoke-access` 修正首次6項通過後在 `/admin`
+遇到 unexpected redirect 的檢查，改驗 Access redirect 並補 exact-source CSP，其他既有 assertions 維持。
+首次 smoke 失敗收據與兩份修正 diff 保留，第二次收據記錄 `priorFailedAttempt`，沒有覆寫失敗。
+Dispatcher 為 `562f005a`；原03:30／04:30 UTC、5分鐘隨機延遲、Persistent及service argv維持，
+觀察到下次排程為10月21日03:33:09／04:32:18 UTC，**新 dispatcher 自然備份尚未觀察**。
+GitHub Deployments 的 staging-next／next 已各記錄 success；原168項需求、T-047、第二操作者與真人成果未驗項保留。
+
 ## 2026-10-19 商店公開說明與會員啟用邊界發布完成
 
 **截至23:06 UTC，staging 與 production 都已部署 `240cf677`／schema172，
