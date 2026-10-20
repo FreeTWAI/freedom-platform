@@ -5,7 +5,7 @@ export const STOREFRONT_POLICIES_PROFILE='freedom.hosted-store-policies/v1' as c
 export const POLICY_KINDS=['shipping','returns','privacy','terms'] as const;
 export const PolicyKindSchema=z.enum(POLICY_KINDS);
 export type PolicyKind=z.infer<typeof PolicyKindSchema>;
-export const POLICY_LABELS:Record<PolicyKind,string>={shipping:'配送政策',returns:'退換貨政策',privacy:'隱私政策',terms:'服務條款（選填）'};
+export const POLICY_LABELS:Record<PolicyKind,string>={shipping:'配送政策',returns:'退換貨政策',privacy:'隱私政策',terms:'服務條款'};
 export const SELLER_FIELDS={business_name:['營業名稱',120],email:['聯絡 Email',254],phone:['電話',40],address:['地址',300],service_hours:['客服時間',300],tax_id:['統一編號',8],responsible_person:['負責人',80]} as const;
 export const POLICY_CHECKLISTS:Record<PolicyKind,readonly string[]>={
  shipping:['配送範圍與方式','運費','出貨時間','拆包','離島','未取件的處理'],
@@ -13,7 +13,7 @@ export const POLICY_CHECKLISTS:Record<PolicyKind,readonly string[]>={
  privacy:['收集哪些資料','用途','提供給誰（綠界的金流、物流、發票；代出貨的供應商只取得必要收件資料）','保存期限','聯絡方式'],
  terms:['契約成立','取消','付款','發票'],
 };
-export const normalizeLegalText=(v:string)=>v.replace(/\r\n/g,'\n').trim();
+export const normalizeLegalText=(v:string)=>{const line=v.replace(/\r\n/g,'\n');return forbidden.test(line)?line:line.trim();};
 const forbidden=/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 function text(max:number,multiline=false){return z.string().refine(v=>v.isWellFormed(),'請使用有效的文字。').refine(v=>v===normalizeLegalText(v),'請移除前後空白並使用標準換行。')
  .refine(v=>[...v].length<=max,`最多 ${max.toLocaleString('en-US')} 個字。`)
@@ -29,7 +29,7 @@ export type SellerDraft=z.infer<typeof SellerDraftSchema>;
 const body=text(10000,true);
 export const PolicyDraftSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('shipping'),body}).strict(),
- z.object({kind:z.literal('returns'),body,window_days:z.number().int().min(7).max(3650).nullable(),return_by_days:z.number().int().min(1).max(3650)}).strict(),
+ z.object({kind:z.literal('returns'),body,window_days:z.number({error:'請填寫天數。'}).int('請填寫整數天數。').min(7,'售後申請期間須為 7–3650 天。').max(3650,'售後申請期間須為 7–3650 天。').nullable(),return_by_days:z.number({error:'請填寫天數。'}).int('請填寫整數天數。').min(1,'核准後寄回期限須為 1–3650 天。').max(3650,'核准後寄回期限須為 1–3650 天。')}).strict(),
  z.object({kind:z.literal('privacy'),body,drop_ship_disclosed:z.boolean()}).strict(),
  z.object({kind:z.literal('terms'),body}).strict(),
 ]);
@@ -47,11 +47,11 @@ export const emptySellerPolicies=():SellerPoliciesInput=>({seller:{business_name
 // escaping is 6 bytes/unit. Keys, kinds and numeric fields use <2,048 bytes:
 // 4*60,000 + 2,204*6 + 2,048 = 255,272 < 262,144. Wire whitespace is separately
 // bounded to 512 KiB on this exact installed PUT route. Neither shared cap changes.
-const rawBody=z.string().max(20000).refine(v=>new TextEncoder().encode(JSON.stringify(v)).length-2<=60000);
-const rawSeller=z.object(Object.fromEntries(Object.entries(SELLER_FIELDS).map(([k,[,n]])=>[k,z.string().max(n*2)])) as {[K in keyof SellerDraft]:z.ZodString}).strict();
+const rawBody=z.string().max(20000,'政策內容超出長度上限。').refine(v=>new TextEncoder().encode(JSON.stringify(v)).length-2<=60000,'政策內容超出長度上限。');
+const rawSeller=z.object(Object.fromEntries(Object.entries(SELLER_FIELDS).map(([k,[,n]])=>[k,z.string().max(n*2,`最多 ${n} 個字。`)])) as {[K in keyof SellerDraft]:z.ZodString}).strict();
 export const SellerPoliciesWireSchema=z.object({seller:rawSeller,policies:z.object({
  shipping:z.object({kind:z.literal('shipping'),body:rawBody}).strict(),
- returns:z.object({kind:z.literal('returns'),body:rawBody,window_days:z.number().int().min(7).max(3650).nullable(),return_by_days:z.number().int().min(1).max(3650).optional()}).strict(),
+ returns:z.object({kind:z.literal('returns'),body:rawBody,window_days:z.number({error:'請填寫天數。'}).int('請填寫整數天數。').min(7,'售後申請期間須為 7–3650 天。').max(3650,'售後申請期間須為 7–3650 天。').nullable(),return_by_days:z.number({error:'請填寫天數。'}).int('請填寫整數天數。').min(1,'核准後寄回期限須為 1–3650 天。').max(3650,'核准後寄回期限須為 1–3650 天。').optional()}).strict(),
  privacy:z.object({kind:z.literal('privacy'),body:rawBody,drop_ship_disclosed:z.boolean()}).strict(),
  terms:z.object({kind:z.literal('terms'),body:rawBody}).strict(),
 }).strict()}).strict();

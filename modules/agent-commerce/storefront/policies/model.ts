@@ -9,9 +9,13 @@ export interface RenderPolicies{seller:SellerDraft;policies:Partial<Record<Polic
 export const emptyLegalDocument=():PublicationSellerPolicies=>({profile:STOREFRONT_POLICIES_PROFILE,seller:null,policies:{shipping:null,returns:null,privacy:null,terms:null}});
 export function legalSnapshot(raw:unknown){const document=PublicationSellerPoliciesSchema.parse(raw);return {document,sha256:digest(document)};}
 export function policyFromRow(r:Record<string,any>):PolicyDraft{
- const base={kind:r.kind,body:r.body};return SellerPoliciesInputSchema.shape.policies.shape[r.kind as PolicyDraft['kind']].parse(r.kind==='returns'?{...base,window_days:r.window_days,return_by_days:r.return_by_days}:r.kind==='privacy'?{...base,drop_ship_disclosed:r.drop_ship_disclosed}:base);
+ const base={kind:r.kind,body:r.body},policy=SellerPoliciesInputSchema.shape.policies.shape[r.kind as PolicyDraft['kind']].parse(r.kind==='returns'?{...base,window_days:r.window_days,return_by_days:r.return_by_days}:r.kind==='privacy'?{...base,drop_ship_disclosed:r.drop_ship_disclosed}:base);
+ if(digest(policy)!==r.content_sha256)throw new Problem(500,'seller_policies_invalid','賣方資訊與商店政策暫時無法讀取。');return policy;
 }
-export function sellerFromRow(r:Record<string,any>):SellerDraft{return SellerPoliciesInputSchema.shape.seller.parse(Object.fromEntries(Object.keys(emptySellerPolicies().seller).map(k=>[k,r[k]])));}
+export function sellerFromRow(r:Record<string,any>):SellerDraft{
+ const seller=SellerPoliciesInputSchema.shape.seller.parse(Object.fromEntries(Object.keys(emptySellerPolicies().seller).map(k=>[k,r[k]])));
+ if(digest(seller)!==r.content_sha256)throw new Problem(500,'seller_policies_invalid','賣方資訊與商店政策暫時無法讀取。');return seller;
+}
 export async function draftLegalSnapshot(q:PoolClient,p:Profile){
  const document=emptyLegalDocument(),input=emptySellerPolicies();
  const seller=(await q.query(`SELECT v.* FROM commerce_storefront_seller_drafts d JOIN commerce_storefront_seller_versions v

@@ -213,6 +213,7 @@ const app=createApp(productPool??pool,origin,'local',{commerceQueryTransport:pay
   distributionPhotosEnabled:process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE==='1',
   supplyOfferPhotosEnabled:process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE==='1',
   storeAppearanceEnabled:process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE==='1',
+  storePoliciesEnabled:false,
   eventParticipationEnabled:process.env.FREEDOM_E2E_EVENT_PARTICIPATION==='1',
   ...(privateAiFixture?{privateAiProduct:privateAiFixture.transport}:{}),
   ...(avatarAssetFixture?{avatarAssetStore:avatarAssetFixture.store}:{}),

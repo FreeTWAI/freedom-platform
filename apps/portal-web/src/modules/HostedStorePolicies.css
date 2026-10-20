@@ -1,0 +1,22 @@
+.hosted-store-policies { max-width: 960px; min-width: 0; border-top: 1px solid var(--line); padding-top: 20px; }
+.hosted-policies-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.hosted-policies-fields > legend { font-weight: 650; margin-bottom: 12px; }
+.hosted-store-policies :is(h4,h5) { margin: 0; }
+.hosted-policies-warning { border-left: 3px solid var(--focus); padding-left: 12px; }
+.hosted-policies-seller-grid, .hosted-policies-returns { display: grid; gap: 16px; }
+.hosted-policies-policy { border-top: 1px solid var(--line); padding-block: 20px; min-width: 0; }
+.hosted-policies-policy-grid { display: grid; gap: 16px; min-width: 0; }
+.hosted-store-policies textarea { min-height: 220px; resize: vertical; line-height: 1.7; overflow-wrap: anywhere; }
+.hosted-policies-checklist { font-size: .875rem; color: var(--muted); }
+.hosted-policies-checklist p { font-weight: 650; }
+.hosted-policies-checklist ul { padding-left: 20px; line-height: 1.8; }
+.hosted-policies-checkbox { display: flex; align-items: flex-start; gap: 8px; }
+.hosted-policies-checkbox input { flex: 0 0 auto; width: auto; margin-top: 4px; }
+.hosted-policies-readonly { white-space: pre-wrap; overflow-wrap: anywhere; }
+.hosted-store-policies .actions .btn { flex: 0 1 auto; max-width: calc(100% - 12px); min-height: 44px; width: auto; }
+.hosted-store-policies .btn-sm { padding: 8px 12px; font-size: .875rem; }
+@media (min-width:768px) { .hosted-policies-seller-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .hosted-policies-policy-grid { grid-template-columns: minmax(0,2fr) minmax(12rem,1fr); } .hosted-policies-returns { grid-template-columns: repeat(2,minmax(0,1fr)); } .hosted-policies-returns > p { grid-column: 1 / -1; } }
+
+.hosted-policies-policy summary { cursor: pointer; font-weight: 650; min-height: 44px; padding-block: 8px; }
+.hosted-policies-policy summary small { color: var(--muted); font-weight: 400; margin-left: 12px; }
+.hosted-policies-policy summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
