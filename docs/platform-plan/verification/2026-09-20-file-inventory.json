@@ -23004,8 +23004,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 73538,
-      "sha256": "854fc758d19d3328d33e0b84e76d6247a335942a49dbbeb96eb160f93147f5f0"
+      "bytes": 75378,
+      "sha256": "da14f7610d4523cf5be52fd0eafe9e44db81faddba7b81fa1cdab1e51c573f2d"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",

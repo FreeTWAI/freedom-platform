@@ -711,6 +711,29 @@ test('buyer journey returns a guest after real login, reconfirms identity and fi
     expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cart);
     await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-return-notice-${width}.png`));
     await fillBuyerContact(page);
+    // A background change must invalidate the quote even though a pending
+    // same-identity read no longer toggles the form's blocked state.
+    const session = await (await context.request.get('/api/v1/session')).json();
+    const logout = await context.request.post('/api/v1/auth/logout', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID()}, data: {}});
+    expect(logout.status()).toBe(200);
+    const guestQuote = page.waitForResponse(response => response.url().endsWith('/cart-quotes') && response.headers()['x-commerce-buyer'] === 'guest');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await guestQuote;
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    await fillBuyerContact(page);
+    await apiLogin(context, store.origin, person.email);
+    const memberQuote = page.waitForResponse(response => response.url().endsWith('/cart-quotes') && response.headers()['x-commerce-buyer'] === `member:${person.id}`);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await memberQuote;
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cart);
+    expect(writes).toHaveLength(0);
+    await fillBuyerContact(page);
     await freeze(page, store);
     const order = await place(page, '銀行匯款');
     expect(writes).toHaveLength(2);
