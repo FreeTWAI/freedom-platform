@@ -4,12 +4,18 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import type {Pool} from 'pg';
 import sharp from 'sharp';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
 import {communityCatalog,skillBooksForGuild} from '../../modules/community/catalog.js';
 import {guildTitles} from '../../modules/positioning/assessment.js';
 import {communityAuthorSources} from '../../modules/community/community-author-skills.js';
 import {skillMarkdown,pageHtml,skillAgentMarkdown} from '../../modules/development/service.js';
 import {catalogBookForRepository,catalogRepositoryKeys,repositoryKey} from '../../modules/skill-submissions/repository-match.js';
 import {listPublishedSkillSubmissions} from '../../modules/skill-submissions/public.js';
+import {trackedGitHubRepositories} from '../../modules/community/github-sync.js';
+import {catalogMetricTargets} from '../../modules/github-social/service.js';
+import {memberAuthorClaim,PUBLIC_AUTHOR_CLAIM_SQL} from '../../modules/community/repo-author-claims.js';
+import {SkillBookSourceAccount} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 
 const expected=[
   ["hrflow", "tesdano-crypto/HRSystem-OpenSource", "a60cd7b14d25b5a8ab90574247e48a4b4038b11c", "Shiang", "author", "Apache-2.0"],
@@ -25,6 +31,60 @@ const expected=[
   ["story-bible", "Rumi-3653/story-bible", "d0fa28c9a2bf7f26eaf8f01a8b03c2f4508a9ef5", "Nico", "author", "MIT"],
   ["human-mode", "madeofroc-arch/AI-Detox-Center", "b2f5bc19f2f22b18285dfe360a5d77acbda63ca1", "啪哩啪啦", "curator", "MIT"]
 ] as const;
+
+test('all twelve source accounts link to the repository owner without implying verified member identity',()=>{
+  for(const [id,repo] of expected){
+    const book=communityCatalog.skill_books.find(book=>book.id===id)!,account=repo.split('/')[0];
+    const link=`<a href="https://github.com/${account}" target="_blank" rel="noopener noreferrer">${account}</a>`;
+    for(const markup of [renderToStaticMarkup(createElement(SkillBookSourceAccount,{book})),pageHtml(book.title,skillMarkdown(id)!,`/development/skills/${id}.md`)]){
+      assert.ok(markup.includes('來源 GitHub 帳號：'+link),id);
+      assert.ok(markup.includes('Repo 擁有者帳號，不代表會員身分已核實。'),id);
+    }
+    assert.equal(book.guide!.contribution_url,`https://github.com/${repo}/issues`);
+  }
+  assert.equal(renderToStaticMarkup(createElement(SkillBookSourceAccount,{book:{repository_url:'https://github.com.evil.invalid/owner/repo'}})),'<p>來源資訊請見原作連結。</p>');
+});
+
+test('member-shared books enter GitHub sync and metrics from the catalog with an empty fake pool',async()=>{
+  let queries=0;
+  const pool={query:async(sql:string)=>{
+    queries++;assert.equal(sql,'SELECT repository_full_name FROM oss_projects WHERE sharing_withdrawn_at IS NULL');
+    return {rows:[]};
+  }} as unknown as Pool;
+  const tracked=await trackedGitHubRepositories(pool),metrics=catalogMetricTargets();
+  assert.equal(queries,1);
+  for(const [id,repo] of expected){
+    assert.deepEqual(tracked.filter(target=>target.key===repo.toLowerCase()),[{key:repo.toLowerCase(),name:repo}]);
+    assert.ok(metrics.some(target=>target.key===repo.toLowerCase()&&target.repository===repo),id);
+  }
+});
+
+test('all twelve book ids are available to connected repository owners in the existing claim flow',async()=>{
+  for(const [id,repo] of expected){
+    const owner=repo.split('/')[0];
+    const pool={query:async(sql:string,params:unknown[])=>{
+      if(sql.startsWith('SELECT github_user_id, github_login FROM github_social_connections'))return {rows:[{github_user_id:'123',github_login:owner}]};
+      if(sql.includes("c.source_snapshot->>'book_id'=$3")){assert.equal(params[2],id);return {rows:[]};}
+      assert.equal(sql,PUBLIC_AUTHOR_CLAIM_SQL);assert.deepEqual(params,[id]);return {rows:[]};
+    }} as unknown as Pool;
+    const actor={user_id:'synthetic-owner',community_id:'synthetic-community',email:'synthetic@example.test',display_name:'Synthetic owner',profession_membership_ref:'synthetic-profession',session_hash:'synthetic-session',csrf_token:'synthetic-csrf'};
+    const view=await memberAuthorClaim(pool,actor,id);
+    assert.equal(view.book_id,id);assert.equal(view.github_connected,true);assert.equal(view.github_login,owner);
+    assert.equal(view.public.status,'unclaimed');assert.deepEqual(view.claims,[]);
+  }
+});
+
+test('only declared work websites are added to the twelve member-shared guides',()=>{
+  const websites:Record<string,string>={
+    'photo-border-remover':'https://kieiken.github.io/photo-border-remover/',
+    'keynote-pptx-doctor':'https://kieiken.github.io/keynote-pptx-doctor/',
+    'webchat-mcp':'https://webchatmcp.js-package.xyz',
+  };
+  for(const [id] of expected){
+    const book=communityCatalog.skill_books.find(book=>book.id===id)!;
+    assert.equal(book.guide!.website_url,websites[id]);assert.equal(book.introduction_url,websites[id]??null);
+  }
+});
 
 test('all twelve member-shared repositories retain exact pins, community credit, self-declared roles and no guild assignments',()=>{
   for(const [id,repo,sha,credit,relationship,license] of expected){

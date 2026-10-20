@@ -1,6 +1,6 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {SkillBookGuide} from '../../../../modules/community/skill-book-guides';
-import { SkillBookCover, SkillBookStar } from './SkillBookCover';
+import { SkillBookCover, SkillBookStar, SkillBookSourceAccount } from './SkillBookCover';
 import {SkillBookBadges} from './SkillBookBadges';
 import {useSkillDiscovery} from './skill-discovery-client';
 import {SkillShare,fetchSkillShareContent,skillSharePath} from './SkillShare';
@@ -24,7 +24,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   const bookId=book.id??book.book_id,discovery=useSkillDiscovery(),summaryOverride=discovery.data?.books.find(item=>item.book_id===bookId)?.summary_override??book.summary_override;
   const guide=book.guide,beginner=guide?.beginner,repository=httpsLink(book.repository_url),upstream=httpsLink(book.upstream_url)||repository;
   const reading=httpsLink(guide?.reading_url)||repository,website=httpsLink(book.introduction_url)||httpsLink(guide?.website_url),fork=upstream?`${upstream.replace(/\/$/,'')}/fork`:null,contribute=httpsLink(guide?.contribution_url);
-  const source=upstream?new URL(upstream):null,account=source?.hostname==='github.com'?source.pathname.split('/').filter(Boolean)[0]:null;
+  const source=upstream?new URL(upstream):null;
   useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();else if(!open&&dialog.current?.open)dialog.current.close();},[open]);
   useEffect(()=>{
     if(!open||!bookId)return;
@@ -59,7 +59,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
           <details className="skill-intro-details"><summary>練習與設定</summary><div className="stack"><section><h3>準備</h3><ul>{guide.prerequisites.map(item=><li key={item}>{item}</li>)}</ul></section><section><h3>練習</h3><ol>{guide.first_steps.map(step=><li key={step}>{step}</li>)}</ol></section>{guide.quickstart&&<section className="stack"><h3>啟動指令</h3><p className="field-hint">{guide.quickstart.context}</p><pre className="skill-intro-command"><code>{guide.quickstart.commands}</code></pre></section>}{(book.id??book.book_id)&&<a href={`/development/skills/${encodeURIComponent((book.id??book.book_id)!)}`} target="_blank" rel="noopener noreferrer">完整指南 ↗</a>}</div></details>
           <details className="skill-intro-details"><summary>功能與使用範圍</summary><div className="stack"><p className="field-hint">以下為原作收錄版本的功能說明，站內應用另依其版本資料。</p><p className="skill-intro-status">{guide.status}</p><p className="muted">{guide.audience.join('、')}</p><ul className="skill-intro-features">{guide.features.map(feature=><li key={feature}>{feature}</li>)}</ul></div></details>
         </>}
-        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><p>{account?`來源 GitHub 帳號：${account}`:'來源資訊請見原作連結。'}</p>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
+        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
       </div>
     </dialog>
   </>;

@@ -43,7 +43,7 @@ test('guild skill book introduces a real first deliverable before external readi
   await expect(start).toContainText('Node.js 24');await expect(start.locator('pre')).toContainText('npm run read -- products');
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
   await expect(modal.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',/github\.com\/FreeTWAI\/freedom-supplier-client\/blob\/[a-f0-9]{40}\/README\.md$/);
-  await modal.getByText('作者、授權與收錄來源',{exact:true}).click();await expect(modal).toContainText('來源 GitHub 帳號：FreeTWAI');await expect(modal).toContainText('未明確宣告授權條款');
+  await modal.getByText('作者、授權與收錄來源',{exact:true}).click();await expect(modal).toContainText('來源 GitHub 帳號：FreeTWAI');await expect(modal.getByRole('link',{name:'FreeTWAI',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI');await expect(modal).toContainText('Repo 擁有者帳號，不代表會員身分已核實。');await expect(modal).toContainText('未明確宣告授權條款');
   await page.setViewportSize({width:390,height:844});expect(await modal.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
   await page.screenshot({path:'test-results/skill-book-intro-phone.png'});
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(trigger).toBeFocused();
@@ -411,6 +411,10 @@ test('member-shared maintainer and curator credits stay accurate on cards, dialo
     const dialog=page.locator('dialog[open]');
     await expect(dialog).toContainText(`來源標示的${role}：${credit}`);
     await expect(dialog).not.toContainText(`作者：${credit}`);
+    await dialog.getByText('作者、授權與收錄來源',{exact:true}).click();
+    const owner=id==='usage'?'kieiken':'madeofroc-arch';
+    await expect(dialog.getByRole('link',{name:owner,exact:true})).toHaveAttribute('href',`https://github.com/${owner}`);
+    await expect(dialog).toContainText('Repo 擁有者帳號，不代表會員身分已核實。');
     await page.keyboard.press('Escape');
     const response=await request.get(`/development/skills/${id}`);expect(response.status()).toBe(200);
     const html=await response.text();expect(html).toContain(`${role}：${credit}`);expect(html).not.toContain(`作者：${credit}`);
