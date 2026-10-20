@@ -1,3 +1,4 @@
+import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import * as shipping from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
 import * as commerceSetup from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import * as sellerCheckout from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
@@ -228,6 +229,16 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['product-media-command', hostedMedia.ProductMediaCommandSchema, 'output', ['same_product_identity', 'original_completed_version', 'current_version_not_older_than_completion', 'current_same_instance_store_write']],
     ['public-store-media', hostedMedia.PublicStoreMediaSchema, 'output', ['unique_skus', 'exact_publication_revision_sku_path', 'current_publication_liveness', 'immutable_media_digest']],
     ['remove-photo-input', hostedMedia.RemoveProductPhotoInputSchema, 'input', ['current_same_instance_store_write', 'product_selection_version_cas']],
+  ]],
+  ['storefront-policies', 'C1 seller and plain text policy drafts with immutable publication references. No checkout consent or gate.', [
+    ['seller-draft', policies.SellerDraftSchema, 'input', ['no_account_defaults','business_name_if_any_field']],
+    ['policy-draft', policies.PolicyDraftSchema, 'input', ['normalized_10000_unicode_code_points','structured_fields_display_only']],
+    ['seller-policies-input', policies.SellerPoliciesInputSchema, 'input', ['atomic_section','current_store_manage_profile_cas']],
+    ['seller-policies-wire', policies.SellerPoliciesWireSchema, 'input', ['serialized_snapshot_under_256_kib']],
+    ['seller-policies-draft', policies.SellerPoliciesDraftSchema, 'output', ['current_store_read']],
+    ['seller-policies-command', policies.SellerPoliciesAckSchema, 'output', ['completion_metadata_only_receipt','current_store_manage']],
+    ['policy-version', policies.PolicyVersionReadSchema, 'output', ['ever_published_same_store','no_private_version_number']],
+    ['publication-seller-policies', policies.PublicationSellerPoliciesSchema, 'output', ['server_only_freeze_refs']],
   ]],
   ['storefront-appearance', 'Independent draft and frozen publication appearance; storefront/v1 stays unchanged. Server-only media identities never enter this bundle.', [
     ['appearance-settings-input', appearance.StorefrontAppearanceInputSchema, 'input', ['unique_ordered_own_retail_product_ids', 'single_line_80_unicode_characters', 'current_store_manage_profile_cas']],

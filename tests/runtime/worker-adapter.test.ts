@@ -78,6 +78,18 @@ test('appearance flag is an exact default-OFF boolean requiring only guild launc
   assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
 });
 
+test('seller policies flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storePoliciesEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storePoliciesEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
 test('offer photo flag parses exact booleans and requires supplier console and product-photo reads',()=>{
   for(const flag of [undefined,'false']) {
     const configuration=env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag});

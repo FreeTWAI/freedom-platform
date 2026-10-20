@@ -118,6 +118,7 @@ export type PlatformRuntime = {
   supplyOfferPhotosEnabled?: boolean;
   /** Additive store branding, independent of media installation; default OFF. */
   storeAppearanceEnabled?: boolean;
+  storePoliciesEnabled?: boolean;
   /** Independent installed read port and new-upload admission; both absent by default. */
   storePhotoAssetStore?: ObjectStore;
   storePhotoAssets?: StorePhotoAssets;
