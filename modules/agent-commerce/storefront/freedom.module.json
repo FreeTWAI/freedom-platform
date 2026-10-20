@@ -60,7 +60,8 @@
     "tests/runtime/storefront-gallery-sql.test.ts",
     "tests/runtime/storefront-gallery-commands.test.ts",
     "tests/runtime/storefront-gallery-media.test.ts",
-    "tests/e2e/hosted-store-gallery-off.spec.ts"
+    "tests/e2e/hosted-store-gallery-off.spec.ts",
+    "tests/runtime/buyer-journey.test.ts"
   ],
   "public_exports": [],
   "dependencies": [

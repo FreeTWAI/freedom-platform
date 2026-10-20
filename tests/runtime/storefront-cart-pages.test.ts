@@ -270,7 +270,7 @@ test('B01 and B03 serve open variants only when checkout is open, and keep close
   assert.deepEqual(await tableCounts(), before);
 });
 
-test('B04 cart route serves no-store HTML shell identically with checkout on and off, and 404s for unknown or unpublished stores', async () => {
+test('B04 cart route keeps the OFF shell and adds only the enabled buyer marker, and 404s for unknown or unpublished stores', async () => {
   const s = await x.store(5);
   const openApp = makeApp({ checkoutEnabled: true });
   const before = await tableCounts();
@@ -289,7 +289,8 @@ test('B04 cart route serves no-store HTML shell identically with checkout on and
     assert.equal(res.headers.get('set-cookie'), null);
   }
 
-  assert.equal(closedHtml, openHtml);
+  assert.equal(openHtml, cartPageHtml({ slug: s.slug, name: '合成商店' }, true));
+  assert.equal(openHtml.replace(' data-buyer-journey="true"', ''), closedHtml);
   assert.equal(closedHtml, cartPageHtml({ slug: s.slug, name: '合成商店' }));
   assert.ok(closedHtml.includes('<title>購物車｜合成商店｜自由工坊</title>'));
   assert.ok(closedHtml.includes('<body><a class="shop-skip-link" href="#main">跳到主要內容</a>'));
@@ -331,7 +332,7 @@ test('B05 is a no-store shell with no order effects and follows store publicatio
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('set-cookie'), null);
     assert.equal(response.headers.get('x-robots-tag'), 'noindex');
-    assert.equal(await response.text(), checkoutPageHtml({slug: s.slug, name: '合成商店'}));
+    assert.equal(await response.text(), checkoutPageHtml({slug: s.slug, name: '合成商店'}, candidate === app));
   }
   const missing = await app.request(`${x.h.origin}/shops/no-such-store/checkout`);
   assert.equal(missing.status, 404);

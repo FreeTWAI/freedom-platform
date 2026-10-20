@@ -28,7 +28,7 @@ test('closed errors and the generated hosted checkout bundle cover each JSON req
   const terms={publication_revision:'1',currency:'TWD',items:[item],merchandise_total_minor:100,discount_total_minor:0,discounts:[],shipping:publicShipping,shipping_total_minor:0,tax_state:'not_assessed',total_minor:100,consents:[],payment_methods:['immediate_card'],offline_payment:null};
   const order={order_ref:id,display_number:'280229-ABCDEF',store:{slug:'synthetic-shop',name:'合成商店'},created_at:time,pay_by:time,reservation_expired:false,lifecycle_state:'cancelled',cancel_reason:'paid_cancelled',currency:'TWD',lines:[{...item,options:[]}],merchandise_total_minor:100,discount_total_minor:0,shipping_total_minor:0,total_minor:100,payment_state:'confirmed',payment_method:'immediate_card',payment_grace_until:null,offline_instructions:null,latest_payment_attempt:null,can_resume_payment:false,contact:{name:'測試買家甲😀',email:'buyer@example.test',phone:'0900000000'},delivery:{},invoice:null,redacted:false};
   const samples:[string,unknown][]=[
-    ['shipping-method-ref','home'],['delivery-field-error-code','required'],['shipping-unavailable-reason','fulfilment_not_agreed'],['checkout-shipping',frozenShipping],
+    ['buyer-identity-header','guest'],['shipping-method-ref','home'],['delivery-field-error-code','required'],['shipping-unavailable-reason','fulfilment_not_agreed'],['checkout-shipping',frozenShipping],
     ['cart-quote-input',input],['cart-quote',{publication_revision:'1',currency:'TWD',lines:[{...item,options:[],state:'ok'}],merchandise_total_minor:100,discounts:[],delivery_options:[],shipping:{state:'quoted',method:'home',groups:[{group_ref:'g1',amount_minor:0}],total_minor:0},total_minor:100,payment_options:[{method:'immediate_card',available:true,reason:null}]}],
     ['checkout-input',{...input,contact:order.contact,delivery:{}}],['checkout',{checkout_ref:id,terms,terms_sha256:hash,expires_at:time}],
     ['placement-input',{terms_sha256:hash,client_order_id:id}],['placement',{order,payment:null}],['order',order],['redeem-input',{token:'synthetic'}],
@@ -46,7 +46,7 @@ for c in x['cases']:
  Draft202012Validator.check_schema(s)
  assert Draft202012Validator(s,format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),57);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),60);
 });
 test('checkout timestamps require ASCII UTC milliseconds and reject trailing content',()=>{
   const timestamp=c.CheckoutResponseSchema.shape.expires_at;
@@ -63,14 +63,14 @@ test('payment DTOs and JSON Schema share closed states, bearer URLs and strict b
   for(const extra of [{payment_state:'invented'},{latest_payment_attempt:{attempt_ref:id,state:'issued',created_at:time}},{latest_payment_attempt:{attempt_ref:id,state:'ready',created_at:time,account_id:id}},{can_resume_payment:'true'},{trade_no:'SYNTHETIC'},{exceptions:[]}])add('order',{...order,...extra},false,c.PublicOrderSchema);
   add('placement',{order,payment:handoff},true,c.PlaceOrderResponseSchema);add('placement',{order,payment:null},true,c.PlaceOrderResponseSchema);
   for(const value of [handoff,{...handoff,handoff_url:'https://foreign.test'+handoff.handoff_url},{...handoff,handoff_url:handoff.handoff_url+'\n'},{...handoff,handoff_url:handoff.handoff_url+'?x=1'},{...handoff,handoff_url:'/pay/ecpay/'+'A'.repeat(42)},{...handoff,account_ref:'forbidden'},{...handoff,expires_at:'2028-02-29T12:34:56Z'}])add('payment-handoff',value,value===handoff,c.PaymentHandoffResponseSchema);
-  for(const code of ['payment_profile_unavailable','payment_handoff_unavailable','checkout_order_closed','checkout_hold_expired','payment_already_applied','payment_attempts_exhausted','payment_result_pending']){assert(c.CheckoutErrorCodeSchema.safeParse(code).success);add('error',{type:'about:blank',title:code,status:409,code,detail:'合成錯誤'},true,c.CheckoutErrorSchema);}
+  for(const code of ['checkout_identity_changed','payment_profile_unavailable','payment_handoff_unavailable','checkout_order_closed','checkout_hold_expired','payment_already_applied','payment_attempts_exhausted','payment_result_pending']){assert(c.CheckoutErrorCodeSchema.safeParse(code).success);add('error',{type:'about:blank',title:code,status:409,code,detail:'合成錯誤'},true,c.CheckoutErrorSchema);}
   const result=spawnSync('python3',['-c',`import json,sys
 from jsonschema import Draft202012Validator,FormatChecker
 x=json.load(sys.stdin)
 for c in x['cases']:
  assert Draft202012Validator(x['bundle']['$defs'][c['name']],format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c['name']
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),58);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),59);
 });
 
 test('delivery errors and cart options stay pinned to the rules library',()=>{
@@ -95,4 +95,17 @@ test('delivery errors and cart options stay pinned to the rules library',()=>{
 test('buyer query has an empty strict request and the existing order response',()=>{
   assert.equal(c.PaymentQueryResponseSchema,c.PublicOrderSchema);assert(c.PaymentQueryInputSchema.safeParse({}).success);
   for(const value of [{attempt_ref:randomUUID()},{trigger:'buyer'},null])assert(!c.PaymentQueryInputSchema.safeParse(value).success);
+});
+
+test('buyer equality header has identical Zod and JSON Schema conformance without credential or authority selectors',()=>{
+  const bundle=JSON.parse(readFileSync(new URL('../../contracts/guild-launchpad/v1/hosted-checkout.schema.json',import.meta.url),'utf8'));
+  const id='11111111-1111-4111-8111-111111111111';
+  const cases=[...['guest',`member:${id}`].map(value=>({value,valid:true})),...['',null,{},[],{buyer_principal_id:id},'member:invalid','Guest',`member:${id}\n`,`member:${id.toUpperCase().replace('11111111','AAAAAAAA')}`,`member:${id.replace('-4111-','-0111-')}`,`member:${id.replace('-8111-','-7111-')}`,'guest\0'].map(value=>({value,valid:false}))];
+  for(const item of cases)assert.equal(c.CheckoutBuyerIdentitySchema.safeParse(item.value).success,item.valid);
+  const result=spawnSync('python3',['-c',`import json,sys
+from jsonschema import Draft202012Validator
+x=json.load(sys.stdin)
+for c in x['cases']: assert Draft202012Validator(x['schema']).is_valid(c['value']) == c['valid']
+print(len(x['cases']))`],{input:JSON.stringify({schema:bundle.$defs['buyer-identity-header'],cases}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
 });

@@ -28,7 +28,8 @@
     "guild-supply",
     "guild-open-source",
     "guild-events",
-    "community-ar"
+    "community-ar",
+    "commerce-storefront"
   ],
   "format": "freedom.module/v1",
   "instructions": [

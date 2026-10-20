@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {formatIsoLocal} from '../format';
 import {SHORT_VIDEO_EMBED_ORIGIN, playableShortVideos, playerCommand, shortVideoEmbedUrl, type PlayerCommand, type ShortVideoSource} from './short-video-embed';
 import './ShortVideoFeed.css';
@@ -69,6 +69,18 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
   useEffect(() => { setPaused(false); }, [active]);
   useEffect(() => { apply(); }, [active, playing, muted, idsKey, apply]);
   useEffect(() => { if (active >= videos.length - 2 && hasMore && !loadingMore) onLoadMore(); }, [active, videos.length, hasMore, loadingMore, onLoadMore]);
+  // The captions of slides that are not on screen are inert. If focus sits on a control of the slide that is about to
+  // stop being current, the browser would drop it on <body>; hand it to the feed before the slide goes inert.
+  const keepFocusInFeed = useCallback(() => {
+    const focused = document.activeElement, root = scroller.current;
+    if (root && focused instanceof HTMLElement && focused !== root && root.contains(focused) && focused.closest('.short-video-caption')) root.focus({preventScroll: true});
+  }, []);
+  // "Next" is disabled on the last slide and "previous" on the first. A disabled button cannot hold focus, so hand it to
+  // the feed as soon as the current slide changes under it (before any further key press can leave the dialog from it).
+  useLayoutEffect(() => {
+    const focused = document.activeElement, root = scroller.current;
+    if (root && focused instanceof HTMLButtonElement && focused.disabled && root.parentElement?.contains(focused)) root.focus({preventScroll: true});
+  }, [active]);
   // The list changed (refresh, withdrawal, hide): keep the viewer on the same post, or the nearest one if it is gone.
   useEffect(() => {
     const list = latest.current.videos;
@@ -77,10 +89,11 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
     const next = at >= 0 ? at : Math.min(latest.current.active, list.length - 1);
     selected.current = list[next].post_id;
     if (next !== latest.current.active) {
+      keepFocusInFeed();
       setActive(next);
       scroller.current?.scrollTo({top: next * scroller.current.clientHeight, behavior: 'instant'});
     }
-  }, [idsKey]);
+  }, [idsKey, keepFocusInFeed]);
   // Leaving the tab stops playback; coming back stays stopped until the current list confirms the video.
   const revalidate = useCallback(async () => {
     const mine = ++sequence.current;
@@ -115,9 +128,11 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
       if (event.key !== 'Tab') return;
       const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), a[href], [tabindex="0"]') ?? [])].filter(element => !element.closest('[inert]'));
       if (!focusable.length) return;
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      const first = focusable[0], last = focusable[focusable.length - 1], current = document.activeElement;
+      // Focus that has already left the dialog (for example dropped on <body>) comes back in instead of escaping behind it.
+      if (!current || !dialog.current?.contains(current)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); return; }
+      if (event.shiftKey && current === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && current === last) { event.preventDefault(); first.focus(); }
     };
     // The browser's Back button leaves full screen first instead of leaving the page.
     const onPop = () => { if (!window.history.state?.freedomShortFull) setFull(false); };
@@ -150,6 +165,7 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
     if (!root || !root.clientHeight) return;
     const index = Math.min(Math.max(Math.round(root.scrollTop / root.clientHeight), 0), videos.length - 1);
     selected.current = videos[index]?.post_id;
+    if (index !== latest.current.active) keepFocusInFeed();
     setActive(current => current === index ? current : index);
   }
   function enterFull() {
@@ -198,11 +214,11 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
             {index === active && paused && check === 'idle' && <span className="short-video-paused" aria-hidden="true">▶</span>}
             {unconfirmed && <span className="short-video-status" role="status">{check === 'checking' ? '正在確認影片狀態…' : '無法確認影片狀態，點一下重試'}</span>}
           </button>
-          <div className="short-video-caption">
+          <div className="short-video-caption" ref={element => { if (element) { if (index === active) element.removeAttribute('inert'); else element.setAttribute('inert', ''); } }}>
             <strong>{post.title}</strong>
             <span>{post.author.display_name} · {formatIsoLocal(post.created_at)}</span>
             {post.url && <a href={post.url} target="_blank" rel="noopener noreferrer">在 YouTube 開啟 ↗</a>}
-            <div className="short-video-actions" role="group" aria-label="貼文互動" ref={element => { if (element) { if (index === active) element.removeAttribute('inert'); else element.setAttribute('inert', ''); } }}>
+            <div className="short-video-actions" role="group" aria-label="貼文互動">
               <button type="button" className="short-video-action" aria-pressed={post.liked ?? false} aria-label={`${post.liked ? '收回讚' : '按讚'} · ${post.like_count ?? 0}`} disabled={likeBusy === post.post_id} onClick={() => onLike(post)}>{post.liked ? '♥' : '♡'} {post.like_count ?? 0}</button>
               <button type="button" className="short-video-action" aria-label={`留言 · ${post.comment_count ?? 0}`} onClick={event => onComment(post, event.currentTarget)}>💬 {post.comment_count ?? 0}</button>
               <span className="short-video-share">{renderShare(post)}</span>

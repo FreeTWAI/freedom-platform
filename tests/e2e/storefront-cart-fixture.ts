@@ -67,7 +67,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean;adminAccess?:boolean};
+type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -106,8 +106,9 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
       }}:{}),
       guildLaunchpadEnabled: true,
       supplierConsoleEnabled,
+      ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
-      commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
+      commerceSettings: { checkoutEnabled: controls.checkoutEnabled ?? true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
         ...(controls.realAdmission?{}:{admission: { allowed: () => true }}),
         ...(!offline ? {shipping: ports.shipping} : {}),
@@ -311,6 +312,7 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       saveOfflineFixture,
       admission: listener.admission,
       sellerPost: post,
+      republish,
       updatePriceAndRepublish,
       removeProductAndRepublish,
       updateLongNamesAndRepublish,
