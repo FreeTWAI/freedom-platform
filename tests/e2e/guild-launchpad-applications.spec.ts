@@ -229,7 +229,11 @@ test('leader configuration cannot remove a committed pending tenant creation or 
 });
 
 test('unreadable committed tenant creation retains its name and key across two retries', async ({page,e2eAuthPool},testInfo) => {
-  const userId=await member(e2eAuthPool,page); await open(page); await begin(page);
+  const userId=await member(e2eAuthPool,page);
+  // Switching to the retail tool requires active full commerce membership under the cohort rule.
+  await e2eAuthPool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+    VALUES($1,$2,$3,'guild_commerce_sales','active','full')`,[randomUUID(),DEMO_COMMUNITY,userId]);
+  await open(page); await begin(page);
   const name='原操作業務空間';
   const input=flow(page).getByLabel('業務空間名稱',{exact:true});
   const create=flow(page).getByRole('button',{name:'建立業務空間',exact:true});
