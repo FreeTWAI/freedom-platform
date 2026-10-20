@@ -860,6 +860,14 @@ test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs
     const actual=unsealCredential(commerceKeys,row,row);
     assert.equal(JSON.stringify(actual)===JSON.stringify(commerceMaterials.get(row.account_id)),true,'restored credential must unseal under its retained context');
   }
+  // Every retained legal byte and reference, including unpublished identity
+  // metadata, must equal the exported A/B source; C is outside the snapshot.
+  for(const table of legalTables){
+    const order=table.endsWith('_versions')?'version_id':table==='commerce_publication_policy_refs'?'publication_id,kind':table==='commerce_publication_seller_policies'?'publication_id':table==='commerce_storefront_policy_drafts'?'kind':'version_id';
+    const rows=async(pool:Pool)=>(await pool.query(`SELECT * FROM ${table} WHERE tenant_id=ANY($1::uuid[]) ORDER BY tenant_id,instance_id,${order}`,[[spaces.a.tenantId,spaces.b.tenantId]])).rows;
+    const retained=await rows(restoredPool);assert.equal(retained.length,EXPECTED[table],table);assert.deepEqual(retained,await rows(owner),`${table}: all version text, digests and publication bindings retained`);
+    assert.equal((await restoredPool.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[spaces.c.tenantId])).rowCount,0);
+  }
   const restoredKeys = await foreignKeys(restoredPool);
   assert(restoredKeys.length > 0); assert.deepEqual(restoredKeys, await foreignKeys(owner));
   for (const key of restoredKeys) assert.equal(key.convalidated, true);
@@ -917,6 +925,10 @@ test('J6-R4 lockdown precedes grants; one restored runtime connection cycles A, 
       assert.deepEqual(await visible(q), space ? tenantSlice(space) : personalOnly());
     });
   }
+});
+
+test('J6-R4 restored seller and policy history retains immutable versions, freezes and draft identity',async()=>{
+ const q=await restoredPool.connect();try{await q.query('BEGIN');for(const table of legalTables){for(const statement of [table.endsWith('_drafts')?`UPDATE ${table} SET created_at=created_at+interval '1 second'`:`UPDATE ${table} SET tenant_id=tenant_id`,`DELETE FROM ${table}`]){await q.query('SAVEPOINT immutable_legal');await assert.rejects(q.query(statement),(e:unknown)=>(e as {code:string}).code==='23514');await q.query('ROLLBACK TO SAVEPOINT immutable_legal');}}}finally{await q.query('ROLLBACK');q.release();}
 });
 
 test('J6-R4 restored checkout PII requires the exact tenant context and disappears without context', async () => {
