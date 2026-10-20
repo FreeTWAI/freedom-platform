@@ -257,6 +257,52 @@ export async function runLocalSuite(root, id, options = {}) {
 
 const PINNED_OPTION_KEYS = Object.freeze(['testDatabaseUrl', 'env', 'timeoutMs', 'signal']);
 
+// Optional diagnostics from an already-failed pytest process. Reconstruct only
+// selected paths and closed counts; helper failures never replace its verdict.
+async function pytestFailureCounts(root, junit, expected, files, deadline, signal) {
+  try {
+    if (signal?.aborted || performance.now() >= deadline) return;
+    const helperPath = fileURLToPath(new URL('../../scripts/ci/pinned_pytest_evidence.py', import.meta.url));
+    const output = await new Promise(done => {
+      const child = spawn('python3', ['-I', helperPath, '--failure-counts', '--junit', junit, '--expected', expected],
+        { cwd: root, env: verificationEnvironment(), stdio: ['ignore', 'pipe', 'ignore'] });
+      let invalid = false, size = 0;
+      const chunks = [];
+      const stop = () => { invalid = true; child.kill('SIGKILL'); };
+      const timer = setTimeout(stop, Math.max(1, Math.min(30_000, Math.floor(deadline - performance.now()))));
+      signal?.addEventListener('abort', stop, { once: true });
+      if (signal?.aborted) stop();
+      child.stdout.on('data', bytes => {
+        size += bytes.length;
+        if (size > MAX_OUTPUT) stop();
+        else chunks.push(bytes);
+      });
+      child.stdout.on('error', stop);
+      child.once('error', () => { invalid = true; });
+      child.once('close', (code, terminationSignal) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', stop);
+        done(!invalid && code === 0 && terminationSignal === null ? Buffer.concat(chunks) : undefined);
+      });
+    });
+    if (!output || signal?.aborted || performance.now() >= deadline) return;
+    const parsed = parseJson(output, { maxBytes: MAX_OUTPUT, maxNodes: 500_000 });
+    if (parsed.ok !== false || parsed.reason !== 'test_process_failed' || !Array.isArray(parsed.files)
+      || parsed.files.length !== files.length) return;
+    const test_files = [];
+    for (const [index, file] of parsed.files.entries()) {
+      if (!file || file.path !== files[index] || !file.counts
+        || !COUNT_KEYS.every(key => Number.isSafeInteger(file.counts[key]) && file.counts[key] >= 0)
+        || file.counts.tests < 1
+        || file.counts.tests !== COUNT_KEYS.slice(1).reduce((sum, key) => sum + file.counts[key], 0)) return;
+      test_files.push({ path: files[index], counts: Object.fromEntries(COUNT_KEYS.map(key => [key, file.counts[key]])),
+        cases: [], suite_events: [] });
+    }
+    if (signal?.aborted || performance.now() >= deadline) return;
+    return test_files;
+  } catch { /* missing, malformed, oversized or unavailable diagnostics fail closed */ }
+}
+
 async function runPytestSuiteDefinition(root, id, files, suite, extraEnv, timeoutMs, options) {
   const deadline = performance.now() + timeoutMs;
   const failure = (reason, evidence_reason) => ({ ...result(id, 'failed', reason),
@@ -290,10 +336,16 @@ async function runPytestSuiteDefinition(root, id, files, suite, extraEnv, timeou
       child.once('close', (code, terminationSignal) => {
         clearTimeout(timer);
         options.signal?.removeEventListener('abort', abort);
-        done({ reason, failed: code !== 0 || terminationSignal !== null });
+        done({ reason, failed: code !== 0 || terminationSignal !== null,
+          exitedNonzero: Number.isInteger(code) && code !== 0 && terminationSignal === null });
       });
     });
-    if (ran.reason || ran.failed) return failure(ran.reason ?? 'test_process_failed');
+    if (ran.reason || ran.failed) {
+      const failed = failure(ran.reason ?? 'test_process_failed');
+      if (ran.reason || !ran.exitedNonzero) return failed;
+      const test_files = await pytestFailureCounts(root, junit, expected, files, deadline, options.signal);
+      return test_files ? { ...failed, test_files } : failed;
+    }
     if (options.signal?.aborted) return failure('test_cancelled');
     if (performance.now() >= deadline) return failure('test_timeout');
     const helperPath = fileURLToPath(new URL('../../scripts/ci/pinned_pytest_evidence.py', import.meta.url));

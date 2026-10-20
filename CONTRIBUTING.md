@@ -35,6 +35,10 @@ npm run test:repos
 自願貢獻不保證案源、XP、收益或雇用。若產生付費合作，由當事人另定條款與 Seller 外部收款；平台不代收。秘密、客戶資料、真實交易單據與未授權素材不進公開 Issue／PR。
 <!-- freedom-repository-guide:end -->
 
+## 寫完之後怎麼發布
+
+一般改善、限定試用與核心／交易變更走不同的發布途徑，共用同一套安全底線；PR 暫時不能發布時，維護者會寫出卡點、下一棒、解除條件與交付方式。詳見[群友貢獻的發布途徑](docs/development/contribution-release-paths.md)。
+
 ## 平行頁面審查
 
 每組使用自己的工作樹與建置產物；E2E 會各自建立 PostgreSQL schema。可用 `FREEDOM_E2E_PORT=4321 npm run test:e2e` 指定另一個 localhost 埠，預設仍是 4311。4310／4312 自 2026-09-25 起空出來給本機 `npm run demo`，不要再當成 Castle 上的 staging／public 服務埠。每組仍使用一個 Playwright worker，先 build 再跑瀏覽器，勿在測試中重建同一份前端。測試的 Origin 應由目前測試網址取得，不能寫死另一組的埠。
