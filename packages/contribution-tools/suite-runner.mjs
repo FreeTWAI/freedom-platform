@@ -191,9 +191,9 @@ async function runSharded(root, selections, files, options, timeout, count) {
   try {
     partitions = partitionRuntimeFiles(files, count);
     databases = await createRuntimeDatabases(options.testDatabaseUrl, count,
-      Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 24_000))));
+      Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 64_000))));
     // Reserve bounded cleanup time within the original global budget.
-    const remaining = deadline - performance.now() - 24_000;
+    const remaining = deadline - performance.now() - 64_000;
     if (remaining <= 0 || options.signal?.aborted) reason = options.signal?.aborted ? 'test_cancelled' : 'test_timeout';
     else shards = await Promise.all(partitions.map(async (selected, index) => {
       const ran = await execute(root, selected, 'tsx', { TEST_DATABASE_URL: databases.urls[index] }, remaining, options.signal);
@@ -504,7 +504,7 @@ const PARTITION_SCHEMA = 'freedom.runtime-partition/v1';
 // Finite matrix capacity, including provisioning and verified cleanup. Hosted
 // observations on 2026-10-15 put the same 55 files about 20% slower and the
 // projected full partition beyond 1,224s. Keep legacy four-partition behavior;
-// six and eight hosts get 1,500s including the unchanged 24s cleanup reserve.
+// six and eight hosts get 1,500s including the 64s cleanup reserve.
 const PARTITION_BUDGET_MS = Object.freeze({ 4: 1_200_000, 6: 1_500_000, 8: 1_500_000 });
 // Queueing can serialize every host: allow one full partition budget per host plus
 // 30 minutes of bounded queue gaps. CI scopes artifacts to one run attempt;
@@ -547,8 +547,8 @@ export async function runRuntimePartition(root, options = {}) {
   let databases, cleanup = false, report;
   try {
     partitionCheck(isDisposableDatabaseUrl(options.testDatabaseUrl), 'test_database_rejected');
-    databases = await createRuntimeDatabases(options.testDatabaseUrl, 1, Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 24_000))));
-    const remaining = Math.floor(deadline - performance.now() - 24_000);
+    databases = await createRuntimeDatabases(options.testDatabaseUrl, 1, Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 64_000))));
+    const remaining = Math.floor(deadline - performance.now() - 64_000);
     if (remaining <= 0) throw Error('test_timeout');
     [report] = await runGroup(root, [{id: check_id, files: selected}], true,
       {testDatabaseUrl: databases.urls[0], timeoutMs: remaining, runtimeShards: 1, signal: options.signal}, budget);
