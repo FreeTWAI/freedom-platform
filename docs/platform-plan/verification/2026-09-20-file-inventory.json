@@ -39,8 +39,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 35155,
-      "sha256": "12b2302fecf514d3e483e00434569956ae9100e925bd14ed2cf0e68bef18a070"
+      "bytes": 36434,
+      "sha256": "a7434397eab37e2f5b54ab205c6354ba8d5639fb61a68579cbe2bfb197f9fafb"
     },
     {
       "path": "compose.yaml",
@@ -329,8 +329,8 @@
     },
     {
       "path": "apps/platform-api/src/app.ts",
-      "bytes": 12122,
-      "sha256": "28ac138bf9a53a5006056cf68f4611a9c37e4dccea16c2a8f46c52a18fec5422"
+      "bytes": 12203,
+      "sha256": "e3e041aaa5ecb4ad84d35b7872defd26adf4a949a2e529a434a98a168683cb2d"
     },
     {
       "path": "apps/platform-api/src/credential-ingest-client.ts",
@@ -389,8 +389,8 @@
     },
     {
       "path": "apps/platform-api/src/platform-app.ts",
-      "bytes": 69624,
-      "sha256": "6878dd895f7d56ac314a1e81609e3364c01fd92bf20bd7c32807a21e69ea2132"
+      "bytes": 70088,
+      "sha256": "30cdad7218fc5b972a16125cba64336df0a1fc6450956772cc920d2efd73a318"
     },
     {
       "path": "apps/platform-api/src/private-ai-path.ts",
@@ -409,13 +409,13 @@
     },
     {
       "path": "apps/platform-api/src/runtime.ts",
-      "bytes": 9409,
-      "sha256": "66d871038dc7ba62d222cb119e9604e64d9d6b847391db84ab617ec4a455e560"
+      "bytes": 9440,
+      "sha256": "69696abf9419866a77dfa81d619764d7a61a50dbadf66f65c9f9ec8939e57124"
     },
     {
       "path": "apps/platform-api/src/server.ts",
-      "bytes": 4421,
-      "sha256": "49c0ff7afdd5042292ca153d4868f464565dfffa66e67b9f978cafad74a4fe34"
+      "bytes": 4490,
+      "sha256": "ae458cb692b8adbd25bc0b1e2817d5d029ade83bdc6a7eb7fe36dcc04fc8e02a"
     },
     {
       "path": "apps/platform-api/src/session-cookie.ts",
@@ -449,8 +449,8 @@
     },
     {
       "path": "apps/platform-api/src/worker.ts",
-      "bytes": 44863,
-      "sha256": "a9376b141fa976ed492608b8e5f0ed91101413a8315d82033bad8acf2661cf8a"
+      "bytes": 45150,
+      "sha256": "feeabd15d2f631039f489d484d8824a2d4005982177333fa3cffef530160fda7"
     },
     {
       "path": "apps/platform-api/src/generated/runtime-text.ts",
@@ -1959,8 +1959,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 65746,
-      "sha256": "d3925d38334a02d578eeb3ca078226a3026a8171dcb34d01bc150fe6ca9e50dc"
+      "bytes": 65844,
+      "sha256": "0e23887872882b17e481a2b014e8098fbd43c0b0cabdceae0b9288fabe6de80c"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -2389,8 +2389,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/Community.tsx",
-      "bytes": 12502,
-      "sha256": "ec8e87d630891ec31fe7283213ce9c3096d437cd7adefdbeb31fc0a70f87c18c"
+      "bytes": 12533,
+      "sha256": "a8a6b6b20f01f160b825637bd8a5155163f049d8b5a77cc1529a9720031c778e"
     },
     {
       "path": "apps/portal-web/src/modules/CommunityHistory.css",
@@ -2723,6 +2723,16 @@
       "sha256": "1acceed0e2d47b7a61fb106910bdd78d132539251c1737b8c70733cdc048340f"
     },
     {
+      "path": "apps/portal-web/src/modules/InlineVideo.css",
+      "bytes": 551,
+      "sha256": "0b213d3d3fa024579e9d3a61f2d74de195d3dff2df647149bba39c12d93888fd"
+    },
+    {
+      "path": "apps/portal-web/src/modules/InlineVideo.tsx",
+      "bytes": 1441,
+      "sha256": "97a9401b2d0be3d101f0cf0fd1561199bb34bf47b2c4c093158828256dbcfd2a"
+    },
+    {
       "path": "apps/portal-web/src/modules/LegacyCommercePanels.tsx",
       "bytes": 25878,
       "sha256": "8927f7df917a099fe962a6363cb5ccb75535b7a80c056b3eff07a2c9283ed71e"
@@ -2794,8 +2804,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 15574,
-      "sha256": "b7c34dd6c607f14a10a94ce4d44f7ba18ef38c048329df0abb95707f78e0ed68"
+      "bytes": 15641,
+      "sha256": "f8137b51fa292b84ebe4357b9ebfdd20419a8fa24d497b7823007da5632271b4"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -3013,6 +3023,16 @@
       "sha256": "8f7dbaf85cddd3f0d2b7b6fb6ef305253300b1c07987a3fde57af527eccdf69e"
     },
     {
+      "path": "apps/portal-web/src/modules/ShortVideoFeed.css",
+      "bytes": 5332,
+      "sha256": "d8101d734fed7844d3e67ee5fd4bb997c433a91e7899c6cd69ade4f55d5a41a9"
+    },
+    {
+      "path": "apps/portal-web/src/modules/ShortVideoFeed.tsx",
+      "bytes": 15073,
+      "sha256": "bd3ea3393a2eb4072f11850a280ccbfa629bb0be5374692767eecfced64766d3"
+    },
+    {
       "path": "apps/portal-web/src/modules/ShowcasePanel.tsx",
       "bytes": 31367,
       "sha256": "59614d1a8265411778eef52a382ce57e6ce7724eaf6aa2acbb61c8f2e486e188"
@@ -3089,8 +3109,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialInteractions.tsx",
-      "bytes": 21293,
-      "sha256": "8824824cdfe2de59345e8c88c6c0257407bde36911033dae6351b35a531c47c1"
+      "bytes": 21532,
+      "sha256": "efac4c5ad37fea08aea4baaab7020be7dac9bff990af1f4a293e4da746995b40"
     },
     {
       "path": "apps/portal-web/src/modules/SocialPostEditor.tsx",
@@ -3124,8 +3144,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.tsx",
-      "bytes": 41232,
-      "sha256": "f949abe83f72fd0f396ef9b4dd126af67e9690ec78b133346e17869c6f81a07b"
+      "bytes": 47387,
+      "sha256": "962bdbd848ab0edeea4380532af67f92374b7c7ecf1b777202ecdc9215646e73"
     },
     {
       "path": "apps/portal-web/src/modules/SquadInvitations.css",
@@ -3316,6 +3336,11 @@
       "path": "apps/portal-web/src/modules/shared.tsx",
       "bytes": 3065,
       "sha256": "6fba606e4f32769cb54a46542a81b9264d86c6a585f6011919039d7f64b5504d"
+    },
+    {
+      "path": "apps/portal-web/src/modules/short-video-embed.ts",
+      "bytes": 4263,
+      "sha256": "777a3dfd3d7044bc2b22b48d4d60efa857443d4f5b7eccf67c8f8f5733a7ba23"
     },
     {
       "path": "apps/portal-web/src/modules/showcase-drafts.ts",
@@ -19699,8 +19724,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 1994,
-      "sha256": "206cefd3f2811caa4018ad4d6e31097db5e5353e56cf6d14dcfd8a393b0a2448"
+      "bytes": 2483,
+      "sha256": "602baa80d579a58f79711dde17576a2036d7c07723b13b43b3714c551a3ed647"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -21899,8 +21924,8 @@
     },
     {
       "path": "scripts/e2e-server.ts",
-      "bytes": 18841,
-      "sha256": "2dad31d3a06b650cda604842c0b5a0628ff8436151b77ddac4bde2ccbeb0b113"
+      "bytes": 18913,
+      "sha256": "8e2665b519cbeafa8a380760029b5d3abd35df0266a5a42279fe4126e5387623"
     },
     {
       "path": "scripts/export-contract-bundle.mjs",
@@ -22769,8 +22794,8 @@
     },
     {
       "path": "tests/e2e/member-feature-fixture.ts",
-      "bytes": 2387,
-      "sha256": "876206ccd056635d6360bdd373696310baefc4d3093b5ba6373833a170ac77b3"
+      "bytes": 2408,
+      "sha256": "987b8b26c70693f098dd5cd6a96ca9ac8aba521c3c2d64d98646dbddae61f6a9"
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",
@@ -22991,6 +23016,21 @@
       "path": "tests/e2e/sharing-authoring.spec.ts",
       "bytes": 198,
       "sha256": "7c98ef149a073cccb181667c51d9c5ad52a436baa33e452491ec159b769dc4fe"
+    },
+    {
+      "path": "tests/e2e/short-videos-lifecycle.spec.ts",
+      "bytes": 19424,
+      "sha256": "a6123d52ab0063b1cf0c086946433769547e1346e7914b742f9ece1ddbe6995e"
+    },
+    {
+      "path": "tests/e2e/short-videos-share.spec.ts",
+      "bytes": 17609,
+      "sha256": "a6a54001f2491e6addd2a5f3f429f8166556b22716d186a41e5f6bdcbe64efe8"
+    },
+    {
+      "path": "tests/e2e/short-videos.spec.ts",
+      "bytes": 9643,
+      "sha256": "c39c83f28d366c0250a3d12cfd0b563b06f52c9c10b429da0ec7513912eb1311"
     },
     {
       "path": "tests/e2e/showcase-pages.spec.ts",
@@ -25241,6 +25281,16 @@
       "path": "tests/runtime/shop-service-identity.test.ts",
       "bytes": 20640,
       "sha256": "7306530456d3567c2e522a78e10ec2f65edf8a31d0656abca1f813212a6c2590"
+    },
+    {
+      "path": "tests/runtime/short-video-embed.test.ts",
+      "bytes": 5952,
+      "sha256": "a9a885f2e241587547ecefcb8085a2e872eb2a3ecffb851a1220f77d1d1a9e4e"
+    },
+    {
+      "path": "tests/runtime/short-video-flag.test.ts",
+      "bytes": 1451,
+      "sha256": "42032e92e279760118c1ce5d7afb2b55526a42153d80f9adb60756b6300c1931"
     },
     {
       "path": "tests/runtime/showcase-drafts.test.ts",
