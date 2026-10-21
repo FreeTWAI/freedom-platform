@@ -15,6 +15,7 @@ import {verifyPassword,taipeiDate,command,expireNextSettingsProof} from './selle
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 import {SupplyOfferSchema, DistributionSchema} from '../../contracts/guild-launchpad/v1/hosted-distribution.js';
+import {openNotifications} from './navigation.js';
 
 type Store = Awaited<ReturnType<typeof setupCartFixtureStore>>;
 async function openBuyer(db: Pool, context: BrowserContext, store: Store) {
@@ -919,4 +920,77 @@ test('VARIANTS-E2E each SKU keeps its stock and checkout/order labels survive a 
   await page.getByRole('link',{name:'前往結帳',exact:true}).click();await page.getByLabel('收件人姓名',{exact:true}).fill('合成買家乙');await page.getByLabel('收件人手機',{exact:true}).fill('0900123456');await page.getByLabel('Email',{exact:true}).fill('variants-second@example.test');await page.getByRole('radio',{name:'面交取貨',exact:true}).check();await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy','false');await freeze(page,store);const second=await place(page,'面交付款');expect(second.lines[0].title).toBe('新版 T 恤（黑／M）');
   expect((await e2eAuthPool.query('SELECT item_id,reserved FROM commerce_items WHERE item_id=ANY($1::uuid[]) ORDER BY item_id',[[a.product_id,b.product_id]])).rows.map(row=>row.reserved)).toEqual([1,1]);
  }finally{await context.close();await store.close();}
+});
+
+test('order bell tells an eligible seller reader about placement and opening it rechecks revoked authority',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{commerceOrderNotificationsEnabled:true});
+  const buyerContext=await browser.newContext({baseURL:store.origin}),readerContext=await browser.newContext({baseURL:store.origin});
+  try{
+    for(const context of [buyerContext,readerContext])await context.route(url=>url.origin!==store.origin,route=>route.abort());
+    const reader=await member(e2eAuthPool),principal=randomUUID();
+    await e2eAuthPool.query('INSERT INTO principals(principal_id,user_ref) VALUES($1,$2)',[principal,reader.id]);
+    await e2eAuthPool.query("INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at) VALUES($1,$2,'operator','active',clock_timestamp())",[store.tenant,principal]);
+    await e2eAuthPool.query(`INSERT INTO tenant_module_permissions(tenant_id,principal_id,instance_id,capabilities,status,granted_by_principal_id)
+      SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[store.tenant,principal,store.instance,store.seller.id]);
+    await apiLogin(readerContext,store.origin,reader.email);
+    const readerPage=await readerContext.newPage();await readerPage.goto('/#home');
+    await expect(readerPage.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    const buyer=await openBuyer(e2eAuthPool,buyerContext,store),buyerPage=await buyerContext.newPage();
+    await start(buyerPage,store);await freeze(buyerPage,store);const order=await place(buyerPage,'銀行匯款');
+    await readerPage.locator('.notification-bell-trigger').click();
+    const panel=readerPage.getByRole('region',{name:'最近通知'}),item=panel.locator('.notification-bell-item').filter({hasText:'新訂單待確認收款'});
+    await expect(item).toBeVisible();await expect(item).toContainText(`「山邊小店」收到訂單 ${order.display_number}，等待銀行匯款；請至訂單頁查看。`);
+    for(const hidden of ['000000123456','合成測試銀行','合成買家甲','offline-buyer@example.test','0900123456','350.00'])await expect(item).not.toContainText(hidden);
+    await expect(readerPage.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
+    const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
+    await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
+    await expect(readerPage).toHaveURL(`${store.origin}/#stores/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
+    await expect(readerPage.locator('.seller-console')).toContainText(order.display_number);
+    await e2eAuthPool.query("UPDATE tenant_module_permissions SET capabilities=ARRAY['store:read'],version=version+1,updated_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[store.tenant,principal]);
+    expect((await readerContext.request.get(`/api/v1${store.root}/checkout-orders/${order.order_ref}`)).status()).toBe(403);
+    const cancelled=buyerPage.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/orders/${order.order_ref}/cancel`));
+    await buyerPage.getByRole('button',{name:'取消訂單',exact:true}).click();
+    await buyerPage.getByRole('dialog',{name:'要取消這筆訂單嗎？'}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
+    expect((await cancelled).status()).toBe(200);
+    expect((await e2eAuthPool.query('SELECT 1 FROM member_notifications WHERE recipient_ref=$1 AND source_key=$2',[reader.id,`commerce-order/v1/${order.order_ref}/buyer_cancelled`])).rowCount).toBe(0);
+    const history=await(await readerContext.request.get('/api/v1/me/notifications')).json() as {items:{title:string;body:string}[]};
+    expect(history.items.some(n=>n.title==='新訂單待確認收款'&&n.body.includes(order.display_number))).toBe(true);
+    expect((await e2eAuthPool.query('SELECT 1 FROM member_notifications WHERE recipient_ref=$1 AND source_key LIKE $2',[buyer.id,`commerce-order/v1/${order.order_ref}/%`])).rowCount).toBe(0);
+  }finally{await buyerContext.close();await readerContext.close();await store.close();}
+});
+
+test('buyer order notices open a fresh authorized B07 and the full history keeps its primary order action on phones',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{commerceOrderNotificationsEnabled:true});
+  const context=await browser.newContext({baseURL:store.origin});
+  try{
+    await context.route(url=>url.origin!==store.origin,route=>route.abort());
+    await openBuyer(e2eAuthPool,context,store);const page=await context.newPage();
+    await start(page,store);await freeze(page,store);const order=await place(page,'銀行匯款');
+    await expect(page.getByText('店家確認收款後，按「更新訂單狀態」即可看到最新狀態。',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveClass(/shop-button-secondary/);
+    await assertCartResponsiveLayout(page,[390,768,1440],width=>info.outputPath(`notify-b07-${width}.png`));
+    const date=(await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
+    const paid=SellerCheckoutOrderSchema.parse(await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/offline-payments`,{amount_minor:order.total_minor,received_on:date},200,'1'));
+    await expect(page.getByText('店家已確認收到付款。',{exact:true})).toHaveCount(0);
+    const refreshed=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname.endsWith(`/orders/${order.order_ref}`));
+    await page.getByRole('button',{name:'更新訂單狀態',exact:true}).click();expect((await refreshed).status()).toBe(200);
+    await expect(page.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveCount(0);
+    const portal=await context.newPage();await portal.goto('/#home');await openNotifications(portal);
+    const history=portal.getByRole('region',{name:'最近通知'}),item=history.locator('li[data-notification]').filter({hasText:'店家已確認收款'});
+    await expect(item.getByRole('heading',{name:'店家已確認收款',exact:true})).toBeVisible();
+    const action=item.getByRole('button',{name:'查看我的訂單',exact:true});await expect(action).toHaveClass(/btn-primary/);
+    await portal.setViewportSize({width:390,height:900});const bounds=await action.boundingBox();expect(bounds).not.toBeNull();expect(bounds!.height).toBeGreaterThanOrEqual(44);expect(bounds!.width).toBeLessThan(300);
+    await expect(portal.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    await assertCartResponsiveLayout(portal,[390,768,1440],width=>info.outputPath(`notify-history-${width}.png`));
+    await action.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+    await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/meetup-handover`,{completed_on:date},200,paid.version);
+    await portal.goto('/#home');await portal.locator('.notification-bell-trigger').click();
+    const handover=portal.getByRole('region',{name:'最近通知'}).locator('.notification-bell-item').filter({hasText:'店家已登記交貨'});
+    await expect(handover).toContainText(`「山邊小店」已登記訂單 ${order.display_number} 的面交交貨。`);
+    await handover.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+    await expect(portal.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveCount(0);
+  }finally{await context.close();await store.close();}
 });

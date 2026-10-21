@@ -23469,8 +23469,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart-fixture.ts",
-      "bytes": 19032,
-      "sha256": "f83d541f7549530710f72f7f78728e3fb47070938fa53e371c88a96d99d43c7e"
+      "bytes": 19166,
+      "sha256": "e9f0651a4621aaa3317b02fe682d785c4699308b31c4dcc433c516878e5dad1c"
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
@@ -23479,8 +23479,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 80865,
-      "sha256": "fc456f348e3e2b28d53ad09141a10c82125f3677b7b52259dd382d3a88b52904"
+      "bytes": 89264,
+      "sha256": "4be3b1a0fbe97ac7a2cc5bb333981cb0fdb78423ae953f2bddd6bb25c4f2b7e2"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",

@@ -68,7 +68,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
+type CartControls = {commerceOrderNotificationsEnabled?:boolean;storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -107,6 +107,7 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
         return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
       }}:{}),
       guildLaunchpadEnabled: true,
+      commerceOrderNotificationsEnabled:controls.commerceOrderNotificationsEnabled===true,
       storeVariantsEnabled:controls.storeVariantsEnabled===true,
       ...(controls.storeVariantsEnabled?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
       supplierConsoleEnabled,
