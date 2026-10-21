@@ -6,6 +6,11 @@
     "overview": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.overview/v1"
@@ -416,7 +421,7 @@
         "product_limit"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: single_statement_snapshot, store_write_required_for_counts, owner_required_for_reservation_lines, unavailable_is_not_zero."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, single_statement_snapshot, store_write_required_for_counts, owner_required_for_reservation_lines, unavailable_is_not_zero."
     },
     "products": {
       "type": "object",
@@ -602,6 +607,71 @@
                   "inactive"
                 ],
                 "additionalProperties": false
+              },
+              "inventory": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "ready"
+                      },
+                      "stock": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "reserved": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "available": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "held": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "allocated": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "stock",
+                      "reserved",
+                      "available",
+                      "held",
+                      "allocated"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "inconsistent"
+                      },
+                      "code": {
+                        "type": "string",
+                        "const": "reservation_inconsistent"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "code"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": [
@@ -635,7 +705,7 @@
         "limit"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: complete_bounded_catalog, available_equals_stock_minus_reserved, private_cost_and_terms."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, complete_bounded_catalog, available_equals_stock_minus_reserved, private_cost_and_terms."
     },
     "product": {
       "type": "object",
@@ -818,6 +888,71 @@
                 "inactive"
               ],
               "additionalProperties": false
+            },
+            "inventory": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "const": "ready"
+                    },
+                    "stock": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "reserved": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "available": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "held": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "allocated": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "stock",
+                    "reserved",
+                    "available",
+                    "held",
+                    "allocated"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "const": "inconsistent"
+                    },
+                    "code": {
+                      "type": "string",
+                      "const": "reservation_inconsistent"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "required": [
@@ -1385,7 +1520,7 @@
         "truncated"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: private_cost_and_terms, impact_preview_is_not_authority."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, private_cost_and_terms, impact_preview_is_not_authority."
     },
     "request": {
       "type": "object",
@@ -3064,6 +3199,11 @@
     "summary": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.summary/v1"
@@ -3146,7 +3286,7 @@
         "todos"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: one_business_per_read, store_write_required_for_counts, unavailable_is_not_zero."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, one_business_per_read, store_write_required_for_counts, unavailable_is_not_zero."
     },
     "report-query": {
       "type": "object",
@@ -3170,6 +3310,11 @@
     "report": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.report/v1"
@@ -3544,7 +3689,7 @@
         "csv_rows"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: one_statement_at_as_of, store_write_required, reservations_owner_only, supply_amount_is_not_revenue, refused_above_max_csv_rows, not_a_data_export."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, one_statement_at_as_of, store_write_required, reservations_owner_only, supply_amount_is_not_revenue, refused_above_max_csv_rows, not_a_data_export."
     },
     "materials": {
       "type": "object",

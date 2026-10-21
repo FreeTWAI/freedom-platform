@@ -240,3 +240,9 @@ test('the complete supply module passes the approved dependency check', () => {
   assert.ok(parsers, 'the installed selector parsers must be available');
   assert.equal(guildPresentationDependenciesProven({module: 'guild-supply', baseline: files, candidate: files}, parsers), true);
 });
+
+test('supply summary keeps unrelated todos but never reports an unknown stock count as zero',()=>{
+ const tenantId='11111111-1111-4111-8111-111111111111',instanceId='22222222-2222-4222-8222-222222222222';
+ const html=renderToStaticMarkup(createElement(SupplySummaryView,{name:'合成供貨',tenantId,instanceId,state:{kind:'ready',data:{profile:'freedom.supplier-console.summary/v1',tenant_id:tenantId,instance_id:instanceId,as_of:'2026-10-20T00:00:00.000Z',inventory_inconsistent_count:1,todos:{state:'ready',pending_requests:0,outdated_offers:0,out_of_stock_products:0}}}}));
+ assert(!html.includes('目前沒有待辦'));assert(html.includes('缺貨商品 暫時無法確認'));assert(html.includes('有 1 件商品的庫存紀錄不一致'));assert(html.includes('待確認售價申請 0'));
+});

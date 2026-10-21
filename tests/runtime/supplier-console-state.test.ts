@@ -1,3 +1,6 @@
+import {MerchantInventorySummary,InventoryDefinition} from '../../modules/agent-commerce/hosted-ui/CommerceTools';
+import {MerchantInventorySchema,ProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront';
+import {SupplyProductViewSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {test} from 'node:test';
 import * as React from 'react';
 import {createElement} from 'react';
@@ -586,4 +589,33 @@ test('structured supply references parse optional text, retain labels and format
  for(const [field,text] of [['msrp_minor','0'],['msrp_minor','1000000.01'],['minimum_order_quantity','0'],['minimum_order_quantity','10001'],['minimum_order_quantity','2.5'],['lead_time_days','-1'],['lead_time_days','366'],['lead_time_days','1.2'],['lead_time_days','1e2']])assert(Number.isNaN(commandFields('terms.update',{[field]:text})[field]),field+' '+text);
  assert.equal(fieldLabels.msrp_minor,'建議售價');assert.equal(fieldLabels.minimum_order_quantity,'最低訂量');assert.equal(fieldLabels.lead_time_days,'交期');
  assert.equal(attemptFieldText('msrp_minor',45025,'TWD'),'$450.25');assert.equal(attemptFieldText('minimum_order_quantity',2,'TWD'),'2 件');assert.equal(attemptFieldText('lead_time_days',3,'TWD'),'3 天');assert.equal(attemptFieldText('lead_time_days',0,'TWD'),'當天');assert.equal(attemptFieldText('lead_time_days',null,'TWD'),'（空白）');
+});
+
+test('merchant stock contracts accept legacy absence and validate all occupied-stock equations',()=>{
+ const ready={state:'ready' as const,stock:20,reserved:8,available:12,held:3,allocated:5};
+ assert.deepEqual(MerchantInventorySchema.parse(ready),ready);
+ for(const field of ['stock','reserved','available','held','allocated'] as const)for(const value of [-1,0.5,1000001])
+  assert.equal(MerchantInventorySchema.safeParse({...ready,[field]:value}).success,false,field+':'+value);
+ for(const invalid of [{...ready,reserved:7},{...ready,available:13},{...ready,secret:'private'},{state:'inconsistent',code:'reservation_inconsistent',held:0}])
+  assert.equal(MerchantInventorySchema.safeParse(invalid).success,false);
+ assert.deepEqual(MerchantInventorySchema.parse({state:'inconsistent',code:'reservation_inconsistent'}),{state:'inconsistent',code:'reservation_inconsistent'});
+ const product={product_id:id,sku:'P0001',title:'合成茶杯',description:'',price_minor:100,currency:'TWD',stock:20,version:'1'};
+ assert(ProductViewSchema.safeParse(product).success);assert(ProductViewSchema.safeParse({...product,inventory:ready}).success);
+ assert.equal(ProductViewSchema.safeParse({...product,stock:21,inventory:ready}).success,false);
+ const {price_minor,...supply}=product;
+ assert(SupplyProductViewSchema.safeParse({...supply,cost_minor:price_minor,inventory:ready}).success);
+ assert.equal(SupplyProductViewSchema.safeParse({...supply,stock:21,cost_minor:price_minor,inventory:ready}).success,false);
+});
+test('merchant inventory renders unavailable values locally and keeps unknown products after known availability',()=>{
+ const inventory={state:'ready' as const,stock:20,reserved:8,available:12,held:3,allocated:5};
+ const render=(props:Parameters<typeof MerchantInventorySummary>[0])=>renderToStaticMarkup(createElement(MerchantInventorySummary,props));
+ const html=render({stock:20,inventory});for(const text of ['庫存 20・已占用 8・可售 12','預留中 3','已付款待出貨 5','tabular-nums'])assert(html.includes(text),text);
+ assert(render({stock:20,inventory,supplier:true}).includes('庫存 20／已占用 8／可用 12'));
+ const bad=render({stock:20,inventory:{state:'inconsistent',code:'reservation_inconsistent'}});assert(bad.includes('已占用 —・可售 —'));assert(bad.includes('庫存紀錄不一致'));assert(!bad.includes('已付款待出貨 0'));
+ assert(render({stock:20}).includes('庫存明細暫時無法讀取，請重新讀取。'));
+ const definition=renderToStaticMarkup(createElement(InventoryDefinition,{supplier:true}));assert(definition.includes('可用與可售是同一數量'));assert.equal(definition.split('預留不是成交').length,2);
+ const base={product_id:id,sku:'P0001',title:'合成茶杯',description:'',currency:'TWD' as const,supply_price_minor:100,shipping_minor:0,stock:20,reserved:8,available:12,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+ const unknown={...base,product_id:other,sku:'P0002',available:0,reserved:20,inventory:{state:'inconsistent' as const,code:'reservation_inconsistent' as const}};
+ assert.deepEqual(filterProducts([unknown,{...base,inventory}],undefined,'available').map(i=>i.product_id),[id,other]);
+ assert.deepEqual(filterProducts([unknown,{...base,inventory}],'out_of_stock').map(i=>i.product_id),[other]);
 });

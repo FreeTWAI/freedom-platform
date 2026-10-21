@@ -270,6 +270,71 @@
         "transaction_state": {
           "type": "string",
           "const": "not_enabled"
+        },
+        "inventory": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "stock": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "reserved": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "available": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "held": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "allocated": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "state",
+                "stock",
+                "reserved",
+                "available",
+                "held",
+                "allocated"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "inconsistent"
+                },
+                "code": {
+                  "type": "string",
+                  "const": "reservation_inconsistent"
+                }
+              },
+              "required": [
+                "state",
+                "code"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": [
@@ -289,7 +354,7 @@
         "transaction_state"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: available_equals_stock_minus_reserved, private_cost_and_terms."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, available_equals_stock_minus_reserved, private_cost_and_terms."
     }
   }
 }

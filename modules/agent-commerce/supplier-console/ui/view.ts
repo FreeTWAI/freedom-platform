@@ -10,13 +10,13 @@ import type {Fields} from '../state/drafts';
 import type {AttemptKind} from '../state/attempt';
 export const PRICE_GAP_NOTE='價格差屬於賣家的定價，不是你的佣金、收入或利潤。';
 export const REVIEW_NOTE='同意的是這個售價與供貨版本；不代表同意代出貨，也不會取得買家收件資料。';
-export const RESERVATION_NOTE='預留最多 30 分鐘，尚未付款或安排出貨；供貨金額不是請款或營收。';
+export const RESERVATION_NOTE='本頁只顯示 30 分鐘供貨預留，不包含付款後的履約單。預留尚未付款或安排出貨；供貨金額不是請款或營收。';
 export const permissionReason=(reason:'store_write_required'|'owner_required')=>reason==='owner_required'?'只有業務空間擁有者可以查看預留':'需要商品編輯權限才能查看';
 export const metricText=(metric:SupplierMetric)=>metric.state==='ready'?String(metric.count):`無法取得：${permissionReason(metric.reason)}`;
 export const todoText=(todo:SupplierTodo)=>todo.kind==='request_pending'?'待確認售價申請':todo.kind==='offer_outdated'?'供貨條件已修改，需重新公開':todo.kind==='out_of_stock'?'可用庫存已用完':'尚未公開供貨版本';
 export function filterProducts(items:SupplierProduct[],state:ProductState|undefined,sort:ProductSort='sku',search='') {
- return items.filter(p=>(!state||(state==='offered'?p.offer!==null:state==='not_offered'?p.offer===null:state==='outdated'?p.offer!==null&&!p.offer.matches_current_terms:p.available===0))&&productMatches(p,search))
-  .sort((a,b)=>sort==='available'?a.available-b.available||a.sku.localeCompare(b.sku):sort==='title'?a.title.localeCompare(b.title,'zh-TW')||a.sku.localeCompare(b.sku):a.sku.localeCompare(b.sku));
+ return items.filter(p=>(!state||(state==='offered'?p.offer!==null:state==='not_offered'?p.offer===null:state==='outdated'?p.offer!==null&&!p.offer.matches_current_terms:(p.available===0||p.inventory?.state==='inconsistent')))&&productMatches(p,search))
+  .sort((a,b)=>sort==='available'?Number(a.inventory?.state==='inconsistent')-Number(b.inventory?.state==='inconsistent')||(a.inventory?.state==='inconsistent'?0:a.available-b.available)||a.sku.localeCompare(b.sku):sort==='title'?a.title.localeCompare(b.title,'zh-TW')||a.sku.localeCompare(b.sku):a.sku.localeCompare(b.sku));
 }
 export function partnerLabel(partner:Pick<SupplierPartner,'partner_id'|'name'>,peers:Pick<SupplierPartner,'partner_id'|'name'>[]){return partner.name+(peers.some(p=>p.partner_id!==partner.partner_id&&p.name===partner.name)?`（店家 ID …${partner.partner_id.slice(-6)}）`:'');}
 export const selectionPartnerLabel=(s:SupplierProductSelection,peers:SupplierProductSelection[])=>partnerLabel({partner_id:s.partner_id,name:s.seller_name},peers.map(p=>({partner_id:p.partner_id,name:p.seller_name})));
