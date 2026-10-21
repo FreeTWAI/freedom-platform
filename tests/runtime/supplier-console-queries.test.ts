@@ -40,8 +40,8 @@ async function open(name:string,guild=supplierGuild,owner?:Session):Promise<Stor
 async function supplier(name=catalog.name,owner?:Session) {
   const s=await open(name,supplierGuild,owner);ok(await send(s,'/supply-profile',{...catalog,name}),201);return s;
 }
-async function retailer(name='零售 B') {
-  const s=await open(name,retailGuild);ok(await send(s,'/setup',{name,slug:`retail-${randomUUID().slice(0,12)}`,currency:'TWD'}),201);return s;
+async function retailer(name='零售 B',owner?:Session) {
+  const s=await open(name,retailGuild,owner);ok(await send(s,'/setup',{name,slug:`retail-${randomUUID().slice(0,12)}`,currency:'TWD'}),201);return s;
 }
 async function supplyProduct(s:Store,input=product) {
   const made=ok(await send(s,'/supply-products',input),201);
@@ -459,6 +459,10 @@ test('merchant stock stays scoped and item-local on inconsistency; 200-product a
   });
  }
  const reportPath='/report?from=2026-01-01&to=2026-12-31';
+ const csvPath=reportPath.replace('/report?','/report.csv?');
+ const readyCsv=await consoleGet(a,csvPath);ok(readyCsv);
+ const readyLine=(await readyCsv.response.text()).split('\r\n').find(line=>line.startsWith('"'+first.product_id+'",'));
+ assert.equal(readyLine?.split(',').slice(6,9).join(','),'"100","8","92"');assert(readyLine?.endsWith('"3","5","正常"'));
  try {
   inconsistentItem=first.product_id;
   const bad=await checkSnapshot(a,'/products');assert.deepEqual(bad.items[0].inventory,{state:'inconsistent',code:'reservation_inconsistent'});assert.equal(bad.items[1].inventory.state,'ready');
@@ -466,11 +470,15 @@ test('merchant stock stays scoped and item-local on inconsistency; 200-product a
   for(const path of ['/overview','/summary',reportPath])assert.equal((await checkSnapshot(a,path)).inventory_inconsistent_count,1,path);
   const csv=await consoleGet(a,reportPath.replace('/report?','/report.csv?'));ok(csv);const body=await csv.response.text();
   assert(body.includes('庫存紀錄不一致'));assert(body.includes('暫時無法確認'));assert(!body.includes(other.product_id));
+  const badLine=body.split('\r\n').find(line=>line.startsWith('"'+first.product_id+'",'));assert.equal(badLine?.split(',').slice(5,9).join(','),'"","100","",""');assert(badLine?.endsWith('"","","庫存紀錄不一致"'));
   for(const path of ['/products','/products/'+first.product_id]) {
    const denied=await consoleGet(a,path,foreign.owner);ok(denied,404);assert(!JSON.stringify(denied.data).includes(first.product_id));
   }
  } finally {inconsistentItem=undefined;}
  assert.deepEqual((await checkSnapshot(a,'/products')).items[0].inventory,expected);
+ const sameOwner=await retailer('同一會員的另一事業',a.owner);
+ assert.deepEqual((await checkSnapshot(sameOwner,'/products')).items,[]);
+ const wrongScope=await consoleGet(sameOwner,'/products/'+first.product_id);ok(wrongScope,404);assert(!JSON.stringify(wrongScope.data).includes(first.product_id));
  assert.equal((await h.pool.query('SELECT reservation_state FROM commerce_orders WHERE order_id=$1',[held.order_id])).rows[0].reservation_state,'reserved');
 });
 
@@ -527,7 +535,7 @@ async function stockAllocationHistory(source:string,count:number) {
    jsonb_build_object('order_id',h.order_id,'client_order_id',h.client_id,'external_id','chk:'||c.checkout_id::text||':'||h.client_id::text))).*
    FROM stock_history_ids h CROSS JOIN commerce_orders o JOIN commerce_checkout_orders c ON c.order_id=o.order_id WHERE o.order_id=$1`,[source]);
   await q.query(`INSERT INTO commerce_checkout_orders SELECT (jsonb_populate_record(NULL::commerce_checkout_orders,to_jsonb(c)||
-   jsonb_build_object('order_id',h.order_id,'display_number',left(c.display_number,7)||lpad(h.n::text,6,'0'),'version',1))).*
+   jsonb_build_object('order_id',h.order_id,'display_number',left(c.display_number,7)||(CASE WHEN substr(c.display_number,8,1)='0' THEN '1' ELSE '0' END)||lpad(h.n::text,5,'0'),'version',1))).*
    FROM stock_history_ids h CROSS JOIN commerce_checkout_orders c WHERE c.order_id=$1`,[source]);
   await q.query(`INSERT INTO commerce_order_lines SELECT (jsonb_populate_record(NULL::commerce_order_lines,to_jsonb(l)||
    jsonb_build_object('order_id',h.order_id))).* FROM stock_history_ids h CROSS JOIN commerce_order_lines l WHERE l.order_id=$1`,[source]);
