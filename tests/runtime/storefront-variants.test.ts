@@ -180,6 +180,7 @@ test('VARIANTS-05 write capability, replay reauthorization, compound create roll
 });
 
 test('VARIANTS-06 predecessor function and attachment guards reject drift before any DDL; closed pages make no availability query',async()=>{
+ const {catalogErrorHtml}=await import('../../modules/agent-commerce/storefront/variants/page.js');const changed=catalogErrorHtml('商店內容正在更新，請重新載入。',true);assert.match(changed,/<h1>商店內容正在更新<\/h1>/);assert.match(changed,/請重新載入，確認最新商品與規格。/);assert.match(changed,/>重新載入<\/a>/);
  const schema='variant_guard_'+process.pid,q=await f.h.pool.connect();
  try{
   await q.query('BEGIN');await q.query(`CREATE SCHEMA ${schema}`);await q.query(`SET LOCAL search_path=${schema}`);

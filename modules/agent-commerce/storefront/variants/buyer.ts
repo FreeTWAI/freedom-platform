@@ -54,5 +54,5 @@ export async function readVariantBuyerPage(pool:Pool,slug:string,options:{appear
    });if(value!==undefined)return value;
   }catch(e){if(!(e instanceof Problem&&['publication_changed','supply_unavailable'].includes(e.code)))throw e;}
  }
- throw new Problem(503,'storefront_catalog_changed','商品公開內容剛剛更新，請重新整理後再試。');
+ throw new Problem(503,'storefront_catalog_changed','商店內容正在更新，請重新載入。');
 }

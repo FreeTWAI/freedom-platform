@@ -141,7 +141,7 @@ export function createPublicHostedStoreRoutes(
   const buyerJourneyEnabled = checkout?.settings?.checkoutEnabled === true;
   const emailEnabled = options?.emailEnabled ?? checkout?.settings?.emailEnabled ?? Boolean(checkout?.email);
   const variantPage=async(c:Parameters<typeof singleQuery>[0])=>{try{return await readVariantBuyerPage(pool,c.req.param('slug')!,options??{},checkout);}catch(e){
-    if(e instanceof Problem&&['storefront_variants_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message),e.status as 500);
+    if(e instanceof Problem&&['storefront_variants_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message,e.code==='storefront_catalog_changed'),e.status as 500);
     throw e;
   }};
   app.get('/api/v1/public/stores/:slug', async c => {
