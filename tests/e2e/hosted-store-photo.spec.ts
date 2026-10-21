@@ -3920,6 +3920,7 @@ test('CATEGORIES-E2E grouped category omits featured, retains default photo and 
    expect(names).toHaveLength(2);expect(new Set(names).size).toBe(2);expect(names).toEqual([action+input.title+' · '+b.sku,action+input.title+' · '+a.sku]);
   }
   await categories('put','/'+category+'/groups',{group_keys:[a.sku]});
+  await publish();await detail.goto('/shops/'+slug);const shareImage=await detail.locator('meta[property="og:image"]').getAttribute('content');expect(shareImage).toContain('/shops/'+slug+'/media/');await detail.goto('/shops/'+slug+'?category='+detached);await expect(detail.locator('meta[property="og:image"]')).toHaveAttribute('content',shareImage!);
   g=await read('/product-groups/'+a.sku);const singleton=await read('/product-groups/'+a.sku+'~single');await putGroup({...input,members:[{product_id:a.product_id,product_version:singleton.members[0].product.version,value_keys:[axis.values[0].key]},...g.members.map((m:any)=>({product_id:m.product.product_id,product_version:m.product.version,value_keys:m.value_keys}))]},g.version);
   await page.reload();const manager=page.locator('.store-categories-editor');await expect(manager.getByText('部分商品已停止上架，發布時不會顯示；請確認分類商品。',{exact:true})).toBeVisible();await publish();expect((await buyer.request.get('/shops/'+slug+'?category='+detached)).status()).toBe(404);expect((await buyer.request.get('/shops/'+slug+'?category='+category)).status()).toBe(200);
  }finally{await context.close();await buyer.close();await server.stop();}

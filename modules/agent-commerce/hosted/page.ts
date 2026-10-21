@@ -76,7 +76,7 @@ export function storeHtml(store: PublicStoreProjection, template: StoreTemplate 
   const category=categories?categoryDisplay(categories,store.products,catalog):undefined;
   const all=catalog?catalogProducts(store,catalog):store.products;
   const displayed=category?.skus?category.skus.map(sku=>all.find(p=>p.sku===sku)!):all;
-  const cover = displayed.map(product => catalogPhoto(product.sku,photos,catalog)).find(Boolean);
+  const cover = all.map(product => catalogPhoto(product.sku,photos,catalog)).find(Boolean);
   const rendered = new Map(displayed.map(p => {
     const variant=catalog?variantCardDetail(store,p.sku,catalog):undefined;
     const photo = picture(catalogPhoto(p.sku,photos,catalog), p.title), path = previewBase?`${previewBase}/products/${p.sku}`:productPath(store, p.sku);
