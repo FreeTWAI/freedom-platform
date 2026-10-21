@@ -45,6 +45,14 @@ test('VARIANTS-01 lazy own groups, exact combinations, CAS/replay, store isolati
  const foreignProduct=f.ok(await f.h.call('GET',foreign.root+'/products',foreign.owner,undefined,{},app)).items[0];
  assert.equal((await call('PUT','/product-groups/P0001',{...input,members:[...input.members,{product_id:foreignProduct.product_id,product_version:'1',value_keys:[axes[0].values[0].key,axes[1].values[1].key]}]},'2')).data.code,'variant_members_changed');
  await publish();assert.equal(f.ok(await call('GET','/preview')).dirty,false);
+ // U+0958 expands to two code points under NFC. Validate normalized text
+ // before writing it to the SQL length checks, with the existing 422 copies.
+ for(const [patch,code] of [
+  [{description:'\u0958'.repeat(2000)},'variant_group_text_invalid'],
+  [{title:'\u0958'.repeat(120)},'variant_group_text_invalid'],
+  [{axes:axes.map((a,n)=>n===0?{...a,name:'\u0958'.repeat(20)}:a)},'variant_axis_name_invalid'],
+  [{axes:axes.map((a,n)=>n===0?{...a,values:a.values.map((v,k)=>k===0?{...v,name:'\u0958'.repeat(40)}:v)}:a)},'variant_value_invalid'],
+ ] as const){const rejected=await call('PUT','/product-groups/P0001',{...input,...patch},'2');assert.equal(rejected.status,422);assert.equal(rejected.data.code,code);}
  const frozen=(await f.h.pool.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[s.tenantId])).rows[0];
  const root=(await f.h.pool.query('SELECT group_id FROM commerce_product_groups WHERE tenant_id=$1 AND catalog_anchor_sku=$2',[s.tenantId,'P0001'])).rows[0].group_id;
  await assert.rejects(f.h.pool.query('UPDATE commerce_product_group_members SET option_value_keys=$3,membership_version=membership_version+1 WHERE tenant_id=$1 AND product_id=$2',[s.tenantId,second.product_id,[randomUUID(),axes[1].values[1].key]]),{code:'23514'});
