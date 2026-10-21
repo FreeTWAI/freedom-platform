@@ -1,4 +1,5 @@
 export { FulfilmentRuleError } from './errors.js';
+export { hostedLineFulfilment, fulfilmentConsentFailure } from './consent.js';
 
 export {
   SERVICE_KEYS,

@@ -1370,6 +1370,270 @@
       "default_branch": "main",
       "kind": "author_source",
       "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "從員工、出勤、請假到薪資，研究台灣情境的人資管理流程。",
+      "current_scope": "Apache-2.0 自有程式；SQL Server、第三方依賴與政府行事曆資料另有條款，依 NOTICE 核對。.NET 10 與隔離 SQL Server 必備；SQL 整合測試限定 Windows、SQL Express 與整合驗證。這份獨立快照不是既有安裝的升級路徑。補休到期僅是 metadata，尚未自動到期或轉薪；LINE bridge 與外部出勤排程預設停用，需另外設定。台灣薪資與日曆規則須由採用者自行核對；工坊未執行上游程式。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/tesdano-crypto/HRSystem-OpenSource",
+      "repository": "tesdano-crypto/HRSystem-OpenSource",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "閱讀出生資料經星曆計算轉成人類圖欄位的 API 設計。",
+      "current_scope": "AGPL-3.0；本書只描述與連結，未複製上游程式碼。修改版透過網路供使用者互動時，須依 AGPL 提供對應原始碼；Swiss Ephemeris 另採 AGPL／專業授權雙軌，採用前核對其條款。Repo 不附必要的 .se1 星曆資料。需 Python 3.10 以上，原作建議 Linux。出生資料須本人同意；這是文化與自我探索工具，不作健康、命運或任職能力判定。工坊未驗證計算準確度。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/hdsljp-api",
+      "repository": "kieiken/hdsljp-api",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "在 macOS 選單列整理本機 Claude 與 Codex 紀錄中的用量。",
+      "current_scope": "ken-kk 自述為維護者，這是 lollapalooza 的 aqua5230/usage 二次修改版，須保留 NOTICE.md 原始署名。AGPL-3.0（原作標示 AGPL-3.0-only）；本書未複製程式碼，修改版若供網路互動須依 AGPL 提供對應原始碼。限 macOS，來源採 Python 3.13；安裝包未簽章，會安裝每分鐘更新的 LaunchAgent。依本機紀錄推算，數值與成本不是官方帳務；原作說明不呼叫 Anthropic／OpenAI API、不讀 Keychain。工坊未安裝或讀取任何個人日誌。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/usage",
+      "repository": "kieiken/usage",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "批次移除照片外側白邊，調整倍率與 DPI 後匯出 PNG。",
+      "current_scope": "MIT；原作說明照片處理留在瀏覽器，工坊未實測資料流或裁切品質。瀏覽器版不需安裝；資料夾自動儲存路徑需 macOS 與 Node.js 本機伺服器。輸入限 PNG／JPEG／WebP；倍率 1–3 倍及 DPI 設定不代表恢復原圖細節，應保留原檔並人工檢查白色主體邊緣。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/photo-border-remover",
+      "repository": "kieiken/photo-border-remover",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "用區段到達、捲動與 CTA 事件，整理著陸頁的閱讀及離開線索。",
+      "current_scope": "MIT 模板；不錄影的設計仍會把事件送到 Google GA4，不能把原作「不收個資」描述推成零隱私負擔。自訂 page、section、cta 值須避免個資，並核對自己的告知與資料設定。自動取數需 GA4、GCP 服務帳號與 PHP 同源 proxy；私鑰放 Web root 外，proxy 與診斷頁置於 Basic 認證下。API 有配額與並行限制，原作不保證轉換成效；工坊未接真實分析帳號。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/ga4-lp-analytics",
+      "repository": "kieiken/ga4-lp-analytics",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "整理 Facebook 與 Threads 的可見貼文反應，留下調整方向的依據。",
+      "current_scope": "MIT；用於發布後計測與診斷，不直接產生或發布貼文。README 依賴 Codex Desktop、Chrome 外掛、已登入服務與作者本機的 kiei-dashboard／tracking.test.js，外部儀表板不在本 repo，需自備或改接相同保存契約。不要把 README 的外掛敘述當成工坊已驗證的可用功能。讀取只限本人有權查看的畫面，仍受 Facebook／Threads 規範與存取狀態限制；工坊未登入或擷取反應。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/sns-feedback-collect",
+      "repository": "kieiken/sns-feedback-collect",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "以角色分工、摘要與完成證據，減少多代理流程反覆退回重做。",
+      "current_scope": "MIT 文字規則集，屬軟性行為引導，不保證 token 硬上限或特定節省比例。需自己的 Claude Code／Ultracode Workflow 環境；agentType、模型名稱、繼承與 budget 敘述依作者的特定環境，採用前須逐項查核，不代表所有安裝都支援。模型服務可能另計費，工坊未啟動代理或測量節省效果。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/ultracode-token-optimization",
+      "repository": "kieiken/ultracode-token-optimization",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "檢查 pptx 封裝結構，為 PowerPoint 能開而 Keynote 拒絕的檔案找線索。",
+      "current_scope": "MIT；原作提供瀏覽器本機處理、Claude Code Skill 與只用 Python 標準庫的腳本。檢查封裝關聯、媒體格式與 XML，不保證所有問題都能自動修復；修復後仍須在目標 Keynote 核對版面與備註，macOS Quick Look 驗證也需 Mac。原作說明不修改投影片內容，工坊未執行或驗證修復結果，請保留原檔。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/kieiken/keynote-pptx-doctor",
+      "repository": "kieiken/keynote-pptx-doctor",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "透過本機瀏覽器橋接網頁聊天服務，將回覆交回 MCP client。",
+      "current_scope": "Apache-2.0；需 Node.js 22 以上、Playwright Chromium；Claude／Grok 要登入，訪客與暫存對話狀態依服務而異，不能保證零保存。提示、歷史、工具結果會送到所選第三方聊天服務，仍受其條款、額度與收費限制，並非官方 API 或繞過付費方案。本機持久瀏覽器 profile 保留登入。工具回合由 host 依自己的權限與確認執行，不是沙箱。Codex 等外掛安裝會關閉應用並改設定，服務停止可能影響官方模型連線；Windows 腳本未實機驗證。工坊未安裝或登入。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/JS-PACKAGE/WebChatMCP.js",
+      "repository": "JS-PACKAGE/WebChatMCP.js",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "每回合只改一個聲音變因，讓試聽評語累積成自己的配音規則。",
+      "current_scope": "MIT；真實生成需 Google Gemini API，文字與聲音樣本會送到 Google。免費層次數、模型與造聲 API 能力以自己的專案為準；固定版本記載 API 造聲免費層與 language_code 等仍未實測，不保證免費或台灣腔效果。複製聲音只限本人，須完成同意；私人音檔與 ID 不進 Git。配樂、音效與混音不在範圍，工坊未呼叫 API 或試聽。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/Rumi-3653/gemini-voice-lab",
+      "repository": "Rumi-3653/gemini-voice-lab",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "把角色、場景與世界觀留成唯一正本，讓生圖、編劇與配音共用設定。",
+      "current_scope": "MIT；Markdown 卡可手填，Python 3.8 以上的 check／export 只用標準庫。本工具管理設定，不會自行生成影像、聲音或保證一致性；下游模型費用及資料傳輸另計。範例視覺鎖句與聲線參數未經平台實測；部分下游是作者自用或第三方工具，不在 repo。library 預設忽略版本控制，仍須自己保護未發表 IP；參考圖與聲音需有權使用。工坊未執行匯出。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/Rumi-3653/story-bible",
+      "repository": "Rumi-3653/story-bible",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "先留下自己的答案，再檢查論證；用五階提示練習保留自主思考。",
+      "current_scope": "啪哩啪啦自述為策展者，原作為 madeofroc-arch/AI-Detox-Center，不能據此稱其為作者。MIT；固定版本的遊戲採預寫題目、本機計算，不需帳號、推論或 API key。結果是遊玩樣本比例，不是心理診斷或個人能力判決；部分題目仍有可辨識線索，重要觀察需多次遊玩。安裝到聊天服務的 Skill 後，對話資料依該服務處理，不能將遊戲本機隱私延伸到所有平台。舊 tracker 歷史保留封存；工坊未執行遊戲或證明訓練效果。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-10-20.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-10-20 的固定 commit README／LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/madeofroc-arch/AI-Detox-Center",
+      "repository": "madeofroc-arch/AI-Detox-Center",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
     }
   ]
 }

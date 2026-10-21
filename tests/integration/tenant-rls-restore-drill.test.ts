@@ -1,3 +1,7 @@
+import sharp from 'sharp';
+import {galleryTables,seedGalleryRows} from '../helpers/storefront-gallery.js';
+import {publicationMediaSnapshot} from '../../modules/agent-commerce/hosted/media.js';
+import {seedSellerPolicyRows,legalTables} from '../helpers/storefront-policies.js';
 import {ensureDevice,grantDevice} from '../../modules/agent-commerce/checkout/access.js';
 // Real coordinator -> sealed archive -> quarantine restore proves complete tenant
 // rows, references, bytes and restored runtime isolation after migration 125.
@@ -149,7 +153,10 @@ const RLS_TABLES = [
   'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
   'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants',
   'commerce_resource_tenants', 'commerce_order_quotes', 'commerce_hosted_supply_offers', 'commerce_product_photo_targets', 'commerce_publication_photo_refs',
-  'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets',
+  'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
+  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs',
+  'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
+  'commerce_storefront_appearance_drafts', 'commerce_storefront_appearance_targets', 'commerce_publication_appearances', 'commerce_publication_appearance_refs',
   'tenant_high_risk_verifications', 'tenant_ownership_transfers', 'tenant_recovery_cases', 'tenant_module_permissions',
   'deployment_bindings', 'workspace_module_bindings', 'tenant_work_results', 'tenant_work_result_targets',
   'tenant_capacity_policies', 'work_items', 'scoped_command_receipts', 'scoped_transition_journal', 'scoped_outbox',
@@ -248,6 +255,20 @@ async function publishResult(q: PoolClient, space: Space, author: Person) {
 
 /** Synthetic retained quote with real hosted identities and unchanged production constraints.
  * This SQL fixture does not activate reservations or claim service admission. */
+const galleryObjects=new Map<string,Omit<ResultObject,'intentId'>[]>();
+async function retainedGalleryObjects(q:PoolClient,data:{tenantId:string;principalId:string}){
+ const actor=(await q.query("SELECT p.user_ref,s.scope_id FROM principals p JOIN resource_scopes s ON s.kind='tenant' AND s.tenant_ref=$2 WHERE p.principal_id=$1",[data.principalId,data.tenantId])).rows[0];
+ const objects:Omit<ResultObject,'intentId'>[]=[];
+ for(const color of ['#7890a0','#a09078']){
+  const assetId=randomUUID(),representationId=randomUUID(),bytes=await sharp({create:{width:30,height:20,channels:3,background:color}}).webp({quality:80}).toBuffer();
+  const metadata:ObjectMetadata={contentType:'image/webp',byteSize:bytes.length,sha256:await sha256(bytes),transformVersion:'storefront.product-photo.webp.v1',policyRevision:'synthetic-gallery-restore',profileId:'storefront.product-photo'};
+  const key=objectKey({scopeId:actor.scope_id,assetId,representationId});await writeVerifiedObject(source,key,{bytes,metadata},{revision:metadata.policyRevision,platformPersistenceAllowed:true});
+  await q.query(`INSERT INTO assets(asset_id,scope_id,representation_id,owner_principal_id,owner_user_id,policy_revision,purpose,scope_kind,tenant_ref) VALUES($1,$2,$3,$4,$5,$6,'storefront.product-photo','tenant',$7)`,[assetId,actor.scope_id,representationId,data.principalId,actor.user_ref,metadata.policyRevision,data.tenantId]);
+  await q.query(`INSERT INTO asset_objects(asset_id,scope_id,representation_id,content_type,byte_size,content_sha256,transform_version,policy_revision,purpose,variant,profile_id,pixel_width,pixel_height) VALUES($1,$2,$3,'image/webp',$4,$5,$6,$7,'storefront.product-photo','image','storefront.product-photo',30,20)`,[assetId,actor.scope_id,representationId,bytes.length,metadata.sha256,metadata.transformVersion,metadata.policyRevision]);
+  await q.query("UPDATE assets SET state='ready',ready_at=clock_timestamp() WHERE asset_id=$1",[assetId]);objects.push({assetId,representationId,key,metadata,bytes});
+ }
+ galleryObjects.set(data.tenantId,objects);return {scope:actor.scope_id,objects};
+}
 async function insertHostedQuote(q: PoolClient, data: { tenantId: string; principalId: string; instanceId: string }, buyerPrincipalId = data.principalId) {
   const instanceId = randomUUID(), bindingId = randomUUID(), supplyId = randomUUID(), shopId = randomUUID();
   const itemId = randomUUID(), selectionId = randomUUID(), publicationId = randomUUID(), quoteId = randomUUID();
@@ -285,12 +306,18 @@ async function insertHostedQuote(q: PoolClient, data: { tenantId: string; princi
   [offerId, data.tenantId, instanceId, itemId, name, product, offerHash, supplyId]);
   await q.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot)
     VALUES($1,$2,$3,100,'交易尚未啟用。',$4)`, [selectionId, shopId, itemId, product]);
+  const gallery=await retainedGalleryObjects(q,data),primary=gallery.objects[0];
+  await q.query(`INSERT INTO commerce_product_photo_targets(product_id,tenant_id,instance_id,scope_id,asset_id,representation_id,policy_revision,linked_at_product_version) VALUES($1,$2,$3,$4,$5,$6,$7,1)`,[itemId,data.tenantId,instanceId,gallery.scope,primary.assetId,primary.representationId,primary.metadata.policyRevision]);
+  const mediaHash=publicationMediaSnapshot({profile:'freedom.hosted-store-media/v1',photos:[{sku:'P0001',asset_id:primary.assetId,representation_id:primary.representationId,purpose:'storefront.product-photo',transform_version:primary.metadata.transformVersion,content_type:primary.metadata.contentType,byte_size:primary.bytes.length,width:30,height:20,sha256:primary.metadata.sha256}]}).sha256;
   const now = (await q.query<{ now: Date }>("SELECT date_trunc('milliseconds',clock_timestamp()) AS now")).rows[0].now;
   const projection = PublicStoreProjectionSchema.parse({ slug, name, brand: null, description: '', currency: 'TWD',
     products: [{ sku: 'P0001', title, description: '', price_minor: 100 }], revision: '1', published_at: now.toISOString(), transaction_state: 'not_enabled' });
-  await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at)
-    VALUES($1,$2,$3,1,$4,$5,$6,$7,$8)`, [publicationId, instanceId, data.tenantId, slug, projection, projectionDigest(projection), data.principalId, now]);
+  await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at,media_sha256)
+    VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9)`, [publicationId, instanceId, data.tenantId, slug, projection, projectionDigest(projection), data.principalId, now,mediaHash]);
   await q.query(`UPDATE commerce_storefront_profiles SET current_publication_id=$2,first_published_at=$3,version=version+1 WHERE instance_id=$1`, [instanceId, publicationId, now]);
+  await q.query(`INSERT INTO commerce_publication_photo_refs(publication_id,sku,tenant_id,instance_id,scope_id,asset_id,representation_id,policy_revision) VALUES($1,'P0001',$2,$3,$4,$5,$6,$7)`,[publicationId,data.tenantId,instanceId,gallery.scope,primary.assetId,primary.representationId,primary.metadata.policyRevision]);
+  const secondary=gallery.objects[1];await seedGalleryRows(q,{tenantId:data.tenantId,instanceId,productId:itemId,secondary:{asset_id:secondary.assetId,representation_id:secondary.representationId,policy_revision:secondary.metadata.policyRevision}});
+  await seedSellerPolicyRows(q,{tenantId:data.tenantId,instanceId});
   const bindings = [{ selection_id: selectionId, item_id: itemId, version: '1', sku: 'P0001', quantity: 1 }];
   const terms = { profile: HOSTED_ORDER_PROFILE, store: { slug, name }, publication_revision: '1', currency: 'TWD',
     items: [{ sku: 'P0001', title, quantity: 1, unit_price_minor: 100, line_total_minor: 100 }], merchandise_total_minor: 100,
@@ -535,9 +562,11 @@ const EXPECTED: Record<string, number> = {
   // Each tenant retains a card contact and the cloned offline-bank contact.
   commerce_customers: 2, commerce_checkout_contacts: 4, commerce_exception_cases: 2, commerce_order_access_grants: 2,
   tenant_module_permissions: 0, commerce_resource_tenants: 4, commerce_order_quotes: 2, commerce_hosted_supply_offers: 2,
-  // Photo-bearing restore is exercised by media-backup-restore; this fixture
-  // must still preserve both empty tables and their tenant policies.
-  commerce_product_photo_targets: 0, commerce_publication_photo_refs: 0, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0,
+  // Both restored tenants have real primary/secondary bytes and every gallery table.
+  commerce_product_groups:2,commerce_product_group_members:2,commerce_product_gallery_photos:2,commerce_publication_galleries:2,commerce_publication_gallery_refs:4,
+  commerce_product_photo_targets: 2, commerce_publication_photo_refs: 2, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0, commerce_hosted_offer_photos: 0,
+  commerce_storefront_seller_drafts: 2, commerce_storefront_policy_drafts: 8, commerce_storefront_seller_versions: 2, commerce_storefront_policy_versions: 8, commerce_publication_seller_policies: 2, commerce_publication_policy_refs: 8,
+  commerce_storefront_appearance_drafts: 0, commerce_storefront_appearance_targets: 0, commerce_publication_appearances: 0, commerce_publication_appearance_refs: 0,
   tenant_work_results: 2, tenant_work_result_targets: 2, tenant_capacity_policies: 3,
   work_items: 3, scoped_command_receipts: 3, scoped_transition_journal: 3, scoped_outbox: 3,
   // This fixture inserts existing Work directly; no registry launch is performed.
@@ -677,7 +706,7 @@ before(async () => {
     dump: { async open() { return Readable.toWeb(createReadStream(dumpPath)) as ReadableStream<Uint8Array>; } }, archive, backupObjects });
   assert.equal(sealed.status, 'recovery_set_verified');
   const readback = await readbackRecoverySet({ archive, setId, backupObjects, verifiedAt: new Date().toISOString(), writeReceipt: true });
-  assert.equal(readback.objects.count, 2); assert.equal(readback.manifestSha256, sealed.manifestSha256);
+  assert.equal(readback.objects.count, 6); assert.equal(readback.manifestSha256, sealed.manifestSha256);
   const target = (await admin.query('SELECT current_database() AS database')).rows[0].database + '_r' + randomUUID().replaceAll('-', '').slice(0, 8);
   assertIdent(target); await admin.query(`CREATE DATABASE ${target}`); restoredDatabase = target;
   restoredPool = poolFor(superuser, restoredDatabase);
@@ -777,7 +806,7 @@ test('J6-R2 owner and backup counts and full-row fingerprints agree at the same 
     assert.equal(evidenceCount(backup.evidence, table), ['commerce_payment_attempts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 4 : 2, table);
   }
   assert.equal(snapshotAssets, 2);
-  assert.deepEqual(backup.objects.objects.map(object => object.key).sort(), [spaces.a.object!.key, spaces.b.object!.key].sort());
+  assert.deepEqual(backup.objects.objects.map(object => object.key).sort(), [spaces.a.object!.key, spaces.b.object!.key,...galleryObjects.get(spaces.a.tenantId)!.map(o=>o.key),...galleryObjects.get(spaces.b.tenantId)!.map(o=>o.key)].sort());
 });
 
 async function foreignKeys(pool: Pool) {
@@ -797,7 +826,7 @@ async function policies(pool: Pool) {
 
 test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs, row security and exact object digests', async () => {
   assert.equal(recovered.status, 'database_and_objects_restored');
-  assert.equal(recovered.evidence.status, 'matched'); assert.equal(recovered.objects.objectCount, 2);
+  assert.equal(recovered.evidence.status, 'matched'); assert.equal(recovered.objects.objectCount, 6);
   assert.equal(recovered.exposure, 'quarantine_not_approved_for_exposure');
   assert.deepEqual(recovered.remainingOperatorSteps, ['apply_pending_migrations', 'restore_acl_lockdown', 'runtime_and_backup_grants',
     'fence_restored_sessions_and_external_authority', 'role_login_checks', 'drain_writers_before_cutover']);
@@ -854,6 +883,21 @@ test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs
     const actual=unsealCredential(commerceKeys,row,row);
     assert.equal(JSON.stringify(actual)===JSON.stringify(commerceMaterials.get(row.account_id)),true,'restored credential must unseal under its retained context');
   }
+  // Every retained legal byte and reference, including unpublished identity
+  // metadata, must equal the exported A/B source; C is outside the snapshot.
+  for(const table of legalTables){
+    const order=table.endsWith('_versions')?'version_id':table==='commerce_publication_policy_refs'?'publication_id,kind':table==='commerce_publication_seller_policies'?'publication_id':table==='commerce_storefront_policy_drafts'?'kind':'version_id';
+    const rows=async(pool:Pool)=>(await pool.query(`SELECT * FROM ${table} WHERE tenant_id=ANY($1::uuid[]) ORDER BY tenant_id,instance_id,${order}`,[[spaces.a.tenantId,spaces.b.tenantId]])).rows;
+    const retained=await rows(restoredPool);assert.equal(retained.length,EXPECTED[table],table);assert.deepEqual(retained,await rows(owner),`${table}: all version text, digests and publication bindings retained`);
+    assert.equal((await restoredPool.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[spaces.c.tenantId])).rowCount,0);
+  }
+  for(const table of galleryTables){
+   const rows=async(pool:Pool)=>(await pool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=ANY($1::uuid[]) ORDER BY to_jsonb(t)::text`,[[spaces.a.tenantId,spaces.b.tenantId]])).rows;
+   assert.equal((await rows(restoredPool)).length,EXPECTED[table]);assert.deepEqual(await rows(restoredPool),await rows(owner));
+   assert.equal((await restoredPool.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[spaces.c.tenantId])).rowCount,0);
+  }
+  for(const space of [spaces.a,spaces.b])for(const object of galleryObjects.get(space.tenantId)!)assert.deepEqual(Buffer.from((await readVerifiedObject(restoredObjects,object.key,object.metadata)).bytes),object.bytes);
+  for(const object of galleryObjects.get(spaces.c.tenantId)!)assert.equal(await restoredObjects.head(object.key),null);
   const restoredKeys = await foreignKeys(restoredPool);
   assert(restoredKeys.length > 0); assert.deepEqual(restoredKeys, await foreignKeys(owner));
   for (const key of restoredKeys) assert.equal(key.convalidated, true);
@@ -913,23 +957,28 @@ test('J6-R4 lockdown precedes grants; one restored runtime connection cycles A, 
   }
 });
 
+test('J6-R4 restored seller and policy history retains immutable versions, freezes and draft identity',async()=>{
+ const q=await restoredPool.connect();try{await q.query('BEGIN');for(const table of legalTables){for(const statement of [table.endsWith('_drafts')?`UPDATE ${table} SET created_at=created_at+interval '1 second'`:`UPDATE ${table} SET tenant_id=tenant_id`,`DELETE FROM ${table}`]){await q.query('SAVEPOINT immutable_legal');await assert.rejects(q.query(statement),(e:unknown)=>(e as {code:string}).code==='23514');await q.query('ROLLBACK TO SAVEPOINT immutable_legal');}}}finally{await q.query('ROLLBACK');q.release();}
+});
+
 test('J6-R4 restored checkout PII requires the exact tenant context and disappears without context', async () => {
   for (const space of [spaces.a, spaces.b]) {
     await isolatedTransaction(runtimePool, async q => {
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindPrincipalContext(q, space === spaces.a ? people.p1.principalId : people.p2.principalId);
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindTenantContext(q, { tenantId: space.tenantId, tenantScopeId: space.scopeId });
-      for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) {
-        const order = table === 'commerce_checkout_contacts' ? ' ORDER BY contact_id' : '';
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) {
+        const policyKinds=['commerce_storefront_policy_drafts','commerce_storefront_policy_versions','commerce_publication_policy_refs'].includes(table);
+        const order = table === 'commerce_checkout_contacts' ? ' ORDER BY contact_id' : policyKinds?' ORDER BY kind':'';
         const rows = (await q.query(`SELECT * FROM ${table}${order}`)).rows;
-        assert.equal(rows.length, ['commerce_checkout_contacts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
+        assert.equal(rows.length, policyKinds?4:['commerce_checkout_contacts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
         assert.deepEqual(rows, (await restoredPool.query(`SELECT * FROM ${table} WHERE tenant_id=$1${order}`, [space.tenantId])).rows);
       }
     });
   }
   await isolatedTransaction(runtimePool, async q => {
-    for (const table of ['commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+    for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
   });
 });
 
@@ -978,4 +1027,18 @@ test('T-047 post-backup membership and invitation revocations survive restore be
     try { check(); } catch (error) { failures.push(error as Error); }
   }
   if (failures.length) throw new AggregateError(failures, failures.map(error => error.message).join('\n'));
+});
+
+
+test('gallery restore retains nonempty A/B tenant graphs and exact read/retarget boundaries',async()=>{
+ for(const space of [spaces.a,spaces.b])await isolatedTransaction(runtimePool,async q=>{
+  for(const table of galleryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);
+  await bindPrincipalContext(q,space===spaces.a?people.p1.principalId:people.p2.principalId);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
+  for(const table of galleryTables){
+   const own=(await q.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;
+   assert.equal(own.length,table==='commerce_publication_gallery_refs'?2:1);assert.deepEqual(own,(await restoredPool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=$1 ORDER BY to_jsonb(t)::text`,[space.tenantId])).rows);
+   const other=space===spaces.a?spaces.b:spaces.a;assert.equal((await q.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[other.tenantId])).rowCount,0);
+   await q.query('SAVEPOINT gallery_retarget');await assert.rejects(q.query(`UPDATE ${table} SET tenant_id=$1 WHERE tenant_id=$2`,[other.tenantId,space.tenantId]),(e:unknown)=>['23514','23503','42501'].includes((e as {code:string}).code));await q.query('ROLLBACK TO SAVEPOINT gallery_retarget');
+  }
+ });
 });

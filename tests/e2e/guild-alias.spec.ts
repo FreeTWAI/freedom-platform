@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type {Locator, Page} from '@playwright/test';
-import {navigate} from './navigation.js';
+import {navigate,navigateAdmin} from './navigation.js';
 import {test, expect} from './fixtures.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS} from '../../packages/testing/seed.js';
 import {E2E_AUTHOR_CLAIM_ADMIN_EMAIL, E2E_AUTHOR_CLAIM_ADMIN_TOKEN} from '../../packages/testing/e2e-admin.js';
@@ -125,7 +125,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
       await route.continue({headers:{...route.request().headers(),'cf-access-jwt-assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}});
     });
     await admin.goto('/admin');
-    await admin.getByRole('button',{name:'公會管理',exact:true}).click();
+    await navigateAdmin(admin,'公會管理');
     const management=admin.locator('.admin-guild-management');
     await management.getByLabel('搜尋公會',{exact:true}).fill('成長與行銷');
     const marketing=management.getByRole('article',{name:'成長與行銷公會',exact:true});
@@ -144,9 +144,13 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     await expect(marketing.getByText('已更新公會名稱與別名。')).toBeVisible();
     await expect(marketing.locator('.guild-name-alias')).toContainText('行銷小名');
 
-    await admin.getByRole('button',{name:'公會申請',exact:true}).click();
+    await navigateAdmin(admin,'公會申請');
+    // This journey checks pending and reviewed cards; the new default only lists pending ones.
+    const allApplications=admin.getByRole('group',{name:'公會申請篩選',exact:true}).getByRole('button',{name:'全部',exact:true});
+    await allApplications.click();await expect(allApplications).toHaveAttribute('aria-pressed','true');
     const approveCard=admin.locator('article').filter({has:admin.getByRole('heading',{name:approveName,exact:true})});
     await expect(approveCard).toBeVisible();
+    await approveCard.getByText('開始審核',{exact:true}).click();
     await approveCard.getByLabel('別名',{exact:true}).fill('核准小名');
     await approveCard.getByLabel('職業稱號',{exact:true}).fill('核准實踐者');
     await approveCard.getByLabel('公會宗旨',{exact:true}).fill('整理一個可以公開核對的公會目標。');
@@ -156,7 +160,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     await approveCard.getByRole('button',{name:'保存審核決定',exact:true}).click();
     await expect(approveCard.getByText('已核准',{exact:true})).toBeVisible();
 
-    await admin.getByRole('button',{name:'公會管理',exact:true}).click();
+    await navigateAdmin(admin,'公會管理');
     await management.getByLabel('搜尋公會',{exact:true}).fill(approveName);
     const custom=management.getByRole('article',{name:approveName,exact:true});
     await custom.getByRole('button',{name:'編輯名稱與別名',exact:true}).click();
@@ -217,8 +221,9 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
       await expect(visitor.locator('body')).not.toContainText(privateMarker);
     }finally{await anonymous.close();}
 
-    await admin.getByRole('button',{name:'公會申請',exact:true}).click();
+    await navigateAdmin(admin,'公會申請');
     const mergeCard=admin.locator('article').filter({has:admin.getByRole('heading',{name:mergeName,exact:true})});
+    await mergeCard.getByText('開始審核',{exact:true}).click();
     await mergeCard.getByLabel('審核決定',{exact:true}).selectOption({label:'併入既有公會'});
     await expect(mergeCard.getByLabel('別名',{exact:true})).toHaveValue(mergeName);
     await mergeCard.getByLabel('目標公會',{exact:true}).selectOption(SECURITY);
@@ -242,7 +247,10 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     }
     await mergeCard.getByRole('button',{name:'併入這個公會',exact:true}).click();
     await expect(mergeCard.locator('.badge.guild-merged')).toHaveText('已併入');
+    await mergeCard.getByText('查看申請與審核紀錄',{exact:true}).click();
+    await expect(mergeCard.locator('details.admin-application-details')).toHaveJSProperty('open',true);
     await expect(mergeCard.getByText('併入：資安公會',{exact:true})).toBeVisible();
+    await expect(mergeCard.getByText('併入資安公會並留下別名。',{exact:true})).toBeVisible();
 
     await page.setViewportSize({width:1280,height:900});
     await page.goto('/');

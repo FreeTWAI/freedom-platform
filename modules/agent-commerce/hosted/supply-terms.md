@@ -21,8 +21,9 @@ The existing `commerce_items.price_minor` stores supply cost; shipping amount an
 terms use the existing item columns. `commerce_selections.retail_price_minor`
 remains the seller's price. Product creation initializes both prices as before;
 subsequent retail edits cannot overwrite supply cost. The own selection version
-serializes both editors. No new migration, item, stock balance or receipt system
-is introduced. Available quantity is `stock - reserved`, from existing inventory;
+serializes both editors. The original preparation introduced no migration, item,
+stock balance or receipt system; the structured-reference increment below adds
+nullable item columns. Available quantity is `stock - reserved`, from existing inventory;
 this form cannot write stock or clear reservations.
 
 The additive contract leaves the pinned storefront/v1 DTO and publication
@@ -98,3 +99,52 @@ when the resource has subsequently changed; effects are not repeated. The UI
 then calls the separately authorized metadata/product GET for current content.
 These GETs do not pretend to be the original command snapshot. Existing retail,
 supply-terms and offer receipt shapes are preserved as legacy contracts.
+
+
+## 2026-10-20 structured supply references
+
+The private terms editor and supplier-console product detail return all three
+keys, using `null` when the supplier has not provided a value:
+
+| Field | Meaning | Inclusive integer bounds |
+| --- | --- | --- |
+| `msrp_minor` | Advisory retail price per item, in the offer currency's minor units | 1–100000000 |
+| `minimum_order_quantity` | Supplier's stated minimum items per shop order | 1–10000 |
+| `lead_time_days` | Days from receiving the order to shipping; 0 means the same day | 0–365 |
+
+The existing `PATCH …/products/:id/supply-terms` accepts each new key as optional
+and nullable: omission preserves its stored value, `null` clears it, and an
+integer sets it. Older clients that omit these fields cannot clear them. Both
+editors submit only changed reference fields; an empty input explicitly sends
+`null`. The update shares the existing statement, transaction, product CAS,
+version increment, fact and receipt/replay rules. Changing only one reference
+outdates the currently offered terms until the supplier explicitly republishes.
+
+Offer snapshots instead omit unset reference keys entirely and never contain
+`null` for them. `terms_sha256` hashes the sorted-key JSON through the historical
+`digest`, and both publish deduplication and `matches_current_terms` depend on
+that same function. The seven-key pre-change object therefore remains byte-for-
+byte equivalent when all references are unset; unchanged republishing reuses the
+same offer. Existing selections retain their original immutable version.
+
+Under [ADR-027](../../../docs/platform-plan/07-decisions-risks-traceability.md),
+MSRP is information only: there is no price gate, ranking, filtering or suggested
+price comparison in supplier review. A seller may propose either a lower or a
+higher price. The supplier editor's below-cost note does not prevent saving.
+Minimum order and lead time are also informational; they change no reservation,
+quantity, availability, checkout or fulfilment decision. These private references
+are shared only through the existing community offer and own-selection reads;
+the public storefront, buyer APIs and buyer receipts use their existing explicit
+allowlists and never include them. They grant no drop-ship consent or supplied-
+line checkout. Formal resale-price arrangements still need professional review.
+
+## Private occupied-stock breakdown
+
+The live own-product terms GET adds the optional merchant `inventory` observation
+from the authorized item statement. It shows 庫存／已占用／可售 and the held/allocated
+breakdown. 可售 and the supplier console's 可用 are the same available quantity.
+Missing legacy observations and inconsistent ledgers show unavailable dependent
+counts, with a local refresh that preserves the terms draft. PATCH receipts keep
+their existing shape and are followed by a fresh read. Supplier offer terms,
+retailer catalog projections and published storefront bytes do not gain private
+stock data. This read grants no drop-ship consent or buyer-recipient access.

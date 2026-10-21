@@ -18,7 +18,7 @@ import {fieldLabels,attemptFieldText} from './view';
 import {ConsoleShell} from '../../hosted-ui/ConsoleShell';
 import './SupplierConsole.css';
 const NAV_GROUPS=['營運','合作','管理'] as const;
-export function SupplierConsole({client,userId,route,registerLeave,photosEnabled=false,photoUploadsEnabled=false,materialMediaEnabled=false,materialUploadsEnabled=false}:{client:PortalClient;userId:string;route:SupplierConsoleRoute;registerLeave:RegisterLeave;photosEnabled?:boolean;photoUploadsEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean}){
+export function SupplierConsole({client,userId,route,registerLeave,photosEnabled=false,photoUploadsEnabled=false,materialMediaEnabled=false,materialUploadsEnabled=false,supplyOfferPhotosEnabled=false}:{client:PortalClient;userId:string;route:SupplierConsoleRoute;registerLeave:RegisterLeave;photosEnabled?:boolean;photoUploadsEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;supplyOfferPhotosEnabled?:boolean}){
  const c=useSupplierConsoleController({client,userId,scope:route,route,registerLeave,photosEnabled}),profile=c.profile,r=c.slot('profile'),ready=profile?.setup_state==='ready';
  const pages=consoleNavigation(profile?.capabilities??[],c.ownerAllowed),current=SUPPLIER_CONSOLE_PAGES.find(p=>p.page===route.page)!,selected=current.parent??current.page;
  const content=useRef<HTMLDivElement>(null),previous=useRef(route.page+':'+route.id),retry=useRef<HTMLButtonElement>(null),focused=useRef<{el:HTMLElement;section:Element|null;lost:boolean}|null>(null);
@@ -57,7 +57,7 @@ export function SupplierConsole({client,userId,route,registerLeave,photosEnabled
   <ConsoleShell label="營運中心" selectLabel="營運中心頁面" groups={NAV_GROUPS} items={nav} current={{key:selected,title:current.title}} enabled={ready} disabledReason="請先完成商品庫設定">
   <div className="sc-content stack" ref={content}>{!ready?<div data-sc-active="true"><Setup c={c}/></div>:<><div data-sc-active={route.page!=='product'&&route.page!=='material'}>{route.page==='material'?null:current.requires==='write'?<WriteAccess c={c}>{page}</WriteAccess>:page}</div>
    {materialIds.map(id=><div key={id} hidden={route.page!=='material'||route.id!==id} data-sc-active={route.page==='material'&&route.id===id}><WriteAccess c={c}><Material c={c} id={id} mediaEnabled={materialMediaEnabled} uploadsEnabled={materialUploadsEnabled} active={route.page==='material'&&route.id===id}/></WriteAccess></div>)}
-   {productIds.map(id=><div key={id} hidden={route.page!=='product'||route.id!==id} data-sc-active={route.page==='product'&&route.id===id}><WriteAccess c={c}><Product c={c} id={id} uploadsEnabled={photoUploadsEnabled}/></WriteAccess></div>)}
+   {productIds.map(id=><div key={id} hidden={route.page!=='product'||route.id!==id} data-sc-active={route.page==='product'&&route.id===id}><WriteAccess c={c}><Product c={c} id={id} offerPhotosEnabled={supplyOfferPhotosEnabled} uploadsEnabled={photoUploadsEnabled}/></WriteAccess></div>)}
   </>}</div></ConsoleShell></>}
  </div>;
 }

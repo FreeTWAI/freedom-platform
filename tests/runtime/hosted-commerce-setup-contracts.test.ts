@@ -19,7 +19,37 @@ test('generated commerce setup bundle validates every request and response witho
   const id=randomUUID(),time='2028-02-29T12:34:56.789Z',fresh={fresh_auth_verification_id:id};
   const account={logistics_services:[],payment_activation:null,account_id:id,provider:'ecpay',environment:'sandbox',merchant_id:'1234567',version:'1',created_at:time,
     services:[{purpose:'payment',profile:'ecpay.aio.credit.v1',state:'draft',credential_version:1,credential_updated_at:time,activated_at:null,throttled_until:null}]};
-  const admission={admission_id:id,tenant_id:id,instance_id:id,environment:'sandbox',admitted_at:time,admitted_by:id,reason:'合成准入理由',revoked_at:null,revoked_by:null,revoke_reason:null};
+  const admission={admission_id:id,tenant_id:id,instance_id:id,environment:'sandbox' as const,admitted_at:time,admitted_by:id,reason:'合成准入理由',revoked_at:null,revoked_by:null,revoke_reason:null};
+  const unconfigured:wire.StoreReadiness={accepting_orders:false,items:[
+    {key:'storefront',state:'missing',revision:null},
+    {key:'products',state:'missing',published_count:0,sellable_count:0,own_stock_count:0},
+    {key:'store_information',state:'missing'},
+    {key:'release',state:'upgrade_required',module_release_ref:'storefront@1.0.0'},
+    {key:'payment',state:'missing',version:null},
+    {key:'delivery',state:'missing',version:null},
+    {key:'admission',state:'not_admitted'},
+    {key:'platform',state:'done'},
+  ],methods:{payment:[],delivery:[]}};
+  const ready:wire.StoreReadiness={accepting_orders:true,items:[
+    {key:'storefront',state:'done',revision:'1'},
+    {key:'products',state:'done',published_count:1,sellable_count:1,own_stock_count:1},
+    {key:'store_information',state:'done'},
+    {key:'release',state:'done',module_release_ref:'storefront@1.1.0'},
+    {key:'payment',state:'done',version:'1'},
+    {key:'delivery',state:'done',version:'1'},
+    {key:'admission',state:'done'},
+    {key:'platform',state:'done'},
+  ],methods:{payment:['bank_transfer'],delivery:['meetup']}};
+  const paused:wire.StoreOverview={...ready,tenant_id:id,instance_id:id,environment:'sandbox',checked_at:time,accepting_orders:false,
+    items:ready.items.map(item=>item.key==='payment'?{...item,state:'not_offered'}:item.key==='admission'?{...item,state:'revoked'}:item.key==='platform'?{...item,state:'paused'}:item),
+    orders:{open:{count:1,more:false},awaiting_offline_payment:{count:1,more:false},needs_action:{count:0,more:false}}};
+  const adminPage:wire.AdminStoreReadinessPage={environment:'sandbox',checked_at:time,release_sha:'a'.repeat(40),
+    platform:{checkout_enabled:true,quarantine:false,provider_profiles:['offline.bank_transfer.v1']},
+    summary:{stores:1,active_admissions:1,accepting_orders:1},items:[{
+      tenant_id:id,tenant_display_name:'合成業務空間',tenant_status:'active',instance_id:id,instance_status:'active',
+      store:{name:'合成商店',slug:'synthetic-store',public_path:'/shops/synthetic-store'},module_release_ref:'storefront@1.1.0',
+      readiness:ready,admission:{active:admission,last_revoked:null},admin_is_member:false,
+    }],next_offset:null};
   const samples:[string,unknown][]=[
     ['empty-input',{}],['store-release',{module_release_ref:'storefront@1.0.0',application_release_ref:'hosted-store@1.0.0',version:'1',capabilities:['store:read'],upgrade:{module_release_ref:'storefront@1.1.0',application_release_ref:'hosted-store@1.1.0'},can_upgrade:true}],
     ['provider-account-create-input',{provider:'ecpay',environment:'sandbox',merchant_id:'1234567',...fresh}],
@@ -27,7 +57,10 @@ test('generated commerce setup bundle validates every request and response witho
     ['payment-activation',{attempt_ref:id,state:'ready',created_at:time}],['provider-activation-payment-input',fresh],['provider-activation-payment',{handoff_url:'/pay/ecpay/'+'A'.repeat(43),attempt_ref:id,expires_at:time}],
     ['logistics-service-create-input',{service_key:'ecpay.logistics.home.tcat',...fresh}],['provider-service-state-input',fresh],['provider-account',account],['provider-account-page',{items:[account]}],
     ['store-admission-create-input',{tenant_id:id,instance_id:id,reason:'合成准入理由'}],['store-admission-revoke-input',{reason:'合成撤銷理由'}],['store-admission-query',{tenant_id:id}],
-    ['store-admission',admission],['store-admission-page',{items:[admission]}],['error-code','commerce_credentials_unavailable'],
+    ['store-admission',admission],['store-admission-page',{items:[admission]}],
+    ['store-readiness',unconfigured],['store-overview',paused],
+    ['admin-store-readiness-query',{limit:'25',offset:'0'}],['admin-store-readiness-page',adminPage],
+    ['error-code','commerce_credentials_unavailable'],
     ['error',{type:'about:blank',title:'unavailable',status:503,code:'commerce_credentials_unavailable',detail:'合成錯誤'}],
   ];
   assert.deepEqual(Object.keys(bundle.$defs).sort(),samples.map(([name])=>name).sort());
@@ -41,7 +74,7 @@ for c in x['cases']:
  Draft202012Validator.check_schema(s)
  assert Draft202012Validator(s,format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c['name']
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),54);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),66);
 });
 test('activation contract requires fresh proof and exposes only its coarse state and bearer response',()=>{
   const id=randomUUID(),time='2028-02-29T12:34:56.789Z',fresh={fresh_auth_verification_id:id};

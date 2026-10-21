@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import type {MerchantInventory} from '../../../contracts/guild-launchpad/v1/storefront.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { DirectEffectContext } from './direct-authority.js';
 
@@ -36,15 +37,33 @@ export interface CheckoutInventory {
 }
 
 export interface InventoryPosition {stock:number; held:number; allocated:number; available:number}
-/** Internal read; callers authorize item access. Never supplies tenant authority.
- * Available is the physical balance, including due holds until settlement. */
-export async function inventoryPositions(q:PoolClient,itemIds:readonly string[]):Promise<ReadonlyMap<string,InventoryPosition>> {
-  const rows=(await q.query<{item_id:string;stock:number;reserved:number;held:number;allocated:number}>(`SELECT i.item_id,i.stock,i.reserved,
+/** Closed SQL fragment for alias i. Only embed in an already-authorized item
+ * statement; this neither binds a tenant nor grants ledger/item access. */
+export const INVENTORY_POSITION_COLUMNS = `
     (SELECT coalesce(sum(h.quantity),0)::int FROM commerce_inventory_reservations h WHERE h.item_id=i.item_id AND h.state='held') AS held,
-    (SELECT coalesce(sum(a.quantity-a.shipped_quantity-a.released_quantity),0)::int FROM commerce_inventory_allocations a WHERE a.item_id=i.item_id) AS allocated
-    FROM commerce_items i WHERE i.item_id=ANY($1::uuid[]) ORDER BY i.item_id`,[[...new Set(itemIds)].sort()])).rows;
-  for(const row of rows)requireCondition(row.reserved===row.held+row.allocated,409,'reservation_inconsistent','庫存紀錄不一致。');
-  return new Map(rows.map(r=>[r.item_id,{stock:r.stock,held:r.held,allocated:r.allocated,available:r.stock-r.reserved}]));
+    (SELECT coalesce(sum(a.quantity-a.shipped_quantity-a.released_quantity),0)::int FROM commerce_inventory_allocations a WHERE a.item_id=i.item_id) AS allocated`;
+export interface InventoryPositionRow {item_id:string;stock:number;reserved:number;held:number;allocated:number}
+interface ReportingInventory {onInconsistent:'report';rows?:readonly InventoryPositionRow[]}
+/** Internal read; callers authorize item access first in the same scoped read.
+ * Due holds remain occupied until settlement. Trusted preloaded rows MUST come
+ * from that authorized SQL statement using the closed columns above, never a
+ * request body. Preloading keeps the supplier's entire read in one snapshot.
+ * Strict callers retain their original 409; only reporting reads mark a row. */
+export function inventoryPositions(q:PoolClient,itemIds:readonly string[]):Promise<ReadonlyMap<string,InventoryPosition>>;
+export function inventoryPositions(q:PoolClient,itemIds:readonly string[],options:ReportingInventory):Promise<ReadonlyMap<string,MerchantInventory>>;
+export async function inventoryPositions(q:PoolClient,itemIds:readonly string[],options?:ReportingInventory):Promise<ReadonlyMap<string,InventoryPosition|MerchantInventory>> {
+  const ids=[...new Set(itemIds)].sort();
+  const rows=options?.rows??(await q.query<InventoryPositionRow>(`SELECT i.item_id,i.stock,i.reserved,${INVENTORY_POSITION_COLUMNS}
+    FROM commerce_items i WHERE i.item_id=ANY($1::uuid[]) ORDER BY i.item_id`,[ids])).rows;
+  if(options?.rows)requireCondition(rows.length===ids.length && new Set(rows.map(r=>r.item_id)).size===ids.length
+    && rows.every(r=>ids.includes(r.item_id)),500,'inventory_projection_inconsistent','庫存讀取範圍不一致。');
+  return new Map(rows.map(r=>{
+    const consistent=r.reserved===r.held+r.allocated;
+    if(!options)requireCondition(consistent,409,'reservation_inconsistent','庫存紀錄不一致。');
+    const position={stock:r.stock,held:r.held,allocated:r.allocated,available:r.stock-r.reserved};
+    return [r.item_id,options?(consistent?{state:'ready' as const,...position,reserved:r.reserved}
+      :{state:'inconsistent' as const,code:'reservation_inconsistent' as const}):position];
+  }));
 }
 
 /** Internal transaction port. Durable holds give retries a stable identity;
