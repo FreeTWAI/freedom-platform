@@ -8,7 +8,7 @@ const move=<T,>(rows:T[],index:number,delta:number)=>{const next=[...rows];[next
 export function CategoriesEditor({client,userId,root,writable,locked,refresh,onState,onSaved}:{client:PortalClient;userId:string;root:string;writable:boolean;locked:boolean;refresh:string;onState:(dirty:boolean,blocking:boolean)=>void;onSaved:()=>Promise<void>}){
  const scope=userId+'/'+client.sessionGeneration+'/'+root+'/categories',[page,setPage]=useState<CategoryPage|null>(null),[selected,setSelected]=useState(''),[name,setName]=useState(''),[keys,setKeys]=useState<string[]>([]),[newName,setNewName]=useState('');
  const [attempt,setAttempt]=useState(()=>categoryAttempt(client,scope)),[busy,setBusy]=useState(false),[loadError,setLoadError]=useState(false),[message,setMessage]=useState(()=>categoryAttempt(client,scope)?'暫時無法確認儲存結果，請用原操作重試。':''),[alert,setAlert]=useState(false),[invalid,setInvalid]=useState<'new'|'name'|null>(null),[conflict,setConflict]=useState(false);
- const [removing,setRemoving]=useState<{category_id:string;name:string}|null>(null),confirmRef=useRef<HTMLDialogElement>(null);
+ const [removing,setRemoving]=useState<{category_id:string;name:string}|null>(null),confirmRef=useRef<HTMLDialogElement>(null),cancelRef=useRef<HTMLButtonElement>(null);
  const generation=useRef(client.sessionGeneration),alive=useRef(true),sequence=useRef(0),sending=useRef(false),state=useRef(onState),messageRef=useRef<HTMLDivElement>(null);state.current=onState;
  const current=()=>alive.current&&generation.current===client.sessionGeneration;
  const editKeys=(value:Parameters<typeof setKeys>[0])=>{sequence.current++;setKeys(value);};
@@ -18,7 +18,7 @@ export function CategoriesEditor({client,userId,root,writable,locked,refresh,onS
  const blocked=locked||busy||!!attempt||conflict;
  useEffect(()=>{state.current(dirty||!!attempt,busy||!!attempt);},[dirty,attempt,busy]);
  useEffect(()=>{if(alert)messageRef.current?.focus();},[message,alert]);
- useEffect(()=>{const dialog=confirmRef.current;if(removing&&dialog){dialog.showModal();return()=>{if(dialog.open)dialog.close();};}},[removing]);
+ useEffect(()=>{const dialog=confirmRef.current;if(removing&&dialog){dialog.showModal();cancelRef.current?.focus();return()=>{if(dialog.open)dialog.close();};}},[removing]);
  useEffect(()=>{if(!writable)setRemoving(null);},[writable]);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;sequence.current++;const pending=categoryAttempt(client,scope);if(pending)holdCategoryAttempt(client,scope,{...pending,hadUnknown:true});state.current(false,false);};},[]);
  function select(next:CategoryPage,id:string){sequence.current++;const category=next.items.find(c=>c.category_id===id)??next.items[0];setSelected(category?.category_id??'');setName(category?.name??'');setKeys(category?.group_keys??[]);}
@@ -54,7 +54,7 @@ export function CategoriesEditor({client,userId,root,writable,locked,refresh,onS
      </fieldset>{writable&&<div className="actions"><button type="button" className={button} disabled={busy||!!attempt||locked} onClick={discard}>取消變更</button></div>}
     </section>}
    </div></>}
-  {removing&&<dialog ref={confirmRef} className="store-category-confirm" role="alertdialog" aria-modal="true" aria-labelledby="category-confirm-title" aria-describedby="category-confirm-detail" onClose={()=>setRemoving(null)}><h4 id="category-confirm-title">要刪除「{removing.name}」嗎？</h4><p id="category-confirm-detail">商品會保留在全部商品；發布更新後，這個分類的舊連結將無法使用。</p><div className="actions"><button type="button" className={button} onClick={()=>{const id=removing.category_id;confirmRef.current?.close();setRemoving(null);fresh('post','/'+id+'/remove',{},'remove','已刪除分類，尚未發布。',id);}}>刪除分類</button><button type="button" className={button} autoFocus onClick={()=>confirmRef.current?.close()}>繼續編輯</button></div></dialog>}
+  {removing&&<dialog ref={confirmRef} className="store-category-confirm" role="alertdialog" aria-modal="true" aria-labelledby="category-confirm-title" aria-describedby="category-confirm-detail" onClose={()=>setRemoving(null)}><h4 id="category-confirm-title">要刪除「{removing.name}」嗎？</h4><p id="category-confirm-detail">商品會保留在全部商品；發布更新後，這個分類的舊連結將無法使用。</p><div className="actions"><button type="button" className={button} onClick={()=>{const id=removing.category_id;confirmRef.current?.close();setRemoving(null);fresh('post','/'+id+'/remove',{},'remove','已刪除分類，尚未發布。',id);}}>刪除分類</button><button type="button" className={button} ref={cancelRef} onClick={()=>confirmRef.current?.close()}>繼續編輯</button></div></dialog>}
   <p className="field-hint">沒有商品的分類不會顯示在商店。儲存後可預覽，再發布到商店。</p>
  </section>;
 }
