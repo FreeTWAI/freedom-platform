@@ -54,13 +54,13 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
       <WorkshopIcon name={id}/><span>{t(title)}</span>
     </button>;
   };
-  return <nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key==='Escape'&&moreOpen){setMoreOpen(false);moreTrigger.current?.focus()}}}>
+  return <nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key!=='Escape'||!moreOpen)return;event.stopPropagation();if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;event.preventDefault();setMoreOpen(false);moreTrigger.current?.focus()}}>
     <div className="nav-primary">{primary.filter(id => id !== 'my-content' || personalContentEnabled).map(id => item(id))}{communitySearchEnabled && item('community-search')}</div>
     <details className="nav-section nav-more" open={moreOpen}>
       <summary ref={moreTrigger} aria-expanded={moreOpen} onClick={event => { event.preventDefault(); setMoreOpen(value => !value); }}>{t('nav.more')}<span aria-hidden="true">⌄</span></summary>
       <div className="nav-more-content">
-    <label className="nav-search"><span className="sr-only">{t('nav.search')}</span><input ref={searchRef} type="search" autoComplete="off" value={query} onChange={event=>setQuery(event.target.value)} maxLength={80} placeholder={t('nav.example')} onKeyDown={event=>{if(event.key==='Escape'&&query){event.stopPropagation();setQuery('')}}}/></label>
-    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'stores.supplyTitle', '#stores/supply')}{searchMatches.map(id => item(id))}{!supplyMatches && searchMatches.length===0 && <p className="field-hint" role="status">沒有符合的功能，請試試其他關鍵字。</p>}<p className="field-hint">{t('nav.searchHint')}</p></div>:<>
+    <label className="nav-search"><span className="sr-only">{t('nav.search')}</span><input ref={searchRef} type="search" autoComplete="off" value={query} onChange={event=>setQuery(event.target.value)} maxLength={80} placeholder={t('nav.example')} onKeyDown={event=>{if(event.key==='Escape'&&query&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();event.stopPropagation();setQuery('')}}}/></label>
+    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'stores.supplyTitle', '#stores/supply')}{searchMatches.map(id => item(id))}{!supplyMatches && searchMatches.length===0 && <p className="field-hint" role="status" aria-atomic="true">{t('nav.results')} · 0. {t('nav.searchHint')}</p>}{(supplyMatches || searchMatches.length > 0) && <p className="field-hint">{t('nav.searchHint')}</p>}</div>:<>
     {groups.map(group => <details className="nav-section" key={group.label} open={expanded.includes(group.label)}>
       <summary onClick={event => { event.preventDefault(); setExpanded(value => value.includes(group.label) ? value.filter(label => label !== group.label) : [...value, group.label]); }}>
         {t(groupKeys[group.label])}<span aria-hidden="true">⌄</span>
