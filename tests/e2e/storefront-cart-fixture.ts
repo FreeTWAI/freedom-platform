@@ -66,7 +66,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean};
+type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -98,14 +98,16 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
     const adminToken=randomUUID(),adminCsrf=randomUUID(),adminEmail=`admission-${randomUUID()}@example.test`;
     if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
     app = createApp(listenerPool, origin, 'local', {
+      registrationCommunityId: DEMO_COMMUNITY,
       ...(controls.realAdmission?{adminVerifier:async(request:Request)=>{
         if(request.headers.get('X-Fixture-Admin')!==adminToken)throw new Problem(403,'admin_required','需要合成管理員。');
         return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
       }}:{}),
       guildLaunchpadEnabled: true,
       supplierConsoleEnabled,
+      ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
-      commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
+      commerceSettings: { checkoutEnabled: controls.checkoutEnabled ?? true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
         ...(controls.realAdmission?{}:{admission: { allowed: () => true }}),
         ...(!offline ? {shipping: ports.shipping} : {}),
@@ -309,6 +311,7 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       saveOfflineFixture,
       admission: listener.admission,
       sellerPost: post,
+      republish,
       updatePriceAndRepublish,
       removeProductAndRepublish,
       updateLongNamesAndRepublish,

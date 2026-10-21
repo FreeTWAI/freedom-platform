@@ -130,6 +130,7 @@ export function createPublicHostedStoreRoutes(
   options?: { emailEnabled?: boolean },
 ) {
   const app = new Hono<PlatformEnv>();
+  const buyerJourneyEnabled = checkout?.settings?.checkoutEnabled === true;
   const emailEnabled = options?.emailEnabled ?? checkout?.settings?.emailEnabled ?? Boolean(checkout?.email);
   app.get('/api/v1/public/stores/:slug', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
@@ -157,13 +158,13 @@ export function createPublicHostedStoreRoutes(
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     const store = await readPublicStorePage(pool, c.req.param('slug'));
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(cartPageHtml(store.projection));
+    return c.html(cartPageHtml(store.projection, buyerJourneyEnabled));
   });
   app.get('/shops/:slug/checkout', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     const store = await readPublicStorePage(pool, c.req.param('slug'));
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(checkoutPageHtml(store.projection));
+    return c.html(checkoutPageHtml(store.projection, buyerJourneyEnabled));
   });
   app.get('/shops/:slug/orders/:order_ref', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
@@ -171,13 +172,13 @@ export function createPublicHostedStoreRoutes(
     if (!store) return c.html(storeMissingHtml(), 404);
     const orderRef = c.req.param('order_ref');
     if (!OpaqueId.safeParse(orderRef).success) return c.html(orderMissingHtml(store.projection), 404);
-    return c.html(orderPageHtml(store.projection, orderRef, { emailEnabled }));
+    return c.html(orderPageHtml(store.projection, orderRef, { emailEnabled, buyerJourneyEnabled }));
   });
   app.get('/shops/:slug/order-access', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     const store = await readPublicStorePage(pool, c.req.param('slug'));
     if (!store) return c.html(storeMissingHtml(), 404);
-    return c.html(orderAccessPageHtml(store.projection, { emailEnabled }));
+    return c.html(orderAccessPageHtml(store.projection, { emailEnabled, buyerJourneyEnabled }));
   });
   app.get('/shops/:slug/payment-return/:attempt_ref', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
