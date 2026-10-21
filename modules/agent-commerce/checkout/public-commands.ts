@@ -1,3 +1,4 @@
+import {readRetainedMemberOrder} from './member-orders.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives.js';
@@ -137,10 +138,18 @@ export async function cancelPublicOrder(pool:Pool,slug:string,orderRef:string,ac
   });
 }
 export async function readPublicOrder(pool:Pool,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions) {
-  return isolatedTransaction(pool,async q=>{
-    const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
-    const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
-  });
+  try {
+    return await isolatedTransaction(pool,async q=>{
+      const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
+      const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
+    });
+  } catch(error) {
+    if(options.settings?.checkoutEnabled===true&&error instanceof Problem&&error.code==='checkout_order_not_found') {
+      const retained=await readRetainedMemberOrder(pool,slug,orderRef,access.sessionToken,options.payment);
+      if(retained)return retained;
+    }
+    throw error;
+  }
 }
 /** Reads and handoff resumption use one buyer-access proof and decision-clock recheck. */
 async function authorizePublicOrder(q:PoolClient,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions){

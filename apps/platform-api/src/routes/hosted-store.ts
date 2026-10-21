@@ -1,3 +1,5 @@
+import {retainedMemberOrderHeading} from '../../../../modules/agent-commerce/checkout/member-orders.js';
+import {readSessionCookie} from '../session-cookie.js';
 import {renderGallery,type GalleryOptions} from '../../../../modules/agent-commerce/storefront/gallery/model.js';
 import type {PoliciesOptions} from '../../../../modules/agent-commerce/storefront/policies/model.js';
 import type {AppearanceOptions} from '../../../../modules/agent-commerce/hosted/appearance.js';
@@ -17,7 +19,7 @@ import { SupplyTermsInputSchema } from '../../../../contracts/guild-launchpad/v1
 import { readSupplyTerms, updateSupplyTerms } from '../../../../modules/agent-commerce/hosted/supply-terms.js';
 import { readPublicStore, readPublicStorePage } from '../../../../modules/agent-commerce/hosted/public.js';
 import { storeHtml, productHtml, publicProduct, storeMissingHtml } from '../../../../modules/agent-commerce/hosted/page.js';
-import { cartPageHtml, checkoutPageHtml, orderPageHtml, orderMissingHtml, orderAccessPageHtml, paymentReturnPageHtml, paymentReturnMissingHtml } from '../../../../modules/agent-commerce/storefront/pages.js';
+import { cartPageHtml, checkoutPageHtml, orderPageHtml, retainedOrderPageHtml, orderMissingHtml, orderAccessPageHtml, paymentReturnPageHtml, paymentReturnMissingHtml } from '../../../../modules/agent-commerce/storefront/pages.js';
 import { resolvePaymentReturn } from '../../../../modules/agent-commerce/payments/browser-return.js';
 import { Problem } from '../../../../packages/shared/problem.js';
 import { publicPurchaseState, type HostedCheckoutOptions } from '../../../../modules/agent-commerce/checkout/public-commands.js';
@@ -172,8 +174,14 @@ export function createPublicHostedStoreRoutes(
   app.get('/shops/:slug/orders/:order_ref', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance,options?.policies);
-    if (!store) return c.html(storeMissingHtml(), 404);
     const orderRef = c.req.param('order_ref');
+    if (!store) {
+      if(buyerJourneyEnabled&&OpaqueId.safeParse(orderRef).success) {
+        const heading=await retainedMemberOrderHeading(pool,c.req.param('slug'),orderRef,readSessionCookie(c.req.header('Cookie'),checkout!.origin));
+        if(heading){privateCache(c);return c.html(retainedOrderPageHtml(heading,orderRef));}
+      }
+      return c.html(storeMissingHtml(),404);
+    }
     if (!OpaqueId.safeParse(orderRef).success) return c.html(orderMissingHtml({...store.projection,appearance:store.appearance,policies:store.policies}), 404);
     return c.html(orderPageHtml({...store.projection,appearance:store.appearance,policies:store.policies}, orderRef, { emailEnabled, buyerJourneyEnabled }));
   });

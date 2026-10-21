@@ -204,6 +204,7 @@ const FOUNDATION_NAMES = [
   '175_storefront_appearance.sql',
   '176_storefront_seller_policies.sql',
   '177_storefront_product_gallery.sql',
+  '178_member_checkout_order_index.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

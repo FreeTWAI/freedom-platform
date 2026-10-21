@@ -1,3 +1,4 @@
+import {createMemberCheckoutOrderRoutes} from './routes/member-checkout-orders.js';
 import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
 import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
 import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
@@ -117,7 +118,8 @@ const JSON_UTF8_DECODER=new TextDecoder('utf-8',{fatal:true});
 // Unicode mode treats a valid UTF-16 pair as one code point, outside this range.
 const UNPAIRED_JSON_SURROGATE=/[\uD800-\uDFFF]/u;
 
-function onboardingAllowed(path:string,method:string) {
+function onboardingAllowed(path:string,method:string,checkoutEnabled=false) {
+  if(checkoutEnabled&&path==='/api/v1/me/orders'&&method==='GET')return true;
   if(path==='/api/v1/me/client-errors'&&method==='POST')return true;
   if(path==='/api/v1/me/totp'||path==='/api/v1/me/totp/enable'||path==='/api/v1/me/totp/disable')return true;
   if(path==='/api/v1/events'&&method==='POST')return true;
@@ -630,7 +632,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   });
   app.route('/',createHostedCheckoutRoutes(pool,origin,runtime,freedomEnv));
   app.route('/',createHostedPaymentRoutes(pool,runtime,freedomEnv,origin));
-  app.use('/api/v1/*',memberBoundary(pool,origin,onboardingAllowed));
+  if(runtime.commerceSettings?.checkoutEnabled===true)app.use('/api/v1/me/orders',async(c,next)=>{try{await next();}finally{hostedOrderPrivateCache(c);}});
+  app.use('/api/v1/*',memberBoundary(pool,origin,(path,method)=>onboardingAllowed(path,method,runtime.commerceSettings?.checkoutEnabled===true)));
   // EC-SPEC-10 §8.3 covers setup and catalog writes as well as order actions.
   // Keep this at composition: fulfilment must not depend on operations settings,
   // and every storefront route (including future sibling settings) shares it.
@@ -647,6 +650,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     await authRateLimit(pool,'email-verification-global','global',500,3600);
     return c.json(await requestEmailVerification(pool,c.get('actor'),origin,runtime.eventEmailSender));
   });
+  if(runtime.commerceSettings?.checkoutEnabled===true)app.route('/api/v1',createMemberCheckoutOrderRoutes(pool,origin,runtime.tenantListCursors));
   app.route('/api/v1', createHostedOrderRoutes(pool, { discoveryInstalled: runtime.guildLaunchpadEnabled === true, admissionEnabled: runtime.hostedReservationsEnabled === true, cursors: runtime.tenantListCursors }));
   const cmd=async(c:any):Promise<Command>=>{
     const ifMatch=c.req.header('If-Match') as string|undefined;
