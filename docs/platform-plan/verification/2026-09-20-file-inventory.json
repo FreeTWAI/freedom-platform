@@ -23099,8 +23099,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 293416,
-      "sha256": "f67e4905918a6524537bf2608e48006e873777e70062cfae020d41563bcea361"
+      "bytes": 293639,
+      "sha256": "8e7c62affd7daf28f843bea5e64465cf71b4b6158dbcc6e8cb15cbc212afb307"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
@@ -23539,8 +23539,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
-      "bytes": 68150,
-      "sha256": "09337b27b10b99d4fb353563056cab501d89417817d1fa6ff97f97b0d2638274"
+      "bytes": 68373,
+      "sha256": "0c336c81aafb31a3c4a9a2fb9435e5516b23546c9d5639fb1ee4b6ec3b7b17c1"
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
