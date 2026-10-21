@@ -7,7 +7,7 @@ import {conflictRows} from '../../state/drafts';
 import {fieldLabels,changeLabel,changeSubject} from '../view';
 import type {SupplierChanges} from '../../../../../contracts/guild-launchpad/v1/supplier-console';
 import {SupplyProductInputSchema} from '../../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
-import {formatIsoLocal,parseMajorToMinor} from '../../../../../apps/portal-web/src/format';
+import {formatIsoLocal,formatMinor,parseMajorToMinor} from '../../../../../apps/portal-web/src/format';
 import {supplierConsoleHref} from '../route';
 export function dataTime(time:string|null,seconds=true){return time?new Date(time).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',...(seconds?{second:'2-digit'}:{})}):'尚未取得';}
 export function ReadStatus<T>({c,name,label,scopedAction=false,showLabel=false}:{c:ConsoleController;name:string;label:string;scopedAction?:boolean;showLabel?:boolean}) {
@@ -21,15 +21,15 @@ export function ReadStatus<T>({c,name,label,scopedAction=false,showLabel=false}:
 export function WriteAccess({c,children}:{c:ConsoleController;children:ReactNode}) {return c.profile?.capabilities.includes('store:write')?<>{children}</>:<div className="stack"><h2 tabIndex={-1}>{c.route.page==='product'?'商品詳情':c.route.page==='partner'?'合作店家詳情':c.route.page==='review'?'審核售價申請':c.route.page==='product-new'?'新增商品':c.route.page==='partners'?'合作店家':c.route.page==='terms'?'供貨條件與審核':c.route.page==='reports'?'營運報表':c.route.page==='materials'?'行銷素材':c.route.page==='material-new'?'新增素材':c.route.page==='material'?'素材詳情':'商品與庫存'}</h2><p>需要商品編輯權限才能查看。供貨價與條件不會顯示，請聯絡業務空間擁有者。</p></div>;}
 export function Capacity({count}:{count:number}){return <p className="field-hint">共用商品容量 {count}／200（含供貨商品與商店選品）</p>;}
 const positiveMoneySchema=SupplyProductInputSchema.shape.cost_minor;
-const positiveMoneyMaximum=(positiveMoneySchema.maxValue!/100).toLocaleString('en-US');
 export function Editor({c,name,title,base,version,kind,path,target,productId,fields,primary=false,disabled=false,children}:{c:ConsoleController;name:string;title:string;base:Fields;version:string;kind:AttemptKind;path:string;target:string;productId?:string;fields:{key:string;label?:string;hint?:string;multiline?:boolean;money?:boolean;positiveMoney?:boolean;max?:number;required?:boolean;options?:{value:string;label:string}[]}[];primary?:boolean;disabled?:boolean;children?:ReactNode}){
  const draft=c.drafts[name],values={...base,...draft?.fields},conflict=c.conflicts[name],hintPrefix=useId(),validationId=useId();
+ const currency=c.profile?.catalog?.currency??'TWD',positiveMoneyMaximum=formatMinor(positiveMoneySchema.maxValue!,currency);
  const [announcement,setAnnouncement]=useState(''),errors:Record<string,string>={};
- const moneyRule=(label:string)=>`${label}須大於 0，最多兩位小數。最高 NT$ ${positiveMoneyMaximum}。`;
+ const moneyRule=(label:string)=>`${label}須大於 0，最多兩位小數。最高 ${positiveMoneyMaximum}。`;
  for(const field of fields)if(field.positiveMoney){
   const value=String(values[field.key]??'').trim(),label=field.label??fieldLabels[field.key];
   if(!value)continue;
-  try{if(!positiveMoneySchema.safeParse(parseMajorToMinor(value)).success)errors[field.key]=`${label}不可超過 NT$ ${positiveMoneyMaximum}。`;}
+  try{if(!positiveMoneySchema.safeParse(parseMajorToMinor(value)).success)errors[field.key]=`${label}不可超過 ${positiveMoneyMaximum}。`;}
   catch{errors[field.key]=`請輸入大於 0 的${label}，最多兩位小數；無效數字會被拒絕，不會四捨五入。`;}
  }
  const invalid=Object.keys(errors).length>0,incomplete=fields.some(f=>f.positiveMoney&&f.required&&!String(values[f.key]??'').trim());

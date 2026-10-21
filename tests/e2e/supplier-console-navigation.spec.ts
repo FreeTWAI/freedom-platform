@@ -19,9 +19,9 @@ async function patch(page:Page,path:string,body:unknown,version:string){
  const response=await page.request.patch('/api/v1'+path,{data:body,headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${version}"`}});
  const result=await response.json();expect(response.status(),JSON.stringify(result)).toBe(200);return result;
 }
-async function catalogue(page:Page,suffix:string,label='合成導航'){
+async function catalogue(page:Page,suffix:string,label='合成導航',currency:'TWD'|'USD'='TWD'){
  const store=await launchStore(page,`${label}空間 ${suffix}`),name=`${label}商品庫 ${suffix}`;
- await post(page,store.root+'/supply-profile',{name,currency:'TWD'},201);return {...store,name};
+ await post(page,store.root+'/supply-profile',{name,currency},201);return {...store,name};
 }
 async function createProduct(page:Page,s:Store,title:string,stock=10,description='合成導航驗收'){
  return {...SupplyProductReceiptSchema.parse(await post(page,s.root+'/supply-products',{title,description,cost_minor:400,stock},201)),title,stock};
@@ -237,7 +237,7 @@ for(const width of [1280,390])test(`new supplier product validates price before 
  await go(page,store,'/products/new');
  const form=active(page).getByRole('form',{name:'新增商品',exact:true});
  const price=form.getByLabel('供貨單價',{exact:true}),submit=form.getByRole('button',{name:'新增商品',exact:true});
- const rule='供貨單價須大於 0，最多兩位小數。最高 NT$ 1,000,000。',invalidMoney='請輸入大於 0 的供貨單價，最多兩位小數；無效數字會被拒絕，不會四捨五入。',overCap='供貨單價不可超過 NT$ 1,000,000。';
+ const rule='供貨單價須大於 0，最多兩位小數。最高 $1,000,000.00。',invalidMoney='請輸入大於 0 的供貨單價，最多兩位小數；無效數字會被拒絕，不會四捨五入。',overCap='供貨單價不可超過 $1,000,000.00。';
  const announcement=form.locator('[role="status"].sr-only');
  await expect(price).not.toHaveAttribute('aria-invalid');await expect(price).not.toHaveAttribute('aria-label');
  await expect(price).toHaveAccessibleName('供貨單價');await expect(price).toHaveAccessibleDescription(rule);await expect(submit).toBeDisabled();
@@ -276,4 +276,29 @@ for(const width of [1280,390])test(`new supplier product validates price before 
  await price.fill('0.01');await expect(submit).toBeEnabled();await expect(price).toHaveAttribute('aria-invalid','false');
  const sent=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/supply-products'));
  await submit.click();const response=await sent;expect(response.status()).toBe(201);expect(response.request().postDataJSON().cost_minor).toBe(1);expect(writes).toBe(1);
+});
+
+test('new supplier product validates the price cap in the USD catalog currency (1280px)',async({page,e2eAuthPool})=>{
+ await page.setViewportSize({width:1280,height:844});
+ const member=await person(e2eAuthPool);await login(page,member.email);
+ const store=await catalogue(page,randomUUID().slice(0,6),'本機美元表單驗收','USD');
+ await go(page,store,'/products/new');
+ const form=active(page).getByRole('form',{name:'新增商品',exact:true});
+ const price=form.getByLabel('供貨單價',{exact:true}),submit=form.getByRole('button',{name:'新增商品',exact:true});
+ const rule='供貨單價須大於 0，最多兩位小數。最高 US$1,000,000.00。',overCap='供貨單價不可超過 US$1,000,000.00。';
+ const announcement=form.locator('[role="status"].sr-only');
+ await expect(price).toHaveAccessibleDescription(rule);
+ await expect(price).not.toHaveAccessibleDescription(/(^|[^S])\$1,000,000/);
+ await expect(form).not.toContainText('NT$');
+ await form.getByLabel('商品名稱',{exact:true}).fill('本機私人美元測試商品');
+ let writes=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/supply-products'))writes++;});
+ await price.fill('1000000.01');await expect(price).toHaveAttribute('aria-invalid','true');
+ await expect(price).toHaveAccessibleDescription(overCap);
+ await expect(price).not.toHaveAccessibleDescription(/(^|[^S])\$1,000,000/);
+ await expect(submit).toBeDisabled();
+ await form.evaluate(el=>el.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await expect(announcement).toHaveText(overCap);await expect(form).not.toContainText('NT$');
+ expect(writes).toBe(0);
+ await price.fill('1000000');await expect(price).toHaveAttribute('aria-invalid','false');await expect(submit).toBeEnabled();
+ expect(writes).toBe(0);
 });

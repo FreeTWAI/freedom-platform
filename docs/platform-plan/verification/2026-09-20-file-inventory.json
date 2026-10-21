@@ -18839,8 +18839,8 @@
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Shared.tsx",
-      "bytes": 11099,
-      "sha256": "3e62450929f833d33e40080935d9a96851f7d513a15cee6b9907eee9631ffe53"
+      "bytes": 11141,
+      "sha256": "83b488199b49711f515c0e195725eb2137cbf85a6633ba3baae8326b0f94068d"
     },
     {
       "path": "modules/agent-commerce/supplier-console/ui/pages/Terms.tsx",
@@ -23404,8 +23404,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-navigation.spec.ts",
-      "bytes": 30163,
-      "sha256": "87592218e797de00322da1b7cb169959281a264bbf9fc3cbfac5a26a9e37c259"
+      "bytes": 32016,
+      "sha256": "9e4045155040e352151603307819b0561519398a8f88a9d92e31920f01c00d05"
     },
     {
       "path": "tests/e2e/supplier-console-queries.spec.ts",
