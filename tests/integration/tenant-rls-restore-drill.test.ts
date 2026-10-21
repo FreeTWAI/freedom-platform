@@ -566,6 +566,8 @@ const EXPECTED: Record<string, number> = {
   tenant_module_permissions: 0, commerce_resource_tenants: 4, commerce_order_quotes: 2, commerce_hosted_supply_offers: 2,
   // Both restored tenants have real primary/secondary bytes and every gallery table.
   commerce_product_groups:4,commerce_product_group_members:4,commerce_publication_variants:2,commerce_product_gallery_photos:2,commerce_publication_galleries:2,commerce_publication_gallery_refs:4,
+  // A/B each retain one active and one removed category/member, plus one frozen document.
+  commerce_storefront_categories:4,commerce_storefront_category_members:4,commerce_publication_categories:2,
   commerce_product_photo_targets: 4, commerce_publication_photo_refs: 2, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0, commerce_hosted_offer_photos: 0,
   commerce_storefront_seller_drafts: 2, commerce_storefront_policy_drafts: 8, commerce_storefront_seller_versions: 2, commerce_storefront_policy_versions: 8, commerce_publication_seller_policies: 2, commerce_publication_policy_refs: 8,
   commerce_storefront_appearance_drafts: 0, commerce_storefront_appearance_targets: 0, commerce_publication_appearances: 0, commerce_publication_appearance_refs: 0,
@@ -1063,7 +1065,7 @@ test('category restore retains active/tombstone and frozen A/B rows through cont
   for(const table of categoryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);
   let turn=0;
   for(const [space,other] of [[spaces.a,spaces.b],[spaces.b,spaces.a],[spaces.a,spaces.b]]){
-   if(turn++===2){await clearTenantContext(q);for(const table of categoryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);}
+   if(turn++>0){await clearTenantContext(q);for(const table of categoryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);}
    await bindPrincipalContext(q,space===spaces.a?people.p1.principalId:people.p2.principalId);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
    for(const table of categoryTables){const rows=(await q.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;assert.equal(rows.length,table==='commerce_publication_categories'?1:2);assert.deepEqual(rows,(await restoredPool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=$1 ORDER BY to_jsonb(t)::text`,[space.tenantId])).rows);assert.equal((await q.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[other.tenantId])).rowCount,0);}
   }
