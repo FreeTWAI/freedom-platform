@@ -145,7 +145,7 @@ export function createPublicHostedStoreRoutes(
   const app = new Hono<PlatformEnv>();
   const buyerJourneyEnabled = checkout?.settings?.checkoutEnabled === true;
   const emailEnabled = options?.emailEnabled ?? checkout?.settings?.emailEnabled ?? Boolean(checkout?.email);
-  const variantPage=async(c:Parameters<typeof singleQuery>[0])=>{try{return await readVariantBuyerPage(pool,c.req.param('slug')!,options??{},checkout);}catch(e){
+  const variantPage=async(c:Parameters<typeof singleQuery>[0],readOptions=options)=>{try{return await readVariantBuyerPage(pool,c.req.param('slug')!,readOptions??{},checkout);}catch(e){
     if(e instanceof Problem&&['storefront_variants_invalid','storefront_categories_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message,e.code==='storefront_catalog_changed'),e.status as 500);
     throw e;
   }};
@@ -172,7 +172,7 @@ export function createPublicHostedStoreRoutes(
   app.get('/shops/:slug/products/:sku', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
     if(options?.variants?.enabled===true){
-      const result=await variantPage(c),sku=c.req.param('sku');if(result instanceof Response)return result;if(!result||!publicProduct(result.store.projection,sku))return c.html(storeMissingHtml(true),404);
+      const result=await variantPage(c,{...options,categories:undefined}),sku=c.req.param('sku');if(result instanceof Response)return result;if(!result||!publicProduct(result.store.projection,sku))return c.html(storeMissingHtml(true),404);
       const {store,purchase,catalog}=result,group=catalog.document.groups.find(g=>g.members.some(m=>m.sku===sku))!;
       return c.html(productHtml(store.projection,sku,store.media.photos,publicOrigin?{publicOrigin}:undefined,purchase,store.appearance,store.policies,store.gallery?renderGallery(store.gallery.document,group.gallery_sku,store.projection.slug,store.projection.revision,options.gallery?.mediaInstalled===true):undefined,undefined,catalog)!);
     }
