@@ -2789,8 +2789,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
-      "bytes": 64957,
-      "sha256": "95c8af826a6999c2565394a18adea886eadb1ef8ecb6ceb3131421827c967ac4"
+      "bytes": 64927,
+      "sha256": "e6eb08b3906af0f80ea9298236bf9f93e1e6bde70b29849d41d55e6d5fbbc62a"
     },
     {
       "path": "apps/portal-web/src/modules/MemberPresence.css",
@@ -13590,7 +13590,7 @@
     {
       "path": "deploy/cloudflare/environments.json",
       "bytes": 30992,
-      "sha256": "bfaa339237ec0f755005a8aab33185c221c29d695e6423b8f1a748cb6e99486c"
+      "sha256": "a82556ced001bbd4641c533721521feeab6939779794b1e9799da27b1eb7f3e4"
     },
     {
       "path": "deploy/cloudflare/media-preflight.md",
@@ -13724,8 +13724,8 @@
     },
     {
       "path": "deploy/cloudflare/lib/release-compatibility.mjs",
-      "bytes": 47722,
-      "sha256": "ba6433b5f2e0129546e57a5c6baed4ab1ef5142ce928291bf0342f019c83030a"
+      "bytes": 47764,
+      "sha256": "624215a71badf4bb15ec47b2132aa79766eae0f5e2aa64329fb7cf15ad87fb2c"
     },
     {
       "path": "deploy/cloudflare/lib/wrangler.mjs",
@@ -13809,8 +13809,8 @@
     },
     {
       "path": "deploy/cloudflare/test/migration-plan.test.mjs",
-      "bytes": 13125,
-      "sha256": "8771b0c96a52eab74ef9e7cefbfbb61c21bfdd84ca7f8a3522b40b1c5dfb3a2d"
+      "bytes": 13126,
+      "sha256": "ccc5a9673cc16c1a23460a1a3c5ac4629ff7480af1b6a5fac8dd3d847630c0ea"
     },
     {
       "path": "deploy/cloudflare/test/migration-reviewed-privileges.test.mjs",
@@ -13844,8 +13844,8 @@
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 89883,
-      "sha256": "625c6a72eb35e9b9aa14050b0a306b63bdc422b0a599c2c0c61827cbb7469045"
+      "bytes": 92082,
+      "sha256": "31939a6f078bb23b4c21a7e56f4f5f6285e735b9b39709b2dfee7fca6fd0938f"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
@@ -15724,8 +15724,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 37499,
-      "sha256": "5a06be94e42e7cc08b75131666e556745e494f052af9407f7a5bbbf90640f879"
+      "bytes": 37773,
+      "sha256": "5b356d8b1353358e189addca6f7e20da47b5bb747af8c64156a421a8bd57db67"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -17526,6 +17526,11 @@
       "path": "migrations/179_storefront_product_variants.sql",
       "bytes": 24694,
       "sha256": "623c2354b7880526a54eb370e08fc2473e7235cab07f5226f4418817625987ba"
+    },
+    {
+      "path": "migrations/180_commerce_order_notifications.sql",
+      "bytes": 1562,
+      "sha256": "db3960897cc716701238fff8cb74a56b38050b9587f85d50a74bddc02f4c7616"
     },
     {
       "path": "modules/agent-commerce/README.md",

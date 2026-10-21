@@ -178,7 +178,7 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpe
           <p className="messages-body">{item.body}</p>
           <p className="messages-meta">{formatIsoLocal(item.created_at)} · {item.read_at?'已讀':'未讀'}</p>
           <div className="messages-actions">
-            {action&&(!orderAction||onOrder)&&<button className={orderAction?'btn btn-ghost':'btn btn-primary'} type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
+            {action&&(!orderAction||onOrder)&&<button className="btn btn-primary" type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
             {!item.read_at&&<button className="btn btn-ghost" type="button" disabled={busy[id]} onClick={()=>void markRead(item)}>{busy[id]?'正在標記…':'標為已讀'}</button>}
           </div>
           {problem&&<div className="banner banner-error" role="alert">{problem.message}<div className="messages-actions">
