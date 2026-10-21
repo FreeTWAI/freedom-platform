@@ -22429,13 +22429,13 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.mjs",
-      "bytes": 44903,
-      "sha256": "601055110b094d1147be88a965e5ecc54f1d08d9431ba00dba88bbb6a5e93916"
+      "bytes": 45014,
+      "sha256": "a6309bb4b64aaad4d6a5df7333ab01f0e44971d1d1afb8d36be00239a3abf075"
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 89703,
-      "sha256": "897dea003bba3264f6c6e13970585712b58f2416feee8b322cbdfac64f3e4d76"
+      "bytes": 90630,
+      "sha256": "fd12b272314a71edf6e0c29839461d289bff061a34ea0692e1749488a048a1ad"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",

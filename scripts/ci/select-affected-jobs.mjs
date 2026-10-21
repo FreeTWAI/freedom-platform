@@ -253,12 +253,13 @@ export function decideHandoffDocsProfile(input) {
       }
     }
     // Preserve known ownership/reverse-consumer obligations before selecting the
-    // fixed documentation check. This does not change general context impact.
+    // fixed documentation check. commerce-publication imports the supplier-console
+    // contract, making it a known consumer. General context impact is unchanged.
     const owned = documents.filter(handoffOwner), supplier = owned.some(path => handoffOwner(path) === 'supplier-console');
     const governance = owned.some(path => handoffOwner(path) === 'governance');
     const impact = selectImpact({baseline: input.baseline, candidate: input.candidate, changedPaths: owned});
     if (impact.unknown_paths.length || !sameSet(impact.module_ids,
-      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition'] : []), ...(governance ? ['governance'] : [])])
+      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition', 'commerce-publication'] : []), ...(governance ? ['governance'] : [])])
       || !sameSet(impact.tests, [...new Set([...(supplier ? ['e2e.harness', 'runtime.full', 'runtime.guild-blocks'] : []),
         ...(governance ? ['governance.unit', 'runtime.full'] : [])])])) throw Error();
     return {profile: HANDOFF_DOCS_REASON, reason: HANDOFF_DOCS_REASON};
