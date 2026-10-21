@@ -1102,3 +1102,15 @@ test('distribution copies retain a schema172 reader capability after the flag is
  f.host.observation.schema_ledger=prefix(f.scan,171).ledger;f.host.observation.schema_ledger_digest=compatibilityLedgerDigest(f.host.observation.schema_ledger);
  assert(evaluate(f).issues.some(i=>i.code==='observed_shape_schema_missing'&&i.shape==='media.distribution-photo.asset.v1'));
 });
+
+test('schema173 catalog publications preserve schema172 approval boundaries and reject unknown ledger names',()=>{
+  const f=fixtureAt(173),old=prefix(f.scan,172);
+  assert.equal(f.scan.ledger.at(-1).name,'173_member_shared_skill_books.sql');
+  const result=evaluate(f);assert.equal(result.status,'compatible');assert.deepEqual(result.required_shapes,[]);
+  for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(evaluate(f).issues.some(i=>i.code==='release_schema_unsupported'));
+  const renamed=fixtureAt(173);renamed.scan.ledger.at(-1).name='173_unreviewed.sql';
+  renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert(evaluate(renamed).issues.some(i=>i.code==='schema_unknown'));
+});

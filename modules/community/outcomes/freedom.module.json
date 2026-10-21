@@ -21,7 +21,8 @@
     "tests/runtime/worker-adapter.test.ts",
     "tests/worker/event-highlight-assets.test.ts",
     "apps/portal-web/src/modules/CommunitySkillBooks.tsx",
-    "apps/portal-web/src/modules/SkillBookIntro.tsx"
+    "apps/portal-web/src/modules/SkillBookIntro.tsx",
+    "apps/portal-web/src/modules/SkillBookUsage.tsx"
   ],
   "public_exports": [],
   "dependencies": [

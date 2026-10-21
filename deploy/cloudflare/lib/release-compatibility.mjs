@@ -197,6 +197,8 @@ const FOUNDATION_NAMES = [
   // recognition grants no persistence, partner visibility or public use.
   '171_supply_materials.sql',
   '172_distribution_photos.sql',
+  // Catalog publication only; no new runtime capability or grants.
+  '173_member_shared_skill_books.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
