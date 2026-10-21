@@ -2309,8 +2309,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/CommunitySearch.tsx",
-      "bytes": 11784,
-      "sha256": "ae75df74459014cd4512f6e4c1cb1e5b591b56048ced52ca95c2548fd7f597f2"
+      "bytes": 12640,
+      "sha256": "8ea0d900846f7e29e9806f3d248cb2b303a2f24db4a543ea6b4787c1aab4cd6e"
     },
     {
       "path": "apps/portal-web/src/modules/CommunitySkillBooks.tsx",
@@ -2444,8 +2444,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/FriendsPanel.tsx",
-      "bytes": 6974,
-      "sha256": "d4617b864f586f560d30347d21c1eb7c6a586556dbf59503e7146644eb01ae4a"
+      "bytes": 9745,
+      "sha256": "d16c3d5d8d6fe8b08119c8e2eb5bd1c3f89525a2935ca84d0c4c16a38e13d0e4"
     },
     {
       "path": "apps/portal-web/src/modules/GitHubAuthorFollow.tsx",
@@ -3143,6 +3143,11 @@
       "sha256": "d2ed5b2a2dc504163d4952c9ad8ba8b10239e9b15330db1dfdb6b1512d8a806a"
     },
     {
+      "path": "apps/portal-web/src/modules/community-search-controller.ts",
+      "bytes": 7342,
+      "sha256": "ae6d3ff2d5bc481c4862ed7b0790e93a6481d4cfaab8558ab9bf92fccc52efb8"
+    },
+    {
       "path": "apps/portal-web/src/modules/direct-message-receipts.ts",
       "bytes": 3906,
       "sha256": "0bfe2149c2c7000a0a3e8a4cf06a6f8de937a2cea7df0555d43c0d935ddaa1ca"
@@ -3156,6 +3161,11 @@
       "path": "apps/portal-web/src/modules/freedom.module.json",
       "bytes": 8307,
       "sha256": "0ef9ffda678b6ff4c7f3131eec1a2044a7fc6cc9cfda60a940b486328d1c43fc"
+    },
+    {
+      "path": "apps/portal-web/src/modules/friends-directory-controller.ts",
+      "bytes": 8377,
+      "sha256": "3dc0ba180114ec740aaaf4c87a6674ca64b9c9a28da588bc966b71b3bdb44eef"
     },
     {
       "path": "apps/portal-web/src/modules/github-connect-help.ts",
@@ -19694,8 +19704,8 @@
     },
     {
       "path": "modules/community-search/freedom.module.json",
-      "bytes": 2689,
-      "sha256": "648b957041e5e9d0d551c54c8524ceda7aa74cea1efb2f890601aa81740a90c6"
+      "bytes": 2866,
+      "sha256": "bd270336201536c825159191fd0bb37213f9c5373055a34844a9e0b87828c70c"
     },
     {
       "path": "modules/development/freedom.module.json",
@@ -19976,6 +19986,11 @@
       "path": "modules/identity-membership/totp.ts",
       "bytes": 12019,
       "sha256": "eee19255c288cf2cba623ee84bc42ca69e8ec417d0dcbfb7c98493468867804c"
+    },
+    {
+      "path": "modules/identity-membership/friends-directory/freedom.module.json",
+      "bytes": 807,
+      "sha256": "e3660830b23c0a4bb9e0efdc1b914a5855ba5c5c386fec5892a2159ecce1e0ca"
     },
     {
       "path": "modules/identity-membership/squads/freedom.module.json",
@@ -22403,6 +22418,11 @@
       "sha256": "aa2aa3b6c9450d106c91a819f8986ca244fcc276bb9b36f52c7bb48194029532"
     },
     {
+      "path": "tests/e2e/community-search-interaction.spec.ts",
+      "bytes": 9733,
+      "sha256": "81345071ccc09c28b1b8ac8c3aa42b77151041e80b8c67bf3da6efd5838e6511"
+    },
+    {
       "path": "tests/e2e/community-search.spec.ts",
       "bytes": 18904,
       "sha256": "3e6000b6ba1ca6fe73c2cc88d6b927af15156aaff787c7a2f449dfd8a797fbbc"
@@ -22506,6 +22526,11 @@
       "path": "tests/e2e/freedom.module.json",
       "bytes": 1793,
       "sha256": "7b717e629d95b06f7f1d11b70a5df649462e47737c82a17adb31c51b76a3c889"
+    },
+    {
+      "path": "tests/e2e/friends-directory-interaction.spec.ts",
+      "bytes": 10213,
+      "sha256": "fd5f4e25d75625d0b2ab2d8a2577c5346ac4033e7830962cf6b993cbc26f5010"
     },
     {
       "path": "tests/e2e/game-console.spec.ts",
@@ -23708,6 +23733,11 @@
       "sha256": "d66677877fca573ca3b381cdf0eb6c6951e7a3e1c3f6bd8bbea95fe7b3eddad5"
     },
     {
+      "path": "tests/runtime/community-search-controller.test.ts",
+      "bytes": 14216,
+      "sha256": "3582a6f3645fa81a29e038af741e1a104e251536931d5db401231bb4f44c894a"
+    },
+    {
       "path": "tests/runtime/community-search.test.ts",
       "bytes": 42224,
       "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
@@ -23981,6 +24011,11 @@
       "path": "tests/runtime/freetwai-transfer.test.ts",
       "bytes": 15057,
       "sha256": "6799ef8df9f7bb6bce2d50c36f4a2376283b3094dd3e8b61c07ede240af8584d"
+    },
+    {
+      "path": "tests/runtime/friends-directory-controller.test.ts",
+      "bytes": 14127,
+      "sha256": "f6d58e2d75cdb3b9758cb0dccb69c88af9794ce5424828c018bc70e7c706051b"
     },
     {
       "path": "tests/runtime/friends-session-clock.test.ts",
