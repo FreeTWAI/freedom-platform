@@ -23394,8 +23394,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-materials.spec.ts",
-      "bytes": 75974,
-      "sha256": "6160d904c140e72b4195e244d9f8578c762f2ce5ed27fd48a06c705f2152e63c"
+      "bytes": 76276,
+      "sha256": "464f497a5f896ab1d918a8e21488fb4d3f5b713761a6b1de74bcd2844eee0ee4"
     },
     {
       "path": "tests/e2e/supplier-console-navigation.spec.ts",
