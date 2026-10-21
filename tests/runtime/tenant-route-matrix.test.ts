@@ -53,7 +53,7 @@ const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:tr
 
 const checkoutApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]}});
 
-const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/(?:\*|:n)$/.test(path);
+const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/:n(?:\/\*)?$/.test(path);
 const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
 function isOfferOrDistributionPhotoPath(path: string) {
   return path.includes('/product-groups')||isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
@@ -225,11 +225,11 @@ const routeTable: Record<string, string> = {
   'GET /shops/:slug/about': 'global',
   'GET /shops/:slug/policies/:kind': 'global',
   'GET /shops/:slug/policies/:kind/v/:version_id': 'global',
-  'ALL /shops/:slug/media/:revision/:sku/*': 'middleware',
+  'ALL /shops/:slug/media/:revision/:sku/:n/*': 'middleware',
   'GET /shops/:slug/media/:revision/:sku/:n': 'global',
   'HEAD /shops/:slug/media/:revision/:sku/:n': 'global',
-  'GET /shops/:slug/media/:revision/:sku/*': 'global',
-  'HEAD /shops/:slug/media/:revision/:sku/*': 'global',
+  'GET /shops/:slug/media/:revision/:sku/:n/*': 'global',
+  'HEAD /shops/:slug/media/:revision/:sku/:n/*': 'global',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'middleware',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'middleware',
