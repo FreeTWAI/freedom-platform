@@ -12,7 +12,8 @@ export function variantCardDetail(store:PublicStoreProjection,sku:string,catalog
 }
 export function featuredGroupSkus(skus:readonly string[],catalog:RenderCatalog){return [...new Set(skus.flatMap(sku=>{const g=catalog.document.groups.find(g=>g.members.some(m=>m.sku===sku));return g?[g.default_sku]:[];}))];}
 function target(g:RenderVariantGroup,selected:string,axis:number,value:string,availability:RenderCatalog['availability']){
- const current=g.members.find(m=>m.sku===selected)!,candidates=g.members.filter(m=>m.value_keys[axis]===value&&(axis===0||m.value_keys[0]===current.value_keys[0]));
+ const current=g.members.find(m=>m.sku===selected)!;if(current.value_keys[axis]===value)return current;
+ const candidates=g.members.filter(m=>m.value_keys[axis]===value&&(axis===0||m.value_keys[0]===current.value_keys[0]));
  const compatible=candidates.find(m=>m.value_keys.every((v,n)=>n===axis||v===current.value_keys[n]));
  return (compatible&&(!availability||availability.get(compatible.sku)==='available')?compatible:undefined)??candidates.find(m=>availability?.get(m.sku)==='available')??candidates[0];
 }
