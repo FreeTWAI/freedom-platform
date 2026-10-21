@@ -13,6 +13,8 @@ import {InlineVideo} from './InlineVideo';
 import {SocialPostShare} from './SocialPostShare';
 import {youtubeLinkHint, youtubeLinkKind} from './short-video-embed';
 import './SocialZone.css';
+// Keep styles eager so a failed CSS preload cannot poison the optional module import.
+import './SocialPostOptimizer.css';
 import {prepareSocialImage} from './social-image';
 import {socialPostJobForSession} from '../social-post-task';
 import {newTextHistory,recordText,breakTextGroup,undoText,redoText} from './text-edit-history';

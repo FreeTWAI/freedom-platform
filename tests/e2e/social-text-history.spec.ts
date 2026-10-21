@@ -1,10 +1,13 @@
 import {test,expect,type Page} from './fixtures.js';
 import {signOut} from './navigation.js';
+import {randomUUID} from 'node:crypto';
+import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
+import {hashPassword} from '../../modules/identity-membership/service.js';
 
-async function composer(page:Page){
+async function composer(page:Page,email='maker@local.test'){
   await page.goto('/');
-  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
-  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
+  await page.getByLabel('電子郵件',{exact:true}).fill(email);
+  await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();
   return page.getByRole('dialog',{name:'建立貼文',exact:true});
@@ -42,8 +45,12 @@ test('optimizer loads on demand, failed download retains editable history and ex
   await dialog.getByRole('button',{name:'重做',exact:true}).click();await expect(area).toHaveValue('工具失敗也要保留的修改');
 });
 
-test('unknown publication locks history, retry confirms the original command and clears history after acknowledgement',async({page})=>{
-  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true});
+test('unknown publication locks history, retry confirms the original command and clears history after acknowledgement',async({page,e2eAuthPool})=>{
+  const id=randomUUID(),email=`social-history-${id}@example.test`;
+  // Publishing must not consume the shared maker account's daily posting quota.
+  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    VALUES($1,$2,$3,'貼文歷程測試會員',$4,$5,false)`,[id,DEMO_COMMUNITY,email,hashPassword(DEMO_PASSWORD),randomUUID()]);
+  const dialog=await composer(page,email),area=dialog.getByLabel('貼文內容',{exact:true});
   await area.fill('本機驗證：發布確認後才清除草稿歷程');
   await page.route('**/api/v1/social-posts/notes',route=>route.abort('failed'),{times:1});
   await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();

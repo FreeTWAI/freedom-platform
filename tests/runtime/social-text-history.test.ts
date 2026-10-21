@@ -46,3 +46,21 @@ test('optimizer retry admits only its same-origin JavaScript chunk with bounded 
   for(const attempt of [0,4,1.5])assert.equal(shareModuleRetryUrl(error(origin+path),origin,attempt,'SocialPostOptimizer'),null);
   assert.equal(shareModuleRetryUrl(error(origin+path+'?share-retry=2'),origin,2,'SocialPostOptimizer'),null);
 });
+
+test('optimizer CSS is eager so a stylesheet download cannot reject the deferred JavaScript import',async()=>{
+  const {build}=await import('vite');
+  const result=await build({configFile:'apps/portal-web/vite.config.ts',logLevel:'silent',build:{write:false,manifest:true}});
+  assert(!Array.isArray(result)&&'output' in result);
+  const manifestAsset=result.output.find(asset=>asset.type==='asset'&&asset.fileName==='.vite/manifest.json');
+  assert(manifestAsset?.type==='asset');
+  const manifest=JSON.parse(String(manifestAsset.source)) as Record<string,{file:string;imports?:string[];css?:string[];isDynamicEntry?:boolean}>;
+  const optimizer=manifest['src/modules/SocialPostOptimizer.tsx'];
+  assert(optimizer?.isDynamicEntry,'optimizer JavaScript must stay deferred');
+  assert.deepEqual(optimizer.css??[],[],'the deferred optimizer must not request a separate stylesheet');
+  const eager=new Set<string>();
+  function visit(key:string){if(eager.has(key))return;eager.add(key);for(const dependency of manifest[key].imports??[])visit(dependency);}
+  visit('index.html');
+  assert(!eager.has('src/modules/SocialPostOptimizer.tsx'),'optimizer JavaScript must not enter the initial module graph');
+  const css=new Set([...eager].flatMap(key=>manifest[key].css??[]));
+  assert(result.output.some(asset=>asset.type==='asset'&&css.has(asset.fileName)&&String(asset.source).includes('.social-post-optimizer')),'optimizer styles must be in the initial stylesheet graph');
+});

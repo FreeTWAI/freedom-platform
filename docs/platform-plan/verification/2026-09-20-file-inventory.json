@@ -2059,8 +2059,8 @@
     },
     {
       "path": "apps/portal-web/src/share-module-loader.ts",
-      "bytes": 881,
-      "sha256": "33634e7c1df0a590e0286b3c00085f2e6d6dafd2cc78848f63dc191d5bcaed06"
+      "bytes": 1059,
+      "sha256": "26dff4398dca189c1db6bcc2494203151d8d6f7f0ab9c280fc041bd42cd0c07b"
     },
     {
       "path": "apps/portal-web/src/skill-social.tsx",
@@ -3049,8 +3049,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.tsx",
-      "bytes": 47387,
-      "sha256": "962bdbd848ab0edeea4380532af67f92374b7c7ecf1b777202ecdc9215646e73"
+      "bytes": 50769,
+      "sha256": "6506ba55542d5b327d6e3eba08212f1e602657ab46d888546dc782e88946695d"
     },
     {
       "path": "apps/portal-web/src/modules/SquadInvitations.css",
@@ -3281,6 +3281,11 @@
       "path": "apps/portal-web/src/modules/tenant-workspaces.css",
       "bytes": 1319,
       "sha256": "806bd11ea2c2db54fadabebe7dc8583a9d6bed8bdc7aa1bd22d6c6c87b40962e"
+    },
+    {
+      "path": "apps/portal-web/src/modules/text-edit-history.ts",
+      "bytes": 1529,
+      "sha256": "714d80eb3313a9c26cb4ceef039869424d439858fef192e4910b6ad45d250886"
     },
     {
       "path": "apps/portal-web/src/modules/totp-setup.ts",
@@ -19654,8 +19659,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 2527,
-      "sha256": "40ba190aa184204930d4d1688b7e1219bd30a45da833c825004f391f2c26a1d1"
+      "bytes": 2727,
+      "sha256": "537589118aea6d8bb6941ed58bf4511b4584f6d70c34d912f372abb94907cd82"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -21889,8 +21894,8 @@
     },
     {
       "path": "scripts/generate-guild-blocks.mjs",
-      "bytes": 3393,
-      "sha256": "7f794393c1231ce476fa7f4573295458f77ba95918585900b1612c9be3b9f3f7"
+      "bytes": 3415,
+      "sha256": "52e17c7be465f7e2c927797be8f5ba0c16f27f23e1b65c826467d4e89844cd84"
     },
     {
       "path": "scripts/generate-runtime-text.mjs",
@@ -23061,6 +23066,11 @@
       "path": "tests/e2e/social-post-optimizer.spec.ts",
       "bytes": 8137,
       "sha256": "125537a72529658e3d2a3ac65061f97f62864815127ed7420d7c395405690497"
+    },
+    {
+      "path": "tests/e2e/social-text-history.spec.ts",
+      "bytes": 6854,
+      "sha256": "cd745beffe579ac5a58e08b98c544dc8f8d579bcb295e0163fbe60800ac74623"
     },
     {
       "path": "tests/e2e/social-wall.spec.ts",
@@ -25361,6 +25371,11 @@
       "path": "tests/runtime/social-share.test.ts",
       "bytes": 11199,
       "sha256": "3cbed91e5d65cc9f583b06397f7d7c471ed377d471cb7779792fbab9973a5a6d"
+    },
+    {
+      "path": "tests/runtime/social-text-history.test.ts",
+      "bytes": 4646,
+      "sha256": "2e5a974614e8523eedca95c764cf0d71638ce29e40e2bdbf051ced27172e6c2c"
     },
     {
       "path": "tests/runtime/social-thumbnail-assets.test.ts",
