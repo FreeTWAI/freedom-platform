@@ -22529,8 +22529,8 @@
     },
     {
       "path": "tests/e2e/guild-alias.spec.ts",
-      "bytes": 19563,
-      "sha256": "35a9681db8759e70bf771b4a0d442bbd2f7ae82619c2667a843a74bb35f91f9c"
+      "bytes": 19856,
+      "sha256": "2b5780557fd512e2ab83671a233d7d679829883c8a1da531a9d1b1513f688b9c"
     },
     {
       "path": "tests/e2e/guild-block-composition.spec.ts",
