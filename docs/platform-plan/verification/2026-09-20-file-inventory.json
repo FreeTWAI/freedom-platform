@@ -13814,8 +13814,8 @@
     },
     {
       "path": "deploy/cloudflare/test/media-wrangler.test.mjs",
-      "bytes": 20919,
-      "sha256": "672a7990cdb8fc12662b4e91dacfbb605cfa3c013231e9be84ea1a9e5ef1d5fc"
+      "bytes": 20918,
+      "sha256": "89e6cffaa065a115bee558092f06f5e6719f68447979588d00988778c27b0861"
     },
     {
       "path": "deploy/cloudflare/test/migration-fixtures.mjs",
@@ -18714,8 +18714,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/categories/Editor.tsx",
-      "bytes": 13613,
-      "sha256": "8feea2de0c05f7d78d092eaa5573b6710edc34fead6cc2a1e91a6d0eb4da409b"
+      "bytes": 13688,
+      "sha256": "30427b88e28becb25e01abba0b9084f60b55ef58d2e823cd20466ee8bfecf216"
     },
     {
       "path": "modules/agent-commerce/storefront/categories/commands.ts",
@@ -23539,8 +23539,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
-      "bytes": 65483,
-      "sha256": "4df789c10a944519243d7b897b06e02c026a52cfb1b5093a0811fce2964f0c0d"
+      "bytes": 66264,
+      "sha256": "add3d34133a2477e77879c5d1546ff0b9827a309c411d20060d5a7f2f6816684"
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
@@ -26139,8 +26139,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 145087,
-      "sha256": "c43a2a973902e7e97c0bc63f0372df96f53fcdadf18b8347a7472621c3f49ef1"
+      "bytes": 145113,
+      "sha256": "75cbb605079776820eb2b38339eba6f7fe0dc70daa95e2c6043a3b4fd6658cad"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",
@@ -26194,8 +26194,8 @@
     },
     {
       "path": "tests/runtime/worker-adapter.test.ts",
-      "bytes": 57867,
-      "sha256": "868cc4010a826ab97f62b850cae9d0d15245c0e525d5a4d1488011e6858809d6"
+      "bytes": 57866,
+      "sha256": "104012c7c63e8e18be87d4a0a70cfc13a7ab8d70a384f81abe57c1c2b152e099"
     },
     {
       "path": "tests/runtime/worker-private-ai-ingest.test.ts",
