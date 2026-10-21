@@ -13710,7 +13710,7 @@
     {
       "path": "deploy/cloudflare/sql/20-runtime-grants.psql",
       "bytes": 28128,
-      "sha256": "a72ae1bef6f5e9467eb7ed390ada8bd03ef0562da7da1553e642046ce2dfc15d"
+      "sha256": "332913b40b2107c904ef337ad76cf7cf4dd1be1edf933c59395f739f7ec79c39"
     },
     {
       "path": "deploy/cloudflare/sql/30-verify-readonly.psql",
@@ -25744,8 +25744,8 @@
     },
     {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
-      "bytes": 16796,
-      "sha256": "5daeb42867c78d2932ff131cc091ea9c81fab2c6b669081f80fb1db8ba9aebd7"
+      "bytes": 17977,
+      "sha256": "5f6aae1fbc949b88670b347dbeb2ae0e51a8a5f062c97eadc05c8d70a4161f90"
     },
     {
       "path": "tests/runtime/storefront-order-pages.test.ts",
@@ -25929,8 +25929,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 142014,
-      "sha256": "3fa35b62d75e69a98f250ed1836dbe7ae668fac68e4b2b804940b644382ef5e3"
+      "bytes": 142025,
+      "sha256": "439c641888c179fc2616f38e902d4fd83b8183a7509f26da738869ea4e0a3b70"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",

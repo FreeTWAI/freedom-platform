@@ -355,7 +355,6 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs') AND c.relkind='r'
 \gexec
 -- END STOREFRONT SELLER POLICY GRANTS
-COMMIT;
 
 -- BEGIN STOREFRONT GALLERY GRANTS
 SELECT format($authorization$
@@ -387,3 +386,4 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('commerce_product_groups','commerce_product_gallery_photos','commerce_publication_galleries','commerce_publication_gallery_refs','commerce_product_group_members') AND c.relkind='r'
 \gexec
 -- END STOREFRONT GALLERY GRANTS
+COMMIT;
