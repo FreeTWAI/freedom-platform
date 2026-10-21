@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { PortalClient } from '../api';
+import { ApiError, type PortalClient } from '../api';
 import type { SessionPayload } from '../types';
 import { formatIsoLocal, hoursFromNowLocalInput, localInputToIso } from '../format';
 import { useModuleMutation } from './shared';
 import {announceInboxChange} from './member-inbox';
-import {uploadEventBanner,uploadEventVideo} from './event-banner-client';
+import {prepareEventMedia,sendEventMedia,readEventMedia,currentMediaEvent,type EventMediaCommand} from './event-banner-client';
 import {prepareSocialImage} from './social-image';
 import {EventCalendar} from './EventCalendar';
 import {EventParticipation,EventParticipationOrganizer} from './EventParticipation';
@@ -18,6 +18,7 @@ export type CommunityEvent = {
   capacity:number|null; state:'pending'|'published'|'rejected'|'cancelled'; aggregate_version:number;
   attending_count:number; my_rsvp:'going'|'cancelled'|null;guild_key:string|null;review_guild_key:string|null;can_review:boolean;review_reason:string|null;
 };
+type MediaSave={result:CommunityEvent;banner:File|null;video:File|null;editing:boolean;command:EventMediaCommand|null};
 type Guild={guild_key:string;name:string;membership?:{state:string;member_tier?:'intern'|'full'}|null};
 const INTERN_WRITE='實習成員可以閱讀公會內容、在公會聊天室聊天；請會長把你設為正式成員後再發布或編輯。';
 const internExchange=(value:{event_kind:string;guild_key:string|null},guilds:Guild[])=>value.event_kind==='guild_skill_exchange'&&guilds.some(guild=>guild.guild_key===value.guild_key&&guild.membership?.state==='active'&&guild.membership.member_tier==='intern');
@@ -26,13 +27,14 @@ type Referral={user_id:string;member_name:string;registrations:number;clicks:num
 type ReferralPage={items:Referral[];total:number;next_offset:number|null};
 type ReferralView=ReferralPage&{loading:boolean;error:string;request_offset:number};
 export type EventDraft = {title:string;description:string;starts_at:string;ends_at:string;mode:CommunityEvent['mode'];event_kind:CommunityEvent['event_kind'];topic:string;location:string;online_url:string;capacity:string;guild_key:string;visibility:CommunityEvent['visibility']};
+export type EventPayload=Omit<EventDraft,'topic'|'online_url'|'capacity'|'guild_key'>&{topic:string|null;online_url:string|null;capacity:number|null;guild_key:string|null};
 export const blankEvent=():EventDraft=>({title:'',description:'',starts_at:hoursFromNowLocalInput(24),ends_at:hoursFromNowLocalInput(25),mode:'online',event_kind:'other',topic:'',location:'',online_url:'',capacity:'',guild_key:'',visibility:'workshop'});
 function localTime(iso:string) {
   const date=new Date(iso), local=new Date(date.getTime()-date.getTimezoneOffset()*60_000);
   return local.toISOString().slice(0,16);
 }
 const fromEvent=(item:CommunityEvent):EventDraft=>({title:item.title,description:item.description,starts_at:localTime(item.starts_at),ends_at:localTime(item.ends_at),mode:item.mode,event_kind:item.event_kind??'other',topic:item.topic??'',location:item.location,online_url:item.online_url??'',capacity:item.capacity===null?'':String(item.capacity),guild_key:item.guild_key??'',visibility:item.visibility??'workshop'});
-export const eventPayload=(value:EventDraft)=>({...value,starts_at:localInputToIso(value.starts_at),ends_at:localInputToIso(value.ends_at),topic:value.topic.trim()||null,online_url:value.online_url.trim()||null,capacity:value.capacity===''?null:Number(value.capacity),guild_key:value.guild_key||null});
+export const eventPayload=(value:EventDraft):EventPayload=>({...value,starts_at:localInputToIso(value.starts_at),ends_at:localInputToIso(value.ends_at),topic:value.topic.trim()||null,online_url:value.online_url.trim()||null,capacity:value.capacity===''?null:Number(value.capacity),guild_key:value.guild_key||null});
 const modeLabel:Record<CommunityEvent['mode'],string>={online:'線上',in_person:'實體',hybrid:'線上與實體'};
 const kindLabel:Record<CommunityEvent['event_kind'],string>={reading_group:'線上讀書會',meetup:'聚會',guild_skill_exchange:'公會技能交流',other:'其他活動'};
 const reviewerFor=(value:EventDraft,guilds:Guild[])=>value.event_kind==='guild_skill_exchange'
@@ -90,11 +92,13 @@ function EventDraftPreview({value,banner,existingBanner}:{value:EventDraft;banne
 
 export function EventsPanel({client,session,locationHash,registerLeave,onList,participationEnabled=false}:{client:PortalClient;session:SessionPayload;locationHash:string;registerLeave:(guard:(()=>boolean)|null)=>void;onList:()=>void;participationEnabled?:boolean}) {
   const [items,setItems]=useState<CommunityEvent[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
+  const loadRequest=useRef(0);
   const [creating,setCreating]=useState(false),[draft,setDraft]=useState<EventDraft>(blankEvent);
   const draftBaseline=useRef(draft);
   const [editing,setEditing]=useState<string|null>(null),[editDraft,setEditDraft]=useState<EventDraft>(blankEvent);
   const [bannerFile,setBannerFile]=useState<File|null>(null),[editBannerFile,setEditBannerFile]=useState<File|null>(null),[videoFile,setVideoFile]=useState<File|null>(null),[editVideoFile,setEditVideoFile]=useState<File|null>(null),[bannerError,setBannerError]=useState(''),[saving,setSaving]=useState(false);
-  const [preparingBanner,setPreparingBanner]=useState(false);
+  const [preparingBanner,setPreparingBanner]=useState(false),[mediaUnknown,setMediaUnknown]=useState(false);
+  const mediaSave=useRef<MediaSave|null>(null);
   const bannerSelection=useRef(0);
   useEffect(()=>()=>{bannerSelection.current++;},[client,session.user.user_id]);
   function cancelBannerPreparation(){bannerSelection.current++;setPreparingBanner(false);setBannerError('');}
@@ -110,7 +114,7 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
   const selectedId=/^#events\/([0-9a-f-]{36})(?:\?.*)?$/.exec(locationHash)?.[1]??(!locationHash?/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1]??null:null);
   const [selectedItem,setSelectedItem]=useState<CommunityEvent|null>(null);
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client);
-  const saveAttempt=useRef<{path:string;body:ReturnType<typeof eventPayload>;version?:number;editing:boolean}|null>(null);
+  const saveAttempt=useRef<{path:string;body:EventPayload;version?:number;editing:boolean}|null>(null);
   const recoveringSave=lastFailureUnknown&&saveAttempt.current!==null;
   // A lost response recovers the exact original command, including its version.
   // Known rejections allow the member to correct the draft before submitting.
@@ -127,23 +131,31 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
   const leaveGuard=useRef<()=>boolean>(()=>true);
   leaveGuard.current=()=>{
     if(saving||busy){setNotice('正在處理活動，請等候完成後再離開。');return false;}
+    if(mediaUnknown){setNotice('媒體保存結果尚未確認，請先確認原操作後再離開。');return false;}
     if(lastFailureUnknown){setNotice('尚未確認原操作的結果，請先重試原操作後再離開。');return false;}
     return !dirty||window.confirm('活動有尚未儲存的內容。要捨棄變更並離開嗎？');
   };
   const acceptedLocation=useRef(locationHash);
   useEffect(()=>{if(acceptedLocation.current!==locationHash){acceptedLocation.current=locationHash;discardDrafts();}},[locationHash]);
-  const unloading=useRef(false);unloading.current=dirty||saving||busy||preparingBanner||lastFailureUnknown;
+  const unloading=useRef(false);unloading.current=dirty||saving||busy||preparingBanner||lastFailureUnknown||mediaUnknown;
   useEffect(()=>{
     registerLeave(()=>leaveGuard.current());
     const beforeUnload=(event:BeforeUnloadEvent)=>{if(unloading.current){event.preventDefault();event.returnValue='';}};
     window.addEventListener('beforeunload',beforeUnload);
     return()=>{registerLeave(null);window.removeEventListener('beforeunload',beforeUnload);};
   },[registerLeave]);
-  const load=useCallback(async()=>{setLoading(true);setLoadError('');try{const [events,directory,announcements]=await Promise.all([
-    client.get<{items:CommunityEvent[]}>('/events'),client.get<{items:Guild[]}>('/guilds/directory'),client.get<{items:Bulletin[]}>('/events/bulletins')]);
-    setItems(events.items);setGuilds(directory.items);setBulletins(announcements.items);
-  }catch(cause){setLoadError(cause instanceof Error?cause.message:'活動暫時無法載入。');}finally{setLoading(false);}},[client]);
-  useEffect(()=>{void load();},[load]);
+  const load=useCallback(async()=>{
+    const token=++loadRequest.current,generation=client.sessionGeneration;
+    const current=()=>loadRequest.current===token&&client.sessionGeneration===generation;
+    setLoading(true);setLoadError('');
+    try{const [events,directory,announcements]=await Promise.all([
+      client.get<{items:CommunityEvent[]}>('/events'),client.get<{items:Guild[]}>('/guilds/directory'),client.get<{items:Bulletin[]}>('/events/bulletins')]);
+      if(!current())return;
+      setItems(events.items);setGuilds(directory.items);setBulletins(announcements.items);
+    }catch(cause){if(current())setLoadError(cause instanceof Error?cause.message:'活動暫時無法載入。');}
+    finally{if(current())setLoading(false);}
+  },[client]);
+  useEffect(()=>{void load();return()=>{loadRequest.current++;};},[load]);
   useEffect(()=>{if(!selectedId||items.some(item=>item.event_id===selectedId)){setSelectedItem(null);return;}let active=true;void client.get<CommunityEvent>(`/events/${selectedId}`).then(item=>{if(active)setSelectedItem(item)}).catch(()=>{if(active)setSelectedItem(null)});return()=>{active=false}},[client,items,selectedId]);
   useEffect(()=>{if(selectedId)referralCode(selectedId)},[selectedId]);
   const resumedEvent=useRef<string|null>(null);
@@ -171,43 +183,82 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
     }
     if(editingFile)setEditVideoFile(file);else setVideoFile(file);
   }
+  function publishEvent(result:CommunityEvent){
+    // A read started before this confirmed write must not replace its version.
+    loadRequest.current++;setLoading(false);setLoadError('');
+    setItems(current=>current.some(item=>item.event_id===result.event_id)
+      ?current.map(item=>item.event_id===result.event_id?result:item):[result,...current]);
+  }
+  async function finishMedia(pending:MediaSave):Promise<boolean>{
+    try{
+      for(const kind of ['banner','video'] as const){
+        const file=pending[kind];if(!file)continue;
+        pending.command??=await prepareEventMedia(client,pending.result,file,kind);
+        const receipt=await sendEventMedia(client,pending.command);
+        pending.result=currentMediaEvent(pending.result,receipt);
+        pending[kind]=null;pending.command=null;
+      }
+    }catch(cause){
+      const unknown=Boolean(pending.command&&cause instanceof ApiError&&cause.network);
+      mediaSave.current=unknown?pending:null;setMediaUnknown(unknown);
+      publishEvent(pending.result);
+      setBannerError(unknown?'媒體保存結果尚未確認，請先確認原操作。':cause instanceof Error?cause.message:'媒體未能保存，請重試。');
+      setCreating(false);setEditing(pending.result.event_id);setEditDraft(fromEvent(pending.result));
+      setBannerFile(null);setVideoFile(null);setEditBannerFile(pending.banner);setEditVideoFile(pending.video);
+      // Unknown outcomes reconcile the exact command before any further write.
+      if(!unknown)void load();
+      return unknown;
+    }
+    mediaSave.current=null;setMediaUnknown(false);publishEvent(pending.result);
+    discardDrafts();setNotice(pending.editing?'活動已更新，仍待審核。':'活動已送出審核，核准後開放報名。');
+    announceInboxChange();window.dispatchEvent(new Event('freedom-world-facts-updated'));void load();
+    return false;
+  }
+  async function reconcileMedia(){
+    const pending=mediaSave.current;if(!pending?.command)return;
+    setSaving(true);setBannerError('');
+    try{
+      // If this read fails, keep the command and lock. The member can retry
+      // reconciliation without issuing metadata or a different upload command.
+      pending.result=await readEventMedia(client,pending.command);
+      publishEvent(pending.result);
+      await finishMedia(pending);
+    }catch(cause){setBannerError('尚未確認媒體保存結果，請重試確認保存。');}
+    finally{setSaving(false);}
+  }
   async function save(event:FormEvent) {
-    event.preventDefault();if(saving||busy||preparingBanner||bannerError)return;
+    event.preventDefault();if(saving||busy||mediaUnknown||preparingBanner||bannerError)return;
     if(lastFailureUnknown&&!saveAttempt.current){setNotice('尚未確認原操作的結果，請先重試原操作。');return;}
     setSaving(true);setNotice('');
-    const current=items.find(item=>item.event_id===editing);
+    const current=original;
     const attempt=saveAttempt.current??(current
       ?{path:`/events/${current.event_id}/update`,body:eventPayload(editDraft),version:current.aggregate_version,editing:true}
       :{path:'/events',body:eventPayload(draft),editing:false});
     saveAttempt.current=attempt;
     try{
-      let result=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version);
-      if(!result)return;
+      const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version);
+      if(!saved)return;
       saveAttempt.current=null;
-      let pendingBanner=attempt.editing?editBannerFile:bannerFile,pendingVideo=attempt.editing?editVideoFile:videoFile;
-      try{
-        if(pendingBanner){result=await uploadEventBanner(client,result,pendingBanner);pendingBanner=null;}
-        if(pendingVideo){result=await uploadEventVideo(client,result,pendingVideo);pendingVideo=null;}
-      }catch(cause){setBannerError(cause instanceof Error?cause.message:'媒體未能保存；活動已送出，請在活動卡片重試。');setCreating(false);setEditing(result.event_id);setEditDraft(fromEvent(result));setEditBannerFile(pendingBanner);setEditVideoFile(pendingVideo);await load();return;}
-      discardDrafts();setNotice(attempt.editing?'活動已更新，仍待審核。':'活動已送出審核，核准後開放報名。');announceInboxChange();window.dispatchEvent(new Event('freedom-world-facts-updated'));await load();
+      const pending:MediaSave={result:saved,banner:attempt.editing?editBannerFile:bannerFile,video:attempt.editing?editVideoFile:videoFile,editing:attempt.editing,command:null};
+      if(await finishMedia(pending))await reconcileMedia();
     }finally{setSaving(false);}
   }
   async function removeBanner(item:CommunityEvent){
-    if(saving||busy||recoveringSave){setNotice('請先完成或重試原活動儲存操作。');return;}
+    if(saving||busy||recoveringSave||mediaUnknown){setNotice('請先完成或重試原活動儲存操作。');return;}
     setBannerError('');setSaving(true);
     try{await client.post(`/events/${item.event_id}/banner/remove`,{},{ifMatch:item.aggregate_version});await load();setNotice('Banner 已移除。');}
     catch(cause){setBannerError(cause instanceof Error?cause.message:'Banner 未能移除。');}
     finally{setSaving(false);}
   }
   async function removeVideo(item:CommunityEvent){
-    if(saving||busy||recoveringSave){setNotice('請先完成或重試原活動儲存操作。');return;}
+    if(saving||busy||recoveringSave||mediaUnknown){setNotice('請先完成或重試原活動儲存操作。');return;}
     setBannerError('');setSaving(true);
     try{await client.post(`/events/${item.event_id}/video/remove`,{},{ifMatch:item.aggregate_version});await load();setNotice('影片已移除。');}
     catch(cause){setBannerError(cause instanceof Error?cause.message:'影片未能移除。');}
     finally{setSaving(false);}
   }
   async function action(item:CommunityEvent,kind:'cancel'|'rsvp',going=false) {
-    if(saving||busy||recoveringSave){setNotice('請先完成或重試原活動儲存操作。');return;}
+    if(saving||busy||recoveringSave||mediaUnknown){setNotice('請先完成或重試原活動儲存操作。');return;}
     setNotice('');
     const code=kind==='rsvp'&&going?referralCode(item.event_id):null;
     if(kind==='rsvp'&&going&&item.visibility==='referral'&&!code){setNotice('請從會員分享的活動連結進入，才能報名這場活動。');return;}
@@ -215,12 +266,13 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
     if(result){setNotice(kind==='cancel'?'活動已取消。':going?'報名完成。':'已取消報名。');await load();}
   }
   async function review(item:CommunityEvent,decision:'approve'|'reject'){
-    if(saving||busy||recoveringSave){setNotice('請先完成或重試原活動儲存操作。');return;}
+    if(saving||busy||recoveringSave||mediaUnknown){setNotice('請先完成或重試原活動儲存操作。');return;}
     const reason=reviewReason.trim();if(!reason){setNotice('請填寫審核理由。');return;}
     const result=await mutate<CommunityEvent>(`/events/${item.event_id}/review`,{decision,reason},item.aggregate_version);
     if(result){setReviewing(null);setReviewReason('');setNotice(decision==='approve'?'活動已核准並公告。':'活動已退回並通知發佈者。');announceInboxChange();window.dispatchEvent(new Event('freedom-world-facts-updated'));await load();}
   }
   async function share(item:CommunityEvent){
+    if(saving||busy||mediaUnknown)return;
     try{
       const result=await client.post<{path:string}>('/promotion/links',{kind:'event',target:item.event_id});
       const url=`${window.location.origin}${result.path}`;
@@ -261,21 +313,21 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
       {item.topic&&<p>主題：{item.topic}</p>}<p className="multiline-text">{item.description}</p><dl className="experience-meta"><div><dt>時間</dt><dd>{formatIsoLocal(item.starts_at)} ～ {formatIsoLocal(item.ends_at)}（依裝置時區）</dd></div><div><dt>地點</dt><dd>{link?<a href={link} target="_blank" rel="noopener noreferrer">開啟參與連結 ↗</a>:item.location}</dd></div>{onlineLink&&<div><dt>線上參與</dt><dd><a href={onlineLink} target="_blank" rel="noopener noreferrer">開啟線上連結 ↗</a></dd></div>}<div><dt>發佈者</dt><dd>{item.organizer_name}（會員活動）</dd></div></dl>
       {item.state==='rejected'&&item.review_reason&&<p className="banner banner-info">審核理由：<span className="multiline-text">{item.review_reason}</span></p>}
       {exchangeBlocked&&<p className="field-hint">{INTERN_WRITE}</p>}
-      <div className="experience-actions">{canJoin&&<button type="button" className={item.my_rsvp==='going'?'btn btn-ghost':'btn btn-primary'} disabled={busy||saving||recoveringSave||(item.my_rsvp!=='going'&&item.capacity!==null&&item.attending_count>=item.capacity)} onClick={()=>void action(item,'rsvp',item.my_rsvp!=='going')}>{item.my_rsvp==='going'?'取消報名':item.capacity!==null&&item.attending_count>=item.capacity?'名額已滿':'我要參加'}</button>}{item.state==='published'&&<a className="btn btn-ghost" href={`#events/${item.event_id}`}>活動專頁</a>}{item.state==='published'&&!ended&&<button type="button" className="btn btn-ghost" onClick={()=>void share(item)}>分享活動</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={event=>{attendeesTrigger.current=event.currentTarget;setAttendeesFor({event_id:item.event_id,title:item.title});}}>報名名單</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={()=>void report(item)}>分享報名統計</button>}{mine&&item.state==='pending'&&!started&&<button type="button" className="btn btn-ghost" disabled={busy||saving||exchangeBlocked} onClick={()=>{if(!leaveGuard.current())return;discardDrafts();setEditing(item.event_id);setEditDraft(fromEvent(item));}}>編輯草稿</button>}{mine&&(item.state==='pending'||item.state==='published')&&<button type="button" className="btn btn-ghost" disabled={busy||saving||recoveringSave||exchangeBlocked} onClick={()=>void action(item,'cancel')}>取消活動</button>}{item.can_review&&<button type="button" className="btn btn-primary" disabled={busy||saving||recoveringSave} onClick={()=>{setReviewing(item.event_id);setReviewReason('');}}>審核活動</button>}</div>
+      <div className="experience-actions">{canJoin&&<button type="button" className={item.my_rsvp==='going'?'btn btn-ghost':'btn btn-primary'} disabled={busy||saving||recoveringSave||mediaUnknown||(item.my_rsvp!=='going'&&item.capacity!==null&&item.attending_count>=item.capacity)} onClick={()=>void action(item,'rsvp',item.my_rsvp!=='going')}>{item.my_rsvp==='going'?'取消報名':item.capacity!==null&&item.attending_count>=item.capacity?'名額已滿':'我要參加'}</button>}{item.state==='published'&&<a className="btn btn-ghost" href={`#events/${item.event_id}`}>活動專頁</a>}{item.state==='published'&&!ended&&<button type="button" className="btn btn-ghost" disabled={saving||busy||mediaUnknown} onClick={()=>void share(item)}>分享活動</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={event=>{attendeesTrigger.current=event.currentTarget;setAttendeesFor({event_id:item.event_id,title:item.title});}}>報名名單</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={()=>void report(item)}>分享報名統計</button>}{mine&&item.state==='pending'&&!started&&<button type="button" className="btn btn-ghost" disabled={busy||saving||recoveringSave||mediaUnknown||exchangeBlocked} onClick={()=>{if(!leaveGuard.current())return;discardDrafts();setEditing(item.event_id);setEditDraft(fromEvent(item));}}>編輯草稿</button>}{mine&&(item.state==='pending'||item.state==='published')&&<button type="button" className="btn btn-ghost" disabled={busy||saving||recoveringSave||mediaUnknown||exchangeBlocked} onClick={()=>void action(item,'cancel')}>取消活動</button>}{item.can_review&&<button type="button" className="btn btn-primary" disabled={busy||saving||recoveringSave||mediaUnknown} onClick={()=>{setReviewing(item.event_id);setReviewReason('');}}>審核活動</button>}</div>
       {shareFor===item.event_id&&shareUrl&&<div className="event-share-link"><label className="field">分享連結<input readOnly value={shareUrl} onFocus={event=>event.target.select()}/><small>推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。</small></label><button type="button" className="btn btn-ghost" onClick={()=>void navigator.clipboard.writeText(shareUrl).then(()=>setNotice('活動專頁連結已複製。')).catch(()=>setNotice('請選取上方連結手動複製。'))}>複製連結</button></div>}
       {referral&&<div className="event-referral-report"><h4>依分享會員統計報名</h4>{referral.error&&<div className="banner banner-error" role="alert">{referral.error}<button type="button" className="btn btn-ghost" onClick={()=>void report(item,referral.request_offset)}>重試</button></div>}{referral.items.length?<ul>{referral.items.map(row=><li key={row.user_id}>{row.member_name}：點擊 {row.clicks}・報名 {row.registrations} 人</li>)}</ul>:!referral.loading&&!referral.error?<p>尚無分享報名紀錄。</p>:null}{referral.loading&&<p role="status">正在讀取分享統計…</p>}{referral.items.length>0&&<p className="field-hint">目前顯示 {referral.items.length} / {referral.total} 位分享會員。</p>}{referral.next_offset!==null&&!referral.loading&&!referral.error&&<button type="button" className="btn btn-ghost" onClick={()=>void report(item,referral.next_offset!)}>載入更多</button>}</div>}
       {participationEnabled&&selectedId===item.event_id&&<EventParticipation client={client} session={session} eventId={item.event_id} eventVersion={item.aggregate_version} rsvpState={item.my_rsvp} referralCode={referralCode(item.event_id)} onChanged={()=>void load()}/>}
       {participationEnabled&&selectedId===item.event_id&&mine&&item.state==='published'&&!started&&!exchangeBlocked&&<EventParticipationOrganizer client={client} session={session} event={item} onChanged={()=>void load()}/>}
-      {editing===item.event_id&&<form className="experience-editor" onSubmit={e=>void save(e)}><EventFields value={editDraft} onChange={setEditDraft} guilds={guilds} guildLocked disabled={saving||busy||lastFailureUnknown}/>{internExchange(editDraft,guilds)&&<p className="field-hint">{INTERN_WRITE}</p>}<label className="field">活動海報（選填）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving||busy||recoveringSave||internExchange(editDraft,guilds)} onChange={e=>void chooseBanner(e.target.files?.[0]??null,true)}/><small>直式、橫式皆可；JPEG、PNG 或 WebP，20 MB 內會自動調整大小。{editBannerFile?` 已選擇 ${editBannerFile.name}`:''}</small></label>{preparingBanner&&<p className="field-hint" role="status">正在處理圖片…</p>}<label className="field">活動影片（選填）<input type="file" accept="video/mp4,video/webm" disabled={saving||busy||recoveringSave||internExchange(editDraft,guilds)} onChange={e=>chooseVideo(e.target.files?.[0]??null,true)}/><small>MP4 或 WebM，20 MiB 以下。{editVideoFile?` 已選擇 ${editVideoFile.name}`:''}</small></label><EventDraftPreview value={editDraft} banner={editBannerFile} existingBanner={item.banner_url}/><div className="experience-actions"><button className="btn btn-primary" disabled={busy||saving||preparingBanner||Boolean(bannerError)||internExchange(editDraft,guilds)}>儲存修改</button>{bannerError&&(editBannerFile||editVideoFile)&&<button type="button" className="btn btn-ghost" onClick={()=>setBannerError('')}>重試保存</button>}{item.banner_url&&<button type="button" className="btn btn-ghost" disabled={saving||busy||recoveringSave||internExchange(editDraft,guilds)} onClick={()=>void removeBanner(item)}>移除海報</button>}{item.video_url&&<button type="button" className="btn btn-ghost" disabled={saving||busy||recoveringSave||internExchange(editDraft,guilds)} onClick={()=>void removeVideo(item)}>移除影片</button>}<button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>{if(leaveGuard.current())discardDrafts();}}>返回</button></div></form>}
-      {reviewing===item.event_id&&<div className="experience-editor"><label className="field">審核理由<textarea required minLength={1} maxLength={500} value={reviewReason} onChange={e=>setReviewReason(e.target.value)}/></label><div className="experience-actions"><button type="button" className="btn btn-primary" disabled={busy||saving||recoveringSave||!reviewReason.trim()} onClick={()=>void review(item,'approve')}>核准並公告</button><button type="button" className="btn btn-ghost" disabled={busy||saving||recoveringSave||!reviewReason.trim()} onClick={()=>void review(item,'reject')}>退回</button><button type="button" className="btn btn-ghost" onClick={()=>setReviewing(null)}>返回</button></div></div>}
+      {editing===item.event_id&&<form className="experience-editor" onSubmit={e=>void save(e)}><EventFields value={editDraft} onChange={setEditDraft} guilds={guilds} guildLocked disabled={saving||busy||lastFailureUnknown||mediaUnknown}/>{internExchange(editDraft,guilds)&&<p className="field-hint">{INTERN_WRITE}</p>}<label className="field">活動海報（選填）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving||busy||recoveringSave||mediaUnknown||internExchange(editDraft,guilds)} onChange={e=>void chooseBanner(e.target.files?.[0]??null,true)}/><small>直式、橫式皆可；JPEG、PNG 或 WebP，20 MB 內會自動調整大小。{editBannerFile?` 已選擇 ${editBannerFile.name}`:''}</small></label>{preparingBanner&&<p className="field-hint" role="status">正在處理圖片…</p>}<label className="field">活動影片（選填）<input type="file" accept="video/mp4,video/webm" disabled={saving||busy||recoveringSave||mediaUnknown||internExchange(editDraft,guilds)} onChange={e=>chooseVideo(e.target.files?.[0]??null,true)}/><small>MP4 或 WebM，20 MiB 以下。{editVideoFile?` 已選擇 ${editVideoFile.name}`:''}</small></label><EventDraftPreview value={editDraft} banner={editBannerFile} existingBanner={item.banner_url}/><div className="experience-actions"><button className="btn btn-primary" disabled={busy||saving||mediaUnknown||preparingBanner||Boolean(bannerError)||internExchange(editDraft,guilds)}>儲存修改</button>{mediaUnknown?<button type="button" className="btn btn-ghost" disabled={saving||busy} onClick={()=>void reconcileMedia()}>重試確認保存</button>:bannerError&&(editBannerFile||editVideoFile)&&<button type="button" className="btn btn-ghost" onClick={()=>setBannerError('')}>重試保存</button>}{item.banner_url&&<button type="button" className="btn btn-ghost" disabled={saving||busy||recoveringSave||mediaUnknown||internExchange(editDraft,guilds)} onClick={()=>void removeBanner(item)}>移除海報</button>}{item.video_url&&<button type="button" className="btn btn-ghost" disabled={saving||busy||recoveringSave||mediaUnknown||internExchange(editDraft,guilds)} onClick={()=>void removeVideo(item)}>移除影片</button>}<button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>{if(leaveGuard.current())discardDrafts();}}>返回</button></div></form>}
+      {reviewing===item.event_id&&<div className="experience-editor"><label className="field">審核理由<textarea required minLength={1} maxLength={500} value={reviewReason} onChange={e=>setReviewReason(e.target.value)}/></label><div className="experience-actions"><button type="button" className="btn btn-primary" disabled={busy||saving||recoveringSave||mediaUnknown||!reviewReason.trim()} onClick={()=>void review(item,'approve')}>核准並公告</button><button type="button" className="btn btn-ghost" disabled={busy||saving||recoveringSave||mediaUnknown||!reviewReason.trim()} onClick={()=>void review(item,'reject')}>退回</button><button type="button" className="btn btn-ghost" onClick={()=>setReviewing(null)}>返回</button></div></div>}
     </article>;
   };
   const selected=selectedId&&(items.find(item=>item.event_id===selectedId)??selectedItem);
   if(selectedId)return <section className="experience-panel stack" aria-label="活動專頁"><div className="experience-actions"><button className="btn btn-ghost" type="button" onClick={onList}>返回活動列表與行事曆</button></div>{selected?render(selected):<p role="status">{loading?'正在載入活動…':'找不到這場活動，或目前無法查看。'}</p>}<EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>{notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}</section>;
   return <section className="experience-panel stack" aria-label="活動發佈區">
     <EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>
-    <div className="experience-intro"><div><p className="eyebrow">MEET / LEARN / BUILD</p><h2>和社群一起碰面、分享、動手做。</h2><p>已登入會員可提交活動。線上由會員與社群營運公會審核，實體及混合形式由活動與空間公會審核；公會技能交流由主辦公會審核，並可設定僅公會內部參與。平台管理員也能審核。核准後開放報名。</p></div><button type="button" className="btn btn-primary" data-guide-anchor="events:submit-event" disabled={saving} onClick={()=>{const open=!creating;if(leaveGuard.current()){discardDrafts();setCreating(open);}}}>＋ 提交活動</button></div>
-    {creating&&<form className="card experience-editor" onSubmit={e=>void save(e)}><h3>提交活動</h3><EventFields value={draft} onChange={setDraft} guilds={guilds} disabled={saving||busy||lastFailureUnknown}/>{internExchange(draft,guilds)&&<p className="field-hint">{INTERN_WRITE}</p>}<label className="field">活動海報（選填）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving||busy||recoveringSave} onChange={e=>void chooseBanner(e.target.files?.[0]??null)}/><small>直式、橫式皆可；JPEG、PNG 或 WebP，20 MB 內會自動調整大小。{bannerFile?` 已選擇 ${bannerFile.name}`:''}</small></label>{preparingBanner&&<p className="field-hint" role="status">正在處理圖片…</p>}<label className="field">活動影片（選填）<input type="file" accept="video/mp4,video/webm" disabled={saving||busy||recoveringSave} onChange={e=>chooseVideo(e.target.files?.[0]??null)}/><small>MP4 或 WebM，20 MiB 以下。{videoFile?` 已選擇 ${videoFile.name}`:''}</small></label><EventDraftPreview value={draft} banner={bannerFile}/><div className="experience-actions"><button className="btn btn-primary" disabled={busy||saving||preparingBanner||Boolean(bannerError)||internExchange(draft,guilds)}>送出審核</button><button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>{if(leaveGuard.current())discardDrafts();}}>返回</button></div></form>}
+    <div className="experience-intro"><div><p className="eyebrow">MEET / LEARN / BUILD</p><h2>和社群一起碰面、分享、動手做。</h2><p>已登入會員可提交活動。線上由會員與社群營運公會審核，實體及混合形式由活動與空間公會審核；公會技能交流由主辦公會審核，並可設定僅公會內部參與。平台管理員也能審核。核准後開放報名。</p></div><button type="button" className="btn btn-primary" data-guide-anchor="events:submit-event" disabled={saving||mediaUnknown} onClick={()=>{const open=!creating;if(leaveGuard.current()){discardDrafts();setCreating(open);}}}>＋ 提交活動</button></div>
+    {creating&&<form className="card experience-editor" onSubmit={e=>void save(e)}><h3>提交活動</h3><EventFields value={draft} onChange={setDraft} guilds={guilds} disabled={saving||busy||lastFailureUnknown||mediaUnknown}/>{internExchange(draft,guilds)&&<p className="field-hint">{INTERN_WRITE}</p>}<label className="field">活動海報（選填）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving||busy||recoveringSave} onChange={e=>void chooseBanner(e.target.files?.[0]??null)}/><small>直式、橫式皆可；JPEG、PNG 或 WebP，20 MB 內會自動調整大小。{bannerFile?` 已選擇 ${bannerFile.name}`:''}</small></label>{preparingBanner&&<p className="field-hint" role="status">正在處理圖片…</p>}<label className="field">活動影片（選填）<input type="file" accept="video/mp4,video/webm" disabled={saving||busy||recoveringSave} onChange={e=>chooseVideo(e.target.files?.[0]??null)}/><small>MP4 或 WebM，20 MiB 以下。{videoFile?` 已選擇 ${videoFile.name}`:''}</small></label><EventDraftPreview value={draft} banner={bannerFile}/><div className="experience-actions"><button className="btn btn-primary" disabled={busy||saving||mediaUnknown||preparingBanner||Boolean(bannerError)||internExchange(draft,guilds)}>送出審核</button><button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>{if(leaveGuard.current())discardDrafts();}}>返回</button></div></form>}
     {notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}{loadError&&<div role="alert" className="banner banner-error">{loadError}<button className="btn btn-ghost" onClick={()=>void load()}>重試</button></div>}
     {loading&&<p role="status">正在載入活動…</p>}
     {!loading&&<>{pending.length>0&&<><div className="experience-heading"><h2>待審核活動</h2><span>{pending.length} 場</span></div><div className="experience-grid">{pending.map(render)}</div></>}

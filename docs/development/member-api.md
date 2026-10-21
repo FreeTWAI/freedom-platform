@@ -655,6 +655,94 @@ Idempotency-Key replays remain available without consuming another slot.
 Five per hour is a provisional value (#199); it is the named constant
 `eventCreateLimit` in `modules/community/events.ts`.
 
+## Event submission departure lifecycle (#790)
+
+The event editor protects departures while an event or its selected media is
+being saved, and while a submission's network outcome remains unknown. An
+unknown submission freezes its original body/version and retries the same
+Idempotency-Key; a confirmed replay does not create another event.
+
+Once the save is confirmed, the editor closes and releases its saving guard
+before the read-only event-list refresh completes. Members can immediately
+close a new untouched composer or navigate to “我的內容”, even if that refresh
+is still pending. The refresh does not discard a newer draft or release a
+newer submission's pending protection. Ordinary unsaved input still requires
+explicit discard; a failed media save retains its unsaved files for retry.
+
+Each refresh has an invocation and session-generation fence. Only the newest
+invocation may replace events, guilds or bulletins, report a load error, or end
+the loading indicator; unmounting also invalidates its pending reads. A delayed
+older success or rejection cannot erase a later confirmed event or replace the
+newest read's feedback. These read continuations never reset editor drafts.
+
+Before starting that background refresh, saving publishes the authoritative
+event returned by the command and any completed media upload into local items.
+Reopening an edit or cancelling from detail therefore uses the confirmed
+aggregate version without waiting for the list. Known media rejection publishes
+the latest confirmed event too, retaining the editable draft and only failed or
+not-yet-sent files; retrying does not re-upload confirmed successful media. Detail-only
+events use the same current-item fallback for their next update command.
+
+### 媒體未知結果對帳（#793）
+
+Banner／video 的傳輸中斷、成功回應 JSON 無法解析或必要 DTO 欄位不符，
+都屬於結果未知；已知 415 則可更正檔案。未知操作在目前工作階段記憶體保留
+原 File bytes、MIME、海報方向、Idempotency-Key、原 aggregate version 與
+登入世代。先等待 `GET /events/:id` 讀回，再以完整原命令重播查核伺服器 receipt；
+不插入 `/update`，也不因讀回版本提高或已有媒體 URL 就猜測該檔案已提交。
+媒體 URL 不帶來源 digest，所以讀回本身不足以識別原操作；原 key 的重播可能
+再次傳輸 bytes，但既有 receipt 保證不再新增一次媒體保存／版本／journal。
+若讀回比 receipt 新，保留讀回的較新事件；原命令確認後只處理尚未送出的媒體。
+
+對帳完成前，儲存、編輯、取消、移除媒體、新活動與離開保護都保持鎖定。
+讀回失敗仍保留原命令，可按「重試確認保存」重試讀回；不會退回一般 metadata
+儲存。全部命令確認後立刻關閉編輯器並允許離開，背景列表刷新不延長此鎖。
+保留的檔案與命令不寫入永久儲存，重新整理／關閉視窗仍只有 beforeunload 提醒，
+不宣稱具有跨程序恢復能力。
+
+本次新增 banner／video 各自已提交後 ACK 遺失、成功 ACK 格式錯誤的瀏覽器案例，
+會暫停對帳 GET，核對沒有第二次 metadata 更新或競爭操作，再驗原 key／bytes／
+版本重播與每種媒體各一次 durable journal；其中一例先讓讀回 503，再重試恢復。
+既有 415 案例保留。刷新案例使用獨立社群，分別覆蓋較舊成功晚到，以及較舊失敗
+不能結束較新載入或顯示錯誤。這些瀏覽器案例本輪未執行：現有 fixture 需要
+PostgreSQL，依本輪限制沒有啟動資料庫。以下本機 Chromium／PostgreSQL 結果是
+原作者先前證據，不能當成本次修改的瀏覽器通過紀錄。
+
+The existing event-member journey holds a real successful list response after
+an original-key retry and verifies immediate departure at 1440px and 390px,
+along with equal retry bodies/keys and one durable event. Additional controlled
+local Chromium/API/PostgreSQL smoke held real GET200 snapshots across two
+confirmed writes, delivered them newest-first, and retained the latest event
+and a newer draft at both widths. Desktop checks also retained loading across
+superseded success/error completions and preserved a newer real HTTP error.
+With refreshes held, immediate edits used versions 1 then 2 and cancellation
+used version 3 successfully. A completed banner plus an actual video-format
+415 retained the video/draft and retried from confirmed version 3 to version 5,
+without repeating the banner. Pending/unknown protection and original-tuple
+recovery remained intact. The unchanged focused event-member journey passed
+all seven cases after the final build and raw browser reload. This synthetic
+local evidence is not deployment, trusted CI or real-member acceptance; that
+earlier smoke did not add a permanent UI test.
+
+The follow-up regression runs the event journey before notification preferences
+on the same worker schema. Event creation intentionally retains organizer
+`event_submitted` notifications; the history-count case owns a fresh synthetic
+recipient instead of deleting shared notifications or widening exact unread
+assertions. A bounded attachment records the shared demo recipient's actual
+notification kinds/source keys. Both widths additionally exercise newest-first
+real list responses, a newer unsent draft, immediate confirmed-version edits,
+and retained video recovery after a real server format rejection, without
+re-uploading the successful banner. The initial expanded local run passed 11
+cases and failed both new refresh cases: their interceptor also captured the
+initial empty-list response, so snapshot indexes did not identify the two
+post-save reads. Waiting for initial-list readiness before interception fixed
+that test race. The corrected sequential event-then-notification run passed all
+13 cases on the same existing build and owned PostgreSQL schema. The exact
+history/reminder counts remain 2/1 before reading the essential notification;
+the filtered bell remains 1 when full history opens. Neither this local pass
+nor the test correction relabels the original hosted count-3-versus-1 failure
+as a passing run.
+
 ## Member event detail session boundary
 
 `GET /api/v1/events/:id` reads its existing authorized event DTO through

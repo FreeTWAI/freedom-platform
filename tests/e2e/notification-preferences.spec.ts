@@ -1,3 +1,5 @@
+import {randomUUID} from 'node:crypto';
+import {hashPassword} from '../../modules/identity-membership/service.js';
 import {test,expect,type Page} from './member-feature-fixture.js';
 import {DEMO_PASSWORD,DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 import {signOut} from './navigation.js';
@@ -42,8 +44,15 @@ test.describe('enabled notification preferences',()=>{
     await signOut(page);await login(page,'reviewer@local.test');await expect(panel.getByLabel('好友邀請與結果')).toHaveValue('instant');await expect(panel.getByLabel('啟用安靜時段')).not.toBeChecked();
   });
 
-  test('full notification history preserves the preference-filtered bell count after opening and reading',async({page,e2eAuthPool})=>{
-    const recipient=DEMO_USERS[2];
+  test('full notification history preserves the preference-filtered bell count after opening and reading',async({page,e2eAuthPool},info)=>{
+    // The worker schema retains earlier real journeys' event_submitted notices.
+    // Own the recipient instead of deleting shared history or relaxing unread counts.
+    const recipient={user_id:randomUUID(),email:`preferences-history-${randomUUID()}@example.test`};
+    await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+      VALUES($1,$2,$3,'合成通知歷史會員',$4,$5,false)`,[recipient.user_id,DEMO_COMMUNITY,recipient.email,hashPassword(DEMO_PASSWORD),randomUUID()]);
+    const prior=(await e2eAuthPool.query(`SELECT kind,source_key FROM member_notifications
+      WHERE community_id=$1 AND recipient_ref=$2 ORDER BY created_at,notification_id LIMIT 20`,[DEMO_COMMUNITY,DEMO_USERS[2].user_id])).rows;
+    await info.attach('shared-member-notification-sources',{body:JSON.stringify(prior),contentType:'application/json'});
     await e2eAuthPool.query(`INSERT INTO member_notifications(notification_id,community_id,recipient_ref,kind,source_key,title,body)
       VALUES(gen_random_uuid(),$1,$2,'friend_request','preferences-history-friend','已關閉提醒的好友邀請','仍保留在完整歷史'),
         (gen_random_uuid(),$1,$2,'guild_expert_revoked','preferences-history-essential','必要通知仍會提醒','不受好友偏好影響')`,[DEMO_COMMUNITY,recipient.user_id]);
