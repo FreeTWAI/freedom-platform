@@ -759,3 +759,16 @@ test('scheduled offline expiry receives the order-notice port only when both fla
   await run('true');assert.equal(typeof (seen[1] as {emit?:unknown}).emit,'function');
   await run('true',true);assert.equal(seen.length,2);
 });
+
+test('categories flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_CATEGORIES_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeCategoriesEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_CATEGORIES_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_CATEGORIES_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_CATEGORIES_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeCategoriesEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+

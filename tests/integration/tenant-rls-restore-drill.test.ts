@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import {galleryTables,seedGalleryRows,seedVariantsRows} from '../helpers/storefront-gallery.js';
+import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
 import {publicationMediaSnapshot} from '../../modules/agent-commerce/hosted/media.js';
 import {seedSellerPolicyRows,legalTables} from '../helpers/storefront-policies.js';
 import {ensureDevice,grantDevice} from '../../modules/agent-commerce/checkout/access.js';
@@ -32,7 +32,7 @@ import { CheckoutTermsSchema } from '../../contracts/guild-launchpad/v1/hosted-c
 import { HOSTED_ORDER_PROFILE, QuoteSchema } from '../../contracts/guild-launchpad/v1/hosted-order.js';
 import { PublicStoreProjectionSchema } from '../../contracts/guild-launchpad/v1/storefront.js';
 import { projectionDigest } from '../../modules/agent-commerce/hosted/publish.js';
-import { bindPrincipalContext, bindTenantContext, isolatedTransaction } from '../../packages/resource-scopes/tenant-transaction.js';
+import { bindPrincipalContext, bindTenantContext, clearTenantContext, isolatedTransaction } from '../../packages/resource-scopes/tenant-transaction.js';
 import { createAssetMaintenance } from '../../modules/assets/maintenance.js';
 import { createR2ObjectStore, type AssetR2Binding } from '../../packages/asset-storage/r2.js';
 import { objectKey, sha256, writeVerifiedObject, readVerifiedObject, type ObjectStore, type ObjectMetadata } from '../../packages/asset-storage/index.js';
@@ -154,7 +154,7 @@ const RLS_TABLES = [
   'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants',
   'commerce_resource_tenants', 'commerce_order_quotes', 'commerce_hosted_supply_offers', 'commerce_product_photo_targets', 'commerce_publication_photo_refs',
   'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
-  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',
+  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',...categoryTables,
   'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
   'commerce_storefront_appearance_drafts', 'commerce_storefront_appearance_targets', 'commerce_publication_appearances', 'commerce_publication_appearance_refs',
   'tenant_high_risk_verifications', 'tenant_ownership_transfers', 'tenant_recovery_cases', 'tenant_module_permissions',
@@ -318,6 +318,7 @@ async function insertHostedQuote(q: PoolClient, data: { tenantId: string; princi
   await q.query(`INSERT INTO commerce_publication_photo_refs(publication_id,sku,tenant_id,instance_id,scope_id,asset_id,representation_id,policy_revision) VALUES($1,'P0001',$2,$3,$4,$5,$6,$7)`,[publicationId,data.tenantId,instanceId,gallery.scope,primary.assetId,primary.representationId,primary.metadata.policyRevision]);
   const secondary=gallery.objects[1];await seedGalleryRows(q,{tenantId:data.tenantId,instanceId,productId:itemId,secondary:{asset_id:secondary.assetId,representation_id:secondary.representationId,policy_revision:secondary.metadata.policyRevision}});
   await seedVariantsRows(q,{tenantId:data.tenantId,instanceId,productId:itemId});
+  await seedCategoriesRows(q,{tenantId:data.tenantId,instanceId,productId:itemId});
   await seedSellerPolicyRows(q,{tenantId:data.tenantId,instanceId});
   const bindings = [{ selection_id: selectionId, item_id: itemId, version: '1', sku: 'P0001', quantity: 1 }];
   const terms = { profile: HOSTED_ORDER_PROFILE, store: { slug, name }, publication_revision: '1', currency: 'TWD',
@@ -1053,6 +1054,18 @@ test('variant restore retains both nonempty frozen catalogs and rejects tenant r
    assert.deepEqual(rows,(await restoredPool.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[space.tenantId])).rows);
    assert.equal((await q.query('SELECT 1 FROM commerce_publication_variants WHERE tenant_id=$1',[other.tenantId])).rowCount,0);
    await q.query('SAVEPOINT variants_retarget');await assert.rejects(q.query('UPDATE commerce_publication_variants SET tenant_id=$1 WHERE tenant_id=$2',[other.tenantId,space.tenantId]),(e:unknown)=>['23514','42501'].includes((e as {code:string}).code));await q.query('ROLLBACK TO SAVEPOINT variants_retarget');
+  }
+ });
+});
+
+test('category restore retains active/tombstone and frozen A/B rows through context cycling',async()=>{
+ await isolatedTransaction(runtimePool,async q=>{
+  for(const table of categoryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);
+  let turn=0;
+  for(const [space,other] of [[spaces.a,spaces.b],[spaces.b,spaces.a],[spaces.a,spaces.b]]){
+   if(turn++===2){await clearTenantContext(q);for(const table of categoryTables)assert.equal((await q.query(`SELECT 1 FROM ${table}`)).rowCount,0);}
+   await bindPrincipalContext(q,space===spaces.a?people.p1.principalId:people.p2.principalId);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
+   for(const table of categoryTables){const rows=(await q.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;assert.equal(rows.length,table==='commerce_publication_categories'?1:2);assert.deepEqual(rows,(await restoredPool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=$1 ORDER BY to_jsonb(t)::text`,[space.tenantId])).rows);assert.equal((await q.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[other.tenantId])).rowCount,0);}
   }
  });
 });

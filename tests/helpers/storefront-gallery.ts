@@ -83,3 +83,22 @@ export async function seedVariantsRows(q:PoolClient,input:{tenantId:string;insta
  await q.query('INSERT INTO commerce_publication_variants(publication_id,tenant_id,instance_id,document,variants_sha256) VALUES($1,$2,$3,$4,$5)',[publicationId,input.tenantId,input.instanceId,snapshot.document,snapshot.sha256]);
  return {groupId:home.group_id,publicationId,secondId};
 }
+
+export const categoryTables=['commerce_storefront_categories','commerce_storefront_category_members','commerce_publication_categories'] as const;
+/** Nonempty owner-only A/B category fixture; contains retained inactive rows and
+ * a frozen original-publication SKU without adding an Asset reference. */
+export async function seedCategoriesRows(q:PoolClient,input:{tenantId:string;instanceId:string;productId:string}){
+ const {categoriesSnapshot}=await import('../../modules/agent-commerce/storefront/categories/model.js');
+ const p=(await q.query(`SELECT p.*,s.scope_id,i.sku FROM commerce_storefront_profiles p JOIN resource_scopes s ON s.kind='tenant' AND s.tenant_ref=p.tenant_id JOIN commerce_items i ON i.item_id=$3 AND i.shop_id=p.supply_shop_id WHERE p.tenant_id=$1 AND p.instance_id=$2`,[input.tenantId,input.instanceId,input.productId])).rows[0];
+ const ids=[randomUUID(),randomUUID()];
+ await q.query("SELECT set_config('freedom.category_variants','off',true)");
+ for(const [n,id] of ids.entries()){
+  await q.query('INSERT INTO commerce_storefront_categories(category_id,tenant_id,instance_id,scope_id,name,name_key,sort_order) VALUES($1,$2,$3,$4,$5,$5,$6)',[id,p.tenant_id,p.instance_id,p.scope_id,'合成分類'+n,n+1]);
+  await q.query('INSERT INTO commerce_storefront_category_members(category_id,tenant_id,instance_id,scope_id,group_key,sort_order) VALUES($1,$2,$3,$4,$5,0)',[id,p.tenant_id,p.instance_id,p.scope_id,p.sku]);
+ }
+ await q.query('UPDATE commerce_storefront_category_members SET removed_at=clock_timestamp(),sort_order=NULL WHERE category_id=$1',[ids[1]]);
+ await q.query('UPDATE commerce_storefront_categories SET removed_at=clock_timestamp(),sort_order=NULL,version=version+1 WHERE category_id=$1',[ids[1]]);
+ const snapshot=categoriesSnapshot({profile:'freedom.hosted-store-categories/v1',categories:[{category_id:ids[0],name:'合成分類0',order:1,groups:[{group_key:p.sku,order:0,skus:[p.sku]}]}]},[p.sku]);
+ await q.query('INSERT INTO commerce_publication_categories(publication_id,tenant_id,instance_id,document,categories_sha256) VALUES($1,$2,$3,$4,$5)',[p.current_publication_id,p.tenant_id,p.instance_id,snapshot.document,snapshot.sha256]);
+ return ids;
+}

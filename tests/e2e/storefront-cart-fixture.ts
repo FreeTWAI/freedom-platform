@@ -68,7 +68,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {commerceOrderNotificationsEnabled?:boolean;storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
+type CartControls = {storeCategoriesEnabled?:boolean;storeAppearanceEnabled?:boolean;commerceOrderNotificationsEnabled?:boolean;storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -109,7 +109,8 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
       guildLaunchpadEnabled: true,
       commerceOrderNotificationsEnabled:controls.commerceOrderNotificationsEnabled===true,
       storeVariantsEnabled:controls.storeVariantsEnabled===true,
-      ...(controls.storeVariantsEnabled?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
+      storeCategoriesEnabled:controls.storeCategoriesEnabled===true,storeAppearanceEnabled:controls.storeAppearanceEnabled===true,
+      ...((controls.storeVariantsEnabled||controls.storeCategoriesEnabled)?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
       supplierConsoleEnabled,
       ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,

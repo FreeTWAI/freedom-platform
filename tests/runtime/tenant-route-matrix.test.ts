@@ -49,14 +49,14 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,storeVariantsEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,storeVariantsEnabled:true,storeCategoriesEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 const checkoutApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]}});
 
 const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/(?:\*|:n)$/.test(path);
 const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
 function isOfferOrDistributionPhotoPath(path: string) {
-  return path.includes('/product-groups')||isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/categories')||path.includes('/product-groups')||isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -236,6 +236,12 @@ const routeTable: Record<string, string> = {
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/*': 'middleware',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories': 'tenant',
+  'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories/reorder': 'tenant',
+  'PUT /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id/groups': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id/remove': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key': 'tenant',
   'PUT /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key': 'tenant',
@@ -672,8 +678,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 159, middleware: 32 });
-  assert.equal(selectedRoutes.length, 233);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 165, middleware: 32 });
+  assert.equal(selectedRoutes.length, 239);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
@@ -852,6 +858,12 @@ const routes: Route[] = [
   {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-galleries'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/categories'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/categories',body:{name:'合成分類'},version:'"1"'},
+  {method:'PATCH',path:'/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id',body:{name:'合成新名'},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/categories/reorder',body:{category_ids:[]},version:'"1"'},
+  {method:'PUT',path:'/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id/groups',body:{group_keys:[]},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/categories/:category_id/remove',body:{},version:'"1"'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key'},
   {method:'PUT',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key',body:{title:'合成商品組',description:'',axes:[],members:[{product_id:':product_id',product_version:'1',value_keys:[]}],default_product_id:':product_id',order:0},version:'"1"'},

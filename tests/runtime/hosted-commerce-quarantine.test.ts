@@ -1,3 +1,4 @@
+import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
@@ -174,4 +175,14 @@ test('quarantine blocks all three variant mutations and receipt replay before an
  assert.deepEqual(await snapshot(),before);assert.equal((await h.f.x.h.call('GET',root,s.owner,undefined,{},app)).status,200);
  h.f.settings.quarantine=false;assert.equal((await send('PUT','',body)).status,200);
  const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await send('PUT','',body)).status,503);assert.deepEqual(await snapshot(),committed);
+});
+
+test('quarantine blocks all five category mutations and replay before receipts, facts or profile changes',async()=>{
+ const s=await h.f.x.store(),app=createApp(h.f.x.runtime,h.f.x.h.origin,'local',{registrationCommunityId:DEMO_COMMUNITY,guildLaunchpadEnabled:true,storeCategoriesEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:h.f.settings});
+ const read=()=>h.f.x.h.call('GET',s.root+'/categories',s.owner,undefined,{},app),p=h.expect(await read()),key=randomUUID(),id=randomUUID();
+ const send=(method:string,suffix:string,body:unknown,commandKey=key)=>h.f.x.h.call(method,s.root+'/categories'+suffix,s.owner,body,{'Idempotency-Key':commandKey,'If-Match':`"${p.version}"`},app);
+ const before=await snapshot();h.f.settings.quarantine=true;
+ for(const [method,suffix,body] of [['POST','',{name:'合成分類'}],['PATCH','/'+id,{name:'合成新名'}],['POST','/reorder',{category_ids:[]}],['PUT','/'+id+'/groups',{group_keys:[]}],['POST','/'+id+'/remove',{}]] as const)assert.equal((await send(method,suffix,body)).status,503);
+ assert.deepEqual(await snapshot(),before);assert.equal((await read()).status,200);
+ h.f.settings.quarantine=false;assert.equal((await send('POST','',{name:'合成分類'})).status,201);const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await send('POST','',{name:'合成分類'})).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
 });

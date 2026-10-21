@@ -1,4 +1,4 @@
-import {galleryTables,seedGalleryRows,seedVariantsRows} from '../helpers/storefront-gallery.js';
+import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
 import {seedSellerPolicyRows} from '../helpers/storefront-policies.js';
 import {seedAppearanceRows} from '../helpers/storefront-appearance.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
@@ -585,7 +585,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
   'commerce_ship_from_locations', 'commerce_logistics_services',
     'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
     'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
-  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',
+  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',...categoryTables,
   'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
     'commerce_storefront_appearance_drafts', 'commerce_storefront_appearance_targets', 'commerce_publication_appearances', 'commerce_publication_appearance_refs',
     'tenant_capacity_policies', 'tenant_module_permissions', 'work_items', 'scoped_command_receipts', 'scoped_transition_journal', 'scoped_outbox',
@@ -651,7 +651,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
   }
   for(const data of hosted) {
     const q=await owner.connect();
-    try { await q.query('BEGIN');await seedAppearanceRows(q,{tenantId:data.tenantId,instanceId:data.instanceId,productId:data.itemId});await seedSellerPolicyRows(q,data);await seedGalleryRows(q,{...data,productId:data.itemId});await seedVariantsRows(q,{...data,productId:data.itemId});await q.query('COMMIT'); }
+    try { await q.query('BEGIN');await seedAppearanceRows(q,{tenantId:data.tenantId,instanceId:data.instanceId,productId:data.itemId});await seedSellerPolicyRows(q,data);await seedGalleryRows(q,{...data,productId:data.itemId});await seedVariantsRows(q,{...data,productId:data.itemId});await seedCategoriesRows(q,{...data,productId:data.itemId});await q.query('COMMIT'); }
     catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
   }
   // A/B distribution rows retain an own ready Asset with foreign material
@@ -748,8 +748,8 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
       record.push({ table, mechanism: 'documented_exception', update_covered: false, outcome: 'uncovered', reason: DOCUMENTED_UNCOVERED_RLS_TABLES[table] });
       continue;
     }
-    if ([...galleryTables,'commerce_publication_variants','commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
-      const mutable=table==='commerce_product_groups'||table==='commerce_product_group_members'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');
+    if ([...galleryTables,'commerce_publication_variants',...categoryTables,'commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
+      const mutable=table==='commerce_storefront_categories'||table==='commerce_storefront_category_members'||table==='commerce_product_groups'||table==='commerce_product_group_members'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');
       const policies=(await owner.query<Policy>(`SELECT policyname,cmd,permissive,qual,with_check FROM pg_policies
         WHERE schemaname=current_schema() AND tablename=$1 ORDER BY policyname`,[table])).rows;
       assert.deepEqual(policies,[
