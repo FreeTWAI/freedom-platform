@@ -18699,8 +18699,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 22657,
-      "sha256": "e2c9fb793942f6beffd117943e94d51bdcd4efba5fb5682ee660f5e093f03a59"
+      "bytes": 25287,
+      "sha256": "1b7cd636dfaeef3041fe5bb24177a9d60c92fdee33ea5c0f66a968eeabdcd91a"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -18749,8 +18749,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/categories/read.ts",
-      "bytes": 1582,
-      "sha256": "6739bda25f4023dcecf0065b69fbf1c137c89f8431e74fa86916fe772acec41c"
+      "bytes": 1585,
+      "sha256": "df229f5400a420cc230e2773ce96b8cd35b13279ab79e331cf960ed067f89ecb"
     },
     {
       "path": "modules/agent-commerce/storefront/gallery/commands.ts",

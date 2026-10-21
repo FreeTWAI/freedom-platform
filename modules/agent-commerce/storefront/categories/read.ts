@@ -6,7 +6,7 @@ import {publicPurchaseStateWithClient,type HostedCheckoutOptions} from '../../ch
 import type {AppearanceOptions} from '../../hosted/appearance.js';
 import type {PoliciesOptions} from '../policies/model.js';
 import type {CategoriesOptions} from './model.js';
-/** Category-only reads never opt into variants metadata, inventory or assets.
+/** Category-only reads never opt into variants metadata or availability queries.
  * Recheck current publication and store liveness before returning frozen data. */
 export async function readCategoryBuyerPage(pool:Pool,slug:string,options:{appearance?:AppearanceOptions;policies?:PoliciesOptions;categories?:CategoriesOptions},checkout?:HostedCheckoutOptions){
  for(let n=0;n<2;n++){

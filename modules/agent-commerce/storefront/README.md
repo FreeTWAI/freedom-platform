@@ -327,3 +327,43 @@ pending bytes. The separate tenant drill has nonempty A/B graphs and six capture
 objects (two Work/four product photos). Exact-base reader/rendering proof revokes
 SELECT on all five gallery tables. The contract generator emits the independent
 `storefront-gallery.schema.json`; original contract families remain unchanged.
+
+## Store categories (2026-10-21 local candidate)
+
+Migration181 adds retained `commerce_storefront_categories`,
+`commerce_storefront_category_members` and immutable
+`commerce_publication_categories`. `FREEDOM_STORE_CATEGORIES_ENABLED` defaults
+OFF and independently requires launchpad; it requires neither variants, media
+nor checkout. This source activates no environment or deployment. Categories
+use existing store:read/write and profile If-Match; publication still requires
+store:publish. Names are normalized NFC single-line text of at most 40 Unicode
+characters, with at most 30 active categories per store. Empty categories remain
+editable and are omitted from publication.
+
+With variants ON, membership resolves exact ProductGroupKeySchema identities.
+The surviving original group keeps P0001 after its anchor splits out or is
+removed; the detached live anchor is P0001~single. Both are independently
+assignable. Rejoin removes the singleton from the effective catalog: its retained
+reference becomes inactive, warns without revealing an unavailable title, and is
+omitted from publish. Reads do not repair rows. With variants OFF, only exact
+SKU singleton keys resolve; suffixed references are inactive and never stripped.
+This branch reads no variants metadata or sidecar. The transaction-local SQL
+`freedom.category_variants` setting selects the same semantics for activation validation;
+it never grants access to a product or another store.
+
+The manager, private preview and publish share the effective catalog and category
+snapshot. Publication freezes covered SKUs, so later flag changes do not consult
+today's draft to interpret a published category. Missing old sidecars yield an
+empty category list; malformed or digest/coverage-invalid rows fail closed.
+Category rename, order and membership participate in dirty/dedupe; timestamps and
+row versions do not. A normalized no-op changes no profile/category version.
+
+Buyers follow ordinary no-JS links at `/shops/:slug?category=<uuid>#products`.
+Selected categories preserve membership order, show each effective frozen group
+once and omit featured products. Empty, removed, unpublished and wrong-store
+category identities share the same 404 page; malformed or repeated category
+queries return 400. UUIDs are display identities, not authority. Draft changes
+remain private until publish; unpublish retains frozen history. Existing public
+v1 JSON, cart/checkout terms, asset references, quotas and retention policy are
+unchanged. Unknown editor operations retain their original command in
+member/session/store-scoped RAM, and late reads cannot overwrite local edits.
