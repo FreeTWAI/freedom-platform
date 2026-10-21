@@ -247,7 +247,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
 
     await a.getByRole('button', {name: '同意', exact: true}).click();
     await expect(consoleRoot.locator('.sc-announcement')).toHaveText('已保存：同意售價申請。');
-    await expect(activeView.locator('.badge')).toHaveText('可售');
+    await expect(activeView.locator('.badge')).toHaveText('已同意，可加入展示頁（尚不能結帳購買）');
 
     await storeArea(b, '供貨合作');
     await b.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
