@@ -3721,6 +3721,24 @@ test.describe('C1 own product gallery',()=>{
   await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
  }
  async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ test('GALLERY-E2E-legacy primary photos decode on B01 and serve B01/B03 Open Graph images',async({browser,e2eAuthPool},info)=>{
+  const s=await setup(browser,e2eAuthPool),buyer=await browser.newContext({baseURL:server.origin,viewport:{width:390,height:900}});
+  try{
+   await add(s.page,await source('synthetic-primary.png','#5e8ca0'));await publish(s.page);
+   const page=await buyer.newPage();await page.goto('/shops/'+s.slug);
+   const cards=page.locator('.shop-products article img');await expect(cards).toHaveCount(1);
+   for(const width of [390,1440]){
+    await page.setViewportSize({width,height:900});for(const image of await cards.all()){await decoded(image);await expect(image).toBeVisible();}
+    await page.screenshot({path:info.outputPath(`gallery-legacy-b01-${width}.png`),fullPage:true});
+   }
+   async function checkOpenGraph(){
+    const content=await page.locator('meta[property="og:image"]').getAttribute('content');expect(content).toBe(LIVE_PUBLIC_ORIGIN+`/shops/${s.slug}/media/1/${s.product.sku}`);
+    // Resolve the declared public asset path against this isolated local fixture.
+    const response=await buyer.request.get(new URL(content!).pathname);expect(response.status()).toBe(200);expect(response.headers()['content-type']).toBe('image/webp');
+   }
+   await checkOpenGraph();await page.getByRole('link',{name:'查看商品：合成圖組商品',exact:true}).click();await expect(page.locator('.shop-gallery-photo')).toHaveCount(1);await checkOpenGraph();
+  }finally{await buyer.close();await s.context.close();}
+ });
  for(const width of [390,768,1440])test(`GALLERY-E2E-responsive-${width} editor, frozen detail, keyboard and no-JS photos`,async({browser,e2eAuthPool},info)=>{
   const s=await setup(browser,e2eAuthPool,width),{page}=s;
   const buyer=await browser.newContext({baseURL:server.origin,viewport:{width,height:900}}),noJs=await browser.newContext({baseURL:server.origin,javaScriptEnabled:false,viewport:{width,height:900}});
@@ -3869,9 +3887,9 @@ test('VARIANTS-E2E default SKU gallery, deduplicated featured cards and split re
   const put=async(body:unknown,version:string)=>{const response=await page.request.put('/api/v1'+s.root+'/product-groups/'+a.sku,{data:body,headers:headers(version)});expect(response.status(),await response.text()).toBe(200);return response.json();};
   await put(input,'1');const appearance=await read('/appearance-settings');const featured=await page.request.patch('/api/v1'+s.root+'/appearance-settings',{data:{template_id:appearance.template_id,accent_preset:appearance.accent_preset,announcement:appearance.announcement,featured_product_ids:[a.product_id,b.product_id]},headers:headers(appearance.version)});expect(featured.status(),await featured.text()).toBe(200);
   const publish=async()=>{const view=await read('');await post(page,s.root+'/publish',{},200,view.version);};await publish();const detail=await buyer.newPage();
-  await detail.goto('/shops/'+slug);await expect(detail.locator('.shop-featured li')).toHaveCount(1);await expect(detail.locator('.shop-featured img')).toHaveAttribute('src',new RegExp('/'+b.sku+'$'));await expect(detail.getByRole('link',{name:'查看商品：共同 T 恤',exact:true})).toHaveCount(2);
+  await detail.goto('/shops/'+slug);await expect(detail.locator('.shop-featured li')).toHaveCount(1);await expect(detail.locator('.shop-featured img')).toHaveAttribute('src',new RegExp('/'+b.sku+'/1$'));await decoded(detail.locator('.shop-featured img'));await decoded(detail.locator('.shop-catalog:not(.shop-featured) img'));await expect(detail.getByRole('link',{name:'查看商品：共同 T 恤',exact:true})).toHaveCount(2);
   for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-featured-gallery-'+width+'.png'),fullPage:true});}
-  await detail.goto('/shops/'+slug+'/products/'+a.sku);await expect(detail.locator('.shop-gallery-photo')).toHaveCount(1);await expect(detail.locator('.shop-gallery-photo img')).toHaveAttribute('src',new RegExp('/'+b.sku+'/1$'));
+  await detail.goto('/shops/'+slug+'/products/'+a.sku);await expect(detail.locator('.shop-gallery-photo')).toHaveCount(1);await expect(detail.locator('.shop-gallery-photo img')).toHaveAttribute('src',new RegExp('/'+b.sku+'/1$'));const ogPath=new URL((await detail.locator('meta[property="og:image"]').getAttribute('content'))!).pathname;expect(ogPath).toMatch(new RegExp('/'+b.sku+'/1$'));expect((await buyer.request.get(server.origin+ogPath)).status()).toBe(200);
   let group=await read('/product-groups/'+a.sku);await put({...input,default_product_id:a.product_id},group.version);await detail.reload();await expect(detail.locator('.shop-gallery-photo')).toHaveCount(1);await publish();await detail.reload();await expect(detail.locator('.shop-gallery-photo')).toHaveCount(2);
   for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-shared-gallery-'+width+'.png'),fullPage:true});}
   group=await read('/product-groups/'+a.sku);await post(page,s.root+'/product-groups/'+a.sku+'/split',{},200,group.version);await publish();await detail.goto('/shops/'+slug+'/products/'+b.sku);await expect(detail.getByRole('heading',{level:1})).toHaveText('黑色原商品');await expect(detail.locator('.shop-gallery-photo')).toHaveCount(1);await detail.goto('/shops/'+slug+'/products/'+a.sku);await expect(detail.getByRole('heading',{level:1})).toHaveText('白色原商品');await expect(detail.locator('.shop-gallery-photo')).toHaveCount(2);await detail.goto('/shops/'+slug);await expect(detail.locator('.shop-featured li')).toHaveCount(2);

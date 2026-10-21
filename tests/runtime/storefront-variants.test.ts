@@ -85,6 +85,14 @@ test('VARIANTS-02 reservation titles stay v1; real per-item holds leave the othe
  const closed=f.application(false,{storeVariantsEnabled:true});
  const detail=await(await closed.request(f.h.origin+'/shops/'+s.slug+'/products/P0001')).text();assert.match(detail,/登入確認預留條件/);assert.match(detail,/已選擇：白／M/);assert.doesNotMatch(detail,/售完|暫時無法購買/);
  assert.doesNotMatch(await(await closed.request(f.h.origin+'/shops/'+s.slug)).text(),/售完|暫時無法購買/);
+ // A rollback writer deletes only the canonical product. Its retained 177
+ // photo routing and later gallery-only metadata writes must keep working.
+ const current=(await page()).items.find(g=>g.group_key==='P0001')!;
+ const extra=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'舊版刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},current.version),201);
+ const removed=extra.current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='舊版刪除的規格').product;
+ f.ok(await call('POST','/products/'+removed.product_id+'/remove',{},removed.version,undefined,f.app));
+ assert.equal((await f.h.pool.query(`UPDATE commerce_product_groups SET last_changed_at_product_version=storefront_gallery_product_version(tenant_id,instance_id,anchor_product_id) WHERE tenant_id=$1 AND instance_id=$2 AND catalog_anchor_sku='P0001'`,[s.tenantId,s.instanceId])).rowCount,1);
+ assert.equal((await page()).items.some(g=>g.members.some(m=>m.product.product_id===removed.product_id)),false);
 });
 test('VARIANTS-03 detached former anchors keep distinct singleton identity, rejoin, and survive anchor deletion',async()=>{
  const a=f.ok(await call('POST','/products',{title:'原始起點',price_minor:100,stock:2}),201),b=f.ok(await call('POST','/products',{title:'剩餘規格',price_minor:200,stock:2}),201);
@@ -136,7 +144,7 @@ test('VARIANTS-04 body allowance is exact method/path/flag, and schema bounds pr
  const accepted=await app.request(f.h.origin+'/api/v1'+foreign.root+'/product-groups/P0001',{method:'PUT',headers:{'Content-Type':'application/json',Origin:f.h.origin,Cookie:foreign.owner.cookie,'X-CSRF-Token':foreign.owner.csrf,'Idempotency-Key':randomUUID(),'If-Match':'"1"'},body:JSON.stringify(maximum)});
  assert.equal(accepted.status,200,await accepted.clone().text());assert.equal((await accepted.json() as any).current.items[0].members.length,200);
  const limit=await call('POST','/product-groups/P0001/products',{product:{title:'超過名額',price_minor:100,stock:1},value_keys:[longAxes[0].values[10].key,longAxes[1].values[0].key]},'2',undefined,app,foreign.owner,foreign);assert.equal(limit.status,409);assert.equal(limit.data.code,'storefront_product_limit');
- assert.equal(ReplaceProductGroupInputSchema.safeParse(maximum).success,true);const bytes=Buffer.byteLength(JSON.stringify(maximum));assert.ok(bytes>32768&&bytes<131072);console.log(JSON.stringify({worst_legal_group_body_bytes:bytes,complete_label_utf16:120}));
+ assert.equal(ReplaceProductGroupInputSchema.safeParse(maximum).success,true);const bytes=Buffer.byteLength(JSON.stringify(maximum));assert.ok(bytes>32768&&bytes<131072);console.log(JSON.stringify({worst_legal_group_body_bytes:bytes,illegal_title_body_bytes:Buffer.byteLength(JSON.stringify({...maximum,title:'名'.repeat(120)})),legal_title_utf16:37,complete_label_utf16:120}));
  // Parser accepts the specified 120-character title body; label validation is
  // deliberately stricter because checkout's existing title contract is 120.
  const semantic=await request('PUT',path,JSON.stringify({...maximum,title:'名'.repeat(120)}));assert.equal(semantic.status,422);assert.equal((await semantic.json() as any).code,'variant_label_too_long');
@@ -172,6 +180,7 @@ test('VARIANTS-05 write capability, replay reauthorization, compound create roll
 });
 
 test('VARIANTS-06 predecessor function and attachment guards reject drift before any DDL; closed pages make no availability query',async()=>{
+ const {catalogErrorHtml}=await import('../../modules/agent-commerce/storefront/variants/page.js');const changed=catalogErrorHtml('商店內容正在更新，請重新載入。',true);assert.match(changed,/<h1>商店內容正在更新<\/h1>/);assert.match(changed,/請重新載入，確認最新商品與規格。/);assert.match(changed,/>重新載入<\/a>/);
  const schema='variant_guard_'+process.pid,q=await f.h.pool.connect();
  try{
   await q.query('BEGIN');await q.query(`CREATE SCHEMA ${schema}`);await q.query(`SET LOCAL search_path=${schema}`);
@@ -199,7 +208,7 @@ test('VARIANTS-06 predecessor function and attachment guards reject drift before
 test('VARIANTS-07 a refused current reply rolls the new mutation, journal and receipt back together',async()=>{
  const {replaceProductGroup}=await import('../../modules/agent-commerce/storefront/variants/commands.js'),{Problem}=await import('../../packages/shared/problem.js');
  const g=(await page()).items.find(g=>g.group_key==='P0001')!,key=randomUUID();
- const snapshot=async()=>({groups:(await f.h.pool.query('SELECT to_jsonb(g) row FROM commerce_product_groups g WHERE tenant_id=$1 ORDER BY group_id',[s.tenantId])).rows,members:(await f.h.pool.query('SELECT to_jsonb(m) row FROM commerce_product_group_members m WHERE tenant_id=$1 ORDER BY selection_id',[s.tenantId])).rows,receipts:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts WHERE tenant_id=$1',[s.tenantId])).rows[0].n,journal:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_transition_journal WHERE tenant_id=$1',[s.tenantId])).rows[0].n});
+ const snapshot=async()=>({groups:(await f.h.pool.query('SELECT to_jsonb(g) row FROM commerce_product_groups g WHERE tenant_id=$1 ORDER BY group_id',[s.tenantId])).rows,members:(await f.h.pool.query('SELECT to_jsonb(m) row FROM commerce_product_group_members m WHERE tenant_id=$1 ORDER BY selection_id',[s.tenantId])).rows,receipts:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts WHERE scope_id=(SELECT scope_id FROM commerce_storefront_profiles WHERE instance_id=$1)',[s.instanceId])).rows[0].n,journal:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_transition_journal WHERE scope_id=(SELECT scope_id FROM commerce_storefront_profiles WHERE instance_id=$1)',[s.instanceId])).rows[0].n});
  const before=await snapshot();let refused=false;
  const source=new Proxy(f.runtime,{get(pool,property){if(property==='connect')return async()=>{const client=await pool.connect();let written=false;return new Proxy(client,{get(target,method){if(method==='query')return(sql:any,...args:any[])=>{
   const text=typeof sql==='string'?sql:sql.text;if(text.startsWith('UPDATE commerce_product_groups SET catalog_anchor_sku='))written=true;
