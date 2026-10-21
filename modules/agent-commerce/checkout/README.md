@@ -132,6 +132,20 @@ reference comparisons see committed facts even across communities.
 All writes and deferred checks must commit in the caller transaction; on any error
 the caller must roll back the entire transaction.
 
+Order bell notices are the explicit optional exception to that rule. When the
+order-notifications flag and checkout are ON, and commerce is not quarantined,
+the existing notification writer runs inside a notification-only savepoint after
+the domain effect. Invalid frozen metadata, formatting or recipient invariants
+roll back that optional block, emit only `commerce_order_notification_skipped`,
+and let commerce continue. Every rejected database query is classified at its
+origin, including connection errors without SQLSTATE; database and savepoint
+errors propagate and roll back the entire domain transaction and receipt/work
+change. Successful notices commit atomically with it. There is no independent
+commit, external delivery or retry loop. OFF installs no port and issues no
+notification SQL. The frozen publication supplies only store name/slug and the
+order supplies its display number and immutable buyer principal; the email-based
+customer/member label is not a notification identity.
+
 ## Canonical terms
 
 `freedom.checkout-terms/v1` contains current publication identity/revision,

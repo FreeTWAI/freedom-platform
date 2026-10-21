@@ -50,7 +50,7 @@ export function notificationVisibilitySQL(orderNotificationsEnabled:boolean,alia
  * not required and nothing here grants roles or sends email/external traffic.
  * Invalid input or cross-community routing is a programming error and throws.
  */
-export async function notifyMember(q:PoolClient,input:NotifyMemberInput):Promise<{notification_id:string}|null>{
+export async function notifyMember(q:Pick<PoolClient,'query'>,input:NotifyMemberInput):Promise<{notification_id:string}|null>{
   const parsed=notifyInput.safeParse(input);
   if(!parsed.success)throw new Error(`notification_input_invalid: ${parsed.error.issues.map(i=>i.path.join('.')||'input').join(',')}`);
   const n=parsed.data;

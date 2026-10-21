@@ -2,6 +2,7 @@ import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefro
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
 import {runDueCommerceWork,runAfterResponseWork} from '../../../modules/agent-commerce/operations/due-work.js';
+import {createOrderNotifications} from '../../../modules/agent-commerce/checkout/order-notifications.js';
 import {createEcpayQueryTransport,type PaymentQueryTransport} from '../../../modules/agent-commerce/payments/query-transport.js';
 import {applyDeferredPaymentEvents} from '../../../modules/agent-commerce/payments/events.js';
 import {flushControlEvents} from '../../../modules/agent-commerce/operations/journal/journal.js';
@@ -560,7 +561,8 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               }catch{console.error('commerce_email_not_ready');}
               const keyring=env.COMMERCE_CREDENTIAL_KEYS?CommerceCredentialKeyring.parse(env.COMMERCE_CREDENTIAL_KEYS):null;
               const freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);
-              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps});
+              const orderNotifications=createOrderNotifications(readCommerceOrderNotificationsEnabled(env),commerce);
+              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})});
             }catch{console.error('commerce_due_work_failed');}
             try{
               await (deps.commerceEmailSweep??sweepCommerceOutboundEmails)(pool,{limit:500});

@@ -788,7 +788,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));
+    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,orderNotifications:hostedCheckoutOptions(origin,runtime,freedomEnv).orderNotifications,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));
     if(runtime.supplierConsoleEnabled===true) {
       app.route('/api/v1',createHostedSupplierConsoleRoutes(pool,{cursors:runtime.tenantListCursors,offerPhotosEnabled:supplyOfferPhotosInstalled(runtime)}));
       app.route('/api/v1',createHostedSupplyMaterialRoutes(pool));

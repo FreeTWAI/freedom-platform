@@ -16,7 +16,8 @@ import {liveDevice,ensureDevice,grantDevice,hasDeviceGrant,assertDeviceLive,asse
 import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,commerceRateLimitInTransaction,lockOpenOrderBudgets,enforceOpenOrderLimits} from './limits.js';
 import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CommerceEmailOutbox} from '../operations/notifications/email-port.js';
-export interface HostedCheckoutOptions extends CheckoutPorts {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
+import type {OrderNotificationOptions} from './order-notifications.js';
+export interface HostedCheckoutOptions extends CheckoutPorts,OrderNotificationOptions {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
 export interface BrowserAccess {deviceToken?:string;sessionToken?:string;network:string;expectedBuyer?:wire.CheckoutBuyerIdentity}
 const defaults:CommerceSettings={checkoutEnabled:false,quarantine:false,providerProfiles:[]};
 export function quarantineGate(options:Pick<HostedCheckoutOptions,'settings'>) {requireCondition(!(options.settings??defaults).quarantine,503,'commerce_quarantined','商務服務暫停中。');}
@@ -133,7 +134,7 @@ export async function cancelPublicOrder(pool:Pool,slug:string,orderRef:string,ac
   await chargeCommerceBudgets(pool,access.network,{network:'handoffNetwork'});
   return isolatedTransaction(pool,async q=>{
     const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
-    await cancelUnpaidOrder(q,authorized.store,orderRef,'buyer','buyer_cancelled',{payment:options.payment});
+    await cancelUnpaidOrder(q,authorized.store,orderRef,'buyer','buyer_cancelled',{payment:options.payment,orderNotifications:options.orderNotifications,actorPrincipalId:authorized.actorPrincipalId});
     const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
   });
 }
@@ -161,7 +162,7 @@ async function authorizePublicOrder(q:PoolClient,slug:string,orderRef:string,acc
   const device=await liveDevice(q,access.deviceToken);
   const byMember=identity?.principalId!==null&&identity?.principalId!==undefined&&identity.principalId===row.buyer_principal_id;
   if(!byMember&&!(device&&await hasDeviceGrant(q,device.device_id,row.checkout_id,orderRef)))orderAccessNotFound();
-  return {store,recheck:async()=>{
+  return {store,actorPrincipalId:identity?.principalId??null,recheck:async()=>{
     if(byMember)await currentMember(q,identity);
     else if(!await hasDeviceGrant(q,device!.device_id,row.checkout_id,orderRef))orderAccessNotFound();
   }};

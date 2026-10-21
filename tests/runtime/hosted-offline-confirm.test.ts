@@ -22,6 +22,7 @@ import {Problem} from '../../packages/shared/problem.js';
 import {createTenantListCursorCodec} from '../../packages/shared/tenant-list-cursor.js';
 import {checkoutHarness, type CheckoutHarness} from './hosted-checkout-harness.js';
 import {syntheticShippingPort} from '../../scripts/synthetic-shipping-quote.js';
+import {createOrderNotifications} from '../../modules/agent-commerce/checkout/order-notifications.js';
 
 const syllables = ['青', '禾', '川', '石', '林', '安', '白', '南'];
 const synthetic = (n: number) => Array.from({length: n}, () => syllables[randomInt(syllables.length)]).join('');
@@ -38,6 +39,11 @@ const offlinePorts = (method: 'meetup' | 'home' = 'meetup'): CheckoutPorts => ({
 const problem = (status: number, code: string) => (error: unknown) => error instanceof Problem && error.status === status && error.code === code;
 const pages = () => ({cursors: createTenantListCursorCodec(randomBytes(32).toString('base64url'), {environment: 'local', origin: x.h.origin})});
 const quarantine = {settings: {checkoutEnabled: true, quarantine: true, providerProfiles: [] as const}};
+const notificationOptions=()=>({orderNotifications:createOrderNotifications(true,{checkoutEnabled:true,quarantine:false})});
+async function orderNotices(id:string){
+  return (await x.h.pool.query(`SELECT recipient_ref,kind,title,body,action_tab,action_resource_id,source_key FROM member_notifications
+    WHERE source_key LIKE 'commerce-order/v1/'||$1||'/%' ORDER BY kind`,[id])).rows;
+}
 
 async function actorOf(cookie: string) {
   return authenticate(x.runtime, cookie.split('=')[1].split(';')[0]);
@@ -80,7 +86,7 @@ test('meetup completion revalidation after a receipt-insert wait denies a fulfil
     await blocker.query('BEGIN');
     await blocker.query('LOCK TABLE scoped_command_receipts IN SHARE ROW EXCLUSIVE MODE');
     const holder = Number((await blocker.query<{pid: number}>('SELECT pg_backend_pid() AS pid')).rows[0].pid);
-    pending = completeMeetup(x.runtime, clerk.actor, s.tenantId, s.instanceId, order.order_id, {amount_minor: order.terms.total_minor, completed_on: date}, key, order.version)
+    pending = completeMeetup(x.runtime, clerk.actor, s.tenantId, s.instanceId, order.order_id, {amount_minor: order.terms.total_minor, completed_on: date}, key, order.version,notificationOptions())
       .then(value => ({value}), (error: unknown) => ({error}));
     await blockedBy(holder);
     await blocker.query(`UPDATE tenant_module_permissions SET capabilities=ARRAY['store:read','store:orders:manage'], updated_at=clock_timestamp(), version=version+1
@@ -94,6 +100,7 @@ test('meetup completion revalidation after a receipt-insert wait denies a fulfil
   assert.ok('error' in result, 'receipt revalidation must refuse the revoked fulfil capability');
   assert.ok(result.error instanceof Problem && result.error.status === 403 && result.error.code === 'capability_denied');
   assert.deepEqual(await counts(order.order_id), {payments: 0, handovers: 0, outcome: null});
+  assert.deepEqual(await orderNotices(order.order_id),[]);
   assert.equal((await x.h.pool.query(`SELECT count(*)::int AS n FROM scoped_command_receipts WHERE operation='commerce.checkout_order.complete_meetup' AND target_id=$1`, [order.order_id])).rows[0].n, 0);
 });
 
@@ -501,3 +508,57 @@ async function placePublicBank() {
   const placed = await placePublicOrder(x.runtime, s.slug, created.value.checkout_ref, {terms_sha256: created.value.terms_sha256, client_order_id: randomUUID(), payment_method: 'bank_transfer'}, opened, opt);
   return {s, owner: await actorOf(s.owner.cookie), opt, access: opened, order: placed.value.order};
 }
+
+test('member buyer notices follow bank receipt, handover, cash meetup and seller cancellation once using frozen store facts',async()=>{
+  const {s,order,owner}=await placeOffline('bank_transfer',20),date=await today(),opt=notificationOptions();
+  const buyer=(await x.h.pool.query('SELECT buyer_principal_id FROM commerce_orders WHERE order_id=$1',[order.order_id])).rows[0].buyer_principal_id as string;
+  const next=async(method:'bank_transfer'|'cash_on_meetup')=>{
+    const ports=offlinePorts(),saved=await x.tx(q=>freezeCheckout(q,s,{...x.input(s.product.sku,1),idempotencyKey:randomUUID()},ports));
+    return x.tx(q=>placeCheckoutOrder(q,s,{checkoutId:saved.checkout_id,termsSha256:saved.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:buyer,environment:'sandbox',paymentMethod:method},ports));
+  };
+  const cash=await next('cash_on_meetup'),cancelled=await next('bank_transfer'),unallocatable=await next('bank_transfer');
+  const current=(await x.h.call('GET',s.root,s.owner,undefined,{},x.app)).data;
+  assert.equal((await x.send(s,'',{name:'合成新版商店'},current.version,'PATCH')).status,200);await x.publish(s);
+  const keys=[randomUUID(),randomUUID()],body={amount_minor:order.terms.total_minor,received_on:date};
+  const raced=await Promise.allSettled(keys.map(key=>confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,body,key,order.version,opt)));
+  assert.equal(raced.filter(item=>item.status==='fulfilled').length,1);
+  const winner=raced.findIndex(item=>item.status==='fulfilled');
+  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,body,keys[winner],order.version,opt);
+  assert.equal((await orderNotices(order.order_id)).length,1);
+  const handoverKey=randomUUID();
+  await recordMeetupHandover(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{completed_on:date},handoverKey,order.version,opt);
+  await recordMeetupHandover(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{completed_on:date},handoverKey,order.version,opt);
+  const meetupKey=randomUUID();
+  await completeMeetup(x.runtime,owner,s.tenantId,s.instanceId,cash.order_id,{amount_minor:cash.terms.total_minor,completed_on:date},meetupKey,cash.version,opt);
+  await completeMeetup(x.runtime,owner,s.tenantId,s.instanceId,cash.order_id,{amount_minor:cash.terms.total_minor,completed_on:date},meetupKey,cash.version,opt);
+  const cancelKey=randomUUID();
+  await cancelSellerCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,cancelled.order_id,cancelKey,cancelled.version,opt);
+  await cancelSellerCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,cancelled.order_id,cancelKey,cancelled.version,opt);
+  await x.tx(async q=>{await(await checkoutInventory(q,unallocatable.order_id)).releaseHolds();});
+  await x.h.pool.query('UPDATE commerce_items SET stock=0 WHERE item_id=$1',[s.product.product_id]);
+  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,unallocatable.order_id,{amount_minor:unallocatable.terms.total_minor,received_on:date},randomUUID(),unallocatable.version,opt);
+  assert.equal((await counts(unallocatable.order_id)).outcome,'unallocatable');
+  const expected=[
+    [order,'commerce_order_payment_confirmed','店家已確認收款',`「合成商店」已確認收到訂單 ${order.display_number} 的付款。請開啟訂單查看最新狀態。`],
+    [order,'commerce_order_handed_over','店家已登記交貨',`「合成商店」已登記訂單 ${order.display_number} 的面交交貨。`],
+    [cash,'commerce_order_handed_over','店家已登記面交完成',`「合成商店」已登記訂單 ${cash.display_number} 的面交收款與交貨。`],
+    [cancelled,'commerce_order_seller_cancelled','店家已取消訂單',`「合成商店」的訂單 ${cancelled.display_number} 已由店家取消。`],
+    [unallocatable,'commerce_order_payment_confirmed','店家已確認收款',`「合成商店」已確認收到訂單 ${unallocatable.display_number} 的付款。請開啟訂單查看最新狀態。`],
+  ] as const;
+  const buyerRef=(await x.h.pool.query('SELECT user_ref FROM principals WHERE principal_id=$1',[buyer])).rows[0].user_ref;
+  for(const [source,kind,title,text] of expected){
+    const notice=(await orderNotices(source.order_id)).filter(n=>n.kind===kind);assert.equal(notice.length,1);
+    assert.equal(notice[0].recipient_ref,buyerRef);assert.equal(notice[0].title,title);assert.equal(notice[0].body,text);
+    assert.equal(notice[0].action_tab,'reservations');assert.equal(notice[0].action_resource_id,`${s.slug}/${source.order_id}`);
+    assert.equal(notice[0].body.includes('合成新版商店'),false);
+  }
+  assert.equal((await orderNotices(cash.order_id)).length,1);
+  assert.equal((await orderNotices(order.order_id)).length,2);
+  // The seller's own order never produces a buyer notice about their own action.
+  await x.h.pool.query('UPDATE commerce_items SET stock=10 WHERE item_id=$1',[s.product.product_id]);
+  const selfPorts=offlinePorts(),published=(await x.h.call('GET',s.root,s.owner,undefined,{},x.app)).data;
+  const selfCheckout=await x.tx(q=>freezeCheckout(q,s,{...x.input(s.product.sku,1),publication_revision:published.publication.current_revision,idempotencyKey:randomUUID()},selfPorts));
+  const self=await x.tx(async q=>{const principal=await mapPersonPrincipal(q,s.owner.user.user_id);return placeCheckoutOrder(q,s,{checkoutId:selfCheckout.checkout_id,termsSha256:selfCheckout.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:principal.principal_id,environment:'sandbox',paymentMethod:'bank_transfer'},selfPorts);});
+  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,self.order_id,{amount_minor:self.terms.total_minor,received_on:date},randomUUID(),self.version,opt);
+  assert.deepEqual(await orderNotices(self.order_id),[]);
+});

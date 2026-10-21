@@ -3,10 +3,11 @@ import {clearTenantContext,isolatedTransaction} from '../../../../packages/resou
 import {bindStore,lockMachineOrder} from '../../checkout/authority.js';
 import {hasConfirmedPayment} from '../../checkout/confirmed-payment.js';
 import {cancelUnpaidOrder} from '../../checkout/orders.js';
+import type {OrderNotificationOptions} from '../../checkout/order-notifications.js';
 
 export const OFFLINE_CONFIRMATION_GRACE_MS=72*60*60*1000;
 /** Order locks precede the due row. Placement inserts that row while it holds the order. */
-export async function endOfflinePaymentWindow(pool:Pool,orderId:string,options:{now?:()=>Date;leaseToken?:string;tenantId?:string;signal?:AbortSignal}={}){
+export async function endOfflinePaymentWindow(pool:Pool,orderId:string,options:OrderNotificationOptions&{now?:()=>Date;leaseToken?:string;tenantId?:string;signal?:AbortSignal}={}){
   return isolatedTransaction(pool,async q=>{
     const peek=(await q.query<{tenant_id:string}>('SELECT tenant_id FROM commerce_checkout_orders WHERE order_id=$1',[orderId])).rows[0];
     if(options.tenantId&&peek&&peek.tenant_id!==options.tenantId)throw Error('due_work_binding_invalid');
@@ -27,7 +28,7 @@ export async function endOfflinePaymentWindow(pool:Pool,orderId:string,options:{
       FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
       JOIN commerce_storefront_profiles p ON p.tenant_id=co.tenant_id AND p.instance_id=co.instance_id WHERE co.order_id=$1`,[orderId])).rows[0];
     const openUnpaid=order?.lifecycle_state==='open'&&order.payment_method!=='immediate_card'&&!await hasConfirmedPayment(q,orderId);
-    if(openUnpaid&&order.grace_ended)await cancelUnpaidOrder(q,order,orderId,'system','payment_not_completed');
+    if(openUnpaid&&order.grace_ended)await cancelUnpaidOrder(q,order,orderId,'system','payment_not_completed',{orderNotifications:options.orderNotifications});
     if(openUnpaid&&!order.grace_ended)await q.query(`UPDATE commerce_due_work SET due_at=(SELECT expires_at+interval '72 hours' FROM commerce_orders WHERE order_id=$2),lease_until=NULL,updated_at=clock_timestamp() WHERE due_work_id=$1`,[row.due_work_id,orderId]);
     else await q.query('DELETE FROM commerce_due_work WHERE due_work_id=$1',[row.due_work_id]);
     return 'completed' as const;

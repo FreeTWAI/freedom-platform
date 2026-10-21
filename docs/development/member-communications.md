@@ -143,6 +143,36 @@ session 自然到期不會修改已鎖列或觸發 `40001`，交易內的 `now()
 
 `notifyMember(q, input)`（`notifications.ts`）在呼叫端的交易內寫入，與領域變更一起提交或回滾；同一 `(community, recipient, source_key)` 只寫一次。輸入不合法（未知 kind、任意網址或額外欄位的 action）或收件者不在同社群會直接丟錯，讓整個指令回滾。通知只是站內提示，不授予任何權限。
 
+### 訂單站內通知（候選 schema180）
+
+`FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED` 預設 OFF，僅接受 `true`／`false`；ON 另需
+`FREEDOM_COMMERCE_CHECKOUT_ENABLED=true`。這不是 Email 授權，沒有外部傳送或新排程。
+六種 `commerce_order_*` 交易通知涵蓋會員離線訂單成立、買家取消、確認匯款、登記交貨／面交、
+店家取消、付款確認寬限結束後的實際取消。單純釋出保留不發通知；面交付款與交貨合為一則。
+本人不會收到自己操作的通知；同時是買家與店家讀者時，系統取消採買家文案與連結。
+
+收件人由訂單保存的 `buyer_principal_id` 與當下商店實例的有效讀取能力決定，不以 Email 配對。
+買家通知進自己的社群；店家收件人必須在店家業務社群，且同時具備 `store:read` 和
+`store:orders:read`。一個有界查詢最多讀回51人，以 owner、admin、其他成員及 principal UUID
+排序；最多通知50位店家讀者，第51位只觸發固定的截斷診斷。沒有收件者列鎖或後續無界佇列。
+
+文案僅含下單凍結的店名與訂單顯示編號，不含金額、買家姓名、聯絡方式、地址或銀行資料。
+`source_key` 為 `commerce-order/v1/<order UUID>/<event>`。`stores` action 用98字元的
+`T32_I32_O32` tuple，只解成既有店家訂單 hash；`reservations` action 用 `<slug>/<order UUID>`，
+只解成同站 B07。格式未知或不合法時保留文字、不導覽；開啟後仍由原路徑重新檢查權限。
+這些交易種類不受社群偏好、摘要、聊天室靜音或安靜時段停用，歸入 `system`，沒有新偏好開關。
+
+僅 commerce 的可選通知區塊使用 savepoint：非資料庫的資料／格式／收件者不變量錯誤會回滾
+該區塊，留下固定 `commerce_order_notification_skipped` 診斷；原指令繼續。所有 SQL 拒絕，
+包括沒有 SQLSTATE 的連線錯誤，依查詢來源分類並重拋，讓整筆訂單、通知及收據／due work 回滾。
+原 writer 對其他呼叫端仍嚴格丟錯。詳見 checkout README 的明確例外。
+
+Quarantine 停止新通知與到期處理，既有通知與授權讀取仍可用。任何一個安裝旗標 OFF 時，
+同一 predicate 在分頁前過濾種類，亦用於未讀數、提醒、全部標讀與單則標讀的收據重播前授權。
+關閉不刪歷史，下一次既有鈴鐺刷新即反映關閉；重開不回填 OFF 期間的事件。
+撤權不抹除當時有權收到的歷史，也不讓舊通知取得訂單權限。
+Migration180 只擴充既有 CHECK，不新增物件或權限，無須因本變更重跑 runtime grants。
+
 目前接上的事件（`events.ts`）：
 
 | 事件 | 收件者 | kind | action |
