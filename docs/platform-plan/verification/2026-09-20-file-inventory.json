@@ -39,8 +39,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 36120,
-      "sha256": "21228c24de016ce626b29ff7e2d8f316c3ec0831cd0afd8c314aeb1755346b9f"
+      "bytes": 36343,
+      "sha256": "5ce15288720e39c53a7c7cece6be1e16b51a313ea944207afae195707ff05e56"
     },
     {
       "path": "compose.yaml",
@@ -13445,7 +13445,7 @@
     {
       "path": "deploy/cloudflare/environments.json",
       "bytes": 30992,
-      "sha256": "b9bfb9c3b8cd2282f2b843ced8b1c88d618ea6ef1f0163baedf86c0dd81dbd7f"
+      "sha256": "45be24bc9c32fcdf0cf333881ee97ea125065c6a8371a5e6d5aa2a0d3396cae5"
     },
     {
       "path": "deploy/cloudflare/media-preflight.md",
@@ -13474,8 +13474,8 @@
     },
     {
       "path": "deploy/cloudflare/release-compatibility.md",
-      "bytes": 33043,
-      "sha256": "daac6cac8b091da56f08db60def0102e198fe3c6401a5926aaa9cb01d5fee084"
+      "bytes": 34016,
+      "sha256": "a5eef78635304064b049e057d0b085056d109d03eb5c13f8c7ace7da739d7516"
     },
     {
       "path": "deploy/cloudflare/candidate/README.md",
@@ -13579,8 +13579,8 @@
     },
     {
       "path": "deploy/cloudflare/lib/release-compatibility.mjs",
-      "bytes": 47163,
-      "sha256": "5865a1404b0d11f3f9eb8411344748626a480b493e5901f237a8529f091cd07d"
+      "bytes": 47617,
+      "sha256": "ea8ad6a968eeada3602e0a05827d365ea25ab9b873a6b33aa0ec3d2af7abbedc"
     },
     {
       "path": "deploy/cloudflare/lib/wrangler.mjs",
@@ -13664,8 +13664,8 @@
     },
     {
       "path": "deploy/cloudflare/test/migration-plan.test.mjs",
-      "bytes": 13117,
-      "sha256": "fb4137d50807afbafdf2408da218d50acc6ed6951a3239375d1ac3facfd55119"
+      "bytes": 13121,
+      "sha256": "2a820f75553d9425f5d45d34ce8714f8bc24e59978a0cfd2d665f588fd252ea7"
     },
     {
       "path": "deploy/cloudflare/test/migration-reviewed-privileges.test.mjs",
@@ -13679,53 +13679,53 @@
     },
     {
       "path": "deploy/cloudflare/test/release-agent-connections.test.mjs",
-      "bytes": 5523,
-      "sha256": "9e813389253870f722714fb69fe66df4656f58bda38b0baf64a4bb3f0918c6d1"
+      "bytes": 5605,
+      "sha256": "d6da2157a91c15043b9295859af9e27e8b53d39956d67150a27688946c0b2e6c"
     },
     {
       "path": "deploy/cloudflare/test/release-bootstrap-session.test.mjs",
-      "bytes": 7586,
-      "sha256": "f16567804df95704c275cd61eed2baa09538cd9966e444d1d75a23a250ff73da"
+      "bytes": 7668,
+      "sha256": "af25d041cc37ee95b66879f18bfc24fb0a5cc1b3eeb00d9188f1ccb1cd470a5a"
     },
     {
       "path": "deploy/cloudflare/test/release-bootstrap-status.test.mjs",
-      "bytes": 6232,
-      "sha256": "80393501ec9472bb6735244574f1a9bc7f93eeb2f63bc4b1894dc157bfaa2588"
+      "bytes": 6314,
+      "sha256": "6933044caf878faa8b4a252357b8f92076ed85f918da4d33117ea491c0e83ebf"
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility-adversarial.test.mjs",
-      "bytes": 11671,
-      "sha256": "cb9cfd9554467db59b268038e8f9e562a5a02bf1ece40b1b332b23cc549fad5d"
+      "bytes": 11794,
+      "sha256": "06b14bd8486b500b50279b593c497dccb2209fea67da71c27a6112fce36a98b5"
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 74120,
-      "sha256": "f7b2674d901b0a4696513d1ac6e900edfd45f0633247a32ea066e92af0feaf35"
+      "bytes": 79478,
+      "sha256": "564644beacf065387f8a4838a83d22aad995e59509547a6f53893d7623e62f8c"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
-      "bytes": 6069,
-      "sha256": "714afd4dfe84e2a376f9efaf0895ce02709c54518da2306e753aaf118dfda9e7"
+      "bytes": 6151,
+      "sha256": "acd78ed38403963eb23bdb799241807d6679c9fda62bf98c0c191e3aad59b830"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-ingest.test.mjs",
-      "bytes": 7033,
-      "sha256": "3dda93cfb461e95b30a4da3ffb01ff7ea08d3cef6493034f2772774176c9a401"
+      "bytes": 7115,
+      "sha256": "27fb649749865e9885683e50c7ff936c2e43ea99dddb49cd70d5d89bbfc17548"
     },
     {
       "path": "deploy/cloudflare/test/release-device-authorization.test.mjs",
-      "bytes": 6480,
-      "sha256": "36a48f37d6f13da81fbaea8ac07f81a98e82d3d375f6601b76249773cfa4c4c7"
+      "bytes": 6562,
+      "sha256": "89835859fb1e28423dabb5d6ce9cb67e6255744f357f2db204559d9eca0c0aaf"
     },
     {
       "path": "deploy/cloudflare/test/release-domain-media.test.mjs",
-      "bytes": 9712,
-      "sha256": "46d72b16daf4dcc01a6cd47245c2c4fd347f58f415adf7568f2f8480859cbc4b"
+      "bytes": 9876,
+      "sha256": "573f4bc284489ecae603d2833792a48f1bca60253318e8991db3cb9c7a351a2a"
     },
     {
       "path": "deploy/cloudflare/test/release-execution-run.test.mjs",
-      "bytes": 8630,
-      "sha256": "c1662f2124e7c695b6f0b9dbd09bf0a49eea3858a571cd795f474461b06f7c7f"
+      "bytes": 8835,
+      "sha256": "6496a99195fd87074cbcd096bd8025c8a355edfd61f3b6c5cae898a7c1c0cb8a"
     },
     {
       "path": "deploy/cloudflare/test/release-history-floor-adversarial.test.mjs",
@@ -13734,38 +13734,38 @@
     },
     {
       "path": "deploy/cloudflare/test/release-member-device-management.test.mjs",
-      "bytes": 9831,
-      "sha256": "37801a21054048a79e92159e7ef40e681ca400d32d6b45f5343c2aa9d2ffa6a0"
+      "bytes": 9957,
+      "sha256": "05fb35147ef60e85561462a03c0e5e492b2bb54007f46eb59c6bf9ed7e6bfa12"
     },
     {
       "path": "deploy/cloudflare/test/release-member-model-settings.test.mjs",
-      "bytes": 7121,
-      "sha256": "8ecf5222eaa3d8091a94f55cb69fc16e35f64aa30ce1c9186e463fd8e08be456"
+      "bytes": 7247,
+      "sha256": "667515c753a1fa366f17def6a51851a3a08f3ec4e3e50196350ee6e50d98f676"
     },
     {
       "path": "deploy/cloudflare/test/release-member-prerequisites.test.mjs",
-      "bytes": 6512,
-      "sha256": "e654820dd5bb7cc62eb7861a0d4716ba1883f7e640f1b3216a553eeaa38af53b"
+      "bytes": 6594,
+      "sha256": "e9df78aec73b2431928e796a858c6d9a4de2bb83c0d003a3f3f03456e1bf5cff"
     },
     {
       "path": "deploy/cloudflare/test/release-model-result.test.mjs",
-      "bytes": 6093,
-      "sha256": "b8175392696a9234f553219516e9fcecbdef0892dfe4467e37babfcc00a23e72"
+      "bytes": 6175,
+      "sha256": "76cbbeeed4f34a4746ff244231bac1d5d71867d45120a738f4e4a81dc6db16e9"
     },
     {
       "path": "deploy/cloudflare/test/release-model-step.test.mjs",
-      "bytes": 6027,
-      "sha256": "86e4b222fdb6c95be85be5236bdb61dbb5ce1572c43e911598521b83343eacb1"
+      "bytes": 6109,
+      "sha256": "2dd9d8e1c642300b394958153d18265e6578ecbff2e1646dcc76d81efbf4dd01"
     },
     {
       "path": "deploy/cloudflare/test/release-runtime-enrollment.test.mjs",
-      "bytes": 5112,
-      "sha256": "81e6ae552e974eb91debe153767f1b0f7a4e7b811409379e8add745d37ed457f"
+      "bytes": 5194,
+      "sha256": "e1dee436ad43e2cdd6af3304742320d05ce3175e5857c404b1d9899a3f81898c"
     },
     {
       "path": "deploy/cloudflare/test/release-shared-reservations.test.mjs",
-      "bytes": 11272,
-      "sha256": "1e73c40e630f55f682c827d9f09e9b5f8403fc962d7f8ec2cc4fb0be95c0768f"
+      "bytes": 11314,
+      "sha256": "3372bbd78fa0708c9af978208cd23bb38ff9ba4029ce9d03c7db68135a431f86"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14274,8 +14274,8 @@
     },
     {
       "path": "docs/development/member-api.md",
-      "bytes": 89334,
-      "sha256": "de04826372ef0e152c4f2da6ff4a271b29a27a540e5585ed00af43c34a8d36fc"
+      "bytes": 94060,
+      "sha256": "e7329bfbe0d27e1a600985f63bfc4a03e9a562340664416086d62f19e471d58e"
     },
     {
       "path": "docs/development/member-communications.md",
@@ -15580,7 +15580,7 @@
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
       "bytes": 36031,
-      "sha256": "2a3d45adbac2cabe6d4238405b5731645ede23c974687a33405de380e871658c"
+      "sha256": "3fad4f393910cf93b5d3dab690a0bc3ec12586213c14410623f0bca05c40f56b"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -17346,6 +17346,11 @@
       "path": "migrations/172_distribution_photos.sql",
       "bytes": 9543,
       "sha256": "ed86c0aa586bbee580256a0a239d7532c39fa01a70c53d40b46693033e7e6b33"
+    },
+    {
+      "path": "migrations/173_guest_invitation_credit.sql",
+      "bytes": 250,
+      "sha256": "603ecc18fdd480b4b73ed428aefc5f0210d25dd63ff538bcb61946ec4e38b010"
     },
     {
       "path": "modules/agent-commerce/README.md",
@@ -19299,13 +19304,13 @@
     },
     {
       "path": "modules/community/event-waitlist.ts",
-      "bytes": 35866,
-      "sha256": "a87100407662498491b5642781b7143ae26acf14c12ef3e395e9836e483cd9dd"
+      "bytes": 37548,
+      "sha256": "1bbae9f63d5a427a08efe5ac3c58a4f900a2f79c45815c612f0951ed16c4b03b"
     },
     {
       "path": "modules/community/events.ts",
-      "bytes": 59401,
-      "sha256": "32162b4aeccbc5d1c2415c4a13cad45061d237472f86948093cf9baf725ff18d"
+      "bytes": 60510,
+      "sha256": "45380f04dfe483f65d4aca39b0ad93d25c2e052be0717c7101328fa27733f259"
     },
     {
       "path": "modules/community/first-participation.ts",
@@ -19434,8 +19439,8 @@
     },
     {
       "path": "modules/community/participation/freedom.module.json",
-      "bytes": 1668,
-      "sha256": "444556cac69fb4ba6ef81d5126814fac3ef1fb897cc0128785e4d16d1ac06a26"
+      "bytes": 1718,
+      "sha256": "8f7597a278d4c580ce7ca4d96f64a29c267dad74d6e8e4b6151f75d5dee66a2d"
     },
     {
       "path": "modules/community/personal-content/freedom.module.json",
@@ -23894,8 +23899,8 @@
     },
     {
       "path": "tests/runtime/event-participation-api.test.ts",
-      "bytes": 27606,
-      "sha256": "61916cea3d6d8f894077e559ef16979983b26617c3641138bdf6a7bcc8cda6c7"
+      "bytes": 40428,
+      "sha256": "36812d0131991de8e7385304907a9f34335426ef9d655137736a020e0560ca86"
     },
     {
       "path": "tests/runtime/event-participation-reminders.test.ts",
@@ -23914,8 +23919,8 @@
     },
     {
       "path": "tests/runtime/event-waitlist.test.ts",
-      "bytes": 46675,
-      "sha256": "2c5bc94081b814ab4dd6b4b4c4653223b143d0de6db162fab8c5fece49155e2f"
+      "bytes": 74444,
+      "sha256": "2b3558a9b7ca37e41b21f70b15c74e7396a01b26ae0905a6cd1a98c9d44afc2b"
     },
     {
       "path": "tests/runtime/events-past.test.ts",
