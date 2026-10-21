@@ -1,8 +1,8 @@
 import {parseMajorToMinor,formatMinor} from '../../../../apps/portal-web/src/format';
 import {useEffect,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../../../../apps/portal-web/src/api';
-import {ProductViewSchema,ProductInputSchema,ProductUpdateInputSchema} from '../../../../contracts/guild-launchpad/v1/storefront';
-import {ProductGroupPageSchema,ReplaceProductGroupInputSchema,VariantCommandAckSchema,type ProductGroupDraft} from '../../../../contracts/guild-launchpad/v1/storefront-variants';
+import {ProductViewSchema} from '../../../../contracts/guild-launchpad/v1/storefront';
+import {ProductGroupPageSchema,ReplaceProductGroupInputSchema,VariantCommandAckSchema,CreateVariantProductInputSchema,type ProductGroupDraft} from '../../../../contracts/guild-launchpad/v1/storefront-variants';
 import {catalogAttempt,holdCatalogAttempt,releaseCatalogAttempt,type CatalogAttempt} from './editor-state';
 import './editor.css';
 type Page=ReturnType<typeof ProductGroupPageSchema.parse>;
@@ -58,11 +58,11 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
  </section>;
 }
 function numericProductFields(price:string,stock:string,currency:string){
- const amount=parseMajorToMinor(price),cap=ProductInputSchema.shape.price_minor.maxValue!;
+ const amount=parseMajorToMinor(price),cap=CreateVariantProductInputSchema.shape.product.shape.price_minor.maxValue!;
  if(amount>cap)throw new Error(`價格上限為 ${formatMinor(cap,currency)}。`);
  if(!/^\d+$/.test(stock))throw new Error('庫存須為整數。');
- const parsed=ProductUpdateInputSchema.safeParse({price_minor:amount,stock:Number(stock)});
- if(!parsed.success)throw new Error('有欄位格式不符，請檢查後再送出。');return parsed.data;
+ const fields=CreateVariantProductInputSchema.shape.product.shape,priceValue=fields.price_minor.safeParse(amount),stockValue=fields.stock.safeParse(Number(stock));
+ if(!priceValue.success||!stockValue.success)throw new Error('有欄位格式不符，請檢查後再送出。');return {price_minor:priceValue.data,stock:stockValue.data};
 }
 function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCreate,onProduct,onReload}:{group:ProductGroupDraft;page:Page;writable:boolean;locked:boolean;onDirty:(v:boolean)=>void;onSave:(v:Draft)=>void;onSplit:()=>void;onCreate:(v:unknown)=>void;onProduct:(id:string,version:string,body:unknown)=>void;onReload:()=>void}){
  const [draft,setDraft]=useState(()=>fromGroup(g)),[attach,setAttach]=useState(''),[newOpen,setNewOpen]=useState(false),[newProduct,setNewProduct]=useState({title:'',description:'',price_minor:'',stock:'0'}),[newValues,setNewValues]=useState<string[]>([]),[productDirty,setProductDirty]=useState<Record<string,boolean>>({}),[fieldError,setFieldError]=useState(''),[reset,setReset]=useState(0);
@@ -72,7 +72,7 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
  const axes=(next:Draft['axes'])=>setDraft(old=>({...old,axes:next,members:old.members.map(m=>({...m,value_keys:next.map((a,n)=>a.values.some(v=>v.key===m.value_keys[n])?m.value_keys[n]:a.values[0]?.key??'')}))}));
  const candidates=page.items.filter(row=>row.group_id===null&&row.editable&&!draft.members.some(m=>m.product_id===row.members[0].product.product_id));
  const member=(id:string)=>page.items.flatMap(g=>g.members).find(m=>m.product.product_id===id)!;
- function create(){try{const fields=numericProductFields(newProduct.price_minor,newProduct.stock,g.members[0].product.currency),parsed=ProductInputSchema.safeParse({title:newProduct.title,description:newProduct.description,...fields});if(!parsed.success)throw new Error('有欄位格式不符，請檢查後再送出。');setFieldError('');onCreate({product:parsed.data,value_keys:newValues});}catch(e){setFieldError(e instanceof Error?e.message:'請檢查商品資料。');}}
+ function create(){try{const fields=numericProductFields(newProduct.price_minor,newProduct.stock,g.members[0].product.currency),parsed=CreateVariantProductInputSchema.shape.product.safeParse({title:newProduct.title,description:newProduct.description,...fields});if(!parsed.success)throw new Error('有欄位格式不符，請檢查後再送出。');setFieldError('');onCreate({product:parsed.data,value_keys:newValues});}catch(e){setFieldError(e instanceof Error?e.message:'請檢查商品資料。');}}
  return <div className="stack">
   {fieldError&&<p role="alert">{fieldError}</p>}
   {!g.group_id&&<p className="field-hint">這是單一商品。加入選項與商品即可建立規格。</p>}
