@@ -184,8 +184,8 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4186,
-      "sha256": "45bba9498b219c048d49cedc4fa1f7ea8888fa024bce0418afb2b901c5be293c"
+      "bytes": 4219,
+      "sha256": "46241ec66f7d1e2431e6203643c63ebfda25c830cd670c1b1ebf79166bbd4ffa"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -19559,8 +19559,8 @@
     },
     {
       "path": "modules/community/outcomes/freedom.module.json",
-      "bytes": 2161,
-      "sha256": "f5dfca04af7c10e9bbe6295bec09b4a71a80d9d1869f01596bfbeb978f9f604e"
+      "bytes": 2215,
+      "sha256": "478ad832859dff87309b13750016f6f89fa3b1db6734e502bbd0d321d4eef476"
     },
     {
       "path": "modules/community/participation/freedom.module.json",
@@ -19889,8 +19889,8 @@
     },
     {
       "path": "modules/development/freedom.module.json",
-      "bytes": 1954,
-      "sha256": "b1e47b35e847d58f10021b3f088590f74a1fcfa4a428fe8532c0545af3366840"
+      "bytes": 3957,
+      "sha256": "67e04600a38206dfdabb7e79550dcf92f9c84441776def712d51eff16a99e63e"
     },
     {
       "path": "modules/development/page-github.ts",
