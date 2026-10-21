@@ -22874,8 +22874,8 @@
     },
     {
       "path": "tests/e2e/hosted-order.spec.ts",
-      "bytes": 24376,
-      "sha256": "5f2cd8982da368125ac41bd986f460d8b61decefed296cc785216e74dff7b3c9"
+      "bytes": 24683,
+      "sha256": "7c47fa60d93d43b1a315fb5ef755174bdccec2adcb37e5fc8158f0a8c4acd968"
     },
     {
       "path": "tests/e2e/hosted-payment-fixture.ts",

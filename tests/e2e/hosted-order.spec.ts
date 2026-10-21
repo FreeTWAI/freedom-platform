@@ -201,7 +201,7 @@ test('buyer order list follows next page and isolates another account', async ({
       await route.continue({url: url.toString()});
     });
     await buyerLogin(page, s.buyer.email, '#reservations');
-    const list = page.getByRole('region', {name: '我的訂單'});
+    const list = page.getByRole('region', {name: '預留紀錄'});
     await expect(list.getByRole('link', {name: '查看訂單', exact: true})).toHaveCount(1);
     await page.setViewportSize({width: 390, height: 844});
     await expect(list.getByRole('button', {name: '下一頁', exact: true})).toBeVisible();
@@ -215,7 +215,7 @@ test('buyer order list follows next page and isolates another account', async ({
     const other = await browser.newContext({baseURL});
     try {
       const strangerPage = await other.newPage(); await buyerLogin(strangerPage, s.stranger.email, '#reservations');
-      await expect(strangerPage.getByRole('region', {name: '我的訂單'})).toContainText('目前沒有訂單');
+      await expect(strangerPage.getByRole('region', {name: '預留紀錄'})).toContainText('目前沒有訂單');
       await expect(strangerPage.getByRole('link', {name: '查看訂單', exact: true})).toHaveCount(0);
     } finally {await other.close();}
   } finally {await context.close();}
@@ -272,10 +272,6 @@ test('checkout orders region loads, empties, retries and pages above the separat
     await orders.getByRole('button',{name:'重新載入訂單',exact:true}).click();
     await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',second.orderPath);
     await expect(orders).toContainText('已取消（你取消了訂單）');
-    for(const width of [390,768,1440]){
-      await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-      await page.screenshot({path:info.outputPath(`member-orders-${width}.png`),fullPage:true});
-    }
     await orders.getByRole('button',{name:'下一頁',exact:true}).click();
     await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',first.orderPath);
     await expect(orders.getByRole('button',{name:'下一頁',exact:true})).toHaveCount(0);
@@ -290,5 +286,12 @@ test('checkout orders region loads, empties, retries and pages above the separat
       await expect(old.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
       expect(await old.locator('..').evaluate(element=>element.outerHTML)).toBe(expectedOffLegacy);
     } finally {await offContext.close();await off.close();}
+    // Screenshots may leave an empty inline caret style; take them after strict DOM comparisons.
+    await orders.getByRole('button',{name:'重新整理／第一頁',exact:true}).click();
+    await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',second.orderPath);
+    for(const width of [390,768,1440]){
+      await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:info.outputPath(`member-orders-${width}.png`),fullPage:true});
+    }
   } finally {release.resolve();await context.close();await listener.close();}
 });
