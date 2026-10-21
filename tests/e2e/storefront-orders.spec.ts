@@ -760,6 +760,8 @@ test('retained B07 is a private original-member read after unpublication and adm
     await expect(page.locator('#shop-order')).toHaveAttribute('data-retained-order','true');
     await expect(page.getByRole('heading',{level:1})).toHaveText(`訂單 ${order.display_number}`);
     await expect(page.getByText('000000123456',{exact:true})).toBeVisible();await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await expect(page.getByRole('region',{name:'付款',exact:true})).toContainText('請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。');
+    await expect(page.getByRole('region',{name:'付款',exact:true})).not.toContainText('請用這個瀏覽器回到訂單');
     await expect(page.locator('header .shop-top-store')).toHaveText('山邊小店');
     await expect(page.locator('header .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');
     await expect(page.locator('footer,#shop-information,[data-store-appearance]')).toHaveCount(0);

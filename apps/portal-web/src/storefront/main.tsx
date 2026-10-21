@@ -834,7 +834,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       currentPayView === 'expired' ||
       ((currentPayView === 'failed' || currentPayView === 'awaiting') && order.can_resume_payment));
   const paymentSection = orderPaymentSectionCopy(currentPayView);
-  const emailNote = offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
+  const emailNote = readOnly ? '請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。' : offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
   const paymentControlsDisabled = busy || forgetting || paymentBusy || redirecting;
 
   return (

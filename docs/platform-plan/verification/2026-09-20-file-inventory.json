@@ -3739,8 +3739,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/main.tsx",
-      "bytes": 103703,
-      "sha256": "5a42414dd0b2bcacfda85ff62474ec826ec02dbdac996ce5553a4026915868d6"
+      "bytes": 103800,
+      "sha256": "43840a21c09bc6de569ed762c031d64a67f2e84dc6e146e37e5a9d5352101254"
     },
     {
       "path": "apps/portal-web/src/storefront/offline-order.tsx",
@@ -23389,8 +23389,8 @@
     },
     {
       "path": "tests/e2e/storefront-orders.spec.ts",
-      "bytes": 43062,
-      "sha256": "cad8a928cea89667a58a04cc46ee17a86b9b38e9439303bcfbf9c7c0cdc72481"
+      "bytes": 43358,
+      "sha256": "3ecf5d311eb42c01222f5a81eec6de63e56a40846524d6d05c364df60f694fae"
     },
     {
       "path": "tests/e2e/storefront-payment-fixture.ts",
