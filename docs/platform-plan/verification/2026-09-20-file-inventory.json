@@ -29,8 +29,8 @@
     },
     {
       "path": "DESIGN.md",
-      "bytes": 14210,
-      "sha256": "3b5b98854bb2b0fea455e87b624ae204beabd8d348f7180d60292ad250ac88e6"
+      "bytes": 14381,
+      "sha256": "c75653ca048ac09950d68b64b6de8a426413890942e514f2f35edfe86812a8bb"
     },
     {
       "path": "LICENSE",
@@ -1949,8 +1949,8 @@
     },
     {
       "path": "apps/portal-web/src/SocialLayout.css",
-      "bytes": 17242,
-      "sha256": "c4de6a7aca16110b89fad56c348781de10059d3ca8fb9ec00627c8e259027c5c"
+      "bytes": 17347,
+      "sha256": "df945b7fb5b266704a14bb4e46aab736912d585a13ee519df9948e13e1bde4f6"
     },
     {
       "path": "apps/portal-web/src/WorkshopIcon.tsx",
@@ -2714,8 +2714,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 15951,
-      "sha256": "158e8f8743ad26161be478dfb1729a773163175c48f998823d733d15f8e19563"
+      "bytes": 16079,
+      "sha256": "5b6c4e73dcfe45b4dc5a469c80525a1b0c653368e698eb5076972a6a8bb867fe"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -14304,8 +14304,8 @@
     },
     {
       "path": "docs/development/member-participation-plan.md",
-      "bytes": 35598,
-      "sha256": "d45cbeca297683e3b38f48374fdad978ad6bce6941035c1fa69e9f891f8035ad"
+      "bytes": 35814,
+      "sha256": "8cc7c8009af50f7203fcff49dc96eee34c6a1b757d20b6b4d8863c6208def602"
     },
     {
       "path": "docs/development/member-settings-messages.md",
@@ -22759,8 +22759,8 @@
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",
-      "bytes": 28120,
-      "sha256": "88d7e441bf216414b267ceb2aa66e78b08cfaa24445996b93d8c45b72e190c9c"
+      "bytes": 30525,
+      "sha256": "68edeaccac3272cf7fe2c553038d586f02ffcb7e566acb57ad8278f2332ec95c"
     },
     {
       "path": "tests/e2e/member-navigation-hierarchy.spec.ts",

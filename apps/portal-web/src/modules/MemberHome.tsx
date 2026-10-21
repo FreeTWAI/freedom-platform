@@ -148,7 +148,10 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
+    <details className="home-participation-disclosure" open={wide}>
+    <summary>一起學、一起做</summary>
     <HomeParticipation key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
+    </details>
     {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
       <div className="home-next-copy">
       <h2 className="home-next-eyebrow">公會與學習</h2>

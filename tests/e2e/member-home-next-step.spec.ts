@@ -51,6 +51,14 @@ function suggestion(page: Page) {
   return page.getByRole('region', { name: '公會與技能書建議', exact: true });
 }
 
+async function openParticipation(page: Page) {
+  const disclosure = page.locator('.home-participation-disclosure');
+  await expect(disclosure).toBeAttached();
+  if (!await disclosure.evaluate(element => (element as HTMLDetailsElement).open))
+    await disclosure.locator('summary').click();
+  await expect(disclosure).toHaveJSProperty('open', true);
+}
+
 async function checkGuidance(page: Page, message: string, _destination: 'guilds' | 'skills') {
   await expect(suggestion(page)).toContainText(message);
   await expect(page.locator('.game-console')).toHaveCount(0);
@@ -270,8 +278,8 @@ test('a failed work dashboard read keeps the open-task hint', async ({ page }) =
   await expect(prompt.getByText(workHint, { exact: true })).toHaveCount(0);
 });
 
-test('phone participation and unfinished work are visible before opening the optional workshop', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+for (const width of [320, 390]) test(`phone ${width}px keeps the composer in view and opens participation before the optional workshop`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
   await stubCard(page, memberCard({ primary_guild: guild }));
   await stubJson(page, '/api/v1/me/skill-books', { items: [] });
   await stubJson(page, '/api/v1/task-board/preview', { items: [] });
@@ -279,7 +287,24 @@ test('phone participation and unfinished work are visible before opening the opt
   await stubJson(page, '/api/v1/engagements/summary', { has_engagements: true, needs_response: true });
   await login(page, false);
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
+  const disclosure = page.locator('.home-participation-disclosure');
+  const toggle = disclosure.locator('summary');
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await expect(toggle).toHaveText('一起學、一起做');
+  await expect(toggle).toBeInViewport();
+  expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(disclosure.locator('.home-participation')).toBeHidden();
+  await expect(suggestion(page).getByRole('button', { name: '回到我的工作', exact: true })).toBeVisible();
+  const composer = page.getByRole('region', { name: '首頁社群動態', exact: true }).getByRole('button', { name: '建立貼文', exact: true });
+  await page.evaluate(() => scrollTo(0, 0));
+  await expect(composer).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(disclosure).toHaveJSProperty('open', true);
+  await expect(toggle).toBeFocused();
   const entries = page.getByRole('navigation', { name: '參與自由工坊', exact: true });
+  await expect(entries).toBeVisible();
   await expect(entries.getByRole('button')).toHaveCount(4);
   await expect(entries.getByRole('button')).toHaveText(['技能與工具找一本技能書，開始練習', '社群活動看看聚會，一起交流', '合作夥伴認識不同專長的人', '作品交流分享作品、提出需求']);
   await expect(suggestion(page).getByRole('button', { name: '回到我的工作', exact: true })).toBeVisible();
@@ -295,7 +320,17 @@ test('phone participation and unfinished work are visible before opening the opt
   await expect(page).toHaveURL(/#skills$/);
   await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
   await page.goBack();
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await openParticipation(page);
   await expect(entries).toBeVisible();
+  await toggle.focus();
+  await page.keyboard.press('Space');
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await expect(toggle).toBeFocused();
+  await expect(disclosure.locator('.home-participation')).toBeHidden();
+  await page.evaluate(() => scrollTo(0, 0));
+  await expect(composer).toBeInViewport();
+  await openParticipation(page);
   await progress.getByRole('button', { name: '查看合作紀錄', exact: true }).click();
   await expect(page).toHaveURL(/#engagement$/);
   await expect(page.getByText('還沒有合作紀錄', { exact: true })).toBeVisible();
@@ -406,7 +441,14 @@ test('the home action stays compact, readable and reachable in all themes on des
     await page.getByRole('button', { name: '設定', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     for (const width of [1440, 820, 390, 320]) {
+      const wasWide = await page.evaluate(() => window.matchMedia('(min-width:861px)').matches);
       await page.setViewportSize({ width, height: 900 });
+      if (wasWide !== (width > 860)) await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', width > 860);
+      if (width > 860) {
+        await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', true);
+        await expect(page.locator('.home-participation-disclosure > summary')).toBeHidden();
+      }
+      await openParticipation(page);
       const entries = page.getByRole('navigation', { name: '參與自由工坊', exact: true });
       for (const button of await entries.getByRole('button').all()) {
         await expect(button).toBeVisible();
