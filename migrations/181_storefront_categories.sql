@@ -51,26 +51,26 @@ CREATE TRIGGER preserve_storefront_category_member BEFORE INSERT OR UPDATE OR DE
 -- This transaction-local switch chooses catalog semantics only, never authority.
 -- OFF checks SKU selections only; it does not query either variants table.
 CREATE FUNCTION storefront_category_group_exists(t uuid,i uuid,k text) RETURNS boolean LANGUAGE plpgsql STABLE AS $$
-DECLARE p commerce_storefront_profiles; item uuid;selection uuid;assigned uuid;home uuid;
+DECLARE p commerce_storefront_profiles; live_item uuid;live_selection uuid;assigned uuid;home uuid;
 BEGIN
  SELECT * INTO STRICT p FROM commerce_storefront_profiles WHERE tenant_id=t AND instance_id=i;
  IF current_setting('freedom.category_variants',true) IS DISTINCT FROM 'on' THEN
   RETURN EXISTS(SELECT 1 FROM commerce_selections s JOIN commerce_items item USING(item_id)
    WHERE s.shop_id=p.storefront_shop_id AND ((item.shop_id=p.supply_shop_id AND s.own_retail_enabled AND item.sku=k)
-    OR (s.hosted_sku=k AND s.acceptance_state='sellable' AND s.current_acceptance_id IS NOT NULL)));
+    OR (s.hosted_sku=k AND s.acceptance_state='sellable' AND EXISTS(SELECT 1 FROM commerce_hosted_supply_offers o JOIN commerce_distribution_acceptances a ON a.acceptance_id=s.current_acceptance_id AND a.selection_id=s.selection_id WHERE o.offer_id=s.hosted_offer_id AND o.item_id=s.item_id AND o.state='offered' AND a.decision='accepted' AND a.listing_sha256=s.listing_sha256 AND s.snapshot->>'offer_sha256'=o.terms_sha256))));
  END IF;
  -- An explicit group's anchor may no longer have a live item.
  IF EXISTS(SELECT 1 FROM commerce_product_groups g JOIN commerce_product_group_members m ON m.catalog_group_id=g.group_id AND m.tenant_id=g.tenant_id AND m.instance_id=g.instance_id
   JOIN commerce_selections s ON s.selection_id=m.selection_id AND s.shop_id=p.storefront_shop_id AND s.own_retail_enabled
   JOIN commerce_items item ON item.item_id=s.item_id AND item.shop_id=p.supply_shop_id
   WHERE g.tenant_id=t AND g.instance_id=i AND g.catalog_anchor_sku=k) THEN RETURN true;END IF;
- SELECT item.item_id,s.selection_id INTO item,selection FROM commerce_selections s JOIN commerce_items item USING(item_id)
+ SELECT item.item_id,s.selection_id INTO live_item,live_selection FROM commerce_selections s JOIN commerce_items item USING(item_id)
   WHERE s.shop_id=p.storefront_shop_id AND ((item.shop_id=p.supply_shop_id AND s.own_retail_enabled AND item.sku=replace(k,'~single',''))
-   OR (s.hosted_sku=k AND s.acceptance_state='sellable' AND s.current_acceptance_id IS NOT NULL));
- IF selection IS NULL THEN RETURN false;END IF;
- SELECT m.catalog_group_id INTO assigned FROM commerce_product_group_members m WHERE m.tenant_id=t AND m.instance_id=i AND m.selection_id=selection;
+   OR (s.hosted_sku=k AND s.acceptance_state='sellable' AND EXISTS(SELECT 1 FROM commerce_hosted_supply_offers o JOIN commerce_distribution_acceptances a ON a.acceptance_id=s.current_acceptance_id AND a.selection_id=s.selection_id WHERE o.offer_id=s.hosted_offer_id AND o.item_id=s.item_id AND o.state='offered' AND a.decision='accepted' AND a.listing_sha256=s.listing_sha256 AND s.snapshot->>'offer_sha256'=o.terms_sha256)));
+ IF live_selection IS NULL THEN RETURN false;END IF;
+ SELECT m.catalog_group_id INTO assigned FROM commerce_product_group_members m WHERE m.tenant_id=t AND m.instance_id=i AND m.selection_id=live_selection;
  IF assigned IS NOT NULL THEN RETURN false;END IF;
- SELECT g.group_id INTO home FROM commerce_product_groups g WHERE g.tenant_id=t AND g.instance_id=i AND g.anchor_product_id=item
+ SELECT g.group_id INTO home FROM commerce_product_groups g WHERE g.tenant_id=t AND g.instance_id=i AND g.anchor_product_id=live_item
   AND EXISTS(SELECT 1 FROM commerce_product_group_members m JOIN commerce_selections s ON s.selection_id=m.selection_id AND s.shop_id=p.storefront_shop_id AND s.own_retail_enabled
    WHERE m.tenant_id=t AND m.instance_id=i AND m.catalog_group_id=g.group_id);
  RETURN (home IS NOT NULL)=(k LIKE '%~single');

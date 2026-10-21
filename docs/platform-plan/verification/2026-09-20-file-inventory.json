@@ -17554,8 +17554,8 @@
     },
     {
       "path": "migrations/181_storefront_categories.sql",
-      "bytes": 13540,
-      "sha256": "39f3ca7a691bdea8acbeeaaff97e18e266dacc22e88ba9c9b15aa5447d785dc3"
+      "bytes": 14231,
+      "sha256": "6b0442f4c71418c07f2e3b895cdd3172d19323a36e983e1e6f4125ace4d7fae9"
     },
     {
       "path": "modules/agent-commerce/README.md",
@@ -25934,8 +25934,8 @@
     },
     {
       "path": "tests/runtime/storefront-categories.test.ts",
-      "bytes": 19102,
-      "sha256": "3b18ea274beec6b09387c50aaf2a9b4b26ddad44d28e4abe1cb6bd6175588316"
+      "bytes": 20923,
+      "sha256": "e26ddc776b66bdc5f8fd6b6abeac5c2cabae1fb14dbad397ff21ef0d2fc40584"
     },
     {
       "path": "tests/runtime/storefront-gallery-commands.test.ts",
