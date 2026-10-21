@@ -15599,8 +15599,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-      "bytes": 33197,
-      "sha256": "3f622732ba6e5317f3e89e3f77dbfbcad161143cfc68b447516ab6178ec2782c"
+      "bytes": 33352,
+      "sha256": "782b944f749b8d2cfd0538de52909cc43262356539ae919c7955ffdbb2cff997"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
