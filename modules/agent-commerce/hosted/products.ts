@@ -1,7 +1,7 @@
 import {INVENTORY_POSITION_COLUMNS,inventoryPositions} from './inventory.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { ProductInputSchema, ProductUpdateInputSchema, ProductViewSchema, ProductPageSchema, ProductRemovedSchema, type ProductView } from '../../../contracts/guild-launchpad/v1/storefront.js';
+import { ProductInputSchema, ProductUpdateInputSchema, ProductViewSchema, MerchantProductViewSchema, MerchantProductPageSchema, type MerchantProductView, ProductRemovedSchema, type ProductView } from '../../../contracts/guild-launchpad/v1/storefront.js';
 import { checkVersion } from '../../../packages/db/index.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { Actor } from '../../identity-membership/service.js';
@@ -14,7 +14,7 @@ export function productSnapshot(p: Pick<ProductView, 'sku' | 'title' | 'descript
     shipping_minor: 0, shipping_terms: SHIPPING, return_terms: RETURNS };
 }
 /** Product identity is the existing item; its concurrency version is the selection's. */
-export async function products(q: PoolClient, p: Profile, includeSupplyOnly = false, withInventory = false): Promise<ProductView[]> {
+export async function products(q: PoolClient, p: Profile, includeSupplyOnly = false, withInventory = false): Promise<MerchantProductView[]> {
   const rows = (await q.query(`SELECT i.item_id AS product_id,i.sku,i.title,i.description,l.retail_price_minor AS price_minor,i.stock,s.currency,l.aggregate_version::text AS version${withInventory?`,i.reserved,${INVENTORY_POSITION_COLUMNS}`:''}
     FROM commerce_items i JOIN commerce_selections l ON l.item_id=i.item_id
     JOIN commerce_resource_tenants m ON m.resource_kind='shop' AND m.resource_id=i.shop_id AND m.mapping_state='confirmed'
@@ -25,13 +25,13 @@ export async function products(q: PoolClient, p: Profile, includeSupplyOnly = fa
   [p.tenant_id, p.instance_id, p.supply_shop_id, p.storefront_shop_id, includeSupplyOnly])).rows;
   const inventory=withInventory?await inventoryPositions(q,rows.map(r=>r.product_id),{onInconsistent:'report',
     rows:rows.map(r=>({...r,item_id:r.product_id}))}):null;
-  return rows.map(({reserved:_reserved,held:_held,allocated:_allocated,...row})=>ProductViewSchema.parse({...row,price_minor:Number(row.price_minor),
+  return rows.map(({reserved:_reserved,held:_held,allocated:_allocated,...row})=>(withInventory?MerchantProductViewSchema:ProductViewSchema).parse({...row,price_minor:Number(row.price_minor),
     ...(inventory?{inventory:inventory.get(row.product_id)}:{})}));
 }
 export async function listProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
     const p = await profile(q, tenantId, instanceId); retailReady(p);
-    return ProductPageSchema.parse({ items: await products(q, p, false, true), limit: 200 });
+    return MerchantProductPageSchema.parse({ items: await products(q, p, false, true), limit: 200 });
   });
 }
 export function addProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, raw: unknown, key: string, supplyOnly: true): Promise<{product_id: string; version: string}>;

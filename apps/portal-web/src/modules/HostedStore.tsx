@@ -16,8 +16,8 @@ import {z} from 'zod';
 import {OpaqueId} from '../../../../contracts/common/v1/identity';
 import {
   StoreViewSchema, StoreSetupInputSchema, StoreUpdateInputSchema, SlugAvailabilitySchema,
-  ProductInputSchema, ProductViewSchema, ProductPageSchema, ProductRemovedSchema, StorePreviewSchema,
-  type ProductView, type StoreView,
+  ProductInputSchema, MerchantProductViewSchema as ProductViewSchema, MerchantProductPageSchema as ProductPageSchema, ProductRemovedSchema, StorePreviewSchema,
+  type MerchantProductView as ProductView, type StoreView,
 } from '../../../../contracts/guild-launchpad/v1/storefront';
 import {StoreAppearanceSchema, type StoreAppearance, type StoreTemplate} from '../../../../contracts/guild-launchpad/v1/storefront-presentation';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';

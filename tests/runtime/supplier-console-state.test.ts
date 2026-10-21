@@ -1,5 +1,5 @@
 import {MerchantInventorySummary,InventoryDefinition} from '../../modules/agent-commerce/hosted-ui/CommerceTools';
-import {MerchantInventorySchema,ProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront';
+import {MerchantInventorySchema,MerchantProductViewSchema as ProductViewSchema,ProductViewSchema as FrozenProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront';
 import {SupplyProductViewSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {test} from 'node:test';
 import * as React from 'react';
@@ -600,6 +600,7 @@ test('merchant stock contracts accept legacy absence and validate all occupied-s
   assert.equal(MerchantInventorySchema.safeParse(invalid).success,false);
  assert.deepEqual(MerchantInventorySchema.parse({state:'inconsistent',code:'reservation_inconsistent'}),{state:'inconsistent',code:'reservation_inconsistent'});
  const product={product_id:id,sku:'P0001',title:'合成茶杯',description:'',price_minor:100,currency:'TWD',stock:20,version:'1'};
+ assert.equal(FrozenProductViewSchema.safeParse({...product,inventory:ready}).success,false);
  assert(ProductViewSchema.safeParse(product).success);assert(ProductViewSchema.safeParse({...product,inventory:ready}).success);
  assert.equal(ProductViewSchema.safeParse({...product,stock:21,inventory:ready}).success,false);
  const {price_minor,...supply}=product;
