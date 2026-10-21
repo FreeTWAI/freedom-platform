@@ -334,8 +334,8 @@
     },
     {
       "path": "apps/platform-api/src/app.ts",
-      "bytes": 12203,
-      "sha256": "e3e041aaa5ecb4ad84d35b7872defd26adf4a949a2e529a434a98a168683cb2d"
+      "bytes": 12271,
+      "sha256": "2cddfe0fcfbacdf743c3677cd6cf809a2176e01d61ea60362a3ab72a2c535441"
     },
     {
       "path": "apps/platform-api/src/credential-ingest-client.ts",
@@ -24129,8 +24129,8 @@
     },
     {
       "path": "tests/runtime/hosted-order-http-contracts.test.ts",
-      "bytes": 2644,
-      "sha256": "81b0af3ca099f552ed401d4adaccdbf5f4e4736579c219b08034fd820f968413"
+      "bytes": 3378,
+      "sha256": "f594cad77d2aaf59fe0a4bb9d5d063a75e245b8988bfc977b059905402a7f4e3"
     },
     {
       "path": "tests/runtime/hosted-order-http.test.ts",
