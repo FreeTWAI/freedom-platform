@@ -167,7 +167,7 @@ function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLoca
       {held.current?.kind !== 'quote' && <button className="btn btn-ghost" disabled={busy || loading} onClick={() => void load(lookupTarget)}>查詢原預留</button>}</div>}
     {!route ? <p>預留連結格式不正確。</p> : route.kind === 'lookup' ? <>
       <section className="stack" aria-label={separateReservations?'預留紀錄':'我的訂單'}>{!separateReservations&&<h2>我的訂單</h2>}
-        {page?.items.length === 0 && <p>目前沒有訂單。</p>}
+        {page?.items.length === 0 && <p>{separateReservations?'目前沒有預留紀錄。':'目前沒有訂單。'}</p>}
         {page?.items.map(item => <article className="hosted-store-product stack" key={item.order_id}>
           <h3>{item.store.name}</h3><p>{item.state === 'reserved' ? '預留中' : item.state === 'cancelled' ? '已取消' : '已到期'} · 商品金額 {formatMinor(item.merchandise_total_minor, item.currency)}（非應付金額）</p>
           <p>預留截止：{formatIsoLocal(item.reservation_expires_at)}</p>

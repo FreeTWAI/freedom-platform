@@ -215,11 +215,28 @@ test('buyer order list follows next page and isolates another account', async ({
     const other = await browser.newContext({baseURL});
     try {
       const strangerPage = await other.newPage(); await buyerLogin(strangerPage, s.stranger.email, '#reservations');
-      await expect(strangerPage.getByRole('region', {name: '預留紀錄'})).toContainText('目前沒有訂單');
+      await expect(strangerPage.getByRole('region', {name: '預留紀錄'})).toContainText('目前沒有預留紀錄。');
       await expect(strangerPage.getByRole('link', {name: '查看訂單', exact: true})).toHaveCount(0);
     } finally {await other.close();}
   } finally {await context.close();}
 });
+
+// Undo only the four declared checkout-ON differences before comparing the full v1 DOM.
+function originalReservationsHTML(element: Element) {
+  const copy=element.cloneNode(true) as HTMLElement,heading=copy.firstElementChild;
+  if(heading?.tagName!=='H2'||heading.textContent!=='預留紀錄')throw Error('Missing separate reservations heading.');
+  heading.remove();
+  const lookup=copy.querySelector('section[aria-label="預留紀錄"]');
+  if(!lookup||lookup.querySelector('h2'))throw Error('Unexpected reservations lookup heading.');
+  lookup.setAttribute('aria-label','我的訂單');
+  const originalHeading=document.createElement('h2');originalHeading.textContent='我的訂單';lookup.prepend(originalHeading);
+  const empty=lookup.querySelector(':scope > p');
+  if(empty){
+    if(empty.textContent!=='目前沒有預留紀錄。')throw Error('Unexpected reservations empty state.');
+    empty.textContent='目前沒有訂單。';
+  }
+  return copy.outerHTML;
+}
 
 test('checkout orders region loads, empties, retries and pages above the separate reservations region',async({page,browser,baseURL,e2eAuthPool},info)=>{
   const store=await setupStorefrontOrderStore(e2eAuthPool,browser,baseURL!),listener=await openCartListener(e2eAuthPool),context=await browser.newContext({baseURL});
@@ -252,17 +269,7 @@ test('checkout orders region loads, empties, retries and pages above the separat
     await expect(legacy.getByRole('link',{name:'查看訂單',exact:true})).toHaveCount(1);
     await expect(legacy.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
     const originalLegacy=await legacy.locator('..').evaluate(element=>element.outerHTML);
-    // Only undo the three declared heading/name changes; compare the entire legacy component.
-    const expectedOffLegacy=await legacy.locator('..').evaluate(element=>{
-      const copy=element.cloneNode(true) as HTMLElement,heading=copy.firstElementChild;
-      if(heading?.tagName!=='H2'||heading.textContent!=='預留紀錄')throw Error('Missing separate reservations heading.');
-      heading.remove();
-      const lookup=copy.querySelector('section[aria-label="預留紀錄"]');
-      if(!lookup||lookup.querySelector('h2'))throw Error('Unexpected reservations lookup heading.');
-      lookup.setAttribute('aria-label','我的訂單');
-      const originalHeading=document.createElement('h2');originalHeading.textContent='我的訂單';lookup.prepend(originalHeading);
-      return copy.outerHTML;
-    });
+    const expectedOffLegacy=await legacy.locator('..').evaluate(originalReservationsHTML);
     release.resolve();await expect(orders).toContainText('目前沒有訂單。');
     fail=true;await orders.getByRole('button',{name:'重新整理／第一頁',exact:true}).click();
     await expect(orders.getByRole('alert')).toHaveText('無法取得訂單，請稍後重試。');
@@ -285,13 +292,31 @@ test('checkout orders region loads, empties, retries and pages above the separat
       await expect(offPage.getByRole('heading',{name:'預留紀錄',exact:true})).toHaveCount(0);
       await expect(old.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
       expect(await old.locator('..').evaluate(element=>element.outerHTML)).toBe(expectedOffLegacy);
+      // A buyer with checkout orders and no v1 reservations must see an unambiguous empty state.
+      const checkoutOnly=await seedStorefrontOrder(e2eAuthPool,store,{buyerUserId:store.stranger.id,cancelReason:'buyer_cancelled'});
+      const emptyContext=await browser.newContext(),emptyOffContext=await browser.newContext();
+      try {
+        const emptyPage=await emptyContext.newPage();await buyerLogin(emptyPage,store.stranger.email,'#reservations',listener.origin);
+        const emptyOrders=emptyPage.getByRole('region',{name:'訂單',exact:true}),emptyLegacy=emptyPage.getByRole('region',{name:'預留紀錄',exact:true});
+        await expect(emptyOrders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',checkoutOnly.orderPath);
+        await expect(emptyLegacy.getByText('目前沒有預留紀錄。',{exact:true})).toBeVisible();
+        await expect(emptyLegacy.getByText('目前沒有訂單。',{exact:true})).toHaveCount(0);
+        await expect(emptyLegacy.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
+        const expectedEmptyOff=await emptyLegacy.locator('..').evaluate(originalReservationsHTML);
+        const emptyOffPage=await emptyOffContext.newPage();await buyerLogin(emptyOffPage,store.stranger.email,'#reservations',off.origin);
+        const oldEmpty=emptyOffPage.getByRole('region',{name:'我的訂單',exact:true});
+        await expect(oldEmpty.getByText('目前沒有訂單。',{exact:true})).toBeVisible();
+        await expect(oldEmpty.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
+        expect(await oldEmpty.locator('..').evaluate(element=>element.outerHTML)).toBe(expectedEmptyOff);
+        // Screenshots may leave an empty inline caret style; take them after strict DOM comparisons.
+        await expect(emptyPage.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(1);
+        const heading=emptyPage.getByRole('heading',{name:'預留紀錄',exact:true,level:2});
+        expect(await heading.evaluate(element=>element.nextElementSibling?.getAttribute('role'))).toBe('note');
+        for(const width of [390,768,1440]){
+          await emptyPage.setViewportSize({width,height:900});expect(await emptyPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+          await emptyPage.screenshot({path:info.outputPath(`member-orders-${width}.png`),fullPage:true});
+        }
+      } finally {await emptyContext.close();await emptyOffContext.close();}
     } finally {await offContext.close();await off.close();}
-    // Screenshots may leave an empty inline caret style; take them after strict DOM comparisons.
-    await orders.getByRole('button',{name:'重新整理／第一頁',exact:true}).click();
-    await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',second.orderPath);
-    for(const width of [390,768,1440]){
-      await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-      await page.screenshot({path:info.outputPath(`member-orders-${width}.png`),fullPage:true});
-    }
   } finally {release.resolve();await context.close();await listener.close();}
 });

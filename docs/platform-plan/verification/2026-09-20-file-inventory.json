@@ -2614,8 +2614,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedOrder.tsx",
-      "bytes": 18387,
-      "sha256": "d479b1bc8fdb6e4b6972e2c07d44c2f5efcb9f3c8dd15a83a5989899ffcdfd88"
+      "bytes": 18442,
+      "sha256": "1eb71fd611d23460b2d463bafe097f85a4eabc6e772908b7fba3c742312aef52"
     },
     {
       "path": "apps/portal-web/src/modules/HostedReservationSetting.tsx",
@@ -22874,8 +22874,8 @@
     },
     {
       "path": "tests/e2e/hosted-order.spec.ts",
-      "bytes": 24683,
-      "sha256": "7c47fa60d93d43b1a315fb5ef755174bdccec2adcb37e5fc8158f0a8c4acd968"
+      "bytes": 26875,
+      "sha256": "f8f2cad42af2e553fbf26ce89b51be3b2d36e7024673347dfd101a972d8c7f38"
     },
     {
       "path": "tests/e2e/hosted-payment-fixture.ts",
