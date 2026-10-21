@@ -247,7 +247,10 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     }
     await mergeCard.getByRole('button',{name:'併入這個公會',exact:true}).click();
     await expect(mergeCard.locator('.badge.guild-merged')).toHaveText('已併入');
+    await mergeCard.getByText('查看申請與審核紀錄',{exact:true}).click();
+    await expect(mergeCard.locator('details.admin-application-details')).toHaveJSProperty('open',true);
     await expect(mergeCard.getByText('併入：資安公會',{exact:true})).toBeVisible();
+    await expect(mergeCard.getByText('併入資安公會並留下別名。',{exact:true})).toBeVisible();
 
     await page.setViewportSize({width:1280,height:900});
     await page.goto('/');
