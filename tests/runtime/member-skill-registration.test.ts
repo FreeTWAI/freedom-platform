@@ -193,13 +193,13 @@ test('a book moved to 社群技能書 leaves the unlocked shelf without deleting
   assert.deepEqual(await shelf(),['ai-avatar-bot','aiwff-runtime','project-template']);
 });
 
-test('migration 174 publishes twelve member-shared books without changing publication times or any grants on replay',async()=>{
+test('migration 179 publishes twelve member-shared books without changing publication times or any grants on replay',async()=>{
   const ids=["ga4-lp-analytics", "gemini-voice-lab", "hdsljp-api", "hrflow", "human-mode", "keynote-pptx-doctor", "photo-border-remover", "sns-feedback-collect", "story-bible", "ultracode-token-optimization", "usage", "webchat-mcp"];
   assert.deepEqual((await pool.query('SELECT book_id FROM skill_publications WHERE book_id=ANY($1::text[]) ORDER BY book_id',[ids])).rows.map(row=>row.book_id),ids);
   const snapshot=(await pool.query('SELECT * FROM skill_publications ORDER BY book_id')).rows;
   const memberGrants=(await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,book_id')).rows;
   const developmentGrants=(await pool.query('SELECT * FROM development_grants ORDER BY grant_id')).rows;
-  const sql=await readFile(new URL('../../migrations/174_member_shared_skill_books.sql',import.meta.url),'utf8');
+  const sql=await readFile(new URL('../../migrations/179_member_shared_skill_books.sql',import.meta.url),'utf8');
   await pool.query(sql);await pool.query(sql);
   assert.deepEqual((await pool.query('SELECT * FROM skill_publications ORDER BY book_id')).rows,snapshot);
   assert.deepEqual((await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,book_id')).rows,memberGrants);

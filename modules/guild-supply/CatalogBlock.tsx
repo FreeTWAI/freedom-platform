@@ -31,10 +31,10 @@ export function SupplySummaryView({state, name, tenantId, instanceId, retry}: {
     if (todos.state === 'unavailable') {
       return <p className="field-hint">需要商品編輯權限才能查看待辦。</p>;
     }
-    if (todos.pending_requests === 0 && todos.outdated_offers === 0 && todos.out_of_stock_products === 0) {
+    if (todos.pending_requests === 0 && todos.outdated_offers === 0 && todos.out_of_stock_products === 0 && !state.data.inventory_inconsistent_count) {
       return <p className="field-hint">目前沒有待辦。</p>;
     }
-    return <p className="field-hint">待辦：待確認售價申請 {todos.pending_requests}、供貨版本需重新公開 {todos.outdated_offers}、缺貨商品 {todos.out_of_stock_products}</p>;
+    return <p className="field-hint">待辦：待確認售價申請 {todos.pending_requests}、供貨版本需重新公開 {todos.outdated_offers}、缺貨商品 {state.data.inventory_inconsistent_count?'暫時無法確認':todos.out_of_stock_products}{!!state.data.inventory_inconsistent_count&&`；有 ${state.data.inventory_inconsistent_count} 件商品的庫存紀錄不一致，缺貨商品數暫時無法確認。`}</p>;
   }
   return null;
 }

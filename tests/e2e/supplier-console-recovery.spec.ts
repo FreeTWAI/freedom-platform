@@ -155,7 +155,7 @@ test('SC-E2E-23 stock below the reserved quantity is refused and the input is ke
   expect(await balance()).toEqual([{stock:10,reserved:3}]);await go(page,s,'/products/'+p.product_id);
   const form=active(page).getByRole('form',{name:'儲存庫存',exact:true});await form.getByLabel('庫存',{exact:true}).fill('2');
   const refused=page.waitForResponse(r=>r.request().method()==='PATCH'&&r.url().endsWith('/supply-products/'+p.product_id));await form.getByRole('button',{name:'儲存庫存',exact:true}).click();expect((await refused).status()).toBe(409);
-  await expect(form.getByRole('status')).toContainText('庫存不能低於已保留的數量');await expect(form.getByLabel('庫存',{exact:true})).toHaveValue('2');await expect(active(page)).toContainText('庫存 10／已預留 3／可用 7');expect(await balance()).toEqual([{stock:10,reserved:3}]);
+  await expect(form.getByRole('status')).toContainText('庫存不能低於已占用的數量');await expect(form.getByLabel('庫存',{exact:true})).toHaveValue('2');await expect(active(page)).toContainText('庫存 10／已占用 3／可用 7');expect(await balance()).toEqual([{stock:10,reserved:3}]);
   await evidence(page,info,'stock-below-real-reservation');await form.getByLabel('庫存',{exact:true}).fill('5');
   const accepted=page.waitForResponse(r=>r.request().method()==='PATCH'&&r.url().endsWith('/supply-products/'+p.product_id));await form.getByRole('button',{name:'儲存庫存',exact:true}).click();expect((await accepted).status()).toBe(200);
   await expect(form.getByRole('status')).toHaveText('已保存：儲存庫存。');expect(await balance()).toEqual([{stock:5,reserved:3}]);

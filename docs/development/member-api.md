@@ -895,7 +895,7 @@ cancel a committed registration or recall a provider-accepted email.
 ## Event calendar, reminders and waitlists (#256)
 
 The candidate uses migrations `153_event_participation.sql` and
-`173_guest_invitation_credit.sql`. Apply both **before switching source, even
+`178_guest_invitation_credit.sql`. Apply both **before switching source, even
 with the feature off**: existing RSVP capacity and guest acknowledgement paths
 also use their columns. The new routes and UI require
 `FREEDOM_EVENT_PARTICIPATION_ENABLED=true` (default off); disabled routes return
@@ -1004,7 +1004,7 @@ The nullable column is necessary because transient request state disappears on
 provider failure and email/hold correlation cannot prove actual invitation use.
 Existing rows are not backfilled by inference. Cutover must stop old writers and
 drain their ten-minute pending holds before installing the new writer; do not
-roll back to a writer that ignores exact credit. Schema173's release capability
+roll back to a writer that ignores exact credit. Schema178's release capability
 floor applies even with participation OFF. No deployment or flag change is implied.
 An expired hold grants no extension and allows the next candidate to advance.
 While the event is still published and not started, disabling its waitlist

@@ -325,7 +325,7 @@ test('a scope revocation that holds the row lock wins before new authorization',
 });
 
 test('upgrade from 075 preserves every legacy table and receipt; migration/backfill are repeatable', async () => {
-  // Migration 173 adds exactly these publications without changing legacy rows.
+  // Migration 179 adds exactly these publications without changing legacy rows.
   const addedBookIds = ['hrflow', 'hdsljp-api', 'usage', 'photo-border-remover', 'ga4-lp-analytics', 'sns-feedback-collect',
     'ultracode-token-optimization', 'keynote-pptx-doctor', 'webchat-mcp', 'gemini-voice-lab', 'story-bible', 'human-mode'];
   const upgradeSchema = schema + '_upgrade', upgrade = new Pool({ connectionString, options: `-c search_path=${upgradeSchema}`, max: 4 });

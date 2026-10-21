@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
-import {CurrencySchema,ProductInputSchema,ProductViewSchema} from './storefront.js';
+import {CurrencySchema,ProductInputSchema,MerchantProductViewBaseSchema,merchantInventoryMatches} from './storefront.js';
 
 // Additive private supplier DTOs. The pinned retail storefront/v1 stays unchanged.
 const name=z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]*$/);
@@ -18,7 +18,7 @@ export const SupplyCatalogReceiptSchema=z.object({instance_id:OpaqueId,version:V
 export const SupplyProductReceiptSchema=z.object({product_id:OpaqueId,version:Version}).strict();
 export const SupplyProductInputSchema=ProductInputSchema.omit({price_minor:true}).extend({cost_minor:ProductInputSchema.shape.price_minor});
 export const SupplyProductUpdateInputSchema=SupplyProductInputSchema.partial().refine(value=>Object.keys(value).length>0);
-export const SupplyProductViewSchema=ProductViewSchema.omit({price_minor:true}).extend({cost_minor:ProductInputSchema.shape.price_minor});
+export const SupplyProductViewSchema=MerchantProductViewBaseSchema.omit({price_minor:true}).extend({cost_minor:ProductInputSchema.shape.price_minor}).refine(merchantInventoryMatches, 'inventory must match product counters');
 export const SupplyProductPageSchema=z.object({items:z.array(SupplyProductViewSchema).max(200),limit:z.literal(200)}).strict();
 export type SupplyCatalogView=z.infer<typeof SupplyCatalogViewSchema>;
 export type SupplyProductView=z.infer<typeof SupplyProductViewSchema>;

@@ -1,3 +1,4 @@
+import {InventoryIssues} from '../../../hosted-ui/CommerceTools';
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {SupplierReportQuerySchema,type SupplierReport} from '../../../../../contracts/guild-launchpad/v1/supplier-console';
 import {ApiError} from '../../../../../apps/portal-web/src/api';
@@ -21,9 +22,9 @@ export function Reports({c}:{c:ConsoleController}){
  return <section className="stack"><h2 tabIndex={-1}>營運報表</h2>
   <ReportControls key={key} c={c} ready={!!d}>
   <ReadStatus c={c} name={key} label="營運報表"/>
-  {d&&<>
+  {d&&<><InventoryIssues count={d.inventory_inconsistent_count}/>
    <section className="sc-section stack"><h3>商品（資料時間當下）</h3><table className="sc-products sc-report-table"><thead><tr><th scope="col">項目</th><th scope="col" className="sc-number">數量</th><th scope="col">清單</th></tr></thead><tbody>
-    {([['total','商品總數',undefined],['offered','公開中','offered'],['not_offered','尚未公開','not_offered'],['outdated','需更新版本','outdated'],['out_of_stock','缺貨','out_of_stock']] as const).map(([field,label,state])=><tr key={field}><th scope="row">{label}</th><td className="sc-number" data-label="數量">{d.products[field]}</td><td><a className="btn btn-ghost btn-small" aria-label={`${label}：查看清單`} href={supplierConsoleHref(c.scope,'products',{state:state as ProductState|undefined})}>查看清單</a></td></tr>)}
+    {([['total','商品總數',undefined],['offered','公開中','offered'],['not_offered','尚未公開','not_offered'],['outdated','需更新版本','outdated'],['out_of_stock','缺貨','out_of_stock']] as const).map(([field,label,state])=><tr key={field}><th scope="row">{label}</th><td className="sc-number" data-label="數量">{field==='out_of_stock'&&d.inventory_inconsistent_count?'暫時無法確認':d.products[field]}</td><td><a className="btn btn-ghost btn-small" aria-label={`${label}：查看清單`} href={supplierConsoleHref(c.scope,'products',{state:state as ProductState|undefined})}>查看清單</a></td></tr>)}
    </tbody></table></section>
    <section className="sc-section stack"><h3>合作（資料時間當下）</h3>
     <dl className="detail-list sc-report-totals">{cooperationLabels.map(([field,label])=><div key={field}><dt>{label}</dt><dd className="sc-number">{d.cooperation.totals[field]}</dd></div>)}</dl>

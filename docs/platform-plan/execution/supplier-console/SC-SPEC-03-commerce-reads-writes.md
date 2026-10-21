@@ -42,6 +42,10 @@
 
 - 權限 `store:write`。回傳完整的本店商品（與 `supply-products` 同一組資料列，最多 200；超過視為 500 不變條件錯誤）。
 - 每列：`supply_price_minor`、`shipping_minor`、`stock`、`reserved`、`available`（schema 驗證 `available = stock - reserved`）、商品版本、目前 `offered` 的 offer（`offer_id`、`version`、`terms_sha256`、`matches_current_terms`）、合作數。
+- 私人商品讀取追加可選 `inventory`：`ready` 帶 `stock/reserved/available/held/allocated`，其中 `reserved = held + allocated`、`available = stock - reserved`，並與原欄位核對；`inconsistent` 只帶 `code: reservation_inconsistent`。新讀取一律提供狀態，可選只為舊回應相容。
+- 畫面用「已占用」表示 `reserved`，拆成「預留中」與「已付款待出貨」；供應商保留「可用」，與商店「可售」是同一數量。預留不是成交，到期但尚未結算的 hold 仍占用庫存。
+- 拆分在原本已授權的單一 statement 內取得。`inventoryPositions` 的 reporting overload 只接受該 statement 的可信列，不綁 tenant、不授權，也不接受 request rows；原本嚴格呼叫仍以 409 拒絕不一致。
+- 不一致只影響該列：相關數量顯示 `—`，正常商品繼續顯示。概覽與摘要追加 `inventory_inconsistent_count`；非零時不呈現未核實的缺貨總數，也不能顯示「目前沒有待辦」。其他計數與既有 v1 數值欄位維持原義。
 - 合作數以本商品所有 offer 版本上的賣家選品分桶：`awaiting`（待確認且 offer 仍公開）、`sellable`（可售且 offer 仍公開）、`changes_requested`、`inactive`（其餘：不同意、撤回、或 offer 已撤回）。
 - `matches_current_terms` 必須與公開命令用同一個函式計算：把 `publishSupplyOffer` 內組 terms 的程式抽成 `supplyOfferTerms(row, currency)`（`modules/agent-commerce/hosted/distribution.ts`），公開與讀取都呼叫它再 `digest`。
 

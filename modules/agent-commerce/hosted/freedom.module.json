@@ -3,6 +3,8 @@
   "module_id": "hosted-distribution",
   "owner_role": "foundation",
   "owned_paths": [
+    "migrations/173_supply_structured_terms.sql",
+    "tests/runtime/hosted-supply-structured-terms.test.ts",
     "modules/agent-commerce/hosted/distribution.ts",
     "modules/agent-commerce/hosted/distribution.md",
     "apps/platform-api/src/routes/hosted-distribution.ts",
@@ -90,6 +92,7 @@
       "kind": "page",
       "entry": "apps/portal-web/src/modules/HostedDistribution.tsx",
       "operations": [
+        "storefront.supply-catalog-photos.read",
         "store.supply-offer.list",
         "store.supply-offer.publish",
         "store.supply-offer.withdraw",

@@ -1,11 +1,12 @@
+import {legalStyles} from './policies/pages.js';
 import { escapeHtml } from '../../../packages/shared/html.js';
-import {storefrontHeader, storefrontFooter, type StorefrontHeading} from '../hosted/storefront-shell.js';
+import {storefrontHeader, storefrontFooter, storefrontBodyAttributes, type StorefrontHeading} from '../hosted/storefront-shell.js';
 
 export type StorefrontStoreHeading = StorefrontHeading;
 
 function storefrontShell(store: StorefrontStoreHeading, title: string, content: string, includeScript = false): string {
   const script = includeScript ? '<script type="module" src="/assets/storefront.js"></script>' : '';
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="/shops.css">${script}</head><body>${storefrontHeader(store, {cart: includeScript})}<main id="main" tabindex="-1">${content}</main>${storefrontFooter(store, {orderAccess: false})}</body></html>`;
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="/shops.css">${legalStyles(store.policies)}${script}</head><body${storefrontBodyAttributes(store.appearance)}>${storefrontHeader(store, {cart: includeScript})}<main id="main" tabindex="-1">${content}</main>${storefrontFooter(store, {orderAccess: false})}</body></html>`;
 }
 
 export function cartPageHtml(store: StorefrontStoreHeading, buyerJourneyEnabled = false): string {

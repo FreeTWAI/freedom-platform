@@ -118,16 +118,16 @@ WebChatMCP.js 與 Human Mode 的會員各有 100 則原文，原先優先考慮�
 
 ## 上架
 
-新增 `migrations/174_member_shared_skill_books.sql`，只 INSERT 12 筆 `skill_publications` 並使用 `ON CONFLICT DO NOTHING`，保留既有上架時間；不寫入 `member_skill_book_grants`、`development_grants` 或會員資料。`deploy/cloudflare/environments.json` 的 `migrations.last` 為 174，migration plan 與 release compatibility 的已知 ledger／測試同步新增，既有 migration 未改。
+新增 `migrations/179_member_shared_skill_books.sql`，只 INSERT 12 筆 `skill_publications` 並使用 `ON CONFLICT DO NOTHING`，保留既有上架時間；不寫入 `member_skill_book_grants`、`development_grants` 或會員資料。`deploy/cloudflare/environments.json` 的 `migrations.last` 為 179，migration plan 與 release compatibility 的已知 ledger／測試同步新增，既有 migration 未改。
 
-本批次因 #768 使用 173，將 #919 的上架 migration 重編為 174。這次未執行 migration 或宣稱已上線。
+#937 先合併占用 173–177，本批次把 #768 改為 178、#919 改為 179。這次未執行 migration 或宣稱已上線。
 
 ## 驗證入口與證據界線
 
 - `npm run typecheck`；前端修改後 `npm run build`。
 - 不需 PostgreSQL：`tests/runtime/member-shared-skill-books.test.ts`（固定 pins、角色、無公會指定、SQL 排除參數、24 張精確規格與 manifest 雜湊）、`skill-book-guides.test.ts`、`skill-book-upstreams.test.ts`、`skill-collaboration.test.ts`、`development-map.test.ts`、`skill-share-content.test.ts`、`skill-sharing.test.ts`。
 - 本機 migration／release 規劃：`node --test deploy/cloudflare/test/migration-plan.test.mjs deploy/cloudflare/test/release-compatibility.test.mjs`，不接資料庫、不授部署權。
-- 需 PostgreSQL，這次 `not_run`：`member-skill-registration.test.ts` 新增 174 的上架／重播／無 grant 變更檢查；`skill-submission-upgrades.test.ts` 新增全部 12 repo 加 WebChatMCP 第二筆、可見對照投稿與直接閱讀的真正 SQL 回歸。任務不允許啟動 PostgreSQL／Docker。
+- 需 PostgreSQL，這次 `not_run`：`member-skill-registration.test.ts` 新增 179 的上架／重播／無 grant 變更檢查；`skill-submission-upgrades.test.ts` 新增全部 12 repo 加 WebChatMCP 第二筆、可見對照投稿與直接閱讀的真正 SQL 回歸。任務不允許啟動 PostgreSQL／Docker。
 - 需瀏覽器與隔離資料庫，這次 `not_run`：`tests/e2e/skill-book-library.spec.ts`、`audit-skills.spec.ts`。書架期望為 29 本公會技能書與 24 本社群技能書。
 - `scripts/verify-public.mjs` 同步 53 本／59 個 repo 的精確期望；這次未執行公開部署驗收。
 - 前輪實跑結果在 job dir `skill-books.report.md`；本輪精修、實跑與未驗項另記 `skill-books-polish.report.md`，不把本機測試當成可信 CI／正式部署證據。context 的 `surface_unmapped` blocker 也保留，不為本次擴大修改治理 descriptors。
