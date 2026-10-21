@@ -15,7 +15,8 @@
     "tests/runtime/storefront-payment-pages.test.ts",
     "tests/e2e/storefront-payment.spec.ts",
     "tests/e2e/storefront-payment-fixture.ts",
-    "tests/e2e/storefront-order-email.spec.ts"
+    "tests/e2e/storefront-order-email.spec.ts",
+    "tests/runtime/buyer-journey.test.ts"
   ],
   "public_exports": [],
   "dependencies": [

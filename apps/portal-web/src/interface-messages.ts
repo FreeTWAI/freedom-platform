@@ -3,6 +3,7 @@
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
   'sellerConsole.orders':["訂單", "Orders", "注文", "주문", "Pedidos"],
+  'sellerConsole.overview':["開店準備", "Store readiness", "開店準備", "개점 준비", "Preparación de la tienda"],
   'sellerConsole.order':["訂單詳情", "Order details", "注文詳細", "주문 상세", "Detalles del pedido"],
   'sellerConsole.reservations':["舊版預留", "Legacy reservations", "旧版の予約", "이전 예약", "Reservas anteriores"],
   'sellerConsole.payments':["收款與對帳", "Payments and reconciliation", "入金と照合", "수금 및 대사", "Cobros y conciliación"],
