@@ -8,7 +8,7 @@ import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 
 export * from './fixtures.js';
 type Features=Pick<NonNullable<Parameters<typeof createApp>[3]>,
-  'shortVideosEnabled'|'memberReportingEnabled'|'personalContentEnabled'|'firstParticipationEnabled'|'notificationPreferencesEnabled'|'eventParticipationEnabled'|'squadOutcomesEnabled'|'eventOutcomesEnabled'|'eventEmailSender'|'totpEncryptionKey'|'passwordEmailSender'|'communitySearchEnabled'|'participationMetricsEnabled'|'guildLaunchpadEnabled'|'hostedReservationsEnabled'|'supplierConsoleEnabled'>;
+  'shortVideosEnabled'|'memberReportingEnabled'|'personalContentEnabled'|'firstParticipationEnabled'|'notificationPreferencesEnabled'|'eventParticipationEnabled'|'squadOutcomesEnabled'|'eventOutcomesEnabled'|'eventEmailSender'|'totpEncryptionKey'|'passwordEmailSender'|'communitySearchEnabled'|'participationMetricsEnabled'|'guildLaunchpadEnabled'|'hostedReservationsEnabled'|'supplierConsoleEnabled'|'storePoliciesEnabled'>;
 
 /** Real per-test Node host on the existing owned schema. Both ON/OFF cases run in
  * the ordinary browser pass; feature coverage does not depend on a new CI pin. */

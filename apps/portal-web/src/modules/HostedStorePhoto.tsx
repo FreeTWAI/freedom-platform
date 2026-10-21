@@ -2,9 +2,9 @@ import {useEffect,useId,useRef,useState} from 'react';
 import type {ProductView} from '../../../../contracts/guild-launchpad/v1/storefront';
 import type {ProductMediaView} from '../../../../contracts/guild-launchpad/v1/hosted-store-media';
 import {ApiError,type PortalClient} from '../api';
-import {sendProductPhoto,productPhotoFileError} from './hosted-store-photo-client';
+import {sendProductPhoto,productPhotoFileError,prepareProductPhotoFile} from './hosted-store-photo-client';
 import {retainedPhotoFailure,reviewPhotoAttempt,holdPhotoAttempt,heldPhotoAttempt,restorePhotoAttempt,releasePhotoAttempt,forgetRefusedPhotoAttempt,photoBlocksLeaving,type PhotoAttempt} from './hosted-store-photo-state';
-import {prepareBrowserRaster,socialImageProblem} from '../../../../packages/asset-storage/browser-raster';
+import {socialImageProblem} from '../../../../packages/asset-storage/browser-raster';
 
 export function HostedStorePhoto({client,userId,tenantId,instanceId,product,media,writable,uploadsEnabled,locked,onState,onSaved}:{
   client:PortalClient;userId:string;tenantId:string;instanceId:string;product:Pick<ProductView,'product_id'|'title'|'version'>;media?:ProductMediaView;writable:boolean;uploadsEnabled:boolean;locked:boolean;
@@ -32,7 +32,7 @@ export function HostedStorePhoto({client,userId,tenantId,instanceId,product,medi
     if(held.current?.hadUnknown||busy.current)return;
     const error=socialImageProblem(selected);if(error){setMessage(error);if(input.current)input.current.value='';return;}
     const serial=++preparation.current;setPreparing(true);setMessage('正在裝置上準備照片…');
-    try{const prepared=selected.size>2*1024*1024?await prepareBrowserRaster(selected):selected;
+    try{const prepared=await prepareProductPhotoFile(selected);
       if(!mounted.current||serial!==preparation.current||session.current!==client.sessionGeneration)return;
       const invalid=productPhotoFileError(prepared);if(invalid)throw new Error(invalid);
       setFile(prepared);setAttempt(null);held.current=null;setPhase('idle');setMessage('照片準備好了。按「儲存照片」後才會上傳。');

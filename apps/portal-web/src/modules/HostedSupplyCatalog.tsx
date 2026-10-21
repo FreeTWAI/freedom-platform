@@ -1,3 +1,4 @@
+import {MerchantInventorySummary,InventoryDefinition,STOCK_HINT} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import type {z} from 'zod';
 import {SupplyCatalogViewSchema, SupplyCatalogSetupInputSchema, SupplyProductInputSchema, SupplyProductViewSchema, SupplyProductPageSchema, SupplyCatalogReceiptSchema, SupplyProductReceiptSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
@@ -53,8 +54,8 @@ export function SupplyCatalogList({client}: {client: PortalClient}) {
     </>}
   </div>;
 }
-export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave}: {
-  client: PortalClient; tenantId: string; instanceId: string; registerLeave: (guard: (() => boolean) | null) => void;
+export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave, supplyOfferPhotosEnabled=false}: {
+  supplyOfferPhotosEnabled?:boolean; client: PortalClient; tenantId: string; instanceId: string; registerLeave: (guard: (() => boolean) | null) => void;
 }) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [view, setView] = useState<Catalog | null>(null);
@@ -224,6 +225,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
             <div className="hosted-supply-toolbar"><h3 id="supply-products-title" ref={productsHeading} tabIndex={-1}>供貨商品</h3>
               {can('store:write') && !adding && !editing && !supplyEditing && view.product_count < view.product_limit && <button type="button" className="btn btn-primary" disabled={locked} onClick={() => openEditor('add')}>新增供貨商品</button>}
             </div>
+            {supplyOfferPhotosEnabled&&<p className="field-hint">方案照片請到<a href={`#stores/${tenantId}/${instanceId}/supply/products`}>供應商營運中心</a>的商品詳情管理。</p>}
             <p className="field-hint">幣別：{catalog.currency} · 共用商品容量：{view.product_count}／{view.product_limit}（含供貨商品與商店選品）</p>
             {!!products.length&&<ProductSearch value={query} onChange={setQuery} count={products.filter(product=>productMatches(product,query)).length} total={products.length} disabled={locked||hasDraft}/>}
             {!!products.length&&!products.some(product=>productMatches(product,query))&&<p>沒有符合的供貨商品，清除搜尋即可查看全部。</p>}
@@ -231,7 +233,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
               onCancel={closeEditor}
               onSave={(body, success) => command({method: 'post', path: root + '/supply-products', body, schema: SupplyProductReceiptSchema, notice: '已新增供貨商品。', success: () => {success(); setAdding(false); markDirty('add', false);}})}/>}
             {!products.length && !loading && <p>還沒有商品。新增商品後可設定供貨條件。</p>}
-            <div className="hosted-store-products">{products.map(product => {
+            {!supplyEditing&&<InventoryDefinition/>}<div className="hosted-store-products">{products.map(product => {
               // Reserve one silent status line so a late summary cannot move the edit buttons.
               const offerState = supplyOfferStateText(product, displayedCooperation);
               return <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
@@ -240,7 +242,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
                 onSave={(body, version, success) => command({targetMissingIsStore: false, method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}
                 onPublish={can('store:publish') && can('store:write') ? version => command({targetMissingIsStore: false, method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，同社群店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined}/>
                 : editing === product.product_id ? <SupplyProductForm key={product.version} product={product} currency={catalog.currency} busy={locked || !can('store:write')} onDirty={value => markDirty('edit', value)} onCancel={closeEditor} onSave={(body, success) => command({targetMissingIsStore: false, method: 'patch', path: root + '/supply-products/' + product.product_id, body, version: product.version, schema: SupplyProductReceiptSchema, notice: '已儲存供貨商品。', success: () => {success(); setEditing(null); markDirty('edit', false);}})}/>
-                : <><h4>{product.title}</h4><p>供貨單價 {formatMinor(product.cost_minor, product.currency)}</p><p>庫存 {product.stock}</p><p className="field-hint" aria-hidden={!offerState}>{offerState ?? '\u00a0'}</p>{product.description && <p className="hosted-store-description">{product.description}</p>}
+                : <><h4>{product.title}</h4><p>供貨單價 {formatMinor(product.cost_minor, product.currency)}</p><MerchantInventorySummary stock={product.stock} inventory={product.inventory}/><p className="field-hint" aria-hidden={!offerState}>{offerState ?? '\u00a0'}</p>{product.description && <p className="hosted-store-description">{product.description}</p>}
                   {can('store:write') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={locked} onClick={() => openEditor('edit', product.product_id)}>編輯供貨商品</button>
                     <button type="button" className="btn btn-ghost" disabled={locked} onClick={() => openEditor('supply', product.product_id)}>供貨條件</button></div>}</>}
             </article>;})}</div>
@@ -306,7 +308,7 @@ function SupplyProductForm({product, currency, busy, onDirty, onCancel, onSave}:
       <label className="field">商品名稱<input autoFocus required maxLength={120} value={fields.title} onChange={event => change('title', event.target.value)}/></label>
       <label className="field">商品說明<textarea maxLength={2000} value={fields.description} onChange={event => change('description', event.target.value)}/></label>
       <label className="field">供貨單價（{currency}）<input required inputMode="decimal" value={fields.cost} onChange={event => change('cost', event.target.value)}/></label>
-      <label className="field">庫存<input required inputMode="numeric" value={fields.stock} onChange={event => change('stock', event.target.value)}/></label>
+      <label className="field">庫存<input required inputMode="numeric" value={fields.stock} onChange={event => change('stock', event.target.value)}/></label><p className="field-hint">{STOCK_HINT}</p>
       {error && <p role="alert">{error}</p>}<div className="actions"><button className="btn btn-primary" disabled={busy}>{product ? '儲存供貨商品' : title}</button>{onCancel && <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>取消編輯</button>}</div>
     </fieldset>
   </form>;
