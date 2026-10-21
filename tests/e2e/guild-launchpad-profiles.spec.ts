@@ -120,7 +120,7 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   const member = await person(e2eAuthPool);
   await login(page, member.email);
   await page.goto('/#stores');
-  await expect(page.getByRole('link', {name: '前往商品品質與供應公會設定供貨', exact: true})).toHaveAttribute('href', `#guilds/${supplier}`);
+  await expect(page.getByRole('link', {name: '開始供貨設定', exact: true})).toHaveAttribute('href', '#stores/supply/setup');
   await open(page, supplier);
   await expect(primary(page)).toContainText('已有商店可直接沿用');
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
