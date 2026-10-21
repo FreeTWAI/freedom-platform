@@ -114,6 +114,19 @@ test('GALLERY-SQL-04 RLS hides unbound and foreign rows; retargets and foreign i
 });
 test('GALLERY-SQL-05 canonical grants remove column and immutable writes',()=>tx(async q=>{
  const text=await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql',import.meta.url),'utf8');
+ // Mask SQL literals and comments so procedural bodies do not count as transaction boundaries.
+ const topLevel=text.replace(/\$([A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?\$\1\$|'(?:''|[^'])*'|--[^\n]*|\/\*[\s\S]*?\*\//g,value=>value.replace(/[^\n]/g,' '));
+ const begins=[...topLevel.matchAll(/^[ \t]*BEGIN;[ \t]*$/gm)],commits=[...topLevel.matchAll(/^[ \t]*COMMIT;[ \t]*$/gm)];
+ assert.equal(begins.length,1,'one top-level BEGIN');assert.equal(commits.length,1,'one top-level COMMIT');
+ assert(topLevel.trimEnd().endsWith('COMMIT;'),'COMMIT must be the last top-level statement');
+ const markers=[...text.matchAll(/^-- (BEGIN|END) (.+ (?:GRANTS|EXCLUSIONS))$/gm)],open=new Set<string>();
+ assert(markers.some(marker=>marker[2]==='STOREFRONT GALLERY GRANTS'));
+ for(const marker of markers){
+  assert(marker.index>begins[0].index&&marker.index<commits[0].index,`${marker[1]} ${marker[2]} must be inside the grants transaction`);
+  if(marker[1]==='BEGIN'){assert(!open.has(marker[2]),`duplicate BEGIN ${marker[2]}`);open.add(marker[2]);}
+  else{assert(open.delete(marker[2]),`unmatched END ${marker[2]}`);}
+ }
+ assert.equal(open.size,0,'every grants/exclusions block has a matching END');
  const sql=text.split('-- BEGIN STOREFRONT GALLERY GRANTS\n')[1].split('\n\\gexec')[0].replaceAll(":'runtime'",`'${role}'`).replaceAll("n.nspname='public'",`n.nspname='${schema}'`);
  await q.query(`GRANT UPDATE(document) ON commerce_publication_galleries TO ${role} WITH GRANT OPTION`);
  for(const row of (await q.query(sql)).rows)await q.query(Object.values(row)[0] as string);

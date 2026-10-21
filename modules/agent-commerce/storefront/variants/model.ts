@@ -60,8 +60,8 @@ export async function draftVariantsData(q:PoolClient,p:Profile,items?:readonly P
   result.push({profile:STOREFRONT_VARIANTS_PROFILE,group_key:g.catalog_anchor_sku,group_id:g.group_id,version:g.version,title:g.title,description:g.description,axes,members:mapped,default_product_id:selected.product.product_id,order:g.sort_order,editable:true,can_anchor:true});
  }
  for(const [selectionId,r] of live){if(assigned.has(selectionId))continue;
-  const home=groups.find(g=>g.anchor_product_id===r.product.product_id),retained=home&&result.some(g=>g.group_id===home.group_id),member=members.find(m=>m.selection_id===selectionId);
-  result.push({profile:STOREFRONT_VARIANTS_PROFILE,group_key:r.product.sku+(retained?'~single':''),group_id:null,version:!retained&&home?.catalog_anchor_sku?home.version:member?.membership_version??'1',title:r.product.title,description:r.product.description,axes:[],members:[{...r,value_keys:[],values:[],buyer_label:r.product.title,order:0}],default_product_id:r.product.product_id,order:result.length,editable:r.source==='own',can_anchor:!retained&&r.source==='own'});
+  const home=groups.find(g=>g.anchor_product_id===r.product.product_id),retained=home&&result.some(g=>g.group_id===home.group_id);
+  result.push({profile:STOREFRONT_VARIANTS_PROFILE,group_key:r.product.sku+(retained?'~single':''),group_id:null,version:home?.version??'1',title:r.product.title,description:r.product.description,axes:[],members:[{...r,value_keys:[],values:[],buyer_label:r.product.title,order:0}],default_product_id:r.product.product_id,order:result.length,editable:r.source==='own',can_anchor:!retained&&r.source==='own'});
  }
  result.sort((a,b)=>a.order-b.order||(a.group_key<b.group_key?-1:a.group_key>b.group_key?1:0));
  return {page:ProductGroupPageSchema.parse({profile:STOREFRONT_VARIANTS_PROFILE,items:result}),groups,members};
