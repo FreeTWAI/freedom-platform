@@ -12,12 +12,13 @@ async function current(){return (await(await get('/api/v1/public/stores/'+s.slug
 test('GALLERY-MEDIA-01 draft preview, escaped alt and sixth dirty dimension freeze with atomic publish/retry',async()=>{
  f.ok(await f.upload(s,'1'));f.ok(await f.upload(s,'2'));await f.publish(s);
  const revision=await current(),html=await(await get('/shops/'+s.slug+'/products/P0001')).text();
+ assert.ok(html.includes('<a href="/shops/'+s.slug+'/products/P0001">商品分享連結</a>'));
  assert.match(html,/shop-gallery-thumbnails/);assert.match(html,/合成商品，第 1 張，共 2 張/);assert.match(html,/role="group" aria-label="選擇商品照片"/);assert.match(html,/data-gallery-status>共 2 張照片/);assert.match(html,/loading="lazy"/);
  const single=await(await get('/api/v1/public/stores/'+s.slug+'/media')).text(),json=await(await get('/api/v1/public/stores/'+s.slug)).text();
  const refs=(await f.h.pool.query('SELECT * FROM commerce_publication_gallery_refs WHERE tenant_id=$1 ORDER BY sku,position',[s.tenantId])).rows;assert.equal(refs.length,2);
  await describe('<img onerror="synthetic"> & \'');
  assert.equal(f.ok(await f.galleryCall(s,'GET','/preview')).dirty,true);assert.equal(await(await get('/shops/'+s.slug+'/products/P0001')).text(),html);
- const preview=await f.galleryCall(s,'GET','/preview-page/products/P0001');assert.equal(preview.status,200);const draft=await preview.response.text();assert.match(draft,/&lt;img onerror=&quot;synthetic&quot;&gt; &amp; &#39;/);assert.doesNotMatch(draft,/<img onerror=/);assert.match(draft,/未發布/);assert.doesNotMatch(draft,/property="og:/);
+ const preview=await f.galleryCall(s,'GET','/preview-page/products/P0001');assert.equal(preview.status,200);const draft=await preview.response.text();assert.match(draft,/&lt;img onerror=&quot;synthetic&quot;&gt; &amp; &#39;/);assert.doesNotMatch(draft,/<img onerror=/);assert.match(draft,/未發布/);assert.doesNotMatch(draft,/property="og:/);assert.doesNotMatch(draft,/商品分享連結/);assert.doesNotMatch(draft,/href="\/shops\//);
  assert.equal(await(await get('/api/v1/public/stores/'+s.slug)).text(),json);assert.equal(await(await get('/api/v1/public/stores/'+s.slug+'/media')).text(),single);
  const view=f.ok(await f.galleryCall(s,'GET','')),key=randomUUID();const results=await Promise.all([f.galleryCall(s,'POST','/publish',{},view.version,key),f.galleryCall(s,'POST','/publish',{},view.version,key)]);for(const r of results)f.ok(r);
  const next=await current();assert.equal(BigInt(next),BigInt(revision)+1n);assert.equal(f.ok(await f.galleryCall(s,'GET','/preview')).dirty,false);
@@ -27,10 +28,26 @@ test('GALLERY-MEDIA-01 draft preview, escaped alt and sixth dirty dimension free
  const count=(await f.h.pool.query('SELECT count(*)::int n FROM commerce_storefront_publications WHERE instance_id=$1',[s.instanceId])).rows[0].n;await f.publish(s);assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM commerce_storefront_publications WHERE instance_id=$1',[s.instanceId])).rows[0].n,count);
 });
 test('GALLERY-MEDIA-02 verified GET/HEAD use current publication; foreign, draft, invalid and out-of-range paths share one miss',async()=>{
- const revision=await current();
+ const revision=await current(),off=f.galleryApplication(false),legacyPath=`/shops/${s.slug}/media/${revision}/P0001`;
+ let primaryBytes:Buffer|undefined;
+ for(const method of ['GET','HEAD']){
+  const enabled=await get(legacyPath,undefined,method),disabled=await get(legacyPath,off,method);
+  assert.equal(enabled.status,200);assert.equal(enabled.status,disabled.status);assert.deepEqual([...enabled.headers],[...disabled.headers]);
+  const bytes=Buffer.from(await enabled.arrayBuffer());assert.deepEqual(bytes,Buffer.from(await disabled.arrayBuffer()));
+  if(method==='GET')primaryBytes=bytes;else assert.equal(bytes.length,0);
+  const numbered=await get(publicPath(revision,'1'),undefined,method);assert.equal(numbered.status,200);assert.deepEqual(Buffer.from(await numbered.arrayBuffer()),bytes);
+  for(const suffix of ['/x','/']){
+   const miss=await get(publicPath(revision,'1')+suffix,undefined,method);assert.equal(miss.status,404);assert.equal(miss.headers.get('Cache-Control'),'no-store');assert.equal(miss.headers.get('X-Robots-Tag'),'noindex');
+   if(method==='GET')assert.match(await miss.text(),/找不到這張商品照片。/);else assert.equal(await miss.text(),'');
+  }
+  const slash=await get(legacyPath+'/',undefined,method),disabledSlash=await get(legacyPath+'/',off,method);assert.equal(slash.status,404);assert.equal(slash.status,disabledSlash.status);assert.deepEqual([...slash.headers],[...disabledSlash.headers]);assert.deepEqual(Buffer.from(await slash.arrayBuffer()),Buffer.from(await disabledSlash.arrayBuffer()));
+ }
+ assert(primaryBytes&&primaryBytes.length>0,'the legacy URL and gallery position 1 share the frozen primary bytes');
  for(const method of ['GET','HEAD']){const gets=f.store.gets,response=await get(publicPath(revision,'2'),undefined,method);assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal(response.headers.get('X-Robots-Tag'),'noindex');assert.equal(response.headers.get('Content-Type'),'image/webp');assert(f.store.gets>gets);if(method==='HEAD')assert.equal(await response.text(),'');}
  f.ok(await f.upload(foreign,'1'));await f.publish(foreign);
  const newProduct=f.ok(await f.post(s.root+'/products',s.owner,{title:'未發布合成商品',description:'合成',price_minor:100,stock:1}),201),draft={...s,productId:newProduct.product_id};f.ok(await f.upload(draft,'1'));
+ const draftPreview=await f.galleryCall(s,'GET','/preview-page/products/'+newProduct.sku);assert.equal(draftPreview.status,200);const unpublishedHtml=await draftPreview.response.text();assert.match(unpublishedHtml,/未發布/);assert.doesNotMatch(unpublishedHtml,/商品分享連結/);assert.doesNotMatch(unpublishedHtml,/href="\/shops\//);
+ assert.equal((await get('/shops/'+s.slug+'/products/'+newProduct.sku)).status,404);
  const miss=[];
  for(const path of [publicPath(revision,'2','P0001',foreign.slug),publicPath(revision,'1','P0002'),publicPath(revision,'9'),publicPath(revision,'01'),publicPath(revision,'1%0A'),publicPath(revision,'1%0D'),publicPath(revision,'1%0D%0A'),publicPath(revision,'1%E2%80%A8'),publicPath(revision,'0'),publicPath(revision,'2')+'/unknown']){
   const r=await get(path);assert.equal(r.status,404);miss.push(await r.text());

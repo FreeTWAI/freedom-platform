@@ -614,8 +614,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-gallery.ts",
-      "bytes": 6910,
-      "sha256": "c34e1b1593d1b017a6a7ebd8bb7c6e5c55fdede07f9095f580af68c7cae9cbef"
+      "bytes": 6916,
+      "sha256": "75545407c22bedc91b646bd78468eb1943d1196c60d3e40418b7652e14dee342"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-media.ts",
@@ -15624,8 +15624,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-      "bytes": 33197,
-      "sha256": "3f622732ba6e5317f3e89e3f77dbfbcad161143cfc68b447516ab6178ec2782c"
+      "bytes": 33352,
+      "sha256": "782b944f749b8d2cfd0538de52909cc43262356539ae919c7955ffdbb2cff997"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
@@ -17894,8 +17894,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/page.ts",
-      "bytes": 17205,
-      "sha256": "06bb1afc49b184202451f17f05588438b7a3928e5e7e757592dc8d5b998c6426"
+      "bytes": 17196,
+      "sha256": "5b1da59a94b48d790a1565ea818f8bd15d6f345d5a4bc4078d789e3563b39dc6"
     },
     {
       "path": "modules/agent-commerce/hosted/photo-authority.ts",
@@ -23019,8 +23019,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 283264,
-      "sha256": "1e25f0f600e76d3503115dc709d9521988dd8fe0d72a2763ffbf63f9b0c42f20"
+      "bytes": 285109,
+      "sha256": "479f48dfccd4fb7ca7e0a506d5ec9718772d0ce572e8e8fb2a3f1f3a9fe83124"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
@@ -24969,8 +24969,8 @@
     },
     {
       "path": "tests/runtime/member-checkout-orders.test.ts",
-      "bytes": 22969,
-      "sha256": "feadaf975cf1454503b6148d442c8ac753865c92e757e05e495fa88ce89e03ee"
+      "bytes": 25906,
+      "sha256": "080bd9c3fbfa8f83743758b62970814fa805177d31fc6d977ee0051fe1fab385"
     },
     {
       "path": "tests/runtime/member-communications.test.ts",
@@ -25854,8 +25854,8 @@
     },
     {
       "path": "tests/runtime/storefront-gallery-media.test.ts",
-      "bytes": 12702,
-      "sha256": "57d64709b071ffdb2322b16a7ac882572f048474d6e39a1b2a6be131e67f3b25"
+      "bytes": 14947,
+      "sha256": "98ea1bd6d87dd2e28352109a63a6e33ecf68cb53949c3b078ea4650e490469a0"
     },
     {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
