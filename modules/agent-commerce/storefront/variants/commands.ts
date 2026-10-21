@@ -1,9 +1,13 @@
 import type {Pool,PoolClient} from 'pg';
 import {ProductGroupKeySchema,ReplaceProductGroupInputSchema,CreateVariantProductInputSchema,SplitProductGroupInputSchema,VariantCommandAckSchema,STOREFRONT_VARIANTS_PROFILE,VariantAxisNameSchema,VariantValueNameSchema,VariantGroupTitleSchema,VariantGroupDescriptionSchema,type ProductGroupDraft,type VariantCommandAck} from '../../../../contracts/guild-launchpad/v1/storefront-variants.js';
-import {requireCondition} from '../../../../packages/shared/problem.js';
+import {Problem,requireCondition} from '../../../../packages/shared/problem.js';
+import {scopedTenantCommand} from '../../../../packages/scoped-commands/index.js';
+import {isolatedTransaction} from '../../../../packages/resource-scopes/tenant-transaction.js';
+import {assertCurrentSessionClock} from '../../../../packages/db/member-session.js';
+import {storeCapabilities,requireStoreInstance,STORE_MISSING} from '../../hosted/capabilities.js';
 import type {TenantScopeContext} from '../../../../packages/resource-scopes/index.js';
 import type {Actor} from '../../../identity-membership/service.js';
-import {profile,retailReady,storeCommand,storeRead,storeFact,type Profile} from '../../hosted/store.js';
+import {profile,instance,retailReady,storeRead,storeFact,type Profile} from '../../hosted/store.js';
 import {createProductRow} from '../../hosted/products.js';
 import {buyerLabel,draftVariantsData} from './model.js';
 import {variantCheck} from './errors.js';
@@ -75,14 +79,27 @@ async function save(q:PoolClient,c:TenantScopeContext,p:Profile,current:ProductG
  await storeFact(q,c,groupId!,next,operation,'storefront_product_group');return {completedVersion:next,changed:true};
 }
 async function command(pool:Pool,actor:Actor,t:string,i:string,rawKey:string,key:string,expected:string,operation:VariantCommandAck['operation'],body:unknown,run:(q:PoolClient,c:TenantScopeContext,p:Profile,g:ProductGroupDraft)=>Promise<{completedVersion:string;changed:boolean}>){
- const groupKey=rawKey;
- const receipt=await storeCommand(pool,actor,t,i,'store:write','storefront.product-group.'+operation,{group_key:groupKey,...body as object},key,expected,async(q,c)=>{
-  const p=await profile(q,t,i,true);retailReady(p);const g=group((await draftVariantsData(q,p)).page,checkedGroupKey(groupKey));version(g,expected);
-  return {groupKey,operation,...await run(q,c,p,g)};
- });
- // A receipt freezes only completion metadata. Reauthorize and read today's
- // draft after a replay; no private old document is stored in the receipt.
- return storeRead(pool,actor,t,i,'store:write',async q=>{const p=await profile(q,t,i);retailReady(p);return VariantCommandAckSchema.parse({profile:STOREFRONT_VARIANTS_PROFILE,group_key:receipt.groupKey,operation:receipt.operation,completed_version:receipt.completedVersion,changed:receipt.changed,current:(await draftVariantsData(q,p)).page});});
+ const groupKey=rawKey;let context!:TenantScopeContext,ack!:VariantCommandAck;
+ // Use the canonical store writer gates and lock order, also on receipt replay.
+ const authorize=async(q:PoolClient,c:TenantScopeContext)=>{context=c;const peek=await instance(q,t,i,false,true);
+  await requireStoreInstance(q,c,peek.instance_id,'store:write',true);await instance(q,t,i,true);
+  await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`commerce-orders/${c.community_id}`]);
+ };
+ try{
+  await scopedTenantCommand(pool,{actor,tenantId:t,tenantLock:'share',operation:'storefront.product-group.'+operation,body:{group_key:groupKey,...body as object},key,expected,
+   target:{kind:'storefront',id:i},capabilitiesForRole:storeCapabilities},authorize,async(q,c)=>{
+    const p=await profile(q,t,i,true);retailReady(p);const g=group((await draftVariantsData(q,p)).page,checkedGroupKey(groupKey));version(g,expected);
+    return {groupKey,operation,...await run(q,c,p,g)};
+   },authorize,undefined,(source,execute)=>isolatedTransaction(source,async q=>{
+    const receipt=await execute(q) as {groupKey:string;operation:VariantCommandAck['operation'];completedVersion:string;changed:boolean};
+    requireCondition(receipt.groupKey===groupKey&&receipt.operation===operation,500,'storefront_variants_invalid','商品規格暫時無法讀取，請稍後重試。');
+    const p=await profile(q,t,i,true);retailReady(p);
+    ack=VariantCommandAckSchema.parse({profile:STOREFRONT_VARIANTS_PROFILE,group_key:receipt.groupKey,operation:receipt.operation,completed_version:receipt.completedVersion,changed:receipt.changed,current:(await draftVariantsData(q,p)).page});
+    // Current reply and receipt commit together. A failed current authorization
+    // cannot leave a committed new mutation behind a known rejection response.
+    await authorize(q,context);await assertCurrentSessionClock(q,actor);return receipt as Awaited<ReturnType<typeof execute>>;
+   }));return ack;
+ }catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);throw e;}
 }
 export function replaceProductGroup(pool:Pool,actor:Actor,t:string,i:string,g:string,key:string,expected:string,raw:unknown){const input=parseReplace(raw);return command(pool,actor,t,i,g,key,expected,'replace',input,(q,c,p,current)=>save(q,c,p,current,input));}
 export function splitProductGroup(pool:Pool,actor:Actor,t:string,i:string,g:string,key:string,expected:string,raw:unknown){

@@ -74,7 +74,9 @@ price/status. It does not rebind the legacy cart application in place.
 
 The five private handlers use existing store read/write authority, group If-Match
 and storefront-targeted command receipts. Receipts retain completion metadata;
-replay reauthorizes and reads the current draft. Compound creation reuses canonical
+replay reauthorizes and reads the current draft. The current reply, final authorization
+and a newly created receipt share the mutation transaction, so a known reply
+rejection cannot leave the new write committed. Compound creation reuses canonical
 product SQL inside the same command and transaction. Unknown editor results retain
 the original body, key and expected version in member/store-scoped browser memory.
 Only the exact flagged group-replacement PUT has the 128 KiB body allowance.

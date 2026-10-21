@@ -195,3 +195,17 @@ test('VARIANTS-06 predecessor function and attachment guards reject drift before
  assert.equal((await closed.request(f.h.origin+'/shops/'+s.slug)).status,200);assert.equal((await closed.request(f.h.origin+'/shops/'+s.slug+'/products/P0001')).status,200);
  assert.equal(queries.some(sql=>/commerce_inventory_(?:reservations|allocations)|AS available/.test(sql)),false);
 });
+
+test('VARIANTS-07 a refused current reply rolls the new mutation, journal and receipt back together',async()=>{
+ const {replaceProductGroup}=await import('../../modules/agent-commerce/storefront/variants/commands.js'),{Problem}=await import('../../packages/shared/problem.js');
+ const g=(await page()).items.find(g=>g.group_key==='P0001')!,key=randomUUID();
+ const snapshot=async()=>({groups:(await f.h.pool.query('SELECT to_jsonb(g) row FROM commerce_product_groups g WHERE tenant_id=$1 ORDER BY group_id',[s.tenantId])).rows,members:(await f.h.pool.query('SELECT to_jsonb(m) row FROM commerce_product_group_members m WHERE tenant_id=$1 ORDER BY selection_id',[s.tenantId])).rows,receipts:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_command_receipts WHERE tenant_id=$1',[s.tenantId])).rows[0].n,journal:(await f.h.pool.query('SELECT count(*)::int n FROM scoped_transition_journal WHERE tenant_id=$1',[s.tenantId])).rows[0].n});
+ const before=await snapshot();let refused=false;
+ const source=new Proxy(f.runtime,{get(pool,property){if(property==='connect')return async()=>{const client=await pool.connect();let written=false;return new Proxy(client,{get(target,method){if(method==='query')return(sql:any,...args:any[])=>{
+  const text=typeof sql==='string'?sql:sql.text;if(text.startsWith('UPDATE commerce_product_groups SET catalog_anchor_sku='))written=true;
+  if(written&&text.startsWith('SELECT *,version::text AS version FROM commerce_product_groups')){refused=true;throw new Problem(403,'capability_denied','目前沒有這個操作的權限。');}
+  return(target.query as any)(sql,...args);
+ };const value=Reflect.get(target,method);return typeof value==='function'?value.bind(target):value;}});};const value=Reflect.get(pool,property);return typeof value==='function'?value.bind(pool):value;}});
+ await assert.rejects(replaceProductGroup(source,s.actor,s.tenantId,s.instanceId,g.group_key,key,g.version,{...body(g),title:'未完成回覆不得留下的名稱'}),(e:any)=>e.code==='capability_denied');
+ assert.equal(refused,true);assert.deepEqual(await snapshot(),before);
+});
