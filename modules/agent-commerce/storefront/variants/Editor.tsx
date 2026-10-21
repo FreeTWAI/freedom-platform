@@ -27,9 +27,13 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
    if(ack){const match=/\/product-groups\/([^/]+)(?:\/(products|split))?$/.exec(value.path),operation=match?.[2]==='products'?'create-product':match?.[2]==='split'?'split':'replace';
     if(!match||ack.group_key!==match[1]||ack.operation!==operation||BigInt(ack.completed_version)<BigInt(value.expected))throw new Error('variant_reply_mismatch');
    }
-   if(value.kind==='product'){const product=ProductViewSchema.parse(result);if(!value.path.endsWith('/products/'+product.product_id)||BigInt(product.version)<BigInt(value.expected))throw new Error('product_reply_mismatch');}
+   const product=value.kind==='product'?ProductViewSchema.parse(result):null;
+   if(product&&(!value.path.endsWith('/products/'+product.product_id)||BigInt(product.version)<BigInt(value.expected)))throw new Error('product_reply_mismatch');
    releaseCatalogAttempt(client,scope);if(!current())return;
-   setAttempt(undefined);setDirty(false);setMessage(value.notice);if(next)setPage(next);setRevision(n=>n+1);await onSaved();
+   setAttempt(undefined);setMessage(value.notice);
+   if(product)setPage(old=>old?{...old,items:old.items.map(g=>({...g,members:g.members.map(m=>m.product.product_id===product.product_id?{...m,product}:m)}))}:old);
+   else{setDirty(false);if(next)setPage(next);setRevision(n=>n+1);}
+   await onSaved();
   }catch(e){if(!current())return;
    const unknown=!(e instanceof ApiError)||e.network||e.timedOut||e.accessExpired||e.status>=500;
    if(unknown||value.hadUnknown){const pending={...value,hadUnknown:true};holdCatalogAttempt(client,scope,pending);setAttempt(pending);setMessage('暫時無法確認儲存結果，請用原操作重試。');}
@@ -49,7 +53,7 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
   {attempt&&!busy&&<button type="button" className="btn btn-ghost" disabled={locked||!writable} onClick={()=>void send(attempt)}>重試原操作</button>}
   {page&&page.items.length>0&&<label>規格商品<select aria-label="規格商品" value={selected} disabled={blocked||dirty} onChange={e=>setSelected(e.target.value)}>{page.items.map(g=><option key={g.group_key} value={g.group_key}>{g.title} · {g.members.map(m=>m.product.sku).join('／')}</option>)}</select></label>}
   {g&&(!writable||!g.editable)&&<div className="stack"><h4>{g.title}</h4><p>{g.description}</p>{g.members.map(m=><p key={m.selection_id}>{m.buyer_label} · {m.product.sku} · {formatMinor(m.product.price_minor,m.product.currency)}</p>)}{!g.editable&&<p>供貨選品目前各自顯示，不可加入商品組。</p>}</div>}
-  {g&&writable&&g.editable&&<GroupEditor key={g.group_key+'/'+g.version+'/'+g.members.map(m=>m.product.version).join('/')} group={g} page={page!} writable={writable&&g.editable} locked={blocked} onDirty={setDirty}
+  {g&&writable&&g.editable&&<GroupEditor key={g.group_key+'/'+g.version} group={g} page={page!} writable={writable&&g.editable} locked={blocked} onDirty={setDirty}
    onSave={body=>fresh('put',root+'/product-groups/'+g.group_key,body,g.version,'已儲存規格，尚未發布。')}
    onSplit={()=>fresh('post',root+'/product-groups/'+g.group_key+'/split',{},g.version,'已拆分商品，尚未發布。')}
    onCreate={body=>fresh('post',root+'/product-groups/'+g.group_key+'/products',body,g.version,'已新增規格商品，尚未發布。')}
@@ -74,12 +78,15 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
  const fieldName=(path:string)=>path==='title'?'商品組名稱':path==='description'?'商品組介紹':path==='new.title'?'商品名稱':path==='new.description'?'商品介紹':path==='new.stock'?'庫存':path==='new.price_minor'?'售價':path.includes('.values.')?'選項值':'選項名稱';
  function invalid(message:string,paths:string[]){setInvalidFields([...new Set(paths)]);setFieldError(message);}
  function save(){
-  const parsed=ReplaceProductGroupInputSchema.safeParse(draft);
+  const parsed=ReplaceProductGroupInputSchema.safeParse(currentDraft);
   if(!parsed.success){invalid('規格設定格式無效，請檢查商品組、選項與成員。',parsed.error.issues.map(i=>i.path.join('.')).filter(p=>p==='title'||p==='description'||/^axes\.\d+\.(?:name|values\.\d+\.name)$/.test(p)));return;}
   if(draft.members.some(m=>(draft.title.trim().normalize('NFC')+(draft.axes.length?'（'+draft.axes.map((a,n)=>(a.values.find(v=>v.key===m.value_keys[n])?.name??'').trim().normalize('NFC')).join('／')+'）':'')).length>120)){invalid('完整商品名稱含規格最多 120 字，請縮短商品組名稱或選項值。',['title']);return;}
   setFieldError('');setInvalidFields([]);onSave(parsed.data);
  }
- const metadataDirty=JSON.stringify(draft)!==JSON.stringify(fromGroup(g)),otherDirty=Object.values(productDirty).some(Boolean),dirty=metadataDirty||otherDirty||newOpen;
+ // Product saves replace only that member's fields. Keep other local price
+ // drafts mounted and use current product versions for the next metadata save.
+ const currentDraft={...draft,members:draft.members.map(m=>({...m,product_version:page.items.flatMap(g=>g.members).find(v=>v.product.product_id===m.product_id)!.product.version}))};
+ const metadataDirty=JSON.stringify(currentDraft)!==JSON.stringify(fromGroup(g)),otherDirty=Object.values(productDirty).some(Boolean),dirty=metadataDirty||otherDirty||newOpen;
  useEffect(()=>onDirty(dirty),[dirty]);
  const update=(patch:Partial<Draft>)=>{setFieldError('');setInvalidFields([]);setDraft(old=>({...old,...patch}));};
  const axes=(next:Draft['axes'])=>setDraft(old=>({...old,axes:next,members:old.members.map(m=>({...m,value_keys:next.map(a=>{const value=m.value_keys[old.axes.findIndex(axis=>axis.key===a.key)];return a.values.some(v=>v.key===value)?value:a.values[0]?.key??'';})}))}));

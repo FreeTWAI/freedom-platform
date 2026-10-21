@@ -118,6 +118,17 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
   await expect(editor.getByLabel(store.products[1].sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('L');
   await expect(editor.getByLabel(store.soldOutProduct.sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('L');
   await editor.getByRole('button',{name:'取消變更',exact:true}).click();
+  await editor.getByLabel(store.products[0].sku+' 售價',{exact:true}).fill('333');
+  await editor.getByLabel(store.products[1].sku+' 售價',{exact:true}).fill('444');
+  await editor.getByLabel(store.products[1].sku+' 庫存',{exact:true}).fill('5');
+  await editor.getByRole('button',{name:'儲存商品：'+store.products[0].sku,exact:true}).click();
+  await expect(editor.getByRole('button',{name:'儲存商品：'+store.products[0].sku,exact:true})).toBeDisabled();
+  await expect(editor.getByLabel(store.products[1].sku+' 售價',{exact:true})).toBeEnabled();
+  await expect(editor.getByLabel(store.products[1].sku+' 售價',{exact:true})).toHaveValue('444');
+  await expect(editor.getByLabel(store.products[1].sku+' 庫存',{exact:true})).toHaveValue('5');
+  await expect(editor.getByLabel('規格商品',{exact:true})).toBeDisabled();
+  await editor.getByRole('button',{name:'儲存商品：'+store.products[1].sku,exact:true}).click();
+  await expect(editor.getByLabel('規格商品',{exact:true})).toBeEnabled();
   for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByLabel('商品組名稱',{exact:true}).focus();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-editor-'+width+'.png'),fullPage:true});}
   await store.republish();const detail=await buyer.newPage();await detail.goto('/shops/'+store.slug);await expect(detail.getByRole('link',{name:'查看商品：經典 T 恤',exact:true})).toHaveCount(1);await expect(detail.locator('.shop-catalog')).toContainText('部分規格售完');
   for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-grid-'+width+'.png'),fullPage:true});}
