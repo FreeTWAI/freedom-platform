@@ -3729,8 +3729,9 @@ test.describe('C1 own product gallery',()=>{
    const second=gallery(page).locator('ol > li').nth(1);await second.getByLabel('照片說明',{exact:true}).fill('合成商品側面');await second.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(second.getByRole('button',{name:'儲存說明',exact:true})).toBeDisabled();
    await expect(gallery(page).getByLabel('新增商品照片',{exact:true})).toBeEnabled();await captureOffer(page,gallery(page),info.outputPath(`gallery-editor-${width}.png`));
    await storeArea(page,'店面與發布');const popup=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await popup;
-   const link=preview.getByRole('link',{name:'查看商品：合成圖組商品',exact:true});await expect(link).toHaveAttribute('href',new RegExp('/preview-page/products/P0001$'));await link.click();await expect(preview.locator('.shop-gallery-photo')).toHaveCount(2);await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await preview.close();
+   const link=preview.getByRole('link',{name:'查看商品：合成圖組商品',exact:true});await expect(link).toHaveAttribute('href',new RegExp('/preview-page/products/P0001$'));await link.click();await expect(preview.locator('.shop-gallery-photo')).toHaveCount(2);await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await expect(preview.getByRole('link',{name:'商品分享連結',exact:true})).toHaveCount(0);await preview.close();
    await publish(page);const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/'+s.product.sku);
+   const share=detail.getByRole('link',{name:'商品分享連結',exact:true});await expect(share).toBeVisible();await expect(share).toHaveAttribute('href','/shops/'+s.slug+'/products/'+s.product.sku);
    await expect(detail.locator('.shop-gallery-photo')).toHaveCount(2);await expect(detail.locator('meta[property="og:image"]')).toHaveAttribute('content',new RegExp('/media/1/P0001$'));
    const stage=detail.locator('.shop-gallery-stage'),before=await stage.boundingBox();
    await expect.poll(()=>detail.locator('.shop-gallery-photo img').first().evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(120);
