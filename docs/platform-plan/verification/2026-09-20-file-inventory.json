@@ -2689,8 +2689,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 17208,
-      "sha256": "4bbc87e33f6d380947dd3a39d80da1ed288d4350f8e898d316e83a244a9d6dfa"
+      "bytes": 17248,
+      "sha256": "cbfd18820b042c96a29d11a23de579548f3d361f0fe03364f43cf61a16ec59cd"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -2944,8 +2944,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SkillBookIntro.tsx",
-      "bytes": 12799,
-      "sha256": "9bc924589b95ef89cbde13c8083defbe459a3d819c9da36f4e25ebf340367706"
+      "bytes": 12812,
+      "sha256": "8be14aac02284bbe749e138fcf0afcc51c14e30bfdcbf889cdb37bb7cc73cfb4"
     },
     {
       "path": "apps/portal-web/src/modules/SkillBookUsage.tsx",
@@ -22669,8 +22669,8 @@
     },
     {
       "path": "tests/e2e/member-home-loading.spec.ts",
-      "bytes": 14302,
-      "sha256": "1abd263c84d62b6237be2ebe53241cce85c78158754ba0dbbe300f021427581c"
+      "bytes": 17910,
+      "sha256": "23f9dceea622b81ff56fa6a35197d76e7abc9acc83b39e09d22d871ff92a9812"
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",

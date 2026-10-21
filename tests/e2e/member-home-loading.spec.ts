@@ -162,6 +162,69 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
   expect(await resume.evaluate((element, original) => element === original, originalResume)).toBe(true);
 });
 
+test('automatic same-guild refresh to a different guide book discards the old claim draft', async ({page}) => {
+  await page.clock.install();
+  const held = barrier();
+  const nextBook = {...book, id: 'home-loading-book-b', book_id: 'home-loading-book-b', title: '背景更新後的公會技能書'};
+  let refreshed = false, bookReads = 0, claimReads = 0;
+  const submitted: string[] = [];
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/author-claims')) submitted.push(path);
+  });
+  await prepare(page, () => refreshed ? nextBook : book);
+  await page.route(url => url.pathname === '/api/v1/me/skill-books', route => {
+    bookReads++;
+    return route.fulfill({json: {items: [{book_id: refreshed ? nextBook.book_id : book.book_id}]}});
+  });
+  await stub(page, '/api/v1/dashboard', {now: []});
+  await stub(page, '/api/v1/task-board/preview', {items: []});
+  for (const item of [book, nextBook]) {
+    await page.route(url => url.pathname === `/api/v1/me/skill-books/${item.book_id}/author-claim`, async route => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      if (item === nextBook) { claimReads++; await held.promise; }
+      await route.fulfill({json: {
+        book_id: item.book_id, github_connected: true, github_login: 'synthetic-author', claims: [],
+        public: {book_id: item.book_id, status: 'unclaimed', label: '尚未認領', verified: [], attributed_author: null},
+      }});
+    });
+  }
+  await login(page);
+  const trigger = guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true});
+  await trigger.click();
+  const dialog = page.getByRole('dialog', {name: book.title, exact: true});
+  const draft = '這是只屬於第一本技能書、尚未送出的原作認領聲明。';
+  const evidence = 'https://example.com/first-book-evidence';
+  await dialog.getByLabel('聲明', {exact: true}).fill(draft);
+  await dialog.getByLabel('證據網址（建議提供）', {exact: true}).fill(evidence);
+  await dialog.getByRole('checkbox').check();
+  await expect(dialog.getByRole('button', {name: '送出認領', exact: true})).toBeEnabled();
+  refreshed = true;
+  const nextDialog = page.getByRole('dialog', {name: nextBook.title, exact: true});
+  try {
+    await returnAfterStale(page);
+    await expect.poll(() => bookReads).toBe(2);
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await trigger.click();
+    await expect(nextDialog).toHaveJSProperty('open', true);
+    await expect.poll(() => claimReads).toBe(1);
+    const panel = nextDialog.getByRole('region', {name: '認領這件原作', exact: true});
+    await expect(panel.getByRole('status')).toHaveText('正在讀取認領狀態…');
+    await expect(panel.getByRole('button', {name: '送出認領', exact: true})).toHaveCount(0);
+    await expect(panel.getByRole('textbox')).toHaveCount(0);
+    await expect(nextDialog).not.toContainText(book.title);
+    await expect(nextDialog).not.toContainText(draft);
+    await expect(nextDialog).not.toContainText(evidence);
+    expect(submitted).toEqual([]);
+  } finally { held.release(); }
+  await expect(nextDialog.getByLabel('聲明', {exact: true})).toHaveValue('');
+  await expect(nextDialog.getByLabel('證據網址（建議提供）', {exact: true})).toHaveValue('');
+  await expect(nextDialog.getByRole('checkbox')).not.toBeChecked();
+  await expect(nextDialog.getByRole('button', {name: '送出認領', exact: true})).toBeDisabled();
+  expect(submitted).toEqual([]);
+});
+
 test('failed automatic card and onboarding reads keep good values quiet and retry missing labels', async ({page}) => {
   await page.clock.install();
   let failing = false, labelReads = 0;

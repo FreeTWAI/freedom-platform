@@ -200,7 +200,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
       {primaryGuild ? <div className="home-next-actions">
         {guideBook
-          ? <SkillBookIntro book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
+          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
           : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
         <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
         {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
