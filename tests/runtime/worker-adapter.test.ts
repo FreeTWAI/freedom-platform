@@ -771,4 +771,3 @@ test('categories flag is an exact default-OFF boolean requiring only guild launc
   const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeCategoriesEnabled,true);
   assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
 });
-

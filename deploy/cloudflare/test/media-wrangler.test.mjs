@@ -285,4 +285,3 @@ test('store categories accepts exact booleans without media but requires guild l
   assert.deepEqual(withGuild.mapping.next.required_capabilities,[]);
   assert(withGuild.mapping.next.features.every(feature=>feature.declared_enabled===false));
 });
-
