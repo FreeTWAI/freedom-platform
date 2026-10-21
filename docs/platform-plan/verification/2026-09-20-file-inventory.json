@@ -18693,6 +18693,11 @@
       "sha256": "b76dc2d4944fdb688578c84127f52f140e545c118d7abfdfe51517fe16b31795"
     },
     {
+      "path": "modules/agent-commerce/storefront/variants/freedom.module.json",
+      "bytes": 1051,
+      "sha256": "08b8fbc4026645b3e4e5a705dda64d9e96718f045fcb8d3a480e27d1c0871bf8"
+    },
+    {
       "path": "modules/agent-commerce/supplier-console/changes.ts",
       "bytes": 4983,
       "sha256": "57be700c9f3c74be0027444a9e4621ec5d6cda83d2c2ea3250a324a860804231"
