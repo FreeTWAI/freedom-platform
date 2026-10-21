@@ -18714,8 +18714,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/categories/Editor.tsx",
-      "bytes": 13747,
-      "sha256": "5ea456891c83ac25ea266084a908929ba04283fb149b7187a16f7a45ab11e5fc"
+      "bytes": 13852,
+      "sha256": "3639c03b294d0fe9c0f4af3cdef0c5d1da2cb8b6d1de78dac5f5d09ec68603a2"
     },
     {
       "path": "modules/agent-commerce/storefront/categories/commands.ts",
@@ -23099,8 +23099,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 290596,
-      "sha256": "f5720c08167d0fed00d1231547885fdfd6bc498e1d1eb8144cd6ca742b692eca"
+      "bytes": 291314,
+      "sha256": "b5e91c103348f598aac010cf46a2daf8f773f54dcaef39753dfa6a6e6c728d9a"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
