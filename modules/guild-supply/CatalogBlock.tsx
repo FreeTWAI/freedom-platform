@@ -66,10 +66,10 @@ export default function CatalogBlock({client, viewer, navigate, startApplication
       </li>)}</ul> : <p>目前沒有可讀取的供貨商品庫。</p>}
       <div className="actions">
         {(state.data.items.length > 3 || state.data.next_cursor) && <button type="button" className="btn btn-ghost btn-small" onClick={() => navigate('#stores/supply')}>查看全部供貨商品庫</button>}
-        {viewer === 'member' && startApplication && startableApplications.includes('hosted-store') && <button type="button" className={`btn ${state.data.items.length ? 'btn-ghost' : 'btn-primary'} btn-small`} onClick={() => startApplication('hosted-store')}>開始供貨設定</button>}
+        {viewer !== 'visitor' && startApplication && startableApplications.includes('hosted-store') && <button type="button" className={`btn ${state.data.items.length ? 'btn-ghost' : 'btn-primary'} btn-small`} onClick={() => startApplication('hosted-store')}>開始供貨設定</button>}
       </div>
       <details className="question-note"><summary>供貨與預留流程</summary><p className="field-hint">公開供貨、同意店主售價與開放預留是不同步驟。進入商品庫可確認目前狀態，並回查自己的供貨訂單。</p></details>
-      {viewer === 'read_only' && <p className="field-hint">這個入口以唯讀方式呈現；公會身分不會增加商品或庫存權限。</p>}
+      {viewer === 'read_only' && <p className="field-hint">供應商公會成員可建立自己的商品庫；既有商品與庫存仍依商品庫授權操作。</p>}
     </>}
   </div>;
 }

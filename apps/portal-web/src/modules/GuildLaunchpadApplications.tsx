@@ -15,6 +15,8 @@ import {ApplicationSkillSources, CommerceReadingReferences, PortableBusinessStat
 import './SkillBookIntro.css';
 
 export const REASONS: Record<string, string> = {
+  guild_member_required: '需要商品品質與供應公會的有效成員身分，實習成員也可開始供貨。',
+  commerce_guild_member_required: '建立零售商店需要電商公會的有效成員身分，實習成員也可以開始。',
   guild_full_member_required: '需要這個公會的正式會員身分，請在聊天室聯絡會長。',
   tenant_manage_required: '你目前沒有可管理的業務空間，請前往業務空間建立或接受邀請。',
   policy_unconfigured: '業務空間尚未設定容量政策，請聯絡擁有者。',
@@ -184,7 +186,10 @@ export function GuildLaunchpadApplications({client, guildKey, publicMode, visito
         <div className="application-actions"><button type="button" className="btn btn-ghost btn-small" aria-expanded={openDetail === key} onClick={() => void release(app)}>版本資料</button>
           {!publicMode && <button type="button" className="btn btn-secondary btn-small" disabled={!startable(app)} onClick={event => { if (flowLeaveGuard.current && !flowLeaveGuard.current()) return; opener.current = event.currentTarget; setLaunch(app); }}>啟動應用</button>}
         </div>
-        {!publicMode && app.eligibility?.reason_codes.map(code => <p key={code} className="field-hint">{visitor && code === 'guild_full_member_required' ? '先加入這個公會，才能啟動應用。' : REASONS[code]}</p>)}
+        {!publicMode && app.eligibility?.reason_codes.map(code => <p key={code} className="field-hint">{visitor && ((code === 'commerce_guild_member_required' && guildKey === 'guild_commerce_sales')
+            || (code === 'guild_member_required' && guildKey === 'guild_product_quality_supply'))
+            ? '先加入這個公會，實習成員也可以開始設定。'
+            : visitor && code === 'guild_full_member_required' ? '先加入這個公會，才能啟動應用。' : REASONS[code]}</p>)}
         {!publicMode && app.eligibility?.reason_codes.includes('tenant_manage_required') && <div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>建立或選擇業務空間</a></div>}
         {openDetail === key && detail && <section className="stack" aria-label={`${displayName}版本資料`}>
           <p>{detail.runtime_profiles.includes('hosted-reviewed') ? '站內應用版本' : '應用版本'}：{detail.release_ref} · 授權：{LICENSE[detail.license_state]}</p>
@@ -266,6 +271,7 @@ const FORGET_HINT = '不再追蹤只會讓這個分頁不再自動開啟這個�
 // error can also come from the route's read after commit, so keep that launch.
 const DECLINED_LAUNCH = new Set([
   'plan_stale', 'version_conflict', 'quota_exceeded', 'policy_unconfigured', 'guild_full_member_required',
+  'guild_member_required', 'commerce_guild_member_required',
   'application_not_available', 'license_unresolved', 'instance_unavailable', 'workspace_binding_conflict',
   'workspace_unavailable', 'validation_failed', 'configuration_invalid', 'dependency_cycle',
   'invalid_input', 'invalid_json', 'idempotency_required', 'invalid_version',
@@ -296,6 +302,8 @@ const NEXT: Record<string, string> = {
   quota_exceeded: '既有工作仍可使用，請聯絡業務空間擁有者調整容量。',
   policy_unconfigured: '請聯絡業務空間擁有者設定容量政策。',
   guild_full_member_required: REASONS.guild_full_member_required,
+  guild_member_required: REASONS.guild_member_required,
+  commerce_guild_member_required: REASONS.commerce_guild_member_required,
   capability_denied: '請切換到你擁有或管理的業務空間，或聯絡其擁有者。',
   tenant_not_found: '請切換業務空間，並確認目前成員資格。',
   not_found: '請重新載入目前業務空間，確認目標仍可讀取。',

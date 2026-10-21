@@ -19,9 +19,13 @@
 
 會員 session cookie 是 `SameSite=Strict`。從 LINE、Facebook 或其他網站點進來時，瀏覽器不會帶 cookie，直接 302 無法分辨是不是本人在點自己的連結。連結預覽機器人也不該計分。
 
-所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session，然後才前往目標。
+所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session。計數請求使用 `keepalive`，站內目標立即接續開啟，無須等回報成功或逾時；回報失敗不阻擋閱讀。不可改成直接 302，否則會失去本人排除所需的同源 cookie。
 
-未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址 302 回首頁。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
+只有 `social_post` 的目標是外部網站；其他類型使用伺服器組出的站內路徑。外部分享頁顯示原貼文標題、目的地域名與路徑，以及目的地的帳號、費用、資料處理責任，訪客按「前往原文」才離站，沒有倒數或自動跳轉。網址取自目前有效貼文並沿用既有 HTTPS 正規化與外站規則；一般頁面的外連不增加確認步驟。沒有 JavaScript 時，頁面與主要連結仍可使用。
+
+外部分享的既有分數仍代表這條分享頁的有效訪問，不代表訪客按了外連、採用了產品或完成交易；去重、機器人排除與隱私規則不變。
+
+未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址回傳共用的 404 頁與返回首頁入口，不顯示原標題、目的地、個人分享碼、OG 預覽或計數程式。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
 
 中繼頁含 `noindex,nofollow`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`，以及網站既有的 CSP。不放 inline script 或 style。OG 圖網址使用 runtime 的公開來源。`og:type` 是 `website`。`og:url` 是這條個人連結本身（公開來源 + `/go/<code>`）；技能書只有在 `intro` 有效（1–999）時才附上 `?intro=N`。它不是目標網址，否則 Facebook 會把分享收成目標頁、跳過個人連結。
 
@@ -120,7 +124,7 @@ Production runtime 必須提供受限的 preview transport；缺少 transport �
 
 | 方法與路徑 | 誰 | 用途 |
 | --- | --- | --- |
-| `GET /go/:code` | 公開 | 中繼頁，或 302 回首頁 |
+| `GET /go/:code` | 公開 | 站內接續／外部目的地頁，或不揭露舊內容的 404 |
 | `POST /api/v1/promotion/clicks` | 公開 | `{code}`，永遠 `{ok:true}` |
 | `POST /api/v1/promotion/links` | 會員 | 取得或建立個人連結 |
 | `GET /api/v1/promotion/links/mine?period=` | 會員 | 自己的連結、各期間分數與 `available`；只讀 |
@@ -203,7 +207,25 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
 
 標題 1–80 字、簡介 1–160 字、說明最多 2000 字、價格與地區各最多 60 字。聯絡方式 1–3 個，名稱 1–20 字。網址必須是 https，沒有帳密、非預設埠、本機或 IP 主機，並用 `normalizeShareUrl` 正規化後儲存。表單送出前跑同一份檢查。
 
+選填 `price_text`／`area_text` 僅接受字串或原本的省略／null 語意（#776）；
+空字串或 trim 後空白仍表示清空。數字、布林、陣列與物件回
+`422 validation_failed`，不把錯誤輸入靜默當成 null，不改服務版本、收據或原值。
+拒絕不占用 command key；修正為合法文字後可沿同一 key 重試。
+
 建立、修改、暫停、恢復與刪除只有主人能做。修改、暫停、恢復、刪除、封面與隱藏都要 `If-Match` 的 `aggregate_version`，並用 Idempotency-Key。刪除是軟刪除（`state=deleted`），同時刪掉封面。暫停只給主人在「我的服務」看見；公開頁與 `/go/` 都回到找不到。平台管理員可隱藏；公會長不行。隱藏後各處都看不到，`/go/` 回到首頁。擁有者停用或是驗收測試帳號時，其他人與公開頁都看不到，主人仍可在會員介面看見自己的有效服務。
+
+會員介面的管理員「隱藏」先顯示後果與「確定隱藏／取消」；此時不送請求，
+取消也不寫入。只有按「確定隱藏」才呼叫原有 hide API。確認會說明主人也
+無法查看或編輯、分享連結失效，且目前沒有復原操作；沒有新增 unhide 或擴權。
+確認狀態同時綁定服務、`hide`／`delete` 及「我的服務列／公開卡片」來源，避免
+重複呈現的同一服務互相展開或取消後回到另一個控制點。觸發按鈕保持掛載，
+以 `aria-expanded`／`aria-controls` 關聯確認區；警告同時是確認區與確認按鈕的
+可存取說明。鍵盤取消後焦點回到原來源的觸發按鈕，不送寫入。
+`member-services.spec.ts` 以真實管理員 session 與隔離 PostgreSQL 驗證自己／
+他人的服務：鍵盤取消後仍公開且版本不變，確認後才隱藏、只寫一次，等待實際
+列表移除後重新登入核對主人／管理員清單與公開頁 404。公開頁既有最長 60 秒
+快取政策不變；原生 HTTP 與 browser `cache: 'no-store'` 讀回不沿用瀏覽器舊快取，
+不能把仍在有效期的舊 200 視為隱藏提交失敗。
 
 封面輸入是 JPEG、PNG 或 WebP，最多 4 MiB，簽名與動畫檢查與其他上傳相同。輸出是 `service_cover`，`cover` 成 1200×675 的 WebP，最多 512 KiB。上傳是帶 Idempotency-Key 與 If-Match 的二進位 PUT。會員看封面走 `GET /api/v1/member-services/:id/cover`（暫停的服務主人仍看得到）；公開封面是 `GET /api/v1/public/member-services/:id/cover`。
 

@@ -156,7 +156,7 @@ test('2. Polling: 付款成功但通知延後 -> B06 polls every 5 s with at mos
   expect(maxInFlight).toBe(1);
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('已收到付款');
-  await expect(page.getByRole('status')).toHaveText('已收到付款');
+  await expect(page.locator('#shop-pay-return').getByRole('status')).toHaveText('已收到付款');
   await expect(page.locator('#shop-pay-return')).toContainText(
     `訂單 ${p.order.display_number} 的後續進度會顯示在訂單頁。`,
   );
@@ -271,7 +271,7 @@ test('3. After polling: 結果待確認 -> 2 minutes of polling -> 重新查詢 
 
   // Manual query 2: 200 but still checking -> status shows "{HH:mm} 已查詢，仍在確認中。" and no new auto-polling
   await reQueryBtn.click();
-  await expect(page.getByRole('status')).toHaveText(/^[0-9]{2}:[0-9]{2} 已查詢，仍在確認中。$/);
+  await expect(page.locator('#shop-pay-return').getByRole('status')).toHaveText(/^[0-9]{2}:[0-9]{2} 已查詢，仍在確認中。$/);
   await page.clock.runFor(10_000);
   expect(pollCounter).toBe(25);
 
@@ -280,7 +280,7 @@ test('3. After polling: 結果待確認 -> 2 minutes of polling -> 重新查詢 
   const h1 = page.getByRole('heading', { level: 1, name: '已收到付款' });
   await expect(h1).toBeVisible();
   await expect(h1).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('已收到付款');
+  await expect(page.locator('#shop-pay-return').getByRole('status')).toHaveText('已收到付款');
 });
 
 test('4 & 5. Failure and Simulated: 付款失敗 follows DTO can_resume_payment on B06 and B07; 模擬付款 never shows 已收到付款, 已付款, 模擬 or 測試', async ({
@@ -864,7 +864,7 @@ test('9, 11, 12, 13, 14. No access & member access, EC-AT18, Review (overpaid), 
     await retryBtn.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { level: 1, name: '已收到付款' })).toBeFocused();
-    await expect(page.getByRole('status')).toHaveText('已收到付款');
+    await expect(page.locator('#shop-pay-return').getByRole('status')).toHaveText('已收到付款');
 
     b06Mode = 'pending';
     await page.goto(memberReturnPath);
@@ -876,7 +876,7 @@ test('9, 11, 12, 13, 14. No access & member access, EC-AT18, Review (overpaid), 
     await reQueryBtn.focus();
     await expect(reQueryBtn).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toHaveText(/^[0-9]{2}:[0-9]{2} 已查詢，仍在確認中。$/);
+    await expect(page.locator('#shop-pay-return').getByRole('status')).toHaveText(/^[0-9]{2}:[0-9]{2} 已查詢，仍在確認中。$/);
     await page.unroute(`${memberOrderApi}/payment-queries`);
     await page.unroute(memberOrderApi);
 

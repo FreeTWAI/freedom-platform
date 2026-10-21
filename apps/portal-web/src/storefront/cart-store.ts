@@ -1,3 +1,6 @@
+import {isValidStoreSlug} from '../../../../modules/agent-commerce/storefront-return.js';
+export {STORE_SLUG_PATTERN, isValidStoreSlug} from '../../../../modules/agent-commerce/storefront-return.js';
+
 export type CartCurrency = 'TWD' | 'USD';
 
 export interface StoredCartLine {
@@ -13,7 +16,6 @@ export interface StoredCart {
   lines: StoredCartLine[];
 }
 
-export const STORE_SLUG_PATTERN = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 export const PRODUCT_SKU_PATTERN = /^P[0-9]{4,23}$/;
 export const REVISION_PATTERN = /^[1-9][0-9]{0,18}$/;
 export const MAX_CART_LINES = 50;
@@ -24,10 +26,6 @@ const CART_KEY_PREFIX = 'freedom.shop.cart.v1:';
 
 export function cartStorageKey(slug: string): string {
   return `${CART_KEY_PREFIX}${slug}`;
-}
-
-export function isValidStoreSlug(value: string): boolean {
-  return STORE_SLUG_PATTERN.test(value);
 }
 
 export function isValidProductSku(value: string): boolean {

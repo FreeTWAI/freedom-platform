@@ -191,9 +191,9 @@ async function runSharded(root, selections, files, options, timeout, count) {
   try {
     partitions = partitionRuntimeFiles(files, count);
     databases = await createRuntimeDatabases(options.testDatabaseUrl, count,
-      Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 24_000))));
+      Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 64_000))));
     // Reserve bounded cleanup time within the original global budget.
-    const remaining = deadline - performance.now() - 24_000;
+    const remaining = deadline - performance.now() - 64_000;
     if (remaining <= 0 || options.signal?.aborted) reason = options.signal?.aborted ? 'test_cancelled' : 'test_timeout';
     else shards = await Promise.all(partitions.map(async (selected, index) => {
       const ran = await execute(root, selected, 'tsx', { TEST_DATABASE_URL: databases.urls[index] }, remaining, options.signal);
@@ -257,6 +257,52 @@ export async function runLocalSuite(root, id, options = {}) {
 
 const PINNED_OPTION_KEYS = Object.freeze(['testDatabaseUrl', 'env', 'timeoutMs', 'signal']);
 
+// Optional diagnostics from an already-failed pytest process. Reconstruct only
+// selected paths and closed counts; helper failures never replace its verdict.
+async function pytestFailureCounts(root, junit, expected, files, deadline, signal) {
+  try {
+    if (signal?.aborted || performance.now() >= deadline) return;
+    const helperPath = fileURLToPath(new URL('../../scripts/ci/pinned_pytest_evidence.py', import.meta.url));
+    const output = await new Promise(done => {
+      const child = spawn('python3', ['-I', helperPath, '--failure-counts', '--junit', junit, '--expected', expected],
+        { cwd: root, env: verificationEnvironment(), stdio: ['ignore', 'pipe', 'ignore'] });
+      let invalid = false, size = 0;
+      const chunks = [];
+      const stop = () => { invalid = true; child.kill('SIGKILL'); };
+      const timer = setTimeout(stop, Math.max(1, Math.min(30_000, Math.floor(deadline - performance.now()))));
+      signal?.addEventListener('abort', stop, { once: true });
+      if (signal?.aborted) stop();
+      child.stdout.on('data', bytes => {
+        size += bytes.length;
+        if (size > MAX_OUTPUT) stop();
+        else chunks.push(bytes);
+      });
+      child.stdout.on('error', stop);
+      child.once('error', () => { invalid = true; });
+      child.once('close', (code, terminationSignal) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', stop);
+        done(!invalid && code === 0 && terminationSignal === null ? Buffer.concat(chunks) : undefined);
+      });
+    });
+    if (!output || signal?.aborted || performance.now() >= deadline) return;
+    const parsed = parseJson(output, { maxBytes: MAX_OUTPUT, maxNodes: 500_000 });
+    if (parsed.ok !== false || parsed.reason !== 'test_process_failed' || !Array.isArray(parsed.files)
+      || parsed.files.length !== files.length) return;
+    const test_files = [];
+    for (const [index, file] of parsed.files.entries()) {
+      if (!file || file.path !== files[index] || !file.counts
+        || !COUNT_KEYS.every(key => Number.isSafeInteger(file.counts[key]) && file.counts[key] >= 0)
+        || file.counts.tests < 1
+        || file.counts.tests !== COUNT_KEYS.slice(1).reduce((sum, key) => sum + file.counts[key], 0)) return;
+      test_files.push({ path: files[index], counts: Object.fromEntries(COUNT_KEYS.map(key => [key, file.counts[key]])),
+        cases: [], suite_events: [] });
+    }
+    if (signal?.aborted || performance.now() >= deadline) return;
+    return test_files;
+  } catch { /* missing, malformed, oversized or unavailable diagnostics fail closed */ }
+}
+
 async function runPytestSuiteDefinition(root, id, files, suite, extraEnv, timeoutMs, options) {
   const deadline = performance.now() + timeoutMs;
   const failure = (reason, evidence_reason) => ({ ...result(id, 'failed', reason),
@@ -290,10 +336,16 @@ async function runPytestSuiteDefinition(root, id, files, suite, extraEnv, timeou
       child.once('close', (code, terminationSignal) => {
         clearTimeout(timer);
         options.signal?.removeEventListener('abort', abort);
-        done({ reason, failed: code !== 0 || terminationSignal !== null });
+        done({ reason, failed: code !== 0 || terminationSignal !== null,
+          exitedNonzero: Number.isInteger(code) && code !== 0 && terminationSignal === null });
       });
     });
-    if (ran.reason || ran.failed) return failure(ran.reason ?? 'test_process_failed');
+    if (ran.reason || ran.failed) {
+      const failed = failure(ran.reason ?? 'test_process_failed');
+      if (ran.reason || !ran.exitedNonzero) return failed;
+      const test_files = await pytestFailureCounts(root, junit, expected, files, deadline, options.signal);
+      return test_files ? { ...failed, test_files } : failed;
+    }
     if (options.signal?.aborted) return failure('test_cancelled');
     if (performance.now() >= deadline) return failure('test_timeout');
     const helperPath = fileURLToPath(new URL('../../scripts/ci/pinned_pytest_evidence.py', import.meta.url));
@@ -452,7 +504,7 @@ const PARTITION_SCHEMA = 'freedom.runtime-partition/v1';
 // Finite matrix capacity, including provisioning and verified cleanup. Hosted
 // observations on 2026-10-15 put the same 55 files about 20% slower and the
 // projected full partition beyond 1,224s. Keep legacy four-partition behavior;
-// six and eight hosts get 1,500s including the unchanged 24s cleanup reserve.
+// six and eight hosts get 1,500s including the 64s cleanup reserve.
 const PARTITION_BUDGET_MS = Object.freeze({ 4: 1_200_000, 6: 1_500_000, 8: 1_500_000 });
 // Queueing can serialize every host: allow one full partition budget per host plus
 // 30 minutes of bounded queue gaps. CI scopes artifacts to one run attempt;
@@ -495,8 +547,8 @@ export async function runRuntimePartition(root, options = {}) {
   let databases, cleanup = false, report;
   try {
     partitionCheck(isDisposableDatabaseUrl(options.testDatabaseUrl), 'test_database_rejected');
-    databases = await createRuntimeDatabases(options.testDatabaseUrl, 1, Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 24_000))));
-    const remaining = Math.floor(deadline - performance.now() - 24_000);
+    databases = await createRuntimeDatabases(options.testDatabaseUrl, 1, Math.max(1, Math.min(20_000, Math.floor(deadline - performance.now() - 64_000))));
+    const remaining = Math.floor(deadline - performance.now() - 64_000);
     if (remaining <= 0) throw Error('test_timeout');
     [report] = await runGroup(root, [{id: check_id, files: selected}], true,
       {testDatabaseUrl: databases.urls[0], timeoutMs: remaining, runtimeShards: 1, signal: options.signal}, budget);

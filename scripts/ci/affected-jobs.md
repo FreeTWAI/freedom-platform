@@ -104,3 +104,34 @@ policy. Source-integrity, the required aggregate and their failure semantics
 are unchanged. This source proposal does not update the installed workflow pin,
 change GitHub settings or bypass any current PR's checks. Hosted savings require
 a separately reviewed and authorized installed-source upgrade.
+
+## Approved guild module boundaries
+
+The guild profile is now a source candidate for ordinary changes within the two
+approved guild module directories, rather than exact import prefixes in two files.
+Existing preview tests, Markdown, local TS/TSX helpers and plain CSS may accompany
+component edits. New helpers/styles/docs are allowed under existing ownership;
+new preview test files remain full until the fixed runner enumerates them.
+
+Selection still requires the complete, unchanged baseline/candidate descriptor
+graph, approved owners/surfaces/operations and exact reverse-consumer obligations.
+The selector reads every regular source blob in each affected module in both
+immutable Git trees. TypeScript AST imports and exports must resolve locally or
+retain the same baseline external dependency set; product/test dependency sets
+stay separate. Comments, strings and harmless import formatting no longer count
+as imports. Missing/ambiguous local resolution, unknown modules, new external
+or cross-domain dependencies, dynamic/type imports, CommonJS, import.meta,
+CSS imports/URL assets, unknown configuration, AGENTS, rename/delete/mode changes
+and missing/invalid parsers retain full CI. Limits are 256 files per module/revision,
+262144 bytes per file and 2000000 bytes across the two module snapshots.
+
+The selector job installs its own workflow checkout's existing lockfile with
+`npm ci --ignore-scripts --no-audit --no-fund`; it never obtains parsers from the
+candidate checkout. The existing TypeScript 6 compatibility parser and PostCSS
+parse source as data without running candidate code/configuration. The verify
+aggregate remains dependency-free. This is dependency selection, not a security
+sandbox or a claim that all program behavior is statically known. Review,
+source-integrity, CodeQL, fixed guild integration/preview checks and strict
+main protections remain unchanged. This control-plane PR itself requires full CI;
+local regression results do not establish hosted savings or independent guild
+maintainer assignments.

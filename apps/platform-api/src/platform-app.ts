@@ -12,6 +12,7 @@ import {isPaymentHandoffPath} from '../../../modules/agent-commerce/payments/han
 import {createHostedPaymentRoutes,hostedPaymentOptions} from './routes/hosted-payments.js';
 import {providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
 import {createHostedCheckoutRoutes,hostedCheckoutOptions} from './routes/hosted-checkout.js';
+import {createHostedStoreOverviewRoutes} from './routes/hosted-store-overview.js';
 import {createHostedSupplierConsoleRoutes} from './routes/hosted-supplier-console.js';
 import {isArUpload,checkArUploadHeaders,createPublicArRoutes,createMemberArRoutes} from './routes/community-ar.js';
 import {readWithMemberSession} from '../../../packages/db/member-session.js';
@@ -162,13 +163,15 @@ export const wireVersionResponses:MiddlewareHandler=async(c,next)=>{
 /** Browser page for a share token. The JSON and avatar routes set the same tag themselves. */
 export function isMemberCardPage(path:string){return /^\/member-cards\/[A-Za-z0-9_-]{43}\/?$/.test(path);}
 /** Shared by the Worker file fast path; route-specific form destinations stay here. */
-export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string){
+export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
   const githubSetupForm=path==='/admin'||path==='/admin/github/callback'?' https://github.com/organizations/FreeTWAI/settings/apps/new':'';
   const destinations=isPaymentHandoffPath(path)?(paymentFormOrigin?' '+paymentFormOrigin:''):githubSetupForm+(brokerFormOrigin?' '+brokerFormOrigin:'');
-  return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
+  // Only the Short feed embeds a player: one named origin, only when the host enabled it, never on a payment hand-off or an admin page.
+  const frames=!shortVideosEnabled||isPaymentHandoffPath(path)||path==='/admin'||path.startsWith('/admin/')?'':" frame-src https://www.youtube-nocookie.com;";
+  return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:;"+frames+" base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
 }
-export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string){
-  return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':platformContentSecurityPolicy(path,brokerFormOrigin,paymentFormOrigin)};
+export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
+  return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':platformContentSecurityPolicy(path,brokerFormOrigin,paymentFormOrigin,shortVideosEnabled)};
 }
 /** Runtime-neutral platform app. Host adapters: app.ts (Node) and worker.ts (Cloudflare). */
 export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,runtime:PlatformRuntime,options:{githubSocial?:GitHubSocialOptions;coCreationGitHub?:CollaborationGitHub}={}) {
@@ -225,7 +228,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   });
   app.use('/api/v1/me/onboarding/*',onboardingDiagnostics());
   app.use('*',async(c,next)=>{
-    const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin);
+    const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true);
     for(const [name,value] of Object.entries(headers))if(name!=='Content-Security-Policy')c.header(name,value);
     const host=new URL(c.req.url).hostname;
     requireCondition(allowedHosts.has(host),403,'host_rejected',freedomEnv==='local'?'此版本只提供本機使用。':'請從自由工坊網站操作。');
@@ -300,8 +303,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         checkTenantResultContentHeaders(c.req.header('Content-Length'));
       } else {
         requireCondition(/^application\/json[ \t]*(?:;|$)/i.test(c.req.header('Content-Type')??''),415,'json_required','操作需要 JSON。');
-        // Note creation may embed one base64 image (#387); every other JSON command keeps the small ceiling.
-        const jsonLimit=c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:32768;
+        // Notes may embed an image; preview wraps up to 24,000 UTF-8 bytes
+        // in {"content":""}, with at most six JSON escape bytes per input byte.
+        const jsonLimit=c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
+          c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:32768;
         requireCondition(Number(c.req.header('Content-Length')??0)<=jsonLimit,413,'body_too_large','內容過長。');
         if(c.req.raw.body) {
           let size=0;
@@ -357,7 +362,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     });
   });
   registerGuideReleaseRoute(app,runtime.publicGuideAssets);
-  app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal));
+  app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv),releaseSha:runtime.health?.release_sha??null}));
   const skillEventBacklinks=runtime.eventOutcomesEnabled===true?async(id:string,c:Context)=>{
     let actor:Actor|null=null;
     const session=readSessionCookie(c.req.header('Cookie'),origin);
@@ -369,7 +374,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/',createDevelopmentRoutes(id=>publicSocial.cachedMetrics(id),id=>readSkillEditorial(pool,id),async id=>(await skillDiscovery(pool)).books.find(book=>book.book_id===id),runtime.publicOrigin,id=>publicAuthorClaimForBook(pool,id),runtime.communityDiscoveryEnabled===true,skillEventBacklinks));
   app.get('/api/v1/health',c=>c.json({status:'ok',mode:freedomEnv,version:packageMetadata.version,money_movement_enabled:false,official:false,...runtime.health,shop_key_policy:shopHost.policy??'unconfigured',shop_key_issuer_profile:shopHost.policy?'freedom.shop-service-key/v1':null}));
   app.get('/api/v1/protocol',c=>c.json(protocolMetadata));
-  app.get('/api/v1/site',c=>c.json({brand:'自由工坊',commerce_checkout_enabled:runtime.commerceSettings?.checkoutEnabled===true&&runtime.commerceSettings?.quarantine!==true,commerce_console_enabled:runtime.commerceSettings?.consoleEnabled===true&&runtime.supplierConsoleEnabled===true&&runtime.guildLaunchpadEnabled===true,public_mode:freedomEnv==='public',registration_enabled:freedomEnv==='local'||Boolean(runtime.registrationCommunityId()),password_recovery_enabled:Boolean(runtime.passwordEmailSender),demo_accounts_enabled:freedomEnv!=='public',community:communityCatalog,guild_launchpad_enabled:runtime.guildLaunchpadEnabled===true,community_discovery_enabled:runtime.communityDiscoveryEnabled===true,member_blocking_enabled:runtime.memberBlockingEnabled===true,member_reporting_enabled:runtime.memberReportingEnabled===true,community_search_enabled:runtime.communitySearchEnabled===true,unified_sharing_enabled:runtime.unifiedSharingEnabled===true,community_relations_enabled:runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true,personal_content_enabled:runtime.personalContentEnabled===true,ar_enabled:runtime.arEnabled===true&&!!runtime.arAssetStore,skill_book_star_gate_enabled:runtime.skillBookStarGateEnabled===true,message_images_enabled:messageImagesInstalled(runtime),event_participation_enabled:runtime.eventParticipationEnabled===true,notification_preferences_enabled:runtime.notificationPreferencesEnabled===true,first_participation_enabled:runtime.firstParticipationEnabled===true,squad_outcomes_enabled:runtime.squadOutcomesEnabled===true,event_outcomes_enabled:runtime.eventOutcomesEnabled===true,hosted_store_photos_enabled:runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),hosted_store_photo_uploads_enabled:runtime.guildLaunchpadEnabled===true&&storePhotoUploadsInstalled(runtime),distribution_photos_enabled:distributionPhotosInstalled(runtime),supply_material_media_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime),supply_material_uploads_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialUploadsInstalled(runtime),supplier_console_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true}));
+  app.get('/api/v1/site',c=>c.json({brand:'自由工坊',commerce_checkout_enabled:runtime.commerceSettings?.checkoutEnabled===true&&runtime.commerceSettings?.quarantine!==true,commerce_console_enabled:runtime.commerceSettings?.consoleEnabled===true&&runtime.guildLaunchpadEnabled===true,public_mode:freedomEnv==='public',registration_enabled:freedomEnv==='local'||Boolean(runtime.registrationCommunityId()),password_recovery_enabled:Boolean(runtime.passwordEmailSender),demo_accounts_enabled:freedomEnv!=='public',community:communityCatalog,guild_launchpad_enabled:runtime.guildLaunchpadEnabled===true,community_discovery_enabled:runtime.communityDiscoveryEnabled===true,member_blocking_enabled:runtime.memberBlockingEnabled===true,member_reporting_enabled:runtime.memberReportingEnabled===true,community_search_enabled:runtime.communitySearchEnabled===true,unified_sharing_enabled:runtime.unifiedSharingEnabled===true,community_relations_enabled:runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true,personal_content_enabled:runtime.personalContentEnabled===true,ar_enabled:runtime.arEnabled===true&&!!runtime.arAssetStore,short_videos_enabled:runtime.shortVideosEnabled===true,skill_book_star_gate_enabled:runtime.skillBookStarGateEnabled===true,message_images_enabled:messageImagesInstalled(runtime),event_participation_enabled:runtime.eventParticipationEnabled===true,notification_preferences_enabled:runtime.notificationPreferencesEnabled===true,first_participation_enabled:runtime.firstParticipationEnabled===true,squad_outcomes_enabled:runtime.squadOutcomesEnabled===true,event_outcomes_enabled:runtime.eventOutcomesEnabled===true,hosted_store_photos_enabled:runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),hosted_store_photo_uploads_enabled:runtime.guildLaunchpadEnabled===true&&storePhotoUploadsInstalled(runtime),distribution_photos_enabled:distributionPhotosInstalled(runtime),supply_material_media_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime),supply_material_uploads_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialUploadsInstalled(runtime),supplier_console_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true}));
   app.get('/api/v1/public/community-discovery',async c=>{
     requireCondition(runtime.communityDiscoveryEnabled===true,404,'not_found','找不到公開內容。');
     return c.json(await publicDiscovery(pool,runtime.registrationCommunityId()));
@@ -758,8 +763,9 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     app.route('/api/v1',createTenantWorkspaceRoutes(pool));
     app.route('/api/v1',createModuleRegistryRoutes(pool,runtime.moduleProviders,runtime.tenantListCursors));
     app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
-    app.route('/api/v1',createHostedStoreRoutes(pool));
+    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true));
     app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
+    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));

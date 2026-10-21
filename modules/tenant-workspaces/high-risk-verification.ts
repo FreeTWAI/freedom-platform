@@ -43,7 +43,8 @@ async function qualified(q: PoolClient, actor: Actor, principalId: string, tenan
 }
 
 /** Password re-check. No receipt: the password must never enter a digest.
- * Failure counts commit before the problem is raised, matching login(). */
+ * Failure counts commit before the problem is raised, matching login().
+ * Recheck the locked session after the final SQL of every normal outcome. */
 export async function createHighRiskVerification(pool: Pool, actor: Actor, body: unknown) {
   const input = HighRiskVerificationInputSchema.parse(body);
   const outcome = await isolatedTransaction(pool, async q => {
@@ -55,24 +56,31 @@ export async function createHighRiskVerification(pool: Pool, actor: Actor, body:
     await qualified(q, actor, principal.principal_id, input.tenant_id, input.purpose);
     const attemptKey = tokenHash(`high-risk-verification:${actor.user_id}`);
     // DO UPDATE locks an existing row, so the scheduled prune cannot delete it before the SELECT below.
-    await q.query(`INSERT INTO login_attempts VALUES($1,0,now()) ON CONFLICT (attempt_key) DO UPDATE SET attempt_key = excluded.attempt_key`, [attemptKey]);
-    const attempt = (await q.query<{ failures: number; window_start: Date }>(
-      `SELECT failures, window_start FROM login_attempts WHERE attempt_key=$1 FOR UPDATE`, [attemptKey])).rows[0];
-    if (Date.now() - new Date(attempt.window_start).getTime() > 15 * 60 * 1000) {
-      await q.query(`UPDATE login_attempts SET failures=0, window_start=now() WHERE attempt_key=$1`, [attemptKey]);
+    await q.query(`INSERT INTO login_attempts VALUES($1,0,clock_timestamp()) ON CONFLICT (attempt_key) DO UPDATE SET attempt_key = excluded.attempt_key`, [attemptKey]);
+    const attempt = (await q.query<{ failures: number; expired: boolean }>(
+      `SELECT failures, window_start<clock_timestamp()-interval '15 minutes' AS expired FROM login_attempts WHERE attempt_key=$1 FOR UPDATE`, [attemptKey])).rows[0];
+    if (attempt.expired) {
+      await q.query(`UPDATE login_attempts SET failures=0, window_start=clock_timestamp() WHERE attempt_key=$1`, [attemptKey]);
       attempt.failures = 0;
     }
-    if (attempt.failures >= 10) return { kind: 'blocked' as const };
+    if (attempt.failures >= 10) {
+      await assertCurrentSessionClock(q, actor);
+      return { kind: 'blocked' as const };
+    }
     let policy: { fresh_auth_ttl_seconds: number };
     try {
       policy = await loadActivePolicy(q);
     } catch (error) {
-      if (error instanceof Problem && error.code === 'policy_unconfigured') return { kind: 'unconfigured' as const };
+      if (error instanceof Problem && error.code === 'policy_unconfigured') {
+        await assertCurrentSessionClock(q, actor);
+        return { kind: 'unconfigured' as const };
+      }
       throw error;
     }
     const valid = await verifyMemberPassword(q, actor.user_id, input.password);
     if (!valid) {
       await q.query(`UPDATE login_attempts SET failures=failures+1 WHERE attempt_key=$1`, [attemptKey]);
+      await assertCurrentSessionClock(q, actor);
       return { kind: 'invalid' as const };
     }
     await q.query(`UPDATE login_attempts SET failures=0 WHERE attempt_key=$1`, [attemptKey]);
@@ -81,6 +89,7 @@ export async function createHighRiskVerification(pool: Pool, actor: Actor, body:
        VALUES($1,$2,$3,$4,$5,clock_timestamp(),clock_timestamp()+make_interval(secs => $6))
        RETURNING verification_id, expires_at`,
       [actor.user_id, principal.principal_id, actor.session_hash, input.tenant_id, input.purpose, policy.fresh_auth_ttl_seconds])).rows[0];
+    await assertCurrentSessionClock(q, actor);
     return {
       kind: 'created' as const,
       body: HighRiskVerificationSchema.parse({
