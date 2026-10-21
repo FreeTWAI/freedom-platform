@@ -6,7 +6,7 @@ import './editor.css';
 const stale='部分商品已停止上架，發布時不會顯示；請確認分類商品。';
 const move=<T,>(rows:T[],index:number,delta:number)=>{const next=[...rows];[next[index],next[index+delta]]=[next[index+delta],next[index]];return next;};
 export function CategoriesEditor({client,userId,root,writable,locked,refresh,onState,onSaved}:{client:PortalClient;userId:string;root:string;writable:boolean;locked:boolean;refresh:string;onState:(dirty:boolean,blocking:boolean)=>void;onSaved:()=>Promise<void>}){
- const scope=userId+'/'+root+'/categories',[page,setPage]=useState<CategoryPage|null>(null),[selected,setSelected]=useState(''),[name,setName]=useState(''),[keys,setKeys]=useState<string[]>([]),[newName,setNewName]=useState('');
+ const scope=userId+'/'+client.sessionGeneration+'/'+root+'/categories',[page,setPage]=useState<CategoryPage|null>(null),[selected,setSelected]=useState(''),[name,setName]=useState(''),[keys,setKeys]=useState<string[]>([]),[newName,setNewName]=useState('');
  const [attempt,setAttempt]=useState(()=>categoryAttempt(client,scope)),[busy,setBusy]=useState(false),[loadError,setLoadError]=useState(false),[message,setMessage]=useState(()=>categoryAttempt(client,scope)?'暫時無法確認儲存結果，請用原操作重試。':''),[alert,setAlert]=useState(false),[invalid,setInvalid]=useState<'new'|'name'|null>(null),[conflict,setConflict]=useState(false);
  const [removing,setRemoving]=useState<{category_id:string;name:string}|null>(null),confirmRef=useRef<HTMLDialogElement>(null);
  const generation=useRef(client.sessionGeneration),alive=useRef(true),sequence=useRef(0),sending=useRef(false),state=useRef(onState),messageRef=useRef<HTMLDivElement>(null);state.current=onState;
