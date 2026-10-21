@@ -114,6 +114,7 @@ const tenantWorkDocuments: ReadonlyArray<readonly [string, z.ZodType, 'input' | 
 
 const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [string, z.ZodType, 'input' | 'output', readonly string[]]>]> = [
   ['hosted-checkout', 'Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.', [
+    ['buyer-identity-header', checkout.CheckoutBuyerIdentitySchema, 'input', ['equality_precondition_not_authority']],
     ['shipping-method-ref', checkout.ShippingMethodRefSchema, 'output', []],
     ['delivery-field-error-code', checkout.DeliveryFieldErrorCodeSchema, 'output', []],
     ['shipping-unavailable-reason', checkout.ShippingUnavailableReasonSchema, 'output', []],
