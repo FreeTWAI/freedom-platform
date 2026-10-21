@@ -2069,8 +2069,8 @@
     },
     {
       "path": "apps/portal-web/src/page-help.ts",
-      "bytes": 19464,
-      "sha256": "184619e5e4267de15df2d364f5ccab2a21f94aba0f88a511cf5ce38bc6297e17"
+      "bytes": 19620,
+      "sha256": "2a60ba8ebb4e7518a898ccb4f32ba221a2398a848687dcdd04f996fd1fcababd"
     },
     {
       "path": "apps/portal-web/src/portal-feedback.tsx",
