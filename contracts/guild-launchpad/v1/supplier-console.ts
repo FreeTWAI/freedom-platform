@@ -88,6 +88,9 @@ export const SupplierProductSelectionSchema = DistributionSchema.extend({
 export const SupplierProductDetailSchema = z.object({
   profile: z.literal('freedom.supplier-console.product/v1'), as_of: time,
   product: SupplierProductSchema,
+  msrp_minor: SupplyTermsSchema.shape.msrp_minor,
+  minimum_order_quantity: SupplyTermsSchema.shape.minimum_order_quantity,
+  lead_time_days: SupplyTermsSchema.shape.lead_time_days,
   shipping_terms: SupplyTermsInputSchema.shape.shipping_terms, return_terms: SupplyTermsInputSchema.shape.return_terms,
   /** The currently offered version with its frozen terms, or null when nothing is offered. */
   current_offer: SupplyOfferSchema.nullable(),

@@ -1,5 +1,5 @@
 import {createAttempt,type Attempt} from './attempt';
-export type Fields=Record<string,string|number|boolean>;
+export type Fields=Record<string,string|number|boolean|null>;
 export type Draft={baseVersion:string;fields:Fields;stale?:boolean;conflict?:boolean};
 export type Drafts=Record<string,Draft>;
 export function changedFields(base:Fields,values:Fields):Fields {return Object.fromEntries(Object.entries(values).filter(([k,v])=>v!==base[k]));}

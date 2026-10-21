@@ -144,6 +144,8 @@ export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: st
     requireCondition(row.product,404,'not_found','找不到這項商品。');
     return SupplierProductDetailSchema.parse({profile:'freedom.supplier-console.product/v1',as_of:row.as_of,product:productView(row.product,p.currency),
       shipping_terms:row.product.shipping_terms,return_terms:row.product.return_terms,
+      msrp_minor:row.product.msrp_minor===null?null:Number(row.product.msrp_minor),
+      minimum_order_quantity:row.product.minimum_order_quantity,lead_time_days:row.product.lead_time_days,
       current_offer:row.product.current_offer?offerView(row.product.current_offer):null,
       selections:row.selections.slice(0,200).map((l:Record<string,any>)=>({...selectionView(l),partner_id:l.partner_id})),truncated:row.selections.length>200});
   });

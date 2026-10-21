@@ -572,3 +572,13 @@ test('SC-UI-M3-24 a late unknown response cannot resurrect a completed upload or
  const client={},a=uploadAttempt();holdMaterialUpload(client,'member',a);assert.equal(markMaterialUploadUnknown(client,'member',a),true);assert.equal(heldMaterialUpload(client,'member',a)?.hadUnknown,true);releaseMaterialUpload(client,'member',a);assert.equal(markMaterialUploadUnknown(client,'member',a),false);assert.equal(heldMaterialUpload(client,'member',a),null);
  const b=uploadAttempt({key:'new-key'});holdMaterialUpload(client,'member',b);assert.equal(markMaterialUploadUnknown(client,'member',a),false);assert.equal(heldMaterialUpload(client,'member',b)?.key,b.key);assert.equal(heldMaterialUpload(client,'member',b)?.hadUnknown,false);releaseMaterialUpload(client,'member',b);
 });
+
+
+test('structured supply references parse optional text, retain labels and format attempt values',()=>{
+ assert.deepEqual(commandFields('terms.update',{msrp_minor:'450.25',minimum_order_quantity:'2',lead_time_days:'0'}),{msrp_minor:45025,minimum_order_quantity:2,lead_time_days:0});
+ assert.deepEqual(commandFields('terms.update',{msrp_minor:'',minimum_order_quantity:' ',lead_time_days:''}),{msrp_minor:null,minimum_order_quantity:null,lead_time_days:null});
+ assert.deepEqual(commandFields('terms.update',{shipping_minor:'0'}),{shipping_minor:0});
+ for(const [field,text] of [['msrp_minor','0'],['msrp_minor','1000000.01'],['minimum_order_quantity','0'],['minimum_order_quantity','10001'],['minimum_order_quantity','2.5'],['lead_time_days','-1'],['lead_time_days','366'],['lead_time_days','1.2'],['lead_time_days','1e2']])assert(Number.isNaN(commandFields('terms.update',{[field]:text})[field]),field+' '+text);
+ assert.equal(fieldLabels.msrp_minor,'建議售價');assert.equal(fieldLabels.minimum_order_quantity,'最低訂量');assert.equal(fieldLabels.lead_time_days,'交期');
+ assert.equal(attemptFieldText('msrp_minor',45025,'TWD'),'$450.25');assert.equal(attemptFieldText('minimum_order_quantity',2,'TWD'),'2 件');assert.equal(attemptFieldText('lead_time_days',3,'TWD'),'3 天');assert.equal(attemptFieldText('lead_time_days',0,'TWD'),'當天');assert.equal(attemptFieldText('lead_time_days',null,'TWD'),'（空白）');
+});

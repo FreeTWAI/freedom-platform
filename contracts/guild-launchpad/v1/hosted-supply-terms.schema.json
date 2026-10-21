@@ -27,6 +27,42 @@
           "minLength": 1,
           "maxLength": 2000,
           "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+        },
+        "msrp_minor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimum_order_quantity": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lead_time_days": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 365
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -62,6 +98,42 @@
           "minLength": 1,
           "maxLength": 2000,
           "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+        },
+        "msrp_minor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimum_order_quantity": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lead_time_days": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 365
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "product_id": {
           "type": "string",
@@ -120,6 +192,21 @@
                       "minLength": 1,
                       "maxLength": 2000,
                       "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                    },
+                    "msrp_minor": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100000000
+                    },
+                    "minimum_order_quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000
+                    },
+                    "lead_time_days": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 365
                     },
                     "title": {
                       "type": "string",
@@ -190,6 +277,9 @@
         "shipping_minor",
         "shipping_terms",
         "return_terms",
+        "msrp_minor",
+        "minimum_order_quantity",
+        "lead_time_days",
         "product_id",
         "currency",
         "stock",

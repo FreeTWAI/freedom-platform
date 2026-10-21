@@ -8,3 +8,5 @@
 .supply-offer-preview > .stack { margin-top:1rem; }
 .hosted-supply-offer .sale-path { padding:.75rem 0; border-bottom:1px solid var(--line); }
 .hosted-supply-offer .sale-path:last-child { border-bottom:0; }
+.supply-reference-fields > div { display:grid; gap:.5rem; }
+.supply-reference-fields > legend { font-weight:650; padding-block:.25rem; }
