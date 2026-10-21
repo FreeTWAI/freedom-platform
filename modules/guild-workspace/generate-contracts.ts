@@ -249,7 +249,7 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
   ['storefront-variants', 'Own SKU groups with current store authorization and immutable publication sidecars; legacy storefront/v1 unchanged.', [
     ['product-group-draft',variants.ProductGroupDraftSchema,'output',['current_store_read']],
     ['product-group-page',variants.ProductGroupPageSchema,'output',['bounded_200_skus','current_store_read']],
-    ['replace-product-group-input',variants.ReplaceProductGroupInputSchema,'input',['group_cas','existing_own_selections','unique_existing_combinations','complete_label_120_utf16']],
+    ['replace-product-group-input',variants.ReplaceProductGroupInputSchema,'input',['group_cas','existing_own_selections','unique_existing_combinations','normalized_nfc_no_control_or_bidi_text','unique_axis_keys_names_values','complete_label_120_utf16']],
     ['create-variant-product-input',variants.CreateVariantProductInputSchema,'input',['group_cas','atomic_product_create','sku_limit_200']],
     ['split-product-group-input',variants.SplitProductGroupInputSchema,'input',['group_cas','retain_home_gallery_and_group_identity']],
     ['variant-command',variants.VariantCommandAckSchema,'output',['completion_metadata_only_receipt','current_store_write']],
