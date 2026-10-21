@@ -744,6 +744,14 @@ test('buyer journey returns a guest after real login, reconfirms identity and fi
     await expect(page.getByText('000000123456', {exact: true})).toBeVisible();
     await expect(page.getByText('新的面交地點。', {exact: true})).toHaveCount(0);
     expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toMatch(/000000123456|return-buyer@example.test/);
+    await page.goto('/#reservations');
+    const orders=page.getByRole('region',{name:'訂單',exact:true});
+    await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',`/shops/${store.slug}/orders/${order.order_ref}`);
+    await orders.getByRole('link',{name:'開啟訂單',exact:true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(page.getByText('000000123456',{exact:true})).toBeVisible();
+    await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await expect(page.getByText('000000654321',{exact:true})).toHaveCount(0);
   } finally {await context.close(); await store.close();}
 });
 
@@ -764,6 +772,14 @@ test('checkout registration returns before guild choice; unavailable stores keep
     const user = (await e2eAuthPool.query('SELECT user_id,onboarding_completed_at FROM users WHERE email=$1', [email])).rows[0];
     expect(user.onboarding_completed_at).toBeNull();
     expect((await e2eAuthPool.query('SELECT 1 FROM positioning_profession_memberships WHERE user_id=$1', [user.user_id])).rowCount).toBe(0);
+    await page.goto('/#reservations');
+    await expect(page.getByRole('region',{name:'訂單',exact:true})).toContainText('目前沒有訂單。');
+    await expect(page.getByRole('region',{name:'我的訂單',exact:true})).toHaveCount(0);
+    expect((await context.request.get('/api/v1/me/orders')).status()).toBe(200);
+    expect((await context.request.get('/api/v1/me/reservations')).status()).toBe(403);
+    await page.getByRole('link',{name:'返回工坊',exact:true}).click();
+    await expect(page).toHaveURL(`${store.origin}/#home`);
+    await expect(page.getByRole('region',{name:'訂單',exact:true})).toHaveCount(0);
     const version = (await e2eAuthPool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1', [store.instance])).rows[0].version;
     await store.sellerPost(store.root + '/unpublish', {}, 200, version);
     const destination = `/?return_to=${encodeURIComponent(`/shops/${store.slug}/checkout`)}`;

@@ -38,7 +38,52 @@ stable member user ID (or guest). A new session for the same member can explicit
 retry the original coordinates; a different identity parks them without replay,
 clears private in-memory fields and requotes the retained cart. Legacy v1 intents
 are untrusted. Tab metadata stores no contact, bank, cookie or CSRF values.
-This slice adds no member order list or retained unpublished-store read path.
+The member history companion is described below.
+
+## Member checkout history (2026-10-20 candidate)
+
+Raw checkout flag ON mounts `GET /api/v1/me/orders` behind the real cookie
+boundary, including an onboarding exception for this exact GET only. It needs
+no CSRF token. The read-only transaction reuses `member(..., false)` without
+mapping a person or scope and rechecks the live session, active user and same
+active person principal before returning. Disabled principals are refused;
+an unmapped active member gets an empty page. Guild and seller-tenant membership
+are not conditions of the original buyer's retained order access.
+
+Migration178 adds only the partial buyer/creation/UUID index. Candidate discovery
+is `buyer_principal_id = actual principal AND order_profile = 'hosted_checkout'`,
+ordered newest first, at most 21 candidates for a page of at most 20. Dependent
+exact-key sidecar/publication/provenance lookups export only frozen store name
+and slug, order reference/number, placement time, total/currency, lifecycle and
+canonical order path. Missing retained metadata fails closed as an error.
+There is no customer/contact/bank query, cross-tenant fanout, role change,
+BYPASSRLS, new grant or RLS exception in the list. Existing participant metadata
+exemptions suffice. No list budget is charged; no hold is settled.
+
+`tenantListCursors` signs purpose `buyer-orders`, the actual principal, empty
+store/scope selectors and filter `{"profile":"hosted_checkout","v":1}`. The
+position retains six-digit PostgreSQL microseconds and the UUID; continuation
+uses a strict descending tuple boundary. Another member, v1 list, origin or
+environment cannot reuse it. Missing signing configuration returns
+`tenant_cursor_unavailable`, never a misleading empty page. Query limit defaults
+to 20 in the API/domain so generated input/output schemas remain identical.
+
+When the current public store cannot resolve, only the original active member
+may read retained B07. Metadata proves exact order, buyer, frozen slug and stored
+tenant/instance/shop provenance before the existing explicit order projection
+binds that one tenant and reads private contact/payment instructions. Anonymous,
+stranger, expired or disabled identities retain the opaque missing response.
+The HTML shell authenticates before emitting even the frozen store name; it is
+private/no-store/noindex, uses the original Freedom logo, and replays no historical
+merchant description, products, photos, appearance, policies or footer. Its
+hydrated controls are read-only. Placement, cancellation, payment continuation,
+public store pages/JSON and login-return validation gain no retained-store fallback.
+
+These reads remain allowed in quarantine when the raw checkout flag is ON.
+The existing site field still masks the feature in a freshly loaded quarantined
+portal; it does not become a separate history capability. With the raw flag OFF,
+the list/cache middleware are absent and retained B07 falls back to the same
+missing-store response. No real environment or flag was changed.
 
 ## Inventory and retained facts
 

@@ -150,3 +150,17 @@ test('quarantine blocks gallery upload, ordering, descriptions, removal and rece
  const saved=await upload();assert.equal(saved.status,200,await saved.clone().text());
  const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await upload()).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
 });
+
+test('member checkout list and retained B07 are read-only and remain available in quarantine',async()=>{
+  const x=h.f.x,s=await x.store(),principal=(await x.h.pool.query("SELECT principal_id FROM principals WHERE user_ref=$1 AND kind='person'",[s.owner.user.user_id])).rows[0].principal_id;
+  const frozen=await x.frozen(s,1),order=await x.place(s,frozen,randomUUID(),principal);
+  const current=h.expect(await x.h.call('GET',s.root,s.owner,undefined,{},x.app));h.expect(await x.send(s,'/unpublish',{},current.version));
+  const settings={...h.f.settings,checkoutEnabled:true,quarantine:true},app=createApp(x.runtime,x.h.origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:settings});
+  const before=await snapshot(),list=await x.h.call('GET','/me/orders',s.owner,undefined,{},app);
+  assert.equal(list.status,200);assert.deepEqual(list.data.items.map((o:{order_ref:string})=>o.order_ref),[order.order_id]);
+  const page=await app.request(x.h.origin+`/shops/${s.slug}/orders/${order.order_id}`,{headers:{Cookie:s.owner.cookie}});
+  assert.equal(page.status,200);assert.equal(page.headers.get('Cache-Control'),'private, no-store');
+  assert.equal((await app.request(x.h.origin+`/api/v1/public/stores/${s.slug}/orders/${order.order_id}`,{headers:{Cookie:s.owner.cookie}})).status,200);
+  assert.equal((await app.request(x.h.origin+`/shops/${s.slug}/orders/${order.order_id}`)).status,404);
+  assert.deepEqual(await snapshot(),before);
+});

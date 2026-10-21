@@ -1,4 +1,3 @@
-import {createMemberCheckoutOrderRoutes} from './routes/member-checkout-orders.js';
 import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
 import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
 import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
@@ -16,7 +15,7 @@ import {assertPaymentGatewayInstallation} from '../../../modules/agent-commerce/
 import {isPaymentHandoffPath} from '../../../modules/agent-commerce/payments/handoff.js';
 import {createHostedPaymentRoutes,hostedPaymentOptions} from './routes/hosted-payments.js';
 import {providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
-import {createHostedCheckoutRoutes,hostedCheckoutOptions} from './routes/hosted-checkout.js';
+import {createHostedCheckoutRoutes,hostedCheckoutOptions,createMemberCheckoutOrderRoutes} from './routes/hosted-checkout.js';
 import {createHostedStoreOverviewRoutes} from './routes/hosted-store-overview.js';
 import {createHostedSupplierConsoleRoutes} from './routes/hosted-supplier-console.js';
 import {isArUpload,checkArUploadHeaders,createPublicArRoutes,createMemberArRoutes} from './routes/community-ar.js';

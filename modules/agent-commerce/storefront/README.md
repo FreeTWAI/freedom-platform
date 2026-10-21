@@ -27,6 +27,23 @@ The existing directly addressable checkout HTML remains available when off;
 its API gate still rejects checkout. No site JSON or Worker readiness change is
 needed. The portal ignores storefront returns when the flag is off.
 
+2026-10-20 member history companion: raw checkout flag ON adds the portal's
+「訂單」 region above unchanged v1 at exact `#reservations`. A buyer who has
+not completed onboarding gets only this read-only entry at that exact hash;
+leaving it restores onboarding. `HostedOrderPage` composes the checkout-owned,
+agent-commerce-co-owned `CheckoutOrders.tsx`, with no new composition import
+edge or descriptor dependency. Shared lifecycle/Taipei formatters live in the
+existing commerce formatter; storefront `format.ts` re-exports the same names.
+The list stores no private browser data and ignores requests from an old member
+or session generation. Rows open B07 through full navigation.
+
+Unpublished-store B07 has a member-only, private retained shell and order read.
+It exposes only the original buyer's frozen order and bank instructions, with
+no historical storefront/footer replay and no command fallback. Anonymous or
+other members receive the existing missing-store HTML. The list and retained
+read do not change PR-A quotes, identity fences, delivery reasons or unknown ACK
+copy. Migration178 is a partial index only; it changes no table or RLS policy.
+
 - Server HTML for these pages lives in this directory. The routes stay in
   `apps/platform-api/src/routes/hosted-store.ts` next to the other `/shops`
   pages.

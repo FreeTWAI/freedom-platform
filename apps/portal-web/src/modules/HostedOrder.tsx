@@ -1,3 +1,4 @@
+import {CheckoutOrders,type CheckoutOrdersProps} from '../../../../modules/agent-commerce/checkout/CheckoutOrders.js';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {PublicStoreProjectionSchema, type PublicStoreProjection} from '../../../../contracts/guild-launchpad/v1/storefront';
 import {QuoteInputSchema, ReadinessSchema} from '../../../../contracts/guild-launchpad/v1/hosted-order';
@@ -11,9 +12,15 @@ import './HostedStore.css';
 const TERMS = '僅預留 30 分鐘，尚未付款，不會安排出貨。運費未設定，稅額未評估。';
 const unreadable = () => new ApiError({message: '回應未完整收到，尚未確認原操作結果。', network: true});
 const errorText = (error: unknown) => error instanceof ApiError ? error.message : '暫時無法確認回應，請重試。';
-type Props = {client: PortalClient; locationHash: string; registerLeave: (guard: (() => boolean) | null) => void; replaceLocation: (hash: string) => void};
+type Props = {client: PortalClient; locationHash: string; registerLeave: (guard: (() => boolean) | null) => void; replaceLocation: (hash: string) => void; checkoutOrders?:Omit<CheckoutOrdersProps,'client'>&{readOnly?:boolean}};
 /** Mounted with the member/session key by Workspace; no private browser persistence. */
-export function HostedOrderPage({client, locationHash, registerLeave, replaceLocation}: Props) {
+export function HostedOrderPage(props:Props) {
+  return <>
+    {props.checkoutOrders&&props.locationHash==='#reservations'&&<CheckoutOrders key={`${props.checkoutOrders.userId}:${props.client.sessionGeneration}`} client={props.client} {...props.checkoutOrders}/>}
+    {!props.checkoutOrders?.readOnly&&<LegacyHostedOrderPage {...props}/>}
+  </>;
+}
+function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLocation}: Props) {
   const route = buyerRoute(locationHash);
   const [store, setStore] = useState<PublicStoreProjection | null>(null);
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(false);

@@ -33,7 +33,7 @@ export function memberOrderPosition(raw:Record<string,unknown>|null) {
   return parsed.data;
 }
 
-// LIMIT 1 preserves exact-key nested lookups even if table statistics change.
+// Dependent LIMIT 1 lookups prevent an unbounded sidecar hash-join scan.
 // Only these scalar fields of the immutable publication may cross the buyer ACL.
 const metadataJoins=`
   LEFT JOIN LATERAL (

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
-import type {Pool,PoolClient} from 'pg';
+import type {Pool} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {MemberOrderPageSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
@@ -16,7 +16,6 @@ let x:CheckoutHarness;
 let s:Awaited<ReturnType<CheckoutHarness['store']>>,other:typeof s;
 let a:Awaited<ReturnType<CheckoutHarness['h']['person']>>,b:typeof a;
 let pa:string,pb:string,bank:string,template:string;
-const token=(cookie:string)=>cookie.split('=')[1];
 const settings={checkoutEnabled:true,quarantine:false,providerProfiles:[]};
 function app(pool:Pool=x.runtime,overrides:Parameters<typeof createApp>[3]={}) {
   return createApp(pool,x.h.origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:settings,commercePorts:{...ports,admission:{allowed:()=>false}},...overrides});
@@ -74,7 +73,12 @@ before(async()=>{
   bank=(await place(s,pa,true)).order_id;
   template=(await place(other,pa)).order_id;await x.tx(q=>cancelUnpaidOrder(q,other,template,'buyer','buyer_cancelled'));
   await place(s,pb);await place(other,pb);await place(s,null);
-  await history(42,pa);await history(1500,pb);
+  const quoted=await x.h.post(`/hosted-stores/${s.slug}/quotes`,a.session,{publication_revision:'1',items:[{sku:s.product.sku,quantity:1}]},undefined,randomUUID(),x.app);
+  assert.equal(quoted.status,201,JSON.stringify(quoted.data));
+  const legacy=await x.h.post(`/hosted-stores/${s.slug}/orders`,a.session,{quote_id:quoted.data.quote_id,terms_sha256:quoted.data.terms_sha256,client_order_id:randomUUID()},undefined,randomUUID(),x.app);
+  assert.equal(legacy.status,201,JSON.stringify(legacy.data));
+  await x.h.pool.query("INSERT INTO commerce_orders(order_id,public_shop_id,external_id,request_sha256,currency,total_minor) VALUES($1,$2,'synthetic-imported-history',$3,'TWD',100)",[randomUUID(),s.storefront_shop_id,'a'.repeat(64)]);
+  await history(100,pa);await history(1500,pb);
   await x.h.pool.query('ANALYZE commerce_orders; ANALYZE commerce_checkout_orders; ANALYZE commerce_storefront_publications; ANALYZE commerce_storefront_profiles');
 });
 after(async()=>{await x?.stop();});
@@ -84,7 +88,7 @@ test('member list is an indexed original-buyer read across stores with frozen me
   assert.deepEqual(role,{rolsuper:false,rolbypassrls:false,non_owner:true});
   const expected=(await x.h.pool.query("SELECT order_id FROM commerce_orders WHERE buyer_principal_id=$1 AND order_profile='hosted_checkout' ORDER BY created_at DESC,order_id DESC",[pa])).rows.map(r=>r.order_id);
   const captured:{sql:string;values:unknown[]}[]=[];
-  const traced=new Proxy(x.runtime,{get(pool,key){if(key!=='connect')return Reflect.get(pool,key);return async()=>{const q=await pool.connect();return new Proxy(q,{get(client,p){if(p==='query')return async(sql:string,values:unknown[])=>{if(sql.startsWith('WITH candidate AS MATERIALIZED'))captured.push({sql,values});return client.query(sql,values);};const value=Reflect.get(client,p);return typeof value==='function'?value.bind(client):value;}});};}}) as Pool;
+  const traced=new Proxy(x.runtime,{get(pool,key){if(key!=='connect'){const v=Reflect.get(pool,key);return typeof v==='function'?v.bind(pool):v;}return async()=>{const q=await pool.connect();return new Proxy(q,{get(client,p){if(p==='query')return async(sql:string,values:unknown[])=>{if(sql.startsWith('WITH candidate AS MATERIALIZED'))captured.push({sql,values});return client.query(sql,values);};const value=Reflect.get(client,p);return typeof value==='function'?value.bind(client):value;}});};}}) as Pool;
   const target=app(traced),before=await domainSnapshot();
   const first=await get('/me/orders',a,target);assert.equal(first.status,200,JSON.stringify(first.data));
   assert.equal(first.response.headers.get('Cache-Control'),'private, no-store');assert.equal(first.response.headers.get('Vary'),'Cookie');assert.equal(first.response.headers.get('Referrer-Policy'),'no-referrer');assert.equal(first.response.headers.get('Set-Cookie'),null);
@@ -98,7 +102,7 @@ test('member list is an indexed original-buyer read across stores with frozen me
   assert.deepEqual(await domainSnapshot(),before,'GET writes no commerce metadata, mapping, scopes or rate budget');
   for(const [label,capture] of [['first',captured[0]],['continuation',captured[1]]] as const){
     const plan=(await x.runtime.query('EXPLAIN (ANALYZE, BUFFERS) '+capture.sql,capture.values)).rows.map(r=>r['QUERY PLAN']).join('\n');
-    assert.match(plan,/Index Scan using commerce_orders_member_checkout_created_idx/);assert.match(plan,/CTE candidate/);assert.match(plan,/rows=21 loops=1/);
+    assert.match(plan,/Index Scan using commerce_orders_member_checkout_created_idx/);assert.match(plan,/CTE candidate/);assert.match(plan,/rows=21(?:\.00)? loops=1/);
     console.log(`MEMBER_ORDERS_EXPLAIN_${label}\n${plan}`);
   }
   await history(1,pa,true);
@@ -113,6 +117,7 @@ test('member list is an indexed original-buyer read across stores with frozen me
 
 test('HTTP session, cursor, onboarding, quarantine and flag boundaries do not widen buyer ownership',async()=>{
   assert.equal((await get('/me/orders',null)).status,401);
+  assert.equal((await app().request(x.h.origin+'/api/v1/me/orders',{headers:{Cookie:a.session.cookie}})).status,200,'a read needs no CSRF header');
   for(const query of ['limit=0','limit=21','limit=-1','limit=1.5','limit=01','limit=1&limit=1','cursor=','buyer_principal_id='+pa,'tenant_id='+s.tenantId])assert.equal((await get('/me/orders?'+query)).status,422,query);
   const first=MemberOrderPageSchema.parse((await get('/me/orders?limit=1')).data);assert.equal(first.items.length,1);assert(first.next_cursor);
   for(const cursor of ['broken',first.next_cursor!.slice(0,-1)+'!',createTenantListCursorCodec(TENANT_CURSOR_TEST_KEY,{origin:x.h.origin,environment:'other'}).encode({at:'2028-02-29T00:00:00.123456Z',id:bank},{purpose:'buyer-orders',tenantId:'',scopeId:'',principalId:pa,resourceId:null,filter:'{"profile":"hosted_checkout","v":1}'})])assert.equal((await get('/me/orders?cursor='+encodeURIComponent(cursor))).status,422);
@@ -122,11 +127,16 @@ test('HTTP session, cursor, onboarding, quarantine and flag boundaries do not wi
   assert.equal((await get('/me/orders?cursor='+encodeURIComponent(v1))).status,422);
   assert.equal((await get('/me/orders',a,app(x.runtime,{tenantCursorSigningKey:undefined}))).data.code,'tenant_cursor_unavailable');
   const off=app(x.runtime,{commerceSettings:{...settings,checkoutEnabled:false}});
-  for(const person of [a,null]){const hidden=await get('/me/orders',person,off),unknown=await get('/me/unknown-checkout-list',person,off);assert.equal(hidden.status,unknown.status);assert.deepEqual(hidden.data,unknown.data);assert.equal(hidden.response.headers.get('Cache-Control'),unknown.response.headers.get('Cache-Control'));}
+  for(const person of [a,null]){
+    const headers:Record<string,string>=person?{Cookie:person.session.cookie}:{};
+    const hidden=await off.request(x.h.origin+'/api/v1/me/orders',{headers}),unknown=await off.request(x.h.origin+'/api/v1/me/unknown-checkout-list',{headers});
+    assert.equal(hidden.status,unknown.status);assert.equal(await hidden.text(),await unknown.text());
+    for(const name of ['Cache-Control','Content-Security-Policy','X-Robots-Tag','X-Content-Type-Options','Referrer-Policy','Content-Type','Vary'])assert.equal(hidden.headers.get(name),unknown.headers.get(name),name);
+  }
   const unmapped=await x.h.person('合成新會員');const before=await domainSnapshot();assert.deepEqual((await get('/me/orders',unmapped)).data,{items:[],next_cursor:null});assert.deepEqual(await domainSnapshot(),before);
   await x.h.pool.query('UPDATE users SET onboarding_required=true,onboarding_completed_at=NULL WHERE user_id=$1',[a.id]);
   assert.equal((await get('/me/orders')).status,200);assert.equal((await get('/me/reservations')).status,403);
-  assert.equal((await x.h.call('HEAD','/me/orders',a.session,undefined,{},app())).status,403);
+  assert.equal((await app().request(x.h.origin+'/api/v1/me/orders',{method:'HEAD',headers:{Cookie:a.session.cookie}})).status,403);
   assert.equal((await x.h.call('POST','/me/orders',a.session,{}, {},app())).data.code,'onboarding_required');
   await x.h.pool.query('UPDATE users SET onboarding_required=false WHERE user_id=$1',[a.id]);
   await x.h.fullMember(a.id,'guild_commerce_sales');await x.h.pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1",[a.id]);assert.equal((await get('/me/orders')).status,200);
@@ -140,6 +150,24 @@ test('HTTP session, cursor, onboarding, quarantine and flag boundaries do not wi
     else {await x.h.pool.query('DELETE FROM sessions WHERE user_id=$1',[person.id]);await x.h.pool.query('DELETE FROM users WHERE user_id=$1',[person.id]);}
     assert.equal((await get('/me/orders',person)).status,401,change);
   }
+});
+
+test('a late session or principal change suppresses the list; invalid retained metadata is never an empty page',async()=>{
+  async function readWithSeam(run:()=>Promise<void>,corrupt=false){
+    let fired=false;
+    const wrapped=new Proxy(x.runtime,{get(pool,key){if(key!=='connect'){const v=Reflect.get(pool,key);return typeof v==='function'?v.bind(pool):v;}return async()=>{const q=await pool.connect();return new Proxy(q,{get(client,p){if(p==='query')return async(sql:string,values:unknown[])=>{
+      const result=await client.query(sql,values);
+      if(!fired&&sql.startsWith('WITH candidate AS MATERIALIZED')){fired=true;await run();if(corrupt)result.rows[result.rows.length-1].provenance=false;}
+      return result;
+    };const v=Reflect.get(client,p);return typeof v==='function'?v.bind(client):v;}});};}}) as Pool;
+    const response=await get('/me/orders',a,app(wrapped));assert(fired);return response;
+  }
+  const disabled=await readWithSeam(async()=>{await x.h.pool.query("UPDATE principals SET status='disabled' WHERE principal_id=$1",[pa]);});
+  assert.equal(disabled.status,403);assert.equal(disabled.data.code,'member_unavailable');assert.equal(disabled.data.items,undefined);
+  await x.h.pool.query("UPDATE principals SET status='active' WHERE principal_id=$1",[pa]);
+  const inactive=await readWithSeam(async()=>{await x.h.pool.query('UPDATE users SET active=false WHERE user_id=$1',[a.id]);});
+  assert.equal(inactive.status,401);assert.equal(inactive.data.items,undefined);await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[a.id]);
+  const broken=await readWithSeam(async()=>{},true);assert.equal(broken.status,500);assert.equal(broken.data.code,'internal_error');assert.equal(broken.data.items,undefined);
 });
 
 test('retained private B07 admits only the active original member after unpublication and revoked admission',async()=>{
@@ -160,6 +188,11 @@ test('retained private B07 admits only the active original member after unpublic
     const api=await target.request(x.h.origin+`/api/v1/public/stores/${slug}/orders/${ref}`,{headers:cookie?{Cookie:cookie}:{}});assert.equal(api.status,404);
   }
   assert.equal((await target.request(x.h.origin+`/api/v1/public/stores/${s.slug}`)).status,404);
+  await x.h.pool.query(`UPDATE commerce_checkout_contacts SET contact_name=NULL,contact_email=NULL,contact_phone=NULL,delivery=NULL,invoice=NULL,contact_salt=NULL,redacted_at=clock_timestamp()
+    WHERE contact_id=(SELECT contact_id FROM commerce_checkout_orders WHERE order_id=$1)`,[bank]);
+  const redacted=await target.request(x.h.origin+json,{headers:{Cookie:a.session.cookie}});assert.equal(redacted.status,200);const redactedOrder=await redacted.json() as any;
+  assert.equal(redactedOrder.redacted,true);assert.equal(redactedOrder.contact,null);assert.equal(redactedOrder.offline_instructions.account_number,'000000123456');
+  assert.equal((await get('/me/orders')).status,200);
   const snapshot=await domainSnapshot();
   const blocked=await target.request(x.h.origin+json+'/cancel',{method:'POST',headers:{Origin:x.h.origin,Cookie:a.session.cookie,'Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,404);
   const after=await domainSnapshot();delete snapshot.auth_rate_limits;delete after.auth_rate_limits;assert.deepEqual(after,snapshot);
@@ -167,7 +200,7 @@ test('retained private B07 admits only the active original member after unpublic
   assert.equal((await off.request(x.h.origin+path,{headers:{Cookie:a.session.cookie}})).status,404);
   // Test-only deterministic seam: deactivate after the metadata read, before the final clock/identity check.
   let changed=false;
-  const raced=new Proxy(x.runtime,{get(pool,key){if(key!=='connect')return Reflect.get(pool,key);return async()=>{const q=await pool.connect();return new Proxy(q,{get(client,p){if(p==='query')return async(sql:string,values:unknown[])=>{const result=await client.query(sql,values);if(!changed&&sql.includes('FROM commerce_orders o')&&sql.includes('pub.slug=$3')){changed=true;await x.h.pool.query('UPDATE users SET active=false WHERE user_id=$1',[a.id]);}return result;};const v=Reflect.get(client,p);return typeof v==='function'?v.bind(client):v;}});};}}) as Pool;
+  const raced=new Proxy(x.runtime,{get(pool,key){if(key!=='connect'){const v=Reflect.get(pool,key);return typeof v==='function'?v.bind(pool):v;}return async()=>{const q=await pool.connect();return new Proxy(q,{get(client,p){if(p==='query')return async(sql:string,values:unknown[])=>{const result=await client.query(sql,values);if(!changed&&sql.includes('FROM commerce_orders o')&&sql.includes('pub.slug=$3')){changed=true;await x.h.pool.query('UPDATE users SET active=false WHERE user_id=$1',[a.id]);}return result;};const v=Reflect.get(client,p);return typeof v==='function'?v.bind(client):v;}});};}}) as Pool;
   const denied=await app(raced).request(x.h.origin+path,{headers:{Cookie:a.session.cookie}});assert.equal(denied.status,404);assert.equal(await denied.text(),missingBody);assert(changed);
   await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[a.id]);
 });

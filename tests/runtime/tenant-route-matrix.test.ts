@@ -51,6 +51,8 @@ const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, t
 
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
+const checkoutApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]}});
+
 const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/(?:\*|:n)$/.test(path);
 const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
 function isOfferOrDistributionPhotoPath(path: string) {
@@ -86,7 +88,7 @@ async function call(method: string, path: string, session?: Session, body?: stri
   const sent: Record<string, string> = { Origin: origin, ...headers };
   if (session) { sent.Cookie = session.cookie; sent['X-CSRF-Token'] = session.csrf; }
   const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
-  const target=isOfferOrDistributionPhotoPath(path)?distributionApp:app;
+  const target=path==='/me/orders'?checkoutApp:isOfferOrDistributionPhotoPath(path)?distributionApp:app;
   const response = await target.request(origin + (path.startsWith('/admin/') ? path : '/api/v1' + path), { method, headers: sent, body: payload as any });
   const bytes = new Uint8Array(await response.arrayBuffer());
   const type = response.headers.get('content-type') ?? '';
@@ -217,6 +219,8 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'ALL /api/v1/me/orders': 'middleware',
+  'GET /api/v1/me/orders': 'principal',
   'ALL /shops/*': 'middleware',
   'GET /shops/:slug/about': 'global',
   'GET /shops/:slug/policies/:kind': 'global',
@@ -652,19 +656,20 @@ async function buildFixture() {
 let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
 test('T-022 1. Route inventory guard', () => {
-  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-(?:admissions|readiness)(?:\/|$))/;
+  const relevantPaths = /(^\/api\/v1\/me\/orders$|tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-(?:admissions|readiness)(?:\/|$))/;
   // Member search telemetry has an operations path, but is not tenant authority.
   assert.equal(relevantPaths.test('/api/v1/community-search/operations/*'), false);
   for (const suffix of ['', '/reconcile', '/cancel']) {
     assert.equal(relevantPaths.test(`/api/v1/tenants/:tenant_id/operations/:operation_id${suffix}`), true);
   }
-  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||isGalleryPath(r.path)||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media')||isPolicyPath(r.path))&&isOfferOrDistributionPhotoPath(r.path))];
+  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||isGalleryPath(r.path)||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media')||isPolicyPath(r.path))&&isOfferOrDistributionPhotoPath(r.path)),...checkoutApp.routes.filter(r=>r.path==='/api/v1/me/orders')];
   const counts = Object.values(routeTable).reduce<Record<string, number>>((all, kind) => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 13, tenant: 154, middleware: 31 });
-  assert.equal(selectedRoutes.length, 226);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 154, middleware: 32 });
+  assert.equal(selectedRoutes.length, 228);
+  assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
