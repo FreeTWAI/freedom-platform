@@ -470,7 +470,7 @@ test('merchant stock shows real paid allocations and held units without losing h
   await expect(row.locator('.merchant-inventory-breakdown')).toContainText('預留中 1');await expect(row).toContainText('已付款待出貨 2');
   const capture=async(prefix:string)=>{for(const width of [390,768,1440]){
    await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-   await expect(root.locator('.merchant-inventory-definition')).toHaveCount(1);
+   await expect(root.locator('.merchant-inventory-definition:visible')).toHaveCount(1);
    expect(await root.locator('.merchant-inventory-values').first().evaluate(el=>getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
    await page.screenshot({path:info.outputPath(`${prefix}-${width}.png`),fullPage:true});
   }};
@@ -486,7 +486,7 @@ test('merchant stock shows real paid allocations and held units without losing h
   await expect(root.locator('tbody tr').filter({hasText:store.products[1].title}).locator('.merchant-inventory-values')).toHaveText('8／0／8');
   for(const width of [390,768,1440]){
    await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-   await expect(root.locator('.merchant-inventory-definition')).toHaveCount(1);
+   await expect(root.locator('.merchant-inventory-definition:visible')).toHaveCount(1);
    await page.screenshot({path:info.outputPath(`stock-supplier-inconsistent-${width}.png`),fullPage:true});
   }
   await page.unroute('**/supplier-console/products');await page.goto(`/#stores/${store.tenant}/${store.instance}`);
