@@ -50,7 +50,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN RETURN false;
 END $$;
 CREATE FUNCTION storefront_variant_utf16_length(value text) RETURNS integer LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
- SELECT COALESCE(sum(CASE WHEN ascii(c)>65535 THEN 2 ELSE 1 END),0)::integer FROM regexp_split_to_table(value,'') c
+ SELECT char_length(value)+regexp_count(value,U&'[\+010000-\+10ffff]')
 $$;
 ALTER TABLE commerce_product_groups
  ADD COLUMN catalog_anchor_sku text CHECK(catalog_anchor_sku ~ '^P[0-9]{4,23}$'),
@@ -70,7 +70,11 @@ ALTER TABLE commerce_product_group_members
  ADD COLUMN membership_version bigint NOT NULL DEFAULT 1 CHECK(membership_version>0),
  ADD CONSTRAINT variant_catalog_group FOREIGN KEY(catalog_group_id,tenant_id,instance_id,scope_id) REFERENCES commerce_product_groups(group_id,tenant_id,instance_id,scope_id),
  ADD CONSTRAINT variant_member_values CHECK(cardinality(option_value_keys)<=2 AND array_position(option_value_keys,NULL) IS NULL AND (catalog_group_id IS NOT NULL OR cardinality(option_value_keys)=0)),
- ADD CONSTRAINT variant_combination UNIQUE(catalog_group_id,option_value_keys) DEFERRABLE INITIALLY DEFERRED;
+ -- Nondeferrable is essential: 177's old binary uses targetless ON CONFLICT
+ -- DO NOTHING on this table. Commands detach old pairs before attaching new
+ -- pairs, so permutations stay atomic without a deferred unique arbiter.
+ ADD CONSTRAINT variant_combination UNIQUE(catalog_group_id,option_value_keys),
+ ADD CONSTRAINT variant_member_order UNIQUE(catalog_group_id,sort_order);
 CREATE INDEX variant_catalog_members ON commerce_product_group_members(tenant_id,instance_id,catalog_group_id) WHERE catalog_group_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION preserve_storefront_gallery_draft() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -130,31 +134,62 @@ CREATE FUNCTION preserve_storefront_catalog_identity() RETURNS trigger LANGUAGE 
  RETURN NEW;
 END $$;
 CREATE TRIGGER preserve_storefront_catalog_identity BEFORE UPDATE ON commerce_product_groups FOR EACH ROW EXECUTE FUNCTION preserve_storefront_catalog_identity();
+-- Validate only the changed tuple immediately. Metadata changes and changes
+-- to the final default still validate the whole group at commit. This keeps a
+-- 200-SKU replacement bounded instead of revalidating it 200 times.
+CREATE FUNCTION validate_storefront_catalog_member() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE g commerce_product_groups%ROWTYPE;label_length integer;
+BEGIN
+ IF NEW.catalog_group_id IS NULL THEN RETURN NEW;END IF;
+ SELECT * INTO STRICT g FROM commerce_product_groups WHERE group_id=NEW.catalog_group_id AND tenant_id=NEW.tenant_id AND instance_id=NEW.instance_id AND scope_id=NEW.scope_id;
+ IF g.catalog_anchor_sku IS NULL OR cardinality(NEW.option_value_keys)<>jsonb_array_length(g.option_axes)
+  OR NOT EXISTS(SELECT 1 FROM commerce_storefront_profiles f JOIN commerce_selections s ON s.shop_id=f.storefront_shop_id AND s.item_id=NEW.product_id
+   JOIN commerce_items i ON i.item_id=s.item_id AND i.shop_id=f.supply_shop_id
+   WHERE f.tenant_id=NEW.tenant_id AND f.instance_id=NEW.instance_id AND s.selection_id=NEW.selection_id AND s.own_retail_enabled)
+  OR EXISTS(SELECT 1 FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
+   WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(a.axis->'values') v WHERE v->>'key'=NEW.option_value_keys[a.position]::text))
+ THEN RAISE EXCEPTION 'Catalog member requires a current own selection and existing values' USING ERRCODE='23514';END IF;
+ SELECT storefront_variant_utf16_length(g.title)+CASE WHEN cardinality(NEW.option_value_keys)>0 THEN cardinality(NEW.option_value_keys)+1 ELSE 0 END
+  +COALESCE(sum(storefront_variant_utf16_length(v->>'name')),0) INTO label_length
+  FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
+  JOIN LATERAL jsonb_array_elements(a.axis->'values') v ON v->>'key'=NEW.option_value_keys[a.position]::text;
+ IF label_length>120 THEN RAISE EXCEPTION 'Catalog buyer label exceeds checkout limit' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER validate_storefront_catalog_member BEFORE INSERT OR UPDATE ON commerce_product_group_members FOR EACH ROW EXECUTE FUNCTION validate_storefront_catalog_member();
 CREATE FUNCTION require_valid_storefront_catalog() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE g commerce_product_groups%ROWTYPE;m record;n integer;value_names text[];label text;targets uuid[];
+DECLARE g commerce_product_groups%ROWTYPE;n integer;targets uuid[];maximum_label integer;
 BEGIN
  -- Validate the final transaction state, including both ends of a moved member.
  IF TG_TABLE_NAME='commerce_product_groups' THEN targets:=ARRAY[NEW.group_id];
  ELSIF TG_OP='UPDATE' THEN targets:=ARRAY[NEW.catalog_group_id,OLD.catalog_group_id];
  ELSE targets:=ARRAY[NEW.catalog_group_id];END IF;
  FOR g IN SELECT * FROM commerce_product_groups WHERE tenant_id=NEW.tenant_id AND instance_id=NEW.instance_id AND group_id=ANY(targets) AND catalog_anchor_sku IS NOT NULL LOOP
-  n:=0;
-  FOR m IN SELECT a.*,s.selection_id AS live_selection_id,s.own_retail_enabled,i.title AS item_title,f.supply_shop_id,i.shop_id
-   FROM commerce_product_group_members a JOIN commerce_storefront_profiles f USING(tenant_id,instance_id)
-   LEFT JOIN commerce_selections s ON s.selection_id=a.selection_id AND s.shop_id=f.storefront_shop_id AND s.item_id=a.product_id
+  IF TG_TABLE_NAME='commerce_product_group_members' AND g.default_selection_id IS NOT NULL THEN
+   IF TG_OP='INSERT' THEN
+    IF g.default_selection_id<>NEW.selection_id THEN CONTINUE;END IF;
+   ELSIF g.default_selection_id<>NEW.selection_id AND g.default_selection_id<>OLD.selection_id THEN CONTINUE;
+   END IF;
+  END IF;
+  SELECT count(*) INTO n FROM commerce_product_group_members m WHERE m.catalog_group_id=g.group_id AND m.tenant_id=g.tenant_id AND m.instance_id=g.instance_id;
+  IF EXISTS(SELECT 1 FROM commerce_product_group_members m JOIN commerce_storefront_profiles f USING(tenant_id,instance_id)
+   LEFT JOIN commerce_selections s ON s.selection_id=m.selection_id AND s.shop_id=f.storefront_shop_id AND s.item_id=m.product_id
    LEFT JOIN commerce_items i ON i.item_id=s.item_id
-   WHERE a.catalog_group_id=g.group_id AND a.tenant_id=g.tenant_id AND a.instance_id=g.instance_id LOOP
-   n:=n+1;
-   IF m.live_selection_id IS NULL OR NOT m.own_retail_enabled OR m.shop_id IS DISTINCT FROM m.supply_shop_id
-    OR cardinality(m.option_value_keys)<>jsonb_array_length(g.option_axes)
-    OR EXISTS(SELECT 1 FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
-     WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(a.axis->'values') v WHERE v->>'key'=m.option_value_keys[a.position]::text))
-   THEN RAISE EXCEPTION 'Catalog members require current own selections and existing values' USING ERRCODE='23514';END IF;
-   SELECT array_agg(v->>'name' ORDER BY a.position) INTO value_names FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
-    JOIN LATERAL jsonb_array_elements(a.axis->'values') v ON v->>'key'=m.option_value_keys[a.position]::text;
-   label:=g.title||CASE WHEN cardinality(value_names)>0 THEN '（'||array_to_string(value_names,'／')||'）' ELSE '' END;
-   IF storefront_variant_utf16_length(label)>120 THEN RAISE EXCEPTION 'Catalog buyer label exceeds checkout limit' USING ERRCODE='23514';END IF;
-  END LOOP;
+   WHERE m.catalog_group_id=g.group_id AND m.tenant_id=g.tenant_id AND m.instance_id=g.instance_id
+    AND (s.selection_id IS NULL OR NOT s.own_retail_enabled OR i.shop_id IS DISTINCT FROM f.supply_shop_id
+     OR cardinality(m.option_value_keys)<>jsonb_array_length(g.option_axes)
+     OR EXISTS(SELECT 1 FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
+      WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(a.axis->'values') v WHERE v->>'key'=m.option_value_keys[a.position]::text))))
+  THEN RAISE EXCEPTION 'Catalog members require current own selections and existing values' USING ERRCODE='23514';END IF;
+  SELECT storefront_variant_utf16_length(g.title)+CASE WHEN jsonb_array_length(g.option_axes)>0 THEN jsonb_array_length(g.option_axes)+1 ELSE 0 END
+   +COALESCE(sum(value_max),0) INTO maximum_label FROM jsonb_array_elements(g.option_axes) axis
+   CROSS JOIN LATERAL (SELECT max(storefront_variant_utf16_length(v->>'name')) AS value_max FROM jsonb_array_elements(axis->'values') v) x;
+  IF maximum_label>120 AND EXISTS(SELECT 1 FROM commerce_product_group_members m
+   WHERE m.catalog_group_id=g.group_id AND m.tenant_id=g.tenant_id AND m.instance_id=g.instance_id
+    AND storefront_variant_utf16_length(g.title)+CASE WHEN cardinality(m.option_value_keys)>0 THEN cardinality(m.option_value_keys)+1 ELSE 0 END
+     +COALESCE((SELECT sum(storefront_variant_utf16_length(v->>'name')) FROM jsonb_array_elements(g.option_axes) WITH ORDINALITY a(axis,position)
+      JOIN LATERAL jsonb_array_elements(a.axis->'values') v ON v->>'key'=m.option_value_keys[a.position]::text),0)>120)
+  THEN RAISE EXCEPTION 'Catalog buyer label exceeds checkout limit' USING ERRCODE='23514';END IF;
   IF n>200 OR (n>1 AND jsonb_array_length(g.option_axes)=0) THEN RAISE EXCEPTION 'Invalid catalog member count' USING ERRCODE='23514';END IF;
   IF n>0 AND NOT EXISTS(SELECT 1 FROM commerce_product_group_members a WHERE a.catalog_group_id=g.group_id AND a.selection_id=g.default_selection_id AND a.tenant_id=g.tenant_id AND a.instance_id=g.instance_id)
   THEN RAISE EXCEPTION 'Catalog default must be a member' USING ERRCODE='23514';END IF;
@@ -196,7 +231,7 @@ BEGIN
    IF m->'values' IS DISTINCT FROM values_list OR m->>'buyer_label' IS DISTINCT FROM label OR storefront_variant_utf16_length(label)>120 THEN RETURN false;END IF;
    seen:=array_append(seen,m->>'sku');combos:=array_append(combos,(m->'value_keys')::text);
   END LOOP;
-  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(g->'members') m WHERE m->>'sku'=g->>'default_sku') THEN RETURN false;END IF;
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(g->'members') x(member) WHERE x.member->>'sku'=g->>'default_sku') THEN RETURN false;END IF;
  END LOOP;
  RETURN cardinality(seen)<=200;
 EXCEPTION WHEN OTHERS THEN RETURN false;
@@ -229,7 +264,7 @@ CREATE POLICY commerce_publication_variants_insert ON commerce_publication_varia
 CREATE POLICY commerce_product_group_members_update ON commerce_product_group_members FOR UPDATE TO PUBLIC USING(tenant_id=freedom_ctx_tenant()) WITH CHECK(tenant_id=freedom_ctx_tenant());
 DO $$DECLARE name text;BEGIN
  FOREACH name IN ARRAY ARRAY['storefront_variant_text_valid(text,integer,boolean)','storefront_variant_axes_valid(jsonb)','storefront_variant_utf16_length(text)',
- 'preserve_storefront_gallery_draft()','preserve_storefront_gallery_member()','preserve_storefront_catalog_identity()','require_valid_storefront_catalog()',
+ 'preserve_storefront_gallery_draft()','preserve_storefront_gallery_member()','preserve_storefront_catalog_identity()','validate_storefront_catalog_member()','require_valid_storefront_catalog()',
  'storefront_variants_document_valid(jsonb)','preserve_publication_variants()','require_complete_publication_variants()'] LOOP
   EXECUTE format('ALTER FUNCTION %s SET search_path=pg_catalog,%I',name,current_schema());
  END LOOP;

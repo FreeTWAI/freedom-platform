@@ -94,7 +94,7 @@ export interface CheckoutPaymentActions {
   resume(pool:Pool,input:{store:CheckoutStore;orderId:string;network:string;authorize(q:PoolClient):Promise<void>}):Promise<CheckoutPaymentHandoff>;
   query?(pool:Pool,input:{store:CheckoutStore;orderId:string;network:string;trigger?:'buyer'|'seller';authorize(q:PoolClient):Promise<void>}):Promise<'complete'|'query_in_progress'>;
 }
-export interface CheckoutPorts {paymentActions?:CheckoutPaymentActions;shipping?:ShippingQuotePort;admission?:CheckoutAdmissionPort;policies?:CheckoutPolicyPort;unresolved?:UnresolvedOrderPort;payment?:CheckoutPaymentPort;paymentMethods?:CheckoutPaymentMethodsPort}
+export interface CheckoutPorts {buyerLabels?:{resolve(q:PoolClient,store:StoreContext['profile']):Promise<ReadonlyMap<string,string>>};paymentActions?:CheckoutPaymentActions;shipping?:ShippingQuotePort;admission?:CheckoutAdmissionPort;policies?:CheckoutPolicyPort;unresolved?:UnresolvedOrderPort;payment?:CheckoutPaymentPort;paymentMethods?:CheckoutPaymentMethodsPort}
 export const defaultAdmission:CheckoutAdmissionPort={allowed:()=>false};
 const defaultShipping:ShippingQuotePort={async quote(){requireCondition(false,409,'shipping_not_configured','尚未設定配送。');}};
 function invalidShippingQuote():never {throw new Error('shipping_quote_invalid');}
@@ -199,7 +199,8 @@ export async function checkoutTerms(q:PoolClient,context:StoreContext,input:Retu
   });
   const bindings=resolved.bindings.map(b=>({...b,unit_price_minor:resolved.lines.find(l=>l.sku===b.sku)!.unit_price_minor}));
   const quoteLines:ShippingQuoteLine[]=bindings.map(b=>({sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:b.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id}));
-  const items=resolved.lines.map(l=>({...l,offer_sha256:bindings.find(b=>b.sku===l.sku)!.offer_sha256}));
+  const labels=await ports.buyerLabels?.resolve(q,p);
+  const items=resolved.lines.map(l=>({...l,...(labels?{title:labels.get(l.sku)??l.title}:{}),offer_sha256:bindings.find(b=>b.sku===l.sku)!.offer_sha256}));
   const merchandise=items.reduce((n,l)=>n+l.line_total_minor,0);
   const shipping=validateShippingQuote(await (ports.shipping??defaultShipping).quote(q,p,{lines:quoteLines,merchandise_net_minor:merchandise,delivery:input.delivery}),quoteLines);
   const shippingTotal=shipping.groups.reduce((n,g)=>n+g.amount_minor,0),total=merchandise+shippingTotal;

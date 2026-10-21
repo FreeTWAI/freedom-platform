@@ -13,6 +13,8 @@ function complete(document:PublicationVariantsDocument,skus:readonly string[]){
  const seen=new Set<string>(),keys=new Set<string>();
  for(const g of document.groups){
   variantCheck(!keys.has(g.group_key),'storefront_variants_invalid',500);keys.add(g.group_key);
+  const axisKeys=new Set(g.axes.map(a=>a.key)),axisNames=new Set(g.axes.map(a=>a.name));
+  variantCheck(axisKeys.size===g.axes.length&&axisNames.size===g.axes.length&&g.axes.every(a=>a.name===a.name.trim().normalize('NFC')&&new Set(a.values.map(v=>v.key)).size===a.values.length&&new Set(a.values.map(v=>v.name)).size===a.values.length&&a.values.every(v=>v.name===v.name.trim().normalize('NFC'))),'storefront_variants_invalid',500);
   const tuples=new Set<string>();
   variantCheck((g.axes.length>0||g.members.length===1)&&g.default_sku===g.gallery_sku&&g.members.some(m=>m.sku===g.default_sku),'storefront_variants_invalid',500);
   for(const m of g.members){
@@ -28,8 +30,8 @@ export function variantsSnapshot(raw:unknown,skus:readonly string[]){
  const document:PublicationVariantsDocument={profile:parsed.data.profile,groups:parsed.data.groups.map(g=>({group_key:g.group_key,title:g.title,description:g.description,
   axes:g.axes.map(a=>({key:a.key,name:a.name,values:a.values.map(v=>({key:v.key,name:v.name}))})),default_sku:g.default_sku,gallery_sku:g.gallery_sku,order:g.order,
   members:g.members.map(m=>({sku:m.sku,value_keys:[...m.value_keys],values:[...m.values],buyer_label:m.buyer_label,order:m.order}))}))};
- document.groups.sort((a,b)=>a.order-b.order||a.group_key.localeCompare(b.group_key));
- for(const g of document.groups)g.members.sort((a,b)=>a.order-b.order||a.sku.localeCompare(b.sku));
+ document.groups.sort((a,b)=>a.order-b.order||(a.group_key<b.group_key?-1:a.group_key>b.group_key?1:0));
+ for(const g of document.groups)g.members.sort((a,b)=>a.order-b.order||(a.sku<b.sku?-1:a.sku>b.sku?1:0));
  complete(document,skus);
  const freeze=(value:any)=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}};freeze(document);
  return {document,sha256:createHash('sha256').update(JSON.stringify(document)).digest('hex')};
@@ -61,7 +63,7 @@ export async function draftVariantsData(q:PoolClient,p:Profile,items?:readonly P
   const home=groups.find(g=>g.anchor_product_id===r.product.product_id),retained=home&&result.some(g=>g.group_id===home.group_id),member=members.find(m=>m.selection_id===selectionId);
   result.push({profile:STOREFRONT_VARIANTS_PROFILE,group_key:r.product.sku+(retained?'~single':''),group_id:null,version:!retained&&home?.catalog_anchor_sku?home.version:member?.membership_version??'1',title:r.product.title,description:r.product.description,axes:[],members:[{...r,value_keys:[],values:[],buyer_label:r.product.title,order:0}],default_product_id:r.product.product_id,order:result.length,editable:r.source==='own',can_anchor:!retained&&r.source==='own'});
  }
- result.sort((a,b)=>a.order-b.order||a.group_key.localeCompare(b.group_key));
+ result.sort((a,b)=>a.order-b.order||(a.group_key<b.group_key?-1:a.group_key>b.group_key?1:0));
  return {page:ProductGroupPageSchema.parse({profile:STOREFRONT_VARIANTS_PROFILE,items:result}),groups,members};
 }
 export function draftVariantsSnapshot(page:ReturnType<typeof ProductGroupPageSchema.parse>){
