@@ -12,8 +12,9 @@ const LEGACY_FILE = /^[0-9]{3}_[a-z0-9_]+\.sql$/;
 const DAG_NAME = /^v2_(\d{8}T\d{9}Z)_([0-9a-f]{16})_([a-z][a-z0-9_]{0,63})\.sql$/;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,159}$/;
 const ENVIRONMENTS = ['next', 'staging-next'];
-const CAPABILITIES = ['commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'commerce.shop-service-authority.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'avatar.legacy-bytes.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1', 'execution.member-run-record.v1', 'execution.runtime-enrollment.v1', 'execution.agent-connection-record.v1', 'execution.bootstrap-status.v1', 'execution.device-authorization.v1', 'execution.bootstrap-session.v1', 'execution.member-prerequisites.v1', 'execution.model-text-step.v1', 'work.private-model-result.v1', 'execution.model-credential-custody.v1', 'execution.model-broker-bridge.v1', 'execution.model-credential-ingest.v1', 'execution.member-model-settings.v1', 'execution.member-device-management.v1', 'media.server-policy.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.write-effects.v1', 'media.domain-gc.v1'];
+const CAPABILITIES = ['commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'commerce.shop-service-authority.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'avatar.legacy-bytes.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1', 'execution.member-run-record.v1', 'execution.runtime-enrollment.v1', 'execution.agent-connection-record.v1', 'execution.bootstrap-status.v1', 'execution.device-authorization.v1', 'execution.bootstrap-session.v1', 'execution.member-prerequisites.v1', 'execution.model-text-step.v1', 'work.private-model-result.v1', 'execution.model-credential-custody.v1', 'execution.model-broker-bridge.v1', 'execution.model-credential-ingest.v1', 'execution.member-model-settings.v1', 'execution.member-device-management.v1', 'media.server-policy.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.write-effects.v1', 'media.domain-gc.v1'];
 const SHAPES = Object.freeze({
+  'community.guest-invitation-credit.v1': { migration: 178, capabilities: ['community.guest-invitation-credit.v1'] },
   'commerce.hosted-payment.v1': { migration: 169, capabilities: ['commerce.hosted-payment.v1'] },
   'commerce.hosted-checkout.v1': { migration: 168, capabilities: ['commerce.hosted-checkout.v1'] },
   // Old readers would redisplay withdrawn work; this floor survives every feature switch.
@@ -42,6 +43,7 @@ const SHAPES = Object.freeze({
   'media.event-highlight.asset.v1': { migration: 104, capabilities: ['media.event-highlight.asset.v1', 'media.server-policy.v1'] },
   'media.skill-image.asset.v1': { migration: 103, capabilities: ['media.skill-image.asset.v1', 'media.server-policy.v1'] },
   'media.storefront-product-photo.asset.v1': { migration: 141, capabilities: ['media.storefront-product-photo.asset.v1', 'media.server-policy.v1'] },
+  'media.supply-offer-photo.asset.v1': { migration: 174, capabilities: ['media.supply-offer-photo.asset.v1', 'media.server-policy.v1'] },
   'media.distribution-photo.asset.v1': { migration: 172, capabilities: ['media.distribution-photo.asset.v1', 'media.server-policy.v1'] },
   'media.supply-material.asset.v1': { migration: 171, capabilities: ['media.supply-material.asset.v1', 'media.server-policy.v1'] },
   'media.comment-image.asset.v1': { migration: 148, capabilities: ['media.comment-image.asset.v1', 'media.server-policy.v1'] },
@@ -197,6 +199,15 @@ const FOUNDATION_NAMES = [
   // recognition grants no persistence, partner visibility or public use.
   '171_supply_materials.sql',
   '172_distribution_photos.sql',
+  // Nullable advisory supply references; recognition enables no business rule.
+  '173_supply_structured_terms.sql',
+  '174_supply_offer_photos.sql',
+  '175_storefront_appearance.sql',
+  '176_storefront_seller_policies.sql',
+  '177_storefront_product_gallery.sql',
+  '178_guest_invitation_credit.sql',
+  // Catalog publication only; no new runtime capability or grants.
+  '179_member_shared_skill_books.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
@@ -546,6 +557,9 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
   // off. Every active/candidate binary must preserve the durable hold ledger.
   // Nullable retail activation and unpublished supplier placeholders require
   // every reader/writer to preserve the supply-only privacy boundary.
+  // Exact credited invitation identity must survive every guest writer, even
+  // while guest admission is disabled.
+  if (Math.max(plannedLast, floorLast) >= 178) required.add('community.guest-invitation-credit.v1');
   if (Math.max(plannedLast, floorLast) >= 169) required.add('commerce.hosted-payment.v1');
   if (Math.max(plannedLast, floorLast) >= 168) required.add('commerce.hosted-checkout.v1');
   if (Math.max(plannedLast, floorLast) >= 165) required.add('opensource.sharing-visibility.v1');
@@ -565,7 +579,7 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
   // 114 requires a persisted preparation before every new ingest submission;
   // generic pre-114 ingest support cannot satisfy the changed writer contract.
   if (Math.max(plannedLast, floorLast) >= 114 && required.has('execution.model-credential-ingest.v1')) required.add('execution.model-credential-preparation.v1');
-  for (const shape of ['commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'avatar.legacy-bytes.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.domain-gc.v1']) {
+  for (const shape of ['commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'avatar.legacy-bytes.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.domain-gc.v1']) {
     if (!required.has(shape)) continue;
     for (const capability of SHAPES[shape].capabilities) required.add(capability);
     if (floor.capabilities.includes(shape)) {

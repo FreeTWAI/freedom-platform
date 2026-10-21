@@ -22,10 +22,11 @@ import { bindPrivateAiProductTransport, bindPrivateAiProductBrowserPolicy, type 
 import type { ModuleProviderMap } from '../../../modules/module-registry/providers.js';
 import { createNodePreviewFetch } from './node-preview-fetch.js';
 
-type NodeAppOptions = {supplyMaterialAssetStore?:PlatformRuntime['supplyMaterialAssetStore'];supplyMaterialAssets?:PlatformRuntime['supplyMaterialAssets'];supplyMaterialUploadsEnabled?:boolean;afterResponse?:PlatformRuntime['afterResponse'];commerceQueryTransport?:PlatformRuntime['commerceQueryTransport'];commercePayments?:PlatformRuntime['commercePayments'];commerceJournal?:PlatformRuntime['commerceJournal'];commerceEmailSender?:PlatformRuntime['commerceEmailSender'];commerceCredentialKeyring?:PlatformRuntime['commerceCredentialKeyring'];commerceSettings?:PlatformRuntime['commerceSettings'];commercePorts?:PlatformRuntime['commercePorts'];arEnabled?:boolean;arAssetStore?:PlatformRuntime['arAssetStore'];storePhotoAssetStore?:PlatformRuntime['storePhotoAssetStore'];storePhotoAssets?:PlatformRuntime['storePhotoAssets'];storePhotoUploadsEnabled?:boolean;shopKeyPolicy?:PlatformRuntime['shopKeyPolicy'];publicGuideAssets?:PlatformRuntime['publicGuideAssets'];adminVerifier?:AdminAccessVerifier;githubSocial?:GitHubSocialOptions;passwordEmailSender?:PasswordEmailSender;
+type NodeAppOptions = {shortVideosEnabled?:boolean;supplyMaterialAssetStore?:PlatformRuntime['supplyMaterialAssetStore'];supplyMaterialAssets?:PlatformRuntime['supplyMaterialAssets'];supplyMaterialUploadsEnabled?:boolean;afterResponse?:PlatformRuntime['afterResponse'];commerceQueryTransport?:PlatformRuntime['commerceQueryTransport'];commercePayments?:PlatformRuntime['commercePayments'];commerceJournal?:PlatformRuntime['commerceJournal'];commerceEmailSender?:PlatformRuntime['commerceEmailSender'];commerceCredentialKeyring?:PlatformRuntime['commerceCredentialKeyring'];commerceSettings?:PlatformRuntime['commerceSettings'];commercePorts?:PlatformRuntime['commercePorts'];arEnabled?:boolean;arAssetStore?:PlatformRuntime['arAssetStore'];storePhotoAssetStore?:PlatformRuntime['storePhotoAssetStore'];storePhotoAssets?:PlatformRuntime['storePhotoAssets'];storeAppearanceAssets?:PlatformRuntime['storeAppearanceAssets'];storeGalleryAssets?:PlatformRuntime['storeGalleryAssets'];storePhotoUploadsEnabled?:boolean;shopKeyPolicy?:PlatformRuntime['shopKeyPolicy'];publicGuideAssets?:PlatformRuntime['publicGuideAssets'];adminVerifier?:AdminAccessVerifier;githubSocial?:GitHubSocialOptions;passwordEmailSender?:PasswordEmailSender;
+  registrationCommunityId?:string;
   totpEncryptionKey?:string;
   eventEmailSender?:EventEmailSender;maintainerWebhookSecret?:string;now?:()=>Date;avatarAssetStore?:PlatformRuntime['avatarAssetStore'];serviceCoverAssets?:PlatformRuntime['serviceCoverAssets'];serviceCoverAssetStore?:PlatformRuntime['serviceCoverAssetStore'];messageImageAssets?:PlatformRuntime['messageImageAssets'];messageImageAssetStore?:PlatformRuntime['messageImageAssetStore'];eventBannerAssets?:PlatformRuntime['eventBannerAssets'];eventBannerAssetStore?:PlatformRuntime['eventBannerAssetStore'];eventVideoAssets?:PlatformRuntime['eventVideoAssets'];eventVideoAssetStore?:PlatformRuntime['eventVideoAssetStore'];skillImageAssets?:PlatformRuntime['skillImageAssets'];skillImageAssetStore?:PlatformRuntime['skillImageAssetStore'];socialThumbnailAssets?:PlatformRuntime['socialThumbnailAssets'];socialThumbnailAssetStore?:PlatformRuntime['socialThumbnailAssetStore'];eventHighlightAssets?:PlatformRuntime['eventHighlightAssets'];eventHighlightAssetStore?:PlatformRuntime['eventHighlightAssetStore'];
-  linkPreviewFetch?:PlatformRuntime['linkPreviewFetch'];privateAiProduct?:PrivateAiProductTransport;moduleProviders?:ModuleProviderMap;guildLaunchpadEnabled?:boolean;hostedReservationsEnabled?:boolean;supplierConsoleEnabled?:boolean;distributionPhotosEnabled?:boolean;tenantCursorSigningKey?:string;communityDiscoveryEnabled?:boolean;memberBlockingEnabled?:boolean;memberReportingEnabled?:boolean;communitySearchEnabled?:boolean;unifiedSharingEnabled?:boolean;communityRelationsEnabled?:boolean;personalContentEnabled?:boolean;notificationPreferencesEnabled?:boolean;firstParticipationEnabled?:boolean;eventParticipationEnabled?:boolean;squadOutcomesEnabled?:boolean;eventOutcomesEnabled?:boolean;participationMetricsEnabled?:boolean;skillBookStarGateEnabled?:boolean;tenantWorkAssetStore?:PlatformRuntime['tenantWorkAssetStore']};
+  linkPreviewFetch?:PlatformRuntime['linkPreviewFetch'];privateAiProduct?:PrivateAiProductTransport;moduleProviders?:ModuleProviderMap;guildLaunchpadEnabled?:boolean;hostedReservationsEnabled?:boolean;supplierConsoleEnabled?:boolean;distributionPhotosEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;storeAppearanceEnabled?:boolean;storePoliciesEnabled?:boolean;storeGalleryEnabled?:boolean;tenantCursorSigningKey?:string;communityDiscoveryEnabled?:boolean;memberBlockingEnabled?:boolean;memberReportingEnabled?:boolean;communitySearchEnabled?:boolean;unifiedSharingEnabled?:boolean;communityRelationsEnabled?:boolean;personalContentEnabled?:boolean;notificationPreferencesEnabled?:boolean;firstParticipationEnabled?:boolean;eventParticipationEnabled?:boolean;squadOutcomesEnabled?:boolean;eventOutcomesEnabled?:boolean;participationMetricsEnabled?:boolean;skillBookStarGateEnabled?:boolean;tenantWorkAssetStore?:PlatformRuntime['tenantWorkAssetStore']};
 
 // Node host adapter. The Worker bundle never imports this module, so the
 // socket-based address below is only ever read from a real Node server.
@@ -51,9 +52,11 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     commercePayments:options.commercePayments,commerceJournal:options.commerceJournal,commerceEmailSender:options.commerceEmailSender,commerceSettings:options.commerceSettings,commercePorts:{admission,shipping:createShippingQuotePort({environment}),...payments,...(paymentMethods?{paymentMethods}:{}),...options.commercePorts,...(email?{email}:{})},commerceCredentialKeyring:options.commerceCredentialKeyring,commerceProviderEnvironment:providerEnvironment(freedomEnv),
     publicGuideAssets:options.publicGuideAssets,
     supplyMaterialAssetStore:options.supplyMaterialAssetStore,supplyMaterialAssets:options.supplyMaterialAssets,supplyMaterialUploadsEnabled:options.supplyMaterialUploadsEnabled===true,
+    storeAppearanceAssets:options.storeAppearanceAssets,
+    storeGalleryAssets:options.storeGalleryAssets,
     storePhotoAssetStore:options.storePhotoAssetStore,storePhotoAssets:options.storePhotoAssets,storePhotoUploadsEnabled:options.storePhotoUploadsEnabled===true,
     shopKeyPolicy:options.shopKeyPolicy??process.env.FREEDOM_SHOP_KEY_POLICY as PlatformRuntime['shopKeyPolicy'],
-    registrationCommunityId:()=>process.env.FREEDOM_REGISTRATION_COMMUNITY_ID,
+    registrationCommunityId:()=>options.registrationCommunityId??process.env.FREEDOM_REGISTRATION_COMMUNITY_ID,
     githubTokenKey:()=>options.githubSocial?.tokenKey??process.env.GITHUB_SOCIAL_TOKEN_KEY,
     totpEncryptionKey:()=>options.totpEncryptionKey??process.env.TOTP_ENCRYPTION_KEY,
     githubMetricsToken:()=>options.githubSocial?.metricsToken??(process.env.GITHUB_METRICS_TOKEN||undefined),
@@ -63,7 +66,7 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     sourceNetwork:authNetwork,
     allowedHosts:allowedRequestHosts(freedomEnv,origin),
     publicOrigin:LIVE_PUBLIC_ORIGIN,
-    arEnabled:options.arEnabled===true,arAssetStore:options.arAssetStore,
+    arEnabled:options.arEnabled===true,arAssetStore:options.arAssetStore,shortVideosEnabled:options.shortVideosEnabled===true,
     passwordEmailSender:options.passwordEmailSender,avatarAssetStore:options.avatarAssetStore,serviceCoverAssets:options.serviceCoverAssets,serviceCoverAssetStore:options.serviceCoverAssetStore,messageImageAssets:options.messageImageAssets,messageImageAssetStore:options.messageImageAssetStore,eventBannerAssets:options.eventBannerAssets,eventBannerAssetStore:options.eventBannerAssetStore,eventVideoAssets:options.eventVideoAssets,eventVideoAssetStore:options.eventVideoAssetStore,skillImageAssets:options.skillImageAssets,skillImageAssetStore:options.skillImageAssetStore,socialThumbnailAssets:options.socialThumbnailAssets,socialThumbnailAssetStore:options.socialThumbnailAssetStore,eventHighlightAssets:options.eventHighlightAssets,eventHighlightAssetStore:options.eventHighlightAssetStore,
     eventEmailSender:options.eventEmailSender,
     now:options.now,
@@ -73,6 +76,10 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     hostedReservationsEnabled:options.hostedReservationsEnabled===true,
     supplierConsoleEnabled:options.supplierConsoleEnabled===true,
     distributionPhotosEnabled:options.distributionPhotosEnabled===true,
+    supplyOfferPhotosEnabled:options.supplyOfferPhotosEnabled===true,
+    storeAppearanceEnabled:options.storeAppearanceEnabled===true,
+    storePoliciesEnabled:options.storePoliciesEnabled===true,
+    storeGalleryEnabled:options.storeGalleryEnabled===true,
     communityDiscoveryEnabled:options.communityDiscoveryEnabled===true,
     memberBlockingEnabled:options.memberBlockingEnabled===true,
     memberReportingEnabled:options.memberReportingEnabled===true,

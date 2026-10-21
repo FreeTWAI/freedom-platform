@@ -234,7 +234,7 @@ export async function listTaggableContent(pool: Pool, actor: Actor) {
         SELECT submission_id::text AS id,payload->>'title' AS title,published_at AS created_at
         FROM skill_submissions WHERE community_id=$1 AND owner_ref=$2 AND status='published'
         UNION ALL
-        SELECT showcase_id::text AS id,title,created_at FROM showcases WHERE community_id=$1 AND owner_ref=$2
+        SELECT showcase_id::text AS id,title,created_at FROM showcases WHERE community_id=$1 AND owner_ref=$2 AND status='published'
       ) owned_works ORDER BY created_at DESC,id LIMIT 20`, [actor.community_id, actor.user_id]);
     const events = await q.query(`SELECT event_id::text AS id,title FROM community_events WHERE community_id=$1 AND organizer_ref=$2 AND state='published' ORDER BY created_at DESC,event_id LIMIT 20`, [actor.community_id, actor.user_id]);
     const books = await q.query(`SELECT book_id FROM skill_book_maintainers WHERE community_id=$1 AND user_id=$2 AND active AND $3::boolean ORDER BY book_id LIMIT 20 FOR SHARE`, [actor.community_id, actor.user_id, eligibleBooks]);

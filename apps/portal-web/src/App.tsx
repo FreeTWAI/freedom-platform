@@ -35,6 +35,7 @@ import { consoleChannel } from './game-console-routing'
 import {AdminReports,MemberReportingProvider} from './modules/MemberReporting'
 import { BrandPoster, CommunityLinks, CommunityPanel, type SiteConfig } from './modules/Community'
 import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './modules/PublicDiscovery'
+import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
 import { CommunitySearch } from './modules/CommunitySearch'
 import { guildKeyFromHash } from './modules/guild-launchpad-route'
 import {ShareLauncher,SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
@@ -409,6 +410,8 @@ function LoginView({
 }) {
   const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>('login')
   const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
+  const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
+  const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
   const authForm = useRef<HTMLFormElement>(null)
   const discoveryEnabled = site?.community_discovery_enabled === true && !resetToken
@@ -418,6 +421,8 @@ function LoginView({
   }, [])
   useEffect(() => { if (discoveryEnabled && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled, site?.registration_enabled, join])
   const activeMode=resetToken?'confirm-reset':mode
+  const storefrontReturnEnabled = site?.commerce_checkout_enabled === true && !resetToken
+  useEffect(() => () => { authEpoch.current++ }, [activeMode])
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -441,6 +446,7 @@ function LoginView({
     if (pending) return
     setPending(true)
     setError(null)
+    const epoch = authEpoch.current
     try {
       if(activeMode==='request-reset'){
         await client.post('/auth/reset/request',{email:email.trim()},{skipAuthHandler:true})
@@ -466,7 +472,14 @@ function LoginView({
       if (!session?.user || !session.csrf_token) {
         throw new Error('登入回應不完整')
       }
-      if (activeMode === 'register' && discoveryEnabled && returnPath) {
+      if (storefrontReturnEnabled && storefrontReturn) {
+        const allowed = await successfulStorefrontReturn(storefrontReturn, session)
+        if (epoch !== authEpoch.current) return
+        if (allowed) { window.location.assign(storefrontReturn); return }
+        onLoggedIn(session, activeMode === 'register'
+          ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
+          : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
+      } else if (activeMode === 'register' && discoveryEnabled && returnPath) {
         let allowed = false
         try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
         if (allowed) { window.location.assign(returnPath); return }
@@ -497,6 +510,8 @@ function LoginView({
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
         {discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {storefrontReturnEnabled && storefrontReturn && activeMode === 'login' && <p className="muted">登入後會返回原本的商店頁面。</p>}
+        {storefrontReturnEnabled && storefrontReturn && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。</p>}
         {notice && !accessExpired && (
           <p className="banner banner-info" role="status">
             {language==='zh-Hant'?notice:authErrorMessage({message:notice},language)}
@@ -866,7 +881,7 @@ function Workspace({
             {tab === 'events' && <EventsPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} locationHash={locationHash} registerLeave={registerPageLeave} onList={()=>selectTab('events')} participationEnabled={site?.event_participation_enabled===true}/>}
             {tab === 'highlights' && <EventHighlights key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} outcomesEnabled={site?.event_outcomes_enabled===true}/>}
             {tab === 'tasks' && <TaskBoardPanel client={client} onNavigate={selectTab} />}
-            {tab === 'social' && <SocialZone client={client} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>}
+            {tab === 'social' && <SocialZone client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>}
             {tab === 'services' && <MemberServices client={client} />}
             {tab === 'promotion' && <PromotionBoards client={client} />}
             {tab === 'skills' && <SkillsPanel client={client} session={session} onNavigate={selectTab} />}
@@ -875,12 +890,12 @@ function Workspace({
             {tab === 'private-ai' && <PrivateWorkAI client={client} key={session.user.user_id}/>}
             {tab === 'showcase' && <ShowcasePanel />}
             {tab === 'engagement' && <EngagementPanel />}
-            {tab === 'home' && <MemberHome client={client} session={session} onNavigate={selectTab} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} onOpenSupply={() => selectTab('stores', '#stores/supply')} firstParticipationEnabled={site?.first_participation_enabled===true}/>}
+            {tab === 'home' && <MemberHome client={client} session={session} onNavigate={selectTab} personalContentEnabled={site?.personal_content_enabled === true} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} shortVideos={site?.short_videos_enabled === true} onOpenSupply={() => selectTab('stores', '#stores/supply')} firstParticipationEnabled={site?.first_participation_enabled===true}/>}
             {tab === 'positioning' && <PositioningPanel client={client} session={session} onNavigate={selectTab} />}
             {tab === 'guilds' && <GuildsPanel client={client} session={session} onNavigate={selectTab} site={site} locationHash={locationHash} registerPendingLeave={registerPageLeave} />}
             {tab === 'guild-workspace' && <MemberGuildWorkspace client={client}/>}
             {tab === 'reservations' && <HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={registerPageLeave} replaceLocation={replaceBuyerLocation} />}
-            {tab === 'stores' && <HostedStore distributionPhotosEnabled={site?.distribution_photos_enabled===true} materialMediaEnabled={site?.supply_material_media_enabled===true} materialUploadsEnabled={site?.supply_material_uploads_enabled===true} commerceConsoleEnabled={site?.commerce_console_enabled === true} providerEnvironment={site?.public_mode === true ? 'live' : 'sandbox'} consoleEnabled={site?.supplier_console_enabled === true} client={client} photosEnabled={site?.hosted_store_photos_enabled===true} photoUploadsEnabled={site?.hosted_store_photo_uploads_enabled===true} enabled={site?.guild_launchpad_enabled === true} locationHash={locationHash} userId={session.user.user_id} registerLeave={registerPageLeave} />}
+            {tab === 'stores' && <HostedStore galleryEnabled={site?.store_gallery_enabled===true} policiesEnabled={site?.store_policies_enabled===true} appearanceEnabled={site?.store_appearance_enabled===true} supplyOfferPhotosEnabled={site?.supply_offer_photos_enabled===true} distributionPhotosEnabled={site?.distribution_photos_enabled===true} materialMediaEnabled={site?.supply_material_media_enabled===true} materialUploadsEnabled={site?.supply_material_uploads_enabled===true} checkoutEnabled={site?.commerce_checkout_enabled===true} commerceConsoleEnabled={site?.commerce_console_enabled === true} providerEnvironment={site?.public_mode === true ? 'live' : 'sandbox'} consoleEnabled={site?.supplier_console_enabled === true} client={client} photosEnabled={site?.hosted_store_photos_enabled===true} photoUploadsEnabled={site?.hosted_store_photo_uploads_enabled===true} enabled={site?.guild_launchpad_enabled === true} locationHash={locationHash} userId={session.user.user_id} registerLeave={registerPageLeave} />}
             {tab === 'business' && <TenantSettings client={client} session={session} enabled={site ? site.guild_launchpad_enabled === true : null} />}
             {tab === 'supplier' && <SupplierPanel client={client} session={session} onNavigate={selectTab} />}
             {tab === 'retail' && <RetailPanel client={client} session={session} onNavigate={selectTab} />}

@@ -20,11 +20,11 @@
 會員、權限、公會、商品、商店、合作和稽核的權威寫入在本 repo 的 API／PostgreSQL。外倉用版本化契約；本機、staging、public 使用分開的資料庫。GitHub Issue／PR 保存程式協作事實；Seller／bank 保存實收事實。 跨 repo 的協定由[中央平台](https://github.com/FreeTWAI/freedom-platform)維護。
 <!-- freedom-repository-guide:end -->
 
-本 workspace 保存 Freedom 大平台的完整規格，以及 **0.13.0-member-messages 自由工坊會員入口**。內建目錄為 18 個公會、41 本技能書（47 個原作 repo 指引）；管理員另可核准會員申請的自訂公會。新會員註冊後選擇主要公會並取得 Repo 技能書（定位測驗可稍後補做），再進入供貨、商店、作品、行銷與小隊。會員名片有個別聯絡欄位的可見範圍。各模組共用中央會員與 PostgreSQL。
+本 workspace 保存 Freedom 大平台的完整規格，以及 **0.13.0-member-messages 自由工坊會員入口**。內建目錄為 18 個公會、53 本技能書（59 個原作 repo 指引）；管理員另可核准會員申請的自訂公會。新會員註冊後選擇主要公會並取得 Repo 技能書（定位測驗可稍後補做），再進入供貨、商店、作品、行銷與小隊。會員名片有個別聯絡欄位的可見範圍。各模組共用中央會員與 PostgreSQL。
 
 API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最終 status ≥ 500 時，以 `console.warn` 輸出一行 JSON：`{event, method, route, status, duration_ms}`。5xx 優先使用 `server_error`，其餘為 `slow_request`；耗時包含 I/O 等待，`route` 是含 sub-app prefix 的 Hono 路由樣板，未匹配時為 `unmatched`，不記錄實際 path／params、query、headers、cookie、body、user ID 或錯誤內容。快速 2xx／4xx 不新增 log，既有錯誤回應與 `request_failed` 保留；此候選不代表已部署。
 
-技能書分享可從每本 100 則介紹擲骰子選文，再分享或複製介紹與連結；41 本技能各有功能示意圖，供介紹頁與分享縮圖使用。新增「上傳技能」私人 Agent 指令、60 分鐘一次性投稿授權，以及可撤銷的投稿專用 API 金鑰與 Node 客戶端。Agent 上傳後由本人預覽送出，公開介紹頁保留 GitHub 來源、固定版本與授權；公開的作品列在技能書架的「社群技能書」，不自動成為公會指定技能。詳見 [Agent 技能草稿上傳](./docs/development/agent-skill-upload.md) 與 [0.12 版本紀錄](./docs/releases/2026-09-23-agent-skill-sharing.md)。
+技能書分享可從每本 100 則介紹擲骰子選文，再分享或複製介紹與連結；53 本技能各有功能示意圖，供介紹頁與分享縮圖使用。新增「上傳技能」私人 Agent 指令、60 分鐘一次性投稿授權，以及可撤銷的投稿專用 API 金鑰與 Node 客戶端。Agent 上傳後由本人預覽送出，公開介紹頁保留 GitHub 來源、固定版本與授權；公開的作品列在技能書架的「社群技能書」，不自動成為公會指定技能。詳見 [Agent 技能草稿上傳](./docs/development/agent-skill-upload.md) 與 [0.12 版本紀錄](./docs/releases/2026-09-23-agent-skill-sharing.md)。
 
 歷史（2026-09-24 第一批）：新增 Mini 的 Local Workspace MCP、Hao 的 Editkin、Jason 的定位小書僮與 David 的巫師公會交誼廳，當時目錄 29 本。保留原作署名、版本與授權觀察，詳見 [四位作者技能書登錄](./docs/development/member-skill-registration.md)。
 
@@ -33,6 +33,8 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 2026-10-01：上架阿軒哥哥（阿軒割割）的 Open SEO Advisor，由成長與行銷公會指定，當時目錄 38 本技能書、44 個原作 repo 指引。
 
 2026-10-01 第三批：會員以「手動登錄作品」登錄的 3 件作品（jasonlee(J太郎) 的自動 Podcast 剪輯與 AutoVtuber、小艾老師的 Coding Audit Harness）整理為社群技能書，目錄為 41 本技能書、47 個原作 repo 指引。詳見 [手動登錄作品整理為社群技能書](./docs/development/manual-work-skill-books.md)。
+
+2026-10-20：依負責人指示，把 12 個已發布的會員分享 repo 整理為社群技能書，目錄現為 53 本、59 個 repo 指引；署名保留會員自述的作者／維護／策展關係。詳見 [會員分享整理為社群技能書](./docs/development/member-shared-skill-books-2026-10-20.md)。
 
 前版 0.9.7 修正 GitHub Star 權限錯誤提示，App 建立流程明確申請 Metadata 讀取，後台提供權限與 Repo 安裝入口。既有 App 仍需在 GitHub 補齊設定；站內連結成功不代表每個按星請求都已獲 GitHub 允許。
 
@@ -60,11 +62,13 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 
 本分支的 #256 提供依目前活動權限下載的私人 ICS、自願開始提醒與 FIFO 候補。候補不自動報名；主辦者必須逐場明確設定正整數回覆分鐘數，截止不晚於開始時間，邀請仍須本人接受。名額計算包含已確認報名、短期訪客保留與有效邀請，降低容量時把較新的未接受邀請退回原排序。依本次產品決定，會員以 member ID、訪客以正規化 Email 各自去重，不憑自填 Email 推定兩者是同一人，也不宣稱真人身分驗證。只有已報名者可另行訂閱提醒；取消報名／活動停止尚未送出的提醒，寄件服務受理不代表送達，站內紀錄與報名都不代表出席。
 
-`FREEDOM_EVENT_PARTICIPATION_ENABLED=true` 才開放 #256 入口，預設關閉；**即使 flag 關閉，換入本版 source 前仍須套用 migration 153**，既有報名流程也使用新欄位。Worker 啟用時需要可用的 `EMAIL.send`；既有每十分鐘排程做有界輪巡，不保證分鐘級提醒或補位精度，Node 入口不自動排程。ICS 使用固定 UID、UTC 與版本序號，但不是公開訂閱連結，也不自動更新已匯入的副本。私人管理憑證只由 Email 連結 fragment 交給限定 API header，不保存至瀏覽器 storage 或匯出到 ICS。實作、命令與狀態邊界見 [會員 API](./docs/development/member-api.md#event-calendar-reminders-and-waitlists-256)。這是預設關閉的 source candidate；本機隔離資料庫／瀏覽器與獨立 ICS parser 驗證不表示正式寄送、Apple／Google Calendar 實際匯入、部署或啟用已完成。
+`FREEDOM_EVENT_PARTICIPATION_ENABLED=true` 才開放 #256 入口，預設關閉；**即使 flag 關閉，換入本版 source 前仍須套用 migrations 153、178**，既有報名流程也使用新欄位。178 將實際抵扣的候補邀請與獨立報名 attempt 持久綁定；切換前須停止舊 writer 並排空其十分鐘 pending hold，不憑 Email 回填邀請身分，也不能回退忽略此綁定的 writer。Worker 啟用時需要可用的 `EMAIL.send`；既有每十分鐘排程做有界輪巡，不保證分鐘級提醒或補位精度，Node 入口不自動排程。ICS 使用固定 UID、UTC 與版本序號，但不是公開訂閱連結，也不自動更新已匯入的副本。私人管理憑證只由 Email 連結 fragment 交給限定 API header，不保存至瀏覽器 storage 或匯出到 ICS。實作、命令與狀態邊界見 [會員 API](./docs/development/member-api.md#event-calendar-reminders-and-waitlists-256)。這是預設關閉的 source candidate；本機隔離資料庫／瀏覽器與獨立 ICS parser 驗證不表示正式寄送、Apple／Google Calendar 實際匯入、部署或啟用已完成。
 
 本分支的 #257 是活動精華／成果連結的 **source candidate**：在原活動集錦儲存自己的摘要草稿，明確選擇閱讀範圍與發布同意後，連結目前可閱讀的社群作品、技能書及真正的小隊成果；三者有詳細入口與返回原活動的連結。小隊成果由目前隊主本人撰寫、儲存私人草稿並明確發布，不把名冊、私人 Result、自填署名或 Going 回覆當成成果、出席、驗收或 XP。來源撤下或權限變更會停止顯示整份相依摘要、媒體與反向連結，不會退回成未綁定的公開照片。
 
 `FREEDOM_SQUAD_OUTCOMES_ENABLED`、`FREEDOM_EVENT_OUTCOMES_ENABLED` 均預設關閉；活動精華必須同時啟用小隊成果，否則 runtime 拒絕不完整設定。**換入本版 source 前，即使 flags 關閉，也須套用 migrations 154、155**：既有媒體讀取仍使用 binding 表核對目前權限。關閉 flags 不會取消已存 binding 的隱私檢查；不可盲退到忽略 binding 的舊 source。匿名集錦只讀公開／推薦活動，不揭露公會或會員限定活動、圖片、封面與 metadata；目前仍有閱讀權限的會員使用受驗證媒體入口。撤下阻止後續讀取，不承諾收回已下載或外站快取的副本。API、限制與命令契約見 [member API](docs/development/member-api.md#event-highlights-and-published-squad-outcomes-257)。這不是部署、flag-on、正式 #261 政策或需求驗收證據。
+#739 Short 是預設關閉的 source candidate（`FREEDOM_SHORT_VIDEOS_ENABLED`，Node 與 Worker 皆只接受 `true` 開啟，Worker 對其他值回報設定錯誤；無 migration），同一個開關涵蓋以下影片分享功能：（1）動態選項多一個「Short」，把成員已分享、網址為 `youtube.com/shorts/<11 字元 id>` 的 YouTube 連結貼文以垂直滑動播放，社群分享頁與首頁時間軸都有；`/shorts/` 只是網址分類，不檢查也不宣稱影片比例。（2）每則 Short 可直接按讚、開啟留言面板、分享貼文連結、進入貼文選項與檢舉，沿用原本的授權、撤回、隱藏與檢舉流程；回到分頁需重新確認列表後才繼續播放。（3）一般 YouTube 單支影片連結的貼文卡片可按「▶ 站內播放」才載入播放器，未按之前不連線 YouTube。（4）分享外部連結時，輸入網址即顯示辨識結果（Short／影片／非單支影片）。播放器一律由 `https://www.youtube-nocookie.com/embed/<id>` 以固定參數重建，開啟後 CSP 才多一項 `frame-src https://www.youtube-nocookie.com;`（付款交接頁與 `/admin` 不加）；沒有新增其他外部來源。這是來源候選，尚未核准啟用，也未在真機或 Safari 驗證。
+
 #251 檢舉與稽核案件是預設關閉的 source candidate（`FREEDOM_MEMBER_REPORTING_ENABLED`、待部署 migration 160）：會員只能檢舉當前可見內容、查看本人案件狀態；平台管理員依狀態與游標分頁，個別讀取當時的名片／私訊圖片證據，記錄處理理由與摘要。圖片收回後仍保留案件證據；撤銷管理權或 session 後拒絕讀取。#261 的規則、保存期限與申訴管道仍待核准，本候選不啟用正式檢舉。
 
 #262 參與量測是預設關閉的 source candidate（`FREEDOM_PARTICIPATION_METRICS_ENABLED`、migration 159）：只提供有權平台管理員讀取的唯讀報表，每次由權威資料重新計算，附 v3 指標定義，窗口未滿與樣本不足（少於 10）不顯示百分比；七日回訪限既有發布、留言與搜尋時間的參與代理，不讀會覆寫的 session last-seen，不宣稱涵蓋所有瀏覽。搜尋只記結果數與開啟的內容類型，不存查詢文字。目前沒有正式讀權與保存／退出政策，沒有真實 baseline；檢舉處理時間由 transition journal 計算兩個觀察窗口：48 小時內首次處理，以及 7 日內結案；兩者是觀察窗口，不是志工的服務水準目標。重複濫用尚無維護者定義，仍標為不可用。詳見 [會員 API](docs/development/member-api.md#participation-metrics-262)。

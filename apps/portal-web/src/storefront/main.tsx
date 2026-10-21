@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {OfflineOrder} from './offline-order.js';
 import {bootCheckoutPage} from './checkout-page.js';
+import {cartDeliveryNote} from './delivery-copy.js';
+import {CartQuoteResponseSchema, type CartDeliveryOptionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {storefrontLoginHref} from './return-path.js';
 import type { PublicOrder } from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import { formatMinor } from '../../../../modules/agent-commerce/hosted/format.js';
 import {
@@ -799,6 +802,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         <p role="status">這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。</p>
         {errorBlock}
         <div className="shop-order-actions">
+          {container.dataset.buyerJourney === 'true' && <a href={storefrontLoginHref(`/shops/${activeSlug}/orders/${orderRef}`)}>登入會員</a>}
           <a href={`/shops/${activeSlug}/order-access`}>找回訂單</a>
           <a href={`/shops/${activeSlug}`}>回到「{activeStoreName}」</a>
         </div>
@@ -1259,9 +1263,11 @@ interface CartQuoteLine {
 
 type CartQuoteShipping =
   | { state: 'quoted'; groups: { group_ref: string; amount_minor: number }[]; total_minor: number }
-  | { state: 'needs_delivery_data' | 'not_configured'; groups: never[]; total_minor: null };
+  | { state: 'needs_delivery_data' | 'not_configured'; groups: never[]; total_minor: null }
+  | Extract<ReturnType<typeof CartQuoteResponseSchema.parse>['shipping'], {state: 'unavailable'}>;
 
 interface CartQuoteResponse {
+  delivery_options?: ReturnType<typeof CartDeliveryOptionSchema.parse>[];
   publication_revision: string;
   currency: CartCurrency;
   lines: CartQuoteLine[];
@@ -1357,7 +1363,7 @@ function isCartQuoteShape(
   return true;
 }
 
-async function postCartQuote(storeSlug: string, cart: StoredCart): Promise<CartQuoteResult> {
+async function postCartQuote(storeSlug: string, cart: StoredCart, enhanced = false): Promise<CartQuoteResult> {
   const requestedLines = cart.lines.map(line => ({
     sku: line.sku,
     quantity: line.quantity,
@@ -1380,6 +1386,11 @@ async function postCartQuote(storeSlug: string, cart: StoredCart): Promise<CartQ
     if (response.status >= 200 && response.status < 300) {
       try {
         const body: unknown = await response.json();
+        if (enhanced) {
+          const parsed = CartQuoteResponseSchema.safeParse(body);
+          if (!parsed.success || parsed.data.lines.length !== requestedLines.length || parsed.data.lines.some((line, index) => line.sku !== requestedLines[index].sku || line.quantity !== requestedLines[index].quantity)) return {kind: 'failed'};
+          return {kind: 'ok', quote: parsed.data};
+        }
         if (!isCartQuoteShape(body, requestedLines)) return { kind: 'failed' };
         return { kind: 'ok', quote: body };
       } catch {
@@ -1425,6 +1436,7 @@ type PendingFocusTarget =
   | null;
 
 function CartPage({ container, storeSlug, storeName }: CartPageProps) {
+  const enhanced = container.dataset.buyerJourney === 'true';
   const [cart, setCart] = useState<StoredCart>(() => readCart(storeSlug));
   const [draftQuantities, setDraftQuantities] = useState<Record<string, string>>({});
   const [matchedQuote, setMatchedQuote] = useState<{ key: string; quote: CartQuoteResponse } | null>(null);
@@ -1490,7 +1502,7 @@ function CartPage({ container, storeSlug, storeName }: CartPageProps) {
     const wasRetry = retryInFlightRef.current;
     retryInFlightRef.current = false;
 
-    const result = await postCartQuote(storeSlug, requestCart);
+    const result = await postCartQuote(storeSlug, requestCart, enhanced);
     if (unmountedRef.current) return;
     inFlightRef.current = false;
 
@@ -1799,6 +1811,7 @@ function CartPage({ container, storeSlug, storeName }: CartPageProps) {
                 {quoteLine?.state === 'unavailable' && quoteLine.title === null && (
                   <p className="shop-cart-line-state">已下架。</p>
                 )}
+                {enhanced && quote && cartDeliveryNote(quote.delivery_options ?? [], line.sku) && <p className="shop-cart-line-state">{cartDeliveryNote(quote.delivery_options ?? [], line.sku)}</p>}
                 <div className="shop-cart-line-controls">
                   {!hideQuantityControls && (
                     <div className="shop-cart-stepper">
@@ -2787,6 +2800,7 @@ function OrderAccessPage({
     <>
       <h1 id="shop-order-access-title" tabIndex={-1}>找回訂單</h1>
       <p>輸入下單時填寫的 Email 與訂單編號（例如 261015-ABCDEF），我們會把一次性查看連結寄到你的信箱。</p>
+      {container.dataset.buyerJourney === 'true' && <div className="shop-order-actions"><a href={storefrontLoginHref(`/shops/${storeSlug}/order-access`)}>登入會員</a></div>}
       <form className="shop-order-section" noValidate onSubmit={event => void handleSubmit(event)}>
         <div className="shop-order-access-field">
           <label className="shop-add-label" htmlFor="shop-order-access-email">Email</label>

@@ -29,3 +29,12 @@
 .sc-material-danger>button{color:var(--danger)}
 .sc-material-row-action>button{padding:.5rem .75rem}
 .sc-material-page{line-height:1.6}.sc-material-page .field-hint{font-size:.9rem;line-height:1.6}
+.sc-setup-steps{padding-left:1.5rem;margin-bottom:0}.sc-setup-steps>li{padding-block:.5rem}.sc-setup-steps p{margin-block:.5rem}
+
+.supplier-console .sc-offer-photo .actions > .btn-small { flex:none; width:auto; max-width:100%; min-height:44px; padding:.4rem .75rem; font-size:.85rem; }
+
+.merchant-inventory { min-width: 0; overflow-wrap: anywhere; }
+.merchant-inventory p { margin: 0; }
+.merchant-inventory-values { font-variant-numeric: tabular-nums; }
+.merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-variant-numeric: tabular-nums; }
+.merchant-inventory .btn-small { width: auto; min-height: 44px; max-width: 100%; font-size: .875rem; padding: .4rem .75rem; }

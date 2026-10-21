@@ -1,6 +1,16 @@
-:root { color-scheme: light dark; background: canvas; color: canvastext; font-family: system-ui, sans-serif; line-height: 1.6; }
-body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-main { width: min(36rem, 100%); }
-p { margin: 0 0 12px; font-size: 1rem; overflow-wrap: anywhere; }
-a { color: linktext; min-height: 44px; display: inline-flex; align-items: center; }
-a:focus-visible { outline: 3px solid highlight; outline-offset: 3px; }
+:root { color-scheme: light dark; --page: #f6f8fb; --surface: #fff; --text: #1c2636; --muted: #566176; --border: #c9d2df; --link: #3044aa; --focus: #3044ff; background: var(--page); color: var(--text); font-family: system-ui, sans-serif; line-height: 1.7; }
+body { box-sizing: border-box; margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+main { box-sizing: border-box; width: min(42rem, 100%); min-width: 0; padding: 28px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+h1 { margin: 12px 0 18px; font-size: 1.6rem; line-height: 1.5; overflow-wrap: anywhere; }
+p { margin: 0 0 16px; font-size: 1rem; overflow-wrap: anywhere; }
+a { color: var(--link); min-height: 44px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+a:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.go-brand { margin-bottom: 16px; }
+.go-brand img { display: block; width: 128px; height: auto; }
+.go-kind, dt { color: var(--muted); }
+dl { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--page); }
+dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.go-actions { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.go-primary { box-sizing: border-box; padding: 8px 18px; border-radius: 999px; background: #c4ff20; color: #101500; text-decoration: none; }
+@media (max-width: 600px) { body { padding: 16px; } main { padding: 20px; } h1 { font-size: 1.35rem; } }
+@media (prefers-color-scheme: dark) { :root { --page: #08090b; --surface: #14161b; --text: #f4f6ef; --muted: #aeb5c2; --border: #333943; --link: #c4ff20; --focus: #9ba7ff; } }

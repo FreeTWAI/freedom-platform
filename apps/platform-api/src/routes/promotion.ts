@@ -11,7 +11,7 @@ import { readWithMemberSession } from '../../../../packages/db/member-session.js
 import { authRateLimit } from '../../../../modules/identity-membership/members.js';
 import { authenticate } from '../../../../modules/identity-membership/service.js';
 import { previewLink } from '../../../../modules/community/link-preview.js';
-import { createPromotionLink, creditPromotionClick, listMyPromotionLinks, promotionGo, promotionLeaderboards } from '../../../../modules/community/promotion.js';
+import { createPromotionLink, creditPromotionClick, listMyPromotionLinks, promotionGo, promotionUnavailableHtml, promotionLeaderboards } from '../../../../modules/community/promotion.js';
 import { SocialPostExists, activeSocialPostId, createSocialPost, deleteSocialPost, hideSocialPost, listSocialPosts, publicSocialThumbnail, readSocialThumbnail, saveSocialThumbnail, socialPostDraft } from '../../../../modules/community/social-posts.js';
 import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import {createNativeSocialPost, setSocialLike, listSocialComments, createSocialComment, removeSocialComment, editSocialPost, editSocialComment} from '../../../../modules/community/social-posts.js';
@@ -67,7 +67,7 @@ export function registerPublicPromotion(app: Hono<PlatformEnv>, pool: Pool, runt
     c.header('X-Robots-Tag', 'noindex, nofollow');
     c.header('Cache-Control', 'no-store');
     const html = await promotionGo(pool, c.req.param('code'), c.req.query('intro'), runtime.publicOrigin, clock(runtime));
-    if (!html) return c.redirect('/', 302);
+    if (!html) return c.html(promotionUnavailableHtml(), 404);
     return c.html(html);
   });
   app.post('/api/v1/promotion/clicks', async c => {

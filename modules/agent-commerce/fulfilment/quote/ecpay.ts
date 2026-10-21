@@ -1,4 +1,5 @@
 import type {ShippingQuoteLine} from '../../checkout/terms.js';
+import {hostedLineFulfilment} from '../rules/consent.js';
 import {availableMethods,planDelivery,type AvailableMethodOption,type DeliveryGroup,type DeliveryMethod,type DeliveryOption,type ItemShippingAttributes,type PlanDeliveryResult,type PlanInput,type QuoteLine,type ServiceKey,type ShippingProfile,type UnavailableReason} from '../rules/index.js';
 
 const bySku=(a:string,b:string)=>a<b?-1:a>b?1:0;
@@ -14,7 +15,7 @@ export function quoteLines(lines:readonly ShippingQuoteLine[],attributes:Readonl
   return sortedLines(lines).map(line=>({
     line_ref:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,
     attributes:attributes.get(line.item_id)?.attributes??null,
-    fulfilment:line.own?{kind:'self' as const}:{kind:'not_agreed' as const},
+    fulfilment:hostedLineFulfilment(line.own),
   }));
 }
 export function versionsBySku(lines:readonly ShippingQuoteLine[],attributes:ReadonlyMap<string,{readonly version:string}>) {

@@ -15,7 +15,7 @@
 ### 2.1 身分與资格的四道独立检查
 
 1. **平台身份**：server 依现有 session 查 `users.active`、session未撤销／未过期、principal active，满足现行 onboarding 条件；这叫已认证操作者，不等同法律身份／KYC。
-2. **公会关系**：新启动公会提供应用时检查该 guild 的 membership `state='active' AND member_tier='full'`。是否主力、是否持有技能书、会长／专家头衔都不替代此条件。
+2. **公会关系**：新启动一般应用（含 `manual-workspace`）时检查该 guild 的 membership `state='active' AND member_tier='full'`。`hosted-store` 的供货入口检查 `guild_product_quality_supply`，零售入口在任何公会页都检查 `guild_commerce_sales`，两者均接受 active intern／full。首次 `/setup` 重验电商身分；首次 `/supply-profile` 接受有效供应商或电商身分（均含 intern）。拒绝分别使用 `commerce_guild_member_required`／`guild_member_required`；其他应用保留 `guild_full_member_required`。是否主力、是否持有技能书、会长／专家头衔都不替代此条件。
 3. **tenant权限**：操作者在明确选定 tenant 中具有当前 active role 与必要 capability；某人在A是owner，在B是viewer，不许借A权限写B。
 4. **能力状态**：应用已核准、instance/binding/authority版本、方案与额度、操作自己的风险范围；AI另有本人模型与ExecutionGrant。
 
@@ -173,7 +173,7 @@ case错误、批准撤回或没有足够可信证据：保持`recovery_required`
 
 ### 5.4 错误／并行／事件
 
-Problem wire `{type,title,status,code,detail}`。400 malformed UUID/header/body；401 `session_expired`；403 `tenant_capability_denied|guild_full_member_required|fresh_auth_required|recovery_authority_required|policy_unconfigured`；404 `tenant_not_found|invitation_not_found|transfer_not_found`；409 `last_owner_required|invitation_expired|transfer_expired|transfer_authority_changed|tenant_recovery_required|tenant_suspended|slug_conflict|idempotency_conflict`；412 version conflict；428 version_required；429 quota/rate；503 foundation_mapping_unavailable。只在caller已经有metadata读权时给细分state，否则404。
+Problem wire `{type,title,status,code,detail}`。400 malformed UUID/header/body；401 `session_expired`；403 `tenant_capability_denied|guild_full_member_required|guild_member_required|commerce_guild_member_required|fresh_auth_required|recovery_authority_required|policy_unconfigured`；404 `tenant_not_found|invitation_not_found|transfer_not_found`；409 `last_owner_required|invitation_expired|transfer_expired|transfer_authority_changed|tenant_recovery_required|tenant_suspended|slug_conflict|idempotency_conflict`；412 version conflict；428 version_required；429 quota/rate；503 foundation_mapping_unavailable。只在caller已经有metadata读权时给细分state，否则404。
 
 每次mutation同时锁tenant与相关membership，变更authorization_revision、audit/outbox、receipt一个交易。收到相同key及hash仍须重验当前authority；撤权后旧receipt不泄漏数据。高风险「接受后本人不再有旧role」由server限定receipt回`tenant_id/state/revision`最小结果，不能借一般replay恢复原权限；若当前被彻底撤权，则返回拒绝，客户端由状态通知得知完成。
 
@@ -223,7 +223,7 @@ IDOR、混淆代理、跨tenant复合FK缺漏、缓存context复用、transfer�
 
 | T-ID | 可重现步骤 | 预期／证据 |
 |---|---|---|
-| T-003 | F非主力full有tenant-admin，I主力intern做launch | F通过资格，I403；换主力前后membership与ACL digest相同 |
+| T-003 | F非主力full有tenant-admin，I主力intern做launch | 一般应用 F通过资格，I403；`hosted-store` 依对应公会的 active intern／full资格；换主力前后membership与ACL digest相同 |
 | T-007 | M改本guild公告，再读A Work/CRM/export/instance | 公告成功，其余404/403；日志无tenant业务内容 |
 | T-011 | 改slug、transfer、增加第二tenant后比对所有IDs；猜他人URL | stable IDs不变；跨tenant404；public route只投影 |
 | T-013 | A/B交错请求/并行tab/DB pool reuse、viewer写入、伪造role字段 | 按当次tenant role；viewer写403；role/scope字段严格拒绝 |

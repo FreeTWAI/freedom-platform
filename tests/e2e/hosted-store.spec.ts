@@ -1,3 +1,6 @@
+import {test as memberTest} from './member-feature-fixture.js';
+import {setupCartFixtureStore} from './storefront-cart-fixture.js';
+import {apiLogin,fixtureStore,enableStore} from './hosted-order-fixture.js';
 import {storeArea} from './hosted-store-fixture.js';
 import {person,login,open,post,launchStore} from './hosted-store-fixture.js';
 import {randomUUID} from 'node:crypto';
@@ -14,6 +17,72 @@ const primary = (page: Page) => page.getByRole('region', {name: '主要動作', 
 const flow = (page: Page) => page.getByRole('region', {name: '啟動應用', exact: true});
 const storePage = (page: Page) => page.locator('.hosted-store');
 const slugFor = () => 'Island-' + randomUUID().replaceAll('-', '').slice(0, 8).replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit)));
+
+test('a merchant publishes service information that buyers can read on mobile without JavaScript', async ({page, browser, baseURL, e2eAuthPool}, testInfo) => {
+  const member = await person(e2eAuthPool), slug = slugFor().toLowerCase();
+  const description = '合成商店，僅供本機操作驗證。\n客服：shop@example.test（由合成店主處理）\n交付：先聯絡確認面交時間。\n取消與售後：請提供訂單編號聯絡店主。\n說明網址：https://example.test/' + 'long-path-'.repeat(20);
+  const updated = description.replace('shop@example.test', 'updated@example.test');
+  await login(page, member.email);
+  const launched = await launchStore(page, '合成服務說明工作室');
+  await open(page, launched.hash);
+  const setup = page.getByRole('form', {name: '建立商店', exact: true});
+  await setup.getByLabel('商店名稱', {exact: true}).fill('合成服務說明商店');
+  await setup.getByLabel('商店網址', {exact: true}).fill(slug);
+  await setup.getByRole('textbox', {name: '商店介紹', exact: true}).fill(description);
+  await expect(setup.getByRole('textbox', {name: '商店介紹', exact: true})).toHaveAccessibleDescription(/客服方式.*儲存後可先預覽/);
+  await setup.getByRole('button', {name: '建立商店', exact: true}).click();
+  await addProduct(page, '合成展示商品', '120', '3');
+  await storeArea(page, '店面與發布');
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
+  const preview = await popup;
+  await expect(preview.getByRole('region', {name: '商店說明與聯絡', exact: true})).toHaveText('商店說明與聯絡' + description);
+  await expect(preview.getByRole('navigation', {name: '商店導覽'})).toHaveCount(0);
+  await preview.close();
+  await page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  const anonymous = await browser.newContext({baseURL, javaScriptEnabled: false, viewport: {width: 390, height: 844}});
+  try {
+    const buyer = await anonymous.newPage();
+    for (const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access', '/orders/invalid']) {
+      await buyer.goto(`/shops/${slug}${path}`);
+      await buyer.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '商店說明', exact: true}).click();
+      const information = buyer.getByRole('region', {name: '商店說明與聯絡', exact: true});
+      await expect(information).toBeInViewport();
+      await expect(information.getByRole('heading')).toBeFocused();
+      await expect(information).toHaveText('商店說明與聯絡' + description);
+      expect(await buyer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (path === '/order-access') await buyer.screenshot({path: testInfo.outputPath('merchant-info-order-access-390.png'), fullPage: true});
+    }
+    await buyer.setViewportSize({width: 320, height: 740});
+    await buyer.goto(`/shops/${slug}/order-access`);
+    expect(await buyer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await buyer.screenshot({path: testInfo.outputPath('merchant-info-order-access-320.png'), fullPage: true});
+    await storeArea(page, '商店資料');
+    const form = page.getByRole('form', {name: '商店資料', exact: true});
+    await form.getByRole('textbox', {name: '商店介紹', exact: true}).fill(updated);
+    await form.getByRole('button', {name: '儲存商店資料', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+    await buyer.goto(`/shops/${slug}/order-access`);
+    await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('shop@example.test');
+    await expect(buyer.locator('body')).not.toContainText('updated@example.test');
+    await storeArea(page, '店面與發布');
+    await page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版');
+    await buyer.reload();
+    await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('updated@example.test');
+    await buyer.setViewportSize({width: 1280, height: 900});
+    await buyer.goto(`/shops/${slug}/products/P0001`);
+    await buyer.screenshot({path: testInfo.outputPath('merchant-info-product-1280.png'), fullPage: true});
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '停止公開', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('已停止公開');
+    await buyer.reload();
+    await expect(buyer.locator('body')).not.toContainText('updated@example.test');
+    await expect(buyer.getByRole('heading', {name: '找不到這項商品', exact: true})).toBeVisible();
+  } finally {await anonymous.close();}
+});
+
 async function addProduct(page: Page, title: string, price: string, stock = '0') {
   const form = page.getByRole('form', {name: '新增商品', exact: true});
   await form.getByLabel('商品名稱', {exact: true}).fill(title);
@@ -64,7 +133,7 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await setup.getByLabel('商店網址', {exact: true}).fill(slug);
   await expect(setup.getByText(`可以使用：/shops/${slug.toLowerCase()}`, {exact: true})).toBeVisible();
   await setup.getByRole('button', {name: '建立商店', exact: true}).click();
-  await expect(storePage(page).getByRole('note').first()).toHaveText(notice);
+  await expect(page.getByRole('region',{name:'接單狀態',exact:true})).toContainText('尚未開放結帳接單。待完成：發布商店、可售商品、付款方式、交付方式。');
   await addProduct(page, '手工茶杯', '350', '5');
   await addProduct(page, '麻布杯墊', '120.5');
   const product = storePage(page).locator('.hosted-store-product').filter({has: page.getByRole('heading', {name: '麻布杯墊', exact: true})});
@@ -186,7 +255,10 @@ test('store pages stay readable in every theme and width', async ({page, browser
     await expect(pub.getByRole('complementary', {name: '預留與交易說明'})).toContainText('此頁不提供付款，也不會安排出貨。');
     await expect(pub.locator('form,button,script,input')).toHaveCount(0);
     const links = pub.locator('.shop-notice a, .shop-footer a');
-    await expect(links).toHaveCount(2);
+    await expect(links).toHaveCount(4);
+    expect(await links.evaluateAll(elements => elements.map(element => element.getAttribute('href')))).toEqual([
+      `/#reservations/${slug}`, '/', `/shops/${slug}/order-access`, '/#reservations',
+    ]);
     const targets = await links.evaluateAll(elements => elements.map(element => {
       const {left, right, top, bottom, width, height} = element.getBoundingClientRect();
       return {left, right, top, bottom, width, height};
@@ -195,10 +267,15 @@ test('store pages stay readable in every theme and width', async ({page, browser
       expect(target.width).toBeGreaterThanOrEqual(44); expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0); expect(target.right).toBeLessThanOrEqual(width);
     }
-    expect(targets[0].right <= targets[1].left || targets[1].right <= targets[0].left || targets[0].bottom <= targets[1].top || targets[1].bottom <= targets[0].top).toBe(true);
+    for (let i = 0; i < targets.length; i++) for (let j = i + 1; j < targets.length; j++) {
+      const a = targets[i], b = targets[j];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+    }
     await links.nth(0).focus();
     await expect(links.nth(0)).toBeFocused();
-    await pub.keyboard.press('Tab'); await expect(links.nth(1)).toBeFocused();
+    for (let i = 1; i < targets.length; i++) {
+      await pub.keyboard.press('Tab'); await expect(links.nth(i)).toBeFocused();
+    }
     await pub.screenshot({path: testInfo.outputPath(`store-public-${width}.png`), fullPage: true});
     for (const [name, hash] of [['登入查看預留狀態', `#reservations/${slug}`], ['查詢我的預留', '#reservations']]) {
       await pub.goto(`/shops/${slug}`);
@@ -670,4 +747,75 @@ test('published store and product links can be copied from the editor', async ({
   await expect(storePage(page).getByRole('button', {name: '複製商店連結', exact: true})).toHaveCount(0);
   await expect(storePage(page).getByRole('button', {name: '複製商品連結', exact: true})).toHaveCount(0);
   await expect(page.getByLabel('手動複製連結', {exact: true})).toHaveCount(0);
+});
+
+test('merchant order status follows readiness, isolates failures and preserves unsaved product drafts',async({browser,e2eAuthPool},info)=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,{realAdmission:true,supplierConsoleEnabled:false}),context=await browser.newContext({baseURL:store.origin});
+ try {
+  await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
+  const session=await apiLogin(context,store.origin,store.seller.email),page=await context.newPage(),hash=`#stores/${store.tenant}/${store.instance}`;
+  const current=await (await context.request.get('/api/v1'+store.root)).json();
+  const saved=await context.request.patch('/api/v1'+store.root,{headers:{Origin:store.origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${current.version}"`},data:{description:'合成商店；交付與售後請聯絡店主。'}});
+  expect(saved.status()).toBe(200);await store.sellerPost(store.root+'/publish',{},200,(await saved.json()).version);
+  await page.goto('/'+hash);const banner=page.getByRole('region',{name:'接單狀態',exact:true});
+  await expect(banner).toContainText('待完成：付款方式、交付方式');
+  await banner.getByRole('link',{name:'檢查開店準備',exact:true}).click();await expect(page.locator('.commerce-readiness')).toBeVisible();
+  await page.goto('/'+hash);await store.saveOfflineFixture();
+  const refresh=()=>banner.getByRole('button',{name:'更新接單狀態',exact:true}).click();
+  await refresh();await expect(banner).toContainText('開店設定已備妥，等待平台確認後才能接受結帳訂單。');
+  const admission=await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成本機庫存驗證'});
+  await refresh();await expect(banner).toContainText('目前已開放接單；買家可依商店設定結帳。');
+  const shippingPath='/api/v1'+store.root+'/shipping-profile',shipping=await (await context.request.get(shippingPath)).json();
+  const saveDelivery=async(version:string,options:unknown[])=>{const response=await context.request.put(shippingPath,{headers:{Origin:store.origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${version}"`},data:{...shipping.profile,delivery_options:options}});expect(response.status()).toBe(200);};
+  await saveDelivery('1',[]);await refresh();await expect(banner).toContainText('結帳入口已開放；交付方式尚未完成，買家目前無法完成下單。');
+  await saveDelivery('2',shipping.profile.delivery_options);await refresh();await expect(banner).toContainText('目前已開放接單；買家可依商店設定結帳。');
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(page.locator('#store-products-panel .merchant-inventory-definition')).toHaveCount(1);
+   const button=banner.getByRole('button',{name:'更新接單狀態',exact:true});await expect(button).toHaveClass(/btn-small/);
+   expect(await button.evaluate(el=>el.getBoundingClientRect().width)).toBeLessThan(240);
+   expect(await page.locator('.merchant-inventory-values').first().evaluate(el=>getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+   await page.screenshot({path:info.outputPath(`stock-store-on-${width}.png`),fullPage:true});
+  }
+  const article=page.locator('.hosted-store-product').filter({has:page.getByRole('heading',{name:store.products[0].title,exact:true})});
+  await article.getByRole('button',{name:'編輯',exact:true}).click();const form=page.getByRole('form',{name:'編輯'+store.products[0].title,exact:true}),title=form.getByLabel('商品名稱',{exact:true});await title.fill('尚未儲存的合成標題');
+  await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成暫停接單驗證'});await refresh();await expect(banner).toContainText('這間商店目前已暫停接受新結帳訂單');await expect(title).toHaveValue('尚未儲存的合成標題');
+  await page.route('**/overview',async route=>{const response=await route.fetch(),data=await response.json();data.instance_id=randomUUID();await route.fulfill({response,json:data});});await refresh();await expect(banner).toContainText('暫時無法確認這間商店是否接單');await expect(title).toHaveValue('尚未儲存的合成標題');await page.unroute('**/overview');
+  await page.route('**/overview',route=>route.fulfill({status:503,json:{detail:'合成讀取失敗',code:'unavailable'}}));await refresh();await expect(banner).toContainText('暫時無法確認這間商店是否接單');await expect(banner.getByRole('button',{name:'更新接單狀態',exact:true})).toBeVisible();await expect(title).toHaveValue('尚未儲存的合成標題');
+  await page.unroute('**/overview');await refresh();await expect(banner).toContainText('這間商店目前已暫停接受新結帳訂單');
+  await page.route('**/overview',route=>route.fulfill({status:403,json:{detail:'合成權限拒絕',code:'capability_denied'}}));await refresh();await expect(banner).toContainText('暫時無法確認這間商店是否接單');await expect(banner.getByRole('button')).toHaveCount(0);await expect(title).toHaveValue('尚未儲存的合成標題');
+  page.once('dialog',dialog=>dialog.accept());await form.getByRole('button',{name:'取消',exact:true}).click();
+  await page.unroute('**/overview');await page.goto('/'+hash+'/orders/reservations');const checkoutLink=page.getByRole('link',{name:'結帳訂單',exact:true});await expect(checkoutLink).toHaveAttribute('href',hash+'/orders');await expect(checkoutLink).toHaveClass(/btn-small/);
+ } finally {try{await context.close();}finally{await store.close();}}
+});
+
+memberTest.describe('merchant stock with checkout disabled',()=>{
+memberTest.use({memberFeatures:{guildLaunchpadEnabled:true,hostedReservationsEnabled:true}});
+memberTest('merchant checkout OFF keeps both original banners, skips readiness and shows held stock in supply terms',async({browser,baseURL,e2eAuthPool},info)=>{
+ const store=await fixtureStore(e2eAuthPool,browser,baseURL!),context=await browser.newContext({baseURL});
+ try {
+  await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
+  await apiLogin(context,baseURL!,store.seller.email);const page=await context.newPage();let overviewReads=0;
+  page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/overview'))overviewReads++;});
+  const hash=`#stores/${store.tenant}/${store.instance}`;await page.goto('/'+hash);
+  await expect(page.locator('.hosted-store > .banner[role="note"]')).toHaveText(notice);
+  await enableStore(e2eAuthPool,store.instance);const session=await apiLogin(context,baseURL!,store.buyer.email);
+  const post=async(path:string,data:unknown)=>{const response=await context.request.post('/api/v1'+path,{headers:{Origin:baseURL!,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID()},data});expect(response.status()).toBe(201);return response.json();};
+  const quote=await post(`/hosted-stores/${store.slug}/quotes`,{publication_revision:'1',items:[{sku:store.product.sku,quantity:2}]});
+  await post(`/hosted-stores/${store.slug}/orders`,{quote_id:quote.quote_id,terms_sha256:quote.terms_sha256,client_order_id:randomUUID()});
+  await apiLogin(context,baseURL!,store.seller.email);await page.reload();
+  await expect(page.locator('.hosted-store > .banner[role="note"]')).toHaveText('已開放 30 分鐘庫存預留；付款與出貨尚未啟用。');
+  await expect(page.locator('.merchant-inventory-values')).toHaveText('庫存 4・已占用 2・可售 2');await expect(page.locator('.merchant-inventory-breakdown')).toContainText('預留中 2');await expect(page.locator('.merchant-inventory-breakdown')).toContainText('已付款待出貨 0');
+  await page.getByRole('button',{name:'供貨條件',exact:true}).click();await expect(page.getByRole('form',{name:store.product.title+'供貨條件',exact:true})).toBeVisible();
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});await expect(page.locator('.merchant-inventory-definition')).toHaveCount(1);
+   await expect(page.locator('.merchant-inventory-values')).toHaveText('庫存 4・已占用 2・可售 2');
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await page.screenshot({path:info.outputPath(`stock-supply-terms-off-${width}.png`),fullPage:true});
+  }
+  await page.goto('/'+hash+'/orders');await expect(page.getByRole('heading',{name:'商店預留訂單',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'結帳訂單',exact:true})).toHaveCount(0);
+  expect(overviewReads).toBe(0);
+ } finally {await context.close();}
+});
+
 });

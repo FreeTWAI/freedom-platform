@@ -98,3 +98,24 @@ changed capture/policy identity and corrupted downloaded bytes. These are local
 integration cases, not installed cloud GC/retention or operator-handoff evidence.
 The module's CLI surface declarations register ownership only; they do not claim
 runtime entry coverage or deployment.
+
+### Product gallery retention (local candidate, 2026-10-20)
+
+Schema 177's gallery target kind remains under the existing product-photo purpose,
+WebP profile and storage policy. Capture continues to enumerate all unfenced
+`asset_objects`; no gallery purpose, signed URL, pointer-only filter or GC admission
+is added. Both new reference tables must be considered by a future collector;
+inactive rows, deleted-product groups, old frozen refs and stored/pending objects
+remain retained and charged. The five new tenant tables have RLS without FORCE and
+canonical restricted grants; the 24 reviewed SECURITY DEFINER signatures stay unchanged.
+
+The existing guarded `test:media-restore` runner verifies a 25-object graph: its
+original 17 plus exactly 8 gallery objects across two stores, including a stored
+upload stopped before finalization. The tenant sealed-restore drill separately
+captures exactly 6 objects (two Work and four gallery images), with nonempty A/B
+rows in all five gallery tables and late-C exclusion. Snapshot comparison includes
+ordered descriptions, primary identity, retained membership, complete immutable
+sidecars/refs and the new intent routing column. Old public JSON, current verified
+bytes, previous-revision denial, fresh-session fencing and restored tenant isolation
+remain checked. This local labelled/no-network container proof grants no cloud
+backup/restore, runtime installation or cleanup authority.

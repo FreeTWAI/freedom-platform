@@ -8,6 +8,38 @@ The payment machine caller must verify the provider fact before invoking payment
 application. Transaction-core functions perform no external I/O. The separate
 payment action port orchestrates provider queries between committed transactions.
 
+## Buyer identity continuation (2026-10-20)
+
+With checkout enabled, quotes, freeze and placement accept the optional
+`X-Commerce-Buyer` header (`guest` or `member:<user UUID>`). It is an equality
+fence, never authentication: the actual active session remains authoritative.
+`buyer-identity.ts` compares it before principal mapping or domain effects.
+Fenced requests acquire three connections in sequence, never two at once:
+a short pre-check transaction (always `SET TRANSACTION READ ONLY`), the existing
+committed attempt-budget transaction, then the command transaction. The command
+compares the identity again before any effect. Quote commands also use
+`SET TRANSACTION READ ONLY`. Bucket row locks end with the budget transaction;
+they are not held during quotes or checkout/placement domain work. A mismatch
+returns 409 `checkout_identity_changed` with 「登入身分已變更，請重新確認」.
+
+A mismatch writes no domain effect. It also charges no budget, unless the identity changes between the pre-check and the command; then only the attempt budget remains.
+
+Rejected commands retain accepted attempt charges, as in the legacy path.
+Successful quotes echo the actual identity in the same header. Existing clients
+without the header keep their existing command and budget behaviour. The fence
+does not change browser order-access tokens, tenant binding or RLS.
+
+The buyer client rechecks the session on lifecycle events and before freeze,
+place and retry. After initial confirmation, a background check keeps fields
+usable and preserves the quote when the identity and generation are unchanged.
+A failed check blocks fields/actions until a successful check. Its v2 tab intent
+binds replay coordinates to the store and
+stable member user ID (or guest). A new session for the same member can explicitly
+retry the original coordinates; a different identity parks them without replay,
+clears private in-memory fields and requotes the retained cart. Legacy v1 intents
+are untrusted. Tab metadata stores no contact, bank, cookie or CSRF values.
+This slice adds no member order list or retained unpublished-store read path.
+
 ## Inventory and retained facts
 
 N is physical stock, H is the sum of held reservations, and A is the sum of

@@ -218,12 +218,14 @@ for(const order of ['refresh-first','older-first'] as const)test(`precision refr
     await expect.poll(()=>refreshHeld).toBe(true);
     await expect(reload).toHaveAttribute('aria-disabled','true');
     if(order==='refresh-first'){
-      await expect(older).toBeDisabled();expect(reads.some(read=>read.offset===40)).toBe(false);await expect(shown).toHaveCount(40);
+      await expect(older).toBeEnabled();await older.click();
+      await expect(panel.getByRole('button',{name:'正在讀取…',exact:true})).toBeDisabled();
+      expect(reads.some(read=>read.offset===40)).toBe(false);await expect(shown).toHaveCount(40);
     }else await expect(shown).toHaveCount(60);
     releaseRefresh();await expect(reload).toHaveAttribute('aria-disabled','false');
-    if(order==='refresh-first'){await expect(older).toBeEnabled();await older.click();}
     await expect.poll(()=>shown.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-message-id')))).toEqual(rows.toReversed().map(row=>row.message_id));
     await expect(older).toHaveCount(0);await expect(draft).toHaveValue('分頁與精度刷新都保留這份草稿');
     expect(reads).toContainEqual({offset:40,precise:true});
+    if(order==='refresh-first')expect(reads.filter(read=>read.offset===40)).toEqual([{offset:40,precise:true}]);
   }finally{releaseOlder();releaseRefresh();await expect.poll(()=>activeRoutes).toBe(0);}
 });

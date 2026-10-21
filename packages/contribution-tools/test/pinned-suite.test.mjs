@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFile, symlink, mkdir, stat, rm, mkdtemp } from 'node:fs/promises';
+import { readFile, symlink, mkdir, stat, rm, mkdtemp, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -525,4 +525,204 @@ test('Pytest JUnit evidence rejects incomplete totals, skips, duplicate identiti
   assert.equal(result.files[0].path, 'dir/a.py');
   assert.equal(result.total, 1);
   assert.match(result.files[0].cases[0].case_sha256, /^[a-f0-9]{64}$/);
+});
+
+test('Pytest failure-counts helper emits only closed selected-file counts', async t => {
+  const root = await pinnedFixtureRoot(t);
+  const helperPath = join(repoRoot, 'scripts/ci/pinned_pytest_evidence.py');
+  const tc = (file, name, children = '') => `<testcase file="${file}" classname="private-class" name="${name}">${children}</testcase>`;
+  const source = `<testsuites tests="5"><testsuite tests="5" failures="1" errors="1" skipped="1">${[
+    tc('a.py', 'pass'), tc('b.py', '::error::&#10;freedom.test-failure-diagnostic', '<failure message="private-message">private-stack</failure>'),
+    tc('b.py', 'error', '<error/>'), tc('b.py', 'skip', '<skipped/>'), tc('c.py', 'pass')
+  ].join('')}</testsuite></testsuites>`;
+  await put(root, 'expected.json', JSON.stringify(['a.py', 'b.py', 'c.py']));
+  await put(root, 'junit.xml', source);
+  const run = () => spawnSync('python3', ['-I', helperPath, '--failure-counts', '--junit', join(root, 'junit.xml'),
+    '--expected', join(root, 'expected.json')], { encoding: 'utf8' });
+  const child = run();
+  assert.equal(child.status, 0);
+  assert.equal(child.stderr, '');
+  assert.deepEqual(JSON.parse(child.stdout), { ok: false, reason: 'test_process_failed', files: [
+    { path: 'a.py', counts: { tests: 1, passed: 1, failed: 0, cancelled: 0, skipped: 0, todo: 0 } },
+    { path: 'b.py', counts: { tests: 3, passed: 0, failed: 2, cancelled: 0, skipped: 1, todo: 0 } },
+    { path: 'c.py', counts: { tests: 1, passed: 1, failed: 0, cancelled: 0, skipped: 0, todo: 0 } }
+  ] });
+  assert.doesNotMatch(child.stdout, /::error::|freedom\.test-failure-diagnostic|private-/);
+  // Even a pass-shaped document is never pass evidence in this mode.
+  await put(root, 'expected.json', '["a.py"]');
+  await put(root, 'junit.xml', `<testsuite tests="1">${tc('a.py', 'pass')}</testsuite>`);
+  assert.equal(JSON.parse(run().stdout).ok, false);
+});
+
+test('Pytest failure-counts helper rejects unsafe, incomplete and oversized XML without output text', async t => {
+  const root = await pinnedFixtureRoot(t);
+  const helperPath = join(repoRoot, 'scripts/ci/pinned_pytest_evidence.py');
+  const tc = '<testcase file="a.py" name="pass"/>';
+  const source = `<testsuite tests="1">${tc}</testsuite>`;
+  const dtd = '<!DOCTYPE testsuite [<!ENTITY payload "private-entity">]>';
+  const invalid = [
+    null, '<testsuites><testsuite', source + 'truncated', 'x'.repeat(16 * 1024 * 1024 + 1),
+    source.replace('file="a.py"', 'file="unknown.py"'), source.replace('file="a.py"', 'file="./a.py"'),
+    source.replace('file="a.py"', 'file="../a.py"'), source.replace('file="a.py"', ''),
+    source.replace('tests="1"', 'tests="2"'), source.replace('tests="1"', 'tests="9007199254740992"'),
+    `<testsuite tests="2">${tc}${tc}</testsuite>`, '<testsuite tests="0"/>',
+    source.replace('</testsuite>', '<properties><testcase file="unknown.py"/></properties></testsuite>'),
+    `<testsuite tests="1" failures="1">${tc}</testsuite>`,
+    '<testsuite tests="1"><testcase file="a.py"><failure/><skipped/></testcase></testsuite>',
+    dtd + source.replace('name="pass"', 'name="&payload;"'),
+    Buffer.from('<?xml version="1.0" encoding="UTF-16"?>' + dtd + source, 'utf16le'),
+    '<!DOCTYPE testsuite SYSTEM "file:///never-read">' + source,
+    source.replace('name="pass"', 'name="::error::&#1;freedom.test-failure-diagnostic"'),
+  ];
+  for (const [index, xml] of invalid.entries()) {
+    await put(root, 'expected.json', '["a.py"]');
+    if (xml === null) await rm(join(root, 'junit.xml'), { force: true });
+    else await put(root, 'junit.xml', xml);
+    const child = spawnSync('python3', ['-I', helperPath, '--failure-counts', '--junit', join(root, 'junit.xml'),
+      '--expected', join(root, 'expected.json')], { encoding: 'utf8' });
+    assert.equal(child.status, 1, String(index));
+    assert.equal(child.stderr, '', String(index));
+    assert.deepEqual(JSON.parse(child.stdout), { ok: false, reason: 'invalid_failure_counts' }, String(index));
+  }
+  for (const expected of [['a.py', 'a.py'], ['a.py', 'b.py'], ['a.py', 1], ['a.py', 'dir/../b.py'], []]) {
+    await put(root, 'junit.xml', source);
+    await put(root, 'expected.json', JSON.stringify(expected));
+    const child = spawnSync('python3', ['-I', helperPath, '--failure-counts', '--junit', join(root, 'junit.xml'),
+      '--expected', join(root, 'expected.json')], { encoding: 'utf8' });
+    assert.equal(child.status, 1);
+    assert.ok(!Object.hasOwn(JSON.parse(child.stdout), 'files'));
+  }
+});
+
+// A controlled Python launcher verifies process/error/deadline boundaries without
+// depending on pytest timing. The real helper still parses the supplied XML.
+async function pytestLauncher(t) {
+  const root = await pinnedFixtureRoot(t);
+  const python = spawnSync('python3', ['-I', '-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+  assert.equal(python.status, 0);
+  const executable = python.stdout.trim();
+  const previousPath = process.env.PATH;
+  await put(root, 'bin/python3', `#!${executable}
+import json, os, signal, sys, time
+from pathlib import Path
+mode = Path('mode').read_text()
+is_pytest = 'pytest' in sys.argv
+with open('invocations', 'a') as stream:
+    stream.write('pytest\\n' if is_pytest else 'helper\\n')
+if is_pytest:
+    junit = Path(sys.argv[sys.argv.index('--junitxml') + 1])
+    if mode != 'missing':
+        junit.write_bytes(Path('source.xml').read_bytes())
+    if mode == 'signal':
+        os.kill(os.getpid(), signal.SIGTERM)
+    if mode == 'wait':
+        time.sleep(60)
+    sys.exit(0 if mode == 'pass' else 1)
+if mode == 'helper-error':
+    sys.exit(1)
+if mode in ('helper-timeout', 'helper-cancel'):
+    Path('helper-started').touch()
+    time.sleep(60)
+if mode.startswith('helper-output'):
+    print(Path('helper-output.json').read_text())
+    sys.exit(0)
+os.execv(${JSON.stringify(executable)}, [${JSON.stringify(executable)}, *sys.argv[1:]])
+`);
+  await chmod(join(root, 'bin/python3'), 0o755);
+  process.env.PATH = join(root, 'bin') + ':' + previousPath;
+  t.after(() => { process.env.PATH = previousPath; });
+  const files = ['tests/a.py', 'tests/b.py', 'tests/c.py'];
+  for (const file of files) await put(root, file, '# controlled fixture\n');
+  const source = '<testsuite tests="3" failures="1">' + files.map((path, i) =>
+    `<testcase file="${path}" name="test">${i === 1 ? '<failure message="::error:: freedom.test-failure-diagnostic"/>' : ''}</testcase>`).join('') + '</testsuite>';
+  await put(root, 'source.xml', source);
+  const suite = Object.freeze({ files: Object.freeze(files), loader: 'pytest', database: false, timeoutMs: 10_000, env: Object.freeze([]) });
+  return { root, files, source, run: options => runPinnedSuiteDefinition(root, 'ci.fixture-pytest', suite, options) };
+}
+
+test('Failed pytest attaches every selected file and preserves the failure verdict', async t => {
+  const { root, files, run } = await pytestLauncher(t);
+  await put(root, 'mode', 'failure');
+  const result = await run();
+  assert.deepEqual(result, { check_id: 'ci.fixture-pytest', status: 'failed', reason: 'test_process_failed',
+    selected_files: files, test_count: 0, test_files: files.map((path, i) => ({ path,
+      counts: { tests: 1, passed: i === 1 ? 0 : 1, failed: i === 1 ? 1 : 0, cancelled: 0, skipped: 0, todo: 0 },
+      cases: [], suite_events: [] })) });
+  assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\nhelper\n');
+});
+
+test('Failed pytest returns exactly the old failure for unusable XML or helper output', async t => {
+  const { root, files, source, run } = await pytestLauncher(t);
+  const oldFailure = { check_id: 'ci.fixture-pytest', status: 'failed', reason: 'test_process_failed', selected_files: files, test_count: 0 };
+  for (const [mode, xml] of [
+    ['missing', source], ['malformed', '<testsuites>'], ['oversized', 'x'.repeat(16 * 1024 * 1024 + 1)],
+    ['unknown', source.replace('tests/b.py', 'unknown.py')], ['duplicate', source.replace('tests/b.py', 'tests/a.py')],
+    ['helper-error', source]
+  ]) {
+    await put(root, 'mode', mode);
+    await put(root, 'source.xml', xml);
+    assert.deepEqual(await run(), oldFailure, mode);
+  }
+  await put(root, 'source.xml', source);
+  const valid = { ok: false, reason: 'test_process_failed', files: files.map(path => ({ path,
+    counts: { tests: 1, passed: 0, failed: 1, cancelled: 0, skipped: 0, todo: 0 } })) };
+  for (const transform of [
+    value => { value.ok = true; },
+    value => { value.files[1].path = 'unknown.py'; },
+    value => { value.files[1].path = files[0]; },
+    value => { value.files.pop(); },
+    value => { value.files[1].counts.failed = -1; },
+    value => { value.files[1].counts.tests = 1.5; },
+    value => { value.files[1].counts.failed = 9007199254740992; },
+    value => { value.files[1].counts.failed = '::error:: freedom.test-failure-diagnostic'; },
+    value => { value.files[1].counts.passed = 1; }
+  ]) {
+    const output = structuredClone(valid); transform(output);
+    await put(root, 'mode', 'helper-output');
+    await put(root, 'helper-output.json', JSON.stringify(output));
+    assert.deepEqual(await run(), oldFailure);
+  }
+  await put(root, 'helper-output.json', '{truncated');
+  assert.deepEqual(await run(), oldFailure);
+  // Ignore all extra fields even if a helper result contains arbitrary text.
+  await put(root, 'helper-output.json', JSON.stringify({ ...valid, message: '::error::',
+    files: valid.files.map(file => ({ ...file, cases: [{ name: 'freedom.test-failure-diagnostic' }], message: 'private-message' })) }));
+  assert.doesNotMatch(JSON.stringify(await run()), /::error::|freedom\.test-failure-diagnostic|private-message/);
+});
+
+test('Pytest timeout, cancellation, signal and spawn errors never invoke the XML helper', async t => {
+  const { root, files, run } = await pytestLauncher(t);
+  const failure = reason => ({ check_id: 'ci.fixture-pytest', status: 'failed', reason, selected_files: files, test_count: 0 });
+  await put(root, 'mode', 'wait');
+  assert.deepEqual(await run({ timeoutMs: 500 }), failure('test_timeout'));
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 300);
+  try { assert.deepEqual(await run({ signal: ac.signal }), failure('test_cancelled')); }
+  finally { clearTimeout(timer); }
+  assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\npytest\n');
+  await put(root, 'mode', 'signal');
+  assert.deepEqual(await run(), failure('test_process_failed'));
+  assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\npytest\npytest\n');
+  process.env.PATH = join(root, 'empty-bin');
+  assert.deepEqual(await run(), failure('test_process_failed'));
+  assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\npytest\npytest\n');
+});
+
+test('A hung or cancelled failure helper preserves test_process_failed within the original deadline', async t => {
+  const { root, files, run } = await pytestLauncher(t);
+  const oldFailure = { check_id: 'ci.fixture-pytest', status: 'failed', reason: 'test_process_failed', selected_files: files, test_count: 0 };
+  await put(root, 'mode', 'helper-timeout');
+  const started = performance.now();
+  assert.deepEqual(await run({ timeoutMs: 700 }), oldFailure);
+  assert.ok(performance.now() - started < 3000);
+  assert.equal(await readFile(join(root, 'helper-started'), 'utf8'), '');
+  await rm(join(root, 'helper-started'));
+  await put(root, 'mode', 'helper-cancel');
+  const ac = new AbortController();
+  const timer = setInterval(async () => {
+    try { await stat(join(root, 'helper-started')); ac.abort(); } catch { /* waiting for the helper */ }
+  }, 10);
+  try { assert.deepEqual(await run({ timeoutMs: 3000, signal: ac.signal }), oldFailure); }
+  finally { clearInterval(timer); }
+  assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\nhelper\npytest\nhelper\n');
 });

@@ -79,6 +79,12 @@ B 頁是 `/shops/:slug` 之下的獨立文件，不進 portal 的 `app-frame`（
 | 版型 | 既有 `catalog-grid-v1`／`catalog-list-v1`，加主打商品（最多 8 件）與分類入口兩個區段開關 | 版型只改排列，不改語意 |
 | 公告列 | 選填一行，最多 80 字 | 不跑馬燈、不自動輪播 |
 
+**2026-10-20 本機候選狀態（schema175，未部署）**：本切片提供八組具文字名稱的主色、封面、方形店標、單行公告與最多八件自有零售主打商品，隨發布凍結；分類與區段開關仍待後續。`FREEDOM_STORE_APPEARANCE_ENABLED` 預設 OFF；OFF 保留既有呈現並忽略外觀資料。開啟後無封面就是店名與介紹的文字首屏，封面以原比例完整顯示，限制高度、沒有裁切或文字疊圖；390／768 px 在文字後，1440 px 與文字並排。商家店標與主色也套用商品、購物車、結帳與訂單殼，工坊原始 Logo 留在頁尾。
+
+此實作把上表的「新 asset 用途」落為既有 `storefront.product-photo` purpose 下的封閉 target kinds `storefront.cover`／`storefront.logo`，讓舊版仍能計算配額與備份物件，不更動 purpose／admission／policy／profile 基線。萊姆保留既有底色、字色與焦點色，只在外觀 ON 的標記下加 `#537300` 邊框；暖金使用 `#854d0e` 邊框。**淺色主色的非文字 ≥3:1 由邊框達成，並非底色本身**；字對底色 ≥4.5:1、焦點對 `#f6f8fb` ≥3:1 均由獨立 WCAG 計算測試驗證。八組名稱與色值見 [appearance 契約](../../../../contracts/guild-launchpad/v1/storefront-appearance.ts)，計算見 [contrast 測試](../../../../tests/runtime/storefront-appearance-contrast.test.ts)。
+
+商店 `og:image` 在媒體已安裝且有凍結封面時使用封面，否則沿用第一張已發布商品照，再退回原工坊圖；商品 OG 規則不變。這是本機實作與合成測試範圍，不把 §9 全部視覺驗收、真人手機／Safari 或完整 C1 改為通過。
+
 ### 4.3 頁首與署名
 
 商家品牌在前：頁首左側是店標／店名，右側是搜尋與購物車（含件數）。自由工坊改為頁尾署名「使用自由工坊開店」，附原始品牌圖（不重畫、不裁字標、維持比例）連回首頁。店面頁不顯示會員區的全域導覽、聊天泡泡或新手導覽角色。
@@ -185,6 +191,20 @@ B 頁是 `/shops/:slug` 之下的獨立文件，不進 portal 的 `app-frame`（
 - 草稿：存在這個分頁的 sessionStorage，下單成功、按「清除」或 30 分鐘未操作即刪除；不用 localStorage、不送分析。
 - 「確認並付款」：依序建立 checkout、訂單（各帶 Idempotency-Key），成功後進付款交接頁。回應遺失時以同樣的 key 重試，server 回同一筆結果（EC-AT51）。
 - 草稿與未完成的命令綁定原本的身分（guest 或某位會員）與店家；登入身分改變後不再送出舊草稿，顯示「登入身分已變更，請重新確認」（EC-AT49）。
+
+2026-10-20 買家旅程實作註記（checkout 開關開啟時）：B05 的「登入會員」以
+`return_to` 返回原結帳頁；密碼、TOTP／備援碼登入及註冊都先重新確認 session，再驗證
+同店目前的公開投影，最後整頁導覽。註冊可稍後選公會與完整定位。只允許
+`/shops/:slug/checkout`、`/shops/:slug/order-access`、`/shops/:slug/orders/:uuid`，
+不接受購物車、query、fragment、編碼路徑或外站。
+結帳於 mount、pageshow、focus、回到可見狀態及每次凍結／下單／重試前重讀 session；
+以 guest 或穩定的會員 user ID 比對，不把同帳號重新登入視為換人。變更後清除記憶體中的
+聯絡與配送草稿、報價及凍結結果，保留購物車並重新報價，要求買家再次確認。
+分頁僅保存身分中繼資料與 v2 下單重試座標；舊 v1 或身分不符的座標不會自動送出。
+未知下單結果另提示「上次下單結果尚未確認。請用原登入帳號或原瀏覽器找回訂單。」
+`X-Commerce-Buyer` 是可選的相等檢查，並非憑證；API 在同一交易的任何效果之前比對
+實際 session 身分，不符回 409 `checkout_identity_changed`，報價回應亦回傳身分。
+跨店「我的訂單」及取消發布後保留的會員 B07 另行實作；本次完成旅程止於現有 B07。
 
 ### 7.4 B07 訂單
 

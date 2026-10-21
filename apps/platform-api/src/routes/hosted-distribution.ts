@@ -3,11 +3,11 @@ import type {Pool} from 'pg';
 import {OpaqueId} from '../../../../contracts/common/v1/identity.js';
 import {EmptyStoreInputSchema} from '../../../../contracts/guild-launchpad/v1/storefront.js';
 import {DistributionInputSchema, DistributionDecisionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution.js';
-import {listSupplyOffers, publishSupplyOffer, withdrawSupplyOffer, listDistributions, proposeDistribution, decideDistribution, withdrawDistribution} from '../../../../modules/agent-commerce/hosted/distribution.js';
+import {readSupplyOffer, listSupplyOffers, publishSupplyOffer, withdrawSupplyOffer, listDistributions, proposeDistribution, decideDistribution, withdrawDistribution} from '../../../../modules/agent-commerce/hosted/distribution.js';
 import type {PlatformEnv} from '../module-context.js';
 import {privateCache, singleQuery, commandHeaders, etag} from './tenant-http.js';
 
-export function createHostedDistributionRoutes(pool: Pool) {
+export function createHostedDistributionRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false) {
   const app = new Hono<PlatformEnv>();
   app.use('*', async (c, next) => {try {await next();} finally {privateCache(c);}});
   const root = '/tenants/:tenant_id/storefronts/:instance_id';
@@ -16,9 +16,13 @@ export function createHostedDistributionRoutes(pool: Pool) {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t,i] = ids(c);
     return c.json(await listSupplyOffers(pool, c.get('actor'), t, i, own));
   });
+  app.get(root+'/supply-catalog/:offer_id', async c => {
+    EmptyStoreInputSchema.parse(singleQuery(c)); const [t,i] = ids(c);
+    return c.json(await readSupplyOffer(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('offer_id')),admissionEnabled,offerPhotosEnabled));
+  });
   app.post(root+'/products/:product_id/supply-offer', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); EmptyStoreInputSchema.parse(await c.req.json()); const [t,i] = ids(c), h = commandHeaders(c,true);
-    const view = await publishSupplyOffer(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id')),h.key,h.expected!);
+    const view = await publishSupplyOffer(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id')),h.key,h.expected!,offerPhotosEnabled);
     etag(c,view.version); return c.json(view);
   });
   app.post(root+'/supply-offers/:offer_id/withdraw', async c => {

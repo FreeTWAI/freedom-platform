@@ -1,6 +1,7 @@
+import sharp from 'sharp';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
-import {expect,type Page} from './fixtures.js';
+import {expect,type Page,type Locator} from './fixtures.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import {CreateResultSchema} from '../../contracts/guild-launchpad/v1/tenant.js';
@@ -53,4 +54,51 @@ export async function launchStore(page: Page, name: string) {
   const installation = InstallationViewSchema.parse(await (await page.request.get(`/api/v1/tenants/${tenant}/application-installations/by-operation/${operation.operation_id}`)).json());
   const instance = installation.modules.find(link => link.requirement_key === 'storefront')!.instance_id;
   return {root: `/tenants/${tenant}/storefronts/${instance}`, hash: `stores/${tenant}/${instance}`};
+}
+
+/** Synthetic raster shared by product-photo browser journeys. */
+export async function photoSource(name:string,color:string){return {name,mimeType:'image/png',buffer:await sharp({create:{width:120,height:80,channels:3,background:color}}).png().toBuffer()};}
+
+export async function captureOffer(page:Page,target:Locator,path:string){
+  // Tall element captures scroll beneath the fixed portal chrome. Hide only
+  // that chrome for the capture, then restore its exact original inline style.
+  const chrome=page.locator('.community-header,.floating-messages');
+  const styles=await chrome.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('style')));
+  try{
+    await chrome.evaluateAll(nodes=>nodes.forEach(node=>(node as HTMLElement).style.setProperty('visibility','hidden','important')));
+    await target.screenshot({path});
+  }finally{
+    await chrome.evaluateAll((nodes,styles)=>nodes.forEach((node,i)=>styles[i]===null?node.removeAttribute('style'):node.setAttribute('style',styles[i]!)),styles);
+  }
+}
+
+/** Gallery uses the existing photo pass's schema and restricted role. The main
+ * server stays gallery-OFF, so its 32 original journeys retain their baseline. */
+export async function startGalleryBrowserServer(){
+ if(process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE!=='1'||process.env.NODE_ENV==='production')throw Error('Gallery browser fixture requires the local photo pass');
+ const {e2eSchema}=await import('../../packages/testing/e2e-auth-isolation.js');
+ const schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA),connectionString=process.env.TEST_DATABASE_URL;
+ if(!connectionString)throw Error('Explicit disposable TEST_DATABASE_URL required');
+ const {Pool}=await import('pg'),{serve}=await import('@hono/node-server'),{serveStatic}=await import('@hono/node-server/serve-static');
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const {FakeObjectStore}=await import('../../packages/asset-storage/fake-store.js');
+ const {createStorefrontGalleryLifecycle}=await import('../../modules/assets/storefront-gallery.js');
+ const {createStorefrontProductPhotoLifecycle}=await import('../../modules/assets/storefront-product-photo.js');
+ const {TENANT_CURSOR_TEST_KEY}=await import('../runtime/tenant-cursor-fixture.js');
+ const url=new URL(connectionString);url.username=schema+'_app';url.password='';
+ const pool=new Pool({connectionString:url.toString(),options:`-c search_path=${schema}`});
+ const authority=(await pool.query("SELECT r.rolsuper,r.rolbypassrls,has_table_privilege(current_user,'commerce_publication_galleries','UPDATE,DELETE') unsafe FROM pg_roles r WHERE r.rolname=current_user")).rows[0];
+ expect(authority).toEqual({rolsuper:false,rolbypassrls:false,unsafe:false});
+ let app:ReturnType<typeof createApp>|undefined;
+ const server=serve({fetch:request=>{if(!app)throw Error('Gallery fixture is not ready');return app.fetch(request);},hostname:'127.0.0.1',port:0});
+ try{
+  if(!server.listening)await new Promise<void>(resolve=>server.once('listening',resolve));
+  const address=server.address();if(!address||typeof address==='string')throw Error('Gallery fixture needs a loopback port');
+  const origin=`http://127.0.0.1:${address.port}`,store=new FakeObjectStore();
+  app=createApp(pool,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeGalleryEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,
+   storePhotoAssetStore:store,storePhotoAssets:createStorefrontProductPhotoLifecycle(pool,{store}),storeGalleryAssets:createStorefrontGalleryLifecycle(pool,{store}),storePhotoUploadsEnabled:true,
+   linkPreviewFetch:async()=>{throw Error('Gallery fixture forbids outbound previews');}});
+  app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));
+  return {origin,async stop(){await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await pool.end();}};
+ }catch(e){await new Promise<void>(resolve=>server.close(()=>resolve()));await pool.end();throw e;}
 }

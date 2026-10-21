@@ -253,9 +253,19 @@ test('AR-UI-12 devices without a second WebGL context still track, draw fallback
     Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{const replay=document.createElement('video');replay.src='/_ar-test/positive.webm';replay.loop=true;replay.muted=true;replay.playsInline=true;await replay.play();await new Promise<void>(resolve=>replay.requestVideoFrameCallback(()=>resolve()));(window as any).arReplay=replay;const stream=(replay as HTMLVideoElement&{captureStream:()=>MediaStream}).captureStream();(window as any).arTestStream=stream;return stream;}});
   });
   try{
-    await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();await expect(page.getByRole('link',{name:'查看內容',exact:true})).toBeVisible({timeout:30000});
-    await expect(page.getByText('目前使用精簡特效，可以繼續掃描與拍照。',{exact:true})).toBeVisible();
-    expect(await page.locator('.ar-flat-layer').evaluate(node=>{const canvas=node as HTMLCanvasElement;return canvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0);})).toBe(true);
+    await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();
+    // Tracking and fallback state can precede drawing, and target loss clears the canvas.
+    // Observe all three in one browser turn, within the original acquisition budget.
+    await expect.poll(()=>page.evaluate(()=>{
+      const visible=(node:Element|undefined)=>{const rect=node?.getBoundingClientRect();return !!rect?.width&&!!rect.height&&getComputedStyle(node!).visibility==='visible';};
+      const link=Array.from(document.querySelectorAll('.ar-scanner a')).find(node=>node.textContent?.trim()==='查看內容');
+      const fallback=Array.from(document.querySelectorAll('.ar-scanner .field-hint')).find(node=>node.textContent?.trim()==='目前使用精簡特效，可以繼續掃描與拍照。');
+      if(!visible(link)||!visible(fallback))return false;
+      const canvas=document.querySelector<HTMLCanvasElement>('.ar-flat-layer');
+      if(!canvas?.width||!canvas.height)return false;
+      const context=canvas.getContext('2d');
+      return context!==null&&context.getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0);
+    }),{timeout:30000,intervals:[100]}).toBe(true);
     await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
     await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
   }finally{await page.evaluate(()=>{(window as any).arReplay?.pause();(window as any).arTestStream?.getTracks().forEach((track:MediaStreamTrack)=>track.stop());});}

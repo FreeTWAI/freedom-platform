@@ -31,6 +31,49 @@ batched orders remain unchanged. This is a read-decision fence, not a guarantee
 through commit or HTTP delivery; machine bearer and anonymous public-shop readers
 retain their separate authority and are not changed by the member boundary.
 
+Remote import previews accept only the existing allowlisted raw GitHub JSON/MD
+locations. The reader uses Fetch `referrerPolicy: 'no-referrer'`, not a literal
+`no-referrer` URL in `referrer`; native Node Fetch must be able to construct the
+request without disclosing the member page as Referer. Redirect refusal,
+credential omission, the 24,000-byte cap and eight-second abort remain unchanged.
+Remote bytes are decoded as strict UTF-8 before parsing: malformed sequences
+(including encoded surrogates and truncated code points) return
+`422 manifest_fetch_failed`, never replacement characters or a preview.
+The raw byte cap includes any BOM; valid code points split across chunks,
+BOM-prefixed sources and intentional U+FFFD remain accepted.
+The native-fetch regressions in [agent-commerce.test.ts](../../tests/runtime/agent-commerce.test.ts)
+substitute only a synthetic loopback upstream and exercise authenticated
+URL preview, confirmation, same-key replay and exact SQL text/digest readback,
+plus malformed wire rejection without import writes or Referer disclosure.
+This does not establish live GitHub availability or Worker/deployed behavior.
+
+Local JSON/MD import sources remain limited to 24,000 UTF-8 bytes. Only
+`POST /api/v1/commerce/preview` permits a 144,014-byte JSON request: the
+`{"content":""}` wrapper adds 14 bytes and each source byte can require at
+most six bytes when JSON-escaped. This transport allowance prevents valid
+escaped results from hitting the ordinary 32 KiB request ceiling; it does
+not increase the decoded source limit or change the manifest schema.
+Both declared lengths and the actual stream are bounded before parsing.
+All existing Origin, session, CSRF, UTF-8/Unicode/NUL and preview rate-limit
+checks remain in place. Other JSON commands keep their existing ceilings.
+
+The shared manifest schema rejects decoded NUL and unpaired UTF-16 surrogates
+in shop text, product text, public sale terms and manifest URLs. This applies
+after the inner JSON block in a JSON/MD result is decoded, so preview cannot
+offer a manifest that the confirmation HTTP text guard must reject. Valid
+Unicode scalar pairs, intentional U+FFFD and literal `\u0000` / `\ud800`
+text remain unchanged; no replacement or Unicode normalization is applied.
+Existing trimming, length, URL and uniqueness rules still apply. The shared
+business `text()` helper and order/payment/shipment schemas are unchanged.
+
+Public-manifest `item_id` and machine-order `selection_id` uniqueness follows
+PostgreSQL UUID identity: uppercase and lowercase spellings of one UUID are
+duplicates and fail schema validation with `422 validation_failed`, before
+an import or reservation write. Single uppercase references and distinct
+UUIDs remain valid. Only comparison keys are case-folded; the parsed input,
+request digests and external order IDs are not rewritten. Product SKUs keep
+their existing case-sensitive uniqueness rule (`TEA` and `tea` are distinct).
+
 The server resolver and schema constraints are documented in [resource-scopes](../../packages/resource-scopes/README.md). After schema 117 and 118, an upgraded issuer creates only purpose-bound v2 keys when the owner explicitly requests issuance. Its existing member receipt/digest stays unchanged and a replay still returns `token: null`. The application must receive an explicit `FREEDOM_SHOP_KEY_POLICY=legacy-compatible` or `purpose-bound-only`; absent configuration yields shop-only 503. The Worker config checker lists this as a required injection without changing deployed vars. `/api/v1/health` reports the actual selected policy and issuer profile, or `unconfigured`/null. A merged source SHA or configured example is not an installed policy observation.
 
 ## Controlled legacy exit
@@ -70,6 +113,8 @@ The isolated [identity](../../tests/runtime/shop-service-identity.test.ts), [com
 ## Hosted stores
 
 ### Release 1.1.0 and upgrade
+
+Initial supply eligibility follows active membership in `guild_product_quality_supply`, including interns. Initial retail setup requires active membership in `guild_commerce_sales`, including interns. First supply setup also accepts active commerce interns or full members through the same shared rule. Retail denial is `commerce_guild_member_required`; supplier denial remains `guild_member_required`. The common application checks its purpose-specific rule at catalog/plan/launch, and first profile creation checks the corresponding cohort again after lifecycle locks. A supplier installation alone cannot create a retail profile. Existing business capabilities, stock and orders remain valid under their current tenant/instance authorization after later guild changes; membership never grants another business's data or replaces the separate store admission record.
 
 New stores use `hosted-store@1.1.0` / `storefront@1.1.0`, with the original
 storefront contract bytes and twelve registered capabilities. Existing 1.0.0
@@ -208,3 +253,16 @@ published links, themes, product photos and social image preparation. The photo
 suite must run with FREEDOM_E2E_STORE_PHOTO_FIXTURE=1, not as a skipped default
 pass. Local Chromium and PostgreSQL 17 results are source evidence; required
 PostgreSQL 18 CI and real phone/production acceptance remain separate.
+
+## Live merchant stock and order-taking state
+
+Private merchant reads distinguish held reservations from remaining paid
+allocations. 已占用 includes both; 可售 and the supplier console's 可用 equal
+`available`. See [inventory observations](hosted/inventory-reservations.md) for
+strict/reporting semantics and [seller console](seller-console/README.md) for the
+shared readiness presentation. Historical display-only/v1 descriptions above
+remain scoped to those increments; checkout availability comes from the existing
+site flags and current store readiness. No migration, capability release, host
+flag change or new payment/shipping command is introduced by this presentation
+change. Drop-ship consent (C2), exposing supplier breakdowns to retailers and
+stability guarantees for CSV consumers require separate product decisions.

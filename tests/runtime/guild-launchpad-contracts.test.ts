@@ -421,7 +421,7 @@ test('guild launchpad contracts regenerate deterministically and match generated
     cwd: root, env: verificationEnvironment(), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /30 v1 guild launchpad schemas, 15 bundles and one v2 assembly schema checked\/generated\./);
+  assert.match(result.stdout, /30 v1 guild launchpad schemas, 18 bundles and one v2 assembly schema checked\/generated\./);
 });
 
 test('generated guild launchpad schemas agree with Zod except listed server-only rules', () => {
@@ -766,14 +766,15 @@ test('supplier console strict schemas accept private projections and reject inco
   assert.equal(SupplierTodoSchema.safeParse({...todo,extra:1}).success,false);
   assert.equal(SupplierTodosSchema.safeParse({state:'ready',items:Array(21).fill(todo),truncated:true}).success,false);
   const product={product_id:id,sku:'P0001',title:'商品',description:'介紹',currency:'TWD',supply_price_minor:400,shipping_minor:50,
-    stock:10,reserved:3,available:7,version:'1',offer:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+    stock:10,reserved:3,available:7,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
   assert.equal(SupplierProductSchema.safeParse(product).success,true);
   for(const value of [{...product,available:8},{...product,sku:'bad sku'},{...product,cost_minor:400}])assert.equal(SupplierProductSchema.safeParse(value).success,false);
   const products={profile:'freedom.supplier-console.products/v1',as_of:overview.as_of,items:[product],limit:200};
   assert.equal(SupplierProductsSchema.safeParse(products).success,true);
   assert.equal(SupplierProductsSchema.safeParse({...products,extra:1}).success,false);
-  const detail={profile:'freedom.supplier-console.product/v1',as_of:overview.as_of,product,shipping_terms:'出貨',return_terms:'退貨',current_offer:null,selections:[],truncated:false};
+  const detail={profile:'freedom.supplier-console.product/v1',as_of:overview.as_of,product,msrp_minor:null,minimum_order_quantity:null,lead_time_days:null,shipping_terms:'出貨',return_terms:'退貨',current_offer:null,selections:[],truncated:false};
   assert.equal(SupplierProductDetailSchema.safeParse(detail).success,true);
+  assert.equal(SupplierProductDetailSchema.safeParse({...detail,msrp_minor:100000000,minimum_order_quantity:10000,lead_time_days:0}).success,true);
   assert.equal(SupplierProductDetailSchema.safeParse({...detail,extra:1}).success,false);
   const offerFixture={offer_id:id,product_id:id,supplier_name:'供貨茶坊',source_version:'1',terms:{cost_minor:400,shipping_minor:50,shipping_terms:'三天內出貨',return_terms:'瑕疵品退換',title:'茶杯',description:'',currency:'TWD'},terms_sha256:'a'.repeat(64),state:'offered',version:'1'};
   const selection={selection_id:id,offer:offerFixture,sku:'cup-1',seller_name:'合作店',retail_price_minor:1100,state:'sellable',listing_sha256:offerFixture.terms_sha256,version:'1'};
@@ -826,4 +827,39 @@ test('distribution photo command ack compares bounded decimals without throwing'
   }
   assert.equal(parsed(command('abc', '1.2')).success, false);
   assert.equal(parsed({...command('1', '1'), changed: 'yes' as unknown as boolean}).success, false);
+});
+
+test('generated supply bundles accept old snapshots, set references and nullable private reads without accepting null snapshots',()=>{
+ const references={msrp_minor:100000000,minimum_order_quantity:10000,lead_time_days:0},empty={msrp_minor:null,minimum_order_quantity:null,lead_time_days:null};
+ const terms={title:'商品',description:'介紹',currency:'TWD',cost_minor:400,shipping_minor:50,shipping_terms:'包裝寄送',return_terms:'瑕疵換貨'};
+ const offer={offer_id:id,product_id:id,supplier_name:'供應商',source_version:'1',terms,terms_sha256:'a'.repeat(64),state:'offered',version:'1'};
+ const selection={selection_id:id,offer,sku:'P0001',seller_name:'店家',retail_price_minor:100,state:'sellable',listing_sha256:'b'.repeat(64),version:'1'};
+ const product={product_id:id,sku:'P0001',title:'商品',description:'介紹',currency:'TWD',supply_price_minor:400,shipping_minor:50,stock:10,reserved:0,available:10,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+ const cases:{bundle:string;name:string;value:unknown;valid:boolean}[]=[];
+ const sample=(bundle:string,name:string,value:unknown,valid=true)=>cases.push({bundle,name,value,valid});
+ for(const optional of [{},references]){
+  const o={...offer,terms:{...terms,...optional}},l={...selection,offer:o};
+  sample('hosted-distribution','offer',o);sample('hosted-distribution','offers',{items:[o],truncated:false});
+  sample('hosted-distribution','selection',l);sample('hosted-distribution','selections',{items:[l],truncated:false});
+  sample('hosted-distribution','offer-page',{photo:null,offer:o,published_at:'2026-10-20T00:00:00.000Z',supplier:{name:'供應商',public_path:null},selection:l,decision_note:null,sale_paths:{display:{available:true,reason:null},reservation:{available:false,reason:'unknown'},checkout:{available:false,reason:'fulfilment_not_agreed'}}});
+  sample('supplier-console','request',{profile:'freedom.supplier-console.request/v1',as_of:'2026-10-20T00:00:00.000Z',request:{...l,partner_id:id2},product:{product_id:id,offer:null}});
+  sample('supplier-console','partner',{profile:'freedom.supplier-console.partner/v1',as_of:'2026-10-20T00:00:00.000Z',partner:{partner_id:id2,name:'店家',cooperation:product.cooperation,products:1},selections:[l],truncated:false});
+ }
+ for(const optional of [{},references,empty])sample('hosted-supply-terms','input',{cost_minor:400,shipping_minor:50,shipping_terms:'寄送',return_terms:'退貨',...optional});
+ for(const optional of [references,empty]){
+  sample('hosted-supply-terms','view',{product_id:id,currency:'TWD',cost_minor:400,shipping_minor:50,shipping_terms:'寄送',return_terms:'退貨',...optional,stock:10,reserved:0,available:10,current_offer:{terms:{...terms,...references},supplier_name:'供應商',published_at:'2026-10-20T00:00:00.000Z',terms_sha256:offer.terms_sha256},version:'1',transaction_state:'not_enabled'});
+  sample('supplier-console','product',{profile:'freedom.supplier-console.product/v1',as_of:'2026-10-20T00:00:00.000Z',product,...optional,shipping_terms:'寄送',return_terms:'退貨',current_offer:{...offer,terms:{...terms,...references}},selections:[{...selection,partner_id:id2}],truncated:false});
+ }
+ for(const key of Object.keys(references))sample('hosted-distribution','offer',{...offer,terms:{...terms,[key]:null}},false);
+ const bundles=Object.fromEntries([...new Set(cases.map(c=>c.bundle))].map(name=>[name,JSON.parse(readFileSync(`${root}/contracts/guild-launchpad/v1/${name}.schema.json`,'utf8'))]));
+ const script=`import json,sys
+from jsonschema import Draft202012Validator,FormatChecker
+x=json.load(sys.stdin)
+for c in x['cases']:
+ s=x['bundles'][c['bundle']]['$defs'][c['name']]
+ Draft202012Validator.check_schema(s)
+ assert Draft202012Validator(s,format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c
+print(len(x['cases']))`;
+ const result=spawnSync(python,['-X','utf8','-c',script],{cwd:root,env:verificationEnvironment(),encoding:'utf8',input:JSON.stringify({bundles,cases})});
+ assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),24);
 });

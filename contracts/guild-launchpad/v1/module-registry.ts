@@ -47,9 +47,9 @@ export const DependencyChoiceSchema = z.discriminatedUnion('choice', [ReuseDepen
 export const EligibilitySchema = z.object({
   can_launch: z.boolean(),
   reason_codes: z.array(z.enum([
-    'guild_full_member_required', 'tenant_manage_required', 'policy_unconfigured', 'application_not_available',
+    'guild_full_member_required', 'guild_member_required', 'commerce_guild_member_required', 'tenant_manage_required', 'policy_unconfigured', 'application_not_available',
   ])).max(8),
-  required_guild_tier: z.literal('full'),
+  required_guild_tier: z.enum(['intern', 'full']),
   tenant_action: z.enum(['select', 'create', 'continue', 'denied']),
   policy_revision: Version,
 }).strict();

@@ -200,7 +200,7 @@ export const RecoveryCasePageSchema = PageSchema(RecoveryCaseViewSchema);
 
 // Wire problem codes for this slice. HTTP status mapping lives in the routes.
 export const TENANT_AUTHORITY_PROBLEM_CODES = [
-  'session_expired', 'tenant_capability_denied', 'guild_full_member_required', 'fresh_auth_required',
+  'session_expired', 'tenant_capability_denied', 'guild_full_member_required', 'guild_member_required', 'commerce_guild_member_required', 'fresh_auth_required',
   'fresh_auth_rate_limited', 'recovery_authority_required', 'policy_unconfigured', 'tenant_not_found',
   'invitation_not_found', 'transfer_not_found', 'last_owner_required', 'invitation_expired',
   'transfer_expired', 'transfer_authority_changed', 'transfer_pending', 'transfer_closed',

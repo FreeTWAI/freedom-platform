@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import type { Pool } from 'pg';
 import { OpaqueId } from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import { RemoveProductPhotoInputSchema } from '../../../../contracts/guild-launchpad/v1/hosted-store-media.js';
+import {SupplyOfferPhotoPreviewQuerySchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution.js';
 import { AssetStorageError, readBounded } from '../../../../packages/asset-storage/index.js';
 import { Problem, requireCondition } from '../../../../packages/shared/problem.js';
 import { PRODUCT_PHOTO_POLICY } from '../../../../modules/agent-commerce/hosted/media.js';
@@ -12,7 +13,7 @@ import type { PlatformRuntime } from '../runtime.js';
 import type { PlatformEnv } from '../module-context.js';
 import { privateCache, singleQuery, commandHeaders, etag } from './tenant-http.js';
 
-type PhotoRuntime=Pick<PlatformRuntime,'storePhotoAssets'|'storePhotoAssetStore'|'storePhotoUploadsEnabled'|'supplierConsoleEnabled'>;
+type PhotoRuntime=Pick<PlatformRuntime,'storePhotoAssets'|'storePhotoAssetStore'|'storePhotoUploadsEnabled'|'supplierConsoleEnabled'|'guildLaunchpadEnabled'|'supplyOfferPhotosEnabled'>;
 export const storePhotosInstalled=(runtime:PhotoRuntime)=>Boolean(runtime.storePhotoAssetStore);
 export const storePhotoUploadsInstalled=(runtime:PhotoRuntime)=>storePhotosInstalled(runtime)&&Boolean(runtime.storePhotoAssets)&&runtime.storePhotoUploadsEnabled===true;
 export function isStorePhotoUpload(method:string,path:string){return method==='POST'&&/^\/api\/v1\/tenants\/[0-9A-Fa-f-]{36}\/storefronts\/[0-9A-Fa-f-]{36}\/products\/[0-9A-Fa-f-]{36}\/photo$/.test(path);}
@@ -20,7 +21,7 @@ export function checkStorePhotoHeaders(contentType?:string,contentLength?:string
   requireCondition((PRODUCT_PHOTO_POLICY.input_content_types as readonly string[]).includes(contentType??''),415,'product_photo_format','請選擇 JPEG、PNG 或 WebP 照片。');
   if(contentLength!==undefined)requireCondition(/^\d+$/.test(contentLength)&&Number(contentLength)<=PRODUCT_PHOTO_POLICY.input_max_bytes,413,'product_photo_too_large','照片需為 2 MB 以下的檔案。');
 }
-async function sourceBytes(request:Request){
+export async function storePhotoSourceBytes(request:Request){
   requireCondition(request.body,422,'invalid_product_photo','請先選擇照片。');
   try{const bytes=await readBounded(request.body,PRODUCT_PHOTO_POLICY.input_max_bytes);requireCondition(bytes.length>0,422,'invalid_product_photo','請先選擇照片。');return Buffer.from(bytes);}
   catch(error){if(error instanceof AssetStorageError&&error.code==='too_large')throw new Problem(413,'product_photo_too_large','照片需為 2 MB 以下的檔案。');throw error;}
@@ -39,7 +40,7 @@ export function createHostedStoreMediaRoutes(pool:Pool,runtime:PhotoRuntime){
   app.post(root+'/products/:product_id/photo',async c=>{
     RemoveProductPhotoInputSchema.parse(singleQuery(c));checkStorePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
     const h=commandHeaders(c,true),[t,i]=ids(c),productId=OpaqueId.parse(c.req.param('product_id'));
-    const view=await uploadProductPhoto(pool,c.get('actor'),t,i,productId,h.key,h.expected!,{bytes:await sourceBytes(c.req.raw),mime:c.req.header('Content-Type')!},runtime.storePhotoAssets,runtime.storePhotoUploadsEnabled===true,scope);
+    const view=await uploadProductPhoto(pool,c.get('actor'),t,i,productId,h.key,h.expected!,{bytes:await storePhotoSourceBytes(c.req.raw),mime:c.req.header('Content-Type')!},runtime.storePhotoAssets,runtime.storePhotoUploadsEnabled===true,scope);
     etag(c,view.current.version);return c.json(view);
   });
   app.post(root+'/products/:product_id/photo/remove',async c=>{
@@ -47,8 +48,10 @@ export function createHostedStoreMediaRoutes(pool:Pool,runtime:PhotoRuntime){
     const view=await removeProductPhoto(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id')),h.key,h.expected!,scope);etag(c,view.current.version);return c.json(view);
   });
   app.on(['GET','HEAD'],root+'/products/:product_id/photo/:version',async c=>{
-    RemoveProductPhotoInputSchema.parse(singleQuery(c));const[t,i]=ids(c);
-    return imageResponse(c,await readPrivateProductPhoto(pool,runtime.storePhotoAssetStore!,c.get('actor'),t,i,c.req.param('product_id')!,c.req.param('version')!,scope));
+    const query=singleQuery(c),[t,i]=ids(c);
+    const offerShare=Object.keys(query).length?SupplyOfferPhotoPreviewQuerySchema.parse(query):undefined;
+    if(offerShare)requireCondition(runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&runtime.supplyOfferPhotosEnabled===true,404,'not_found','找不到這個頁面。');
+    return imageResponse(c,await readPrivateProductPhoto(pool,runtime.storePhotoAssetStore!,c.get('actor'),t,i,c.req.param('product_id')!,c.req.param('version')!,scope,offerShare));
   });
   return app;
 }

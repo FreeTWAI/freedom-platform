@@ -26,6 +26,26 @@ export const SellerCheckoutOrderQuerySchema=z.object({lifecycle:z.enum(['open','
   display_number:z.string().regex(/^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\s\S])/).optional(),payment_method:z.enum(['immediate_card','bank_transfer','cash_on_meetup']).optional(),
   awaiting_offline_payment:z.literal('true').optional(),cursor:z.string().max(512).optional(),limit:limit.optional()}).strict();
 
+/** Fixed SQL vocabulary for both the order list and overview counts (co/o aliases). */
+export const sellerOrderPredicates={
+  scope:"co.tenant_id=$1 AND co.instance_id=$2 AND o.public_shop_id=$3 AND o.order_profile='hosted_checkout'",
+  needs_action:"EXISTS(SELECT 1 FROM commerce_exception_cases e WHERE e.order_id=co.order_id AND e.tenant_id=co.tenant_id AND e.instance_id=co.instance_id AND e.status='open')",
+  awaiting_offline_payment:`(co.lifecycle_state='open' AND co.payment_method<>'immediate_card' AND NOT ${confirmedPaymentSQL('co.order_id')})`,
+} as const;
+export const sellerOrderFiltersSQL=`AND ($4::text IS NULL OR co.lifecycle_state=$4) AND ($5::text IS NULL OR co.display_number=$5)
+  AND (NOT $6::boolean OR ${sellerOrderPredicates.needs_action}) AND ($7::text IS NULL OR co.payment_method=$7)
+  AND ($8::boolean IS NOT TRUE OR ${sellerOrderPredicates.awaiting_offline_payment})`;
+export async function sellerOverviewOrderCounts(q:PoolClient,tenantId:string,instanceId:string,shopId:string){
+  const counts={} as Record<'open'|'awaiting_offline_payment'|'needs_action',{count:number;more:boolean}>;
+  for(const key of ['open','awaiting_offline_payment','needs_action'] as const){
+    const n=(await q.query<{n:number}>(`SELECT count(*)::int AS n FROM (SELECT 1 FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
+      WHERE ${sellerOrderPredicates.scope} ${sellerOrderFiltersSQL} LIMIT 100) bounded`,
+    [tenantId,instanceId,shopId,key==='open'?'open':null,null,key==='needs_action',null,key==='awaiting_offline_payment'])).rows[0].n;
+    counts[key]={count:Math.min(n,99),more:n>99};
+  }
+  return counts;
+}
+
 export function sellerCheckoutRead<T>(pool:Pool,actor:Actor,tenantId:string,instanceId:string,capability:string,
   run:(q:PoolClient,context:SellerCheckoutContext)=>Promise<T>) {
   return storeRead(pool,actor,tenantId,instanceId,capability,async(q,tenant)=>{
@@ -82,11 +102,8 @@ export async function listSellerCheckoutOrders(pool:Pool,actor:Actor,tenantId:st
     const after=sellerCursorPosition(codec,query.cursor,binding),size=query.limit??20;
     const rows=(await q.query(`SELECT co.order_id,to_char(o.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at
       FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
-      WHERE co.tenant_id=$1 AND co.instance_id=$2 AND o.public_shop_id=$3 AND o.order_profile='hosted_checkout'
-      AND ($4::text IS NULL OR co.lifecycle_state=$4) AND ($5::text IS NULL OR co.display_number=$5)
-      AND (NOT $6::boolean OR EXISTS(SELECT 1 FROM commerce_exception_cases e WHERE e.order_id=co.order_id AND e.tenant_id=co.tenant_id AND e.instance_id=co.instance_id AND e.status='open'))
-      AND ($7::text IS NULL OR co.payment_method=$7)
-      AND ($8::boolean IS NOT TRUE OR (co.lifecycle_state='open' AND co.payment_method<>'immediate_card' AND NOT ${confirmedPaymentSQL('co.order_id')}))
+      WHERE ${sellerOrderPredicates.scope}
+      ${sellerOrderFiltersSQL}
       AND ($9::timestamptz IS NULL OR (o.created_at,o.order_id)<($9::timestamptz,$10::uuid)) ORDER BY o.created_at DESC,o.order_id DESC LIMIT $11`,
     [tenantId,instanceId,context.profile.storefront_shop_id,query.lifecycle??null,query.display_number??null,query.needs_action==='true',query.payment_method??null,query.awaiting_offline_payment==='true',after?.at??null,after?.id??null,size+1])).rows;
     const page=rows.slice(0,size),payments=await options.payment?.summarize(q,page.map(r=>r.order_id)),items=[];

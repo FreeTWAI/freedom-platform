@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import type { PublicStoreProjection } from '../../contracts/guild-launchpad/v1/storefront.js';
@@ -7,8 +7,9 @@ import { productHtml, storeHtml, storeMissingHtml } from '../../modules/agent-co
 import { cartPageHtml, checkoutPageHtml } from '../../modules/agent-commerce/storefront/pages.js';
 import { checkoutHarness, ok, ports, type CheckoutHarness } from './hosted-checkout-harness.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
+import { escapeHtml } from '../../packages/shared/html.js';
 
-const V1_SYNTHETIC_PROJECTION: PublicStoreProjection = {
+const SYNTHETIC_PROJECTION: PublicStoreProjection = {
   slug: 'synthetic-tea-shop',
   name: '山邊合成茶鋪',
   brand: 'Mountain Synthetic',
@@ -33,19 +34,19 @@ const V1_SYNTHETIC_PROJECTION: PublicStoreProjection = {
   ],
 };
 
-const V1_PUBLIC_ORIGIN = { publicOrigin: 'https://shop.example.test/' } as const;
+const PUBLIC_ORIGIN = { publicOrigin: 'https://shop.example.test/' } as const;
 
-const V1_PINNED_SHA256 = {
-  gridDefault: 'e4632c75738352ee8ef2be7b6a545a159ff16a7d749df304025ef2fa47e2a9cd',
-  gridOrigin: '84e1677603b9639d81d47be0e5a79ab7a7f40b9ce1d4fa1b3c4061a919430692',
-  gridPreview: 'ac59754059828ceec03cb7e0ef698da637a1d54a43bf7add560334875df56807',
-  listDefault: 'e7bedbcc611309f4f973f6a83b111a15bf3915536938d89ff3078524a0ee0410',
-  listOrigin: '42359680c955f14aa7d48719a1b2be8faee4a17474f578a9f0361741471c33e4',
-  listPreview: '3afbc107234a93b40f29cf4cfdd175179ab40b83bca82da6b1e1be5e0ee83181',
-  product1Default: '8d5234fdff1a2c91482b853527df1cd26114d0b8c592e421261edd382704fd2f',
-  product1Origin: '2fd1eee6b2d9e20e92ef043b2c13c51818ffe6c9833d2380bb202340192cf699',
-  product2Default: '5923e0b9e9c823463e66403d22da965382390e4c616cdd590c39a4f648703062',
-  product2Origin: 'ad38b02cca7877d1b57cbc3aea2d613fb66d19d4ed43a07aa83f77edc19a85cc',
+const PINNED_SHA256 = {
+  gridDefault: 'f7467d79086fee527db258c6531f118e170bf65cd8e7475a4d6d51b4921d8157',
+  gridOrigin: '6f0e2605be0b35402d29ab15715bafeb6a946befeb354fd7e22455ff7c712e64',
+  gridPreview: '779064abb725543ad5829514c67f4d8ccaee96c092ec72c0d012eebf27794acd',
+  listDefault: 'c5e42139648aa6d57f60340976815d1519a383dc472fb580552ddbcf1fab971e',
+  listOrigin: '5f739f542cc3ba541737cfa2b46db408384926de833741b570c771e259b8aa05',
+  listPreview: '725cc61d78e40c993fb6d72a725b7a9f85eabc1a07c1530a09fd5ec5267bd256',
+  product1Default: 'a2c5469d44a48c1019a9de2b15efb14a3e9e9ffd1db38d40cdfa6adf182e839a',
+  product1Origin: '72c64cc759eb25b9a9e51e6e616589df33faa728b5eb4d5810dd41db7a7c0647',
+  product2Default: 'ff464281af4262f44e72bc40b80c1b250d1dc999e12dd1a7f047eebde896bf6a',
+  product2Origin: 'e6a794b4c41896ffbea119dd15012ed926e9a2d4a20fc2f49afe35e517a9c482',
   missingStore: '5fafd27a9f9b2e25e9d060e4009528265763ce8b9a4f1b37edd1275f180f5905',
   missingProduct: '5ded05ead3b2a30f84c4a7353f83f57a1b28f252b4b4c04cb30bff53144ee53d',
 } as const;
@@ -107,75 +108,75 @@ after(async () => {
   await x?.stop();
 });
 
-test('v1 storefront renderer bytes stay byte-identical across templates, publicOrigin, preview, explicit {open: false} and missing pages', () => {
-  assert.equal(sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1')), V1_PINNED_SHA256.gridDefault);
+test('merchant storefront snapshots cover templates, publicOrigin, private preview, closed checkout and missing pages', () => {
+  assert.equal(sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1')), PINNED_SHA256.gridDefault);
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], undefined, { open: false })),
-    V1_PINNED_SHA256.gridDefault,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], undefined, { open: false })),
+    PINNED_SHA256.gridDefault,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], V1_PUBLIC_ORIGIN)),
-    V1_PINNED_SHA256.gridOrigin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], PUBLIC_ORIGIN)),
+    PINNED_SHA256.gridOrigin,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], V1_PUBLIC_ORIGIN, { open: false })),
-    V1_PINNED_SHA256.gridOrigin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], PUBLIC_ORIGIN, { open: false })),
+    PINNED_SHA256.gridOrigin,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true })),
-    V1_PINNED_SHA256.gridPreview,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true })),
+    PINNED_SHA256.gridPreview,
   );
   assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true }, { open: true })),
-    V1_PINNED_SHA256.gridPreview,
-  );
-
-  assert.equal(sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1')), V1_PINNED_SHA256.listDefault);
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], undefined, { open: false })),
-    V1_PINNED_SHA256.listDefault,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], V1_PUBLIC_ORIGIN)),
-    V1_PINNED_SHA256.listOrigin,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], V1_PUBLIC_ORIGIN, { open: false })),
-    V1_PINNED_SHA256.listOrigin,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true })),
-    V1_PINNED_SHA256.listPreview,
-  );
-  assert.equal(
-    sha256(storeHtml(V1_SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true }, { open: true })),
-    V1_PINNED_SHA256.listPreview,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-grid-v1', [], { preview: true }, { open: true })),
+    PINNED_SHA256.gridPreview,
   );
 
-  assert.equal(sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001') ?? ''), V1_PINNED_SHA256.product1Default);
+  assert.equal(sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1')), PINNED_SHA256.listDefault);
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], undefined, { open: false }) ?? ''),
-    V1_PINNED_SHA256.product1Default,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], undefined, { open: false })),
+    PINNED_SHA256.listDefault,
   );
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], V1_PUBLIC_ORIGIN) ?? ''),
-    V1_PINNED_SHA256.product1Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], PUBLIC_ORIGIN)),
+    PINNED_SHA256.listOrigin,
   );
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0001', [], V1_PUBLIC_ORIGIN, { open: false }) ?? ''),
-    V1_PINNED_SHA256.product1Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], PUBLIC_ORIGIN, { open: false })),
+    PINNED_SHA256.listOrigin,
   );
-  assert.equal(sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0002') ?? ''), V1_PINNED_SHA256.product2Default);
   assert.equal(
-    sha256(productHtml(V1_SYNTHETIC_PROJECTION, 'P0002', [], V1_PUBLIC_ORIGIN) ?? ''),
-    V1_PINNED_SHA256.product2Origin,
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true })),
+    PINNED_SHA256.listPreview,
+  );
+  assert.equal(
+    sha256(storeHtml(SYNTHETIC_PROJECTION, 'catalog-list-v1', [], { preview: true }, { open: true })),
+    PINNED_SHA256.listPreview,
   );
 
-  assert.equal(sha256(storeMissingHtml()), V1_PINNED_SHA256.missingStore);
-  assert.equal(sha256(storeMissingHtml(true)), V1_PINNED_SHA256.missingProduct);
+  assert.equal(sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001') ?? ''), PINNED_SHA256.product1Default);
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], undefined, { open: false }) ?? ''),
+    PINNED_SHA256.product1Default,
+  );
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], PUBLIC_ORIGIN) ?? ''),
+    PINNED_SHA256.product1Origin,
+  );
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0001', [], PUBLIC_ORIGIN, { open: false }) ?? ''),
+    PINNED_SHA256.product1Origin,
+  );
+  assert.equal(sha256(productHtml(SYNTHETIC_PROJECTION, 'P0002') ?? ''), PINNED_SHA256.product2Default);
+  assert.equal(
+    sha256(productHtml(SYNTHETIC_PROJECTION, 'P0002', [], PUBLIC_ORIGIN) ?? ''),
+    PINNED_SHA256.product2Origin,
+  );
+
+  assert.equal(sha256(storeMissingHtml()), PINNED_SHA256.missingStore);
+  assert.equal(sha256(storeMissingHtml(true)), PINNED_SHA256.missingProduct);
 });
 
-test('B01 and B03 serve open variants only when checkout is open, and keep v1 bytes when closed, quarantined or unadmitted', async () => {
+test('B01 and B03 serve open variants only when checkout is open, and keep closed variants when quarantined or unadmitted', async () => {
   const s = await x.store(5);
   const soldOut = await x.store(0);
   const openApp = makeApp({ checkoutEnabled: true });
@@ -188,7 +189,10 @@ test('B01 and B03 serve open variants only when checkout is open, and keep v1 by
     await x.app.request(`${x.h.origin}/shops/${s.slug}/products/${s.product.sku}`)
   ).text();
   assert.equal(closedStoreHtml.includes('<script'), false);
-  assert.ok(closedStoreHtml.includes('<span>會員的商品與商店</span>'));
+  assert.ok(closedStoreHtml.includes('<nav class="shop-navigation" aria-label="商店導覽">'));
+  assert.ok(closedStoreHtml.includes(`<a class="shop-top-store" href="/shops/${s.slug}">合成商店</a>`));
+  assert.ok(closedStoreHtml.includes(`<a href="/shops/${s.slug}/order-access">訂單查詢</a>`));
+  assert.ok(closedProductHtml.includes(`<a href="/shops/${s.slug}/order-access">訂單查詢</a>`));
   assert.ok(closedStoreHtml.includes('登入查看預留狀態'));
   assert.ok(closedStoreHtml.includes('查詢我的預留'));
   assert.equal(closedProductHtml.includes('<script'), false);
@@ -266,7 +270,7 @@ test('B01 and B03 serve open variants only when checkout is open, and keep v1 by
   assert.deepEqual(await tableCounts(), before);
 });
 
-test('B04 cart route serves no-store HTML shell identically with checkout on and off, and 404s for unknown or unpublished stores', async () => {
+test('B04 cart route keeps the OFF shell and adds only the enabled buyer marker, and 404s for unknown or unpublished stores', async () => {
   const s = await x.store(5);
   const openApp = makeApp({ checkoutEnabled: true });
   const before = await tableCounts();
@@ -285,7 +289,8 @@ test('B04 cart route serves no-store HTML shell identically with checkout on and
     assert.equal(res.headers.get('set-cookie'), null);
   }
 
-  assert.equal(closedHtml, openHtml);
+  assert.equal(openHtml, cartPageHtml({ slug: s.slug, name: '合成商店' }, true));
+  assert.equal(openHtml.replace(' data-buyer-journey="true"', ''), closedHtml);
   assert.equal(closedHtml, cartPageHtml({ slug: s.slug, name: '合成商店' }));
   assert.ok(closedHtml.includes('<title>購物車｜合成商店｜自由工坊</title>'));
   assert.ok(closedHtml.includes('<body><a class="shop-skip-link" href="#main">跳到主要內容</a>'));
@@ -327,7 +332,7 @@ test('B05 is a no-store shell with no order effects and follows store publicatio
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('set-cookie'), null);
     assert.equal(response.headers.get('x-robots-tag'), 'noindex');
-    assert.equal(await response.text(), checkoutPageHtml({slug: s.slug, name: '合成商店'}));
+    assert.equal(await response.text(), checkoutPageHtml({slug: s.slug, name: '合成商店'}, candidate === app));
   }
   const missing = await app.request(`${x.h.origin}/shops/no-such-store/checkout`);
   assert.equal(missing.status, 404);
@@ -384,4 +389,57 @@ test('HTML characters in store name and product title are escaped in B01, B03 an
   assert.equal(/\bon[a-z]+\s*=/i.test(b04Html.replaceAll(escapedXss, '')), false);
 
   assert.deepEqual(await tableCounts(), before);
+});
+
+test('merchant service text follows publication, draft privacy and withdrawal across buyer pages', async () => {
+  const s = await x.store(5);
+  const published = '合成店主負責商品與售後\n聯絡：published@example.test\n交付方式請先與店主確認。';
+  const draft = '新的合成客服：draft@example.test\n<script>alert("description")</script>\nhttps://example.test/support';
+  const read = async () => ok(await x.h.call('GET', s.root, s.owner, undefined, {}, x.app));
+  ok(await x.send(s, '', {description: published}, (await read()).version, 'PATCH'));
+  await x.publish(s);
+  const paths = ['', `/products/${s.product.sku}`, '/cart', '/checkout', '/order-access', `/orders/${randomUUID()}`, '/orders/invalid', '/payment-return/invalid'];
+  const pages = async () => Promise.all(paths.map(async path => {
+    const response = await x.app.request(`${x.h.origin}/shops/${s.slug}${path}`);
+    assert.equal(response.status, path.endsWith('/invalid') ? 404 : 200, path);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    return response.text();
+  }));
+  const first = await pages();
+  for (const body of first) {
+    assert.ok(body.includes(escapeHtml(published)));
+    assert.ok(body.includes('href="#shop-information"'));
+    assert.ok(!body.includes(s.owner.user.email));
+  }
+  const publicJson = await (await x.app.request(`${x.h.origin}/api/v1/public/stores/${s.slug}`)).text();
+  const version = (await read()).version;
+  ok(await x.send(s, '', {description: draft}, version, 'PATCH'));
+  assert.equal((await x.send(s, '', {description: 'stale@example.test'}, version, 'PATCH')).status, 412);
+  assert.deepEqual(await pages(), first, 'saving a draft cannot change any public buyer page');
+  assert.equal(await (await x.app.request(`${x.h.origin}/api/v1/public/stores/${s.slug}`)).text(), publicJson);
+  const preview = await x.h.call('GET', s.root + '/preview-page', s.owner, undefined, {}, x.app);
+  assert.equal(preview.status, 200);
+  const privateHtml = await preview.response.clone().text();
+  assert.ok(privateHtml.includes(escapeHtml(draft)));
+  assert.ok(!privateHtml.includes('aria-label="商店導覽"'));
+  assert.equal((await x.h.call('GET', s.root + '/preview-page', undefined, undefined, {}, x.app)).status, 401);
+  await x.publish(s);
+  for (const body of await pages()) {
+    assert.ok(body.includes(escapeHtml(draft)));
+    assert.ok(!body.includes('published@example.test'));
+    assert.ok(!body.includes('<script>alert'));
+    assert.ok(!body.includes('href="https://example.test/support"'));
+  }
+  ok(await x.send(s, '', {description: ''}, (await read()).version, 'PATCH'));
+  await x.publish(s);
+  for (const body of await pages()) {
+    assert.ok(body.includes('店主尚未補充商店說明與聯絡方式。'));
+    assert.ok(!body.includes('draft@example.test'));
+  }
+  ok(await x.send(s, '/unpublish', {}, (await read()).version));
+  for (const path of paths) {
+    const response = await x.app.request(`${x.h.origin}/shops/${s.slug}${path}`);
+    assert.equal(response.status, 404);
+    assert.ok(!(await response.text()).includes('shop-merchant-info'));
+  }
 });

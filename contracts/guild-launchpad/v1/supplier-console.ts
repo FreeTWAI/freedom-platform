@@ -1,9 +1,9 @@
 import {z} from 'zod';
 import {OpaqueId, Version, NonNegativeDecimal, NON_NEGATIVE_DECIMAL_PATTERN} from './primitives.js';
-import {CurrencySchema, ProductViewSchema} from './storefront.js';
+import {CurrencySchema, ProductViewSchema, MerchantInventorySchema, merchantInventoryMatches} from './storefront.js';
 import {SupplyCatalogSetupInputSchema} from './hosted-supply-catalog.js';
 import {SupplyTermsInputSchema, SupplyTermsSchema} from './hosted-supply-terms.js';
-import {DistributionSchema, SupplyOfferSchema} from './hosted-distribution.js';
+import {DistributionSchema, SupplyOfferSchema, SupplyOfferPhotoStateSchema} from './hosted-distribution.js';
 import {OrderPageQuerySchema} from './hosted-order.js';
 import {SupplierReservationSchema} from './hosted-shared-order.js';
 
@@ -35,6 +35,7 @@ export const SupplierTodosSchema = z.discriminatedUnion('state', [
   z.object({state: z.literal('unavailable'), reason: z.literal('store_write_required')}).strict(),
 ]);
 export const SupplierOverviewSchema = z.object({
+  inventory_inconsistent_count: z.number().int().min(0).max(200).optional(),
   profile: z.literal('freedom.supplier-console.overview/v1'),
   tenant_id: OpaqueId, instance_id: OpaqueId, as_of: time,
   metrics: z.object({
@@ -71,8 +72,10 @@ export const SupplierProductSchema = z.object({
   /** Product version used as If-Match by the existing supply-product, supply-terms and supply-offer commands. */
   version: Version,
   offer: SupplierProductOfferSchema.nullable(),
+  offer_photo: SupplyOfferPhotoStateSchema.nullable(),
   cooperation: SupplierCooperationCountsSchema,
-}).strict().refine(row => row.available === row.stock - row.reserved, 'available must equal stock minus reserved');
+  inventory: MerchantInventorySchema.optional(),
+}).strict().refine(merchantInventoryMatches, 'inventory must match product counters').refine(row => row.available === row.stock - row.reserved, 'available must equal stock minus reserved');
 export const SupplierProductsSchema = z.object({
   profile: z.literal('freedom.supplier-console.products/v1'), as_of: time,
   /** The complete owned set; the hosted product limit keeps it at most 200. */
@@ -88,6 +91,9 @@ export const SupplierProductSelectionSchema = DistributionSchema.extend({
 export const SupplierProductDetailSchema = z.object({
   profile: z.literal('freedom.supplier-console.product/v1'), as_of: time,
   product: SupplierProductSchema,
+  msrp_minor: SupplyTermsSchema.shape.msrp_minor,
+  minimum_order_quantity: SupplyTermsSchema.shape.minimum_order_quantity,
+  lead_time_days: SupplyTermsSchema.shape.lead_time_days,
   shipping_terms: SupplyTermsInputSchema.shape.shipping_terms, return_terms: SupplyTermsInputSchema.shape.return_terms,
   /** The currently offered version with its frozen terms, or null when nothing is offered. */
   current_offer: SupplyOfferSchema.nullable(),
@@ -190,6 +196,7 @@ const changeKinds = {
   'storefront.supply-terms.update': 'product', 'storefront.product.photo.upload': 'product',
   'storefront.product.photo.remove': 'product',
   'storefront.supply-offer.publish': 'offer', 'storefront.supply-offer.withdraw': 'offer',
+  'storefront.supply-offer.photo.share': 'offer', 'storefront.supply-offer.photo.stop': 'offer',
   'storefront.distribution.decide': 'request',
 } as const;
 export const SupplierChangeOperationSchema = z.enum(Object.keys(changeKinds) as [keyof typeof changeKinds, ...(keyof typeof changeKinds)[]]);
@@ -219,6 +226,7 @@ export const SupplierChangesSchema = z.object({
 /** One supply catalog's to-dos for the guild block, by the overview's definitions at as_of. Read per catalog and never
  * summed across businesses; a caller without store:write gets unavailable, never zeros. */
 export const SupplierSummarySchema = z.object({
+  inventory_inconsistent_count: z.number().int().min(0).max(200).optional(),
   profile: z.literal('freedom.supplier-console.summary/v1'), tenant_id: OpaqueId, instance_id: OpaqueId, as_of: time,
   todos: z.discriminatedUnion('state', [
     z.object({state: z.literal('ready'), pending_requests: count, outdated_offers: count, out_of_stock_products: count}).strict(),
@@ -254,6 +262,7 @@ export const SupplierReportReservationsSchema = z.object({
   supply_total_minor: amount,
 }).strict();
 export const SupplierReportSchema = z.object({
+  inventory_inconsistent_count: z.number().int().min(0).max(200).optional(),
   profile: z.literal('freedom.supplier-console.report/v1'), tenant_id: OpaqueId, instance_id: OpaqueId, as_of: time,
   business: z.object({name: z.string(), currency: CurrencySchema}).strict(),
   period: z.object({from: reportDay, to: reportDay, time_zone: z.literal('Asia/Taipei'),

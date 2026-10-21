@@ -457,7 +457,10 @@ test('T-012 every member text field is escaped in HTML while public JSON preserv
   const pair = await publicPair(settings.slug); const json = JSON.parse(pair.jsonText);
   assert.equal(json.name, attack); assert.equal(json.brand, attack); assert.equal(json.description, attack + '\n第二段'); assert.equal(json.products[0].title, attack); assert.equal(json.products[0].description, attack + '\n第二段');
   assert.doesNotMatch(pair.htmlText, /<script|<img onerror/i);
-  assert.match(pair.htmlText, /&lt;script&gt;/); assert.match(pair.htmlText, /&quot;&gt;&lt;img onerror=x&gt; &amp;/); assert.match(pair.htmlText, /<p>第二段<\/p>/);
+  assert.match(pair.htmlText, /&lt;script&gt;/); assert.match(pair.htmlText, /&quot;&gt;&lt;img onerror=x&gt; &amp;/);
+  // The full published text keeps its line breaks in the shared service section;
+  // the hero now displays only a short, single-paragraph introduction.
+  assert.match(pair.htmlText, /<p class="shop-merchant-copy">&lt;script&gt;x&lt;\/script&gt; &quot;&gt;&lt;img onerror=x&gt; &amp;\n第二段<\/p>/);
 });
 
 test('T-006 public allowlist hides identifiers and all hidden cases return identical bodies and headers', async () => {
@@ -557,6 +560,8 @@ test('T-016 a disabled setup admin does not hide a store with a current active o
   const s = await open();
   const setupAdmin = (await h.person('合成設定管理者')).session;
   await join(s, setupAdmin, 'admin');
+  assert.equal(expect(await post(s.root + '/setup', setupAdmin, settings), 403).code, 'commerce_guild_member_required');
+  await h.fullMember(setupAdmin.user.user_id, guild);
   expect(await post(s.root + '/setup', setupAdmin, settings), 201);
   await add(s); expect(await publish(s));
   const profile = (await h.pool.query('SELECT storefront_shop_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0];

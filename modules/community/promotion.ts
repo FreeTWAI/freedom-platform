@@ -5,7 +5,7 @@ import { transaction } from '../../packages/db/index.js';
 import { lockMemberSession, assertCurrentSessionClock } from '../../packages/db/member-session.js';
 import { Problem, requireCondition } from '../../packages/shared/problem.js';
 import { isPreviewBot } from '../../packages/shared/promotion-bots.js';
-import { PLATFORM_LABELS, type SocialPlatform } from '../../packages/shared/share-url.js';
+import { PLATFORM_LABELS, normalizeShareUrl, isOwnWorkshopHost, type SocialPlatform } from '../../packages/shared/share-url.js';
 import { escapeHtml } from '../development/service.js';
 import { getSkillShareContent } from './skill-share-content.js';
 import { communityCatalog } from './catalog.js';
@@ -343,7 +343,8 @@ function introNumber(raw: string | undefined) {
   return value >= 1 && value <= 999 ? value : null;
 }
 
-type OpenTarget = { href: string; title: string; description: string; image?: { url: string; width: number; height: number } };
+type OpenTarget = { href: string; title: string; description: string; image?: { url: string; width: number; height: number } } &
+  ({ navigation: 'internal' } | { navigation: 'external'; destination: string; action: string });
 
 async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
   if (link.kind === 'member_card') {
@@ -351,14 +352,14 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     const card = await memberCardForLink(pool, link);
     if (!card) return null;
     return {
-      href: card.path,
+      navigation: 'internal', href: card.path,
       title: card.title,
       description: card.summary || PLATFORM_DESCRIPTION,
       image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height },
     };
   }
   if (!await shareable(pool, link)) return null;
-  if (link.kind === 'platform') return { href: '/', title: platformOg.title, description: platformOg.description, image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height } };
+  if (link.kind === 'platform') return { navigation: 'internal', href: '/', title: platformOg.title, description: platformOg.description, image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height } };
   if (link.kind === 'skill_book') {
     const intro = introNumber(introRaw);
     const query = intro ? `?intro=${intro}` : '';
@@ -368,7 +369,7 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       const content = getSkillShareContent(id);
       const chosen = intro && content && intro <= content.introductions.length ? content.introductions[intro - 1] : null;
       const image = content ? { url: origin + content.illustration_url, width: 1200, height: 630 } : undefined;
-      return { href: `/development/skills/${encodeURIComponent(id)}${query}`, title: book.title, description: chosen || book.description, image };
+      return { navigation: 'internal', href: `/development/skills/${encodeURIComponent(id)}${query}`, title: book.title, description: chosen || book.description, image };
     }
     const requested = link.target_key.slice(11);
     const upgraded = await readPublishedUpgrade(pool, requested);
@@ -376,7 +377,7 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     if (!submission) return null;
     const chosen = intro && intro <= submission.share_introductions.length ? submission.share_introductions[intro - 1] : null;
     const image = submission.illustration_url ? { url: origin + submission.illustration_url, width: 1200, height: 630 } : undefined;
-    return { href: `/development/submissions/${submission.submission_id}${query}`, title: submission.title, description: chosen || submission.description, image };
+    return { navigation: 'internal', href: `/development/submissions/${submission.submission_id}${query}`, title: submission.title, description: chosen || submission.description, image };
   }
   if (link.kind === 'event') {
     const event = await eventStillShared(pool, link.target_key);
@@ -387,7 +388,7 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       const highlight = await publicHighlight(pool, link.target_key);
       if (highlight) {
         const image = highlightShareImage(highlight);
-        return { href: `/highlights/${link.target_key}`, ...preview, image: { url: absoluteUrl(origin, image.url), width: image.width, height: image.height } };
+        return { navigation: 'internal', href: `/highlights/${link.target_key}`, ...preview, image: { url: absoluteUrl(origin, image.url), width: image.width, height: image.height } };
       }
     }
     const code = (await pool.query('SELECT code FROM community_event_share_codes WHERE event_id=$1 AND user_id=$2', [link.target_key, link.user_id])).rows[0]?.code as string | undefined;
@@ -397,7 +398,7 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     const image = open
       ? (event.has_banner && !event.test_host ? { url: `${origin}/api/v1/public/events/${link.target_key}/banner`, width: 1200, height: 675 } : undefined)
       : { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height };
-    return { href, ...preview, image };
+    return { navigation: 'internal', href, ...preview, image };
   }
   if (link.kind === 'member_service') {
     const service = await readMemberServiceShare(pool, link.community_id, link.target_key);
@@ -405,25 +406,39 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     const image = service.hasCover
       ? { url: `${origin}/api/v1/public/member-services/${link.target_key}/cover`, width: 1200, height: 675 }
       : { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height };
-    return { href: `/services/${link.target_key}`, title: service.title, description: service.summary, image };
+    return { navigation: 'internal', href: `/services/${link.target_key}`, title: service.title, description: service.summary, image };
   }
   const post = (await pool.query(`SELECT post_id,url,title,platform FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active' AND kind='link'`, [link.target_key, link.community_id])).rows[0] as { post_id: string; url: string; title: string; platform: SocialPlatform } | undefined;
   if (!post) return null;
+  const destination = normalizeShareUrl(post.url);
+  if (!destination.ok || destination.url !== post.url || isOwnWorkshopHost(destination.host, origin)) return null;
   const thumb = (await pool.query('SELECT 1 FROM community_social_post_thumbnails WHERE post_id=$1', [post.post_id])).rowCount;
+  const address = new URL(destination.url);
   return {
-    href: post.url, title: post.title,
+    navigation: 'external', destination: address.host + address.pathname + address.search,
+    action: destination.platform === 'other' ? '前往 ' + destination.host : '前往 ' + PLATFORM_LABELS[destination.platform] + ' 原文',
+    href: destination.url, title: post.title,
     description: `自由工坊社群分享的 ${PLATFORM_LABELS[post.platform] ?? '其他'} 貼文`,
     image: thumb ? { url: `${origin}/api/v1/public/social-posts/${post.post_id}/thumbnail`, width: 640, height: 360 } : undefined,
   };
 }
 
+const goBrand = '<a class="go-brand" href="/" aria-label="自由工坊首頁"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="128" height="72"></a>';
+
 function goHtml(code: string, target: OpenTarget, ogUrl: string) {
-  const title = escapeHtml(target.title);
-  const description = escapeHtml(target.description);
-  const href = escapeHtml(target.href);
+  const title = escapeHtml(target.title), description = escapeHtml(target.description), href = escapeHtml(target.href);
+  const external = target.navigation === 'external';
   const image = target.image ? `<meta property="og:image" content="${escapeHtml(target.image.url)}"><meta property="og:image:width" content="${target.image.width}"><meta property="og:image:height" content="${target.image.height}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${escapeHtml(target.image.url)}">` : '<meta name="twitter:card" content="summary">';
-  // og:url is this personal link, never the target. Otherwise Facebook collapses the share onto the target.
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>正在開啟：${title}｜自由工坊</title><meta name="robots" content="noindex,nofollow"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(ogUrl)}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:site_name" content="自由工坊"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">${image}<link rel="stylesheet" href="/go.css"></head><body><main data-code="${escapeHtml(code)}" data-target="${href}"><p>正在前往「${title}」…</p><p><a href="${href}">沒有自動前往？請點這裡</a></p></main><script src="/go.js" defer></script></body></html>`;
+  const body = external
+    ? `<p class="go-kind">社群分享 · 外部網站</p><h1>${title}</h1><p>${description}</p><dl><dt>目的地</dt><dd><bdi>${escapeHtml(target.destination)}</bdi></dd></dl><p>這是外部網站。帳號、費用與資料處理，請依目的地網站說明核對。</p><div class="go-actions"><a class="go-primary" data-go-destination href="${href}" rel="noopener noreferrer">${escapeHtml(target.action)} ↗</a><a href="/#social">返回自由工坊</a></div>`
+    : `<p class="go-kind">自由工坊站內內容</p><h1>${title}</h1><p>${description}</p><p>正在開啟站內內容，也可直接使用以下連結。</p><a class="go-primary" data-go-destination href="${href}">開啟站內內容</a>`;
+  // Preserve the personal link as og:url: previews must not collapse attribution onto the destination.
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${external ? '準備前往' : '正在開啟'}：${title}｜自由工坊</title><meta name="robots" content="noindex,nofollow"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(ogUrl)}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:site_name" content="自由工坊"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">${image}<link rel="stylesheet" href="/go.css"></head><body><main data-code="${escapeHtml(code)}" data-target="${href}" data-navigation="${target.navigation}">${goBrand}${body}</main><script src="/go.js" defer></script></body></html>`;
+}
+
+/** Missing, revoked and unavailable links share one response; do not reveal their former target. */
+export function promotionUnavailableHtml() {
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分享連結目前無法開啟｜自由工坊</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/go.css"></head><body><main>${goBrand}<h1>分享連結目前無法開啟</h1><p>連結可能已撤回、內容已停止分享，或網址不完整。</p><a class="go-primary" href="/">返回自由工坊</a></main></body></html>`;
 }
 
 export async function promotionGo(pool: Pool, code: string, intro: string | undefined, origin: string, now = new Date()) {

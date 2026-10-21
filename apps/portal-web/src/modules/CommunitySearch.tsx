@@ -1,79 +1,91 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
 import { CommunityRelationsProvider, CommunityRelations, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
+import {createCommunitySearch} from './community-search-controller';
 
 type Kind = typeof communitySearchKinds[number];
 type Topic = typeof communitySearchTopics[number];
 type Mine = { kind: Kind; id: string; title: string; topics: Topic[]; aggregate_version: number | null };
-const readQuery = () => new URLSearchParams(window.location.hash.split('?')[1] ?? '');
+const readQuery = () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').toString();
+const onSearchPage = () => /^#community-search(?:\?|$)/.test(window.location.hash);
 const message = (error: unknown) => error instanceof Error ? error.message : '無法載入，請重試。';
 
 export function CommunitySearch({ client, authKey, relationsEnabled = false }: { client: PortalClient; authKey: string | null; relationsEnabled?: boolean }) {
+  const lifetime = `${authKey ?? 'anonymous'}:${client.sessionGeneration}`;
   return authKey && relationsEnabled
-    ? <CommunityRelationsProvider key={authKey} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled /></CommunityRelationsProvider>
-    : <SearchContent key={authKey ?? 'anonymous'} client={client} authKey={authKey} relationsEnabled={false}/>;
+    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled /></CommunityRelationsProvider>
+    : <SearchContent key={lifetime} client={client} authKey={authKey} relationsEnabled={false}/>;
 }
 
 function SearchContent({ client, authKey, relationsEnabled }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean }) {
-  const [query, setQuery] = useState(readQuery);
-  const [retry, setRetry] = useState(0);
-  const [refresh, setRefresh] = useState(0);
-  const [result, setResult] = useState<{ key: string; page: CommunitySearchPage } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const requestKey = `${authKey ?? 'anonymous'}:${query.toString()}:${refresh}`;
-  const currentKey = useRef(requestKey);
-  currentKey.current = requestKey;
+  const generation = client.sessionGeneration;
+  const search = useMemo(() => createCommunitySearch<CommunitySearchPage>({
+    query: readQuery(),
+    generation: () => client.sessionGeneration,
+    read: async (query, signal) => communitySearchPageSchema.parse(
+      await client.get<unknown>(`/community-search?${query}`, {signal, suppressConsole: true})),
+    writeQuery: (query, mode) => {
+      if (!onSearchPage()) return;
+      const hash = `#community-search${query ? `?${query}` : ''}`;
+      if (mode === 'push') window.history.pushState(null, '', hash);
+      else window.history.replaceState(null, '', hash);
+    },
+  }), [client, authKey, generation]);
+  const state = useSyncExternalStore(search.subscribe, search.getSnapshot, search.getSnapshot);
+  const query = useMemo(() => new URLSearchParams(state.query), [state.query]);
+  const input = useRef<HTMLInputElement>(null);
+  const results = useRef<HTMLElement>(null);
   useEffect(() => {
-    const changed = () => setQuery(readQuery());
-    const refreshResults = () => setRefresh(value => value + 1);
+    search.start();
+    const changed = () => {if (onSearchPage()) search.restore(readQuery());};
+    const refreshResults = () => {
+      if (onSearchPage() && document.visibilityState === 'visible' && navigator.onLine !== false) search.refresh();
+    };
     window.addEventListener('hashchange', changed);
     window.addEventListener('popstate', changed);
     window.addEventListener('focus', refreshResults);
-    return () => { window.removeEventListener('hashchange', changed); window.removeEventListener('popstate', changed); window.removeEventListener('focus', refreshResults); };
-  }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    const generation = client.sessionGeneration;
-    const live = () => !controller.signal.aborted && generation === client.sessionGeneration && currentKey.current === requestKey;
-    setLoading(true); setFailure(null); setResult(null);
-    const timer = window.setTimeout(() => {
-      void client.get<unknown>(`/community-search?${query}`, { signal: controller.signal, suppressConsole: true })
-        .then(value => { const page = communitySearchPageSchema.parse(value); if (live()) setResult({ key: requestKey, page }); })
-        .catch(cause => { if (live()) setFailure({ key: requestKey, message: message(cause) }); })
-        .finally(() => { if (live()) setLoading(false); });
-    }, 180);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [client, requestKey, retry]);
-  function update(name: string, value: string) {
-    const next = new URLSearchParams(query);
-    if (value) next.set(name, value); else next.delete(name);
-    if (name !== 'cursor') next.delete('cursor');
-    const hash = `#community-search${next.size ? `?${next}` : ''}`;
-    // Text edits replace the current query; paging keeps browser-back history.
-    if (name === 'cursor') window.history.pushState(null, '', hash);
-    else window.history.replaceState(null, '', hash);
-    setQuery(next);
-  }
-  function toggle(name: 'kinds' | 'topics', value: string) {
-    const selected = (query.get(name) ?? '').split(',').filter(Boolean);
-    update(name, selected.includes(value) ? selected.filter(item => item !== value).join(',') : [...selected, value].join(','));
-  }
-  const page = result?.key === requestKey ? result.page : null;
-  const error = failure?.key === requestKey ? failure.message : '';
+    window.addEventListener('online', refreshResults);
+    window.addEventListener('pageshow', refreshResults);
+    document.addEventListener('visibilitychange', refreshResults);
+    return () => {
+      window.removeEventListener('hashchange', changed);
+      window.removeEventListener('popstate', changed);
+      window.removeEventListener('focus', refreshResults);
+      window.removeEventListener('online', refreshResults);
+      window.removeEventListener('pageshow', refreshResults);
+      document.removeEventListener('visibilitychange', refreshResults);
+      search.stop();
+    };
+  }, [search]);
+  const page = state.page;
+  const failed = state.status === 'error';
+  const busy = !state.composing && ['idle', 'waiting', 'loading'].includes(state.status);
   return <div className="stack community-content-search">
     {relationsEnabled && <CommunityRelations client={client}/>}
     <section className="card stack" aria-label="社群內容搜尋條件">
       <p className="muted">搜尋貼文、作品、技能書與活動；只顯示目前可閱讀的內容。這不是導覽的「搜尋功能」。</p>
-      <label className="field">關鍵字<input type="search" maxLength={80} value={query.get('q') ?? ''} onChange={event => update('q', event.target.value)} placeholder="例如：入門教學、設計" /></label>
-      <fieldset><legend>內容類型（可複選）</legend><div className="actions">{communitySearchKinds.map(kind => <label key={kind}><input type="checkbox" checked={(query.get('kinds') ?? '').split(',').includes(kind)} onChange={() => toggle('kinds', kind)} /> {communitySearchKindLabels[kind]}</label>)}</div></fieldset>
-      <fieldset><legend>主題（可複選）</legend><div className="actions">{communitySearchTopics.map(topic => <label key={topic}><input type="checkbox" checked={(query.get('topics') ?? '').split(',').includes(topic)} onChange={() => toggle('topics', topic)} /> {communitySearchTopicLabels[topic]}</label>)}</div></fieldset>
-      {query.has('cursor') && <button className="btn btn-secondary btn-small" onClick={() => update('cursor', '')}>回第一頁</button>}
+      <form className="stack" onSubmit={event => {event.preventDefault(); search.submit();}}>
+        <label className="field">關鍵字<input ref={input} type="search" maxLength={80} value={state.draft}
+          onChange={event => search.edit(event.target.value)}
+          onCompositionStart={() => search.beginComposition()}
+          onCompositionEnd={event => search.endComposition(event.currentTarget.value)}
+          onKeyDown={event => {if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || search.getSnapshot().composing)) event.preventDefault();}}
+          placeholder="例如：入門教學、設計" /></label>
+        <fieldset disabled={state.composing}><legend>內容類型（可複選）</legend><div className="actions">{communitySearchKinds.map(kind => <label key={kind}><input type="checkbox" checked={(query.get('kinds') ?? '').split(',').includes(kind)} onChange={() => search.toggle('kinds', kind)} /> {communitySearchKindLabels[kind]}</label>)}</div></fieldset>
+        <fieldset disabled={state.composing}><legend>主題（可複選）</legend><div className="actions">{communitySearchTopics.map(topic => <label key={topic}><input type="checkbox" checked={(query.get('topics') ?? '').split(',').includes(topic)} onChange={() => search.toggle('topics', topic)} /> {communitySearchTopicLabels[topic]}</label>)}</div></fieldset>
+        <div className="actions">
+          <button type="submit" className="btn btn-secondary btn-small" disabled={state.composing}>搜尋</button>
+          {state.query && <button type="button" className="btn btn-ghost btn-small" disabled={state.composing} onClick={() => {search.clear(); input.current?.focus();}}>清除搜尋條件</button>}
+          {query.has('cursor') && <button type="button" className="btn btn-secondary btn-small" disabled={state.composing} onClick={() => {search.first(); results.current?.focus();}}>回第一頁</button>}
+        </div>
+      </form>
     </section>
-    <section className="stack" aria-label="社群內容搜尋結果" aria-busy={loading || !page && !error}>
-      {(loading || !page && !error) && <p role="status">正在搜尋社群內容…</p>}
-      {error && <div className="card stack"><p role="alert">{error}</p><button className="btn btn-secondary btn-small" onClick={() => setRetry(value => value + 1)}>重試搜尋</button></div>}
+    <section ref={results} tabIndex={-1} className="stack" aria-label="社群內容搜尋結果" aria-busy={busy}>
+      {state.composing && <p role="status">選字完成後會自動搜尋。</p>}
+      {busy && <p role="status">正在搜尋社群內容…</p>}
+      {failed && <div className="card stack"><p role="alert">{message(state.error)}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => search.submit()}>重試搜尋</button></div>}
+      {page && page.items.length > 0 && <p role="status" className="field-hint">本頁顯示 {page.items.length} 筆內容。</p>}
       {page && !page.items.length && <p role="status">沒有符合條件的內容。可更換關鍵字或取消篩選；未標主題的內容仍可用文字搜尋。</p>}
       {page?.items.map(item => <article className="card stack" key={`${item.kind}:${item.id}`}>
         <p className="field-hint">{communitySearchKindLabels[item.kind]}{item.label ? ` · ${item.label}` : ''}</p>
@@ -82,9 +94,9 @@ function SearchContent({ client, authKey, relationsEnabled }: { client: PortalCl
         {item.topics.length > 0 && <p className="field-hint">{item.topics.map(topic => communitySearchTopicLabels[topic]).join(' · ')}</p>}
         {relationsEnabled && <div className="actions"><CommunityBookmarkButton client={client} kind={item.kind} id={item.id}/>{item.author_id && <CommunityAuthorFollowButton client={client} authorId={item.author_id}/>}</div>}
       </article>)}
-      {page?.next_cursor && <button className="btn btn-secondary btn-small" onClick={() => update('cursor', page.next_cursor!)}>下一頁</button>}
+      {page?.next_cursor && <button type="button" className="btn btn-secondary btn-small" onClick={() => {search.next(page.next_cursor!); results.current?.focus();}}>下一頁</button>}
     </section>
-    {authKey && <MyContentTopics key={authKey} client={client} onSaved={() => setRefresh(value => value + 1)} />}
+    {authKey && <MyContentTopics key={`${authKey}:${generation}`} client={client} onSaved={() => search.refresh(true)} />}
   </div>;
 }
 

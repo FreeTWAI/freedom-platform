@@ -163,6 +163,37 @@ test('result files reject malformed UTF-8, clear stale previews and preserve val
  expect(previews).toBe(2);expect(imports).toBe(1);
 });
 
+test('escaped 24KB result rejects inner scalars, then confirms and replays exact SQL content on phone',async({page,e2eAuthPool})=>{
+ await login(page);await navigate(page,'我有東西要賣');await page.setViewportSize({width:320,height:900});
+ const value='繁中😀𐀀�\\u0000\\ud800\\udc00';
+ const manifest={...productManifest,mode:'test',name:'24KB 跳脫保真成果',products:Array.from({length:10},(_,i)=>({...productManifest.products[0],sku:`ESCAPED-${i}`,description:value+'\\'.repeat(950),shipping_terms:value,return_terms:value}))};
+ const md='# 合成成果\n```json\n'+JSON.stringify(manifest)+'\n```';
+ const content='\u0001'.repeat(24000-Buffer.byteLength(md))+md;
+ expect(Buffer.byteLength(content)).toBe(24000);expect(Buffer.byteLength(JSON.stringify({content}))).toBeGreaterThan(32768);
+ const input=page.getByLabel('上傳成果檔',{exact:true});
+ for(const scalar of ['\0','\uD800','\uDC00','\uD800x\uDC00']){
+  const rejected=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/commerce/preview');
+  await upload(page,{...productManifest,description:scalar});expect((await rejected).status()).toBe(422);
+  await expect(page.getByRole('button',{name:'確認並歸檔',exact:true})).toHaveCount(0);
+ }
+ const previewResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/commerce/preview');
+ await input.setInputFiles({name:'escaped-24kb.md',mimeType:'text/markdown',buffer:Buffer.from(content)});
+ const preview=await previewResponse;expect(preview.status()).toBe(200);const parsed=await preview.json();
+ expect(parsed.manifest).toEqual(manifest);
+ await expect(page.getByRole('heading',{name:`確認這次成果：${manifest.name}`,exact:true})).toBeVisible();
+ const imported=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/commerce/import');
+ await page.getByRole('button',{name:'確認並歸檔',exact:true}).click();
+ const response=await imported;expect(response.status()).toBe(201);const receipt=await response.json(),request=response.request();
+ await expect(page.getByText('成果已歸檔，可在我的商店查看。',{exact:true})).toBeVisible();
+ const replay=await page.request.post('/api/v1/commerce/import',{headers:await request.allHeaders(),data:request.postData()!});
+ expect(replay.status()).toBe(201);expect(await replay.json()).toEqual(receipt);
+ const shops=(await e2eAuthPool.query('SELECT manifest_sha256 FROM commerce_shops WHERE shop_id=$1',[receipt.shop_id])).rows;
+ expect(shops).toEqual([{manifest_sha256:parsed.sha256}]);
+ const items=(await e2eAuthPool.query('SELECT sku,description,shipping_terms,return_terms FROM commerce_items WHERE shop_id=$1 ORDER BY sku',[receipt.shop_id])).rows;
+ expect(items).toEqual(manifest.products.map(p=>({sku:p.sku,description:p.description,shipping_terms:value,return_terms:value})));
+ expect((await e2eAuthPool.query('SELECT count(*)::int AS count FROM commerce_shops WHERE owner_id=(SELECT owner_id FROM commerce_shops WHERE shop_id=$1) AND manifest_sha256=$2',[receipt.shop_id,parsed.sha256])).rows[0].count).toBe(1);
+});
+
 test('both shop page guides open and close without clipping on phone',async({page})=>{
  await login(page);await page.setViewportSize({width:320,height:900});
  for(const title of ['我有東西要賣','我可以賣東西']){

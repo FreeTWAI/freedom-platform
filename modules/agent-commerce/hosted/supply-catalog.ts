@@ -1,3 +1,4 @@
+import {INVENTORY_POSITION_COLUMNS,inventoryPositions} from './inventory.js';
 import type {Pool,PoolClient} from 'pg';
 import {SupplyCatalogSetupInputSchema,SupplyCatalogViewSchema,SupplyProductInputSchema,SupplyProductUpdateInputSchema,
   SupplyProductPageSchema,SupplyProductViewSchema,SupplyCatalogReceiptSchema,SupplyProductReceiptSchema} from '../../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';
@@ -9,6 +10,7 @@ import type {Actor} from '../../identity-membership/service.js';
 import {effectiveStoreCapabilities} from './capabilities.js';
 import {profile,ready,createHostedProfile,productCount,storeRead,storeCommand,storeFact,type Instance,type Profile} from './store.js';
 import {addProduct} from './products.js';
+import {assertGuildMembership, supplierMembership, commerceMembership} from '../../module-registry/membership.js';
 
 export async function supplyCatalogView(q:PoolClient,context:TenantScopeContext,inst:Instance) {
   const p=await profile(q,context.tenant_id,inst.instance_id),keys=await effectiveStoreCapabilities(q,context,inst.instance_id);
@@ -27,13 +29,14 @@ export async function setupSupplyCatalog(pool:Pool,actor:Actor,tenantId:string,i
   return storeCommand(pool,actor,tenantId,instanceId,'store:manage','storefront.supply-catalog.setup',input,key,undefined,async(q,context,inst)=>{
     const prior=await profile(q,tenantId,instanceId,true);
     if(prior)return SupplyCatalogReceiptSchema.parse({instance_id:instanceId,version:prior.version,created:false});
+    await assertGuildMembership(q,context.community_id,actor.user_id,[supplierMembership,commerceMembership],true);
     await createHostedProfile(q,context,actor,instanceId,{...input,slug:null,brand:null});
     await storeFact(q,context,instanceId,'1','storefront.supply-catalog.setup');
     return SupplyCatalogReceiptSchema.parse({instance_id:instanceId,version:'1',created:true});
   });
 }
-async function supplyProducts(q:PoolClient,p:Profile) {
-  const rows=(await q.query(`SELECT i.item_id AS product_id,i.sku,i.title,i.description,i.price_minor AS cost_minor,i.stock,s.currency,l.aggregate_version::text AS version
+async function supplyProducts(q:PoolClient,p:Profile,withInventory=false) {
+  const rows=(await q.query(`SELECT i.item_id AS product_id,i.sku,i.title,i.description,i.price_minor AS cost_minor,i.stock,s.currency,l.aggregate_version::text AS version${withInventory?`,i.reserved,${INVENTORY_POSITION_COLUMNS}`:''}
     FROM commerce_items i JOIN commerce_selections l ON l.item_id=i.item_id
     JOIN commerce_resource_tenants supply ON supply.resource_kind='shop' AND supply.resource_id=i.shop_id AND supply.mapping_state='confirmed'
     JOIN commerce_resource_tenants retail ON retail.resource_kind='shop' AND retail.resource_id=l.shop_id AND retail.mapping_state='confirmed'
@@ -41,13 +44,16 @@ async function supplyProducts(q:PoolClient,p:Profile) {
     JOIN commerce_shops s ON s.shop_id=i.shop_id AND s.origin='hosted'
     WHERE supply.tenant_id=$1 AND supply.instance_id=$2 AND i.shop_id=$3 AND l.shop_id=$4 ORDER BY i.sku LIMIT 201`,
   [p.tenant_id,p.instance_id,p.supply_shop_id,p.storefront_shop_id])).rows;
-  return rows.map(row=>SupplyProductViewSchema.parse({...row,cost_minor:Number(row.cost_minor)}));
+  const inventory=withInventory?await inventoryPositions(q,rows.map(r=>r.product_id),{onInconsistent:'report',
+    rows:rows.map(r=>({...r,item_id:r.product_id}))}):null;
+  return rows.map(({reserved:_reserved,held:_held,allocated:_allocated,...row})=>SupplyProductViewSchema.parse({...row,cost_minor:Number(row.cost_minor),
+    ...(inventory?{inventory:inventory.get(row.product_id)}:{})}));
 }
 export async function listSupplyProducts(pool:Pool,actor:Actor,tenantId:string,instanceId:string) {
   // Costs retain the existing private supply-terms write-capability boundary.
   return storeRead(pool,actor,tenantId,instanceId,'store:write',async q=>{
     const p=await profile(q,tenantId,instanceId);ready(p);
-    return SupplyProductPageSchema.parse({items:await supplyProducts(q,p),limit:200});
+    return SupplyProductPageSchema.parse({items:await supplyProducts(q,p,true),limit:200});
   });
 }
 export async function addSupplyProduct(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,key:string) {
@@ -62,7 +68,7 @@ export async function updateSupplyProduct(pool:Pool,actor:Actor,tenantId:string,
     requireCondition(old,404,'not_found','找不到這項商品。');checkVersion(old.version,expected);
     const next=SupplyProductViewSchema.parse({...old,...input,version:String(BigInt(old.version)+1n)});
     const stock=(await q.query<{reserved:number}>('SELECT reserved FROM commerce_items WHERE item_id=$1 FOR UPDATE',[productId])).rows[0];
-    requireCondition(stock&&next.stock>=stock.reserved,409,'stock_below_reserved','庫存不能低於已保留的數量。');
+    requireCondition(stock&&next.stock>=stock.reserved,409,'stock_below_reserved','庫存不能低於已占用的數量（預留中＋已付款待出貨）。');
     if(input.cost_minor!==undefined) {
       const foreign=await q.query('SELECT 1 FROM commerce_selections WHERE item_id=$1 AND shop_id<>$2 AND hosted_offer_id IS NULL LIMIT 1',[productId,p.storefront_shop_id]);
       requireCondition(!foreign.rowCount,409,'supply_terms_in_use','這項商品已有其他商店選用，請先處理既有供貨版本。');

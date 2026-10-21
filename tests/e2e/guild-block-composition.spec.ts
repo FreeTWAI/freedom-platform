@@ -71,6 +71,7 @@ for (const sample of [
     // the same authorized commands. Synthetic identities live only in this run's DB.
     try {
       if (original) {
+        await e2eAuthPool.query("UPDATE positioning_profession_memberships SET member_tier='full' WHERE user_id=$1 AND guild_key=$2", [id, sample.guild]);
         // Cleanup also works if an assertion failed after the member signed out.
         const auth = await page.request.post('/api/v1/auth/login', {data: {email, password: DEMO_PASSWORD}, headers: {Origin: baseURL!}});
         expect(auth.status()).toBe(200);
@@ -165,6 +166,9 @@ for (const sample of [
   expect(response.status()).toBe(200); await response.finished();
   await expect(page.getByText(sample.empty, {exact: true})).toBeVisible();
   if (sample.guild === 'guild_product_quality_supply') {
+    await e2eAuthPool.query("UPDATE positioning_profession_memberships SET member_tier='intern' WHERE user_id=$1 AND guild_key=$2", [id, sample.guild]);
+    await page.reload(); await openGuildSection(page, sample.title);
+    await expect(page.getByText('成員身分：實習成員', {exact: true})).toBeVisible();
     // Start from the published custom block, then return to that block's
     // server-backed catalog entry rather than only checking an empty state.
     const custom = page.locator('.guild-launchpad-content > .guild-launchpad-block').filter({has: page.getByRole('heading', {level: 2, name: sample.title, exact: true})});
@@ -197,6 +201,9 @@ for (const sample of [
     expect(catalogHash).toBe(`#stores/${catalogs.items[0].tenant_id}/${catalogs.items[0].instance_id}/supply`);
     await page.goto(`/#guilds/${sample.guild}`);
 
+    // Restore the author's full membership for layout history administration.
+    await e2eAuthPool.query("UPDATE positioning_profession_memberships SET member_tier='full' WHERE user_id=$1 AND guild_key=$2", [id, sample.guild]);
+    await page.reload();
     // Exercise the actual v2 history UI; the finally restore is only cleanup.
     await openGuildSection(page, '管理啟動台');
     const changedMission = `第二版組裝 ${id}`;

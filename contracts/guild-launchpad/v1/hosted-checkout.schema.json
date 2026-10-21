@@ -3,6 +3,21 @@
   "$id": "https://freetwai.com/contracts/guild-launchpad/v1/hosted-checkout",
   "description": "Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.",
   "$defs": {
+    "buyer-identity-header": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "guest"
+        },
+        {
+          "type": "string",
+          "minLength": 43,
+          "maxLength": 43,
+          "pattern": "^member:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])"
+        }
+      ],
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: equality_precondition_not_authority."
+    },
     "shipping-method-ref": {
       "type": "string",
       "enum": [
@@ -2843,6 +2858,7 @@
             "checkout_store_not_found",
             "checkout_not_found",
             "checkout_order_not_found",
+            "checkout_identity_changed",
             "invalid_idempotency_key",
             "checkout_idempotency_conflict",
             "order_intent_conflict",

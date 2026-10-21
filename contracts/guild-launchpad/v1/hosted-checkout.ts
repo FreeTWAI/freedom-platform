@@ -12,6 +12,9 @@ export const CheckoutTimeSchema=z.string().regex(new RegExp(z.regexes.datetime({
 const time=CheckoutTimeSchema;
 const sku=text.min(1).max(32);
 const quantity=z.number().int().min(1).max(99);
+// A stale-draft equality precondition, never a credential or buyer selector.
+export const CheckoutBuyerIdentitySchema=z.union([z.literal('guest'),z.string().length(43).regex(/^member:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/)]);
+export type CheckoutBuyerIdentity=z.infer<typeof CheckoutBuyerIdentitySchema>;
 export const ShippingMethodRefSchema=z.enum(['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup']);
 export const DeliveryFieldErrorCodeSchema=z.enum(['required','format','too_short','too_long','unknown_postal_code','blocked_term']);
 export const ShippingUnavailableReasonSchema=z.enum(['fulfilment_not_agreed','shipping_attributes_missing','method_unsupported','temperature_unsupported','too_large','cvs_value_limit','outlying_unsupported']);
@@ -125,7 +128,7 @@ export const ForgetAccessInputSchema=z.object({}).strict();
 // 202/204 intentionally have no JSON representation.
 export const EmptyResponseSchema=z.undefined();
 export const CheckoutErrorCodeSchema=z.enum(['commerce_quarantined','checkout_not_enabled','checkout_store_not_found','checkout_not_found','checkout_order_not_found',
-  'invalid_idempotency_key','checkout_idempotency_conflict','order_intent_conflict','consents_mismatch','terms_changed','stock_unavailable','unresolved_order','checkout_expired',
+  'checkout_identity_changed','invalid_idempotency_key','checkout_idempotency_conflict','order_intent_conflict','consents_mismatch','terms_changed','stock_unavailable','unresolved_order','checkout_expired',
   'too_many_open_orders','commerce_rate_limited','order_access_email_unavailable','validation_failed','invalid_checkout_json','checkout_contact_too_large','checkout_contact_unavailable',
   'shipping_not_configured','shipping_unavailable','delivery_invalid','delivery_store_required','checkout_total_invalid','storefront_unavailable','storefront_not_set_up','supply_unavailable','publication_changed','display_number_unavailable','credential_kind_rejected',
   'payment_profile_unavailable','payment_method_unavailable','offline_payment_requires_member','offline_order_limit','payment_handoff_unavailable','checkout_order_closed','checkout_hold_expired','payment_already_applied','payment_attempts_exhausted',

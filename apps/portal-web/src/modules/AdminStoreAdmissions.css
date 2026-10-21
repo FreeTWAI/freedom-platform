@@ -1,0 +1,6 @@
+.admin-store-admissions .admin-readiness-items { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; padding: 0; margin: 0; list-style: none; }
+.admin-store-admissions .admin-readiness-items li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.admin-store-admissions .card { min-width: 0; }
+.admin-store-admissions p,.admin-store-admissions h3 { overflow-wrap: anywhere; }
+.admin-store-admissions input { min-width: 0; width: 100%; }
+@media(max-width:720px) { .admin-store-admissions .admin-readiness-items { grid-template-columns: minmax(0,1fr); } .admin-store-admissions input { font-size: 16px; } }

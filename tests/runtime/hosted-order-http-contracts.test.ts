@@ -6,6 +6,20 @@ import { nodeRuntime, createApp } from '../../apps/platform-api/src/app.js';
 import { workerRuntime, type WorkerEnv, type WorkerConfig } from '../../apps/platform-api/src/worker.js';
 
 const origin = 'http://127.0.0.1:4310';
+test('Node registration community uses the explicit option before the environment', () => {
+  const original = process.env.FREEDOM_REGISTRATION_COMMUNITY_ID;
+  const inherited = '11111111-1111-4111-8111-111111111111';
+  const explicit = '22222222-2222-4222-8222-222222222222';
+  try {
+    process.env.FREEDOM_REGISTRATION_COMMUNITY_ID = inherited;
+    assert.equal(nodeRuntime('local', origin, {registrationCommunityId: explicit}).registrationCommunityId?.(), explicit);
+    assert.equal(nodeRuntime('local', origin).registrationCommunityId?.(), inherited);
+  } finally {
+    if (original === undefined) delete process.env.FREEDOM_REGISTRATION_COMMUNITY_ID;
+    else process.env.FREEDOM_REGISTRATION_COMMUNITY_ID = original;
+  }
+});
+
 test('reservation admission is explicit in both host adapters and independent of existing launchpad installation', () => {
   for (const option of [undefined, false, 'true', 1]) {
     assert.equal(nodeRuntime('local', origin, { guildLaunchpadEnabled: true, hostedReservationsEnabled: option as boolean }).hostedReservationsEnabled, false);

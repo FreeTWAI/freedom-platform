@@ -1,10 +1,9 @@
 import {storeArea} from './hosted-store-fixture.js';
 import { randomUUID } from 'node:crypto';
 import { test, expect, type Page } from './fixtures.js';
-import { navigate, signOut, openGuildSection } from './navigation.js';
+import { signOut, openGuildSection } from './navigation.js';
 import { quickJoin } from './quick-join.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD } from '../../packages/testing/seed.js';
-import { hashPassword } from '../../modules/identity-membership/service.js';
 
 const guild = 'guild_commerce_sales';
 async function register(page: Page, nickname: string) {
@@ -31,44 +30,26 @@ async function guildHome(page: Page) {
   await expect(page.getByRole('region', {name: '主要動作', exact: true})).toBeVisible();
 }
 
-test('registered intern obtains guild approval through the UI, opens a store, publishes a template and returns privately', async ({page, browser, baseURL, e2eAuthPool}, info) => {
+test('registered commerce intern opens a store, publishes a template and returns privately', async ({page, browser, baseURL, e2eAuthPool}, info) => {
   test.setTimeout(120_000);
-  // The existing guild officer is fixture infrastructure. Neither merchant is
-  // inserted, promoted or given a tenant/grant with SQL or direct API calls.
-  const officerId = randomUUID(), officerEmail = `merchant-officer-${officerId}@example.test`;
-  const officerRows = () => e2eAuthPool.query(
-    'SELECT user_id,appointed_at FROM positioning_guild_officers WHERE community_id=$1 AND guild_key=$2', [DEMO_COMMUNITY, guild]);
-  const previousOfficers = (await officerRows()).rows;
-  const officer = await browser.newContext({baseURL}), stranger = await browser.newContext({baseURL}), publicContext = await browser.newContext({baseURL});
+  const stranger = await browser.newContext({baseURL}), publicContext = await browser.newContext({baseURL});
   try {
-    await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
-      VALUES($1,$2,$3,'商店驗收會長',$4,$5,false)`, [officerId, DEMO_COMMUNITY, officerEmail, hashPassword(DEMO_PASSWORD), randomUUID()]);
-    await e2eAuthPool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
-      VALUES($1,$2,$3,$4,'active','full')`, [randomUUID(), DEMO_COMMUNITY, officerId, guild]);
-    // Full-suite predecessors may already have appointed a guild officer.
-    // Borrow only this fixture slot, retaining its appointment time for cleanup.
-    await e2eAuthPool.query(`INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3)
-      ON CONFLICT(community_id,guild_key) DO UPDATE SET user_id=EXCLUDED.user_id`, [DEMO_COMMUNITY, guild, officerId]);
     const nickname = `新店主 ${randomUUID().slice(0, 8)}`, email = await register(page, nickname);
     await guildHome(page);
     const primary = page.getByRole('region', {name: '主要動作', exact: true});
-    await expect(primary).toContainText('你是這個公會的實習成員');
-    await expect(primary.getByRole('button', {name: '建立我的商店', exact: true})).toHaveCount(0);
+    await expect(primary).not.toContainText('你是這個公會的實習成員');
+    await expect(primary.getByRole('heading', {level: 2})).toHaveText('線上商店');
+    await expect(primary.getByRole('button', {name: '建立我的商店', exact: true})).toBeEnabled();
+    await expect(primary.getByRole('button')).toHaveCount(1);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({width, height: 900});
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await primary.screenshot({path: info.outputPath(`commerce-intern-primary-${width}.png`)});
+      await page.screenshot({path: info.outputPath(`commerce-intern-page-${width}.png`), fullPage: true});
+    }
     await openGuildSection(page, '工具目錄');
     await expect(page.getByRole('article').filter({has: page.getByRole('heading', {name: '線上商店', exact: true})})
-      .getByRole('button', {name: '啟動應用', exact: true})).toBeDisabled();
-    const officerPage = await officer.newPage(); await login(officerPage, officerEmail);
-    await navigate(officerPage, '職業公會');
-    const card = officerPage.getByRole('article').filter({has: officerPage.getByRole('heading', {name: /電商/})});
-    await expect(card).toHaveCount(1);
-    await card.getByRole('button', {name: '查看成員', exact: true}).click();
-    const dialog = officerPage.getByRole('dialog');
-    await dialog.getByRole('searchbox', {name: '搜尋公會成員'}).fill(nickname);
-    await dialog.getByRole('button', {name: '搜尋成員', exact: true}).click();
-    const member = dialog.locator('.directory-member'); await expect(member).toHaveCount(1);
-    await member.getByRole('button', {name: '設為正式成員', exact: true}).click();
-    await expect(member.locator('.guild-member-tier-full')).toHaveText('正式成員');
-    await page.reload();
+      .getByRole('button', {name: '啟動應用', exact: true})).toBeEnabled();
     await openGuildSection(page, '線上商店');
     await primary.getByRole('button', {name: '建立我的商店', exact: true}).click();
     const flow = page.getByRole('region', {name: '啟動應用', exact: true});
@@ -84,6 +65,10 @@ test('registered intern obtains guild approval through the UI, opens a store, pu
     await setup.getByLabel('商店網址', {exact: true}).fill(slug);
     await setup.getByLabel('商店介紹', {exact: true}).fill('新會員親手挑選的生活器物');
     await setup.getByRole('button', {name: '建立商店', exact: true}).click();
+    expect((await e2eAuthPool.query(`SELECT m.state,m.member_tier FROM positioning_profession_memberships m
+      JOIN users u ON u.user_id=m.user_id AND u.community_id=m.community_id
+      WHERE u.email=$1 AND m.community_id=$2 AND m.guild_key=$3`, [email, DEMO_COMMUNITY, guild])).rows)
+      .toEqual([{state: 'active', member_tier: 'intern'}]);
     const product = page.getByRole('form', {name: '新增商品', exact: true});
     await product.getByLabel('商品名稱', {exact: true}).fill('手作茶杯');
     await product.getByLabel('商品介紹', {exact: true}).fill('手工製作，適合日常品茶');
@@ -154,16 +139,6 @@ test('registered intern obtains guild approval through the UI, opens a store, pu
     await page.screenshot({path: info.outputPath('registered-merchant-return.png'), fullPage: true});
     await publicPage.screenshot({path: info.outputPath('registered-merchant-public.png'), fullPage: true});
   } finally {
-    try {
-      await officer.close(); await stranger.close(); await publicContext.close();
-    } finally {
-      if (previousOfficers.length) {
-        await e2eAuthPool.query(`UPDATE positioning_guild_officers SET user_id=$4
-          WHERE community_id=$1 AND guild_key=$2 AND user_id=$3`, [DEMO_COMMUNITY, guild, officerId, previousOfficers[0].user_id]);
-      } else {
-        await e2eAuthPool.query('DELETE FROM positioning_guild_officers WHERE community_id=$1 AND guild_key=$2 AND user_id=$3', [DEMO_COMMUNITY, guild, officerId]);
-      }
-      expect((await officerRows()).rows).toEqual(previousOfficers);
-    }
+    await stranger.close(); await publicContext.close();
   }
 });
