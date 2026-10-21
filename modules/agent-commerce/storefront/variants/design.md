@@ -87,3 +87,9 @@ default. Gallery-only group updates retain all 177 routing/version checks and
 skip unrelated catalog validation. The next actual catalog change detaches the
 retained tuples before validating and attaching the current members. This keeps
 legacy photo editing usable after a rollback without relaxing catalog writes.
+
+When gallery rendering is enabled, variants cards and Open Graph images use the
+verified frozen gallery's first numbered image, including for the default SKU.
+The existing gallery wildcard intercepts the older unnumbered thumbnail path;
+using the gallery's own read path keeps ON images usable while preserving every
+OFF byte and legacy URL. Preview paths and the public v1 media JSON stay intact.
