@@ -96,3 +96,29 @@ test('draft changes cannot change public product metadata; closed and missing pr
     await expect(page.getByRole('link', {name: '登入確認預留條件', exact: true})).toHaveCount(0);
   } finally {await owner.close();}
 });
+
+test('VARIANTS-E2E editor recovers the original command and SKU links work with and without JavaScript',async({browser,e2eAuthPool},info)=>{
+ const {setupCartFixtureStore}=await import('./storefront-cart-fixture.js');
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,false,false,{storeVariantsEnabled:true}),owner=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin}),plain=await browser.newContext({baseURL:store.origin,javaScriptEnabled:false});
+ try{
+  await apiLogin(owner,store.origin,store.seller.email);const page=await owner.newPage();await page.goto('/#stores/'+store.tenant+'/'+store.instance);
+  const editor=page.locator('.store-variants-editor');await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveValue(store.products[0].title);
+  await editor.getByLabel('商品組名稱',{exact:true}).fill('經典 T 恤');await editor.getByLabel('商品組介紹',{exact:true}).fill('合成商品組介紹，原本商品內容會保留。');
+  await editor.getByRole('button',{name:'新增選項',exact:true}).click();await editor.getByLabel('選項 1 名稱',{exact:true}).fill('顏色');await editor.getByLabel('選項 1 值 1',{exact:true}).fill('白');await editor.getByRole('button',{name:'新增選項值',exact:true}).click();await editor.getByLabel('選項 1 值 2',{exact:true}).fill('黑');
+  await editor.getByRole('button',{name:'新增選項',exact:true}).click();await editor.getByLabel('選項 2 名稱',{exact:true}).fill('尺寸');await editor.getByLabel('選項 2 值 1',{exact:true}).fill('M');await editor.getByRole('button',{name:'新增選項值',exact:true}).last().click();await editor.getByLabel('選項 2 值 2',{exact:true}).fill('L');
+  for(const product of [store.products[1],store.soldOutProduct]){await editor.getByLabel('加入現有商品',{exact:true}).selectOption(product.product_id);await editor.getByRole('button',{name:'加入商品組',exact:true}).click();}
+  await editor.getByLabel(store.products[1].sku+' 顏色',{exact:true}).selectOption({label:'黑'});await editor.getByLabel(store.products[1].sku+' 尺寸',{exact:true}).selectOption({label:'L'});await editor.getByLabel(store.soldOutProduct.sku+' 尺寸',{exact:true}).selectOption({label:'L'});
+  const signatures:{key:string|undefined;version:string|undefined;body:string|null}[]=[],pattern='**/product-groups/'+store.products[0].sku;
+  page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/product-groups/'+store.products[0].sku))signatures.push({key:request.headers()['idempotency-key'],version:request.headers()['if-match'],body:request.postData()});});
+  await page.route(pattern,async route=>{if(route.request().method()==='PUT'){await route.fetch();await route.abort('failed');}else await route.continue();});
+  await editor.getByRole('button',{name:'儲存規格',exact:true}).click();await expect(editor.getByRole('status')).toContainText('暫時無法確認儲存結果');await expect(editor.getByLabel('商品組名稱',{exact:true})).toBeDisabled();
+  await page.unroute(pattern);await editor.getByRole('button',{name:'重試原操作',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存規格');expect(signatures).toHaveLength(2);expect(signatures[1]).toEqual(signatures[0]);
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByLabel('商品組名稱',{exact:true}).focus();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-editor-'+width+'.png'),fullPage:true});}
+  await store.republish();const detail=await buyer.newPage();await detail.goto('/shops/'+store.slug);await expect(detail.getByRole('link',{name:'查看商品：經典 T 恤',exact:true})).toHaveCount(1);await expect(detail.locator('.shop-catalog')).toContainText('部分規格售完');
+  for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-grid-'+width+'.png'),fullPage:true});}
+  await detail.goto('/shops/'+store.slug+'/products/'+store.products[0].sku);const length=await detail.evaluate(()=>history.length);await detail.getByRole('link',{name:/^顏色：黑/}).click();await expect(detail).toHaveURL(store.origin+'/shops/'+store.slug+'/products/'+store.products[1].sku);expect(await detail.evaluate(()=>history.length)).toBe(length);await expect(detail.getByRole('link',{name:/^顏色：黑/})).toBeFocused();await expect(detail.locator('#shop-variant-status')).toContainText('黑／L');await expect(detail.locator('#shop-add-to-cart')).toHaveAttribute('data-title','經典 T 恤（黑／L）');
+  const noJs=await plain.newPage();await noJs.goto('/shops/'+store.slug+'/products/'+store.soldOutProduct.sku);await expect(noJs.locator('.shop-availability')).toHaveText('此規格已售完，請選擇其他規格。');await expect(noJs.locator('#shop-add-to-cart')).toHaveCount(0);await expect(noJs.getByRole('link',{name:/^尺寸：L/})).toHaveAttribute('aria-current','true');
+  for(const width of [390,768,1440]){await noJs.setViewportSize({width,height:900});expect(await noJs.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await noJs.screenshot({path:info.outputPath('variants-no-js-sold-out-'+width+'.png'),fullPage:true});}
+  await noJs.getByRole('link',{name:/^顏色：黑/}).click();await expect(noJs).toHaveURL(store.origin+'/shops/'+store.slug+'/products/'+store.products[1].sku);await expect(noJs.locator('#shop-add-to-cart')).toHaveAttribute('data-sku',store.products[1].sku);await expect(noJs).toHaveTitle('經典 T 恤（黑／L）｜山邊小店｜自由工坊');
+ }finally{await owner.close();await buyer.close();await plain.close();await store.close();}
+});

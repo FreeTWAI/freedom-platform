@@ -243,3 +243,16 @@ test('offer photo flag defaults off, validates its spelling and needs only produ
   }
   assert.equal(fixture(config=>{config.env.next.vars.FREEDOM_SUPPLY_OFFER_PHOTOS_INVENTED_ENABLED='true';}).structural,false);
 });
+
+test('store variants accepts exact booleans without media but requires guild launchpad',()=>{
+  for(const value of ['TRUE','1','',true]){
+    const report=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED=value;});
+    assert.equal(report.structural,false);assert(report.errors.includes('next:FREEDOM_STORE_VARIANTS_ENABLED:invalid_flag'));
+  }
+  const withoutGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED='true';});
+  assert(withoutGuild.blockers.includes('next:storefront.variants:guild_launchpad_required'));
+  const withGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED='true';config.env.next.vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED='true';});
+  assert.equal(withGuild.structural,true);assert(!withGuild.blockers.includes('next:storefront.variants:guild_launchpad_required'));
+  assert.deepEqual(withGuild.mapping.next.required_capabilities,[]);
+  assert(withGuild.mapping.next.features.every(feature=>feature.declared_enabled===false));
+});

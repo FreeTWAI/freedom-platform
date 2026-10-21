@@ -699,3 +699,15 @@ test('Worker commerce email requires EMAIL and COMMERCE_JOURNAL before opening a
   assert.equal(dueDepsSeen[1].emailSender, undefined);
   assert.ok(dueDepsSeen[1].keyring);
 });
+
+test('variants flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_VARIANTS_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeVariantsEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_VARIANTS_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_VARIANTS_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_VARIANTS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeVariantsEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});

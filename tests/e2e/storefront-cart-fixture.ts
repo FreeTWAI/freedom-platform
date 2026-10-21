@@ -1,3 +1,4 @@
+import {collaborationGitHubFixture} from '../../packages/testing/github-collaboration.js';
 import {Problem} from '../../packages/shared/problem.js';
 import {StoreAdmissionViewSchema} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import { randomUUID } from 'node:crypto';
@@ -67,7 +68,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
+type CartControls = {storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -106,6 +107,8 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
         return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
       }}:{}),
       guildLaunchpadEnabled: true,
+      storeVariantsEnabled:controls.storeVariantsEnabled===true,
+      ...(controls.storeVariantsEnabled?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
       supplierConsoleEnabled,
       ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
@@ -313,6 +316,9 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       saveOfflineFixture,
       admission: listener.admission,
       sellerPost: post,
+      sellerGet:async(path:string)=>(await sellerContext.request.get('/api/v1'+path)).json(),
+      sellerPut:async(path:string,body:unknown,version:string)=>{const response=await sellerContext.request.put('/api/v1'+path,{data:body,headers:headers(version)});const raw=await response.json();expect(response.status(),JSON.stringify(raw)).toBe(200);return raw;},
+      sellerPatch:patch,
       republish,
       updatePriceAndRepublish,
       removeProductAndRepublish,

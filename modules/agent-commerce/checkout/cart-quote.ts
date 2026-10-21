@@ -12,6 +12,7 @@ const cartPortResult=z.object({delivery_options:CartQuoteResponseSchema.shape.de
 export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuoteInput,ports:CheckoutPorts,isMember=false) {
   const context=await readCheckoutStore(q,store,input.lines.map(l=>l.sku)),p=context.profile;
   const publication=p.projection as {revision:string;products:{sku:string;title:string;price_minor:number}[]};
+  const labels=await ports.buyerLabels?.resolve(q,p);
   const quoteLines:ShippingQuoteLine[]=[];
   const lines=[];
   for(const wanted of input.lines) {
@@ -24,6 +25,7 @@ export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuote
         requireCondition(supplier&&supplier.currency===p.currency,409,'supply_unavailable','供貨來源無法使用。');return supplier;
       });
       const b=resolved.bindings[0],priced=resolved.lines[0];
+      if(labels)base.title=labels.get(wanted.sku)??base.title;
       quoteLines.push({sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:priced.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id});
       const available=(await q.query<{available:number}>(`SELECT greatest(0,i.stock
         -coalesce((SELECT sum(h.quantity) FROM commerce_inventory_reservations h WHERE h.item_id=i.item_id AND h.state='held' AND h.expires_at>clock_timestamp()),0)

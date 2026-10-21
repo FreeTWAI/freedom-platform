@@ -899,3 +899,24 @@ test('delivery reasons name blocked supply items; removing them keeps own items 
     await expect(page.getByRole('region', {name: '2. 核對商品與配送'})).not.toContainText(source.title);
   } finally {await context.close(); await sellerContext.close(); await store.close(); await supplier.close();}
 });
+
+test('VARIANTS-E2E each SKU keeps its stock and checkout/order labels survive a published group rename',async({browser,e2eAuthPool},info)=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{storeVariantsEnabled:true}),context=await browser.newContext({baseURL:store.origin});
+ try{
+  const a=await store.sellerPatch(store.root+'/products/'+store.products[0].product_id,{stock:1},store.products[0].version),b=await store.sellerPatch(store.root+'/products/'+store.products[1].product_id,{stock:2},store.products[1].version);
+  const axes=[{key:randomUUID(),name:'顏色',values:[{key:randomUUID(),name:'白'},{key:randomUUID(),name:'黑'}]},{key:randomUUID(),name:'尺寸',values:[{key:randomUUID(),name:'M'}]}];
+  const input={title:'經典 T 恤',description:'合成商品組介紹',axes,members:[{product_id:a.product_id,product_version:a.version,value_keys:[axes[0].values[0].key,axes[1].values[0].key]},{product_id:b.product_id,product_version:b.version,value_keys:[axes[0].values[1].key,axes[1].values[0].key]}],default_product_id:a.product_id,order:0};
+  await store.sellerPut(store.root+'/product-groups/'+a.sku,input,'1');await store.republish();await openBuyer(e2eAuthPool,context,store);
+  const page=await context.newPage();await start(page,store);await expect(page.locator('#shop-checkout')).toContainText('經典 T 恤（白／M）');
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-checkout-label-'+width+'.png'),fullPage:true});}
+  const checkout=await freeze(page,store);expect(checkout.terms.items[0].title).toBe('經典 T 恤（白／M）');const order=await place(page,'面交付款');expect(order.lines[0].title).toBe('經典 T 恤（白／M）');
+  const group=await store.sellerGet(store.root+'/product-groups/'+a.sku);await store.sellerPut(store.root+'/product-groups/'+a.sku,{...input,title:'新版 T 恤'},group.version);await store.republish();
+  await page.reload();await expect(page.locator('#shop-order')).toContainText('經典 T 恤（白／M）');await expect(page.locator('#shop-order')).not.toContainText('新版 T 恤');
+  const seller=await store.sellerGet(store.root+'/checkout-orders/'+order.order_ref);expect(seller.lines[0].title).toBe('經典 T 恤（白／M）');
+  await page.goto('/shops/'+store.slug+'/products/'+a.sku);await expect(page.locator('.shop-availability')).toContainText('此規格已售完');await expect(page.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:/^顏色：黑/}).click();await expect(page.locator('#shop-add-to-cart')).toHaveAttribute('data-title','新版 T 恤（黑／M）');await page.getByRole('button',{name:'加入購物車',exact:true}).click();await page.getByRole('link',{name:'查看購物車',exact:true}).click();await expect(page.locator('#shop-cart')).toContainText('新版 T 恤（黑／M）');
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-cart-label-'+width+'.png'),fullPage:true});}
+  await page.getByRole('link',{name:'前往結帳',exact:true}).click();await page.getByLabel('收件人姓名',{exact:true}).fill('合成買家乙');await page.getByLabel('收件人手機',{exact:true}).fill('0900123456');await page.getByLabel('Email',{exact:true}).fill('variants-second@example.test');await page.getByRole('radio',{name:'面交取貨',exact:true}).check();await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy','false');await freeze(page,store);const second=await place(page,'面交付款');expect(second.lines[0].title).toBe('新版 T 恤（黑／M）');
+  expect((await e2eAuthPool.query('SELECT item_id,reserved FROM commerce_items WHERE item_id=ANY($1::uuid[]) ORDER BY item_id',[[a.product_id,b.product_id]])).rows.map(row=>row.reserved)).toEqual([1,1]);
+ }finally{await context.close();await store.close();}
+});

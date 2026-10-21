@@ -164,3 +164,14 @@ test('member checkout list and retained B07 are read-only and remain available i
   assert.equal((await app.request(x.h.origin+`/shops/${s.slug}/orders/${order.order_id}`)).status,404);
   assert.deepEqual(await snapshot(),before);
 });
+
+test('quarantine blocks all three variant mutations and receipt replay before any rows or sequences change',async()=>{
+ const s=await h.f.x.store(),app=createApp(h.f.x.runtime,h.f.x.h.origin,'local',{guildLaunchpadEnabled:true,storeVariantsEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:h.f.settings});
+ const root=s.root+'/product-groups/'+s.product.sku,key=randomUUID(),body={title:'合成規格商品',description:'',axes:[],members:[{product_id:s.product.product_id,product_version:s.product.version,value_keys:[]}],default_product_id:s.product.product_id,order:0};
+ const send=(method:string,suffix:string,value:unknown,commandKey=key)=>h.f.x.h.call(method,root+suffix,s.owner,value,{'Idempotency-Key':commandKey,'If-Match':'"1"'},app);
+ const before=await snapshot();h.f.settings.quarantine=true;
+ for(const [method,suffix,value] of [['PUT','',body],['POST','/products',{product:{title:'合成新品',price_minor:100,stock:2},value_keys:[]}],['POST','/split',{}]] as const)assert.equal((await send(method,suffix,value)).status,503);
+ assert.deepEqual(await snapshot(),before);assert.equal((await h.f.x.h.call('GET',root,s.owner,undefined,{},app)).status,200);
+ h.f.settings.quarantine=false;assert.equal((await send('PUT','',body)).status,200);
+ const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await send('PUT','',body)).status,503);assert.deepEqual(await snapshot(),committed);
+});

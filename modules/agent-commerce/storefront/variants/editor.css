@@ -1,0 +1,15 @@
+.store-variants-editor { min-width: 0; padding: 20px 0; border-block: 1px solid var(--line); }
+.store-variant-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.store-variant-axes, .store-variant-members { display: grid; gap: 16px; min-width: 0; }
+.store-variant-member, .store-variant-axes > section, .store-variant-new { padding: 16px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.store-variant-inline { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.store-variant-inline label { flex: 1 1 150px; min-width: 0; }
+.store-variants-editor input, .store-variants-editor select, .store-variants-editor textarea { max-width: 100%; min-width: 0; }
+.store-variant-label { overflow-wrap: anywhere; }
+.store-variant-default { display: flex; gap: 8px; align-items: center; }
+.store-variant-default input { width: auto; }
+.store-variant-price { display: flex; flex-wrap: wrap; gap: 12px; border: 0; padding: 0; min-width: 0; }
+.store-variant-price label { flex: 1 1 120px; min-width: 0; }
+.store-variants-editor .btn { width: auto; white-space: normal; }
+@media(min-width:768px) { .store-variant-axes, .store-variant-members { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .store-variants-editor .btn-primary { width: 100%; } }
