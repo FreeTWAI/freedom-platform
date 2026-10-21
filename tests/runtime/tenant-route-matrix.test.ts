@@ -225,11 +225,8 @@ const routeTable: Record<string, string> = {
   'GET /shops/:slug/about': 'global',
   'GET /shops/:slug/policies/:kind': 'global',
   'GET /shops/:slug/policies/:kind/v/:version_id': 'global',
-  'ALL /shops/:slug/media/:revision/:sku/*': 'middleware',
   'GET /shops/:slug/media/:revision/:sku/:n': 'global',
   'HEAD /shops/:slug/media/:revision/:sku/:n': 'global',
-  'GET /shops/:slug/media/:revision/:sku/*': 'global',
-  'HEAD /shops/:slug/media/:revision/:sku/*': 'global',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'middleware',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'middleware',
@@ -678,8 +675,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 165, middleware: 32 });
-  assert.equal(selectedRoutes.length, 239);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 11, tenant: 165, middleware: 31 });
+  assert.equal(selectedRoutes.length, 236);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
