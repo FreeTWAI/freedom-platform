@@ -67,7 +67,7 @@ export function GitHubSourceLinks({repositoryUrl}:{repositoryUrl:string}){
 function count(value:number|null|undefined){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('zh-TW'):'—';}
 function date(value:string|null|undefined){return value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString('zh-TW'):'—';}
 
-export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo}:{bookId:string;repositoryUrl:string;compact?:boolean;returnTo?:string}){
+export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,sourceCredit=false}:{bookId:string;repositoryUrl:string;compact?:boolean;returnTo?:string;sourceCredit?:boolean}){
   const store=useContext(SocialContext)??publicStore;
   const starCountId=useId();
   useSyncExternalStore(store.subscribe,store.snapshot,store.snapshot);
@@ -90,7 +90,7 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo}:{
   }
   const secondaryMetrics=<><div><dt>待處理 Issues／PR</dt><dd>{count(value?.open_issues_count)}</dd></div><div><dt>追蹤專案 · Watch</dt><dd><a className="github-watch-link" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="追蹤專案（Watch）↗" title="前往 GitHub，選擇 Watch 通知">{count(value?.subscribers_count)}</a></dd></div><div><dt>最近更新</dt><dd>{date(value?.pushed_at)}</dd></div></>;
   const metricsNote=<p className="github-metrics-note">{metrics.loading&&!value?'正在讀取 GitHub 數據…':unknown?'GitHub 數據暫時無法讀取':`${old?'上次取得的數據':'數據更新'} · ${date(value?.checked_at)}`}{value?.language?` · ${value.language}`:''}</p>;
-  const source=<div className="github-social-source"><a href={repositoryUrl} target="_blank" rel="noopener noreferrer">原作者 GitHub ↗</a><a href={new URL(repositoryUrl).origin+'/'+new URL(repositoryUrl).pathname.split('/')[1]} target="_blank" rel="noopener noreferrer">Follow 原作者 ↗</a>{value?.archived&&<span className="badge">已封存</span>}</div>;
+  const source=<div className="github-social-source"><a href={repositoryUrl} target="_blank" rel="noopener noreferrer">{sourceCredit?'原作':'原作者'} GitHub ↗</a><a href={new URL(repositoryUrl).origin+'/'+new URL(repositoryUrl).pathname.split('/')[1]} target="_blank" rel="noopener noreferrer">Follow {sourceCredit?'來源帳號':'原作者'} ↗</a>{value?.archived&&<span className="badge">已封存</span>}</div>;
   const accountLoading=account.loading&&!account.value;
   const actionLabel=!store.member?'登入後 Star':accountLoading?'確認 GitHub 連結…':account.error?'重新確認 GitHub 連結':!account.value?.configured?'GitHub 連結尚未啟用':!connected?connecting?'前往 GitHub…':'連結 GitHub 後 Star':star.saving?'正在保存…':!known?'Star 狀態待確認':star.value?.starred?'取消 Star':'Star';
   const actionHint=store.member&&account.value?.configured&&!connected&&!connecting&&!account.error?'連結 GitHub，回來後再點星星。':actionLabel;
@@ -100,7 +100,7 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo}:{
   const forkContents=<><GitHubForkIcon/><span className="github-fork-count">{count(value?.forks_count)}</span></>;
   function starAction(){if(account.error)void store.loadAccount(true);else if(!connected)void connect();else if(known&&!star.loading&&!star.saving)void store.toggleStar(bookId);}
   const actionStatus=accountLoading||connecting||connected&&(!known||star.saving)?actionLabel:store.member&&!account.error&&!account.value?.configured?'GitHub Star 尚未啟用':null;
-  return <div className={`github-book-social${compact?' github-book-social-compact':''}`} ref={ref} data-github-book={bookId} aria-label="原作者 GitHub 數據與操作">
+  return <div className={`github-book-social${compact?' github-book-social-compact':''}`} ref={ref} data-github-book={bookId} aria-label={`${sourceCredit?'原作':'原作者'} GitHub 數據與操作`}>
     {!compact&&source}
     <div className="github-social-overview"><div className="github-social-actions">
       {!store.member?<a className="btn btn-ghost github-star-control" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗" aria-describedby={starCountId} title="前往原作 GitHub 加星">{starContents}</a>:<button className="btn btn-ghost skill-book-star github-star-control" aria-label={actionLabel} aria-description={actionHint} aria-describedby={starCountId} title={`${actionHint} · ${count(value?.stargazers_count)} Stars`} aria-pressed={connected&&known?star.value!.starred!:undefined} aria-busy={star.saving||connecting||accountLoading} disabled={disabled} onClick={starAction}>{starContents}</button>}

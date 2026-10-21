@@ -1,5 +1,7 @@
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
+import {serve} from '@hono/node-server';
+import {once} from 'node:events';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {Pool} from 'pg';
 import {createPool,LOCAL_DATABASE_URL,type Command} from '../../packages/db/index.js';
@@ -144,17 +146,33 @@ test('concurrent issuance and departure share the guild lock and never leave a u
  assert.equal((await pool.query('SELECT count(*) FROM development_keys WHERE revoked_at IS NULL')).rows[0].count,'0');
 });
 
-test('Agent HTTP accepts only its scoped bearer, rejects foreign Origin and cookie-only requests, and browser endpoints retain CSRF',async()=>{
- await enable();const key=await service.issueKey(command({},'issue'),'skill',target),app=createApp(pool,origin,'local',{githubSocial:{config,fetcher}});
- const request=(headers:Record<string,string>,body:unknown=proposal)=>app.request(origin+'/development-agent/v1/proposals',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID(),...headers},body:JSON.stringify(body)});
- assert.equal((await request({Authorization:'Bearer '+key.token})).status,200);
- assert.equal((await request({Authorization:'Bearer '+key.token,Origin:'https://foreign.invalid'})).status,403);
- assert.equal((await request({Cookie:'freedom_local_session='+cookie})).status,401);
- const browserPath=origin+'/api/v1/me/development/skill/video-autopilot/keys';
- assert.equal((await app.request(browserPath,{method:'POST',headers:{Cookie:'freedom_local_session='+cookie,Origin:origin,'Content-Type':'application/json'},body:'{}'})).status,403);
- assert.equal((await request({Authorization:'Bearer fpk_'+randomBytes(32).toString('base64url')})).status,401);
- assert.equal((await app.request(origin+'/api/v1/me/development/skill/video-autopilot')).status,401);
- assert.equal((await request({Authorization:'Bearer '+key.token},{...proposal,target_key:'another'})).status,422);
+test('native Agent HTTP accepts only ASCII Bearer schemes and preserves mixed-case credential bytes and replay authority',async()=>{
+ await enable();const issued=await service.issueKey(command({},'issue'),'skill',target);
+ const token='fpd_'+ 'AbC_dE-f0123456789'.repeat(3).slice(0,43);
+ await pool.query('UPDATE development_keys SET secret_hash=$1 WHERE key_id=$2',[tokenHash(token),issued.key_id]);
+ let app=createApp(pool,origin,'local',{githubSocial:{config,fetcher}});
+ const server=serve({fetch:request=>app.fetch(request),hostname:'127.0.0.1',port:0});
+ try{
+  if(!server.listening)await once(server,'listening');const address=server.address();assert(address&&typeof address!=='string');
+  const at=`http://127.0.0.1:${address.port}`;app=createApp(pool,at,'local',{githubSocial:{config,fetcher}});
+  const key=randomUUID(),request=(headers:Record<string,string>,body:unknown=proposal)=>fetch(at+'/development-agent/v1/proposals',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,...headers},body:JSON.stringify(body)});
+  let saved:unknown;
+  for(const scheme of ['Bearer ','bearer ','bEaReR ','BEARER   ']){
+   const result=await request({Authorization:scheme+token});assert.equal(result.status,200);const body=await result.json();
+   if(saved)assert.deepEqual(body,saved);else saved=body;
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM development_proposals')).rows[0].count,'1');
+  assert.equal((await pool.query("SELECT count(*) FROM command_receipts WHERE operation=$1",[`agent-development/${issued.key_id}`])).rows[0].count,'1');
+  assert.equal((await pool.query("SELECT count(*) FROM transition_journal WHERE aggregate_type='development_proposal'")).rows[0].count,'1');
+  for(const authorization of ['Basic '+token,'BearerX '+token,'Bearer\t'+token,'Bearer'+token,'Bearer\u00a0'+token,'Bearer '+token.replace('fpd_','fpk_'),'Bearer '+token.toLowerCase(),'Bearer '+token.replace('fpd_','FPD_')])
+   assert.equal((await request({Authorization:authorization})).status,401);
+  assert.equal((await request({Authorization:'Bearer '+token,Origin:'https://foreign.invalid'})).status,403);
+  assert.equal((await request({Cookie:'freedom_local_session='+cookie})).status,401);
+  const browserPath=at+'/api/v1/me/development/skill/video-autopilot/keys';
+  assert.equal((await fetch(browserPath,{method:'POST',headers:{Cookie:'freedom_local_session='+cookie,Origin:at,'Content-Type':'application/json'},body:'{}'})).status,403);
+  assert.equal((await fetch(at+'/api/v1/me/development/skill/video-autopilot')).status,401);
+  assert.equal((await request({Authorization:'Bearer '+token},{...proposal,target_key:'another'})).status,422);
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
 
 test('losing skill eligibility preserves platform authority, while an old activation receipt cannot restore a revoked grant',async()=>{
