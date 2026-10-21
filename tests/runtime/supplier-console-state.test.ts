@@ -610,7 +610,7 @@ test('merchant stock contracts accept legacy absence and validate all occupied-s
 test('merchant inventory renders unavailable values locally and keeps unknown products after known availability',()=>{
  const inventory={state:'ready' as const,stock:20,reserved:8,available:12,held:3,allocated:5};
  const render=(props:Parameters<typeof MerchantInventorySummary>[0])=>renderToStaticMarkup(createElement(MerchantInventorySummary,props));
- const html=render({stock:20,inventory});for(const text of ['庫存 20・已占用 8・可售 12','預留中 3','已付款待出貨 5','tabular-nums'])assert(html.includes(text),text);
+ const html=render({stock:20,inventory});for(const text of ['庫存 20・已占用 8・可售 12','預留中 3','已付款待出貨 5','merchant-inventory-values','merchant-inventory-breakdown'])assert(html.includes(text),text);
  assert(render({stock:20,inventory,supplier:true}).includes('庫存 20／已占用 8／可用 12'));
  const bad=render({stock:20,inventory:{state:'inconsistent',code:'reservation_inconsistent'}});assert(bad.includes('已占用 —・可售 —'));assert(bad.includes('庫存紀錄不一致'));assert(!bad.includes('已付款待出貨 0'));
  assert(render({stock:20}).includes('庫存明細暫時無法讀取，請重新讀取。'));

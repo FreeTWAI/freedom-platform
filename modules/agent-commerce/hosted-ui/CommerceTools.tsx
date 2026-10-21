@@ -56,8 +56,8 @@ export function MerchantInventorySummary({stock,inventory,supplier=false,compact
   const label=supplier?'可用':'可售',valid=inventory?.state==='ready';
   const reserved=valid?inventory.reserved:'—',available=valid?inventory.available:'—';
   return <div className="merchant-inventory">
-    <p className="merchant-inventory-values" style={{fontVariantNumeric:'tabular-nums'}}>{compact?`${stock}／${reserved}／${available}`:supplier?`庫存 ${stock}／已占用 ${reserved}／${label} ${available}`:`庫存 ${stock}・已占用 ${reserved}・${label} ${available}`}</p>
-    {valid?<p className="field-hint merchant-inventory-breakdown" style={{fontVariantNumeric:'tabular-nums'}}><span>預留中 {inventory.held}</span><span>已付款待出貨 {inventory.allocated}</span></p>
+    <p className="merchant-inventory-values">{compact?`${stock}／${reserved}／${available}`:supplier?`庫存 ${stock}／已占用 ${reserved}／${label} ${available}`:`庫存 ${stock}・已占用 ${reserved}・${label} ${available}`}</p>
+    {valid?<p className="field-hint merchant-inventory-breakdown"><span>預留中 {inventory.held}</span><span>已付款待出貨 {inventory.allocated}</span></p>
       :<><p className="field-hint" role="status">{inventory?`庫存紀錄不一致，暫時無法確認已占用與${label}數量。請重新讀取；若仍未恢復，請聯絡平台協助核對。`:'庫存明細暫時無法讀取，請重新讀取。'}</p>
       {onRefresh&&<button type="button" className="btn btn-ghost btn-small" disabled={disabled} onClick={onRefresh}>重新讀取庫存</button>}</>}
   </div>;

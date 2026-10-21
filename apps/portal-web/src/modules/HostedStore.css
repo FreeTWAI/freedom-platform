@@ -54,7 +54,8 @@
 
 .merchant-inventory { min-width: 0; overflow-wrap: anywhere; }
 .merchant-inventory p { margin: 0; }
-.merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+.merchant-inventory-values { font-variant-numeric: tabular-nums; }
+.merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-variant-numeric: tabular-nums; }
 .merchant-inventory .btn-small { width: auto; min-height: 44px; max-width: 100%; font-size: .875rem; padding: .4rem .75rem; }
 
 .hosted-store .actions > .btn-small { width: auto; flex: none; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; }
