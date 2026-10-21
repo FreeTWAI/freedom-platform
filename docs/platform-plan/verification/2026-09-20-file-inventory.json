@@ -25564,8 +25564,8 @@
     },
     {
       "path": "tests/runtime/storefront-appearance-contracts.test.ts",
-      "bytes": 7683,
-      "sha256": "06877f135fea7eb8e6301ffa6732432a071788c9301785c369199e3170e3ab5b"
+      "bytes": 8072,
+      "sha256": "d788939d839e88e47e7a703bf15c04ce490a05f00e91fc94477b89c2976bdc59"
     },
     {
       "path": "tests/runtime/storefront-appearance-contrast.test.ts",
