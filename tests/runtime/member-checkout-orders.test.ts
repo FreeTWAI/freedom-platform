@@ -9,6 +9,7 @@ import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transac
 import {createTenantListCursorCodec} from '../../packages/shared/tenant-list-cursor.js';
 import {freezeCheckout,placeCheckoutOrder,cancelUnpaidOrder,canonicalJSON} from '../../modules/agent-commerce/checkout/index.js';
 import {createPaymentMethodsPort} from '../../modules/agent-commerce/payments/offline/methods.js';
+import {createStoreAdmissionPort} from '../../modules/agent-commerce/operations/admissions.js';
 import {checkoutHarness,ports,type CheckoutHarness} from './hosted-checkout-harness.js';
 import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
 
@@ -168,6 +169,34 @@ test('a late session or principal change suppresses the list; invalid retained m
   const inactive=await readWithSeam(async()=>{await x.h.pool.query('UPDATE users SET active=false WHERE user_id=$1',[a.id]);});
   assert.equal(inactive.status,401);assert.equal(inactive.data.items,undefined);await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[a.id]);
   const broken=await readWithSeam(async()=>{},true);assert.equal(broken.status,500);assert.equal(broken.data.code,'internal_error');assert.equal(broken.data.items,undefined);
+});
+
+test('revoked admission keeps a still-published shop on its public member order page',async()=>{
+  const version=(await x.h.pool.query('SELECT version::text FROM module_instances WHERE instance_id=$1',[s.instanceId])).rows[0].version;
+  assert.equal((await x.send(s,'/upgrade',{},version)).status,200);
+  const csrf=randomUUID(),adminEmail=`admin-${randomUUID()}@example.test`;
+  await x.h.pool.query(`INSERT INTO platform_admins(admin_id,community_id,email,display_name)
+    SELECT $1,community_id,$2,'合成獨立准入管理員' FROM tenants WHERE tenant_id=$3`,[randomUUID(),adminEmail,s.tenantId]);
+  const profiles=['offline.bank_transfer.v1'],admission=createStoreAdmissionPort('sandbox',profiles);
+  const target=app(x.runtime,{commerceSettings:{...settings,consoleEnabled:true,providerProfiles:profiles},commercePorts:{...ports,admission},adminVerifier:async()=>({email:adminEmail,subject:'synthetic-member-orders-admin',csrfToken:csrf})});
+  const admin=async(path:string,body:unknown,status:number)=>{
+    const response=await target.request(x.h.origin+'/admin/api/commerce/store-admissions'+path,{method:'POST',headers:{Origin:x.h.origin,'X-Admin-CSRF':csrf,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+    const value=await response.json() as any;assert.equal(response.status,status,JSON.stringify(value));return value;
+  };
+  const admitted=await admin('',{tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成公開訂單准入驗證'},201);
+  assert.equal(await x.tx(async q=>admission.allowed(q,s)),true);
+  const root=`/public/stores/${s.slug}`,original=await get(root+'/orders/'+bank,a,target);
+  assert.equal(original.status,200);assert.equal(original.data.offline_instructions.account_number,'000000123456');
+  const revoked=await admin('/'+admitted.admission_id+'/revoke',{reason:'合成只撤銷准入，商店繼續公開'},200);
+  assert(revoked.revoked_at);assert.equal(await x.tx(async q=>admission.allowed(q,s)),false);
+  const html=await target.request(x.h.origin+`/shops/${s.slug}/orders/${bank}`,{headers:{Cookie:a.session.cookie}});
+  assert.equal(html.status,200);const body=await html.text();
+  assert.doesNotMatch(body,/data-retained-order="true"/);assert.match(body,/class="shop-footer"/);
+  const read=await get(root+'/orders/'+bank,a,target);assert.equal(read.status,200);assert.equal(read.data.order_ref,bank);
+  assert.deepEqual(read.data.offline_instructions,original.data.offline_instructions);
+  const publication=await get(root,a,target);assert.equal(publication.status,200);
+  const blocked=await x.h.post(root+'/checkouts',a.session,{...x.input(s.product.sku,1),publication_revision:publication.data.revision},undefined,randomUUID(),target);
+  assert.equal(blocked.status,409);assert.equal(blocked.data.code,'checkout_not_enabled');
 });
 
 test('retained private B07 admits only the active original member after unpublication and revoked admission',async()=>{

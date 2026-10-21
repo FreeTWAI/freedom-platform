@@ -24879,8 +24879,8 @@
     },
     {
       "path": "tests/runtime/member-checkout-orders.test.ts",
-      "bytes": 22969,
-      "sha256": "feadaf975cf1454503b6148d442c8ac753865c92e757e05e495fa88ce89e03ee"
+      "bytes": 25906,
+      "sha256": "080bd9c3fbfa8f83743758b62970814fa805177d31fc6d977ee0051fe1fab385"
     },
     {
       "path": "tests/runtime/member-communications.test.ts",
