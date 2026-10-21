@@ -2654,8 +2654,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStore.tsx",
-      "bytes": 55226,
-      "sha256": "33c466856e4bf0887b85bff15f75b5ff40bce566cf4b6560d32f54c427e458c9"
+      "bytes": 55319,
+      "sha256": "894038279bbc1c4086d6bd36160116a4c506664681fd20a323d7811667bef92a"
     },
     {
       "path": "apps/portal-web/src/modules/HostedStoreAppearance.css",

@@ -182,7 +182,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     setManualUrl(null);
   }, [root, storeCopyUrl, publishedSkuKey, editing, supplyEditing, publication?.current_revision]);
   function leaveOk() {
-    if (Object.values(photoBlockRef.current).some(Boolean)) {announce(photoBlockRef.current.policies?'賣方資訊與商店政策操作尚未確認，請先重試原操作。':photoBlockRef.current.appearance?'外觀操作尚未確認，請先重試原操作。':photoBlockRef.current.variants?'規格操作尚未確認，請先重試原操作。':'照片操作尚未確認，請先重試原照片操作。');return false;}
+    if (Object.values(photoBlockRef.current).some(Boolean)) {announce(photoBlockRef.current.policies?'賣方資訊與商店政策操作尚未確認，請先重試原操作。':photoBlockRef.current.appearance?'外觀操作尚未確認，請先重試原操作。':photoBlockRef.current.variants?'規格操作尚未確認，請先重試原操作。':photoBlockRef.current.categories?'暫時無法確認儲存結果，請用原操作重試。':'照片操作尚未確認，請先重試原照片操作。');return false;}
     if (busyRef.current || held.current) {
       announce(busyRef.current ? '正在確認原操作，請等候完成後再離開。' : '尚未確認原操作的結果，請按「重試」確認後再離開。');
       return false;
