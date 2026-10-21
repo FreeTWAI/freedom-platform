@@ -221,7 +221,7 @@ test('buyer order list follows next page and isolates another account', async ({
   } finally {await context.close();}
 });
 
-test('checkout orders region loads, empties, retries and pages above the unchanged v1 region',async({page,browser,baseURL,e2eAuthPool},info)=>{
+test('checkout orders region loads, empties, retries and pages above the separate reservations region',async({page,browser,baseURL,e2eAuthPool},info)=>{
   const store=await setupStorefrontOrderStore(e2eAuthPool,browser,baseURL!),listener=await openCartListener(e2eAuthPool),context=await browser.newContext({baseURL});
   const release=gate<void>();let hold=true,fail=false;
   try {
@@ -240,11 +240,29 @@ test('checkout orders region loads, empties, retries and pages above the unchang
       const url=new URL(route.request().url());url.searchParams.set('limit','1');await route.continue({url:url.toString()});
     });
     await buyerLogin(page,store.buyer.email,'#reservations',listener.origin);
-    const orders=page.getByRole('region',{name:'訂單',exact:true}),legacy=page.getByRole('region',{name:'我的訂單',exact:true});
+    const orders=page.getByRole('region',{name:'訂單',exact:true}),legacy=page.getByRole('region',{name:'預留紀錄',exact:true});
     await expect(orders).toContainText('正在讀取訂單…');
-    await expect(legacy.getByRole('heading',{name:'我的訂單',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(1);
+    await expect(page.getByRole('heading',{name:'我的訂單',exact:true,level:1})).toBeVisible();
+    await expect(orders.getByRole('heading',{name:'訂單',exact:true,level:2})).toBeVisible();
+    const reservationsHeading=page.getByRole('heading',{name:'預留紀錄',exact:true,level:2});
+    await expect(reservationsHeading).toBeVisible();
+    await expect(legacy.getByRole('heading',{level:2})).toHaveCount(0);
+    expect(await reservationsHeading.evaluate(heading=>heading.nextElementSibling?.getAttribute('role'))).toBe('note');
     await expect(legacy.getByRole('link',{name:'查看訂單',exact:true})).toHaveCount(1);
-    const originalLegacy=await legacy.evaluate(element=>element.outerHTML);
+    await expect(legacy.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
+    const originalLegacy=await legacy.locator('..').evaluate(element=>element.outerHTML);
+    // Only undo the three declared heading/name changes; compare the entire legacy component.
+    const expectedOffLegacy=await legacy.locator('..').evaluate(element=>{
+      const copy=element.cloneNode(true) as HTMLElement,heading=copy.firstElementChild;
+      if(heading?.tagName!=='H2'||heading.textContent!=='預留紀錄')throw Error('Missing separate reservations heading.');
+      heading.remove();
+      const lookup=copy.querySelector('section[aria-label="預留紀錄"]');
+      if(!lookup||lookup.querySelector('h2'))throw Error('Unexpected reservations lookup heading.');
+      lookup.setAttribute('aria-label','我的訂單');
+      const originalHeading=document.createElement('h2');originalHeading.textContent='我的訂單';lookup.prepend(originalHeading);
+      return copy.outerHTML;
+    });
     release.resolve();await expect(orders).toContainText('目前沒有訂單。');
     fail=true;await orders.getByRole('button',{name:'重新整理／第一頁',exact:true}).click();
     await expect(orders.getByRole('alert')).toHaveText('無法取得訂單，請稍後重試。');
@@ -261,13 +279,16 @@ test('checkout orders region loads, empties, retries and pages above the unchang
     await orders.getByRole('button',{name:'下一頁',exact:true}).click();
     await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',first.orderPath);
     await expect(orders.getByRole('button',{name:'下一頁',exact:true})).toHaveCount(0);
-    expect(await legacy.evaluate(element=>element.outerHTML)).toBe(originalLegacy);
+    expect(await legacy.locator('..').evaluate(element=>element.outerHTML)).toBe(originalLegacy);
     const off=await offListener(e2eAuthPool,true),offContext=await browser.newContext();
     try {
       const offPage=await offContext.newPage();await buyerLogin(offPage,store.buyer.email,'#reservations',off.origin);
       await expect(offPage.getByRole('region',{name:'訂單',exact:true})).toHaveCount(0);
       const old=offPage.getByRole('region',{name:'我的訂單',exact:true});await expect(old.getByRole('link',{name:'查看訂單',exact:true})).toHaveCount(1);
-      expect(await old.evaluate(element=>element.outerHTML)).toBe(originalLegacy);
+      await expect(old.getByRole('heading',{name:'我的訂單',exact:true,level:2})).toBeVisible();
+      await expect(offPage.getByRole('heading',{name:'預留紀錄',exact:true})).toHaveCount(0);
+      await expect(old.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
+      expect(await old.locator('..').evaluate(element=>element.outerHTML)).toBe(expectedOffLegacy);
     } finally {await offContext.close();await off.close();}
   } finally {release.resolve();await context.close();await listener.close();}
 });
