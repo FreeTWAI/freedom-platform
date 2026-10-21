@@ -369,7 +369,13 @@ test('SC-API-32 CSV layout, formula defenses, numeric cells and route headers (A
   }
   assert.equal(section(rows,'合作店家')[0][1],'\'+合作 "店家"');assert.equal(section(rows,'預留行項')[0][6],'\'+合作 "店家"');
   assertSummary(rows,r);
-  for(const row of section(rows,'商品'))for(const n of row.slice(6))assert.match(n,/^(0|[1-9][0-9]*)$/);
+  for(const row of section(rows,'商品')) {
+    assert.equal(row.length,18);assert.equal(row[17],'正常');
+    for(const n of row.slice(6,17))assert.match(n,/^(0|[1-9][0-9]*)$/);
+    assert.equal(Number(row[7]),Number(row[15])+Number(row[16]));
+  }
+  const productHeader=rows[rows.findIndex(r=>r.length===1&&r[0]==='商品')+1];
+  assert.equal(productHeader[7],'已占用');assert.deepEqual(productHeader.slice(15),['預留中','已付款待出貨','庫存狀態']);
   for(const row of section(rows,'合作店家'))for(const n of row.slice(2))assert.match(n,/^(0|[1-9][0-9]*)$/);
   for(const row of section(rows,'預留行項'))for(const n of row.slice(11))assert.match(n,/^(0|[1-9][0-9]*)$/);
   assert.equal(r.csv_rows,section(rows,'商品').length+section(rows,'合作店家').length+section(rows,'預留行項').length);

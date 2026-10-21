@@ -1,4 +1,4 @@
-import {LogisticsServiceKeySchema} from './hosted-shipping.js';
+import {DeliveryMethodSchema,LogisticsServiceKeySchema} from './hosted-shipping.js';
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
 export const CommerceSetupEmptyInputSchema=z.object({}).strict();
@@ -29,6 +29,39 @@ export const StoreAdmissionQuerySchema=z.object({tenant_id:OpaqueId}).strict();
 export const StoreAdmissionViewSchema=z.object({admission_id:OpaqueId,tenant_id:OpaqueId,instance_id:OpaqueId,environment:ProviderEnvironmentSchema,
   admitted_at:IsoTimeSchema,admitted_by:OpaqueId,reason,revoked_at:IsoTimeSchema.nullable(),revoked_by:OpaqueId.nullable(),revoke_reason:reason.nullable()}).strict();
 export const StoreAdmissionPageSchema=z.object({items:z.array(StoreAdmissionViewSchema).max(100)}).strict();
+export const StoreReadinessItemSchema=z.discriminatedUnion('key',[
+  z.object({key:z.literal('storefront'),state:z.enum(['done','missing']),revision:Version.nullable()}).strict(),
+  z.object({key:z.literal('products'),state:z.enum(['done','missing']),published_count:z.number().int().nonnegative(),sellable_count:z.number().int().nonnegative(),own_stock_count:z.number().int().nonnegative()}).strict(),
+  z.object({key:z.literal('store_information'),state:z.enum(['done','missing'])}).strict(),
+  z.object({key:z.literal('release'),state:z.enum(['done','upgrade_required']),module_release_ref:z.string()}).strict(),
+  z.object({key:z.literal('payment'),state:z.enum(['done','missing','not_offered']),version:Version.nullable()}).strict(),
+  z.object({key:z.literal('delivery'),state:z.enum(['done','missing']),version:Version.nullable()}).strict(),
+  z.object({key:z.literal('admission'),state:z.enum(['done','not_admitted','revoked'])}).strict(),
+  z.object({key:z.literal('platform'),state:z.enum(['done','paused'])}).strict(),
+]);
+export const StoreReadinessMethodsSchema=z.object({payment:z.array(z.enum(['bank_transfer','cash_on_meetup','card'])).max(3),
+  delivery:z.array(DeliveryMethodSchema).max(5)}).strict();
+export const StoreReadinessSchema=z.object({accepting_orders:z.boolean(),items:z.array(StoreReadinessItemSchema).length(8),methods:StoreReadinessMethodsSchema}).strict();
+const orderCount=z.object({count:z.number().int().min(0).max(99),more:z.boolean()}).strict();
+export const StoreOverviewSchema=StoreReadinessSchema.extend({tenant_id:OpaqueId,instance_id:OpaqueId,environment:ProviderEnvironmentSchema,checked_at:IsoTimeSchema,
+  orders:z.object({open:orderCount,awaiting_offline_payment:orderCount,needs_action:orderCount}).strict().nullable()}).strict();
+export const AdminStoreReadinessQuerySchema=z.object({limit:z.string().regex(/^(?:[1-9]|[1-4][0-9]|50)$/).optional(),offset:z.string().regex(/^(?:0|[1-9][0-9]{0,14})$/).optional()}).strict();
+export const AdminStoreReadinessItemSchema=z.object({tenant_id:OpaqueId,tenant_display_name:z.string(),tenant_status:z.string(),instance_id:OpaqueId,instance_status:z.string(),
+  store:z.object({name:z.string(),slug:z.string().nullable(),public_path:z.string().nullable()}).strict().nullable(),module_release_ref:z.string(),readiness:StoreReadinessSchema,
+  admission:z.object({active:StoreAdmissionViewSchema.nullable(),last_revoked:StoreAdmissionViewSchema.nullable()}).strict(),admin_is_member:z.boolean()}).strict();
+export const AdminStoreReadinessPageSchema=z.object({environment:ProviderEnvironmentSchema,checked_at:IsoTimeSchema,release_sha:z.string().nullable(),
+  platform:z.object({checkout_enabled:z.boolean(),quarantine:z.boolean(),provider_profiles:z.array(z.string())}).strict(),
+  summary:z.object({stores:z.number().int().nonnegative(),active_admissions:z.number().int().nonnegative(),accepting_orders:z.number().int().nonnegative()}).strict(),
+  items:z.array(AdminStoreReadinessItemSchema).max(50),next_offset:z.number().int().nonnegative().nullable()}).strict();
+export type StoreReadiness=z.infer<typeof StoreReadinessSchema>;
+export type StoreOverview=z.infer<typeof StoreOverviewSchema>;
+export type AdminStoreReadinessPage=z.infer<typeof AdminStoreReadinessPageSchema>;
+/** UI-only vocabulary shared by seller and admin; no server imports. */
+export const STORE_READINESS_LABELS={storefront:'發布商店',products:'可售商品',store_information:'商店說明與聯絡方式',release:'商店版本',payment:'付款方式',delivery:'交付方式',admission:'平台開放確認',platform:'平台接單服務'} as const;
+export const STORE_PAYMENT_LABELS={bank_transfer:'銀行匯款',cash_on_meetup:'面交付現',card:'信用卡'} as const;
+export function storeReadinessStateLabel(item:z.infer<typeof StoreReadinessItemSchema>){
+  return item.state==='done'?'完成':item.key==='admission'||item.key==='platform'||item.state==='not_offered'?'等待平台':'待完成';
+}
 export const CommerceSetupErrorCodeSchema=z.enum([
   'logistics_credentials_required','logistics_service_exists','logistics_service_not_found','logistics_service_state','logistics_service_conflict',
   'store_upgrade_unavailable','commerce_credentials_unavailable','provider_environment_not_allowed','provider_account_exists',

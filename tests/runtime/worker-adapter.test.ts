@@ -14,6 +14,7 @@ import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/see
 import { tokenHash } from '../../modules/identity-membership/service.js';
 import { createWorkerHandler, cloudflareSourceNetwork, rateLimitNetworkKey, readWorkerConfig, workerRuntime, workerScope, type WorkerEnv } from '../../apps/platform-api/src/worker.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import {createPlatformApp} from '../../apps/platform-api/src/platform-app.js';
 import { authoredUploadText } from '../../apps/platform-api/src/routes/published-skills.js';
 import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
 import { assertPublicDatabase, assertStagingDatabase } from '../../apps/platform-api/src/readiness.js';
@@ -64,6 +65,75 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv & { ASSETS: ReturnTy
 }
 const stagingEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'staging', APP_ORIGIN: 'https://staging-next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_A, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 const publicEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'public', APP_ORIGIN: 'https://next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_B, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_REGISTRATION_COMMUNITY_ID: COMMUNITY, FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
+
+test('appearance flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeAppearanceEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeAppearanceEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('seller policies flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storePoliciesEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storePoliciesEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('gallery flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_GALLERY_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeGalleryEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_GALLERY_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_GALLERY_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_GALLERY_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeGalleryEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('offer photo flag parses exact booleans and requires supplier console and product-photo reads',()=>{
+  for(const flag of [undefined,'false']) {
+    const configuration=env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag})),{name:'ReadinessError'});
+  const media={get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA'];
+  const configured:Partial<WorkerEnv>={FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',MEDIA:media};
+  const configuration=env(configured);
+  assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,true);
+  for(const key of ['FREEDOM_GUILD_LAUNCHPAD_ENABLED','FREEDOM_SUPPLIER_CONSOLE_ENABLED','FREEDOM_HOSTED_STORE_PHOTOS_ENABLED'] as const)
+    assert.throws(()=>readWorkerConfig(env({...configured,[key]:'false'})),{name:'ReadinessError'});
+});
+
+test('worker mounts the optional catalog photo list with the existing complete offer-photo installation only',async()=>{
+  for(const enabled of [false,true]){
+    let mounted=false;
+    const pool=fakePool(),configuration=env({FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',
+      FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:String(enabled),
+      MEDIA:{get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA']});
+    const handler=createWorkerHandler({createPool:()=>pool as unknown as Pool,createApp:(...args)=>{
+      const app=createPlatformApp(...args);
+      mounted=app.routes.some(route=>route.method==='GET'&&route.path==='/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos');
+      return app;
+    }});
+    const pending:Promise<unknown>[]=[];
+    const response=await handler.fetch(new Request('http://127.0.0.1:8787/api/v1/site'),configuration,{waitUntil:work=>pending.push(work)});
+    assert.equal(response.status,200);assert.equal(mounted,enabled);
+    assert.equal((await response.json() as {supply_offer_photos_enabled:boolean}).supply_offer_photos_enabled,enabled);
+    await Promise.all(pending);
+  }
+});
 
 test('incomplete outcome enablement fails closed before pools or browser fallback',async()=>{
  const h=harness(),configuration=env({FREEDOM_EVENT_OUTCOMES_ENABLED:'true',FREEDOM_SQUAD_OUTCOMES_ENABLED:'false'});

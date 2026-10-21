@@ -1,3 +1,5 @@
+import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
+import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import * as shipping from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
 import * as commerceSetup from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import * as sellerCheckout from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
@@ -26,6 +28,7 @@ import {
 
 import * as storefront from '../../contracts/guild-launchpad/v1/storefront.js';
 import * as presentation from '../../contracts/guild-launchpad/v1/storefront-presentation.js';
+import * as appearance from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import * as hostedMedia from '../../contracts/guild-launchpad/v1/hosted-store-media.js';
 import * as sharedOrder from '../../contracts/guild-launchpad/v1/hosted-shared-order.js';
 import * as hostedOrder from '../../contracts/guild-launchpad/v1/hosted-order.js';
@@ -142,11 +145,16 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['view', supplyCatalog.SupplyCatalogViewSchema, 'output', ['current_tenant_instance_capabilities']],
     ['product-create', supplyCatalog.SupplyProductInputSchema, 'input', []],
     ['product-update', supplyCatalog.SupplyProductUpdateInputSchema, 'input', ['at_least_one_field']],
-    ['product', supplyCatalog.SupplyProductViewSchema, 'output', ['store_write_required_for_cost']],
-    ['products', supplyCatalog.SupplyProductPageSchema, 'output', ['store_write_required_for_cost']],
+    ['product', supplyCatalog.SupplyProductViewSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency', 'store_write_required_for_cost']],
+    ['products', supplyCatalog.SupplyProductPageSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency', 'store_write_required_for_cost']],
   ]],
   ['hosted-distribution', 'Explicit supplier offer and exact seller listing consent. One supplier item; no payment authority.', [
     ['offer', distribution.SupplyOfferSchema, 'output', ['explicit_supplier_publication']],
+    ['offer-photo-state', distribution.SupplyOfferPhotoStateSchema, 'output', ['explicit_supplier_choice','independent_photo_sequence']],
+    ['offer-photo', distribution.SupplyOfferPhotoSchema, 'output', ['seller_route_only','no_supplier_asset_identity']],
+    ['catalog-photos', distribution.SupplyCatalogPhotosSchema, 'output', ['current_seller_store_write','same_catalog_window','current_offered_share_only']],
+    ['offer-photo-preview-query', distribution.SupplyOfferPhotoPreviewQuerySchema, 'input', ['own_product_photo_route','current_shared_offer_and_sequence']],
+    ['offer-page', distribution.SupplyOfferPageSchema, 'output', ['current_seller_store_write','community_offer_visibility','no_private_supplier_fields']],
     ['offers', distribution.SupplyOffersSchema, 'output', ['bounded_catalog']],
     ['proposal', distribution.DistributionInputSchema, 'input', ['exact_offer_digest']],
     ['decision', distribution.DistributionDecisionSchema, 'input', ['exact_listing_digest_and_version']],
@@ -154,13 +162,16 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['selections', distribution.DistributionsSchema, 'output', ['private_participant_projection']],
   ]],
   ['hosted-supply-terms', 'Private supplier terms on the existing inventory item. No supply offer, acceptance or transaction is enabled.', [
+    ['merchant-inventory', storefront.MerchantInventorySchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency']],
+    ['merchant-product', storefront.MerchantProductViewSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency']],
+    ['merchant-products', storefront.MerchantProductPageSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency']],
     ['input', supplyTerms.SupplyTermsInputSchema, 'input', ['current_same_instance_store_write_capability', 'product_version_cas']],
-    ['view', supplyTerms.SupplyTermsSchema, 'output', ['available_equals_stock_minus_reserved', 'private_cost_and_terms']],
+    ['view', supplyTerms.SupplyTermsSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency', 'available_equals_stock_minus_reserved', 'private_cost_and_terms']],
   ]],
   ['supplier-console', 'Private supplier console read projections over the existing hosted supply authority. Commands stay on the existing routes, keys and versions; no payment, revenue or commission fact.', [
-    ['overview', supplierConsole.SupplierOverviewSchema, 'output', ['single_statement_snapshot', 'store_write_required_for_counts', 'owner_required_for_reservation_lines', 'unavailable_is_not_zero']],
-    ['products', supplierConsole.SupplierProductsSchema, 'output', ['complete_bounded_catalog', 'available_equals_stock_minus_reserved', 'private_cost_and_terms']],
-    ['product', supplierConsole.SupplierProductDetailSchema, 'output', ['private_cost_and_terms', 'impact_preview_is_not_authority']],
+    ['overview', supplierConsole.SupplierOverviewSchema, 'output', ['inventory_inconsistent_count_is_not_zero_stock', 'single_statement_snapshot', 'store_write_required_for_counts', 'owner_required_for_reservation_lines', 'unavailable_is_not_zero']],
+    ['products', supplierConsole.SupplierProductsSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency', 'complete_bounded_catalog', 'available_equals_stock_minus_reserved', 'private_cost_and_terms']],
+    ['product', supplierConsole.SupplierProductDetailSchema, 'output', ['merchant_inventory_equations_and_parent_counts', 'item_local_inconsistency', 'private_cost_and_terms', 'impact_preview_is_not_authority']],
     ['request', supplierConsole.SupplierRequestDetailSchema, 'output', ['single_statement_snapshot', 'supplier_relationship_only', 'current_selection_version_and_digest']],
     ['partners', supplierConsole.SupplierPartnersSchema, 'output', ['stable_seller_shop_id', 'supplier_relationship_only']],
     ['partner', supplierConsole.SupplierPartnerDetailSchema, 'output', ['stable_seller_shop_id', 'supplier_relationship_only']],
@@ -171,9 +182,9 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['reservation', supplierConsole.SupplierReservationDetailSchema, 'output', ['current_owner_only', 'state_decided_at_as_of', 'supplier_lines_only']],
     ['changes-query', supplierConsole.SupplierChangesQuerySchema, 'input', []],
     ['changes', supplierConsole.SupplierChangesSchema, 'output', ['own_tenant_journal_only', 'ids_and_versions_only', 'bounded_newest_first']],
-    ['summary', supplierConsole.SupplierSummarySchema, 'output', ['one_business_per_read', 'store_write_required_for_counts', 'unavailable_is_not_zero']],
+    ['summary', supplierConsole.SupplierSummarySchema, 'output', ['inventory_inconsistent_count_is_not_zero_stock', 'one_business_per_read', 'store_write_required_for_counts', 'unavailable_is_not_zero']],
     ['report-query', supplierConsole.SupplierReportQuerySchema, 'input', ['taipei_calendar_days', 'inclusive_max_366_days']],
-    ['report', supplierConsole.SupplierReportSchema, 'output', ['one_statement_at_as_of', 'store_write_required', 'reservations_owner_only', 'supply_amount_is_not_revenue', 'refused_above_max_csv_rows', 'not_a_data_export']],
+    ['report', supplierConsole.SupplierReportSchema, 'output', ['inventory_inconsistent_count_is_not_zero_stock', 'one_statement_at_as_of', 'store_write_required', 'reservations_owner_only', 'supply_amount_is_not_revenue', 'refused_above_max_csv_rows', 'not_a_data_export']],
     ['materials', supplierConsole.SupplyMaterialsSchema, 'output', ['store_write_required', 'own_business_only', 'shared_retained_space_not_zero_when_unavailable']],
     ['material', supplierConsole.SupplyMaterialDetailSchema, 'output', ['store_write_required', 'immutable_versions', 'grant_history_retained']],
     ['material-create', supplierConsole.SupplyMaterialCreateInputSchema, 'input', ['own_product_or_brand', 'idempotency_key']],
@@ -223,6 +234,32 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['product-media-command', hostedMedia.ProductMediaCommandSchema, 'output', ['same_product_identity', 'original_completed_version', 'current_version_not_older_than_completion', 'current_same_instance_store_write']],
     ['public-store-media', hostedMedia.PublicStoreMediaSchema, 'output', ['unique_skus', 'exact_publication_revision_sku_path', 'current_publication_liveness', 'immutable_media_digest']],
     ['remove-photo-input', hostedMedia.RemoveProductPhotoInputSchema, 'input', ['current_same_instance_store_write', 'product_selection_version_cas']],
+  ]],
+  ['storefront-policies', 'C1 seller and plain text policy drafts with immutable publication references. No checkout consent or gate.', [
+    ['seller-draft', policies.SellerDraftSchema, 'input', ['no_account_defaults','business_name_if_any_field']],
+    ['policy-draft', policies.PolicyDraftSchema, 'input', ['normalized_10000_unicode_code_points','structured_fields_display_only']],
+    ['seller-policies-input', policies.SellerPoliciesInputSchema, 'input', ['atomic_section','current_store_manage_profile_cas']],
+    ['seller-policies-wire', policies.SellerPoliciesWireSchema, 'input', ['serialized_snapshot_under_256_kib']],
+    ['seller-policies-draft', policies.SellerPoliciesDraftSchema, 'output', ['current_store_read']],
+    ['seller-policies-command', policies.SellerPoliciesAckSchema, 'output', ['completion_metadata_only_receipt','current_store_manage']],
+    ['policy-version', policies.PolicyVersionReadSchema, 'output', ['ever_published_same_store','no_private_version_number']],
+    ['publication-seller-policies', policies.PublicationSellerPoliciesSchema, 'output', ['server_only_freeze_refs']],
+  ]],
+  ['storefront-gallery', 'C1 own product galleries, product CAS and immutable server-only publication sidecar; public storefront/v1 unchanged.', [
+    ['gallery-draft',gallery.ProductGalleryDraftSchema,'output',['current_store_read','exact_product_version_paths','virtual_primary','retained_recovery_rows']],
+    ['product-galleries',gallery.ProductGalleriesSchema,'output',['unique_own_products','current_store_read']],
+    ['gallery-command',gallery.GalleryCommandAckSchema,'output',['completion_metadata_only_receipt','current_store_write','product_selection_cas']],
+    ['reorder-gallery-input',gallery.ReorderGalleryInputSchema,'input',['exact_locked_photo_set','current_store_write']],
+    ['gallery-alt-input',gallery.GalleryAltInputSchema,'input',['well_formed_trimmed_120_code_points','no_control_or_bidi','current_store_write']],
+    ['remove-gallery-input',gallery.RemoveGalleryPhotoInputSchema,'input',['current_store_write']],
+    ['publication-gallery',gallery.PublicationGalleryDocumentSchema,'output',['server_only','canonical_digest','exact_frozen_refs','legacy_primary_matches']],
+    ['render-gallery',gallery.RenderGallerySchema,'output',['authorized_same_origin_paths','no_asset_identity']],
+  ]],
+  ['storefront-appearance', 'Independent draft and frozen publication appearance; storefront/v1 stays unchanged. Server-only media identities never enter this bundle.', [
+    ['appearance-settings-input', appearance.StorefrontAppearanceInputSchema, 'input', ['unique_ordered_own_retail_product_ids', 'single_line_80_unicode_characters', 'current_store_manage_profile_cas']],
+    ['appearance-draft', appearance.StorefrontAppearanceDraftSchema, 'output', ['same_ordered_featured_ids', 'unique_eligible_products', 'exact_current_profile_role_paths', 'square_logo', 'current_store_read']],
+    ['appearance-command', appearance.AppearanceCommandAckSchema, 'output', ['original_completed_version', 'current_version_not_older_than_completion', 'current_store_manage']],
+    ['remove-appearance-image-input', appearance.RemoveAppearanceImageInputSchema, 'input', ['current_store_manage_profile_cas']],
   ]],
   ['storefront-presentation', 'Additive saved store presentation. Existing storefront/v1 content, releases and capabilities remain unchanged.', [
     ['appearance-input', presentation.StoreAppearanceInputSchema, 'input', []],
@@ -297,6 +334,10 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['store-admission-query', commerceSetup.StoreAdmissionQuerySchema, 'input', []],
     ['store-admission', commerceSetup.StoreAdmissionViewSchema, 'output', []],
     ['store-admission-page', commerceSetup.StoreAdmissionPageSchema, 'output', []],
+    ['store-readiness', commerceSetup.StoreReadinessSchema, 'output', ['buyer_purchase_state_parity','no_payment_or_contact_contents']],
+    ['store-overview', commerceSetup.StoreOverviewSchema, 'output', ['current_store_read_authority','orders_read_capability']],
+    ['admin-store-readiness-query', commerceSetup.AdminStoreReadinessQuerySchema, 'input', []],
+    ['admin-store-readiness-page', commerceSetup.AdminStoreReadinessPageSchema, 'output', ['active_community_admin','tenant_rls_bound_reads']],
     ['error-code', commerceSetup.CommerceSetupErrorCodeSchema, 'output', []],
     ['error', commerceSetup.CommerceSetupErrorSchema, 'output', []],
   ]],

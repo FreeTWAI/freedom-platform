@@ -51,6 +51,21 @@
               "maxLength": 2000,
               "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
             },
+            "msrp_minor": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            "minimum_order_quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "lead_time_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 365
+            },
             "title": {
               "type": "string",
               "minLength": 1,
@@ -95,6 +110,60 @@
           "type": "string",
           "maxLength": 19,
           "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "published_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+        },
+        "arrangement": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "const": "reseller"
+                },
+                "seller_of_record": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "payment_collector": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "invoice_issuer": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "refund_owner": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "price_owner": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "fulfillment_party": {
+                  "type": "string",
+                  "const": "supplier"
+                }
+              },
+              "required": [
+                "mode",
+                "seller_of_record",
+                "payment_collector",
+                "invoice_issuer",
+                "refund_owner",
+                "price_owner",
+                "fulfillment_party"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -109,6 +178,790 @@
       ],
       "additionalProperties": false,
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: explicit_supplier_publication."
+    },
+    "offer-photo-state": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "not_shared"
+          ]
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 19,
+              "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matches_current_photo": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "state",
+        "seq",
+        "matches_current_photo"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: explicit_supplier_choice, independent_photo_sequence."
+    },
+    "offer-photo": {
+      "type": "object",
+      "properties": {
+        "read_path": {
+          "type": "string",
+          "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]+\\/storefronts\\/[0-9a-f-]+\\/supply-catalog\\/[0-9a-f-]+\\/photo\\/[1-9][0-9]*$"
+        },
+        "seq": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1920
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1920
+        }
+      },
+      "required": [
+        "read_path",
+        "seq",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: seller_route_only, no_supplier_asset_identity."
+    },
+    "catalog-photos": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "offer_id": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "photo": {
+                "type": "object",
+                "properties": {
+                  "read_path": {
+                    "type": "string",
+                    "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]+\\/storefronts\\/[0-9a-f-]+\\/supply-catalog\\/[0-9a-f-]+\\/photo\\/[1-9][0-9]*$"
+                  },
+                  "seq": {
+                    "type": "string",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1920
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1920
+                  }
+                },
+                "required": [
+                  "read_path",
+                  "seq",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "offer_id",
+              "photo"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "truncated"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_seller_store_write, same_catalog_window, current_offered_share_only."
+    },
+    "offer-photo-preview-query": {
+      "type": "object",
+      "properties": {
+        "offer_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "seq": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "offer_id",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: own_product_photo_route, current_shared_offer_and_sequence."
+    },
+    "offer-page": {
+      "type": "object",
+      "properties": {
+        "offer": {
+          "type": "object",
+          "properties": {
+            "offer_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "supplier_name": {
+              "type": "string"
+            },
+            "source_version": {
+              "type": "string",
+              "maxLength": 19,
+              "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "cost_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "shipping_minor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000000
+                },
+                "shipping_terms": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                },
+                "return_terms": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                },
+                "msrp_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "minimum_order_quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "lead_time_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 365
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "TWD",
+                    "USD"
+                  ]
+                }
+              },
+              "required": [
+                "cost_minor",
+                "shipping_minor",
+                "shipping_terms",
+                "return_terms",
+                "title",
+                "description",
+                "currency"
+              ],
+              "additionalProperties": false
+            },
+            "terms_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "offered",
+                "withdrawn"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 19,
+              "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "published_at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+            },
+            "arrangement": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "reseller"
+                    },
+                    "seller_of_record": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "payment_collector": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "invoice_issuer": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "refund_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "price_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "fulfillment_party": {
+                      "type": "string",
+                      "const": "supplier"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "seller_of_record",
+                    "payment_collector",
+                    "invoice_issuer",
+                    "refund_owner",
+                    "price_owner",
+                    "fulfillment_party"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "offer_id",
+            "product_id",
+            "supplier_name",
+            "source_version",
+            "terms",
+            "terms_sha256",
+            "state",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "published_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+        },
+        "photo": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "read_path": {
+                  "type": "string",
+                  "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]+\\/storefronts\\/[0-9a-f-]+\\/supply-catalog\\/[0-9a-f-]+\\/photo\\/[1-9][0-9]*$"
+                },
+                "seq": {
+                  "type": "string",
+                  "maxLength": 19,
+                  "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1920
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1920
+                }
+              },
+              "required": [
+                "read_path",
+                "seq",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supplier": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "public_path": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\/shops\\/[a-z0-9-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "public_path"
+          ],
+          "additionalProperties": false
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "selection_id": {
+                  "type": "string",
+                  "minLength": 36,
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "offer": {
+                  "type": "object",
+                  "properties": {
+                    "offer_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "product_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "supplier_name": {
+                      "type": "string"
+                    },
+                    "source_version": {
+                      "type": "string",
+                      "maxLength": 19,
+                      "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                    },
+                    "terms": {
+                      "type": "object",
+                      "properties": {
+                        "cost_minor": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000000
+                        },
+                        "shipping_minor": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000000
+                        },
+                        "shipping_terms": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                        },
+                        "return_terms": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                        },
+                        "msrp_minor": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000000
+                        },
+                        "minimum_order_quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000
+                        },
+                        "lead_time_days": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 365
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "TWD",
+                            "USD"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "cost_minor",
+                        "shipping_minor",
+                        "shipping_terms",
+                        "return_terms",
+                        "title",
+                        "description",
+                        "currency"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "terms_sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "offered",
+                        "withdrawn"
+                      ]
+                    },
+                    "version": {
+                      "type": "string",
+                      "maxLength": 19,
+                      "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                    },
+                    "published_at": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                    },
+                    "arrangement": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "const": "reseller"
+                            },
+                            "seller_of_record": {
+                              "type": "string",
+                              "const": "seller"
+                            },
+                            "payment_collector": {
+                              "type": "string",
+                              "const": "seller"
+                            },
+                            "invoice_issuer": {
+                              "type": "string",
+                              "const": "seller"
+                            },
+                            "refund_owner": {
+                              "type": "string",
+                              "const": "seller"
+                            },
+                            "price_owner": {
+                              "type": "string",
+                              "const": "seller"
+                            },
+                            "fulfillment_party": {
+                              "type": "string",
+                              "const": "supplier"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "seller_of_record",
+                            "payment_collector",
+                            "invoice_issuer",
+                            "refund_owner",
+                            "price_owner",
+                            "fulfillment_party"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "offer_id",
+                    "product_id",
+                    "supplier_name",
+                    "source_version",
+                    "terms",
+                    "terms_sha256",
+                    "state",
+                    "version"
+                  ],
+                  "additionalProperties": false
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "seller_name": {
+                  "type": "string"
+                },
+                "retail_price_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "awaiting_supply_acceptance",
+                    "sellable",
+                    "declined",
+                    "changes_requested",
+                    "revoked"
+                  ]
+                },
+                "listing_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "version": {
+                  "type": "string",
+                  "maxLength": 19,
+                  "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                "decision_note": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "arrangement": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "const": "reseller"
+                        },
+                        "seller_of_record": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "payment_collector": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "invoice_issuer": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "refund_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "price_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "fulfillment_party": {
+                          "type": "string",
+                          "const": "supplier"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "seller_of_record",
+                        "payment_collector",
+                        "invoice_issuer",
+                        "refund_owner",
+                        "price_owner",
+                        "fulfillment_party"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "selection_id",
+                "offer",
+                "sku",
+                "seller_name",
+                "retail_price_minor",
+                "state",
+                "listing_sha256",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision_note": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sale_paths": {
+          "type": "object",
+          "properties": {
+            "display": {
+              "type": "object",
+              "properties": {
+                "available": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "available",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "reservation": {
+              "type": "object",
+              "properties": {
+                "available": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "available",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "checkout": {
+              "type": "object",
+              "properties": {
+                "available": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "available",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "display",
+            "reservation",
+            "checkout"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "offer",
+        "published_at",
+        "photo",
+        "supplier",
+        "selection",
+        "decision_note",
+        "sale_paths"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_seller_store_write, community_offer_visibility, no_private_supplier_fields."
     },
     "offers": {
       "type": "object",
@@ -164,6 +1017,21 @@
                     "maxLength": 2000,
                     "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                   },
+                  "msrp_minor": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "minimum_order_quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "lead_time_days": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -208,6 +1076,60 @@
                 "type": "string",
                 "maxLength": 19,
                 "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+              },
+              "published_at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+              },
+              "arrangement": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "reseller"
+                      },
+                      "seller_of_record": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "payment_collector": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "invoice_issuer": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "refund_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "price_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "fulfillment_party": {
+                        "type": "string",
+                        "const": "supplier"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "seller_of_record",
+                      "payment_collector",
+                      "invoice_issuer",
+                      "refund_owner",
+                      "price_owner",
+                      "fulfillment_party"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -275,6 +1197,10 @@
         "listing_sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500
         }
       },
       "required": [
@@ -341,6 +1267,21 @@
                   "maxLength": 2000,
                   "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                 },
+                "msrp_minor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000
+                },
+                "minimum_order_quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "lead_time_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 365
+                },
                 "title": {
                   "type": "string",
                   "minLength": 1,
@@ -385,6 +1326,60 @@
               "type": "string",
               "maxLength": 19,
               "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "published_at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+            },
+            "arrangement": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "reseller"
+                    },
+                    "seller_of_record": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "payment_collector": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "invoice_issuer": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "refund_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "price_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "fulfillment_party": {
+                      "type": "string",
+                      "const": "supplier"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "seller_of_record",
+                    "payment_collector",
+                    "invoice_issuer",
+                    "refund_owner",
+                    "price_owner",
+                    "fulfillment_party"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -428,6 +1423,67 @@
           "type": "string",
           "maxLength": 19,
           "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "decision_note": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "arrangement": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "const": "reseller"
+                },
+                "seller_of_record": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "payment_collector": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "invoice_issuer": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "refund_owner": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "price_owner": {
+                  "type": "string",
+                  "const": "seller"
+                },
+                "fulfillment_party": {
+                  "type": "string",
+                  "const": "supplier"
+                }
+              },
+              "required": [
+                "mode",
+                "seller_of_record",
+                "payment_collector",
+                "invoice_issuer",
+                "refund_owner",
+                "price_owner",
+                "fulfillment_party"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -506,6 +1562,21 @@
                         "maxLength": 2000,
                         "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                       },
+                      "msrp_minor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000000
+                      },
+                      "minimum_order_quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "lead_time_days": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
                       "title": {
                         "type": "string",
                         "minLength": 1,
@@ -550,6 +1621,60 @@
                     "type": "string",
                     "maxLength": 19,
                     "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                  },
+                  "published_at": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                  },
+                  "arrangement": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "reseller"
+                          },
+                          "seller_of_record": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "payment_collector": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "invoice_issuer": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "refund_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "price_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "fulfillment_party": {
+                            "type": "string",
+                            "const": "supplier"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "seller_of_record",
+                          "payment_collector",
+                          "invoice_issuer",
+                          "refund_owner",
+                          "price_owner",
+                          "fulfillment_party"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -593,6 +1718,67 @@
                 "type": "string",
                 "maxLength": 19,
                 "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+              },
+              "decision_note": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "arrangement": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "reseller"
+                      },
+                      "seller_of_record": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "payment_collector": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "invoice_issuer": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "refund_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "price_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "fulfillment_party": {
+                        "type": "string",
+                        "const": "supplier"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "seller_of_record",
+                      "payment_collector",
+                      "invoice_issuer",
+                      "refund_owner",
+                      "price_owner",
+                      "fulfillment_party"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [

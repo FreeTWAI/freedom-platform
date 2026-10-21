@@ -1,3 +1,5 @@
+import type {PoolClient} from 'pg';
+import {INVENTORY_POSITION_COLUMNS,inventoryPositions} from '../hosted/inventory.js';
 import type {Pool} from 'pg';
 import {SupplierOverviewSchema, SupplierProductsSchema, SupplierProductDetailSchema, SupplierPartnersSchema,
   SupplierPartnerDetailSchema, SupplierRequestDetailSchema, SupplierSummarySchema, type SupplierProduct, type SupplierTodo} from '../../../contracts/guild-launchpad/v1/supplier-console.js';
@@ -7,6 +9,7 @@ import type {Actor} from '../../identity-membership/service.js';
 import {effectiveStoreCapabilities} from '../hosted/capabilities.js';
 import {offerView, selectionView, supplyOfferTerms} from '../hosted/distribution.js';
 import {profile, ready, storeRead, type Profile} from '../hosted/store.js';
+import {offerPhotoState,offerPhotoStates} from './offer-photos.js';
 
 // Each composed statement below owns its clock and all domain rows. Capability,
 // profile and the final storeRead session fence remain outside this snapshot.
@@ -18,7 +21,7 @@ const capacity = `(SELECT count(*)::int FROM commerce_selections l
 // Availability is derived only in this column (stock minus the reserved counter), so a
 // commerce-owned availability rule can replace it here without touching the projections.
 export const own = `own AS (
-  SELECT i.*,i.stock-i.reserved AS available,l.aggregate_version::text AS product_version,s.currency
+  SELECT i.*,i.stock-i.reserved AS available,l.aggregate_version::text AS product_version,s.currency,${INVENTORY_POSITION_COLUMNS}
   FROM commerce_items i JOIN commerce_selections l ON l.item_id=i.item_id
   JOIN commerce_resource_tenants supply ON supply.resource_kind='shop' AND supply.resource_id=i.shop_id AND supply.mapping_state='confirmed'
   JOIN commerce_resource_tenants retail ON retail.resource_kind='shop' AND retail.resource_id=l.shop_id AND retail.mapping_state='confirmed'
@@ -28,14 +31,14 @@ export const own = `own AS (
 )`;
 export const offers = `offers AS (
   SELECT o.offer_id,o.item_id,o.supplier_name,o.source_version::text AS source_version,
-    o.terms,o.terms_sha256,o.state,o.version::text AS version FROM commerce_hosted_supply_offers o
+    o.terms,o.terms_sha256,o.state,o.created_at,o.version::text AS version FROM commerce_hosted_supply_offers o
   JOIN commerce_items i ON i.item_id=o.item_id AND i.shop_id=$3
   JOIN commerce_storefront_profiles source ON source.tenant_id=o.tenant_id AND source.instance_id=o.instance_id
     AND source.supply_shop_id=$3 AND source.storefront_shop_id=$4
   WHERE o.tenant_id=$1 AND o.instance_id=$2
 )`;
 export const selections = `selections AS (
-  SELECT o.*,l.selection_id,l.shop_id AS partner_id,l.hosted_sku,l.retail_price_minor,l.listing_sha256,l.acceptance_state,
+  SELECT o.*,l.selection_id,l.shop_id AS partner_id,l.hosted_sku,l.retail_price_minor,l.listing_sha256,l.acceptance_state,l.snapshot,
     l.aggregate_version::text AS selection_version,s.name AS seller_name,
     CASE WHEN o.state='withdrawn' OR l.acceptance_state IN ('declined','revoked') THEN 'inactive'
       WHEN l.acceptance_state='awaiting_supply_acceptance' THEN 'awaiting'
@@ -59,11 +62,18 @@ const productCtes = `${clock},${own},${offers},${selections},${products}`;
 const partnerCtes = `${clock},${offers},${selections},${partners}`;
 export const params = (p: Profile) => [p.tenant_id,p.instance_id,p.supply_shop_id,p.storefront_shop_id];
 export type Row = Record<string, any>;
+/** Only rows of the authorized own relation may enter this internal port. */
+export async function attachInventory(q:PoolClient,rows:Row[]) {
+  const positions=await inventoryPositions(q,rows.map(r=>r.item_id),{onInconsistent:'report',rows:rows as import('../hosted/inventory.js').InventoryPositionRow[]});
+  for(const row of rows)row.inventory=positions.get(row.item_id);
+}
+export const inconsistentProducts=(items:readonly SupplierProduct[])=>items.filter(i=>i.inventory?.state==='inconsistent').length;
 export function productView(row: Row, currency: Profile['currency']): SupplierProduct {
   const o = row.current_offer;
   return {product_id:row.item_id,sku:row.sku,title:row.title,description:row.description,currency,
     supply_price_minor:Number(row.price_minor),shipping_minor:Number(row.shipping_minor),stock:row.stock,reserved:row.reserved,
-    available:row.available,version:row.product_version,cooperation:row.cooperation,
+    available:row.available,inventory:row.inventory,version:row.product_version,cooperation:row.cooperation,
+    offer_photo:row.offer_photo??null,
     offer:o?{offer_id:o.offer_id,version:String(o.version),terms_sha256:o.terms_sha256,
       matches_current_terms:digest(supplyOfferTerms(row as Parameters<typeof supplyOfferTerms>[0],currency))===o.terms_sha256}:null};
 }
@@ -96,14 +106,15 @@ export async function readSupplierOverview(pool: Pool, actor: Actor, tenantId: s
         COALESCE((SELECT jsonb_agg(to_jsonb(r) ORDER BY r.sku,r.item_id,r.selection_id) FROM (
           SELECT l.selection_id,l.partner_id,l.seller_name,i.sku,i.item_id,i.title FROM selections l JOIN commerce_items i ON i.item_id=l.item_id AND i.shop_id=$3
           WHERE l.bucket='awaiting' ORDER BY i.sku,i.item_id,l.selection_id LIMIT 21) r),'[]') AS requests FROM clock`,params(p))).rows[0];
+    await attachInventory(q,row.products);
     const items=(row.products as Row[]).map(row=>productView(row,p.currency)),todos:SupplierTodo[]=(row.requests as Row[]).map(r=>({kind:'request_pending',
       selection_id:r.selection_id,product_id:r.item_id,title:r.title,partner_id:r.partner_id,partner_name:r.seller_name}));
     // Products arrive in SKU/ID order; concatenate kinds to keep the specified priority.
     for(const item of items)if(item.offer&&!item.offer.matches_current_terms)todos.push({kind:'offer_outdated',offer_id:item.offer.offer_id,product_id:item.product_id,title:item.title});
-    for(const item of items)if(item.available===0)todos.push({kind:'out_of_stock',product_id:item.product_id,title:item.title});
+    for(const item of items)if(item.inventory?.state==='ready'&&item.available===0)todos.push({kind:'out_of_stock',product_id:item.product_id,title:item.title});
     for(const item of items)if(!item.offer)todos.push({kind:'not_offered',product_id:item.product_id,title:item.title});
     const metric=(count:number)=>({state:'ready',count});
-    return SupplierOverviewSchema.parse({...base,as_of:row.as_of,product_count:row.product_count,
+    return SupplierOverviewSchema.parse({...base,as_of:row.as_of,inventory_inconsistent_count:inconsistentProducts(items),product_count:row.product_count,
       metrics:{offered_products:metric(items.filter(i=>i.offer).length),pending_requests:metric(row.pending_requests),
         active_reservation_lines:context.role==='owner'?metric(row.active_reservation_lines):{state:'unavailable',reason:'owner_required'},
         out_of_stock_products:metric(items.filter(i=>i.available===0).length)},todos:{state:'ready',items:todos.slice(0,20),truncated:todos.length>20}});
@@ -120,21 +131,27 @@ export async function readSupplierSummary(pool: Pool, actor: Actor, tenantId: st
     const row=(await q.query(`/* supplier-console:summary */ WITH ${productCtes} SELECT ${asOf},
       (SELECT count(*)::int FROM selections WHERE bucket='awaiting') AS pending_requests,
       COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.sku,i.item_id) FROM products i),'[]') AS products FROM clock`,params(p))).rows[0];
+    await attachInventory(q,row.products);
     const items=(row.products as Row[]).map(row=>productView(row,p.currency));
-    return SupplierSummarySchema.parse({...base,as_of:row.as_of,todos:{state:'ready',pending_requests:row.pending_requests,
+    return SupplierSummarySchema.parse({...base,as_of:row.as_of,inventory_inconsistent_count:inconsistentProducts(items),todos:{state:'ready',pending_requests:row.pending_requests,
       outdated_offers:items.filter(i=>i.offer&&!i.offer.matches_current_terms).length,out_of_stock_products:items.filter(i=>i.available===0).length}});
   });
 }
-export async function listSupplierProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+export async function listSupplierProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerPhotosEnabled = false) {
   return storeRead(pool,actor,tenantId,instanceId,'store:write',async q=>{
     const p = await profile(q, tenantId, instanceId); ready(p);
     const row=(await q.query(`/* supplier-console:products */ WITH ${productCtes} SELECT ${asOf},
       COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.sku) FROM products i),'[]') AS items FROM clock`,params(p))).rows[0];
     requireCondition(row.items.length<=200,500,'supplier_product_limit','供貨商品數量超出上限。');
+    await attachInventory(q,row.items);
+    if(offerPhotosEnabled) {
+      const states=await offerPhotoStates(q,row.items.flatMap((item:Row)=>item.current_offer?[item.current_offer.offer_id]:[]));
+      for(const item of row.items)if(item.current_offer)item.offer_photo=states.get(item.current_offer.offer_id);
+    }
     return SupplierProductsSchema.parse({profile:'freedom.supplier-console.products/v1',as_of:row.as_of,items:row.items.map((row:Row)=>productView(row,p.currency)),limit:200});
   });
 }
-export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string) {
+export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, offerPhotosEnabled = false) {
   return storeRead(pool,actor,tenantId,instanceId,'store:write',async q=>{
     const p = await profile(q, tenantId, instanceId); ready(p);
     const row=(await q.query(`/* supplier-console:product */ WITH ${productCtes} SELECT ${asOf},
@@ -142,8 +159,12 @@ export async function readSupplierProduct(pool: Pool, actor: Actor, tenantId: st
       COALESCE((SELECT jsonb_agg(to_jsonb(l) ORDER BY l.rank,l.selection_id) FROM (
         SELECT * FROM selections WHERE item_id=$5 ORDER BY rank,selection_id LIMIT 201) l),'[]') AS selections FROM clock`,[...params(p),productId])).rows[0];
     requireCondition(row.product,404,'not_found','找不到這項商品。');
+    await attachInventory(q,[row.product]);
+    if(offerPhotosEnabled&&row.product.current_offer)row.product.offer_photo=await offerPhotoState(q,row.product.current_offer.offer_id);
     return SupplierProductDetailSchema.parse({profile:'freedom.supplier-console.product/v1',as_of:row.as_of,product:productView(row.product,p.currency),
       shipping_terms:row.product.shipping_terms,return_terms:row.product.return_terms,
+      msrp_minor:row.product.msrp_minor===null?null:Number(row.product.msrp_minor),
+      minimum_order_quantity:row.product.minimum_order_quantity,lead_time_days:row.product.lead_time_days,
       current_offer:row.product.current_offer?offerView(row.product.current_offer):null,
       selections:row.selections.slice(0,200).map((l:Record<string,any>)=>({...selectionView(l),partner_id:l.partner_id})),truncated:row.selections.length>200});
   });

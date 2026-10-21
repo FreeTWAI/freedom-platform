@@ -51,3 +51,14 @@
 .hosted-price-summary dl {margin:0}.hosted-price-summary dl>div {display:flex;gap:12px;justify-content:space-between}
 .hosted-price-summary dd {margin:0;font-weight:600}
 @media (max-width:560px){.hosted-retail-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.hosted-retail-nav .btn{width:100%}}
+
+.merchant-inventory { min-width: 0; overflow-wrap: anywhere; }
+.merchant-inventory p { margin: 0; }
+.merchant-inventory-values { font-variant-numeric: tabular-nums; }
+.merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-variant-numeric: tabular-nums; }
+.merchant-inventory .btn-small { width: auto; min-height: 44px; max-width: 100%; font-size: .875rem; padding: .4rem .75rem; }
+
+.hosted-store .actions > .btn-small { width: auto; flex: none; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; }
+.merchant-order-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
+.merchant-order-status > p { flex-basis: 100%; margin: 0; }
+.merchant-order-status > .btn-small { width: auto; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; white-space: normal; }
