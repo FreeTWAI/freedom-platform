@@ -9,12 +9,10 @@ import {suppliedConsentAvailable} from '../../hosted/supply-availability.js';
 import {resolvePublicStorePage} from '../../hosted/public.js';
 import type {AppearanceOptions} from '../../hosted/appearance.js';
 import type {GalleryOptions} from '../gallery/model.js';
-import {renderGallery} from '../gallery/model.js';
-import type {RenderGallery} from '../../../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import type {PoliciesOptions} from '../policies/model.js';
 import type {PublicationVariantsDocument} from '../../../../contracts/guild-launchpad/v1/storefront-variants.js';
 export type VariantAvailability='available'|'sold_out'|'unavailable';
-export interface RenderCatalog {document:PublicationVariantsDocument;availability?:ReadonlyMap<string,VariantAvailability>;photos?:ReadonlyMap<string,RenderGallery[number]>}
+export interface RenderCatalog {document:PublicationVariantsDocument;availability?:ReadonlyMap<string,VariantAvailability>}
 /** Two bulk selection reads (preflight and canonical raw validation) plus one
  * inventory aggregate. A stopped supply never hides a different sellable SKU.
  * No shipping or payment quote is run for individual grid cards. */
@@ -47,8 +45,7 @@ export async function readVariantBuyerPage(pool:Pool,slug:string,options:{appear
    const value=await isolatedTransaction(pool,async q=>{
     await q.query('SET TRANSACTION READ ONLY');const store=await resolvePublicStorePage(q,slug,options.appearance,options.policies,options.gallery,{enabled:true},options.categories);if(!store)return null;
     const purchase=checkout?await publicPurchaseStateWithClient(q,slug,checkout):{open:false as const};
-    const photos=store.gallery?new Map(store.projection.products.flatMap(p=>{const photo=renderGallery(store.gallery!.document,p.sku,store.projection.slug,store.projection.revision,options.gallery?.mediaInstalled===true)[0];return photo?[[p.sku,photo] as const]:[];})):undefined;
-    const catalog:RenderCatalog={document:store.variants!.document,...(photos?{photos}:{}),...(purchase.open?{availability:await availability(q,store)}:{})};
+    const catalog:RenderCatalog={document:store.variants!.document,...(purchase.open?{availability:await availability(q,store)}:{})};
     const current=await resolvePublicStorePage(q,slug);if(!current)return null;
     if(current.publicationId!==store.publicationId)return undefined;
     return {store,purchase,catalog};

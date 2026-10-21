@@ -45,6 +45,14 @@ test('VARIANTS-01 lazy own groups, exact combinations, CAS/replay, store isolati
  const foreignProduct=f.ok(await f.h.call('GET',foreign.root+'/products',foreign.owner,undefined,{},app)).items[0];
  assert.equal((await call('PUT','/product-groups/P0001',{...input,members:[...input.members,{product_id:foreignProduct.product_id,product_version:'1',value_keys:[axes[0].values[0].key,axes[1].values[1].key]}]},'2')).data.code,'variant_members_changed');
  await publish();assert.equal(f.ok(await call('GET','/preview')).dirty,false);
+ // U+0958 expands to two code points under NFC. Validate normalized text
+ // before writing it to the SQL length checks, with the existing 422 copies.
+ for(const [patch,code] of [
+  [{description:'\u0958'.repeat(2000)},'variant_group_text_invalid'],
+  [{title:'\u0958'.repeat(120)},'variant_group_text_invalid'],
+  [{axes:axes.map((a,n)=>n===0?{...a,name:'\u0958'.repeat(20)}:a)},'variant_axis_name_invalid'],
+  [{axes:axes.map((a,n)=>n===0?{...a,values:a.values.map((v,k)=>k===0?{...v,name:'\u0958'.repeat(40)}:v)}:a)},'variant_value_invalid'],
+ ] as const){const rejected=await call('PUT','/product-groups/P0001',{...input,...patch},'2');assert.equal(rejected.status,422);assert.equal(rejected.data.code,code);}
  const frozen=(await f.h.pool.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[s.tenantId])).rows[0];
  const root=(await f.h.pool.query('SELECT group_id FROM commerce_product_groups WHERE tenant_id=$1 AND catalog_anchor_sku=$2',[s.tenantId,'P0001'])).rows[0].group_id;
  await assert.rejects(f.h.pool.query('UPDATE commerce_product_group_members SET option_value_keys=$3,membership_version=membership_version+1 WHERE tenant_id=$1 AND product_id=$2',[s.tenantId,second.product_id,[randomUUID(),axes[1].values[1].key]]),{code:'23514'});
@@ -90,9 +98,13 @@ test('VARIANTS-02 reservation titles stay v1; real per-item holds leave the othe
  const current=(await page()).items.find(g=>g.group_key==='P0001')!;
  const extra=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'舊版刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},current.version),201);
  const removed=extra.current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='舊版刪除的規格').product;
+ const removable=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'重新啟用後刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[1].key,axes[1].values[0].key]},extra.completed_version),201).current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='重新啟用後刪除的規格').product;
  f.ok(await call('POST','/products/'+removed.product_id+'/remove',{},removed.version,undefined,f.app));
  assert.equal((await f.h.pool.query(`UPDATE commerce_product_groups SET last_changed_at_product_version=storefront_gallery_product_version(tenant_id,instance_id,anchor_product_id) WHERE tenant_id=$1 AND instance_id=$2 AND catalog_anchor_sku='P0001'`,[s.tenantId,s.instanceId])).rowCount,1);
  assert.equal((await page()).items.some(g=>g.members.some(m=>m.product.product_id===removed.product_id)),false);
+ f.ok(await call('POST','/products/'+removable.product_id+'/remove',{},removable.version));
+ assert.equal((await f.h.pool.query('SELECT catalog_group_id FROM commerce_product_group_members WHERE tenant_id=$1 AND product_id=$2',[s.tenantId,removed.product_id])).rows[0].catalog_group_id,null,'removal detaches stale OFF-period tuples');
+ assert.equal((await page()).items.find(g=>g.group_key==='P0001')!.members.length,2);
 });
 test('VARIANTS-03 detached former anchors keep distinct singleton identity, rejoin, and survive anchor deletion',async()=>{
  const a=f.ok(await call('POST','/products',{title:'原始起點',price_minor:100,stock:2}),201),b=f.ok(await call('POST','/products',{title:'剩餘規格',price_minor:200,stock:2}),201);
@@ -168,6 +180,15 @@ test('VARIANTS-05 write capability, replay reauthorization, compound create roll
  const added=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'新增白色 L',description:'原本新品介紹',price_minor:33000,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},g.version),201);assert.equal(added.current.items.find((g:any)=>g.group_key==='P0001').members.length,3);
  g=(await page()).items.find(g=>g.group_key==='P0001')!;f.ok(await call('POST','/product-groups/P0001/split',{},g.version));
  assert.equal((await page()).items.find(g=>g.group_key==='P0002')!.title,'原本黑色商品');
+ // A former member uses its own lazy gallery group version when it becomes
+ // an anchor. Membership revisions belong to the group it just left.
+ const detached=(await page()).items.find(g=>g.group_key==='P0002')!;
+ const home=(await f.h.pool.query('SELECT version::text FROM commerce_product_groups WHERE tenant_id=$1 AND anchor_product_id=$2',[s.tenantId,second.product_id])).rows[0];
+ assert.equal(detached.version,home.version,'singleton edit version must match its own lazy group');
+ const restarted=f.ok(await call('PUT','/product-groups/P0002',{...body(detached),title:'原成員的新商品組',axes:[axes[0]],members:body(detached).members.map(m=>({...m,value_keys:[axes[0].values[0].key]}))},detached.version));
+ const expanded=f.ok(await call('POST','/product-groups/P0002/products',{product:{title:'新組的黑色商品',price_minor:200,stock:2},value_keys:[axes[0].values[1].key]},restarted.completed_version),201);
+ assert.equal(expanded.current.items.find((g:any)=>g.group_key==='P0002').members.length,2);
+ await publish();assert.match(await(await app.request(f.h.origin+'/shops/'+s.slug+'/products/P0002')).text(),/原成員的新商品組/);
  const current=f.ok(await call('GET','/products')).items.find((p:any)=>p.product_id===second.product_id);f.ok(await call('PATCH','/products/'+second.product_id,{description:'舊 binary 發布的介紹'},current.version));await publish(f.app);
  const publicProjection=await(await f.app.request(f.h.origin+'/api/v1/public/stores/'+s.slug)).json() as any;
  const fallback=await(await app.request(f.h.origin+'/shops/'+s.slug)).text();assert.match(fallback,new RegExp(publicProjection.products.length+' 件商品'));

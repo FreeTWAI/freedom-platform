@@ -154,7 +154,14 @@ session 自然到期不會修改已鎖列或觸發 `40001`，交易內的 `now()
 收件人由訂單保存的 `buyer_principal_id` 與當下商店實例的有效讀取能力決定，不以 Email 配對。
 買家通知進自己的社群；店家收件人必須在店家業務社群，且同時具備 `store:read` 和
 `store:orders:read`。一個有界查詢最多讀回51人，以 owner、admin、其他成員及 principal UUID
-排序；最多通知50位店家讀者，第51位只觸發固定的截斷診斷。沒有收件者列鎖或後續無界佇列。
+排序；最多通知50位店家讀者，第51位只觸發固定的截斷診斷，沒有後續無界佇列。
+查詢不加明示收件者列鎖，但通知 INSERT 的外鍵仍會在店家／供貨業務的 tenant SHARE 與
+社群 advisory locks 之後取得 `users FOR KEY SHARE`。停用帳號／管理員停權先取得
+`users FOR UPDATE`，再取得擁有業務的 `tenants FOR UPDATE`，可形成 `40P01` 死結。
+登入與改密碼在 scrypt 期間持有的 user UPDATE lock 也會讓通知寫入及其社群鎖等待。
+安裝通知的離線買家下單／取消只在 `40P01` 後重跑整個 isolated transaction 一次，
+不重跑交易外的身分預檢或額度扣除；第二次失敗照常丟錯。卡片流程與 OFF 維持原行為。
+店家操作保留主控台既有的未知結果重試；排程到期保留既有一分鐘後重試。
 
 文案僅含下單凍結的店名與訂單顯示編號，不含金額、買家姓名、聯絡方式、地址或銀行資料。
 `source_key` 為 `commerce-order/v1/<order UUID>/<event>`。`stores` action 用98字元的

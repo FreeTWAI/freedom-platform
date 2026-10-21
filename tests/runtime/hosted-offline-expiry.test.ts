@@ -107,6 +107,7 @@ test('hold expiry returns stock and leaves the offline order open', async () => 
   assert.equal(after.stock, before.stock);
   assert.equal(after.reserved, before.reserved - 1);
   assert.equal((await state(order.order_id)).hold, 'held');
+  // Production has no notice-port parameter on this sweep; this is only a side-effect sanity check.
   assert.deepEqual(await orderNotices(historical),[]);
 });
 

@@ -12,17 +12,24 @@ import {createProductRow} from '../../hosted/products.js';
 import {buyerLabel,draftVariantsData} from './model.js';
 import {variantCheck} from './errors.js';
 const normalized=(value:string)=>value.trim().normalize('NFC');
+function normalizeReplace(raw:unknown){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return raw;
+ const data=raw as Record<string,unknown>,text=(v:unknown)=>typeof v==='string'?normalized(v):v;
+ return {...data,title:text(data.title),description:text(data.description),axes:Array.isArray(data.axes)?data.axes.map(axis=>{
+  if(!axis||typeof axis!=='object'||Array.isArray(axis))return axis;
+  return {...axis,name:text(axis.name),values:Array.isArray(axis.values)?axis.values.map((value:unknown)=>value&&typeof value==='object'&&!Array.isArray(value)?{...value,name:text((value as Record<string,unknown>).name)}:value):axis.values};
+ }):data.axes};
+}
 function parseReplace(raw:unknown){
- const data=raw as Record<string,unknown>;
+ const data=normalizeReplace(raw) as Record<string,unknown>;
  variantCheck(data&&typeof data==='object'&&VariantGroupTitleSchema.safeParse(data.title).success&&VariantGroupDescriptionSchema.safeParse(data.description).success,'variant_group_text_invalid');
  variantCheck(Array.isArray(data.axes)&&data.axes.length<=2&&data.axes.every(a=>Array.isArray(a?.values)&&a.values.length>=1&&a.values.length<=20),'variant_axes_invalid');
  if(Array.isArray(data.axes))for(const axis of data.axes){
   variantCheck(VariantAxisNameSchema.safeParse(axis?.name).success,'variant_axis_name_invalid');
   if(Array.isArray(axis?.values))for(const value of axis.values)variantCheck(VariantValueNameSchema.safeParse(value?.name).success,'variant_value_invalid');
  }
- const parsed=ReplaceProductGroupInputSchema.safeParse(raw);requireCondition(parsed.success,422,'validation_failed','規格設定格式無效，請檢查商品組、選項與成員。');
- const input=parsed.data;input.title=normalized(input.title);input.description=normalized(input.description);
- input.axes=input.axes.map(a=>({...a,name:normalized(a.name),values:a.values.map(v=>({...v,name:normalized(v.name)}))}));
+ const parsed=ReplaceProductGroupInputSchema.safeParse(data);requireCondition(parsed.success,422,'validation_failed','規格設定格式無效，請檢查商品組、選項與成員。');
+ const input=parsed.data;
  variantCheck(new Set(input.axes.map(a=>a.key)).size===input.axes.length&&new Set(input.axes.map(a=>a.name)).size===input.axes.length,'variant_axes_invalid');
  for(const a of input.axes)variantCheck(new Set(a.values.map(v=>v.key)).size===a.values.length&&new Set(a.values.map(v=>v.name)).size===a.values.length,'variant_value_invalid');
  variantCheck(new Set(input.members.map(m=>m.product_id)).size===input.members.length,'variant_order_invalid');

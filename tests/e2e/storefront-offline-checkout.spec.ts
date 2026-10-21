@@ -953,6 +953,8 @@ test('order bell tells an eligible seller reader about placement and opening it 
     await buyerPage.getByRole('button',{name:'取消訂單',exact:true}).click();
     await buyerPage.getByRole('dialog',{name:'要取消這筆訂單嗎？'}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
     expect((await cancelled).status()).toBe(200);
+    const ownerNotices=(await e2eAuthPool.query('SELECT kind FROM member_notifications WHERE recipient_ref=$1 AND source_key=$2',[store.seller.id,`commerce-order/v1/${order.order_ref}/buyer_cancelled`])).rows;
+    expect(ownerNotices).toEqual([{kind:'commerce_order_buyer_cancelled'}]);
     expect((await e2eAuthPool.query('SELECT 1 FROM member_notifications WHERE recipient_ref=$1 AND source_key=$2',[reader.id,`commerce-order/v1/${order.order_ref}/buyer_cancelled`])).rowCount).toBe(0);
     const history=await(await readerContext.request.get('/api/v1/me/notifications')).json() as {items:{title:string;body:string}[]};
     expect(history.items.some(n=>n.title==='新訂單待確認收款'&&n.body.includes(order.display_number))).toBe(true);

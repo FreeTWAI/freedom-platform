@@ -50,7 +50,6 @@ function picture(photo: Photo | null | undefined, title: string, eager = false) 
   return photo ? `<img class="shop-product-photo" src="${escape(photo.read_path)}" alt="${escape(title)}" width="${photo.width}" height="${photo.height}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">`
     : '<div class="shop-photo-placeholder"><span>尚未提供商品照片</span></div>';
 }
-function catalogPhoto(sku:string,photos:ReadonlyMap<string,Photo|null>,catalog?:RenderCatalog){return catalog?.photos?.get(sku)??photos.get(sku);}
 function metadata(name: string, description: string, path: string, photo: Photo | null | undefined, share?: PublicShare) {
   if (!share) return '';
   const origin = new URL(share.publicOrigin);
@@ -76,10 +75,10 @@ export function storeHtml(store: PublicStoreProjection, template: StoreTemplate 
   const category=categories?categoryDisplay(categories,store.products,catalog):undefined;
   const all=catalog?catalogProducts(store,catalog):store.products;
   const displayed=category?.skus?category.skus.map(sku=>all.find(p=>p.sku===sku)!):all;
-  const cover = all.map(product => catalogPhoto(product.sku,photos,catalog)).find(Boolean);
+  const cover = all.map(product => photos.get(product.sku)).find(Boolean);
   const rendered = new Map(displayed.map(p => {
     const variant=catalog?variantCardDetail(store,p.sku,catalog):undefined;
-    const photo = picture(catalogPhoto(p.sku,photos,catalog), p.title), path = previewBase?`${previewBase}/products/${p.sku}`:productPath(store, p.sku);
+    const photo = picture(photos.get(p.sku), p.title), path = previewBase?`${previewBase}/products/${p.sku}`:productPath(store, p.sku);
     const image = preview && !previewBase ? `<div class="shop-photo-link">${photo}</div>` : `<a class="shop-photo-link" href="${path}" aria-label="查看${escape(p.title)}">${photo}</a>`;
     const title = preview && !previewBase ? escape(p.title) : `<a href="${path}">${escape(p.title)}</a>`;
     const action = preview && !previewBase ? `<details class="shop-preview-description"><summary>預覽完整商品內容</summary>${paragraphs(p.description)}</details>`
@@ -102,7 +101,7 @@ export function productHtml(store: PublicStoreProjection, sku: string, media: Me
   const group=catalog?.document.groups.find(g=>g.members.some(m=>m.sku===sku)),selected=group?.members.find(m=>m.sku===sku);
   const product=group?{...rawProduct,title:group.title,description:group.description}:rawProduct,label=selected?.buyer_label??product.title;
   const open = !preview && purchase?.open === true;
-  const photos = photosFor(store, media, share), photo = catalogPhoto(group?.gallery_sku??sku,photos,catalog);
+  const photos = photosFor(store, media, share), photo = photos.get(group?.gallery_sku??sku);
   const legalLinks=policies?policyLinks(store.slug,policies,true):'';
   const action = preview ? '<p class="shop-action-note">這是未發布的商品預覽。</p>' : open
     ? catalog&&variantUnavailable(catalog.availability?.get(sku))

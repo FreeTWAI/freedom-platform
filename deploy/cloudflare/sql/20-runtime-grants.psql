@@ -355,7 +355,6 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs') AND c.relkind='r'
 \gexec
 -- END STOREFRONT SELLER POLICY GRANTS
-COMMIT;
 
 -- BEGIN STOREFRONT GALLERY GRANTS
 SELECT format($authorization$
@@ -417,7 +416,6 @@ WHERE n.nspname='public' AND c.relname IN ('commerce_product_group_members','com
 \gexec
 -- END STOREFRONT VARIANTS GRANTS
 
-
 -- BEGIN STOREFRONT CATEGORIES GRANTS
 SELECT format($authorization$
   REVOKE ALL PRIVILEGES ON TABLE %1$s FROM %2$I;
@@ -448,3 +446,4 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('commerce_storefront_categories','commerce_storefront_category_members','commerce_publication_categories') AND c.relkind='r'
 \gexec
 -- END STOREFRONT CATEGORIES GRANTS
+COMMIT;

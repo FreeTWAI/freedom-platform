@@ -1048,15 +1048,13 @@ test('gallery restore retains nonempty A/B tenant graphs and exact read/retarget
 });
 
 test('variant restore retains both nonempty frozen catalogs and rejects tenant retargeting',async()=>{
- await isolatedTransaction(runtimePool,async q=>{
+ for(const [space,other] of [[spaces.a,spaces.b],[spaces.b,spaces.a]])await isolatedTransaction(runtimePool,async q=>{
   assert.equal((await q.query('SELECT 1 FROM commerce_publication_variants')).rowCount,0);
-  for(const [space,other] of [[spaces.a,spaces.b],[spaces.b,spaces.a]]){
-   await bindPrincipalContext(q,space===spaces.a?people.p1.principalId:people.p2.principalId);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
-   const rows=(await q.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[space.tenantId])).rows;assert.equal(rows.length,1);assert.equal(rows[0].document.groups[0].members.length,2);
-   assert.deepEqual(rows,(await restoredPool.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[space.tenantId])).rows);
-   assert.equal((await q.query('SELECT 1 FROM commerce_publication_variants WHERE tenant_id=$1',[other.tenantId])).rowCount,0);
-   await q.query('SAVEPOINT variants_retarget');await assert.rejects(q.query('UPDATE commerce_publication_variants SET tenant_id=$1 WHERE tenant_id=$2',[other.tenantId,space.tenantId]),(e:unknown)=>['23514','42501'].includes((e as {code:string}).code));await q.query('ROLLBACK TO SAVEPOINT variants_retarget');
-  }
+  await bindPrincipalContext(q,space===spaces.a?people.p1.principalId:people.p2.principalId);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
+  const rows=(await q.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[space.tenantId])).rows;assert.equal(rows.length,1);assert.equal(rows[0].document.groups[0].members.length,2);
+  assert.deepEqual(rows,(await restoredPool.query('SELECT * FROM commerce_publication_variants WHERE tenant_id=$1',[space.tenantId])).rows);
+  assert.equal((await q.query('SELECT 1 FROM commerce_publication_variants WHERE tenant_id=$1',[other.tenantId])).rowCount,0);
+  await q.query('SAVEPOINT variants_retarget');await assert.rejects(q.query('UPDATE commerce_publication_variants SET tenant_id=$1 WHERE tenant_id=$2',[other.tenantId,space.tenantId]),(e:unknown)=>['23514','42501'].includes((e as {code:string}).code));await q.query('ROLLBACK TO SAVEPOINT variants_retarget');
  });
 });
 
