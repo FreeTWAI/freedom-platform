@@ -189,8 +189,8 @@
     },
     {
       "path": "apps/admin/freedom.module.json",
-      "bytes": 1744,
-      "sha256": "67e2d14726e3795f15283a8ea1610fec2473d33e0c7f65687519ec6cc57afefc"
+      "bytes": 1874,
+      "sha256": "c88967b5e803343e38f4769daee0e597483ff84bbed04372190b02629776df85"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -2164,8 +2164,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminGitHubSetup.tsx",
-      "bytes": 3911,
-      "sha256": "f0d8bc1055e601dd4f53da0680d3830ad0e12d921e7bbc1cef8a6ce24325ab72"
+      "bytes": 3418,
+      "sha256": "1e6eb0127b0f4c8536ddcef1d54668696b010c41374e5461fda7bdb186c2d7d4"
     },
     {
       "path": "apps/portal-web/src/modules/AdminGuildManagement.css",
@@ -2179,13 +2179,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminLayout.css",
-      "bytes": 17009,
-      "sha256": "65505da1ce004fe64dcf2e62cbbd3f410be3b4ef6493fee2543995a4e1a7b387"
+      "bytes": 17010,
+      "sha256": "276ad2bb689149d7e42aaebbec66e0b020caaefa0abc896d79bc085d8ff9da2b"
     },
     {
       "path": "apps/portal-web/src/modules/AdminPanel.tsx",
-      "bytes": 42661,
-      "sha256": "e9c8b43fb4c35ae00530bd1841e66eb5ef3e8f1716fd5a666ca1a44f7af5a8e5"
+      "bytes": 43693,
+      "sha256": "af058ab9439cb9c1c1965531658e3c0572acd428a41c0e7e8354e90ed4fdb7ac"
     },
     {
       "path": "apps/portal-web/src/modules/AdminPermissions.css",
@@ -14374,8 +14374,8 @@
     },
     {
       "path": "docs/development/platform-admin-api.md",
-      "bytes": 31001,
-      "sha256": "a51edcaf710f637e207bf4fb5cb6e24db9e53c73ca0f42a8431595cceb4b27ed"
+      "bytes": 31641,
+      "sha256": "ae8f78a5833b9b35b2628306e56f1dbb80a66292556d40590c7a1029a1696dd8"
     },
     {
       "path": "docs/development/post-migration-site-audit-2026-10-04.md",
@@ -19829,8 +19829,8 @@
     },
     {
       "path": "modules/guild-workspace/freedom.module.json",
-      "bytes": 5105,
-      "sha256": "78b32b182abde80c2ced6a65ba2603538ab53e65ea01321984da0fe6f62d3cf7"
+      "bytes": 5156,
+      "sha256": "38c2718107ec300bde262be7be2e7a2d25ef764f13ba4a9cbfdb772c463f4b32"
     },
     {
       "path": "modules/guild-workspace/generate-contracts.ts",
@@ -22314,8 +22314,8 @@
     },
     {
       "path": "tests/e2e/audit-operations.spec.ts",
-      "bytes": 19631,
-      "sha256": "c20311101be442e50b1b1081707283ced05a0fa5740115d5ee70afbfa1255482"
+      "bytes": 19798,
+      "sha256": "e92c8d5dfca7a66cd7bd263979ed17f1b29517e6b22e5cd97f8db2c72adc6d2f"
     },
     {
       "path": "tests/e2e/audit-shell.spec.ts",
@@ -22519,8 +22519,8 @@
     },
     {
       "path": "tests/e2e/github-setup.spec.ts",
-      "bytes": 10377,
-      "sha256": "86675779c2317466e7994f551b9d6df367a9237f25b506a801dc0735ad86108d"
+      "bytes": 14062,
+      "sha256": "09ea0af4477e01200df2c9e48a82dc341b66cceae50a214c1ef0b5e64db25da0"
     },
     {
       "path": "tests/e2e/github-social.spec.ts",
@@ -22529,8 +22529,8 @@
     },
     {
       "path": "tests/e2e/guild-alias.spec.ts",
-      "bytes": 19197,
-      "sha256": "8e18c5966d6c711170b92fe8ba9f9f443dd9024888570cd16ac1830722f3d2ed"
+      "bytes": 19563,
+      "sha256": "35a9681db8759e70bf771b4a0d442bbd2f7ae82619c2667a843a74bb35f91f9c"
     },
     {
       "path": "tests/e2e/guild-block-composition.spec.ts",
@@ -22834,8 +22834,8 @@
     },
     {
       "path": "tests/e2e/navigation.ts",
-      "bytes": 7450,
-      "sha256": "2e09220bba7edff0276c12e3a766cfbc712f960e3bae759239a56444f03121d8"
+      "bytes": 8608,
+      "sha256": "ae70671fab39dbc6699466dc64344748bddf0375287ce185fc84ca07c182f679"
     },
     {
       "path": "tests/e2e/newcomer-guides.spec.ts",
@@ -22884,8 +22884,8 @@
     },
     {
       "path": "tests/e2e/page-tools.spec.ts",
-      "bytes": 9849,
-      "sha256": "f67657facb2aee163005b95971c477dd74231425a640e7feac5dccea21ca6029"
+      "bytes": 10293,
+      "sha256": "14da40d999f4ce5ed5b7e2d88cc2e6ef2dc9b18c4a21ebc15fdca76f2a87655f"
     },
     {
       "path": "tests/e2e/participation-metrics.spec.ts",
@@ -23029,8 +23029,8 @@
     },
     {
       "path": "tests/e2e/skill-editor-guild-access.spec.ts",
-      "bytes": 17616,
-      "sha256": "eb36cf7d9803b2c75b3d4f0de71a275016dcf5e3dc0645e68dbb0dc98859f258"
+      "bytes": 17902,
+      "sha256": "91d7a65a28e3cd4b08fe84bea0c4e2ff94c4ad088581c0bc8e318697acd58aec"
     },
     {
       "path": "tests/e2e/skill-sharing.spec.ts",

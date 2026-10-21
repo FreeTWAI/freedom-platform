@@ -146,3 +146,10 @@
 `GET /members` 附帶 `platform_admin`（null 或 admin_id、active、aggregate_version、access_state），方便直接任命。所有任命由既有 Access 管理員明確確認並留下 audit；會員信箱只是被任命的地址，仍須本人通過 Access OTP 才能使用管理權限。
 
 `access_state` 為 pending、ready、pending_removal、revoked。同步仍是 `scripts/sync-admin-access.ts`：Castle timer 每15秒跑一次，或改由沒有 route 的 cron Worker 每分鐘跑一次（見 [deploy/cloudflare README](../../deploy/cloudflare/README.md)）。兩者不要同時跑。讀回比對成功才寫入 access_synced_version/at。Web API 不持有 Cloudflare token。停用先在資料庫立即生效，舊 Access JWT 也無法再管理；邊緣名單移除可能稍後完成。服務失敗時維持待同步，不假報可登入。Timer 的環境變數見 [部署設定](member-toolkit.md)。
+
+GitHub App 建立回呼由管理頁 shell 在 `/bootstrap` 成功、取得 CSRF 後立即處理，
+先將 `/admin/github/callback?code=…&state=…` 清為 `/admin`，再送出一次
+`POST /github-app/complete`；之後才呈現工作區導覽。交換不依賴 GitHub 設定區塊的
+lazy chunk，切換工作區或載入失敗不會取消交換。設定區塊接收同一份結果／錯誤；
+重新確認身分與往返工作區不重送回呼，管理身分更換時不呈現前一身分的回呼結果。
+後端原有 state、社群／管理員、來源與有效期驗證，以及建立 App 的 GitHub 目的地限制維持原值。

@@ -1,3 +1,4 @@
+import { openAdminNavigation } from './navigation.js';
 import { mkdirSync } from 'node:fs';
 import { test, expect, type Page } from './fixtures.js';
 
@@ -231,7 +232,7 @@ test('a member without any appointment keeps the ordinary empty state', async ({
   expect(calls.editorGets).toBe(0);
 });
 
-test('admin nav group labels keep one line above their wrapped buttons on a phone', async ({ page }) => {
+test('admin nav group labels keep one line above their buttons in the sidebar and phone dialog', async ({ page }) => {
   await page.route('**/admin/api/**', route => {
     const path = new URL(route.request().url()).pathname.replace('/admin/api', '');
     if (path === '/bootstrap') return route.fulfill({ json: { admin: { admin_id: 'synthetic-admin', display_name: '稽核管理員', email: 'admin@example.test', role: 'super_admin', community_id: 'synthetic' }, csrf_token: 'synthetic-csrf', summary: { members: 1, active_members: 1, pending_guild_applications: 0, guilds: 1, admins: 1 }, available_skill_books: [], pending_guild_appointments: [] } });
@@ -241,8 +242,9 @@ test('admin nav group labels keep one line above their wrapped buttons on a phon
     await page.setViewportSize(size);
     await page.goto('/admin');
     await expect(page.getByRole('heading', { name: '會員管理', exact: true })).toBeVisible();
+    const navigation=await openAdminNavigation(page);
     for (const name of ['人員與權限', '公會與活動', '系統']) {
-      const group = page.getByRole('group', { name, exact: true });
+      const group = navigation.getByRole('group', { name, exact: true });
       const label = group.locator('.admin-nav-label'), buttons = group.getByRole('button');
       const box = (await label.boundingBox())!, fontSize = await label.evaluate(el => parseFloat(getComputedStyle(el).fontSize)), lineHeight = await label.evaluate(el => parseFloat(getComputedStyle(el).lineHeight) || parseFloat(getComputedStyle(el).fontSize) * 1.6);
       expect(fontSize, `${name} ${viewport}`).toBe(14);
@@ -256,5 +258,6 @@ test('admin nav group labels keep one line above their wrapped buttons on a phon
     }
     expect(await fits(page)).toBe(true);
     await page.screenshot({ path: `${evidence}/after-admin-nav-groups-${viewport}.png`, fullPage: true });
+    if(viewport==='mobile'){await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'開啟管理選單',exact:true})).toBeFocused();}
   }
 });

@@ -80,8 +80,15 @@ test('phone keeps world chat in an in-page drawer and admin keeps a dock',async(
   await page.getByRole('dialog',{name:'會員首頁：提出想法'}).getByRole('button',{name:'關閉'}).click();
   await page.goto('/admin');
   await expect(page.getByRole('button',{name:'展開訊息控制台'})).toBeVisible();
+  await expect(page.locator('.page-tools-menu')).toHaveCount(1);
+  await openPageTools(page);
   await expect(page.getByRole('button',{name:'提出想法'})).toBeVisible();
-  await expect(page.locator('.page-tools-menu')).toHaveCount(0);
+  await page.getByRole('button',{name:'提出想法'}).click();
+  const adminIdea=page.getByRole('dialog',{name:'平台管理：提出想法'});
+  await expect(adminIdea).toBeVisible();
+  await adminIdea.getByRole('button',{name:'關閉',exact:true}).click();
+  await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
+  await expect(page.locator('.page-tools-menu')).toHaveJSProperty('open',false);
   await page.setViewportSize({width:1280,height:900});await page.getByRole('button',{name:'展開訊息控制台',exact:true}).click();
   const opened=page.waitForEvent('popup');await page.getByRole('button',{name:'在獨立視窗開啟訊息控制台',exact:true}).click();
   const popup=await opened;await expect(popup).toHaveURL(/\/admin\?game-console=popout/);await expect(popup.locator('.game-console.is-popout')).toBeVisible();await popup.close();

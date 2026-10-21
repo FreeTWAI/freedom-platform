@@ -148,7 +148,7 @@
 .admin-nav-heading { display: flex; justify-content: space-between; align-items: center; min-width: 0; }
 .admin-nav-heading > strong { font-size: .9375rem; }
 .admin-workspace .admin-workbench .admin-nav-group { display: grid; grid-template-columns: minmax(0,1fr); gap: 6px; align-items: start; }
-.admin-workspace .admin-workbench .admin-nav-label { font-size: .75rem; color: var(--muted); padding-inline: 10px; }
+.admin-workspace .admin-workbench .admin-nav-label { font-size: .875rem; color: var(--muted); padding-inline: 10px; }
 .admin-workspace .admin-workbench .admin-nav-items { display: grid; gap: 3px; }
 .admin-nav-search { display: grid; gap: 6px; min-width: 0; }
 .admin-nav-search > span { font-size: .8125rem; color: var(--muted); }
