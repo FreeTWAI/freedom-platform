@@ -205,6 +205,22 @@ test('unknown, root, governance, security, shared runtime, test, spec, and confi
   assert.equal(pull([edited('docs/design/mark.png')]).reason, 'not_docs_allowlist');
 });
 
+test('new workflows keep every job selected, including beside docs and generated inventory', () => {
+  for (const path of ['.github/workflows/codeql.yml', '.github/workflows/new-workflow.yml']) {
+    for (const status of ['A', 'M']) {
+      for (const changes of [
+        [edited(path, status)],
+        [edited(path, status), edited('docs/development/notes.md'), edited(GENERATED_INVENTORY_PATH)],
+      ]) {
+        const selection = pull(changes);
+        assert.equal(selection.mode, 'full');
+        assert.equal(selection.reason, 'governance_security_or_shared_runtime');
+        assert.deepEqual(selection.jobs, allResults(true));
+      }
+    }
+  }
+});
+
 test('the generated inventory is metadata only beside an allowlisted document', () => {
   const inventoryOwner = [moduleDescriptor('governance', ['modules/example/**', 'docs/platform-plan/verification/**'])];
   const accompanied = pull([

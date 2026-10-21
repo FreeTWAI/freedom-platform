@@ -232,6 +232,8 @@ const routeTable: Record<string, string> = {
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id/actions/:action': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/release': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/overview': 'tenant',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/overview': 'middleware',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/upgrade': 'tenant',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations/:location_id': 'middleware',
@@ -262,6 +264,7 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/provider-accounts/:account_id/services/payment/activation-payments': 'tenant',
   'POST /admin/api/commerce/store-admissions': 'admin',
   'GET /admin/api/commerce/store-admissions': 'admin',
+  'GET /admin/api/commerce/store-readiness': 'admin',
   'POST /admin/api/commerce/store-admissions/:admission_id/revoke': 'admin',
   // Cache and quarantine middleware are inventoried separately, never sent as a synthetic ALL request.
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id': 'middleware',
@@ -296,6 +299,7 @@ const routeTable: Record<string, string> = {
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-terms': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-offer': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/withdraw': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections': 'tenant',
@@ -590,7 +594,7 @@ async function buildFixture() {
 let fixture: Awaited<ReturnType<typeof buildFixture>>;
 
 test('T-022 1. Route inventory guard', () => {
-  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-admissions(?:\/|$))/;
+  const relevantPaths = /(tenants|tenant-|module-instances|application-|^\/api\/v1\/tenants\/[^/]+\/operations\/|manual-work|launchpad-context|works|results|applications|guilds\/[^/]+\/launchpad|^\/admin\/api\/commerce\/store-(?:admissions|readiness)(?:\/|$))/;
   // Member search telemetry has an operations path, but is not tenant authority.
   assert.equal(relevantPaths.test('/api/v1/community-search/operations/*'), false);
   for (const suffix of ['', '/reconcile', '/cancel']) {
@@ -601,8 +605,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 10, guild: 9, principal: 8, global: 4, tenant: 126, middleware: 16 });
-  assert.equal(selectedRoutes.length, 173);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 128, middleware: 17 });
+  assert.equal(selectedRoutes.length, 177);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -659,6 +663,7 @@ const routes: Route[] = [
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/exception-cases/:case_id/actions/:action', body: { code: 'confirmed' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/release' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/overview' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/upgrade', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/ship-from-locations', body: {label:'合成倉'+randomUUID().slice(0,8),sender_name:'合成星禾',mobile:'09'+String(randomBytes(4).readUInt32BE()).padStart(10,'0').slice(-8),postal_code:'100',address:'合成星禾路'+randomUUID().slice(0,8)+'號',ships:true,receives_returns:true} },
@@ -752,6 +757,7 @@ const routes: Route[] = [
     body: { cost_minor: 100, shipping_minor: 0, shipping_terms: '合成出貨條件', return_terms: '合成退貨條件' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-offers' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-catalog' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/supply-offer', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/withdraw', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections' },
@@ -1174,6 +1180,10 @@ test('T-022 4. Body, header and query substitution', async () => {
   }
   scanForLeaks(candidates, '4 candidates', B);
   for (const actor of [P, N, fixture.people.O, fixture.people.M]) {
+    // Retail eligibility needs commerce membership; add it after the unrelated-guild query above.
+    await owner.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+      VALUES($1,$2,$3,'guild_commerce_sales','active','full')
+      ON CONFLICT (community_id,user_id,guild_key) DO NOTHING`, [randomUUID(), DEMO_COMMUNITY, actor.user.user_id]);
     const launchpad = await call('GET', '/guilds/guild_ai_field/launchpad', actor);
     assert.equal(launchpad.status, 200, JSON.stringify(describe(launchpad)));
     const other = actor === N ? A : B;
@@ -1183,7 +1193,7 @@ test('T-022 4. Body, header and query substitution', async () => {
       application_key, release_ref: application_key === 'hosted-store' ? 'hosted-store@1.1.0' : `${application_key}@1.0.0`,
       display_name: application_key === 'manual-workspace' ? '人工工作空間' : application_key === 'hosted-store' ? '線上商店' : '合成店面',
       eligibility: { can_launch: manages, reason_codes: manages ? [] : ['tenant_manage_required'],
-        policy_revision: '1', required_guild_tier: 'full', tenant_action: manages ? (application_key === 'hosted-store' ? 'select' : 'continue') : 'create' },
+        policy_revision: '1', required_guild_tier: application_key === 'hosted-store' ? 'intern' : 'full', tenant_action: manages ? (application_key === 'hosted-store' ? 'select' : 'continue') : 'create' },
     }));
     assert.deepEqual(launchpad.data.applications, expectedApplications);
     const substituted = await call('GET', `/guilds/guild_ai_field/launchpad?tenant_id=${other.tenantId}&workspace_id=${other.workspaceId}`, actor);

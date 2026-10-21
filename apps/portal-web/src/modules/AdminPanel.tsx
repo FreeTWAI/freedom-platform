@@ -11,6 +11,7 @@ import type {PortalClient} from '../api';
 
 const AdminGitHubSetup=lazy(()=>import('./AdminGitHubSetup').then(module=>({default:module.AdminGitHubSetup})));
 const AdminAuthorClaims=lazy(()=>import('./AdminAuthorClaims').then(module=>({default:module.AdminAuthorClaims})));
+const AdminStoreAdmissions=lazy(()=>import('./AdminStoreAdmissions').then(module=>({default:module.AdminStoreAdmissions})));
 const AdminReviewCenter=lazy(()=>import('./AdminReviewCenter').then(module=>({default:module.AdminReviewCenter})));
 const AdminGuildWorkspace=lazy(()=>import('./GuildWorkspace').then(module=>({default:module.AdminGuildWorkspace})));
 const AdminGuildManagement=lazy(()=>import('./AdminGuildManagement').then(module=>({default:module.AdminGuildManagement})));
@@ -26,10 +27,11 @@ type AdminNomination = {aggregate_version?:number;access_state?:AccessState;user
 type Audit = {audit_id?:string;admin_name?:string;actor_email?:string;actor_name?:string;actor_display_name?:string;action:string;reason:string;target_ref?:string;target_id?:string;target_type?:string;created_at?:string;at?:string};
 type ClientError = {error_id:string;user_id:string;display_name:string;action:string;error_code:string;http_status:number|null;created_at:string};
 type PendingEvent={event_id:string;title:string;description:string;organizer_name:string;guild_name:string|null;starts_at:string;location:string;aggregate_version:number};
-type AdminTab = 'members'|'guild-applications'|'guilds'|'admins'|'author-claims'|'review-center'|'guild-workspace'|'events'|'github'|'audit'|'errors';
+type AdminTab = 'store-admissions'|'members'|'guild-applications'|'guilds'|'admins'|'author-claims'|'review-center'|'guild-workspace'|'events'|'github'|'audit'|'errors';
 type ApplicationState='pending'|'approved'|'declined'|'all';
 const accessLabel=(state?:AccessState)=>state==='ready'?'可登入管理頁':state==='pending'?'登入權限同步中':state==='pending_removal'?'停用同步中':state==='revoked'?'登入權限已停用':'登入權限待確認';
 const adminGroups:{label:string;items:[AdminTab,string][] }[]=[
+  {label:'商店與交易',items:[['store-admissions','商店准入']]},
   {label:'人員與權限',items:[['members','會員管理'],['admins','管理員名單'],['author-claims','作者認領審核']]},
   {label:'公會與活動',items:[['guilds','公會管理'],['guild-applications','公會申請'],['guild-workspace','會長與維護者'],['events','公開活動審核']]},
   {label:'系統',items:[['github','GitHub 連結'],['audit','操作紀錄'],['errors','系統錯誤日誌']]},
@@ -139,6 +141,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
       {tab==='events'&&<section className="stack"><div className="card-head"><h2>公開活動審核</h2><button className="btn btn-ghost" type="button" disabled={busy||loading} onClick={()=>void load()}>更新</button></div><p className="muted">所有會員都能提交。平台管理員可審核全部活動；指定公會的現任會長也可審核該公會活動。審核後會發系統公告與通知。</p><div className="card-grid">{pendingEvents.map(item=><article key={item.event_id} className="card stack"><div className="card-head"><h3>{item.title}</h3><span className="badge">待審核</span></div><p className="multiline-text">{item.description}</p><p className="muted">發佈者：{item.organizer_name} · 主辦：{item.guild_name??'未指定公會'} · 開始：{new Date(item.starts_at).toLocaleString('zh-TW')}</p><p className="muted">地點或連結：{item.location}</p><EventReviewForm busy={busy} onReview={(decision,reason)=>mutate(`/events/${item.event_id}/review`,{decision,reason},item.aggregate_version)}/></article>)}</div>{!loading&&!pendingEvents.length&&!error&&<p className="muted">目前沒有待審核活動。</p>}</section>}
       {tab==='admins'&&<section className="stack" id="admin-list"><div className="card-head"><h2>管理員名單</h2><button type="button" className="btn btn-ghost" disabled={busy||loading} onClick={()=>{setAccessRefresh(value=>value+1);void load();}}>更新登入狀態</button></div><p className="muted">管理員擁有平台全部管理權限。調整管理權限不會變更會員帳號狀態。</p><div className="card-grid">{admins.map((admin,index)=><article className="card stack admin-permission-card" key={admin.admin_id??index}><div className="card-head"><h3>{admin.display_name??'待確認人選'}</h3><span className="badge">{admin.active?'管理權限已啟用':'管理權限已停用'}</span></div><p>{admin.email??'登入身分待確認'}</p><p className="muted">超級管理員 · 平台全部管理權限</p><p className={`admin-access-state admin-access-${admin.access_state??'unknown'}`}>{accessLabel(admin.access_state)}</p>{admin.access_state==='pending_removal'&&<p className="field-hint">管理操作已停用，正在更新登入名單。</p>}<p className="field-hint">{admin.identity_binding==='verified_email_match'?'有已驗證的同信箱會員帳號':admin.identity_binding==='unverified_email_match'?'同信箱會員尚未驗證，不視為身分綁定':'尚未建立同信箱會員帳號'}。</p>{admin.admin_id===bootstrap.admin.admin_id?<p className="field-hint">目前登入的管理員</p>:admin.admin_id&&admin.aggregate_version&&<AdminPermissionControl key={`${admin.admin_id}-${admin.aggregate_version}`} action={admin.active?'deactivate':'activate'} person={{display_name:admin.display_name??'管理員',email:admin.email??''}} busy={busy} onSubmit={reason=>mutate(`/admins/${admin.admin_id}/status`,{active:!admin.active,reason,confirmed:true},admin.aggregate_version)}/>}</article>)}</div></section>}
       {tab==='author-claims'&&<PageLoadBoundary label={adminLabels[tab]}><AdminAuthorClaims client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}
+      {tab==='store-admissions'&&<PageLoadBoundary label={adminLabels[tab]}><AdminStoreAdmissions client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}
       {tab==='review-center'&&<PageLoadBoundary label={adminLabels[tab]}><AdminReviewCenter client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}
       {tab==='github'&&<PageLoadBoundary label={adminLabels[tab]}><AdminGitHubSetup client={client}/></PageLoadBoundary>}
       {tab==='guild-workspace'&&<PageLoadBoundary label={adminLabels[tab]}><AdminGuildWorkspace client={client}/></PageLoadBoundary>}

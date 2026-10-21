@@ -127,6 +127,7 @@ mode 變更與未知路徑仍完整驗證。新增 preview 測試檔也保留完
 首次接入或擴大共用 API、跨公會資料、交易、schema、CI 與權限時，由相應平台／領域
 維護者審查。日常公會程式由具資格的非作者公會維護者處理，無須公會、平台、Ted 三重簽核。
 CODEOWNERS 與既有主線保護仍適用；descriptor 的 owner_role 不會授予 GitHub 權限。
+寫完之後的發布途徑與暫緩 PR 的狀態摘要格式，見[群友貢獻的發布途徑](../../docs/development/contribution-release-paths.md)。
 
 各先行公會仍須確認具名維護者與替補、實際 repo write 權限及可用審查路徑。
 本候選未指定未同意的負責人，也沒有變更 repo 權限或 CODEOWNERS。已有 GitHub 權限
