@@ -2654,8 +2654,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStore.tsx",
-      "bytes": 55319,
-      "sha256": "894038279bbc1c4086d6bd36160116a4c506664681fd20a323d7811667bef92a"
+      "bytes": 55357,
+      "sha256": "01f008ea17ce61c1f2a4948f8d1afe75bfa1521440284dcbad07269544f5a0d1"
     },
     {
       "path": "apps/portal-web/src/modules/HostedStoreAppearance.css",
@@ -18804,8 +18804,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/variants/Editor.tsx",
-      "bytes": 22465,
-      "sha256": "9a1eeb18990d8a557dff60e4bd680c53d7604a872089fb17eca26d1cc64aecf2"
+      "bytes": 22661,
+      "sha256": "bfddd701bbb5f4d8525908e95ed0fb5a6443db292b6a46f3086e4100de6d3800"
     },
     {
       "path": "modules/agent-commerce/storefront/variants/buyer.ts",
@@ -23099,8 +23099,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 291314,
-      "sha256": "b5e91c103348f598aac010cf46a2daf8f773f54dcaef39753dfa6a6e6c728d9a"
+      "bytes": 291716,
+      "sha256": "e4cb8cacde0f3a68478303a5a912fabb83838ce377ef2b6ae8ec1e465c6c130a"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",

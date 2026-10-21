@@ -8,7 +8,7 @@ import './editor.css';
 type Page=ReturnType<typeof ProductGroupPageSchema.parse>;
 type Draft=ReturnType<typeof ReplaceProductGroupInputSchema.parse>;
 const fromGroup=(g:ProductGroupDraft):Draft=>({title:g.title,description:g.description,axes:structuredClone(g.axes),members:g.members.map(m=>({product_id:m.product.product_id,product_version:m.product.version,value_keys:[...m.value_keys]})),default_product_id:g.default_product_id,order:g.order});
-export function VariantsEditor({client,userId,root,writable,locked,refresh,onState,onSaved}:{client:PortalClient;userId:string;root:string;writable:boolean;locked:boolean;refresh:string;onState:(dirty:boolean,blocking:boolean)=>void;onSaved:()=>Promise<void>}){
+export function VariantsEditor({client,userId,root,writable,locked,refresh,onState,onSaved,categoriesEnabled=false}:{categoriesEnabled?:boolean;client:PortalClient;userId:string;root:string;writable:boolean;locked:boolean;refresh:string;onState:(dirty:boolean,blocking:boolean)=>void;onSaved:()=>Promise<void>}){
  const scope=userId+'/'+root+'/variants',[page,setPage]=useState<Page|null>(null),[selected,setSelected]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(()=>catalogAttempt(client,scope)?'暫時無法確認儲存結果，請用原操作重試。':'');
  const [attempt,setAttempt]=useState<CatalogAttempt|undefined>(()=>catalogAttempt(client,scope)),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[revision,setRevision]=useState(0),[messageError,setMessageError]=useState(false);
  const messageRef=useRef<HTMLParagraphElement>(null);useEffect(()=>{if(messageError)messageRef.current?.focus();},[message,messageError]);
@@ -55,6 +55,7 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
    onCreate={body=>fresh('post',root+'/product-groups/'+g.group_key+'/products',body,g.version,'已新增規格商品，尚未發布。')}
    onProduct={(id,version,body)=>fresh('patch',root+'/products/'+id,body,version,'已儲存商品，尚未發布。','product')}
    onReload={()=>{if(!dirty||window.confirm('要捨棄未儲存的變更嗎？')){setDirty(false);setPage(null);void load();}}}/>}
+  {categoriesEnabled&&g&&writable&&g.editable&&<p className="field-hint">合併或拆分後，請在商品分類確認各商品的分類。</p>}
   {!writable&&<p>你目前只有檢視權限。</p>}
  </section>;
 }
