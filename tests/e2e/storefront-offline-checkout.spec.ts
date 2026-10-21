@@ -774,7 +774,7 @@ test('checkout registration returns before guild choice; unavailable stores keep
     expect((await e2eAuthPool.query('SELECT 1 FROM positioning_profession_memberships WHERE user_id=$1', [user.user_id])).rowCount).toBe(0);
     await page.goto('/#reservations');
     await expect(page.getByRole('region',{name:'訂單',exact:true})).toContainText('目前沒有訂單。');
-    await expect(page.getByRole('region',{name:'我的訂單',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('region',{name:'預留紀錄',exact:true})).toHaveCount(0);
     expect((await context.request.get('/api/v1/me/orders')).status()).toBe(200);
     expect((await context.request.get('/api/v1/me/reservations')).status()).toBe(403);
     await page.getByRole('link',{name:'返回工坊',exact:true}).click();
