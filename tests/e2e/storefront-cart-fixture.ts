@@ -100,6 +100,7 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
     const adminToken=randomUUID(),adminCsrf=accessIdentity?.csrfToken??randomUUID(),adminEmail=controls.adminAccess?E2E_AUTHOR_CLAIM_ADMIN_EMAIL:`admission-${randomUUID()}@example.test`;
     if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
     app = createApp(listenerPool, origin, 'local', {
+      registrationCommunityId: DEMO_COMMUNITY,
       ...(controls.realAdmission?{adminVerifier:controls.adminAccess?e2eAuthorClaimAdminVerifier:async(request:Request)=>{
         if(request.headers.get('X-Fixture-Admin')!==adminToken)throw new Problem(403,'admin_required','需要合成管理員。');
         return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
