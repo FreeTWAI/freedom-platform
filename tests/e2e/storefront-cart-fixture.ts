@@ -13,6 +13,7 @@ import { TENANT_CURSOR_TEST_KEY } from '../runtime/tenant-cursor-fixture.js';
 import { ports } from '../runtime/hosted-checkout-harness.js';
 import { LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { DEMO_COMMUNITY } from '../../packages/testing/seed.js';
+import {e2eAuthorClaimAdminVerifier,E2E_AUTHOR_CLAIM_ADMIN_EMAIL,E2E_AUTHOR_CLAIM_ADMIN_TOKEN} from '../../packages/testing/e2e-admin.js';
 import { e2eSchema } from '../../packages/testing/e2e-auth-isolation.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import { CreateResultSchema } from '../../contracts/guild-launchpad/v1/tenant.js';
@@ -66,7 +67,7 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
+type CartControls = {realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
 export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
   const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
@@ -95,11 +96,12 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
       throw Error('Owned loopback listener unavailable.');
     }
     const origin = `http://127.0.0.1:${address.port}`;
-    const adminToken=randomUUID(),adminCsrf=randomUUID(),adminEmail=`admission-${randomUUID()}@example.test`;
-    if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4)',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
+    const accessIdentity=controls.adminAccess?await e2eAuthorClaimAdminVerifier(new Request(origin,{headers:{'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}})):null;
+    const adminToken=randomUUID(),adminCsrf=accessIdentity?.csrfToken??randomUUID(),adminEmail=controls.adminAccess?E2E_AUTHOR_CLAIM_ADMIN_EMAIL:`admission-${randomUUID()}@example.test`;
+    if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
     app = createApp(listenerPool, origin, 'local', {
       registrationCommunityId: DEMO_COMMUNITY,
-      ...(controls.realAdmission?{adminVerifier:async(request:Request)=>{
+      ...(controls.realAdmission?{adminVerifier:controls.adminAccess?e2eAuthorClaimAdminVerifier:async(request:Request)=>{
         if(request.headers.get('X-Fixture-Admin')!==adminToken)throw new Problem(403,'admin_required','需要合成管理員。');
         return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
       }}:{}),
@@ -119,7 +121,7 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
       origin,
       admission: async(path:string,body:unknown)=>{
         if(!controls.realAdmission)throw Error('Real admission was not enabled for this fixture.');
-        const response=await fetch(origin+'/admin/api/commerce/store-admissions'+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','X-Fixture-Admin':adminToken,'X-Admin-CSRF':adminCsrf,'Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+        const response=await fetch(origin+'/admin/api/commerce/store-admissions'+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',...(controls.adminAccess?{'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}:{'X-Fixture-Admin':adminToken}),'X-Admin-CSRF':adminCsrf,'Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
         const raw=await response.json();expect(response.ok,JSON.stringify(raw)).toBe(true);
         return StoreAdmissionViewSchema.parse(raw);
       },

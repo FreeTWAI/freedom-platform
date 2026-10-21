@@ -1,10 +1,12 @@
+import {SupplyOfferPresentation,SHIPPING_TERMS_HINT,RETURN_TERMS_HINT} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferPresentation';
+import {resellerRoles} from '../../../../modules/agent-commerce/hosted-ui/reseller-arrangement';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {SupplyTermsInputSchema, SupplyTermsSchema, type SupplyTerms, type SupplyTermsInput} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
 import {ApiError, type PortalClient} from '../api';
 import {formatMinor, parseMajorToMinor} from '../format';
 
-export function HostedSupplyTerms({client, path, title, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false}: {
-  supplierOnly?: boolean; client: PortalClient; path: string; title: string; busy: boolean;
+export function HostedSupplyTerms({client, path, title, description, supplierName, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false}: {
+  supplierOnly?: boolean; client: PortalClient; path: string; title: string; description: string; supplierName: string; busy: boolean;
   onDirty: (dirty: boolean) => void; onCancel: () => void;
   onPublish?: (version: string) => Promise<void>;
   onSave: (body: SupplyTermsInput, version: string, success: () => void) => Promise<void>;
@@ -26,11 +28,11 @@ export function HostedSupplyTerms({client, path, title, busy, onDirty, onCancel,
     <div className="actions">{error && <button type="button" className="btn btn-ghost" onClick={() => setReload(n => n + 1)}>重試讀取供貨條件</button>}
       <button type="button" className="btn btn-ghost" onClick={onCancel}>返回商品</button></div>
   </div>;
-  return <SupplyForm view={view} title={title} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly}/>;
+  return <SupplyForm view={view} title={title} description={description} supplierName={supplierName} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly}/>;
 }
 
-function SupplyForm({view, title, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false}: {
-  supplierOnly?: boolean; view: SupplyTerms; title: string; busy: boolean; onDirty: (dirty: boolean) => void; onCancel: () => void;
+function SupplyForm({view, title, description, supplierName, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false}: {
+  supplierOnly?: boolean; view: SupplyTerms; title: string; description: string; supplierName: string; busy: boolean; onDirty: (dirty: boolean) => void; onCancel: () => void;
   onPublish?: (version: string) => Promise<void>;
   onSave: (body: SupplyTermsInput, version: string, success: () => void) => Promise<void>;
 }) {
@@ -62,11 +64,17 @@ function SupplyForm({view, title, busy, onDirty, onCancel, onSave, onPublish, su
       <label className="field">每件運費（{view.currency}）<input required inputMode="decimal" value={fields.shipping} onChange={e => change('shipping', e.target.value)}/></label>
       <p className="field-hint">金額上限 {formatMinor(100000000, view.currency)}；免運請填 0。</p>
       <label className="field">出貨條件<textarea required maxLength={2000} value={fields.shippingTerms} onChange={e => change('shippingTerms', e.target.value)}/></label>
+      <p className="field-hint">{SHIPPING_TERMS_HINT}</p>
       <label className="field">退貨條件<textarea required maxLength={2000} value={fields.returnTerms} onChange={e => change('returnTerms', e.target.value)}/></label>
+      <p className="field-hint">{RETURN_TERMS_HINT}</p>
       {error && <p className="banner banner-error" role="alert">{error}</p>}
       <div className="actions"><button className="btn btn-ghost" disabled={busy}>儲存供貨條件</button>
         <button type="button" className="btn btn-ghost" disabled={busy || dirty || !onPublish} onClick={() => void onPublish?.(view.version)}>公開供貨版本</button>
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>返回商品</button></div>
     </fieldset>
+    <details className="supply-offer-preview"><summary>預覽店主會看到的供貨方案</summary><div className="stack">
+      <p className="field-hint">{view.current_offer?'公開中的版本':'目前保存的條件（尚未公開）'}</p>
+      <SupplyOfferPresentation terms={view.current_offer?.terms??{...view,title,description}} supplierName={view.current_offer?.supplier_name??supplierName} publishedAt={view.current_offer?.published_at} versionHash={view.current_offer?.terms_sha256} arrangement={resellerRoles}/>
+    </div></details>
   </form>;
 }
