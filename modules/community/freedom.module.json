@@ -19,6 +19,8 @@
     "modules/community/member-skill-books.ts",
     "modules/community/moderation.ts",
     "modules/community/promotion.ts",
+    "apps/portal-web/public/go.js",
+    "apps/portal-web/public/go.css",
     "modules/community/public-discovery.ts",
     "modules/community/repo-author-claims.ts",
     "modules/community/skill-book-guides.ts",

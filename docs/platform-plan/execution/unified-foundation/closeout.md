@@ -10,6 +10,144 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-20 Short 短影音發布完成
+
+**截至07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，
+Short 已對所有人開啟；四組成功 before／after 備份、隔離還原與清理通過，
+兩環境 dispatcher 已綁定本次來源，原 timer 已恢復 active／enabled。會員 UX 驗收未執行。**
+來源為 #917 的正常 merge，帶入 TSY3991 的 #897「Short — 成員分享的 YouTube Shorts 上滑瀏覽」
+（refs #739）；main Verify 39376522961 的17個 jobs 與 CodeQL 39376522955 的3個 jobs 全部通過。
+本輪沒有 migration；唯一新增 `FREEDOM_SHORT_VIDEOS_ENABLED=true`，兩環境 feature bindings
+由26增至27；Supplier／Commerce console 保持 ON，checkout／交易 Email 保持 OFF，
+其他旗標、路由與 cron 未變。完整證據見[Short 發布收據](rollout-short-videos-2026-10-20.json)。
+
+Ted 於04:50:30.325 UTC 指示：「我覺得他那個如果測試都好 就不用在 staging 測成這樣了, 可以直接先上線給大家測了」。
+依此無 staging acceptance window，member UX acceptance 為 `not_run`；真實手機與 Safari 未驗。
+Production 第二次公開唯讀 smoke 通過14項：`/` 線上 header 已確認
+`frame-src https://www.youtube-nocookie.com;`，`/pay/ecpay/` 加43個 A 的線上 Worker CSP 無 frame-src。
+`/admin` 與 `/admin/github/callback` 的匿名請求在 Worker 前被 Access 以302攔截，
+**未觀察線上 admin Worker CSP**；僅補驗精確部署來源函式
+（`liveAdminWorkerCsp=not_observed_access_protected`、`adminCspSource=exact_source_function`）。
+未登入正式會員或建立訂單，不能以 smoke 通過代替真人使用。
+
+Production 首次 before-set `217429d6` 因 docker exec pg_dump 退出0卻產生截斷 dump，
+在 `pg_restore: … end of file` 失敗，清理通過；第二次 `0416acf8` 完成還原後才綁定。
+本輪 before 為10月20日新擷取的 `240cf677` 備份，run dir 位於前輪 kit，沒有沿用10月19日舊 set。
+兩環境各次成功備份均還原66個／48個物件、核對172 floor與素材政策；production 另核對10項座標約束。
+最初 plan 因 deploy out dir 不存在而拒絕，另行完成後才 seal／deploy，原拒絕紀錄保留。
+
+兩項 kit 修正經 orchestrator 審查：`kit-quiescence` 改以 `MainPID=0` 且 service inactive
+判斷停止，保留 systemd 的歷史 `ExecMainPID`；`smoke-access` 修正首次6項通過後在 `/admin`
+遇到 unexpected redirect 的檢查，改驗 Access redirect 並補 exact-source CSP，其他既有 assertions 維持。
+首次 smoke 失敗收據與兩份修正 diff 保留，第二次收據記錄 `priorFailedAttempt`，沒有覆寫失敗。
+Dispatcher 為 `562f005a`；原03:30／04:30 UTC、5分鐘隨機延遲、Persistent及service argv維持，
+觀察到下次排程為10月21日03:33:09／04:32:18 UTC，**新 dispatcher 自然備份尚未觀察**。
+GitHub Deployments 的 staging-next／next 已各記錄 success；原168項需求、T-047、第二操作者與真人成果未驗項保留。
+
+## 2026-10-19 商店公開說明與會員啟用邊界發布完成
+
+**截至23:06 UTC，staging 與 production 都已部署 `240cf677`／schema172，
+限定驗收、發布後備份與隔離還原通過，兩環境 dispatcher 已綁定本次來源，
+原 timer 已恢復 active／enabled。這是操作收據支持的程式發布，三項真人成果仍待驗收。**
+來源為 #911 的實際 main，Verify 39326252768 的17個 jobs與 CodeQL 39326246130
+的3個 jobs全部通過；公會局部 CI 的已合併／驗證不等於非核心作者已完成自主交付。
+本輪沒有 migration；Supplier／Commerce console 保持 ON，checkout／交易 Email 保持 OFF，
+其他旗標、路由與 cron 未變。完整證據見[商店會員流程發布收據](rollout-merchant-readiness-2026-10-19.json)。
+
+店主可在既有「商店資料 → 商店介紹」填寫客服、交付及售後說明，沿儲存／預覽／發布流程，
+讓買家頁呈現同一份「商店說明與聯絡」；不從會員或銀行資料推導公開資訊。
+Seller console 已解除對 Supplier console 開關的相依，既有權限、准入與 checkout 前置仍保留。
+22:53 UTC 的 production 唯讀盤點為1個已啟用店面，離線付款、交付設定與
+獨立准入各為0；店主實際設定與真人供應商／店主／買家旅程尚未完成，既有測試同意不需重問。
+
+Staging 的普通合成會員後台與匿名公開頁已通過；店面驗收使用首次導航前設定的
+390／1440視窗，確認公開說明、草稿隔離、錨點、checkout OFF與分享目的地。
+Session、fixture及臨時 Access清理通過。先前三次跨 resize失敗仍保留，沒有改稱通過；
+有界本機試驗支持 no-JS、smooth anchor與resize交互作用，尚未證明原生瀏覽器缺陷或
+Playwright獨有原因。**固定初始尺寸通過不代表跨尺寸已修復，也不能據此稱正式站故障。**
+Production 僅做公開唯讀檢查與資產核對，未登入會員、下單或宣稱真人採用。
+
+發布前備份沿用已完成的兩份 `10ad8d2d` 發布後備份，保留原來源與日期，沒有冒稱新擷取。
+本輪新 staging／production備份分別完整還原66個／48個物件，172 floor、素材政策與清理通過；
+只有production另核對10項座標約束及canonical saved floor，staging此項不適用。
+Dispatcher為`ef99163d`；原03:30／04:30 UTC與5分鐘隨機延遲、Persistent設定及service argv維持。
+觀察到下次排程為10月20日03:34:58／04:32:12 UTC，**新 wrapper自然執行尚未觀察**。
+`12940c71`／`10ad8d2d`歷史收據及既有未驗項保留，不新增第四條發布工作線。
+
+## 2026-10-19 三項成果的程式發布完成
+
+**截至21:51 UTC，staging 與 production 都已部署 `10ad8d2d`／schema172，
+各自限定驗收、before／after 備份與隔離還原通過；兩環境 operator 已綁定本次來源，
+兩個原 timer 已恢復 active／enabled。這是程式發布完成，真人產品旅程仍待驗收。**
+這次來源包含 #910 的公會局部 CI、店面品牌呈現、作品介紹與清楚目的地的分享頁，
+另含公開資料隱私修正。沒有 migration；旗標、路由與 cron 未改，
+Supplier／Commerce console 保持開啟，checkout／交易 Email 保持關閉。
+分環境狀態見[本輪發布紀錄](rollout-three-outcomes-2026-10-19.json)。
+
+Staging 的自有合成普通會員已完成店主／供應商桌面與手機後台，兩者 transport error為零，
+匿名 API 拒絕、公開書架、品牌店面、明示目的地的手動外連及撤下後隱藏均通過。
+Session、公開與普通會員 fixture、臨時 Access 清理各有收據。
+分享計分與外部請求使用攔截驗證，沒有建立訂單，也不宣稱真實採用或真人交易完成。
+
+Production 完成公開唯讀 health、版本／旗標、protocol、首頁、匿名拒絕及介紹／店面／分享資產核對，
+沒有登入正式會員或建立訂單。21:37 的唯讀盤點為1個店面且已啟用，但獨立准入、離線付款設定、
+交付設定各為0；這些仍由店主沿既有流程完成，不能以部署成功代替可交易。
+兩環境新備份分別還原66個物件／142089 bytes與48個物件／629894 bytes，172 floor與清理通過，
+production另核對素材政策及10項座標約束。日常 dispatcher 為`999e640b`，原排程未改；
+下次排程為10月20日03:30:31 UTC（staging）及04:31:38 UTC（production）。
+新 wrapper 的自然執行尚未觀察，不能以手動還原或 timer恢復代替。
+
+原驗收在 producer 檢查後累積3個 supplier error，被 finalizer拒絕；其原因未在原收據記錄。
+後續三次失敗保留。新的獨立 recheck 補齊實際商品載入等待及手機隱藏導覽的 owner存在判斷，
+最後才通過整體驗收，沒有放寬 error gate或改動本次產品來源。
+#911 已另於21:16 UTC合併為 `240cf677`，不包含在本次 `10ad8d2d` 發布；
+截至21:51 UTC，其主線 Verify仍在執行。
+真人會員設定、獨立准入、買家交易及兩位非核心公會作者自主交付仍需各自驗收。
+
+## 2026-10-19 會員商務後台啟用（前一輪完成紀錄）
+
+**截至18:04 UTC，staging 與 production 都已部署 `12940c71`／schema172，
+Supplier 與 Commerce console 已開啟；checkout 與交易 Email 仍關閉。**
+這次沿用既有 schema，沒有執行 migration；其他旗標、路由與 cron 保持原值。
+供貨素材／上傳與選品照片仍是 staging開、production關。完整版本、旗標與
+逐環境證據見[會員後台發布收據](rollout-member-consoles-2026-10-19.json)。
+使用者已確認供應商與電商公會成員同意參與測試，這不等於真人驗收已完成，
+也不代替店主自己的公開、付款與交付設定或獨立准入。
+
+Staging 的自有合成普通會員，已走正常登入、店主／供應商權限與桌面／手機後台；
+店主訂單清單可見，匿名 API 被拒絕。這次只驗後台進入與閱讀，沒有下單或代填店家設定。
+合成 fixture、session 與臨時 Access 已分別確認清理。Production 完成公開唯讀
+health、版本／旗標、protocol、首頁與匿名拒絕檢查，沒有登入正式會員或建立訂單。
+真人供應商、店主與買家的完整旅程仍待完成。
+
+兩環境都有新的 before／after 資料庫與物件備份、遠端讀回、隔離還原、172 floor
+與清理證據。Production 首次 after-set `9fae9f1d` 在 capture失敗、清理成功，
+根因仍未確定；另用具名、固定雜湊的 diagnostic adapter／wrapper 完成新 set
+`46f64b85`，不改寫舊失敗。Staging 的初次備份初始化、兩次 browser harness失敗，
+以及 production 的 runtime closure拒絕與 cache隔離修復也分開保留。
+
+日常 dispatcher 已安裝為 `bc9cf6f1`，兩個原 timer恢復 active／enabled，排程未改；
+觀察到下一次為10月20日03:30:11 UTC（staging）與04:34:11 UTC（production）。
+**新 wrapper 的自然排程尚未觀察**，不能以手動還原、安裝或既有 service結果代替。
+Schema 證據使用各次成功備份的 authenticated preflight時間窗，還原檢查不冒稱
+新一次 live DB讀取。所有舊失敗、私有內容／授權讀取 floor、production座標約束、
+原168項需求、T-047 與第二操作者未驗項保留。
+
+本輪繼續以公會自主交付、可信商店／供貨、專業介紹／分享三個成果收尾。
+包含 #901、#906–#909 的整合 PR
+[#910](https://github.com/FreeTWAI/freedom-platform/pull/910) 已於19:31 UTC合併為
+`main@10ad8d2d`（tree `919f8e86`）。截至20:22 UTC的觀察，該主線
+[Verify 39311717186](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311717186)
+與 [CodeQL 39311715398](https://github.com/FreeTWAI/freedom-platform/actions/runs/39311715398)
+已分別完成17及3個 jobs，全部通過；完整 run 與 jobs 收據綁定同一主線來源。
+這是合併後主線的 CI 證據，不代替部署、公開資產或會員驗收；原 PR 失敗紀錄保留。
+店面、介紹、分享與公會改動不包含在本次 `12940c71` 發布。
+下一步以實際版本、公開資產與清理後證據完成新一輪驗收及發布；
+新部署另寫收據，不改寫本次紀錄。會員設定與適用交易驗收沿既有有限商務交接繼續，
+不新增第四條工作線，也不把後台啟用稱為完整電商或 Foundation完成。
+
+以下10月17日及更早段落保留當時觀察；當前具日期快照以上方收據與`current-state.json`為準。
+
 ## 2026-10-17 Commerce 與離線買家流程收尾
 
 #863 的後端與 schema168–170 已部署兩環境，接著 #875 補齊買家報價、確認下單、

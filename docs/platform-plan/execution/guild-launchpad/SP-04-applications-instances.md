@@ -20,7 +20,7 @@ Guild提供可用ApplicationDefinition；SkillBook提供來源與教學；Applic
 
 ### 2.2 使用者可見流程
 
-1. 點guild應用卡，讀公開definition/release/runtime/來源/狀態；符合active full guild資格的人可選管理的tenant/workspace，與主力無關。
+1. 點guild應用卡，讀公開definition/release/runtime/來源/狀態；一般應用須有該guild的active full資格，與主力無關；`hosted-store` 供貨入口接受供應商公會active intern／full，零售入口在任何公會頁都接受電商公會active intern／full。兩者仍須有選定tenant/workspace的管理權。
 2. 伺服器解析依賴，列出此tenant相容實例：只有一個合適provider可推薦`reuse`；有多個必須選明確instance；沒有才提`create`。UI清楚顯「共用既有庫存」或「另建独立空白庫存」。不得先複製資料再問。
 3. 提交不可變launch plan，包含application release、tenant/workspace、選定相依instances、configuration及policy版本。普通使用無申請委員會；容量／安全／授權不足回具體原因。
 4. 本人確認「啟動」後，server重新驗eligibility、tenant capability、plan revision、dependency狀態及quota；同交易持久化Operation、stable IDs、quota reservations、outbox，再由worker做有限步驟。
@@ -116,7 +116,7 @@ type LaunchPlan={plan_id:UUID;version:Version;tenant_id:UUID;workspace_id:UUID;
 
 `configuration`不是任意執行JSON：必須對應該release的pinned config_schema，最大32KiB、深度≤8，無secret/endpoint/sql/js欄位，extension namespaced且明確版本；unknown欄位拒422或完整保存為核准extension，不靜默丟棄。供應key如CRM/service credentials只透過SP-09安全route。
 
-共同錯誤：400 invalid_input/idempotency_required；401 session_expired；403 capability_denied/guild_full_member_required/policy_unconfigured；404 not_found；409 idempotency_conflict/plan_stale/dependency_selection_required/dependency_in_use/workspace_binding_conflict/authority_changed/application_not_available/license_unresolved/operation_not_cancellable；412 version_conflict；422 contract_incompatible/dependency_cycle/configuration_invalid；428 version_required；429 quota_exceeded；503 dependency_unavailable。外部已派送但結果未知不轉503+「失敗可再建」，回202 Operation(needs_reconciliation)。
+共同錯誤：400 invalid_input/idempotency_required；401 session_expired；403 capability_denied/guild_full_member_required/guild_member_required/commerce_guild_member_required/policy_unconfigured；404 not_found；409 idempotency_conflict/plan_stale/dependency_selection_required/dependency_in_use/workspace_binding_conflict/authority_changed/application_not_available/license_unresolved/operation_not_cancellable；412 version_conflict；422 contract_incompatible/dependency_cycle/configuration_invalid；428 version_required；429 quota_exceeded；503 dependency_unavailable。外部已派送但結果未知不轉503+「失敗可再建」，回202 Operation(needs_reconciliation)。
 
 Definition發布沒有任意runtime create/edit endpoint：先在受治理source PR核准immutable release、capability/config schema、license與artifact pin，再由已有發布責任的維運入口匯入registry；本spec不授權guild editor安裝軟體。該匯入工具與授權證據由SP-12 materialization／release gate追蹤，公開GET只呈現已核可profile。
 
@@ -130,7 +130,7 @@ Definition發布沒有任意runtime create/edit endpoint：先在受治理source
 | GET `/tenants/:tenant_id/module-instances/:instance_id` | `{}` | InstanceView＋`dependencies:{requirement_key,provider_instance_id,version}[]` | 當前read；不回raw endpoint/credentials |
 | GET `/tenants/:tenant_id/application-installations` | `{application_key?:StableKey,workspace_id?:UUID,cursor?:string,limit?:int1..100}` | `Page<InstallationView>` | current tenant membership+read |
 | GET `/tenants/:tenant_id/application-installations/by-operation/:operation_id` | `{}` | `InstallationView`（含已受理但尚在provisioning／failed的status） | 只接受該tenant的application.launch操作並驗当前installation read；DB持久operation→installation映射，不由client猜instance；非此類或未授權一致404 |
-| POST `/tenants/:tenant_id/application-launch-plans` `application.plan` | `{guild_key:GuildKey,workspace_id:UUID,application_key:StableKey,release_ref:string,installation_choice:'reuse_existing'\|'create_new',existing_installation_id?:UUID,dependencies:DependencyChoice[],configuration:object}` | 201 LaunchPlan；若缺依賴選擇409附授權可見candidate IDs/versions | owner/admin instance.manage+guild full；不reserve資源，不配置；persist plan供確認/restart |
+| POST `/tenants/:tenant_id/application-launch-plans` `application.plan` | `{guild_key:GuildKey,workspace_id:UUID,application_key:StableKey,release_ref:string,installation_choice:'reuse_existing'\|'create_new',existing_installation_id?:UUID,dependencies:DependencyChoice[],configuration:object}` | 201 LaunchPlan；若缺依賴選擇409附授權可見candidate IDs/versions | owner/admin instance.manage+應用的公會資格（一般guild full；hosted-store依供貨／零售cohort）；不reserve資源，不配置；persist plan供確認/restart |
 | POST `/tenants/:tenant_id/application-installations` `application.launch` | `{plan_id:UUID,expected_plan_version:Version,configuration_digest:Digest}` | 202 Operation（若明確重用已可用installation可200 succeeded；不填resource_ref，以下by-operation讀回原installation） | 重新驗完整plan/current role/guild/quota；一交易operation+stable IDs+reservation+outbox |
 | GET `/tenants/:tenant_id/operations/:operation_id` | `{}` | Operation（只含共同欄位；逐步內部日誌不混進strict DTO） | 同tenant operation.read，無內部endpoint/secret/private body；這是registry/provision生命週期操作，可能早於或跨多instance；SP-05業務effects仍用其instance-scoped route。兩者共用Operation DTO與command/outbox核心，但此route不假稱SP-05既有handler，也不另建工作引擎 |
 | POST `/tenants/:tenant_id/operations/:operation_id/reconcile` `module.provision.reconcile` | `{}`＋If-Match | 202 Operation | owner/admin/受限維運worker；只查原effect，不派第二份；查詢provider仍走已驗adapter |
