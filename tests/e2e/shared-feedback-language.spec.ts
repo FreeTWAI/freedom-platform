@@ -148,3 +148,53 @@ test('a failed deferred page keeps its failure and translated recovery controls 
   await expect(page.locator('.floating-message-panel')).toBeHidden();
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();expect(assets).toBe(1);
 });
+
+
+for (const [index, language] of languages.entries()) {
+  test(`${language.id}: feature search recovers from no results and keeps keyboard focus`, async ({browser}) => {
+    const context=await browser.newContext({locale:language.locale,viewport:{width:1280,height:844}});
+    try {
+      const page=await context.newPage();await login(page,language);
+      const mobile=page.locator('.mobile-menu-toggle');
+      if(await mobile.isVisible())await mobile.click();
+      const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+      await trigger.click();
+      const search=menu.locator('input[type=search]');await expect(search).toBeFocused();
+      await search.fill('zz-no-feature-93275');
+      const status=menu.getByRole('status');await expect(status).toBeVisible();
+      const results=['功能搜尋結果','Feature search results','機能の検索結果','기능 검색 결과','Resultados de funciones'];
+      await expect(status).toContainText(results[index]);
+      await expect(status).toContainText('0');
+      await expect(status).not.toContainText('沒有符合的功能');
+      await search.dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229});
+      await expect(search).toHaveValue('zz-no-feature-93275');
+      await expect(trigger).toHaveAttribute('aria-expanded','true');
+      await search.press('Escape');await expect(search).toHaveValue('');
+      await expect(search).toBeFocused();await expect(trigger).toHaveAttribute('aria-expanded','true');
+      await search.press('Escape');await expect(trigger).toHaveAttribute('aria-expanded','false');
+      await expect(trigger).toBeFocused();
+      await trigger.press('Enter');await expect(search).toBeFocused();await expect(search).toHaveValue('');
+      await search.fill('zz-no-feature-93275');
+      await page.getByRole('heading',{name:language.home,level:1,exact:true}).click();
+      await expect(trigger).toHaveAttribute('aria-expanded','false');
+      await trigger.click();await expect(search).toHaveValue('');
+    } finally {await context.close();}
+  });
+}
+
+test('failed lazy import recovers by loading a new document after the network returns',async({page})=>{
+  await login(page);
+  const asset=/\/assets\/MemberMessages-[^/]+\.js$/;
+  let failed=0;await page.route(asset,route=>{failed++;return route.abort();});
+  await openChat(page);
+  const alert=page.getByRole('alert').filter({hasText:languages[0].failed});
+  await expect(alert).toBeVisible();expect(failed).toBe(1);
+  await page.unroute(asset);
+  const documentLoaded=page.waitForEvent('load');
+  await alert.getByRole('button',{name:languages[0].reload,exact:true}).click();
+  await documentLoaded;
+  await expect(page.getByRole('heading',{name:languages[0].home,level:1,exact:true})).toBeVisible();
+  await openChat(page);
+  await expect(page.getByRole('tab',{name:/^私人訊息/})).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:languages[0].failed})).toHaveCount(0);
+});
