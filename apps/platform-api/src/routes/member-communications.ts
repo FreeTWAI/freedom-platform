@@ -48,11 +48,11 @@ function channelCommand(c:Context<PlatformEnv>,action:'messages'|'read'){
   const kind=c.req.param('kind')??'',key=c.req.param('key')??'';
   return canonicalCommand(c,`/me/channels/${kind}/${kind==='squad'?key.toLowerCase():key}/${action}`);
 }
-export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,memberBlockingEnabled=false) {
+export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,memberBlockingEnabled=false,orderNotificationsEnabled=false) {
   const app=new Hono<PlatformEnv>();
   const installed=()=>requireCondition(messagesImagesOn(),404,'not_found','找不到這個頁面。');
   const messagesImagesOn=()=>messageImagesInstalled(runtime);
-  app.post('/me/inbox/read-all',async c=>c.json(await markAllInboxRead(pool,await canonicalCommand(c,'/me/inbox/read-all'))));
+  app.post('/me/inbox/read-all',async c=>c.json(await markAllInboxRead(pool,await canonicalCommand(c,'/me/inbox/read-all'),orderNotificationsEnabled)));
   if(memberBlockingEnabled){
     app.get('/me/blocks',async c=>{c.header('Cache-Control','private, no-store');return c.json(await listBlocks(pool,c.get('actor'),c.req.query()));});
     app.get('/me/blocks/:userId',async c=>{
@@ -66,8 +66,8 @@ export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,
       return c.json(await changeBlock(pool,await canonicalCommand(c,`/me/blocks/${uuidParam(c,'userId')}/${action}`),c.req.param('userId'),action));
     });
   }
-  app.get('/me/notifications',async c=>c.json(await listNotifications(pool,c.get('actor'),c.req.query())));
-  app.post('/me/notifications/:id/read',async c=>c.json(await markNotificationRead(pool,await canonicalCommand(c,`/me/notifications/${uuidParam(c,'id')}/read`),c.req.param('id'))));
+  app.get('/me/notifications',async c=>c.json(await listNotifications(pool,c.get('actor'),c.req.query(),orderNotificationsEnabled)));
+  app.post('/me/notifications/:id/read',async c=>c.json(await markNotificationRead(pool,await canonicalCommand(c,`/me/notifications/${uuidParam(c,'id')}/read`),c.req.param('id'),orderNotificationsEnabled)));
   app.get('/me/conversations',async c=>c.json(await listConversations(pool,c.get('actor'),c.req.query())));
   app.get('/me/conversations/:userId/activity',async c=>c.json(await conversationActivity(pool,c.get('actor'),c.req.param('userId'),c.req.query())));
   app.get('/me/conversations/:userId/messages',async c=>c.json(await conversationMessages(pool,c.get('actor'),c.req.param('userId'),c.req.query())));

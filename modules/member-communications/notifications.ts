@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {
   NOTIFICATION_ACTION_TABS,NOTIFICATION_BODY_MAX,NOTIFICATION_KINDS,NOTIFICATION_SOURCE_KEY_MAX,NOTIFICATION_TITLE_MAX,isOrderNotificationAction,
   type NotificationAction,type NotificationKind,
+  ORDER_NOTIFICATION_KINDS,
 } from './types.js';
 
 const uuid=z.string().uuid();
@@ -34,6 +35,12 @@ export type NotifyMemberInput={
   community_id:string;recipient_ref:string;kind:NotificationKind;source_key:string;
   title:string;body:string;action:NotificationAction|null;
 };
+
+/** One kill-switch predicate for counts, pages, reminders and read eligibility, before pagination. */
+export function notificationVisibilitySQL(orderNotificationsEnabled:boolean,alias:''|'n'=''):string {
+  const column=alias?'n.kind':'kind';
+  return orderNotificationsEnabled?'TRUE':`${column} NOT IN (${ORDER_NOTIFICATION_KINDS.map(kind=>`'${kind}'`).join(',')})`;
+}
 
 /**
  * Records one in-app notification inside the caller's transaction, so it

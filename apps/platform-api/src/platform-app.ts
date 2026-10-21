@@ -1,3 +1,4 @@
+import {commerceOrderNotificationsInstalled} from './routes/hosted-checkout.js';
 import {storeVariantsInstalled,storeVariantsOptions,isProductGroupReplace,createHostedStoreVariantsRoutes} from './routes/hosted-store-variants.js';
 import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
 import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
@@ -700,7 +701,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       c.header('ETag',`"${preferences.version}"`);
       return c.json(preferences);
     });
-    app.get('/api/v1/me/notification-preferences/reminders',async c=>c.json(await readNotificationReminders(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date())));
+    app.get('/api/v1/me/notification-preferences/reminders',async c=>c.json(await readNotificationReminders(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date(),commerceOrderNotificationsInstalled(runtime))));
     app.get('/api/v1/me/notification-preferences/summary',async c=>c.json(await readNotificationSummary(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date())));
     app.get('/api/v1/me/notification-preferences/channel-reminders',async c=>c.json(await readChannelReminderCounts(pool,c.get('actor'),runtime.now?.()??new Date())));
     app.get('/api/v1/me/notification-preferences/following-reminders',async c=>c.json(await readFollowingReminders(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date())));
@@ -755,7 +756,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createMemberArRoutes(pool,runtime.arAssetStore));
   app.route('/api/v1',createMemberRoutes(pool));
   if(runtime.memberReportingEnabled===true)app.route('/api/v1',createMemberReportingRoutes(pool,runtime.messageImageAssetStore));
-  app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true));
+  app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime)));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
   registerMemberPromotion(app,pool,runtime);
   registerMemberServices(app,pool,runtime);

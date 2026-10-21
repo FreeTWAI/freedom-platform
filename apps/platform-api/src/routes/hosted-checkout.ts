@@ -39,6 +39,10 @@ export function commerceCheckoutQueryDeps(input: {
   };
 }
 
+/** Quarantine preserves history; disabling either installation flag hides order notices. */
+export function commerceOrderNotificationsInstalled(runtime:Pick<PlatformRuntime,'commerceOrderNotificationsEnabled'|'commerceSettings'>):boolean {
+  return runtime.commerceOrderNotificationsEnabled===true&&runtime.commerceSettings?.checkoutEnabled===true;
+}
 /** The one checkout configuration shared by the checkout API and the public store pages. */
 export function hostedCheckoutOptions(origin:string,runtime:PlatformRuntime,environment:FreedomEnv):commands.HostedCheckoutOptions {
   const email=runtime.commerceSettings?.emailEnabled?(runtime.commercePorts?.email??commerceEmailOutbox):undefined;

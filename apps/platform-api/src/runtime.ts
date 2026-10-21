@@ -41,6 +41,7 @@ export type PlatformRuntime = {
   commerceJournal?:EffectJournalPort;
   commerceEmailSender?:CommerceEmailSender;
   commerceSettings?:CommerceSettings;
+  commerceOrderNotificationsEnabled?:boolean;
   commerceCredentialKeyring?:CommerceCredentialKeyring|null;
   commerceProviderEnvironment?:'sandbox'|'live';
   commercePorts?:CheckoutPorts & {email?:CommerceEmailOutbox};

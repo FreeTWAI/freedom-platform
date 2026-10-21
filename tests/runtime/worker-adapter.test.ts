@@ -14,6 +14,8 @@ import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/see
 import { tokenHash } from '../../modules/identity-membership/service.js';
 import { createWorkerHandler, cloudflareSourceNetwork, rateLimitNetworkKey, readWorkerConfig, workerRuntime, workerScope, type WorkerEnv } from '../../apps/platform-api/src/worker.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import {readCommerceOrderNotificationsEnabled,readNodeCommerceSettings} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {commerceOrderNotificationsInstalled} from '../../apps/platform-api/src/routes/hosted-checkout.js';
 import {createPlatformApp} from '../../apps/platform-api/src/platform-app.js';
 import { authoredUploadText } from '../../apps/platform-api/src/routes/published-skills.js';
 import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
@@ -710,4 +712,26 @@ test('variants flag is an exact default-OFF boolean requiring only guild launchp
   const configuration=env({FREEDOM_STORE_VARIANTS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
   const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeVariantsEnabled,true);
   assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('order bell installation is default OFF, exact, checkout-dependent and shared by Node and Worker without external bindings',()=>{
+  for(const value of [undefined,'false']){
+    const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:value});
+    assert.equal(readCommerceOrderNotificationsEnabled(raw),false);
+    assert.equal(workerRuntime(raw,readWorkerConfig(raw)).commerceOrderNotificationsEnabled,false);
+    assert.equal(readNodeCommerceSettings(raw).checkoutEnabled,false);
+  }
+  for(const value of ['TRUE','1','',true,false]){
+    const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:value as string});
+    assert.throws(()=>readWorkerConfig(raw),{name:'ReadinessError'});
+    assert.throws(()=>readNodeCommerceSettings(raw),{name:'ReadinessError'});
+  }
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:'true'})),{name:'ReadinessError'});
+  const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const config=readWorkerConfig(raw),runtime=workerRuntime(raw,config),settings=readNodeCommerceSettings(raw);
+  assert.equal(runtime.commerceOrderNotificationsEnabled,true);assert.equal(commerceOrderNotificationsInstalled(runtime),true);
+  assert.equal(readCommerceOrderNotificationsEnabled(raw),true);assert.deepEqual(readNodeCommerceSettings(raw),config.commerceSettings);
+  assert.equal(runtime.commerceEmailSender,undefined);assert.equal(runtime.commerceJournal,undefined);assert.equal(runtime.storePhotoAssetStore,undefined);
+  assert.equal(commerceOrderNotificationsInstalled({...runtime,commerceSettings:{...settings,checkoutEnabled:false}}),false);
+  assert.equal(commerceOrderNotificationsInstalled({...runtime,commerceSettings:{...settings,quarantine:true}}),true);
 });

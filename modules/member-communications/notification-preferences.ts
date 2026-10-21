@@ -7,6 +7,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { lockMemberGuilds } from '../positioning/onboarding.js';
 import { readFollowUpdates } from '../community/content-relations.js';
 import { CHANNEL_KEY_MAX, GUILD_CHANNEL_KEY_PATTERN, SQUAD_CHANNEL_KEY_PATTERN, type ChannelKind } from './channel-types.js';
+import {notificationVisibilitySQL} from './notifications.js';
 import { isOrderNotificationAction, type Notification, type NotificationList } from './types.js';
 
 export type NotificationCategory = 'friends' | 'squads' | 'events' | 'following';
@@ -159,10 +160,10 @@ function category(kind: string): NotificationCategory | null {
   return null; // Guild authority, security/transaction and unknown future kinds are never muted.
 }
 interface NoticeRow { notification_id: string; kind: Notification['kind']; title: string; created_at: Date | string; action_tab: NonNullable<Notification['action']>['tab'] | null; action_resource_id: string | null }
-async function unreadNotices(q: PoolClient, actor: Actor, kinds: string[], only: boolean): Promise<NoticeRow[]> {
+async function unreadNotices(q: PoolClient, actor: Actor, kinds: string[], only: boolean, orderNotificationsEnabled=false): Promise<NoticeRow[]> {
   return (await q.query(`SELECT n.notification_id,n.kind,n.title,n.created_at,n.action_tab,n.action_resource_id FROM member_notifications n
     WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND (n.kind=ANY($3::text[]))=$4
-    AND ${eventNoticeAccessSql} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 40`, [actor.community_id, actor.user_id, kinds, only])).rows;
+    AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 40`, [actor.community_id, actor.user_id, kinds, only])).rows;
 }
 const eventAccessSql = `e.community_id=$1 AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref)) AND (
   e.organizer_ref=$2 OR (e.state='published' AND (e.visibility<>'guild' OR EXISTS(
@@ -195,7 +196,7 @@ export async function readEventBulletinReminders(pool: Pool, actor: Actor, now: 
     return { items: prefs.categories.events === 'instant' && !isNotificationQuietHours(prefs, now) ? await readableEventBulletins(q, actor) : [] };
   });
 }
-export async function readNotificationReminders(pool: Pool, actor: Actor, followingEnabled: boolean, now: Date): Promise<NotificationList> {
+export async function readNotificationReminders(pool: Pool, actor: Actor, followingEnabled: boolean, now: Date, orderNotificationsEnabled=false): Promise<NotificationList> {
   return snapshot(pool, actor, async q => {
     const prefs = await load(q, actor, followingEnabled), quiet = isNotificationQuietHours(prefs, now);
     const suppressed = socialNotificationKinds.filter(kind => {
@@ -206,9 +207,9 @@ export async function readNotificationReminders(pool: Pool, actor: Actor, follow
     if (quiet) suppressed.push('social_post_commented', 'social_post_liked');
     const unread = (await q.query(`SELECT count(*)::int AS n FROM member_notifications n
       WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND NOT(n.kind=ANY($3::text[]))
-      AND ${eventNoticeAccessSql}`, [actor.community_id, actor.user_id, suppressed])).rows[0];
+      AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')}`, [actor.community_id, actor.user_id, suppressed])).rows[0];
     const items: Notification[] = [];
-    for (const row of await unreadNotices(q, actor, suppressed, false)) {
+    for (const row of await unreadNotices(q, actor, suppressed, false, orderNotificationsEnabled)) {
       const group = category(row.kind);
       let action: Notification['action'];
       if (row.action_tab === 'stores' || row.action_tab === 'reservations') {
