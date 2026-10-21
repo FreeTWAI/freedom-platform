@@ -31,7 +31,14 @@ async function start(page: Page, store: Store) {
   await page.getByLabel('收件人姓名', {exact: true}).fill('合成買家甲');
   await page.getByLabel('收件人手機', {exact: true}).fill('0900123456');
   await page.getByLabel('Email', {exact: true}).fill('offline-buyer@example.test');
+  const meetupQuote = page.waitForResponse(response => {
+    const request = response.request();
+    if (!response.url().endsWith(`/stores/${store.slug}/cart-quotes`) || request.method() !== 'POST') return false;
+    try {return request.postDataJSON()?.delivery?.method === 'meetup';} catch {return false;}
+  });
   await page.getByRole('radio', {name: '面交取貨', exact: true}).check();
+  const response = await meetupQuote;
+  expect(response.ok()).toBe(true);
   await expect(page.getByLabel('收件地址', {exact: true})).toHaveCount(0);
   await expect(page.getByText('請先約定時間，在山邊小店門口面交。', {exact: true})).toBeVisible();
   await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
