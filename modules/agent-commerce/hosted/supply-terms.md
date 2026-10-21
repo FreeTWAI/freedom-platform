@@ -137,3 +137,14 @@ are shared only through the existing community offer and own-selection reads;
 the public storefront, buyer APIs and buyer receipts use their existing explicit
 allowlists and never include them. They grant no drop-ship consent or supplied-
 line checkout. Formal resale-price arrangements still need professional review.
+
+## Private occupied-stock breakdown
+
+The live own-product terms GET adds the optional merchant `inventory` observation
+from the authorized item statement. It shows 庫存／已占用／可售 and the held/allocated
+breakdown. 可售 and the supplier console's 可用 are the same available quantity.
+Missing legacy observations and inconsistent ledgers show unavailable dependent
+counts, with a local refresh that preserves the terms draft. PATCH receipts keep
+their existing shape and are followed by a fresh read. Supplier offer terms,
+retailer catalog projections and published storefront bytes do not gain private
+stock data. This read grants no drop-ship consent or buyer-recipient access.
