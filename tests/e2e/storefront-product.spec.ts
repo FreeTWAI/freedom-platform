@@ -101,14 +101,26 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
  const {setupCartFixtureStore}=await import('./storefront-cart-fixture.js');
  const store=await setupCartFixtureStore(e2eAuthPool,browser,false,false,{storeVariantsEnabled:true}),owner=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin}),plain=await browser.newContext({baseURL:store.origin,javaScriptEnabled:false});
  try{
+  const prefilled={title:'原始\u202e名稱',description:'原始\u0081介紹'},prefilledProduct=await store.sellerPatch(store.root+'/products/'+store.products[0].product_id,prefilled,store.products[0].version);
   await apiLogin(owner,store.origin,store.seller.email);const page=await owner.newPage();await page.goto('/#stores/'+store.tenant+'/'+store.instance);
-  const editor=page.locator('.store-variants-editor');await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveValue(store.products[0].title);
+  const editor=page.locator('.store-variants-editor');await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveValue(prefilled.title);
   async function measureButtons(state:string,width:number){
    const metrics=await page.locator('.btn').evaluateAll(buttons=>buttons.map(button=>({label:button.textContent?.trim()??'',width:button.getBoundingClientRect().width,height:button.getBoundingClientRect().height,editorWidth:button.closest('.store-variants-editor')?.getBoundingClientRect().width??null,primary:button.classList.contains('btn-primary')})));
    await (await import('node:fs/promises')).writeFile(info.outputPath('variants-buttons-'+state+'-'+width+'.json'),JSON.stringify(metrics,null,2)+'\n');
    for(const button of metrics.filter(b=>b.width>0&&b.editorWidth!==null&&!b.primary))expect(button.width,button.label).toBeLessThan(button.editorWidth!*.95);
   }
 
+  await editor.getByLabel('商品組介紹',{exact:true}).fill(prefilled.description+' ');
+  await editor.getByRole('button',{name:'儲存規格',exact:true}).click();
+  await expect(editor.getByRole('alert')).toBeFocused();
+  for(const label of ['商品組名稱','商品組介紹']){
+   await expect(editor.getByLabel(label,{exact:true})).toHaveAttribute('aria-invalid','true');
+   await expect(editor.getByLabel(label,{exact:true})).toHaveAttribute('aria-describedby',/errors$/);
+   await editor.getByRole('link',{name:label,exact:true}).click();await expect(editor.getByLabel(label,{exact:true})).toBeFocused();
+  }
+  await editor.getByRole('button',{name:'取消變更',exact:true}).click();
+  await store.sellerPatch(store.root+'/products/'+store.products[0].product_id,{title:store.products[0].title,description:store.products[0].description},prefilledProduct.version);
+  await page.reload();await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveValue(store.products[0].title);
   await editor.getByLabel('商品組名稱',{exact:true}).fill('');await editor.getByRole('button',{name:'儲存規格',exact:true}).click();await expect(editor.getByRole('alert')).toBeFocused();await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveAttribute('aria-invalid','true');await editor.getByRole('link',{name:'商品組名稱',exact:true}).click();await expect(editor.getByLabel('商品組名稱',{exact:true})).toBeFocused();await editor.getByLabel('商品組名稱',{exact:true}).fill('經典 T 恤');await editor.getByLabel('商品組介紹',{exact:true}).fill('合成商品組介紹，原本商品內容會保留。');
   await editor.getByRole('button',{name:'新增選項',exact:true}).click();await expect(editor.getByRole('textbox',{name:'選項名稱（選項 1）',exact:true})).toBeVisible();await editor.getByLabel('選項名稱（選項 1）',{exact:true}).fill('顏色');await editor.getByLabel('選項值（選項 1，值 1）',{exact:true}).fill('白');await editor.getByRole('button',{name:'新增選項值',exact:true}).click();await editor.getByLabel('選項值（選項 1，值 2）',{exact:true}).fill('黑');
   await editor.getByRole('button',{name:'新增選項',exact:true}).click();await editor.getByLabel('選項名稱（選項 2）',{exact:true}).fill('尺寸');await editor.getByLabel('選項值（選項 2，值 1）',{exact:true}).fill('M');await editor.getByRole('button',{name:'新增選項值',exact:true}).last().click();await editor.getByLabel('選項值（選項 2，值 2）',{exact:true}).fill('L');
