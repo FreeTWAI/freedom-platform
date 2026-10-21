@@ -59,8 +59,9 @@
 除非發現新的產品問題，不再把環境或流程問題退回作者。
 Ted 保留產品取捨、重大風險與費用決策，不是每支 PR 的最後一站。
 
-Fork PR 目前沒有 CodeQL：GitHub 的 CodeQL default setup 不掃 fork PR，作者重跑測試補不出這項掃描。
-在平台改用可掃 fork PR 的設定之前，整合者建立保留原作者提交的中央落地分支，讓必要掃描與主線保護照常執行。
+Fork PR 也會跑 CodeQL：2026-10-20 起 CodeQL 改由 [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml)（#914）執行，
+fork PR 和同 repo 的 PR 一樣直接取得必要的 CodeQL 結果；第一次貢獻的帳號，workflow 要先由維護者核准才會執行。
+head 早於這次切換、或已經和 main 衝突時，由整合者同步 main，或建立保留原作者提交的中央落地分支，作者不必為此重推。
 
 ## 小型發布窗口
 
