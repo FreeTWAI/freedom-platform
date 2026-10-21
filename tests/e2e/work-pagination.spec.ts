@@ -72,15 +72,19 @@ test('workbench and task board load bounded work pages without losing microsecon
   const held=new Promise<void>(resolve=>{releaseStale=resolve;});
   let requested=()=>{};
   const started=new Promise<void>(resolve=>{requested=resolve;});
+  let finished=()=>{};
+  const completed=new Promise<void>(resolve=>{finished=resolve;});
   await page.route('**/api/v1/work-items/page?**',async route=>{
     if(new URL(route.request().url()).searchParams.get('search')!=='missing-review'){await route.continue();return;}
-    const response=await route.fetch();requested();await held;await route.fulfill({response});
+    const response=await route.fetch();requested();await held;
+    try{await route.fulfill({response});}catch(cause){if(!route.request().failure())throw cause;}finally{finished();}
   });
   try{
     await page.getByLabel('搜尋任務',{exact:true}).fill('missing-review');await started;
-    await page.getByLabel('搜尋任務',{exact:true}).fill('needle%_');await expect(older).toBeVisible();
-    const late=page.waitForResponse(response=>new URL(response.url()).searchParams.get('search')==='missing-review');
-    releaseStale();await late;
+    const aborted=page.waitForEvent('requestfailed',request=>new URL(request.url()).searchParams.get('search')==='missing-review');
+    await page.getByLabel('搜尋任務',{exact:true}).fill('needle%_');
+    await expect(older).toBeVisible();releaseStale();await completed;
+    expect((await aborted).failure()?.errorText).toMatch(/abort|cancel/i);
     await expect(older).toBeVisible();await expect(paginationHeadings(page)).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }finally{releaseStale();}
