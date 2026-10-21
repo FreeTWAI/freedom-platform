@@ -1,3 +1,4 @@
+import type {CategoriesOptions} from '../categories/model.js';
 import type {Pool,PoolClient} from 'pg';
 import {isolatedTransaction} from '../../../../packages/resource-scopes/tenant-transaction.js';
 import {Problem,requireCondition} from '../../../../packages/shared/problem.js';
@@ -40,11 +41,11 @@ async function availability(q:PoolClient,store:NonNullable<Awaited<ReturnType<ty
 }
 /** Publication and availability are paired in one read-only transaction. The
  * gate is checked first; a closed checkout makes no inventory/availability read. */
-export async function readVariantBuyerPage(pool:Pool,slug:string,options:{appearance?:AppearanceOptions;policies?:PoliciesOptions;gallery?:GalleryOptions},checkout?:HostedCheckoutOptions){
+export async function readVariantBuyerPage(pool:Pool,slug:string,options:{appearance?:AppearanceOptions;policies?:PoliciesOptions;gallery?:GalleryOptions;categories?:CategoriesOptions},checkout?:HostedCheckoutOptions){
  for(let attempt=0;attempt<2;attempt++){
   try{
    const value=await isolatedTransaction(pool,async q=>{
-    await q.query('SET TRANSACTION READ ONLY');const store=await resolvePublicStorePage(q,slug,options.appearance,options.policies,options.gallery,{enabled:true});if(!store)return null;
+    await q.query('SET TRANSACTION READ ONLY');const store=await resolvePublicStorePage(q,slug,options.appearance,options.policies,options.gallery,{enabled:true},options.categories);if(!store)return null;
     const purchase=checkout?await publicPurchaseStateWithClient(q,slug,checkout):{open:false as const};
     const photos=store.gallery?new Map(store.projection.products.flatMap(p=>{const photo=renderGallery(store.gallery!.document,p.sku,store.projection.slug,store.projection.revision,options.gallery?.mediaInstalled===true)[0];return photo?[[p.sku,photo] as const]:[];})):undefined;
     const catalog:RenderCatalog={document:store.variants!.document,...(photos?{photos}:{}),...(purchase.open?{availability:await availability(q,store)}:{})};

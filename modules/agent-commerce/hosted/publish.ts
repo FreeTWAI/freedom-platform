@@ -1,3 +1,4 @@
+import {categoryDraft,draftCategoriesSnapshot,publishedCategoriesDigest,insertPublicationCategories,type CategoriesOptions} from '../storefront/categories/model.js';
 import {draftVariantsData,draftVariantsSnapshot,publishedVariantsDigest,insertPublicationVariants,type VariantsOptions} from '../storefront/variants/model.js';
 import {draftGalleryData,publishedGalleryDigest,insertPublicationGallery,privateGalleryView,type GalleryOptions} from '../storefront/gallery/model.js';
 import {RenderGallerySchema} from '../../../contracts/guild-launchpad/v1/storefront-gallery.js';
@@ -38,9 +39,9 @@ async function buildProjection(q: PoolClient, p: Profile, items: readonly PhotoP
     products: items.map(({product: { sku, title, description, price_minor }}) => ({ sku, title, description, price_minor })),
     revision: await nextRevision(q, p), published_at: now.toISOString(), transaction_state: 'not_enabled' });
 }
-export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {}) {
+export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
-    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
+    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true||categoriesOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     let projection = await buildProjection(q, p, items);
@@ -48,24 +49,25 @@ export async function previewStore(pool: Pool, actor: Actor, tenantId: string, i
     const policiesDirty=policiesOptions.enabled===true&&(await draftLegalSnapshot(q,p)).sha256!==await publishedLegalDigest(q,p);
     const galleryDirty=galleryOptions.enabled===true&&(await draftGalleryData(q,p,items)).sha256!==await publishedGalleryDigest(q,p);
     const variantsDirty=variantsOptions.enabled===true&&draftVariantsSnapshot((await draftVariantsData(q,p,items)).page).sha256!==await publishedVariantsDigest(q,p);
-    const dirty = variantsDirty || galleryDirty || policiesDirty || appearanceDirty || projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || draftMediaSnapshot(items).sha256 !== p.media_sha256;
+    const categoriesDirty=categoriesOptions.enabled===true&&draftCategoriesSnapshot(await categoryDraft(q,p,categoriesOptions)).sha256!==await publishedCategoriesDigest(q,p);
+    const dirty = categoriesDirty || variantsDirty || galleryDirty || policiesDirty || appearanceDirty || projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || draftMediaSnapshot(items).sha256 !== p.media_sha256;
     if (!dirty && p.projection) projection = publicProjection(p.projection);
     return StorePreviewSchema.parse({ projection, dirty, current_revision: p.revision });
   });
 }
 /** Private saved-draft preview uses the exact public renderer and its allowlisted projection. */
-export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {}) {
+export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {},categoryQuery:readonly string[] = []) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
-    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
+    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true||categoriesOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     const appearance=options.enabled===true?renderAppearance((await draftAppearanceSnapshot(q,p)).document,{tenantId,instanceId,version:p.version},options.mediaInstalled===true):undefined;
     const policies=policiesOptions.enabled===true?renderDraftLegal((await draftLegalSnapshot(q,p)).input,`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`):undefined;
     const catalog=variantsOptions.enabled===true?{document:draftVariantsSnapshot((await draftVariantsData(q,p,items)).page).document}:undefined;
-    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance, policies,galleryOptions.enabled===true||catalog?`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`:undefined,catalog);
+    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance, policies,galleryOptions.enabled===true||catalog?`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`:undefined,catalog,categoriesOptions.enabled===true?{document:draftCategoriesSnapshot(await categoryDraft(q,p,categoriesOptions)).document,query:categoryQuery,base:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`}:undefined);
   });
 }
-export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {}) {
+export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
   const operation = unpublish ? 'storefront.unpublish' : 'storefront.publish';
   return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, {}, key, expected, async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
@@ -82,11 +84,13 @@ export async function publishStore(pool: Pool, actor: Actor, tenantId: string, i
       const policies=policiesOptions.enabled===true?await draftLegalSnapshot(q,p):undefined;
       const gallery=galleryOptions.enabled===true?await draftGalleryData(q,p,items):undefined;
       const variants=variantsOptions.enabled===true?draftVariantsSnapshot((await draftVariantsData(q,p,items)).page):undefined;
+      const categories=categoriesOptions.enabled===true?draftCategoriesSnapshot(await categoryDraft(q,p,categoriesOptions)):undefined;
+      const categoriesUnchanged=!categories||categories.sha256===await publishedCategoriesDigest(q,p);
       const variantsUnchanged=!variants||variants.sha256===await publishedVariantsDigest(q,p);
       const galleryUnchanged=!gallery||gallery.sha256===await publishedGalleryDigest(q,p);
       const policiesUnchanged=!policies||policies.sha256===await publishedLegalDigest(q,p);
       const appearanceUnchanged=!appearance||appearance.sha256===await publishedAppearanceDigest(q,p);
-      if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256 && appearanceUnchanged && policiesUnchanged && galleryUnchanged && variantsUnchanged) return storeView(q, context, inst);
+      if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256 && appearanceUnchanged && policiesUnchanged && galleryUnchanged && variantsUnchanged && categoriesUnchanged) return storeView(q, context, inst);
       const id = randomUUID();
       await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at,template_id,media_sha256)
         SELECT $1,m.instance_id,m.tenant_id,$4,$5,$6,$7,$8,$9,$11,$12 FROM commerce_resource_tenants m
@@ -97,6 +101,7 @@ export async function publishStore(pool: Pool, actor: Actor, tenantId: string, i
       if(policies)await insertPublicationLegal(q,id,p,policies);
       if(gallery)await insertPublicationGallery(q,id,p,gallery);
       if(variants)await insertPublicationVariants(q,id,p,variants);
+      if(categories)await insertPublicationCategories(q,id,p,categories);
       await q.query(`UPDATE commerce_storefront_profiles p SET current_publication_id=$3,first_published_at=COALESCE(p.first_published_at,$4),version=p.version+1,updated_at=clock_timestamp()
         FROM commerce_resource_tenants m WHERE m.resource_id=p.storefront_shop_id AND m.tenant_id=$1 AND m.instance_id=$2 AND p.instance_id=m.instance_id`, [tenantId, instanceId, id, projection.published_at]);
     }

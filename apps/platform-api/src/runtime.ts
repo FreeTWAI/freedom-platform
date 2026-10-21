@@ -121,6 +121,7 @@ export type PlatformRuntime = {
   /** Additive store branding, independent of media installation; default OFF. */
   storeAppearanceEnabled?: boolean;
   storePoliciesEnabled?: boolean;
+  storeCategoriesEnabled?: boolean;
   storeVariantsEnabled?: boolean;
   storeGalleryEnabled?: boolean;
   storeGalleryAssets?: StoreGalleryAssets;

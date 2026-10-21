@@ -1,3 +1,6 @@
+import {readCategoryBuyerPage} from '../../../../modules/agent-commerce/storefront/categories/read.js';
+import {CategoryPageError,categoryErrorHtml} from '../../../../modules/agent-commerce/storefront/categories/pages.js';
+import type {CategoriesOptions} from '../../../../modules/agent-commerce/storefront/categories/model.js';
 import {catalogErrorHtml} from '../../../../modules/agent-commerce/storefront/variants/page.js';
 import {readVariantBuyerPage} from '../../../../modules/agent-commerce/storefront/variants/buyer.js';
 import type {VariantsOptions} from '../../../../modules/agent-commerce/storefront/variants/model.js';
@@ -30,7 +33,7 @@ import type { PlatformEnv } from '../module-context.js';
 import { privateCache, singleQuery, commandHeaders, etag } from './tenant-http.js';
 import {createHostedDistributionRoutes} from './hosted-distribution.js';
 
-export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false, appearanceOptions:AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {}) {
+export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false, appearanceOptions:AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
   const app = new Hono<PlatformEnv>();
   app.route('/', createHostedDistributionRoutes(pool, admissionEnabled, offerPhotosEnabled));
   app.use('*', async (c, next) => { try { await next(); } finally { privateCache(c); } });
@@ -109,7 +112,7 @@ export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, of
     const view = await updateSupplyTerms(pool, c.get('actor'), t, i, OpaqueId.parse(c.req.param('product_id')), body, h.key, h.expected!);
     etag(c, view.version); return c.json(view);
   });
-  app.get(root + '/preview', async c => { EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c); return c.json(await previewStore(pool, c.get('actor'), t, i, appearanceOptions,policiesOptions,galleryOptions,variantsOptions)); });
+  app.get(root + '/preview', async c => { EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c); return c.json(await previewStore(pool, c.get('actor'), t, i, appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions)); });
   app.get(root + '/appearance', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
     const view = await readStoreAppearance(pool, c.get('actor'), t, i); etag(c, view.version); return c.json(view);
@@ -120,13 +123,15 @@ export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, of
     const view = await updateStoreAppearance(pool, c.get('actor'), t, i, body, h.key, h.expected!); etag(c, view.version); return c.json(view);
   });
   app.get(root + '/preview-page', async c => {
-    EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
-    c.header('X-Robots-Tag', 'noindex, nofollow');
-    return c.html(await previewStorePage(pool, c.get('actor'), t, i, appearanceOptions,policiesOptions,galleryOptions,variantsOptions));
+    if(categoriesOptions.enabled!==true)EmptyStoreInputSchema.parse(singleQuery(c));
+    else {const params=new URL(c.req.url).searchParams;params.delete('category');EmptyStoreInputSchema.parse(Object.fromEntries(params));}
+    const [t,i]=ids(c);c.header('X-Robots-Tag','noindex, nofollow');
+    try{return c.html(await previewStorePage(pool,c.get('actor'),t,i,appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions,new URL(c.req.url).searchParams.getAll('category')));}
+    catch(e){if(e instanceof CategoryPageError)return c.html(categoryErrorHtml(e),e.status);throw e;}
   });
   for (const action of ['publish', 'unpublish'] as const) app.post(root + '/' + action, async c => {
     const h = commandHeaders(c, true); EmptyStoreInputSchema.parse(await c.req.json()); const [t, i] = ids(c);
-    const view = await publishStore(pool, c.get('actor'), t, i, h.key, h.expected!, action === 'unpublish', appearanceOptions,policiesOptions,galleryOptions,variantsOptions); if (view.version) etag(c, view.version); return c.json(view);
+    const view = await publishStore(pool, c.get('actor'), t, i, h.key, h.expected!, action === 'unpublish', appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions); if (view.version) etag(c, view.version); return c.json(view);
   });
   return app;
 }
@@ -135,13 +140,13 @@ export function createPublicHostedStoreRoutes(
   pool: Pool,
   publicOrigin?: string,
   checkout?: HostedCheckoutOptions,
-  options?: { emailEnabled?: boolean; appearance?:AppearanceOptions;policies?:PoliciesOptions;gallery?:GalleryOptions;variants?:VariantsOptions },
+  options?: { emailEnabled?: boolean; appearance?:AppearanceOptions;policies?:PoliciesOptions;gallery?:GalleryOptions;variants?:VariantsOptions;categories?:CategoriesOptions },
 ) {
   const app = new Hono<PlatformEnv>();
   const buyerJourneyEnabled = checkout?.settings?.checkoutEnabled === true;
   const emailEnabled = options?.emailEnabled ?? checkout?.settings?.emailEnabled ?? Boolean(checkout?.email);
   const variantPage=async(c:Parameters<typeof singleQuery>[0])=>{try{return await readVariantBuyerPage(pool,c.req.param('slug')!,options??{},checkout);}catch(e){
-    if(e instanceof Problem&&['storefront_variants_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message,e.code==='storefront_catalog_changed'),e.status as 500);
+    if(e instanceof Problem&&['storefront_variants_invalid','storefront_categories_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message,e.code==='storefront_catalog_changed'),e.status as 500);
     throw e;
   }};
   app.get('/api/v1/public/stores/:slug', async c => {
@@ -152,14 +157,17 @@ export function createPublicHostedStoreRoutes(
   });
   app.get('/shops/:slug', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
+    try{
     if(options?.variants?.enabled===true){
       const result=await variantPage(c);if(result instanceof Response)return result;if(!result)return c.html(storeMissingHtml(),404);
-      const {store,purchase,catalog}=result;return c.html(storeHtml(store.projection,store.template_id,store.media.photos,publicOrigin?{publicOrigin}:undefined,purchase,store.appearance,store.policies,undefined,catalog));
+      const {store,purchase,catalog}=result;return c.html(storeHtml(store.projection,store.template_id,store.media.photos,publicOrigin?{publicOrigin}:undefined,purchase,store.appearance,store.policies,undefined,catalog,options?.categories?.enabled===true?{document:store.categories!.document,query:new URL(c.req.url).searchParams.getAll('category'),base:`/shops/${store.projection.slug}`} : undefined));
     }
-    const store = await readPublicStorePage(pool, c.req.param('slug'), options?.appearance,options?.policies);
+    const categoryPage=options?.categories?.enabled===true?await readCategoryBuyerPage(pool,c.req.param('slug'),options,checkout):undefined;
+    const store = categoryPage===undefined?await readPublicStorePage(pool,c.req.param('slug'),options?.appearance,options?.policies):categoryPage?.store;
     if (!store) return c.html(storeMissingHtml(), 404);
-    const purchase = checkout ? await publicPurchaseState(pool, store.projection.slug, checkout) : {open: false as const};
-    return c.html(storeHtml(store.projection, store.template_id, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase, store.appearance, store.policies));
+    const purchase = categoryPage?.purchase??(checkout ? await publicPurchaseState(pool, store.projection.slug, checkout) : {open: false as const});
+    return c.html(storeHtml(store.projection, store.template_id, store.media.photos, publicOrigin ? {publicOrigin} : undefined, purchase, store.appearance, store.policies,undefined,undefined,options?.categories?.enabled===true?{document:store.categories!.document,query:new URL(c.req.url).searchParams.getAll('category'),base:`/shops/${store.projection.slug}`} : undefined));
+    }catch(e){if(e instanceof CategoryPageError)return c.html(categoryErrorHtml(e),e.status);if(e instanceof Problem&&['storefront_categories_invalid','storefront_catalog_changed'].includes(e.code))return c.html(catalogErrorHtml(e.message,e.code==='storefront_catalog_changed'),e.status as 500);throw e;}
   });
   app.get('/shops/:slug/products/:sku', async c => {
     c.header('Cache-Control', 'no-store'); c.header('X-Robots-Tag', 'noindex');
