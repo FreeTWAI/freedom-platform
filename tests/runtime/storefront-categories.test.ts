@@ -39,7 +39,11 @@ test('CATEGORIES-01 normalized names, profile CAS, metadata-only replay, no-op a
  second=(await mutate('POST','',{name:'其他商品'})).category_id;detached=(await mutate('POST','',{name:'拆出的商品'})).category_id;
  extra=f.ok(await call('POST','/products',{title:'原本第二商品',description:'原本介紹',price_minor:2000,stock:2}),201);
  await mutate('PUT','/'+first+'/groups',{group_keys:['P0002','P0001']});await mutate('PUT','/'+second+'/groups',{group_keys:['P0001']});
- assert.equal((await call('PUT','/categories/'+first+'/groups',{group_keys:['P0001','P0001']},(await page()).version)).data.code,'category_groups_invalid');
+ for(const group_keys of [Array.from({length:201},(_,n)=>'P'+String(n+1).padStart(4,'0')),['malformed'],['P0001','P0001']]){
+  const response=await call('PUT','/categories/'+first+'/groups',{group_keys},(await page()).version);
+  assert.equal(response.status,422);assert.equal(response.data.code,'category_groups_invalid');assert.equal(response.data.detail,'請選擇這間商店的商品組，最多 200 組且不要重複。');
+ }
+ for(const body of [null,[],{}, {group_keys:'P0001'}])assert.equal((await call('PUT','/categories/'+first+'/groups',body,(await page()).version)).data.code,'validation_failed');
  assert.equal((await call('PUT','/categories/'+first+'/groups',{group_keys:['P9999']},(await page()).version)).data.code,'category_groups_changed');
  assert.equal((await call('POST','/categories/reorder',{category_ids:[first]},(await page()).version)).data.code,'category_order_invalid');
  await mutate('POST','/reorder',{category_ids:[second,first,detached]});assert.deepEqual((await page()).items.map(c=>c.category_id),[second,first,detached]);

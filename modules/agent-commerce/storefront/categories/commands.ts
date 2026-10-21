@@ -24,6 +24,10 @@ function input(operation:CategoryCommandAck['operation'],raw:unknown):CategoryIn
   name=name.normalize('NFC').trim();categoryCheck(CategoryNameSchema.safeParse(name).success,'category_name_invalid');
   const parsed=CreateCategoryInputSchema.safeParse({...obj,name});requireCondition(parsed.success,422,'validation_failed','分類設定格式無效，請檢查分類與商品。');return parsed.data;
  }
+ if(operation==='groups'&&raw!==null&&typeof raw==='object'&&!Array.isArray(raw)){
+  const keys=(raw as {group_keys?:unknown}).group_keys;
+  if(Array.isArray(keys))categoryCheck(SetCategoryGroupsInputSchema.shape.group_keys.safeParse(keys).success,'category_groups_invalid');
+ }
  const schema=operation==='groups'?SetCategoryGroupsInputSchema:operation==='reorder'?ReorderCategoriesInputSchema:RemoveCategoryInputSchema;
  const parsed=schema.safeParse(raw);requireCondition(parsed.success,422,'validation_failed','分類設定格式無效，請檢查分類與商品。');
  const data=parsed.data as CategoryInput;
