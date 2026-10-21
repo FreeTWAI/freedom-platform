@@ -2799,8 +2799,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
-      "bytes": 64927,
-      "sha256": "e6eb08b3906af0f80ea9298236bf9f93e1e6bde70b29849d41d55e6d5fbbc62a"
+      "bytes": 66421,
+      "sha256": "50f35f4011b6733d54fa3c1a6f83932a29a527f9a42050d137b1dee3408e7634"
     },
     {
       "path": "apps/portal-web/src/modules/MemberPresence.css",
@@ -14444,8 +14444,8 @@
     },
     {
       "path": "docs/development/member-communications.md",
-      "bytes": 37878,
-      "sha256": "2a84754bb4baacd6a454b26af6123a633bc1e6e9a5faf4992cb161949387553d"
+      "bytes": 38532,
+      "sha256": "9a69a20674cde52127b83c7ca4037e52979d5aa584cdb2c8ab293c543268c06e"
     },
     {
       "path": "docs/development/member-connections.md",
@@ -20444,8 +20444,8 @@
     },
     {
       "path": "modules/member-communications/freedom.module.json",
-      "bytes": 4434,
-      "sha256": "a4f99fd6874edf4d31d0232ec0979b982ec09ec566576580dce2d1608f36fd5f"
+      "bytes": 4478,
+      "sha256": "2e823cb4f9ad9547e112bb04bcfdc71c08f84088aa71fc4e7070d13fd0ea4b25"
     },
     {
       "path": "modules/member-communications/freetwai-stickers.ts",
@@ -22934,8 +22934,8 @@
     },
     {
       "path": "tests/e2e/floating-messages.spec.ts",
-      "bytes": 22561,
-      "sha256": "a5e743e8818d8790726949084f9a3e877860b57cfc545e77104ab441d9c37072"
+      "bytes": 22710,
+      "sha256": "592a8a92fe52d69c5cce0416542567638e520900748a6873c7246b9502e152b8"
     },
     {
       "path": "tests/e2e/freedom.module.json",
@@ -23246,6 +23246,11 @@
       "path": "tests/e2e/message-images.spec.ts",
       "bytes": 46367,
       "sha256": "75594a6e8d3eabdf853e8ea46bd93f76c155137417c4de3663592e12fb88e502"
+    },
+    {
+      "path": "tests/e2e/message-load-older.spec.ts",
+      "bytes": 15011,
+      "sha256": "86f7237dd8d843b3a4d122567b6ee5c2318dff9e5b7167d7dc934611128f7b68"
     },
     {
       "path": "tests/e2e/message-retraction.spec.ts",
