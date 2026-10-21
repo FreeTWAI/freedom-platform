@@ -23479,8 +23479,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 89342,
-      "sha256": "e2cafaf0204cbd051020450da84498b4e7cb37532514c41487d09740aa086d2d"
+      "bytes": 89629,
+      "sha256": "26a4c332f01d91b7a64e186622212c535de4ea7e645d91052a1fdc537ce81cf3"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -24054,8 +24054,8 @@
     },
     {
       "path": "tests/runtime/commerce-order-notifications.test.ts",
-      "bytes": 26352,
-      "sha256": "f474c8bae2331bf307c4ab9ff738dc1667e0cf5ea1aaddc0a7c3a4087dd2f2db"
+      "bytes": 27060,
+      "sha256": "17b9a80dcc67a5fc2136ed92d5100131619ace6ebc0dda940e8e7d3b190988dc"
     },
     {
       "path": "tests/runtime/commerce-provider-accounts.test.ts",
@@ -24609,8 +24609,8 @@
     },
     {
       "path": "tests/runtime/hosted-offline-expiry.test.ts",
-      "bytes": 19993,
-      "sha256": "05e7d6187f1f07e2df7c639e5212d2f30c04ccd7fa73da61ec5e496f7abd3d7c"
+      "bytes": 20094,
+      "sha256": "012aa767210d91c984adf1da66b6b4b609d121ebe6a35f3797768ad5cf5ab6ee"
     },
     {
       "path": "tests/runtime/hosted-offline-schema.test.ts",

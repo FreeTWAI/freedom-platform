@@ -17,9 +17,12 @@ import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
 import {syntheticShippingPort} from '../../scripts/synthetic-shipping-quote.js';
 import {Problem} from '../../packages/shared/problem.js';
 import type {Actor} from '../../modules/identity-membership/service.js';
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
 import {applyOwnerAccountStatus} from '../../modules/tenant-workspaces/security-path.js';
 
 let x:CheckoutHarness,s:Awaited<ReturnType<CheckoutHarness['store']>>,buyer:Awaited<ReturnType<CheckoutHarness['h']['person']>>;
+let httpApp:ReturnType<typeof createApp>;
 let owner:Actor,buyerPrincipal:string,ownerPrincipal:string,community:string,foreignCommunity:string;
 const port=createOrderNotifications(true,{checkoutEnabled:true,quarantine:false})!;
 const token=(cookie:string)=>cookie.split(';')[0].split('=').slice(1).join('=');
@@ -38,6 +41,7 @@ before(async()=>{
   const document={schema:'freedom.offline-payment-settings/v1',bank_transfer:{bank_code:'000',bank_name:'合成銀行',branch_name:null,account_number:'000000123456',account_name:'合成測試帳戶',deadline_days:3,note:null},cash_on_meetup:{deadline_days:7}};
   await x.h.pool.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
     VALUES($1,$2,1,$3,$4,$5)`,[s.tenantId,s.instanceId,document,createHash('sha256').update(canonicalJSON(document)).digest('hex'),ownerPrincipal]);
+  httpApp=createApp(x.runtime,x.h.origin,'local',{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:options().settings,commerceOrderNotificationsEnabled:true,commercePorts:basePorts()});
 });
 after(async()=>x?.stop());
 async function notices(id:string,event?:string){
@@ -46,6 +50,10 @@ async function notices(id:string,event?:string){
 async function freeze(){return x.tx(q=>freezeCheckout(q,s,{...x.input(s.product.sku,1),idempotencyKey:randomUUID()},basePorts()));}
 async function placed(method:'bank_transfer'|'cash_on_meetup'='bank_transfer',principal=buyerPrincipal,notifications:OrderNotificationPort|null=port){
   const saved=await freeze();return x.tx(q=>placeCheckoutOrder(q,s,{checkoutId:saved.checkout_id,termsSha256:saved.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:principal,environment:'sandbox',paymentMethod:method},{...basePorts(),orderNotifications:notifications??undefined}));
+}
+async function cancelThroughHttp(id:string){
+  const response=await x.h.call('POST',`/public/stores/${s.slug}/orders/${id}/cancel`,buyer.session,{}, {},httpApp);
+  assert.equal(response.status,200);return response.data;
 }
 function intercept(q:PoolClient,run:(text:string,values:unknown[]|undefined,next:()=>Promise<QueryResult>)=>Promise<QueryResult>):PoolClient {
   return new Proxy(q,{get(target,key,receiver){
@@ -71,7 +79,7 @@ test('real member placement, concurrent retry and buyer cancellation use one ato
   assert.equal(rows[0].source_key,`commerce-order/v1/${id}/placed`);
   assert.deepEqual(orderNotificationDestination({tab:rows[0].action_tab,resource_id:rows[0].action_resource_id}),{tab:'stores',hash:`#stores/${s.tenantId}/${s.instanceId}/orders/${id}`});
   assert.equal((await x.h.pool.query(`SELECT c.member_principal_id FROM commerce_checkout_orders co JOIN commerce_customers c USING(customer_id) WHERE co.order_id=$1`,[id])).rows[0].member_principal_id,null);
-  await cancelPublicOrder(x.runtime,s.slug,id,browser,opt);await cancelPublicOrder(x.runtime,s.slug,id,browser,opt);
+  await cancelThroughHttp(id);await cancelThroughHttp(id);
   const cancelled=await notices(id,'buyer_cancelled');assert.equal(cancelled.length,1);
   assert.equal(cancelled[0].title,'買家已取消訂單');assert.equal(cancelled[0].body,`「合成商店」的訂單 ${D} 已由買家取消。`);
   assert.equal(cancelled[0].recipient_ref,s.owner.user.user_id);assert.equal((await notices(id)).length,2);
@@ -209,8 +217,11 @@ test('a bounded capability snapshot excludes unrelated/revoked readers; retained
   await x.h.pool.query("UPDATE tenant_module_permissions SET status='revoked',revoked_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[s.tenantId,people[1].pid]);
   await assert.rejects(readSellerCheckoutOrder(x.runtime,reader,s.tenantId,s.instanceId,order.order_id),e=>e instanceof Problem&&e.status===404&&e.code==='not_found');
   assert.ok((await listNotifications(x.runtime,reader,{},true)).items.some(n=>n.body.includes(order.display_number)&&n.action?.tab==='stores'));
-  await x.tx(q=>cancelUnpaidOrder(q,s,order.order_id,'buyer','buyer_cancelled',{orderNotifications:port,actorPrincipalId:buyerPrincipal}));
-  assert.ok((await notices(order.order_id,'buyer_cancelled')).every(n=>n.recipient_ref!==people[1].id));
+  await cancelThroughHttp(order.order_id);
+  const cancelled=await notices(order.order_id,'buyer_cancelled');
+  assert.equal(cancelled.filter(n=>n.recipient_ref===s.owner.user.user_id).length,1,'the eligible owner must receive the HTTP cancellation notice');
+  assert.equal(cancelled.length,3);
+  assert.ok(cancelled.every(n=>n.recipient_ref!==people[1].id));
 });
 
 test('optional programming failures roll back only notices, but query-origin errors roll back the whole placement',async()=>{
