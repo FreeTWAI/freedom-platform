@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { PublicStoreProjectionSchema, StorePreviewSchema, type PublicStoreProjection } from '../../../contracts/guild-launchpad/v1/storefront.js';
+import { STOREFRONT_PUBLICATION_PROFILE, StorePublicationReviewSchema, type ReviewedPublicationInput } from '../../../contracts/guild-launchpad/v1/storefront-publication.js';
 import { checkVersion, digest } from '../../../packages/db/index.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { Actor } from '../../identity-membership/service.js';
@@ -33,6 +34,28 @@ async function buildProjection(q: PoolClient, p: Profile, items: readonly PhotoP
     products: items.map(({product: { sku, title, description, price_minor }}) => ({ sku, title, description, price_minor })),
     revision: await nextRevision(q, p), published_at: now.toISOString(), transaction_state: 'not_enabled' });
 }
+function publicationReviewDigest(p: Profile, projection: PublicStoreProjection, mediaSha256: string) {
+  return digest({ profile: STOREFRONT_PUBLICATION_PROFILE, tenant_id: p.tenant_id, instance_id: p.instance_id,
+    projection_sha256: projectionDigest(projection), template_id: p.template_id, media_sha256: mediaSha256 });
+}
+/** Review only saved, publishable content. Product/photo edits have their own versions. */
+export async function reviewStorePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
+  return storeRead(pool, actor, tenantId, instanceId, 'store:publish', async q => {
+    const p = await profile(q, tenantId, instanceId); retailReady(p);
+    const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
+    let projection = await buildProjection(q, p, items);
+    const dirty = projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || media.sha256 !== p.media_sha256;
+    const reviewDigest = publicationReviewDigest(p, projection, media.sha256);
+    if (!dirty && p.projection) projection = publicProjection(p.projection);
+    const photos = items.flatMap(item => {
+      const photo = privatePhotoView(p, item).photo;
+      return photo ? [{sku: item.product.sku, photo}] : [];
+    });
+    return StorePublicationReviewSchema.parse({ profile: STOREFRONT_PUBLICATION_PROFILE, store_version: p.version,
+      preview: { projection, dirty, current_revision: p.revision }, template_id: p.template_id,
+      photo_count: photos.length, photos, review_digest: reviewDigest });
+  });
+}
 export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
     const p = await profile(q, tenantId, instanceId); retailReady(p);
@@ -52,8 +75,14 @@ export async function previewStorePage(pool: Pool, actor: Actor, tenantId: strin
   });
 }
 export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false) {
-  const operation = unpublish ? 'storefront.unpublish' : 'storefront.publish';
-  return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, {}, key, expected, async (q, context, inst) => {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, unpublish);
+}
+export async function publishReviewedStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, input: ReviewedPublicationInput, key: string, expected: string) {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, false, input);
+}
+async function changePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish: boolean, review?: ReviewedPublicationInput) {
+  const operation = unpublish ? 'storefront.unpublish' : review ? 'storefront.publish-reviewed' : 'storefront.publish';
+  return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, review ?? {}, key, expected, async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
     if (unpublish) {
       if (!p.current_publication_id) return storeView(q, context, inst);
@@ -62,6 +91,10 @@ export async function publishStore(pool: Pool, actor: Actor, tenantId: string, i
     } else {
       const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
       const projection = await buildProjection(q, p, items);
+      // Compare under the same instance/community/profile locks, using exactly
+      // the rowset saved below. Do not run this check on a committed receipt replay.
+      if (review) requireCondition(review.review_digest === publicationReviewDigest(p, projection, media.sha256),
+        409, 'storefront_publication_changed', '商品、照片或店面內容已更新，請重新確認後再上架。');
       requireCondition(projection.products.length > 0, 409, 'storefront_has_no_products', '請先新增至少一項商品再公開。');
       const hash = projectionDigest(projection);
       if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256) return storeView(q, context, inst);

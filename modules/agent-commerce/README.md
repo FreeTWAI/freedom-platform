@@ -136,7 +136,32 @@ Ordering is not enabled. Hosted shops remain test mode with `accepting_orders=fa
 
 For stores without order history, delete selections first, then items, then both shops. The profile and its publications cascade from the shops, and resource mappings cascade from each shop. Profile identity/slug and publication immutability triggers only reject updates; order/quote/line foreign keys now retain referenced history; erasure policy remains undecided. Test cleanup uses isolated schema teardown. The migration registers the module/application without a guild offering; a later slice provides the member launch UI and offering. The hosted-store management and anonymous publication routes require the existing guild-launchpad release flag. Exact private buyer order recovery/cancel has a separate member boundary, described below.
 
-Member UI: commerce members enter from the launchpad’s 「建立我的商店」 primary action, the 「我的商店」 tab, or 「設定我的商店」 after the existing launch flow succeeds. `#stores` lists readable stores; `#stores/<tenant_id>/<instance_id>` provides setup, product editing, preview and publication. This UI only calls the existing hosted-store API; ordering remains disabled.
+Member UI: `#stores` lists readable stores and links directly to `#stores/setup`.
+The setup journey explains any missing guild qualification, joins only after an
+explicit member action, and continues the existing tenant/plan/launch flow in the
+same page. `#stores/supply/setup` provides the corresponding supplier journey.
+Neither route changes the primary guild or bypasses membership/capacity checks.
+A pure supply catalog cannot be reused as a retail store; the journey offers a
+separate store space without changing the original catalog or inventory.
+`#stores/<tenant_id>/<instance_id>` retains store settings, product drafts and
+publication. Selecting a valid own-product photo automatically saves its draft;
+unknown results retain the original upload tuple, and a failed read after an
+acknowledged write retries only the read.
+
+The product area can publish all saved, publishable store content in one click.
+The additive `storefront-publication` contract exposes a private
+`GET .../publication-review` under current `store:publish`, including the exact
+public product list, saved template, and versioned private photos from the same
+rowset. `POST .../publish-reviewed` submits that shown digest, profile If-Match
+and original idempotency key. Inside the existing instance/community/profile
+transaction locks, the command compares public text/price, template and media
+before saving that same rowset. Product/photo changes do not bump the profile
+version, so profile CAS alone is insufficient. A changed review requires another
+explicit click; a committed receipt retry never publishes newer drafts. This is
+whole-store publication, including accepted distribution products and excluding
+supply-only drafts; it is not single-product publication. The pinned storefront
+schema and legacy `{}` publish endpoint remain unchanged. Publication does not
+enable checkout, payments or fulfilment.
 
 `GET /api/v1/me/stores` preserves the immutable legacy `{items,truncated}` response. Clients opt into `{items,next_cursor}` with `?pagination=cursor`; continuation requests must retain that opt-in and forward the opaque cursor unchanged as `?pagination=cursor&cursor=...` to continue through at most 100 tenant memberships per request, including pages with no readable storefront. The cursor uses the existing principal-bound tenant keyset codec; every page rechecks session, memberships and instance capabilities under tenant RLS. The Portal appends pages via 「載入更多商店」 and keeps loaded cards when a continuation fails. The pagination DTO lives in `storefront-pagination.ts`, separate from the immutable `storefront@1.0.0` registry contract pin; no registry release or migration changes.
 

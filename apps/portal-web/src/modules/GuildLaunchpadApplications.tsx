@@ -10,6 +10,8 @@ import {moduleWord, INSTANCE_STATUS_WORDS} from './module-words';
 import {formatIsoLocal} from '../format';
 import {ApiError, type PortalClient} from '../api';
 import {recommendedApplications, type ApplicationRef} from '../../../../contracts/guild-launchpad/v1/config';
+import {SupplyCatalogViewSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
+import {storefrontInstanceLabel} from './store-setup';
 import './GuildLaunchpadApplications.css';
 import {ApplicationSkillSources, CommerceReadingReferences, PortableBusinessStatus} from './SkillBookUsage';
 import './SkillBookIntro.css';
@@ -241,6 +243,9 @@ function savedLaunches(userId: string, guildKey: string): SavedLaunch[] {
   }
   catch { return []; }
 }
+export function savedStoreLaunch(userId: string, guildKey: string) {
+  return savedLaunches(userId, guildKey).filter(row => row.application_key === 'hosted-store').at(-1);
+}
 function storeLaunch(userId: string, guildKey: string, item: SavedLaunch, remove = false) {
   const old = savedLaunches(userId, guildKey).filter(row => row.key !== item.key);
   sessionStorage.setItem(launchKey(userId, guildKey), JSON.stringify(remove ? old : [...old, item]));
@@ -352,19 +357,29 @@ function problemText(error: unknown, actionHeld = false) {
   return joinWords(detail, NEXT[error.code ?? ''] ?? '請保留操作識別碼並聯絡支援。');
 }
 function terminal(operation: RegistryOperation | null) { return operation && ['succeeded', 'failed', 'cancelled'].includes(operation.state); }
-function dependencyWords(choice: Dependency, word = moduleWord) {
+function dependencyWords(choice: Dependency, word: (key: string, instanceId?: string) => string = moduleWord) {
   return choice.choice === 'create' ? `另建獨立空白的${word(choice.requirement_key)}`
-    : `共用既有的${word(choice.requirement_key)}（ID 尾碼 ${choice.instance_id.slice(-6)}，版本 ${choice.expected_version}）`;
+    : `共用既有的${word(choice.requirement_key, choice.instance_id)}（ID 尾碼 ${choice.instance_id.slice(-6)}，版本 ${choice.expected_version}）`;
 }
 
-function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, canLeave, registerPendingLeave, restoredRow}: {
+export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, canLeave, registerPendingLeave, restoredRow, allowNewLaunch = true, setupJourney = false}: {
   client: PortalClient; guildKey: string; userId: string; app: ApplicationView; onClose: () => void; canLeave: () => boolean; onWork?: (tenantId: string, workspaceId: string) => boolean; onStore?: (tenantId: string, instanceId: string) => boolean; restoredRow?: SavedLaunch;
+  allowNewLaunch?: boolean; setupJourney?: boolean;
   registerPendingLeave: (guard: (() => boolean) | null) => void;
 }) {
   const supply = guildKey === 'guild_product_quality_supply' && app.application_key === 'hosted-store';
   const displayName = supply ? '商品與供貨' : app.display_name;
-  const word = (key: string) => supply && key === 'storefront' ? '供貨商品庫' : moduleWord(key);
+  const hostedStore = app.application_key === 'hosted-store';
+  const [storefrontLabels, setStorefrontLabels] = useState<Record<string, string>>({});
+  const [retailBlocked, setRetailBlocked] = useState<Set<string>>(new Set());
+  const retailBlockedRef = useRef(new Set<string>());
+  const word = (key: string, instanceId?: string) => hostedStore && key === 'storefront' && instanceId
+    ? storefrontLabels[instanceId] ?? '商品資料空間' : supply && key === 'storefront' ? '供貨商品庫' : moduleWord(key);
   const [tenantName, setTenantName] = useState('');
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const wasCreatingSpace = useRef(false);
+  const newSpaceButton = useRef<HTMLButtonElement>(null);
+  const tenantInput = useRef<HTMLInputElement>(null);
   const [tenantError, setTenantError] = useState('');
   const [tenantRetry, setTenantRetry] = useState(false);
   const tenantAttempt = useRef<{name: string; key: string; body: z.infer<typeof TenantCreateInputSchema>} | null>(null);
@@ -403,6 +418,11 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
   const heading = useRef<HTMLHeadingElement>(null);
   const planHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (plan && !pending) planHeading.current?.focus(); }, [plan, pending]);
+  useEffect(() => {
+    if (creatingSpace) tenantInput.current?.focus();
+    else if (wasCreatingSpace.current) newSpaceButton.current?.focus();
+    wasCreatingSpace.current = creatingSpace;
+  }, [creatingSpace]);
   const tenant = tenants.find(item => item.tenant_id === tenantId);
   const workspace = workspaces.find(item => item.workspace_id === workspaceId);
   const operation = pending?.operation ?? null;
@@ -432,13 +452,16 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
     window.addEventListener('beforeunload', unloading);
     return () => {registerPendingLeave(null); window.removeEventListener('beforeunload', unloading);};
   }, [registerPendingLeave]);
-  async function loadTenants() {
+  async function loadTenants(preferred?: {tenantId: string; workspaceId: string}) {
     const call = ticket(); setReadFailed(false); setProblem(''); setTenantsLoaded(false);
     try {
       const list = await tenantList(client, call.signal);
       if (!call.live()) return;
       tenantRows.current = list; setTenants(list); setTenantsLoaded(true);
       const managed = list.filter(launchable); const stored = readActing(userId);
+      if (preferred && managed.some(row => row.tenant_id === preferred.tenantId)) {
+        await selectTenant(preferred.tenantId, preferred.workspaceId); return;
+      }
       const saved = initial.current ? [initial.current] : savedLaunches(userId, guildKey).filter(row => row.application_key === app.application_key && row.release_ref === app.release_ref).reverse();
       for (const held of saved) {
         const tenant = managed.find(row => row.tenant_id === held.tenant_id);
@@ -452,7 +475,7 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
     } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error)); } }
   }
   async function createSpace() {
-    if (busyRef.current) return;
+    if (busyRef.current || !allowNewLaunch) return;
     if (!tenantAttempt.current) {
       const input = TenantCreateInputSchema.safeParse({display_name: tenantName.trim()});
       if (!input.success) { setTenantError('請輸入 1–120 個字的業務空間名稱，不含控制字元。'); return; }
@@ -466,8 +489,8 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
       const made = result.data;
       if (!call.live()) return;
       rememberActing(userId, made.tenant.tenant_id, made.workspace.workspace_id);
-      tenantAttempt.current = null; setTenantName('');
-      await loadTenants();
+      tenantAttempt.current = null; setTenantName(''); setCreatingSpace(false);
+      await loadTenants({tenantId: made.tenant.tenant_id, workspaceId: made.workspace.workspace_id});
     } catch (error) {
       if (!call.live()) return;
       setTenantError(error instanceof ApiError && error.status === 429 ? joinWords(error.detail ?? error.message, '請改用現有的業務空間。')
@@ -496,7 +519,8 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
   }
   function clearPrivate() {
     setPollingStopped(false); setCanForget(false);
-    setInstances({}); setInstallations([]); setChoices({}); setInstallationChoice(''); setPlan(null); setInstallation(null);
+    retailBlockedRef.current = new Set(); setRetailBlocked(new Set());
+    setInstances({}); setStorefrontLabels({}); setInstallations([]); setChoices({}); setInstallationChoice(''); setPlan(null); setInstallation(null);
     setPending(null); pendingRef.current = null; setProblem(''); setChanged(''); setReady(false); setRetry(null); setReadFailed(false); attempt.current = null;
   }
   async function selectWorkspace(id: string, workspace: string) {
@@ -526,8 +550,17 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
         } while (cursor);
         found[requirement.requirement_key] = rows;
       }
+      const labels: Record<string, string> = {};
+      const blockedForRetail = new Set<string>();
+      if (hostedStore) for (const row of found.storefront ?? []) {
+        const profile = SupplyCatalogViewSchema.parse(await client.get(`/tenants/${id}/storefronts/${row.instance_id}/supply-profile`, {signal: call.signal}));
+        if (!call.live()) return;
+        labels[row.instance_id] = storefrontInstanceLabel(profile);
+        if (!supply && profile.setup_state === 'ready' && !profile.retail_enabled) blockedForRetail.add(row.instance_id);
+      }
       if (!call.live()) return;
-      setInstances(found); setInstallations(existing); setReadFailed(false);
+      retailBlockedRef.current = blockedForRetail; setRetailBlocked(blockedForRetail);
+      setInstances(found); setStorefrontLabels(labels); setInstallations(existing); setReadFailed(false);
       const selected = existing.length === 1 ? existing[0] : existing.find(row => row.installation_id === installationChoice);
       const nextInstallation = selected?.installation_id ?? (existing.length === 0 ? 'create_new' : '');
       if (keep && selected && selected.installation_id !== installationChoice) setChanged(old => joinWords(old, '這個工作區已經有這個應用的安裝，已改為沿用它。'));
@@ -540,7 +573,7 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
   function linkedChoices(item: InstallationView, found: Record<string, InstanceView[]>) {
     const result: Record<string, Dependency> = {};
     for (const link of item.modules) {
-      const row = found[link.requirement_key]?.find(candidate => candidate.instance_id === link.instance_id && !unusableRef.current.has(candidate.instance_id));
+      const row = found[link.requirement_key]?.find(candidate => candidate.instance_id === link.instance_id && !unusableRef.current.has(candidate.instance_id) && !retailBlockedRef.current.has(candidate.instance_id));
       if (row) result[link.requirement_key] = {requirement_key: link.requirement_key, choice: 'reuse', instance_id: row.instance_id, expected_version: row.version};
     }
     return result;
@@ -548,9 +581,9 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
   function defaultChoices(found: Record<string, InstanceView[]>) {
     const result: Record<string, Dependency> = {};
     for (const requirement of app.module_requirements) {
-      const rows = requirement.allow_reuse ? found[requirement.requirement_key].filter(row => !unusableRef.current.has(row.instance_id)) : [];
+      const rows = requirement.allow_reuse ? found[requirement.requirement_key].filter(row => !unusableRef.current.has(row.instance_id) && !retailBlockedRef.current.has(row.instance_id)) : [];
       if (rows.length === 1) result[requirement.requirement_key] = {requirement_key: requirement.requirement_key, choice: 'reuse', instance_id: rows[0].instance_id, expected_version: rows[0].version};
-      else if (!rows.length) result[requirement.requirement_key] = {requirement_key: requirement.requirement_key, choice: 'create', configuration: {}};
+      else if (!rows.length && !(hostedStore && requirement.requirement_key === 'storefront' && found.storefront?.length)) result[requirement.requirement_key] = {requirement_key: requirement.requirement_key, choice: 'create', configuration: {}};
     }
     return result;
   }
@@ -597,7 +630,7 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
     } finally { if (call.live()) { busyRef.current = false; setBusy(false); } }
   }
   async function makePlan() {
-    if (!ready || !canManage || !installationValid || !decided || busyRef.current || pendingRef.current || attempt.current) return;
+    if (!allowNewLaunch || !ready || !canManage || !installationValid || !decided || busyRef.current || pendingRef.current || attempt.current) return;
     const input = PlanInputSchema.parse({guild_key: guildKey, workspace_id: workspaceId, application_key: app.application_key, release_ref: app.release_ref,
       installation_choice: installationChoice === 'create_new' ? 'create_new' : 'reuse_existing',
       ...(installationChoice !== 'create_new' ? {existing_installation_id: installationChoice} : {}),
@@ -606,7 +639,7 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
     await runAction({key: crypto.randomUUID(), path: `/tenants/${tenantId}/application-launch-plans`, body: input, kind: 'plan'});
   }
   async function confirm() {
-    if (!plan || busyRef.current || pendingRef.current) return;
+    if (!allowNewLaunch || !plan || busyRef.current || pendingRef.current) return;
     const held: SavedLaunch = {tenant_id: tenantId, workspace_id: workspaceId, application_key: app.application_key, release_ref: app.release_ref, application: applicationSnapshot(app),
       input: {plan_id: plan.plan_id, expected_plan_version: plan.version, configuration_digest: plan.configuration_digest}, key: crypto.randomUUID(), operation: null};
     try { remember(held); } catch { setProblem('瀏覽器無法保留原操作，請允許分頁儲存後再啟動。'); return; }
@@ -671,30 +704,44 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
   const installationValid = installations.length === 0 ? installationChoice === 'create_new' : Boolean(selectedInstallation);
   const decided = app.module_requirements.every(item => {
     const choice = choices[item.requirement_key];
-    return choice && (!selectedInstallation || (choice.choice === 'reuse' && selectedInstallation.modules.some(link => link.requirement_key === item.requirement_key && link.instance_id === choice.instance_id))) && (choice.choice === 'create' || instances[item.requirement_key]?.some(row => row.instance_id === choice.instance_id && row.version === choice.expected_version && !unusable.has(row.instance_id)));
+    return choice && (!selectedInstallation || (choice.choice === 'reuse' && selectedInstallation.modules.some(link => link.requirement_key === item.requirement_key && link.instance_id === choice.instance_id))) && (choice.choice === 'create' ? !(hostedStore && item.requirement_key === 'storefront' && instances.storefront?.length) : instances[item.requirement_key]?.some(row => row.instance_id === choice.instance_id && row.version === choice.expected_version && !unusable.has(row.instance_id) && !retailBlocked.has(row.instance_id)));
   });
+  const spaceKind = supply ? '供貨空間' : '商店空間';
+  const setupConfirmation = `確認${installationChoice === 'create_new' ? '建立' : '沿用'}${spaceKind}`;
+  const planDetails = plan && <>
+    <p>{displayName} · {plan.release_ref}</p>
+    <p>{installationChoice === 'create_new' ? '建立新安裝' : `沿用安裝（${selectedInstallation?.release_ref}，ID 尾碼 ${installationChoice.slice(-6)}）`}</p>
+    <ul>{plan.choices.map(choice => <li key={choice.requirement_key}>{dependencyWords(choice, word)}</li>)}</ul>
+    <p>容量變化</p><ul>{plan.capacity_delta.length ? plan.capacity_delta.map(item => <li key={item.dimension}>{supply && item.dimension === 'module_instances.storefront' ? '供貨商品庫實例數' : DIMENSION[item.dimension] ?? item.dimension}：+{item.units}</li>) : <li>不增加實例容量</li>}</ul>
+  </>;
+  const installationDetails = installation && <>
+    <p>安裝 ID 尾碼 {installation.installation_id.slice(-6)} · {INSTANCE_STATUS_WORDS[installation.status]}</p>
+    <ul>{installation.modules.map(item => <li key={item.requirement_key}>{word(item.requirement_key)}：ID 尾碼 {item.instance_id.slice(-6)}</li>)}</ul>
+  </>;
   return <section className="application-flow stack" aria-label="啟動應用" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }}>
-    <div className="application-heading"><h3 ref={heading} tabIndex={-1}>啟動{displayName}</h3><button type="button" className="btn btn-ghost" onClick={close}>取消</button></div>
-    <p>{app.release_ref}</p>
+    <div className="application-heading"><h3 ref={heading} tabIndex={-1}>{setupJourney ? supply ? '設定供貨空間' : '設定商店空間' : `啟動${displayName}`}</h3><button type="button" className="btn btn-ghost" onClick={close}>取消</button></div>
+    {!setupJourney && <p>{app.release_ref}</p>}
     {!tenantsLoaded && !readFailed && <p role="status">正在載入業務空間…</p>}
-    {tenantsLoaded && tenants.some(launchable) && <fieldset className="fieldset"><legend>業務空間</legend><div className="application-actions">
+    {tenantsLoaded && tenants.some(launchable) && !creatingSpace && <fieldset className="fieldset"><legend>業務空間</legend><div className="application-actions">
       {tenants.filter(launchable).map(item => <button type="button" key={item.tenant_id} className={item.tenant_id === tenantId ? 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.tenant_id === tenantId ? 'true' : undefined} onClick={() => { if (item.tenant_id !== tenantId) void selectTenant(item.tenant_id); }}>{item.display_name}・{roleLabel(item.my_membership.role)}</button>)}
-    </div>{tenants.some(item => !launchable(item)) && <p className="field-hint">只列出你擁有或管理、目前可使用的業務空間。</p>}</fieldset>}
-    {tenant && <p>目前業務空間：{tenant.display_name} · {roleLabel(tenant.my_membership.role)}{workspace && `／${workspace.name}`}</p>}
-    {tenantsLoaded && !readFailed && !tenants.some(launchable) && <div><p>{!tenants.length ? '你還沒有業務空間。' : tenants.some(item => ['owner', 'admin'].includes(item.my_membership.role)) ? '你擁有或管理的業務空間目前無法使用，請先到業務空間頁處理。' : '你在現有業務空間的角色不能啟動應用。請擁有者或管理員啟動，或建立自己的業務空間。'}</p><form className="stack" onSubmit={event => {event.preventDefault(); void createSpace();}}>
-      <label className="field">業務空間名稱<input required disabled={busy || tenantRetry} maxLength={TenantCreateInputSchema.shape.display_name.maxLength ?? 120} value={tenantName} aria-describedby="launch-space-hint launch-space-error" onChange={event => setTenantName(event.target.value)}/></label>
+    </div>{tenants.some(item => !launchable(item)) && <p className="field-hint">只列出你擁有或管理、目前可使用的業務空間。</p>}
+      {hostedStore && <div className="application-actions"><button ref={newSpaceButton} type="button" className="btn btn-ghost" disabled={!allowNewLaunch || busy || Boolean(retry) || Boolean(pending && !terminal(operation))} onClick={() => {if (canLeaveCreate()) setCreatingSpace(true);}}>{supply ? '建立另一個獨立商品庫' : '另開獨立商店'}</button></div>}
+    </fieldset>}
+    {tenant && !creatingSpace && <p>目前業務空間：{tenant.display_name} · {roleLabel(tenant.my_membership.role)}{workspace && `／${workspace.name}`}</p>}
+    {tenantsLoaded && !readFailed && allowNewLaunch && (creatingSpace || !tenants.some(launchable)) && <div><p>{creatingSpace ? '建立另一個業務空間，讓商品、庫存與合作權限獨立管理。' : !tenants.length ? '你還沒有業務空間。' : tenants.some(item => ['owner', 'admin'].includes(item.my_membership.role)) ? '你擁有或管理的業務空間目前無法使用，請先到業務空間頁處理。' : '你在現有業務空間的角色不能啟動應用。請擁有者或管理員啟動，或建立自己的業務空間。'}</p><form className="stack" onSubmit={event => {event.preventDefault(); void createSpace();}}>
+      <label className="field">業務空間名稱<input ref={tenantInput} required disabled={busy || tenantRetry} maxLength={TenantCreateInputSchema.shape.display_name.maxLength ?? 120} value={tenantName} aria-describedby="launch-space-hint launch-space-error" onChange={event => setTenantName(event.target.value)}/></label>
       <p className="field-hint" id="launch-space-hint">應用的資料會保存在這個業務空間；之後可以在業務空間頁邀請夥伴。</p>
       <p id="launch-space-error" role="alert">{tenantError}</p>
-      <div className="application-actions"><button className="btn btn-primary" disabled={busy || tenantRetry}>建立業務空間</button>{tenantRetry && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void createSpace()}>重試</button>}</div>
+      <div className="application-actions"><button className="btn btn-primary" disabled={busy || tenantRetry}>建立業務空間</button>{tenantRetry && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void createSpace()}>重試</button>}{creatingSpace && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => {if (canLeaveCreate()) setCreatingSpace(false);}}>返回原業務空間</button>}</div>
     </form><div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>建立或選擇業務空間</a></div></div>}
     {problem && <p role="alert" className="banner banner-error">{problem}</p>}
     {changed && <div role="status"><p>{changed}</p>{changedKind === 'plan' && <ul>{Object.entries(instances).flatMap(([key, rows]) => rows.map(row => <li key={`${key}:${row.instance_id}`}>{word(key)}：ID 尾碼 {row.instance_id.slice(-6)}，最新版本 {row.version}，{INSTANCE_STATUS_WORDS[row.status]}</li>))}</ul>}</div>}
     {retry && <div className="application-actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void runAction(retry)}>重試</button></div>}
     {readFailed && <div className="application-actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setProblem(''); setReadFailed(false); if (!tenantsLoaded || !tenantId) void loadTenants(); else if (!workspaceId) void selectTenant(tenantId); else void candidates(true); }}>重新載入清單</button></div>}
-    {canManage && workspacesLoaded && workspaces.length > 0 && <fieldset className="fieldset"><legend>工作區</legend><div className="application-actions">{workspaces.map(item => <button type="button" key={item.workspace_id} className={item.workspace_id === workspaceId ? 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.workspace_id === workspaceId ? 'true' : undefined} onClick={() => { if (item.workspace_id !== workspaceId) void selectWorkspace(tenantId, item.workspace_id); }}>{item.name}</button>)}</div></fieldset>}
-    {canManage && !workspacesLoaded && !readFailed && <p role="status">正在載入工作區…</p>}
-    {canManage && workspacesLoaded && workspaces.length === 0 && <div><p>這個業務空間還沒有可用的工作區，請先到業務空間頁建立。</p><div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>前往業務空間</a></div></div>}
-    {canManage && workspace && !pending && !plan && <>
+    {canManage && !creatingSpace && workspacesLoaded && workspaces.length > 0 && (!setupJourney || workspaces.length > 1) && <fieldset className="fieldset"><legend>工作區</legend><div className="application-actions">{workspaces.map(item => <button type="button" key={item.workspace_id} className={item.workspace_id === workspaceId ? 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.workspace_id === workspaceId ? 'true' : undefined} onClick={() => { if (item.workspace_id !== workspaceId) void selectWorkspace(tenantId, item.workspace_id); }}>{item.name}</button>)}</div></fieldset>}
+    {canManage && !creatingSpace && !workspacesLoaded && !readFailed && <p role="status">正在載入工作區…</p>}
+    {canManage && !creatingSpace && workspacesLoaded && workspaces.length === 0 && <div><p>這個業務空間還沒有可用的工作區，請先到業務空間頁建立。</p><div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>前往業務空間</a></div></div>}
+    {canManage && !creatingSpace && allowNewLaunch && workspace && !pending && !plan && <>
       {!ready && <p role="status">正在載入可用實例…</p>}
       {ready && <>
         {installations.length > 0 && <fieldset className="fieldset"><legend>安裝選擇</legend>
@@ -704,30 +751,32 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
         {app.module_requirements.map(requirement => {
           const storeExists = app.application_key === 'hosted-store' && Boolean(instances[requirement.requirement_key]?.length);
           return <fieldset className="fieldset" key={requirement.requirement_key}><legend>{word(requirement.module_key)}（{requirement.required ? '必要' : '選用'}）</legend>
-          {requirement.allow_reuse && (instances[requirement.requirement_key] ?? []).map(row => <label key={row.instance_id} className="application-choice"><input type="radio" name={`dependency-${requirement.requirement_key}`} disabled={busy || Boolean(retry) || unusable.has(row.instance_id) || Boolean(selectedInstallation && !selectedInstallation.modules.some(link => link.requirement_key === requirement.requirement_key && link.instance_id === row.instance_id))} checked={choices[requirement.requirement_key]?.choice === 'reuse' && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).instance_id === row.instance_id && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).expected_version === row.version} onChange={() => setChoices(old => ({...old, [requirement.requirement_key]: {requirement_key: requirement.requirement_key, choice: 'reuse', instance_id: row.instance_id, expected_version: row.version}}))}/><span>將共用既有的{word(requirement.module_key)}（ID 尾碼 {row.instance_id.slice(-6)}，版本 {row.version}，{INSTANCE_STATUS_WORDS[row.status]}）{unusable.has(row.instance_id) && '（目前無法共用）'}</span></label>)}
+          {requirement.allow_reuse && (instances[requirement.requirement_key] ?? []).map(row => <label key={row.instance_id} className="application-choice"><input type="radio" name={`dependency-${requirement.requirement_key}`} disabled={busy || Boolean(retry) || unusable.has(row.instance_id) || retailBlocked.has(row.instance_id) || Boolean(selectedInstallation && !selectedInstallation.modules.some(link => link.requirement_key === requirement.requirement_key && link.instance_id === row.instance_id))} checked={choices[requirement.requirement_key]?.choice === 'reuse' && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).instance_id === row.instance_id && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).expected_version === row.version} onChange={() => setChoices(old => ({...old, [requirement.requirement_key]: {requirement_key: requirement.requirement_key, choice: 'reuse', instance_id: row.instance_id, expected_version: row.version}}))}/><span>{retailBlocked.has(row.instance_id) ? '保留既有的' : '將共用既有的'}{word(requirement.module_key, row.instance_id)}（ID 尾碼 {row.instance_id.slice(-6)}，版本 {row.version}，{INSTANCE_STATUS_WORDS[row.status]}）{retailBlocked.has(row.instance_id) ? '（純供貨商品庫不能用於零售開店）' : unusable.has(row.instance_id) && '（目前無法共用）'}</span></label>)}
           <label className="application-choice"><input type="radio" name={`dependency-${requirement.requirement_key}`} disabled={createDisabled || storeExists} checked={choices[requirement.requirement_key]?.choice === 'create'} onChange={() => setChoices(old => ({...old, [requirement.requirement_key]: {requirement_key: requirement.requirement_key, choice: 'create', configuration: {}}}))}/><span>另建獨立空白的{word(requirement.module_key)}</span></label>
           {selectedInstallation && (() => {
             const link = selectedInstallation.modules.find(item => item.requirement_key === requirement.requirement_key);
-            const available = link && instances[requirement.requirement_key]?.some(row => row.instance_id === link.instance_id && !unusable.has(row.instance_id));
-            return <p className="field-hint">{available ? `沿用這個安裝時，會繼續共用它連結的${word(requirement.module_key)}（ID 尾碼 ${link.instance_id.slice(-6)}）。` : `這個安裝連結的${word(requirement.module_key)}目前無法使用（ID 尾碼 ${link?.instance_id.slice(-6) ?? '未知'}），請選擇另一個工作區。`}</p>;
+            const available = link && instances[requirement.requirement_key]?.some(row => row.instance_id === link.instance_id && !unusable.has(row.instance_id) && !retailBlocked.has(row.instance_id));
+            return <p className="field-hint">{link && retailBlocked.has(link.instance_id) ? '這個工具連結的是純供貨商品庫，請保留它並另開獨立商店。' : available ? `沿用這個安裝時，會繼續共用它連結的${word(requirement.module_key, link.instance_id)}（ID 尾碼 ${link.instance_id.slice(-6)}）。` : `這個安裝連結的${word(requirement.module_key)}目前無法使用（ID 尾碼 ${link?.instance_id.slice(-6) ?? '未知'}），請選擇另一個工作區。`}</p>;
           })()}
-          {storeExists ? <p className="field-hint">{supply ? '這個業務空間已有商品庫，請沿用它管理供貨。' : '這個業務空間已經有商店，請沿用它。'}</p> : !createDisabled && <p className="field-hint">新實例不複製既有資料，會使用額外容量。</p>}
+          {storeExists ? <p className="field-hint">{supply ? '這個業務空間已有商品庫，請沿用它管理供貨。' : Object.values(storefrontLabels).includes('純供貨商品庫') ? '這個業務空間目前有純供貨商品庫，不能直接轉為零售商店。原商品、庫存與供貨合作會保留；請按上方「另開獨立商店」，在新的空間設定零售。' : '這個業務空間已有商品資料空間，可以沿用；若要分開管理，請按上方「另開獨立商店」。'}</p> : !createDisabled && <p className="field-hint">新實例不複製既有資料，會使用額外容量。</p>}
         </fieldset>;})}
-        <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy || Boolean(attempt.current) || !installationValid || !decided} onClick={() => void makePlan()}>產生啟動方案</button></div>
+        <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy || Boolean(attempt.current) || !installationValid || !decided} onClick={() => void makePlan()}>{setupJourney ? supply ? '確認供貨空間' : '確認開店空間' : '產生啟動方案'}</button></div>
       </>}
     </>}
-    {plan && !pending && <section className="stack" aria-label="確認啟動方案">
-      <h4 ref={planHeading} tabIndex={-1}>確認啟動方案</h4><p>{tenant?.display_name}／{workspace?.name} · {displayName} · {plan.release_ref}</p>
-      <p>{installationChoice === 'create_new' ? '建立新安裝' : `沿用安裝（${selectedInstallation?.release_ref}，ID 尾碼 ${installationChoice.slice(-6)}）`}</p>
-      <ul>{plan.choices.map(choice => <li key={choice.requirement_key}>{dependencyWords(choice, word)}</li>)}</ul>
-      <p>容量變化</p><ul>{plan.capacity_delta.length ? plan.capacity_delta.map(item => <li key={item.dimension}>{supply && item.dimension === 'module_instances.storefront' ? '供貨商品庫實例數' : DIMENSION[item.dimension] ?? item.dimension}：+{item.units}</li>) : <li>不增加實例容量</li>}</ul>
+    {plan && !pending && !creatingSpace && <section className="stack" aria-label="確認啟動方案">
+      <h4 ref={planHeading} tabIndex={-1}>{setupJourney ? setupConfirmation : '確認啟動方案'}</h4><p>{tenant?.display_name}／{workspace?.name}</p>
+      {setupJourney ? <>
+        <p>確認後會準備好{spaceKind}，接著填寫{ supply ? '商品庫' : '商店'}資料與幣別。</p>
+        <ul>{plan.choices.map(choice => <li key={choice.requirement_key}>{choice.choice === 'create' ? '建立新的' : '沿用現有的'}{word(choice.requirement_key, choice.choice === 'reuse' ? choice.instance_id : undefined)}</li>)}</ul>
+        <details><summary>檢視工具與容量設定</summary>{planDetails}</details>
+      </> : planDetails}
       <ul>{plan.warnings.map((item, index) => <li key={index}>{item.requirement_key && `${word(item.requirement_key)}：`}{WARNING[item.code] ?? `${item.code}：請在確認前核對這個提醒。`}</li>)}</ul>
       <p>有效期限：<time dateTime={plan.expires_at}>{formatIsoLocal(plan.expires_at)}</time></p>
-      <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy} onClick={() => void confirm()}>確認啟動</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setPlan(null)}>修改選擇</button></div>
+      <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy || !allowNewLaunch} onClick={() => void confirm()}>{setupJourney ? setupConfirmation : '確認啟動'}</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setPlan(null)}>修改選擇</button></div>
     </section>}
-    {pending && tenant && workspace && <section className="stack" aria-label="啟動進度">
+    {pending && tenant && workspace && !creatingSpace && <section className="stack" aria-label="啟動進度">
       <p aria-live="polite">{tenant?.display_name}／{workspace?.name} · {operation ? STATE[operation.state] : '結果未確認'}</p>
-      {operation && <p>操作識別碼：<code>{operation.operation_id}</code> · 版本 {operation.version}</p>}
+      {operation && (setupJourney ? <details><summary>查看操作詳情</summary><p>操作識別碼：<code>{operation.operation_id}</code> · 版本 {operation.version}</p></details> : <p>操作識別碼：<code>{operation.operation_id}</code> · 版本 {operation.version}</p>)}
       {operation?.problem && <p role="alert">{joinWords(operation.problem.detail, NEXT[operation.problem.code] ?? '請保留操作識別碼並聯絡支援。')}</p>}
       {!terminal(operation) && <div className="application-actions">
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void progress()}>查看進度</button>
@@ -738,10 +787,11 @@ function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onStore, ca
       </div>}
       {!terminal(operation) && (canForget || operation?.state === 'needs_reconciliation') && <p className="field-hint">{FORGET_HINT}</p>}
       {operation?.state === 'succeeded' && <>
-        {installation ? <><p>安裝 ID 尾碼 {installation.installation_id.slice(-6)} · {INSTANCE_STATUS_WORDS[installation.status]}</p><ul>{installation.modules.map(item => <li key={item.requirement_key}>{word(item.requirement_key)}：ID 尾碼 {item.instance_id.slice(-6)}</li>)}</ul>
+        {hostedStore && <p className="field-hint">{supply ? '供貨工具已啟用，還需要填寫商品庫資料、確認幣別與新增商品。公開供貨需另行確認。' : '開店工具已啟用，還需要填寫商店資料、確認幣別與新增商品，再發布展示頁。這不代表已可接單。'}</p>}
+        {installation ? <>{setupJourney ? <details><summary>查看工具設定詳情</summary>{installationDetails}</details> : installationDetails}
           {app.application_key === 'manual-workspace' && <div className="application-actions"><button type="button" className="btn btn-ghost" onClick={() => { if (onWork?.(pending.tenant_id, pending.workspace_id)) close(); }}>前往我的工作</button></div>}{app.application_key === 'hosted-store' && (() => {
             const store = installation.modules.find(link => link.requirement_key === 'storefront');
-            return store && <div className="application-actions"><button type="button" className="btn btn-primary" onClick={() => {if (onStore?.(pending.tenant_id, store.instance_id)) close();}}>{supply ? '設定供貨資料' : '設定我的商店'}</button></div>;
+            return store && <div className="application-actions"><button type="button" className="btn btn-primary" onClick={() => {if (onStore?.(pending.tenant_id, store.instance_id)) close();}}>{setupJourney ? supply ? '繼續供貨設定' : '繼續商店設定' : supply ? '設定供貨資料' : '設定我的商店'}</button></div>;
           })()}</>
           : <div className="application-actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void progress()}>查看安裝</button></div>}
       </>}

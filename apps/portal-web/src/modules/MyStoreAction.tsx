@@ -45,18 +45,20 @@ export function MyStoreAction({client, canStart, reasons, onCreate, onEnter, pur
   const {data, error, retry} = useMyStores(client, purpose);
   const supply = purpose === 'supply';
   const listPath = supply ? '#stores/supply' : '#stores';
+  const beginSetup = () => canStart ? onCreate() : onEnter(supply ? '#stores/supply/setup' : '#stores/setup');
   if (error) return <><p role="alert" className="field-hint">{supply ? '暫時無法讀取你的供貨資料。' : '暫時無法讀取你的商店。'}</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></>;
   if (!data) return <p role="status">{supply ? '正在確認你的供貨資料…' : '正在確認你的商店…'}</p>;
   // Readable stores can belong to other owners. Keep launch eligibility separate
   // from this read-only projection; the existing flow rechecks tenant permissions.
-  const supplySetup = purpose === 'supply' && canStart
-    ? <button type="button" className="btn btn-ghost" onClick={onCreate}>開始供貨設定</button> : null;
+  const supplySetup = purpose === 'supply'
+    ? <button type="button" className="btn btn-ghost" onClick={beginSetup}>開始供貨設定</button> : null;
   if (data.items.length) return <>
     {data.items.slice(0, 3).map(item => <p key={item.instance_id}>{item.name ?? '尚未完成設定'}・{supply ? item.setup_state === 'setup_required' ? '待設定供貨資料' : '供貨資料已就緒' : stateWord(item)}</p>)}
     <div className="actions"><button type="button" className="btn btn-primary" onClick={() => onEnter(data.items.length === 1 && !data.next_cursor ? `#stores/${data.items[0].tenant_id}/${data.items[0].instance_id}${supply ? '/supply' : ''}` : listPath)}>{purpose === 'supply' ? '查看商品與供貨' : '進入我的商店'}</button>{supplySetup}</div>
   </>;
   if (data.next_cursor) return <div className="actions"><button type="button" className="btn btn-ghost" onClick={() => onEnter(listPath)}>{purpose === 'supply' ? '查看供貨資料' : '查看我的商店'}</button>{supplySetup}</div>;
-  return <><div className="actions"><button type="button" className="btn btn-primary" disabled={!canStart} onClick={onCreate}>{purpose === 'supply' ? '開始供貨設定' : '建立我的商店'}</button></div>
+  return <><div className="actions"><button type="button" className="btn btn-primary" onClick={beginSetup}>{purpose === 'supply' ? '開始供貨設定' : '建立我的商店'}</button></div>
+    {!canStart && <p className="field-hint">可在設定流程確認資格並接著完成，無須另找公會工具。</p>}
     {reasons.map((reason, index) => <p className="field-hint" key={index}>{reason}</p>)}
     <p className="field-hint">{supply ? '建立供貨商品庫，設定供貨價與條件後，再決定是否向同社群店主公開供貨版本。' : '交易尚未啟用，只提供店鋪與商品展示。'}</p></>;
 }
