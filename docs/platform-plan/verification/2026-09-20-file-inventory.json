@@ -2239,8 +2239,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminStoreAdmissions.tsx",
-      "bytes": 10125,
-      "sha256": "0b98a25f1ccd42a314960f0591fe70af9df2783a7995df3b9574f371ac7fb9a7"
+      "bytes": 10269,
+      "sha256": "24f84d600be901e7f9749be60898ecca0b101ab0dc3fd2a903c1f58681d2a89a"
     },
     {
       "path": "apps/portal-web/src/modules/AgentShops.css",
@@ -22654,8 +22654,8 @@
     },
     {
       "path": "tests/e2e/commerce-store-readiness.spec.ts",
-      "bytes": 13937,
-      "sha256": "342bdf3e54663d09baa1d5ba8b3213bb4157ff8277c8eb9c1034a2965e31d764"
+      "bytes": 14217,
+      "sha256": "7e81f64850a0090f25aaac6a414f65fd06744ff5422d747df74fd716fa5c7b5b"
     },
     {
       "path": "tests/e2e/community-ar.spec.ts",
