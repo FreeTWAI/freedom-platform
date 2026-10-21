@@ -218,6 +218,20 @@ showcase → 商機 → 提案 → 同意 → 交付／驗收 → 自填／對�
 私人／tenant Work、migration 與付款能力不變。Loopback HTTP、runtime 與部署
 證據分開，本節不宣稱已部署或 Foundation 整體完成。
 
+### 首頁合作摘要
+
+`GET /api/v1/engagements/summary` 只回 `{has_engagements, needs_response}` 兩個布林值。
+沿用完整會員 middleware 與 `readWithMemberSession`，同一原生交易／SQL snapshot
+只讀目前 community 與本人為雙方之一的合作，最後再以 DB 決策時鐘驗 session。
+回應為 `private, no-store`、`Vary: Cookie`；不使用 caller 傳入的 owner 或 community 選擇器，
+不回條款、金額、ID、交付／收款 evidence，也不為首頁下載完整合作清單。
+
+需要接續處理的情形是委託人待同意提案／接受交付、提供者待交付，或委託人待確認
+對方自填收款回報。這是本人目前可處理的步驟，不代表逾期、銀行入帳或已結算。
+前端每次進首頁讀取一次，可手動更新；一般導航不等待摘要，離頁／換登入世代取消讀取。
+不建立輪詢、瀏覽器持久副本或新通知／計分。`flows.test.ts` 驗原命令狀態、非當事人、
+匿名與撤銷拒絕，以及 SQL 等待期間到期後不回摘要。
+
 ### 新認領窗口與歷史 receipt（#626）
 
 依 [五個時鐘的 invite／claim 規則](../../docs/platform-plan/03-domain-events-state-machines.md#11-model-驗收不變量)，

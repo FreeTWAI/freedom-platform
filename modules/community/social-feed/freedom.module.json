@@ -20,6 +20,8 @@
     "apps/portal-web/src/PlatformPurpose.tsx",
     "apps/portal-web/src/SocialLayout.css",
     "apps/portal-web/src/modules/MemberHome.tsx",
+    "apps/portal-web/src/modules/HomeParticipation.tsx",
+    "docs/development/member-participation-plan.md",
     "apps/portal-web/src/modules/SocialCrossPlatformShare.tsx",
     "apps/portal-web/src/modules/SocialInteractions.tsx",
     "apps/portal-web/src/modules/SocialPostEditor.tsx",
@@ -50,6 +52,7 @@
   "public_exports": [],
   "dependencies": [
     "community",
+    "work",
     "asset-lifecycle",
     "skill-submissions",
     "asset-storage"
