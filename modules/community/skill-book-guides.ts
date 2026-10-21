@@ -7,6 +7,7 @@ export type SkillBookBeginner = {
 };
 export type SkillBookGuide = {
   author_name?:string;
+  credit_role?:'維護'|'策展';
   beginner:SkillBookBeginner;
   format:string; summary:string; audience:string[]; status:string; features:string[]; prerequisites:string[];
   first_steps:string[]; first_result:string; contribution:string; contribution_url:string; reading_url:string;

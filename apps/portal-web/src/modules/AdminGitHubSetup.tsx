@@ -1,24 +1,17 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useState} from 'react';
 
-type SetupStatus={configured:boolean;setup_available?:boolean;app_slug?:string;html_url?:string};
+export type SetupStatus={configured:boolean;setup_available?:boolean;app_slug?:string;html_url?:string};
 type Client={request<T>(path:string,body?:unknown):Promise<T>};
-export function AdminGitHubSetup({client}:{client:Client}){
+export function AdminGitHubSetup({client,completion}:{client:Client;completion?:Promise<SetupStatus>|null}){
   const [status,setStatus]=useState<SetupStatus|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  const [parameters]=useState(()=>window.location.pathname==='/admin/github/callback'?new URLSearchParams(window.location.search):null);
-  const complete=useRef<Promise<SetupStatus>|null>(null);
   useEffect(()=>{
     let active=true;
-    if(parameters){
-      if(!complete.current){
-        window.history.replaceState(null,'','/admin');
-        const code=parameters.get('code'),state=parameters.get('state');
-        complete.current=code&&state?client.request<SetupStatus>('/github-app/complete',{code,state}):Promise.reject(Error('GitHub App 建立未完成，請重新開始。'));
-      }
+    if(completion){
       setBusy(true);
-      void complete.current.then(result=>{if(active)setStatus({...result,setup_available:true});}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'GitHub App 設定未完成。');}).finally(()=>{if(active)setBusy(false);});
+      void completion.then(result=>{if(active)setStatus({...result,setup_available:true});}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'GitHub App 設定未完成。');}).finally(()=>{if(active)setBusy(false);});
     }else void client.request<SetupStatus>('/github-app').then(result=>{if(active)setStatus(result);}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'無法讀取 GitHub 設定。');});
     return()=>{active=false;};
-  },[client,parameters]);
+  },[client,completion]);
   async function begin(){
     if(busy)return;setBusy(true);setError('');
     try{

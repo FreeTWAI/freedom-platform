@@ -655,6 +655,94 @@ Idempotency-Key replays remain available without consuming another slot.
 Five per hour is a provisional value (#199); it is the named constant
 `eventCreateLimit` in `modules/community/events.ts`.
 
+## Event submission departure lifecycle (#790)
+
+The event editor protects departures while an event or its selected media is
+being saved, and while a submission's network outcome remains unknown. An
+unknown submission freezes its original body/version and retries the same
+Idempotency-Key; a confirmed replay does not create another event.
+
+Once the save is confirmed, the editor closes and releases its saving guard
+before the read-only event-list refresh completes. Members can immediately
+close a new untouched composer or navigate to “我的內容”, even if that refresh
+is still pending. The refresh does not discard a newer draft or release a
+newer submission's pending protection. Ordinary unsaved input still requires
+explicit discard; a failed media save retains its unsaved files for retry.
+
+Each refresh has an invocation and session-generation fence. Only the newest
+invocation may replace events, guilds or bulletins, report a load error, or end
+the loading indicator; unmounting also invalidates its pending reads. A delayed
+older success or rejection cannot erase a later confirmed event or replace the
+newest read's feedback. These read continuations never reset editor drafts.
+
+Before starting that background refresh, saving publishes the authoritative
+event returned by the command and any completed media upload into local items.
+Reopening an edit or cancelling from detail therefore uses the confirmed
+aggregate version without waiting for the list. Known media rejection publishes
+the latest confirmed event too, retaining the editable draft and only failed or
+not-yet-sent files; retrying does not re-upload confirmed successful media. Detail-only
+events use the same current-item fallback for their next update command.
+
+### 媒體未知結果對帳（#793）
+
+Banner／video 的傳輸中斷、成功回應 JSON 無法解析或必要 DTO 欄位不符，
+都屬於結果未知；已知 415 則可更正檔案。未知操作在目前工作階段記憶體保留
+原 File bytes、MIME、海報方向、Idempotency-Key、原 aggregate version 與
+登入世代。先等待 `GET /events/:id` 讀回，再以完整原命令重播查核伺服器 receipt；
+不插入 `/update`，也不因讀回版本提高或已有媒體 URL 就猜測該檔案已提交。
+媒體 URL 不帶來源 digest，所以讀回本身不足以識別原操作；原 key 的重播可能
+再次傳輸 bytes，但既有 receipt 保證不再新增一次媒體保存／版本／journal。
+若讀回比 receipt 新，保留讀回的較新事件；原命令確認後只處理尚未送出的媒體。
+
+對帳完成前，儲存、編輯、取消、移除媒體、新活動與離開保護都保持鎖定。
+讀回失敗仍保留原命令，可按「重試確認保存」重試讀回；不會退回一般 metadata
+儲存。全部命令確認後立刻關閉編輯器並允許離開，背景列表刷新不延長此鎖。
+保留的檔案與命令不寫入永久儲存，重新整理／關閉視窗仍只有 beforeunload 提醒，
+不宣稱具有跨程序恢復能力。
+
+本次新增 banner／video 各自已提交後 ACK 遺失、成功 ACK 格式錯誤的瀏覽器案例，
+會暫停對帳 GET，核對沒有第二次 metadata 更新或競爭操作，再驗原 key／bytes／
+版本重播與每種媒體各一次 durable journal；其中一例先讓讀回 503，再重試恢復。
+既有 415 案例保留。刷新案例使用獨立社群，分別覆蓋較舊成功晚到，以及較舊失敗
+不能結束較新載入或顯示錯誤。這些瀏覽器案例本輪未執行：現有 fixture 需要
+PostgreSQL，依本輪限制沒有啟動資料庫。以下本機 Chromium／PostgreSQL 結果是
+原作者先前證據，不能當成本次修改的瀏覽器通過紀錄。
+
+The existing event-member journey holds a real successful list response after
+an original-key retry and verifies immediate departure at 1440px and 390px,
+along with equal retry bodies/keys and one durable event. Additional controlled
+local Chromium/API/PostgreSQL smoke held real GET200 snapshots across two
+confirmed writes, delivered them newest-first, and retained the latest event
+and a newer draft at both widths. Desktop checks also retained loading across
+superseded success/error completions and preserved a newer real HTTP error.
+With refreshes held, immediate edits used versions 1 then 2 and cancellation
+used version 3 successfully. A completed banner plus an actual video-format
+415 retained the video/draft and retried from confirmed version 3 to version 5,
+without repeating the banner. Pending/unknown protection and original-tuple
+recovery remained intact. The unchanged focused event-member journey passed
+all seven cases after the final build and raw browser reload. This synthetic
+local evidence is not deployment, trusted CI or real-member acceptance; that
+earlier smoke did not add a permanent UI test.
+
+The follow-up regression runs the event journey before notification preferences
+on the same worker schema. Event creation intentionally retains organizer
+`event_submitted` notifications; the history-count case owns a fresh synthetic
+recipient instead of deleting shared notifications or widening exact unread
+assertions. A bounded attachment records the shared demo recipient's actual
+notification kinds/source keys. Both widths additionally exercise newest-first
+real list responses, a newer unsent draft, immediate confirmed-version edits,
+and retained video recovery after a real server format rejection, without
+re-uploading the successful banner. The initial expanded local run passed 11
+cases and failed both new refresh cases: their interceptor also captured the
+initial empty-list response, so snapshot indexes did not identify the two
+post-save reads. Waiting for initial-list readiness before interception fixed
+that test race. The corrected sequential event-then-notification run passed all
+13 cases on the same existing build and owned PostgreSQL schema. The exact
+history/reminder counts remain 2/1 before reading the essential notification;
+the filtered bell remains 1 when full history opens. Neither this local pass
+nor the test correction relabels the original hosted count-3-versus-1 failure
+as a passing run.
+
 ## Member event detail session boundary
 
 `GET /api/v1/events/:id` reads its existing authorized event DTO through
@@ -806,9 +894,10 @@ cancel a committed registration or recall a provider-accepted email.
 
 ## Event calendar, reminders and waitlists (#256)
 
-The candidate uses migration `153_event_participation.sql`. Apply it **before
-switching source, even with the feature off**: existing RSVP capacity and guest
-acknowledgement paths also use its columns. The new routes and UI require
+The candidate uses migrations `153_event_participation.sql` and
+`178_guest_invitation_credit.sql`. Apply both **before switching source, even
+with the feature off**: existing RSVP capacity and guest acknowledgement paths
+also use their columns. The new routes and UI require
 `FREEDOM_EVENT_PARTICIPATION_ENABLED=true` (default off); disabled routes return
 404 before authentication. Worker enablement requires a usable `EMAIL.send`
 binding. This is not deployment, sender authorization or trusted CI evidence.
@@ -883,6 +972,69 @@ than event start. Decline/expiry advances the queue. Capacity cannot fall below
 confirmed/live pending occupancy; excess newest unaccepted offers return to
 their original queue positions. Genuine transitions retain factual history,
 not invented participant actions or attendance.
+
+The original public guest registration endpoint also credits that same normalized
+Email's live invitation when creating or reviving its own RSVP (#767), matching
+the original member RSVP behavior. The public form remains an explicit request:
+only the existing provider-accepted flow confirms Going and marks the offer
+accepted. Another guest's offer, or an expired offer reassigned to the next
+candidate, cannot be consumed; failure does not send participation mail or
+allocate an extra seat.
+This consumed offer is finalized even if optional participation was switched off
+after it was issued, as on the original member RSVP path. The disabled mode
+still creates no new management capability and does not reconcile the queue;
+successful registration cannot later turn its consumed offer into an expiry.
+Admission persists the exact credited `invitation_id` on the RSVP alongside its
+separate, freshly generated `registration_attempt_id`. Confirmation and explicit
+provider retries retain that pair; an ordinary registration stores no credit.
+Neither email equality nor the finalizer's current offer deadline establishes
+credit. Reconciliation preserves only that exact invitation while its current
+attempt has a live ten-minute pending hold. A provider rejection rolls back
+confirmation, not the admission's durable identity. Renewing an expired/cancelled
+hold generates a new attempt even if the same offer remains live, fencing a late
+confirmation from the old attempt; replacement invitations cannot inherit credit.
+Participation OFF plus an expired, unswept offer can still admit an ordinary
+registration when capacity allows, but does not accept that historical offer;
+subsequent reconciliation records its expiry.
+Runtime regressions exercise these transitions over loopback HTTP and PostgreSQL
+with a synthetic sender. Expired-offer fixtures move both invitation timestamps
+into the past, preserving `invited_at < expires_at` so database constraints remain
+active while testing an unswept, genuinely expired offer.
+The nullable column is necessary because transient request state disappears on
+provider failure and email/hold correlation cannot prove actual invitation use.
+Existing rows are not backfilled by inference. Cutover must stop old writers and
+drain their ten-minute pending holds before installing the new writer; do not
+roll back to a writer that ignores exact credit. Schema178's release capability
+floor applies even with participation OFF. No deployment or flag change is implied.
+An expired hold grants no extension and allows the next candidate to advance.
+While the event is still published and not started, disabling its waitlist
+cancels unconsumed queue entries and offers, not a guest's admitted live hold.
+Invitation workers recheck that policy both when claiming and before handoff;
+retaining the hold must not dispatch a new offer while the waitlist is disabled.
+If policy alone blocks the final handoff, the worker returns only that exact
+current, still-live invitation claim from `unknown` to `pending`, before calling
+the sender. Re-enabling can then deliver it once, including after a rejected
+public-registration provider call left the admitted hold alive. Expired, closed,
+ineligible or replaced claims are not reset. A possibly-sent `unknown` remains
+fenced; a policy round trip is not permission to replay it.
+Capacity reductions retract the newest unconsumed invitations, skipping admitted
+holds already counted as seats instead of clearing their original invitation or
+subtracting that same occupied seat again. Started or cancelled events still
+cancel outstanding offers even when a pending hold exists.
+This does not extend the private invitation-acceptance deadline: a late
+`accept` still returns `409 invitation_unavailable`, even with a live hold.
+
+Local PostgreSQL 18 smoke exercised the production Worker `fetch` and `scheduled`
+handlers in Node 24 with native request pools, a timing-only claim/handoff barrier,
+real organizer policy PATCHes and synthetic `EMAIL.send`. Before this repair,
+public-provider rejection plus disable/re-enable stranded the live offer at
+`unknown` with zero invitation sends. Afterward it became `pending` while disabled,
+then `provider_accepted` on re-enable, with exactly one invitation send and no
+duplicate on the next sweep. The original invitation and one occupied seat stayed
+intact. An accepted send followed by a real database bookkeeping failure stayed
+`unknown` through disable/re-enable and another sweep, without replay. No disabled
+invitation sends or external mail occurred; both owned schemas were removed.
+This is local adapter/source evidence, not a deployed Worker or workerd result.
 
 A new acceptance checks PostgreSQL's current clock after reconciliation and
 eligibility reads, then again after the RSVP, queue/journal and success receipt

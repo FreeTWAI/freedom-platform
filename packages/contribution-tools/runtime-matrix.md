@@ -57,7 +57,70 @@ node scripts/runtime-aggregate.mjs --partition-count 8 --input-dir .freedom/repo
 
 Use indexes 0 through 7 on separate hosts. Upload each `runtime-partition-N.json` even on failure, then download the eight files into one flat input directory. A fragment has schema `freedom.runtime-partition/v1` and check ID `runtime.partition.N`; it cannot represent a full-suite pass. Both its outer and nested cleanup flags must be true for acceptance. Failed artifacts remain intact and are never overwritten by aggregation.
 
-The producer snapshots the actual Git HEAD and full selected source manifest before execution and again after cleanup, rejecting tracked-tree changes. The manifest contains sorted `{path,source_sha256}` entries for all current full-suite files, including the closed baseline; deterministic partition membership uses the reviewed static scheduling weights in `partitionRuntimeFiles`, assigning estimated longest files first to the least-loaded partition with index tie-breaking. The current weights are per-file minimum serial durations from the file-progress segments of hosted runs 38968059268 and 38960147348 (October 16, the commerce candidates) and 38003118152 (October 9). No run passed: 38968059268 timed out partition 1 and failed partition 5's database cleanup, 38960147348 timed out partition 3 and 38003118152 timed out partitions 1 and 4. Timing observations never turn those results into passes. The parser rejects an incomplete final segment unless the log is named with `--partial-log`; a timed-out segment then contributes only its completed files, never the file in flight, and its counters must still match. Those historical reporters clamped `elapsed_ms` at 1,200,000, below their 1,500-second budget; saturated files have no measured duration. The current strict/partial admission rules below supersede the historical omission behavior. Run 38000643429 is no longer an input: its hosts were about 30% faster than run 38960147348 in aggregate, against 21% for run 38003118152, and a minimum across all three understated the files measured only on October 16.
+## 權重更新，2026-10-21
+
+本次以 run 39674589957（batch #963，`05eee5b2`，attempt 1）及
+39673038442（main `2d8056de`）的 16 份 job logs 重算；各有七個完整
+segment 以 `--log` 輸入，batch partition 1 與 main partition 3 逾時，
+以 `--partial-log` 僅納入已完成檔案。兩次 run 都沒有通過；量測不是通過證據。
+目前 467 個 runtime files 全部在兩次 run 的已完成檔案聯集中有量測，
+無刪除或未量測檔案；per-file minima 合計 9,500.848 秒，整秒權重合計 9,744。
+輸出保留工具產生的 `Partial scheduling estimates` 前綴及 fixture 的 partial 標記，
+因為跨 run 聯集不能取代單次完整、source-bound 的 hosted 證據。
+
+October 16 原始 logs 不在本機，無法重放或重新比較當時主機；因此不保留為本輪輸入，
+也不宣稱已量得它們與今天主機的速度差。沿用下方歷史上排除較快主機的理由，
+避免把舊 host／舊檔案的較低耗時混入目前 minima；今天兩次 run 量測目前檔案與主機。
+舊 fixtures 原樣保留，來源仍可追溯。
+
+對目前 467 檔案使用真正的 `partitionRuntimeFiles(files, 8)`，以本次 fixture
+逐分區加總量測 ms：舊權重為 939.118–1,518.582 秒，新權重為
+1,183.704–1,192.938 秒，最大值低於約 1,430 秒，亦低於扣除最多 20 秒
+provisioning 與 64 秒 cleanup reserve 後的 1,416 秒。這只是排程估算，
+不是主機速度保證；batch 必須在新 candidate 上重跑整個 CI matrix 才能證明通過。
+新 fixture 測試沿用 October 16 的完整聯集、唯一性、排序、spread 與新增未量測檔案
+檢查，八分區上界為 1,210 秒，新增 15 秒檔案的上界為 1,220 秒。
+依 orchestrator 決策，三組歷史上界重新對齊原先說明的窗口，並非依新實算值選上界：
+
+- run 37567098443 四分區由 770 → 870 秒，加檔由 780 → 870 秒；低於 870 秒的
+  cushion 是依早期權重校準，900 秒分區約留 870 秒測試的歷史窗口不變。
+- October 9 六分區由 760 → 870 秒，加檔由 770 → 870 秒，對齊原訊息所指
+  900 秒窗口；四分區由 1,150 → 1,200 秒，對齊原訊息所指 legacy matrix budget。
+- October 16 六／八分區分別由 1,040／780 → 1,210 秒，沿用 October 21 fixture
+  的窗口；加檔仍保留 `bound + 10_000`（由 1,050／790 → 1,220 秒）。舊 1.33×／1.8×
+  餘裕推論針對當時 runs 推導的權重；目前權重已不來自 October 16，因此比照 October 16
+  更新時對 October 9 的處理，只移除這組 `< 10_000` spread assertion。
+
+歷史 fixture 內容及其餘 assertions 全部保留；October 21 的 spread 檢查不變。
+
+從 repo root 重現（原始 logs 另存於 job dir）：
+
+```sh
+node scripts/ci/derive-runtime-weights.mjs --root . \
+  --note "Progress segments of runs 39674589957 (2026-10-21, batch #963 at 05eee5b2; p1 timed out) and 39673038442 (2026-10-21, main 2d8056de; p3 timed out); timed-out partitions add completed files only. No run passed." \
+  --output packages/contribution-tools/runtime-file-weights.mjs \
+  --costs-output packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261021.json \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p0-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p2-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p3-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p4-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p5-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p6-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p7-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p0-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p1-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p2-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p4-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p5-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p6-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p7-success.log \
+  --partial-log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p1-failure.log \
+  --partial-log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p3-failure.log
+```
+
+## 歷史權重推導，2026-10-16
+
+The producer snapshots the actual Git HEAD and full selected source manifest before execution and again after cleanup, rejecting tracked-tree changes. The manifest contains sorted `{path,source_sha256}` entries for all current full-suite files, including the closed baseline; deterministic partition membership uses the reviewed static scheduling weights in `partitionRuntimeFiles`, assigning estimated longest files first to the least-loaded partition with index tie-breaking. The October 16 weights were per-file minimum serial durations from the file-progress segments of hosted runs 38968059268 and 38960147348 (October 16, the commerce candidates) and 38003118152 (October 9). No run passed: 38968059268 timed out partition 1 and failed partition 5's database cleanup, 38960147348 timed out partition 3 and 38003118152 timed out partitions 1 and 4. Timing observations never turn those results into passes. The parser rejects an incomplete final segment unless the log is named with `--partial-log`; a timed-out segment then contributes only its completed files, never the file in flight, and its counters must still match. Those historical reporters clamped `elapsed_ms` at 1,200,000, below their 1,500-second budget; saturated files have no measured duration. The current strict/partial admission rules below supersede the historical omission behavior. Run 38000643429 is no longer an input: its hosts were about 30% faster than run 38960147348 in aggregate, against 21% for run 38003118152, and a minimum across all three understated the files measured only on October 16.
 
 The October 9 weights covered 320 files. On the October 16 candidate, 411 files were selected and the unmeasured ones kept the 10-second default, including 40 new commerce runtime files; the 39 that completed took about 1,370 seconds together. Partition 3 reached its 1,500-second deadline with 49/69 files completed. The other five passed: partitions 2 and 5 finished their files in about 900 and 970 seconds, partitions 0, 1 and 4 in 1,380–1,525. That first regenerated fixture covered 395 measured files; the other 16 candidate files kept the 10-second default. Their estimated six loads are 1,085–1,090 seconds of per-file minima. Run 38960147348's own durations, with October 9 durations scaled by 1.35 for the 20 files it never completed, give 1,244–1,342 seconds per partition under the new allocation. That assumes `commerce-provider-accounts.test.ts` takes about 40 seconds after its secret scan became one statement per scan; its weight still records the 215 seconds of the measured run. Estimates require a fresh coherent hosted run; they are neither throughput guarantees nor acceptance evidence. No runner, case, file, cleanup, partition deadline or aggregate-window requirement changed.
 
@@ -71,7 +134,7 @@ node scripts/ci/derive-runtime-weights.mjs --root . \
   --log <complete unsaturated partition log> ... --partial-log <explicit historical incomplete or saturated log> ...
 ```
 
-The October 9 command, with the ten complete logs of runs 38000643429 and 38003118152, still reproduces `runtime-hosted-costs-disk-20261009.json` exactly. Historical October 7 and October 9 cost fixtures remain unchanged. Their hotspot, maximum and four-partition bounds still pass with the new weights; the October 9 fixture no longer asserts a 15-second spread, because the weights no longer come from it. The October 16 fixture test checks six and eight partitions against the 1,500-second host budget. At about 1,630 seconds of minima per partition, the full suite no longer fits four 1,200-second partitions, so no four-partition bound is asserted for it. This does not claim that a local four-process full run has acquired the legacy matrix budget.
+The October 9 command, with the ten complete logs of runs 38000643429 and 38003118152, still reproduces `runtime-hosted-costs-disk-20261009.json` exactly. Historical October 7 and October 9 cost fixtures remain unchanged. At the October 16 refresh, their hotspot, maximum and four-partition bounds passed with those weights; the October 9 fixture no longer asserts a 15-second spread, because the weights no longer come from it. The October 16 fixture test checks six and eight partitions against the 1,500-second host budget. At about 1,630 seconds of minima per partition, the full suite no longer fits four 1,200-second partitions, so no four-partition bound is asserted for it. This does not claim that a local four-process full run has acquired the legacy matrix budget.
 
 Each process retains the original sorted file order. Unknown files receive the same default weight and remain mandatory; file counts need not be equal. Producer, aggregate and local full runner import the same candidate implementation, not a separately installed timing registry. New selections change the manifest and must be rerun together. Untracked build output does not imply a tracked source change.
 

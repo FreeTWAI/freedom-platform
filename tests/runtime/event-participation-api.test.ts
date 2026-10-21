@@ -2,15 +2,17 @@ import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {scheduler} from 'node:timers/promises';
+import {once} from 'node:events';
+import {serve} from '@hono/node-server';
 import {Pool} from 'pg';
 import type {Hono} from 'hono';
 import {z} from 'zod';
 import {authenticate,type Actor} from '../../modules/identity-membership/service.js';
 import {Problem} from '../../packages/shared/problem.js';
-import {readEventParticipation} from '../../modules/community/event-waitlist.js';
+import {readEventParticipation,reconcileEventWaitlist,countEventSeats} from '../../modules/community/event-waitlist.js';
 import {readEventReminder} from '../../modules/community/event-reminders.js';
 import {readMemberEventCalendar,readGuestEventCalendar} from '../../modules/community/event-calendar.js';
-import {createPool} from '../../packages/db/index.js';
+import {createPool,transaction} from '../../packages/db/index.js';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
@@ -334,3 +336,158 @@ for(const [name,read] of memberReads){
     }
   });
 }
+
+interface GuestHttp {
+  configure(enabled:boolean,database?:Pool):void;
+  request(route:string,options?:{body?:unknown;token?:string;headers?:Record<string,string>}):Promise<{status:number;headers:Headers;data:z.infer<typeof responseBody>}>;
+  close():Promise<void>;
+}
+async function guestHttp(send:(to:string,subject:string,body:string)=>Promise<void>):Promise<GuestHttp>{
+  let application=app;
+  const server=serve({fetch:request=>application.fetch(request),hostname:'127.0.0.1',port:0});
+  if(!server.listening)await once(server,'listening');
+  const address=server.address();assert.ok(address&&typeof address!=='string');
+  const httpOrigin=`http://127.0.0.1:${address.port}`;
+  const configure=(enabled:boolean,database:Pool=pool)=>{application=createApp(database,httpOrigin,'local',{eventParticipationEnabled:enabled,eventEmailSender:send});};
+  configure(true);
+  return {
+    configure,
+    async request(route:string,options:{body?:unknown;token?:string;headers?:Record<string,string>}={}){
+      const headers:Record<string,string>={Origin:httpOrigin,...options.headers};
+      if(options.body!==undefined)headers['Content-Type']='application/json';
+      if(options.token)headers['X-Event-Participation-Token']=options.token;
+      const response=await fetch(httpOrigin+route,{method:options.body===undefined?'GET':'POST',headers,body:options.body===undefined?undefined:JSON.stringify(options.body)});
+      return {status:response.status,headers:response.headers,data:responseBody.parse(await response.json())};
+    },
+    close:()=>new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());if('closeAllConnections' in server)server.closeAllConnections();}),
+  };
+}
+async function httpInvitation(http:GuestHttp,email:string){
+  const requested=await http.request(path(eventId,'participation-request'),{body:{name:'合成 TCP 候補訪客',email}});
+  assert.equal(requested.status,200);clean(requested.data,[email]);
+  const message=mail.filter(item=>item.to===email).at(-1);assert.ok(message);
+  const match=message.body.match(/#participation=([A-Za-z0-9_-]{43})(?:\s|$)/);assert.ok(match);
+  const token=match[1],current=await http.request(path(),{token});assert.equal(current.status,200);
+  const joined=await http.request(path(),{token,body:{action:'join',expected_version:current.data.event_version},
+    headers:{'If-Match':`"${current.data.event_version}"`,'Idempotency-Key':randomUUID()}});
+  assert.equal(joined.status,200);
+  return token;
+}
+async function assertHttpParticipationOff(http:GuestHttp,token:string){
+  for(const suffix of ['participation','calendar','reminder']){
+    const denied=await http.request(path(eventId,suffix),{token});
+    assert.equal(denied.status,404);assert.equal(denied.data.code,'not_found');
+    assert.match(denied.headers.get('Cache-Control')??'',/no-store/);
+    assert.match(denied.headers.get('X-Robots-Tag')??'',/noindex/);
+    clean(denied.data,[token,privateLocation,privateOnline]);
+  }
+}
+
+for(const rejectFirst of [false,true])test(`TCP feature-OFF ordinary registration never credits an unswept expired invitation (provider retry=${rejectFirst})`,async()=>{
+  let registration=false,sends=0;
+  const http=await guestHttp(async(to,_subject,body)=>{
+    mail.push({to,body});
+    if(registration&&++sends===1&&rejectFirst)throw new Error('synthetic provider rejection');
+  });
+  try{
+    await pool.query('UPDATE community_events SET capacity=1,waitlist_enabled=true,response_window_minutes=30 WHERE event_id=$1',[eventId]);
+    const email='tcp-expired@local.test',token=await httpInvitation(http,email);
+    const original=(await pool.query('SELECT invitation_id FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0].invitation_id;
+    assert.ok(original);
+    await pool.query("UPDATE community_event_waitlist SET invited_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE event_id=$1 AND guest_email=$2",[eventId,email]);
+    http.configure(false);registration=true;
+    await assertHttpParticipationOff(http,token);
+    const body={name:'合成一般報名',email:email.toUpperCase()};
+    let pendingAttempt:string|undefined;
+    if(rejectFirst){
+      const rejected=await http.request(path(eventId,'register'),{body});
+      assert.equal(rejected.status,503);assert.equal(rejected.data.code,'event_email_delivery_failed');
+      const pending=(await pool.query('SELECT state,registration_attempt_id,credited_invitation_id,email_sent_at FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,email])).rows[0];
+      assert.equal(pending.state,'pending');assert.equal(pending.credited_invitation_id,null);assert.equal(pending.email_sent_at,null);
+      pendingAttempt=pending.registration_attempt_id;
+      assert.equal((await pool.query('SELECT status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0].status,'invited');
+    }
+    const accepted=await http.request(path(eventId,'register'),{body});
+    assert.equal(accepted.status,200);assert.deepEqual(accepted.data,{registered:true,provider_status:'provider_accepted'});
+    const rows=(await pool.query('SELECT state,registration_attempt_id,credited_invitation_id,email_sent_at FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,email])).rows;
+    assert.equal(rows.length,1);assert.equal(rows[0].state,'going');assert.equal(rows[0].credited_invitation_id,null);assert.ok(rows[0].email_sent_at);
+    if(pendingAttempt)assert.equal(rows[0].registration_attempt_id,pendingAttempt);
+    assert.equal(sends,rejectFirst?2:1);
+    assert.equal((await pool.query('SELECT status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0].status,'invited');
+    await transaction(pool,q=>reconcileEventWaitlist(q,eventId));
+    const offer=(await pool.query('SELECT status,invitation_id FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0];
+    assert.equal(offer.status,'expired');assert.equal(offer.invitation_id,original);assert.equal(await countEventSeats(pool,eventId),1);
+    const publicRead=await http.request(`/api/v1/public/events/${eventId}`);assert.equal(publicRead.status,200);assert.equal(publicRead.data.attending_count,1);
+    for(const message of mail.slice(-sends))assert.doesNotMatch(message.body,/#participation=|私人參與管理/);
+    await assertHttpParticipationOff(http,token);
+  }finally{await http.close();}
+});
+
+for(const participationEnabled of [false,true])for(const change of ['deadline','policy','both'] as const)test(`TCP retry retains exact admitted invitation across ${change} gap (participation=${participationEnabled})`,async()=>{
+  let registration=false,sends=0;
+  const http=await guestHttp(async(to,_subject,body)=>{
+    mail.push({to,body});
+    if(registration&&++sends===1)throw new Error('synthetic provider rejection');
+  });
+  try{
+    await pool.query('UPDATE community_events SET capacity=1,waitlist_enabled=true,response_window_minutes=30 WHERE event_id=$1',[eventId]);
+    const email='tcp-live@local.test',nextEmail='tcp-next@local.test',token=await httpInvitation(http,email);
+    await httpInvitation(http,nextEmail);
+    const original=(await pool.query('SELECT invitation_id,status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0];
+    assert.equal(original.status,'invited');assert.ok(original.invitation_id);
+    assert.equal((await pool.query('SELECT status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,nextEmail])).rows[0].status,'queued');
+    let gaps=0,admittedAttempt:string|undefined;
+    // Delay only the committed admission boundary, not rate-limit transactions or SQL results.
+    const gapPool=new Proxy(pool,{get(target,key){
+      if(key!=='connect'){const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}
+      return async()=>{
+        const client=await target.connect();let admission=false;
+        return new Proxy(client,{get(q,property){
+          if(property!=='query'){const value=Reflect.get(q,property,q);return typeof value==='function'?value.bind(q):value;}
+          return async(sql:string,values?:unknown[])=>{
+            const result=await q.query(sql,values);
+            if(sql.includes('INSERT INTO community_event_guest_rsvps')&&sql.includes('credited_invitation_id'))admission=true;
+            if(sql==='COMMIT'&&admission&&gaps===0){
+              gaps++;
+              const admitted=(await pool.query('SELECT state,registration_attempt_id,credited_invitation_id FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,email])).rows[0];
+              assert.equal(admitted.state,'pending');assert.equal(admitted.credited_invitation_id,original.invitation_id);admittedAttempt=admitted.registration_attempt_id;
+              if(change!=='policy')await pool.query("UPDATE community_event_waitlist SET invited_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE event_id=$1 AND guest_email=$2",[eventId,email]);
+              if(change!=='deadline')await pool.query('UPDATE community_events SET waitlist_enabled=false,response_window_minutes=NULL WHERE event_id=$1',[eventId]);
+              await transaction(pool,q=>reconcileEventWaitlist(q,eventId));
+              assert.equal((await pool.query('SELECT status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0].status,'invited');
+              assert.equal(await countEventSeats(pool,eventId),1);
+            }
+            return result;
+          };
+        }});
+      };
+    }});
+    http.configure(participationEnabled,gapPool);registration=true;
+    const body={name:'合成已獲邀 TCP 訪客',email:email.toUpperCase()};
+    const rejected=await http.request(path(eventId,'register'),{body});
+    assert.equal(rejected.status,503);assert.equal(rejected.data.code,'event_email_delivery_failed');assert.equal(gaps,1);
+    const pending=(await pool.query('SELECT state,registration_attempt_id,credited_invitation_id,email_sent_at FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,email])).rows[0];
+    assert.equal(pending.state,'pending');assert.equal(pending.registration_attempt_id,admittedAttempt);assert.equal(pending.credited_invitation_id,original.invitation_id);assert.equal(pending.email_sent_at,null);
+    await transaction(pool,q=>reconcileEventWaitlist(q,eventId));
+    const held=(await pool.query('SELECT status,invitation_id FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0];
+    assert.equal(held.status,'invited');assert.equal(held.invitation_id,original.invitation_id);
+    const accepted=await http.request(path(eventId,'register'),{body});
+    assert.equal(accepted.status,200);assert.deepEqual(accepted.data,{registered:true,provider_status:'provider_accepted'});assert.equal(sends,2);
+    await transaction(pool,q=>reconcileEventWaitlist(q,eventId));
+    const rows=(await pool.query('SELECT state,registration_attempt_id,credited_invitation_id,email_sent_at FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,email])).rows;
+    assert.equal(rows.length,1);assert.equal(rows[0].state,'going');assert.ok(rows[0].email_sent_at);
+    assert.equal(rows[0].registration_attempt_id,admittedAttempt);assert.equal(rows[0].credited_invitation_id,original.invitation_id);
+    const final=(await pool.query('SELECT status,invitation_id FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,email])).rows[0];
+    assert.equal(final.status,'accepted');assert.equal(final.invitation_id,original.invitation_id);
+    assert.equal((await pool.query('SELECT status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,nextEmail])).rows[0].status,change==='deadline'?'queued':'cancelled');
+    assert.equal(await countEventSeats(pool,eventId),1);
+    const publicRead=await http.request(`/api/v1/public/events/${eventId}`);assert.equal(publicRead.status,200);assert.equal(publicRead.data.attending_count,1);
+    if(participationEnabled){
+      const own=await http.request(path(),{token});assert.equal(own.status,200);assert.equal(own.data.rsvp_state,'going');
+      assert.equal(z.object({status:z.string()}).parse(own.data.waitlist).status,'accepted');
+    }else{
+      await assertHttpParticipationOff(http,token);
+      for(const message of mail.slice(-2))assert.doesNotMatch(message.body,/#participation=|私人參與管理/);
+    }
+  }finally{await http.close();}
+});

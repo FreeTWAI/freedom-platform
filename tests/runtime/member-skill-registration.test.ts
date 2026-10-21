@@ -45,7 +45,7 @@ test('community works credit their stated authors and use the actual upstream br
     for(const guild of source.guilds)assert.ok(skillBooksForGuild(guild).some(value=>value.id===id));
     const branch=['aiwff-runtime','line-persona','autovtuber'].includes(id)?'master':'main';
     assert.ok(skillAgentMarkdown(id)?.includes('預設 PR 目標：'+source.repo+':'+branch));
-    assert.ok(skillMarkdown(id)?.includes('作者：'+source.author));
+    assert.ok(skillMarkdown(id)?.includes((book.guide?.credit_role??'作者')+'：'+source.author));
   }
   const status=(id:string)=>communityCatalog.skill_books.find(book=>book.id===id)!.guide!.status;
   assert.match(status('bidding-radar-concept'),/沒有可安裝程式/);
@@ -191,4 +191,17 @@ test('a book moved to 社群技能書 leaves the unlocked shelf without deleting
   // An administrator-approved binding designates the book again for this community only.
   await pool.query('INSERT INTO guild_skill_book_bindings(community_id,guild_key,book_id) VALUES($1,$2,$3)',[community,'guild_ai_vibe','ai-avatar-bot']);
   assert.deepEqual(await shelf(),['ai-avatar-bot','aiwff-runtime','project-template']);
+});
+
+test('migration 179 publishes twelve member-shared books without changing publication times or any grants on replay',async()=>{
+  const ids=["ga4-lp-analytics", "gemini-voice-lab", "hdsljp-api", "hrflow", "human-mode", "keynote-pptx-doctor", "photo-border-remover", "sns-feedback-collect", "story-bible", "ultracode-token-optimization", "usage", "webchat-mcp"];
+  assert.deepEqual((await pool.query('SELECT book_id FROM skill_publications WHERE book_id=ANY($1::text[]) ORDER BY book_id',[ids])).rows.map(row=>row.book_id),ids);
+  const snapshot=(await pool.query('SELECT * FROM skill_publications ORDER BY book_id')).rows;
+  const memberGrants=(await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,book_id')).rows;
+  const developmentGrants=(await pool.query('SELECT * FROM development_grants ORDER BY grant_id')).rows;
+  const sql=await readFile(new URL('../../migrations/179_member_shared_skill_books.sql',import.meta.url),'utf8');
+  await pool.query(sql);await pool.query(sql);
+  assert.deepEqual((await pool.query('SELECT * FROM skill_publications ORDER BY book_id')).rows,snapshot);
+  assert.deepEqual((await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,book_id')).rows,memberGrants);
+  assert.deepEqual((await pool.query('SELECT * FROM development_grants ORDER BY grant_id')).rows,developmentGrants);
 });
