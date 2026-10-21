@@ -90,9 +90,13 @@ test('VARIANTS-02 reservation titles stay v1; real per-item holds leave the othe
  const current=(await page()).items.find(g=>g.group_key==='P0001')!;
  const extra=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'舊版刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},current.version),201);
  const removed=extra.current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='舊版刪除的規格').product;
+ const removable=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'重新啟用後刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[1].key,axes[1].values[0].key]},extra.completed_version),201).current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='重新啟用後刪除的規格').product;
  f.ok(await call('POST','/products/'+removed.product_id+'/remove',{},removed.version,undefined,f.app));
  assert.equal((await f.h.pool.query(`UPDATE commerce_product_groups SET last_changed_at_product_version=storefront_gallery_product_version(tenant_id,instance_id,anchor_product_id) WHERE tenant_id=$1 AND instance_id=$2 AND catalog_anchor_sku='P0001'`,[s.tenantId,s.instanceId])).rowCount,1);
  assert.equal((await page()).items.some(g=>g.members.some(m=>m.product.product_id===removed.product_id)),false);
+ f.ok(await call('POST','/products/'+removable.product_id+'/remove',{},removable.version));
+ assert.equal((await f.h.pool.query('SELECT catalog_group_id FROM commerce_product_group_members WHERE tenant_id=$1 AND product_id=$2',[s.tenantId,removed.product_id])).rows[0].catalog_group_id,null,'removal detaches stale OFF-period tuples');
+ assert.equal((await page()).items.find(g=>g.group_key==='P0001')!.members.length,2);
 });
 test('VARIANTS-03 detached former anchors keep distinct singleton identity, rejoin, and survive anchor deletion',async()=>{
  const a=f.ok(await call('POST','/products',{title:'原始起點',price_minor:100,stock:2}),201),b=f.ok(await call('POST','/products',{title:'剩餘規格',price_minor:200,stock:2}),201);
