@@ -1,0 +1,565 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freetwai.com/contracts/guild-launchpad/v1/storefront-categories",
+  "description": "Frozen store categories and private profile-versioned category commands. No transaction or deployment authority.",
+  "$defs": {
+    "CategoryName": {
+      "type": "string",
+      "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])",
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "CategoryDraft": {
+      "type": "object",
+      "properties": {
+        "category_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "group_keys": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+          }
+        },
+        "inactive_group_keys": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+          }
+        }
+      },
+      "required": [
+        "category_id",
+        "name",
+        "order",
+        "version",
+        "group_keys",
+        "inactive_group_keys"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "CategoryPage": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-categories/v1"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "items": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category_id": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30
+              },
+              "version": {
+                "type": "string",
+                "maxLength": 19,
+                "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+              },
+              "group_keys": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                }
+              },
+              "inactive_group_keys": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                }
+              }
+            },
+            "required": [
+              "category_id",
+              "name",
+              "order",
+              "version",
+              "group_keys",
+              "inactive_group_keys"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "catalog": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "group_key": {
+                "type": "string",
+                "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "skus": {
+                "minItems": 1,
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 24,
+                  "pattern": "^P[0-9]{4,}$(?![\\s\\S])"
+                }
+              }
+            },
+            "required": [
+              "group_key",
+              "title",
+              "skus"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "profile",
+        "version",
+        "items",
+        "catalog"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "CreateCategoryInput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "RenameCategoryInput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "ReorderCategoriesInput": {
+      "type": "object",
+      "properties": {
+        "category_ids": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 36,
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        }
+      },
+      "required": [
+        "category_ids"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "SetCategoryGroupsInput": {
+      "type": "object",
+      "properties": {
+        "group_keys": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+          }
+        }
+      },
+      "required": [
+        "group_keys"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "RemoveCategoryInput": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "CategoryCommandAck": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-categories/v1"
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "create",
+            "rename",
+            "reorder",
+            "groups",
+            "remove"
+          ]
+        },
+        "category_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "current": {
+          "type": "object",
+          "properties": {
+            "profile": {
+              "type": "string",
+              "const": "freedom.hosted-store-categories/v1"
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 19,
+              "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "items": {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "category_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+                  },
+                  "order": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30
+                  },
+                  "version": {
+                    "type": "string",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                  },
+                  "group_keys": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                    }
+                  },
+                  "inactive_group_keys": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                    }
+                  }
+                },
+                "required": [
+                  "category_id",
+                  "name",
+                  "order",
+                  "version",
+                  "group_keys",
+                  "inactive_group_keys"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "catalog": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "group_key": {
+                    "type": "string",
+                    "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "skus": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 24,
+                      "pattern": "^P[0-9]{4,}$(?![\\s\\S])"
+                    }
+                  }
+                },
+                "required": [
+                  "group_key",
+                  "title",
+                  "skus"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "profile",
+            "version",
+            "items",
+            "catalog"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "profile",
+        "operation",
+        "category_id",
+        "completed_version",
+        "changed",
+        "current"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "PublicationCategoriesDocument": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-categories/v1"
+        },
+        "categories": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category_id": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30
+              },
+              "groups": {
+                "minItems": 1,
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "group_key": {
+                      "type": "string",
+                      "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                    },
+                    "order": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 199
+                    },
+                    "skus": {
+                      "minItems": 1,
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 24,
+                        "pattern": "^P[0-9]{4,}$(?![\\s\\S])"
+                      }
+                    }
+                  },
+                  "required": [
+                    "group_key",
+                    "order",
+                    "skus"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "category_id",
+              "name",
+              "order",
+              "groups"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "profile",
+        "categories"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "RenderCategories": {
+      "maxItems": 30,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "minLength": 36,
+            "maxLength": 36,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,40}$(?![\\s\\S])"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "groups": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group_key": {
+                  "type": "string",
+                  "pattern": "^P[0-9]{4,23}(?:~single)?$(?![\\s\\S])"
+                },
+                "order": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 199
+                },
+                "skus": {
+                  "minItems": 1,
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 24,
+                    "pattern": "^P[0-9]{4,}$(?![\\s\\S])"
+                  }
+                }
+              },
+              "required": [
+                "group_key",
+                "order",
+                "skus"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "category_id",
+          "name",
+          "order",
+          "groups"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    },
+    "CategoryErrorCode": {
+      "type": "string",
+      "enum": [
+        "category_name_invalid",
+        "category_name_taken",
+        "category_limit",
+        "category_order_invalid",
+        "category_groups_invalid",
+        "category_groups_changed",
+        "storefront_categories_invalid"
+      ],
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
+    }
+  }
+}

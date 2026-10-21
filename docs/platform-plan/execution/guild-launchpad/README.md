@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=180 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=181 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 本機候選另外包含店面外觀的 migration175（堆疊於173／174）、賣方資訊與政策的 migration176（堆疊於175）與商品圖組的 migration177（堆疊於176），所有新旗標預設 OFF；
 這只是 repository 上限，不代表 staging／production 已套用175–177，或已啟用店面外觀、賣方資訊與政策頁、商品圖組。
@@ -199,3 +199,8 @@ M0 是本次規格/追蹤草案（#153 已合併）。M1 全公會可用公版�
 - 2026-10-05 撰寫時，最新部署/治理敘述引用既有 [foundation handoff](../unified-foundation/handoff-2026-10-04.md)，不是本輪 live 查驗；之後的部署狀態見[目前狀態](#目前狀態)。該 ledger 的 168 項要求及[原平台驗收](../acceptance-matrix.md)完整保留，不能被這 60 項取代
 
 [文件驗證紀錄](verification.md)區分本次靜態檢查與未来產品案例；執行 `python3 docs/platform-plan/execution/guild-launchpad/validate-spec-pack.py` 只驗追蹤、文件結構，以及[目前狀態](#目前狀態)的 `glp-status` 行是否與現況快照一致，絕不將 T-ID 改為通過。這是手動指令；CI 只透過 contracts pytest 的 `docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py` 執行其中的 `glp-status` 檢查。
+
+Categories local candidate (2026-10-21): migration181_storefront_categories.sql,
+independent default-OFF FREEDOM_STORE_CATEGORIES_ENABLED (launchpad required).
+Status was regenerated with validate-spec-pack.py --write-status; repo_max_migration
+is the source candidate frontier, not evidence of deployment or live schema.

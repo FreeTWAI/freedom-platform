@@ -1,3 +1,4 @@
+import * as categories from '../../contracts/guild-launchpad/v1/storefront-categories.js';
 import * as variants from '../../contracts/guild-launchpad/v1/storefront-variants.js';
 import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
@@ -117,6 +118,20 @@ const tenantWorkDocuments: ReadonlyArray<readonly [string, z.ZodType, 'input' | 
 ];
 
 const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [string, z.ZodType, 'input' | 'output', readonly string[]]>]> = [
+  ['storefront-categories', 'Frozen store categories and private profile-versioned category commands. No transaction or deployment authority.', [
+    ['CategoryName', categories.CategoryNameSchema, 'output', []],
+    ['CategoryDraft', categories.CategoryDraftSchema, 'output', []],
+    ['CategoryPage', categories.CategoryPageSchema, 'output', []],
+    ['CreateCategoryInput', categories.CreateCategoryInputSchema, 'input', []],
+    ['RenameCategoryInput', categories.RenameCategoryInputSchema, 'input', []],
+    ['ReorderCategoriesInput', categories.ReorderCategoriesInputSchema, 'input', []],
+    ['SetCategoryGroupsInput', categories.SetCategoryGroupsInputSchema, 'input', []],
+    ['RemoveCategoryInput', categories.RemoveCategoryInputSchema, 'input', []],
+    ['CategoryCommandAck', categories.CategoryCommandAckSchema, 'output', []],
+    ['PublicationCategoriesDocument', categories.PublicationCategoriesDocumentSchema, 'output', []],
+    ['RenderCategories', categories.RenderCategoriesSchema, 'output', []],
+    ['CategoryErrorCode', categories.CategoryErrorCodeSchema, 'output', []],
+  ]],
   ['hosted-checkout', 'Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.', [
     ['buyer-identity-header', checkout.CheckoutBuyerIdentitySchema, 'input', ['equality_precondition_not_authority']],
     ['shipping-method-ref', checkout.ShippingMethodRefSchema, 'output', []],
