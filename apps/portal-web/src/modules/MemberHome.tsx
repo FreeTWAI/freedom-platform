@@ -44,14 +44,17 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const lastRefresh = useRef(0);
+  const refreshInFlight = useRef(false);
 
   const load = useCallback((withLabels: boolean) => {
     const current = ++request.current;
     lastRefresh.current = Date.now();
+    refreshInFlight.current = true;
     setLoading(true);
     void client.get<MemberCardData>(`/members/${session.user.user_id}`).then(data => {
       if (current !== request.current) return;
       const retrying = alertRef.current?.contains(document.activeElement);
+      refreshInFlight.current = false;
       setMember(data); setLoadError(null); setLoading(false);
       if (retrying) requestAnimationFrame(() => {
         // Retry recovery must reveal both the member card and its optional outer guide.
@@ -64,6 +67,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       });
     }).catch((error: unknown) => {
       if (current !== request.current) return;
+      refreshInFlight.current = false;
       setLoadError(`名片暫時無法載入。${error instanceof Error ? error.message : ''}`); setLoading(false);
     });
     // Labels only decorate featured skills; without them the saved names or ids still show.
@@ -76,13 +80,13 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   useEffect(() => {
     setMember(null); setLabels(null); setOnboarding(null); setLoadError(null);
     load(true);
-    return () => { request.current++; };
+    return () => { request.current++; refreshInFlight.current = false; };
   }, [load]);
 
   // Refresh stale membership data after returning to the tab, without polling in the background.
   useEffect(() => {
     const onReturn = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - lastRefresh.current < 60_000) return;
+      if (document.visibilityState !== 'visible' || refreshInFlight.current || Date.now() - lastRefresh.current < 60_000) return;
       load(false);
     };
     document.addEventListener('visibilitychange', onReturn);
