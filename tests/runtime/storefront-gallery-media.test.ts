@@ -28,7 +28,21 @@ test('GALLERY-MEDIA-01 draft preview, escaped alt and sixth dirty dimension free
  const count=(await f.h.pool.query('SELECT count(*)::int n FROM commerce_storefront_publications WHERE instance_id=$1',[s.instanceId])).rows[0].n;await f.publish(s);assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM commerce_storefront_publications WHERE instance_id=$1',[s.instanceId])).rows[0].n,count);
 });
 test('GALLERY-MEDIA-02 verified GET/HEAD use current publication; foreign, draft, invalid and out-of-range paths share one miss',async()=>{
- const revision=await current();
+ const revision=await current(),off=f.galleryApplication(false),legacyPath=`/shops/${s.slug}/media/${revision}/P0001`;
+ let primaryBytes:Buffer|undefined;
+ for(const method of ['GET','HEAD']){
+  const enabled=await get(legacyPath,undefined,method),disabled=await get(legacyPath,off,method);
+  assert.equal(enabled.status,200);assert.equal(enabled.status,disabled.status);assert.deepEqual([...enabled.headers],[...disabled.headers]);
+  const bytes=Buffer.from(await enabled.arrayBuffer());assert.deepEqual(bytes,Buffer.from(await disabled.arrayBuffer()));
+  if(method==='GET')primaryBytes=bytes;else assert.equal(bytes.length,0);
+  const numbered=await get(publicPath(revision,'1'),undefined,method);assert.equal(numbered.status,200);assert.deepEqual(Buffer.from(await numbered.arrayBuffer()),bytes);
+  for(const suffix of ['/x','/']){
+   const miss=await get(publicPath(revision,'1')+suffix,undefined,method);assert.equal(miss.status,404);assert.equal(miss.headers.get('Cache-Control'),'no-store');assert.equal(miss.headers.get('X-Robots-Tag'),'noindex');
+   if(method==='GET')assert.match(await miss.text(),/找不到這張商品照片。/);else assert.equal(await miss.text(),'');
+  }
+  const slash=await get(legacyPath+'/',undefined,method),disabledSlash=await get(legacyPath+'/',off,method);assert.equal(slash.status,404);assert.equal(slash.status,disabledSlash.status);assert.deepEqual([...slash.headers],[...disabledSlash.headers]);assert.deepEqual(Buffer.from(await slash.arrayBuffer()),Buffer.from(await disabledSlash.arrayBuffer()));
+ }
+ assert(primaryBytes&&primaryBytes.length>0,'the legacy URL and gallery position 1 share the frozen primary bytes');
  for(const method of ['GET','HEAD']){const gets=f.store.gets,response=await get(publicPath(revision,'2'),undefined,method);assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal(response.headers.get('X-Robots-Tag'),'noindex');assert.equal(response.headers.get('Content-Type'),'image/webp');assert(f.store.gets>gets);if(method==='HEAD')assert.equal(await response.text(),'');}
  f.ok(await f.upload(foreign,'1'));await f.publish(foreign);
  const newProduct=f.ok(await f.post(s.root+'/products',s.owner,{title:'未發布合成商品',description:'合成',price_minor:100,stock:1}),201),draft={...s,productId:newProduct.product_id};f.ok(await f.upload(draft,'1'));
