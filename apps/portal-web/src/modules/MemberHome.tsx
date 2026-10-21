@@ -147,6 +147,11 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
+    <nav aria-label="快速開始參與" className="home-shortcuts" data-guide-anchor="home:discover">
+      <button type="button" className="home-shortcut" onClick={() => onNavigate?.('showcase')}><span className="home-shortcut-icon" aria-hidden="true"><WorkshopIcon name="showcase"/></span><span>分享作品或找合作</span></button>
+      <button type="button" className="home-shortcut" onClick={() => onNavigate?.('events')}><span className="home-shortcut-icon" aria-hidden="true"><WorkshopIcon name="events"/></span><span>看看近期活動</span></button>
+      <button type="button" className="home-shortcut" onClick={() => onNavigate?.('members')}><span className="home-shortcut-icon" aria-hidden="true"><WorkshopIcon name="members"/></span><span>認識新夥伴</span></button>
+    </nav>
     <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
