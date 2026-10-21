@@ -80,3 +80,10 @@ rejection cannot leave the new write committed. Compound creation reuses canonic
 product SQL inside the same command and transaction. Unknown editor results retain
 the original body, key and expected version in member/store-scoped browser memory.
 Only the exact flagged group-replacement PUT has the 128 KiB body allowance.
+
+A predecessor may delete a canonical product while leaving its retained catalog
+membership behind. Draft reads omit missing selections and derive a surviving
+default. Gallery-only group updates retain all 177 routing/version checks and
+skip unrelated catalog validation. The next actual catalog change detaches the
+retained tuples before validating and attaching the current members. This keeps
+legacy photo editing usable after a rollback without relaxing catalog writes.

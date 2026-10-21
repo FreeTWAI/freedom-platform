@@ -161,7 +161,18 @@ CREATE FUNCTION require_valid_storefront_catalog() RETURNS trigger LANGUAGE plpg
 DECLARE g commerce_product_groups%ROWTYPE;n integer;targets uuid[];maximum_label integer;
 BEGIN
  -- Validate the final transaction state, including both ends of a moved member.
- IF TG_TABLE_NAME='commerce_product_groups' THEN targets:=ARRAY[NEW.group_id];
+ IF TG_TABLE_NAME='commerce_product_groups' THEN
+  -- A predecessor gallery writer cannot maintain catalog membership when it
+  -- deletes a product. Retained missing selections are filtered by the draft
+  -- reader and repaired by the next catalog command. An unrelated photo edit
+  -- must still obey 177's routing/version checks, without validating untouched
+  -- catalog state left by that predecessor.
+  IF TG_OP='UPDATE' THEN
+   IF ROW(NEW.catalog_anchor_sku,NEW.title,NEW.description,NEW.option_axes,NEW.default_selection_id,NEW.sort_order,NEW.version)
+    IS NOT DISTINCT FROM ROW(OLD.catalog_anchor_sku,OLD.title,OLD.description,OLD.option_axes,OLD.default_selection_id,OLD.sort_order,OLD.version)
+   THEN RETURN NULL;END IF;
+  END IF;
+  targets:=ARRAY[NEW.group_id];
  ELSIF TG_OP='UPDATE' THEN targets:=ARRAY[NEW.catalog_group_id,OLD.catalog_group_id];
  ELSE targets:=ARRAY[NEW.catalog_group_id];END IF;
  FOR g IN SELECT * FROM commerce_product_groups WHERE tenant_id=NEW.tenant_id AND instance_id=NEW.instance_id AND group_id=ANY(targets) AND catalog_anchor_sku IS NOT NULL LOOP

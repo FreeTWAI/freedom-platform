@@ -85,6 +85,14 @@ test('VARIANTS-02 reservation titles stay v1; real per-item holds leave the othe
  const closed=f.application(false,{storeVariantsEnabled:true});
  const detail=await(await closed.request(f.h.origin+'/shops/'+s.slug+'/products/P0001')).text();assert.match(detail,/登入確認預留條件/);assert.match(detail,/已選擇：白／M/);assert.doesNotMatch(detail,/售完|暫時無法購買/);
  assert.doesNotMatch(await(await closed.request(f.h.origin+'/shops/'+s.slug)).text(),/售完|暫時無法購買/);
+ // A rollback writer deletes only the canonical product. Its retained 177
+ // photo routing and later gallery-only metadata writes must keep working.
+ const current=(await page()).items.find(g=>g.group_key==='P0001')!;
+ const extra=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'舊版刪除的規格',price_minor:100,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},current.version),201);
+ const removed=extra.current.items.find((g:any)=>g.group_key==='P0001').members.find((m:any)=>m.product.title==='舊版刪除的規格').product;
+ f.ok(await call('POST','/products/'+removed.product_id+'/remove',{},removed.version,undefined,f.app));
+ assert.equal((await f.h.pool.query(`UPDATE commerce_product_groups SET last_changed_at_product_version=storefront_gallery_product_version(tenant_id,instance_id,anchor_product_id) WHERE tenant_id=$1 AND instance_id=$2 AND catalog_anchor_sku='P0001'`,[s.tenantId,s.instanceId])).rowCount,1);
+ assert.equal((await page()).items.some(g=>g.members.some(m=>m.product.product_id===removed.product_id)),false);
 });
 test('VARIANTS-03 detached former anchors keep distinct singleton identity, rejoin, and survive anchor deletion',async()=>{
  const a=f.ok(await call('POST','/products',{title:'原始起點',price_minor:100,stock:2}),201),b=f.ok(await call('POST','/products',{title:'剩餘規格',price_minor:200,stock:2}),201);
