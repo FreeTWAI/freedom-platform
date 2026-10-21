@@ -114,6 +114,7 @@ const tenantWorkDocuments: ReadonlyArray<readonly [string, z.ZodType, 'input' | 
 
 const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [string, z.ZodType, 'input' | 'output', readonly string[]]>]> = [
   ['hosted-checkout', 'Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.', [
+    ['buyer-identity-header', checkout.CheckoutBuyerIdentitySchema, 'input', ['equality_precondition_not_authority']],
     ['shipping-method-ref', checkout.ShippingMethodRefSchema, 'output', []],
     ['delivery-field-error-code', checkout.DeliveryFieldErrorCodeSchema, 'output', []],
     ['shipping-unavailable-reason', checkout.ShippingUnavailableReasonSchema, 'output', []],
@@ -146,6 +147,7 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
   ]],
   ['hosted-distribution', 'Explicit supplier offer and exact seller listing consent. One supplier item; no payment authority.', [
     ['offer', distribution.SupplyOfferSchema, 'output', ['explicit_supplier_publication']],
+    ['offer-page', distribution.SupplyOfferPageSchema, 'output', ['current_seller_store_write','community_offer_visibility','no_private_supplier_fields']],
     ['offers', distribution.SupplyOffersSchema, 'output', ['bounded_catalog']],
     ['proposal', distribution.DistributionInputSchema, 'input', ['exact_offer_digest']],
     ['decision', distribution.DistributionDecisionSchema, 'input', ['exact_listing_digest_and_version']],
@@ -296,6 +298,10 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['store-admission-query', commerceSetup.StoreAdmissionQuerySchema, 'input', []],
     ['store-admission', commerceSetup.StoreAdmissionViewSchema, 'output', []],
     ['store-admission-page', commerceSetup.StoreAdmissionPageSchema, 'output', []],
+    ['store-readiness', commerceSetup.StoreReadinessSchema, 'output', ['buyer_purchase_state_parity','no_payment_or_contact_contents']],
+    ['store-overview', commerceSetup.StoreOverviewSchema, 'output', ['current_store_read_authority','orders_read_capability']],
+    ['admin-store-readiness-query', commerceSetup.AdminStoreReadinessQuerySchema, 'input', []],
+    ['admin-store-readiness-page', commerceSetup.AdminStoreReadinessPageSchema, 'output', ['active_community_admin','tenant_rls_bound_reads']],
     ['error-code', commerceSetup.CommerceSetupErrorCodeSchema, 'output', []],
     ['error', commerceSetup.CommerceSetupErrorSchema, 'output', []],
   ]],

@@ -36,12 +36,28 @@
 | **B09 品牌／政策／聯絡** | `partial`：只有品牌、介紹與平台說明 | 賣方身分與聯絡方式、配送、退換貨、隱私等政策頁；結帳保存當時版本 | 新增：店家政策（有版本、隨發布凍結）與賣方揭露欄位（EC-SPEC-02 §2、EC-SPEC-06 §4） | 匿名 | 政策未填→該店不能開放結帳（C2 啟用條件） | C1 顯示、C2 必填 |
 | **B10 顧客安全返回** | `missing`：查詢預留要登入且只能查自己的 | guest 用訂單連結回到訂單；遺失連結時以 Email＋訂單編號重寄；可選擇關聯到會員帳號 | 新增：訂單存取憑證（高熵、雜湊保存、可撤銷）；`POST /api/v1/public/stores/:slug/order-access-requests` 一律回 202（EC-SPEC-02 §4） | 匿名＋憑證 | 猜訂單編號讀不到（EC-AT05）；不自動建立會員 | C2（寄信需要寄送授權） |
 
+2026-10-20 買家旅程實作範圍（既有 checkout 開關）：
+
+- **B04**：使用 server 報價的完整 `delivery_options`，同一商品被所有已設定方式擋住才加註
+  「目前無法配送」或「目前沒有可用的取貨方式。」；不計算運費，不新增購物車登入返回路徑。
+- **B05**：「登入會員」返回原結帳；密碼、TOTP／備援碼與註冊均適用。身分變更顯示
+  「登入身分已變更，請重新確認」，保留購物車、清除原聯絡草稿並重新報價；再次核對才下單。
+  配送面板點名商品與原因，只建議實際可服務全部商品的方式；否則「回購物車調整」。
+  線下付款成功後至 B07 顯示凍結的匯款說明與期限。跨店訂單清單另行實作。
+- **B10**：新增登入返回原找回頁的連結；有效 UUID 的 hydrated B07 缺單狀態也提供此連結。
+  malformed UUID 的 404 不提供返回入口。登入不賦予訂單權限，仍沿用既有會員／瀏覽器檢查。
+  未公開的商店不自動返回；訂單寄信仍關閉。
+
+開關關閉時，比對既有 HTML body、安全與快取 headers 及固定 fixture 的穩定 hydrated DOM，
+包括 portal 登入與 `#reservations`；此次編輯的 JS asset bytes 不在 byte identity 範圍內。
+原本可直開的 B05 HTML 維持，API 仍拒絕結帳；v1 預留頁與提示維持既有內容。
+
 ## 賣家頁（E，Seller Console）
 
 | 頁面 | 現況 | 目標操作 | 資料／API | 權限（現有／新能力提議） | 錯誤與空狀態 | 里程碑 |
 | --- | --- | --- | --- | --- | --- | --- |
 | **E01 公會啟動／我的商店** | `exists`：`LegacyLaunchpadPrimary`、`MyStoreAction`（`MyStoreAction.tsx:42`）、`StoreList`（`HostedStore.tsx:77`）、`LaunchFlow`（`GuildLaunchpadApplications.tsx`，已有商店時不能另建，`:693,699`） | 建立／沿用商店；另外兩個入口「閱讀／下載原作技能書」「下載可自行部署的營業版本」，後者只有發行物真的可用才顯示下載 | 既有：`GET /me/stores`、`POST /tenants/:id/application-launch-plans`、`…/application-installations`。新增：入口讀取技能書與可攜發行物的關係（EC-SPEC-07 §3） | 會員；建立需要事業 owner | 營業版尚未發行→說明狀態，不連到原作冒充 | C1（營業版入口 C3） |
-| **E02 營運概覽** | `missing`：只有說明文字「已開放 30 分鐘庫存預留；付款與出貨尚未啟用。」（`HostedStore.tsx:240`） | 待付款例外、待出貨、待處理退貨、provider 異常、資料時間 | 新增：`GET /api/v1/tenants/:t/storefronts/:i/overview`（同一 snapshot、`ready`／`unavailable`＋原因） | `store:read`；數字依各能力裁切 | 讀取失敗顯示「無法取得」，不顯示 0 | C2 |
+| **E02 開店準備／營運概覽** | `partial`：開店準備清單、與買家相同的接單判斷、進行中／待確認收款／待處理問題三項訂單數及資料時間 | 待出貨、待處理退貨、provider 異常 counts 尚缺 | `GET /api/v1/tenants/:t/storefronts/:i/overview`；清單與三項有界計數在同一授權交易讀取，數字上限顯示 `99+` | `store:read`；另有 `store:orders:read` 才回訂單概況，否則 `orders: null` | 讀取失敗顯示「無法取得」，不顯示假的 0 | C2 |
 | **E03 品牌與版面** | `partial`：店名、品牌、網址、介紹、幣別；兩種版型（`catalog-grid-v1`／`catalog-list-v1`，`contracts/guild-launchpad/v1/storefront-presentation.ts:6`）；預覽、發布、停止公開（`HostedStore.tsx:282-309`） | 封面、分類、主打商品、受控主色、政策頁；草稿→預覽→發布 | 既有：`PATCH …/appearance`、`GET …/preview`、`POST …/publish`、`…/unpublish`。新增：外觀欄位與政策（EC-SPEC-02 §2） | `store:write`、`store:publish` | 草稿未存不能發布（既有）；網址發布後鎖定（既有 `slug_locked`） | C1 |
 | **E04 商品與選品** | `partial`：商品表單（名稱、價格、庫存、介紹）、一張照片、供貨條件、合作（`HostedStore.tsx:256-281`、`HostedDistribution.tsx`） | 變體、多張照片、分類、庫存來源（自有／供應）、售價、供貨授權狀態 | 既有：`…/products` CRUD、`…/products/:pid/photo`、供貨 offer／selection。新增：variant 與分類（EC-SPEC-02 §1） | `store:write` | 庫存不得低於已占用量（既有 409 `stock_below_reserved`）；供貨撤回→該商品停止接單並說明 | C1 |
 | **E05 訂單詳情** | `partial`：v1 預留清單與明細、取消（`HostedSellerOrders.tsx`、`HostedSupplierOrders.tsx`；入口先探測 `…/reservations?limit=1` 成功才顯示） | 同一頁看訂單、付款、配置、履約、發票、售後；下一個合法操作 | 新增：`GET …/checkout-orders`、`GET …/checkout-orders/:id`、`GET …/checkout-orders/:id/contact`（聯絡卡；訂單本身只帶遮罩的姓名）、`POST …/checkout-orders/:id/cancel`（未付款）、`POST …/checkout-orders/:id/payment-queries`（立即查詢）、`GET …/exception-cases?view=retailer`、`GET …/exception-cases/:id`、`POST …/exception-cases/:id/actions/:action`（EC-SPEC-05 §9.1，付款種類的動作見 EC-SPEC-04 §5.6；`…/orders` 已是 v1 直接預留的賣家路徑，`hosted-orders.ts:72`）；v1 `…/reservations` 照舊 | `store:orders:read`；取消、付款例外的處理、售後與對話回覆另需 `store:orders:manage`；聯絡卡需要 `store:customers:read`；付款明細與退款需要 `store:finance:read` | 每個軸各自的未知／失敗；不以單一 paid 字樣代表全部完成 | C2 |

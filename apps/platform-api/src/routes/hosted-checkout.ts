@@ -65,6 +65,7 @@ export function createHostedCheckoutRoutes(pool:Pool,origin:string,runtime:Platf
   });
   const access=(c:Parameters<PlatformRuntime['sourceNetwork']>[0]):commands.BrowserAccess=>({
     deviceToken:readShopCookie(c.req.header('Cookie'),origin),sessionToken:readSessionCookie(c.req.header('Cookie'),origin),network:(runtime.rateLimitNetwork??runtime.sourceNetwork)(c),
+    ...(runtime.commerceSettings?.checkoutEnabled===true&&c.req.header('X-Commerce-Buyer')!==undefined?{expectedBuyer:parse(wire.CheckoutBuyerIdentitySchema,c.req.header('X-Commerce-Buyer'))}:{}),
   });
   const noQuery=(url:string)=>requireCondition(new URL(url).search==='',422,'validation_failed','不接受查詢參數。');
   const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{
@@ -73,7 +74,9 @@ export function createHostedCheckoutRoutes(pool:Pool,origin:string,runtime:Platf
   };
   app.post(root+'/cart-quotes',async c=>{
     commands.checkoutGate(options);noQuery(c.req.url);const input=parse(wire.CartQuoteInputSchema,await c.req.json());
-    return c.json(wire.CartQuoteResponseSchema.parse(await commands.quotePublicCart(pool,c.req.param('slug')!,input,access(c),options)));
+    const result=await commands.quotePublicCartWithIdentity(pool,c.req.param('slug')!,input,access(c),options);
+    if(runtime.commerceSettings?.checkoutEnabled===true)c.header('X-Commerce-Buyer',result.buyerIdentity);
+    return c.json(wire.CartQuoteResponseSchema.parse(result.value));
   });
   app.post(root+'/checkouts',async c=>{
     commands.checkoutGate(options);noQuery(c.req.url);const input=parse(wire.CheckoutInputSchema,await c.req.json()),key=c.req.header('Idempotency-Key')??'';

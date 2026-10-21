@@ -235,7 +235,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
               // Reserve one silent status line so a late summary cannot move the edit buttons.
               const offerState = supplyOfferStateText(product, displayedCooperation);
               return <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
-              {supplyEditing === product.product_id ? <HostedSupplyTerms key={product.version} supplierOnly client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} busy={locked || !can('store:write')} onDirty={value => markDirty('supply', value)}
+              {supplyEditing === product.product_id ? <HostedSupplyTerms key={product.version} supplierOnly client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} description={product.description} supplierName={catalog.name} busy={locked || !can('store:write')} onDirty={value => markDirty('supply', value)}
                 onCancel={closeEditor}
                 onSave={(body, version, success) => command({targetMissingIsStore: false, method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}
                 onPublish={can('store:publish') && can('store:write') ? version => command({targetMissingIsStore: false, method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，同社群店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined}/>
