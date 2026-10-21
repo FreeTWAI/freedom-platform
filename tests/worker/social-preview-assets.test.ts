@@ -18,6 +18,7 @@ function roleUrl(role:string){const url=new URL(raw!);url.pathname='/'+database;
 const admin=new Pool({connectionString:raw}),owner=new Pool({connectionString:roleUrl(migrator)}),app=new Pool({connectionString:roleUrl(runtimeRole)});
 const sockets=new Set<Socket>(),proxy=socket?createServer(client=>{const upstream=createConnection(join(socket,'.s.PGSQL.5432'));for(const channel of [client,upstream]){sockets.add(channel);channel.on('close',()=>sockets.delete(channel));channel.on('error',()=>{client.destroy();upstream.destroy();});}client.pipe(upstream).pipe(client);}):undefined;
 const origin='http://127.0.0.1:8787',community=randomUUID(),instances:Miniflare[]=[];let directory:string,tcp:string,png:Buffer,created=false,outboundCalls=0;
+const metadataPages = new Map<string, {body: Uint8Array<ArrayBuffer>; type: string}>();
 before(async()=>{
   await admin.query(`CREATE ROLE ${migrator} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;CREATE ROLE ${runtimeRole} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);
   await admin.query(`CREATE DATABASE ${database} OWNER ${migrator}`);created=true;await migrate(owner);
@@ -30,7 +31,7 @@ before(async()=>{
 });
 after(async()=>{for(const instance of instances)await instance.dispose();for(const channel of sockets)channel.destroy();if(proxy?.listening)await new Promise<void>(r=>proxy.close(()=>r()));await Promise.all([owner.end(),app.end()]);try{if(created){await admin.query(`DROP DATABASE ${database}`);await admin.query(`DROP ROLE ${migrator},${runtimeRole}`);}}finally{await admin.end();}if(directory)await rm(directory,{recursive:true,force:true});});
 async function worker(options:{enabled?:string;media?:boolean;images?:boolean}={}){
-  const instance=new Miniflare(convertV4MiniflareOptions({workers:[{name:'native-preview-'+randomUUID(),modules:true,scriptPath:resolve(process.env.FREEDOM_WORKERD_BUNDLE_DIR??'.wrangler/dry-run/local','worker.js'),compatibilityDate:'2026-09-21',compatibilityFlags:['nodejs_compat'],bindings:{FREEDOM_ENV:'local',APP_ORIGIN:origin,FREEDOM_REGISTRATION_COMMUNITY_ID:community,...(options.enabled===undefined?{}:{FREEDOM_SOCIAL_THUMBNAIL_ENABLED:options.enabled})},hyperdrives:{HYPERDRIVE:tcp},...(options.media===false?{}:{r2Buckets:['MEDIA']}),...(options.images===false?{}:{images:{binding:'IMAGES'}}),assets:{directory:join(directory,'assets'),binding:'ASSETS',routerConfig:{has_user_worker:true,invoke_user_worker_ahead_of_assets:true},assetConfig:{not_found_handling:'none'}},outboundService:async(request)=>{outboundCalls++;const url=new URL(request.url);assert.equal(request.method,'GET');assert.equal(request.headers.get('user-agent'),'FreedomWorkshopPreview/1.0 (+https://freetwai.com)');assert.equal(request.headers.get('cookie'),null);assert.equal(request.headers.get('authorization'),null);assert.equal(url.protocol,'https:');if(url.hostname==='x.com'){if(url.pathname==='/unsafe-redirect')return new Response(null,{status:302,headers:{Location:'https://private-looking.test/secret'}});if(url.pathname==='/safe-redirect')return new Response(null,{status:302,headers:{Location:'https://www.x.com/landing'}});const image=url.pathname==='/unsafe-image'?'https://private-looking.test/secret.png':'https://a.cdninstagram.com/image.png';return new Response('<title>Approved public page</title><meta property="og:image" content="'+image+'">',{headers:{'Content-Type':'text/html'}});}if(url.hostname==='www.x.com')return new Response('<title>Approved public page</title>',{headers:{'Content-Type':'text/html'}});if(url.hostname==='a.cdninstagram.com')return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png'}});if(url.hostname==='www.youtube.com'&&url.pathname==='/oembed')return Response.json({title:'Synthetic HTTPS preview'});assert.equal(url.hostname,'i.ytimg.com');assert.match(url.pathname,/^\/vi\/[a-zA-Z0-9_-]+\/hqdefault\.jpg$/);if(url.pathname.includes('/redirect001/'))return new Response(null,{status:302,headers:{Location:'https://127.0.0.1/private'}});if(url.pathname.includes('/oversized01/'))return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png','Content-Length':'5242881'}});return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png'}});}}]}));instances.push(instance);await instance.ready;return instance;
+  const instance=new Miniflare(convertV4MiniflareOptions({workers:[{name:'native-preview-'+randomUUID(),modules:true,scriptPath:resolve(process.env.FREEDOM_WORKERD_BUNDLE_DIR??'.wrangler/dry-run/local','worker.js'),compatibilityDate:'2026-09-21',compatibilityFlags:['nodejs_compat'],bindings:{FREEDOM_ENV:'local',APP_ORIGIN:origin,FREEDOM_REGISTRATION_COMMUNITY_ID:community,...(options.enabled===undefined?{}:{FREEDOM_SOCIAL_THUMBNAIL_ENABLED:options.enabled})},hyperdrives:{HYPERDRIVE:tcp},...(options.media===false?{}:{r2Buckets:['MEDIA']}),...(options.images===false?{}:{images:{binding:'IMAGES'}}),assets:{directory:join(directory,'assets'),binding:'ASSETS',routerConfig:{has_user_worker:true,invoke_user_worker_ahead_of_assets:true},assetConfig:{not_found_handling:'none'}},outboundService:async(request)=>{outboundCalls++;const url=new URL(request.url);assert.equal(request.method,'GET');assert.equal(request.headers.get('user-agent'),'FreedomWorkshopPreview/1.0 (+https://freetwai.com)');assert.equal(request.headers.get('cookie'),null);assert.equal(request.headers.get('authorization'),null);assert.equal(url.protocol,'https:');if(url.hostname==='x.com'){ const fixture = metadataPages.get(url.pathname); if (fixture) return new Response(fixture.body, {headers: {'Content-Type': fixture.type}}); if(url.pathname==='/unsafe-redirect')return new Response(null,{status:302,headers:{Location:'https://private-looking.test/secret'}});if(url.pathname==='/safe-redirect')return new Response(null,{status:302,headers:{Location:'https://www.x.com/landing'}});const image=url.pathname==='/unsafe-image'?'https://private-looking.test/secret.png':'https://a.cdninstagram.com/image.png';return new Response('<title>Approved public page</title><meta property="og:image" content="'+image+'">',{headers:{'Content-Type':'text/html'}}); }if(url.hostname==='www.x.com')return new Response('<title>Approved public page</title>',{headers:{'Content-Type':'text/html'}});if(url.hostname==='a.cdninstagram.com')return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png'}});if(url.hostname==='www.youtube.com'&&url.pathname==='/oembed')return Response.json({title:'Synthetic HTTPS preview'});assert.equal(url.hostname,'i.ytimg.com');assert.match(url.pathname,/^\/vi\/[a-zA-Z0-9_-]+\/hqdefault\.jpg$/);if(url.pathname.includes('/redirect001/'))return new Response(null,{status:302,headers:{Location:'https://127.0.0.1/private'}});if(url.pathname.includes('/oversized01/'))return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png','Content-Length':'5242881'}});return new Response(new Uint8Array(png),{headers:{'Content-Type':'image/png'}});}}]}));instances.push(instance);await instance.ready;return instance;
 }
 type Member={id:string;cookie:string;csrf:string};
 async function member(){const id=randomUUID(),token=randomBytes(32).toString('base64url'),csrf=randomUUID();await owner.query("INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref) VALUES($1,$2,$3,'Synthetic social member','not-a-login',$4)",[id,community,id+'@native-social.test',randomUUID()]);await owner.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour')",[tokenHash(token),id,csrf]);return {id,cookie:'freedom_local_session='+token,csrf};}
@@ -87,4 +88,57 @@ test('canonical Worker leaves untrusted links publishable without egress and che
   assert.equal(metadata.format, 'webp');
   assert.equal(metadata.width, 640);
   assert.equal(metadata.height, 360);
+});
+
+test('native Worker publishes and rereads legal charset and malformed unquoted metadata safely', async () => {
+  const human = await member(), installed = await worker({enabled: 'true'});
+  await owner.query("UPDATE domain_media_storage_policy SET mode='bridge',policy_revision='synthetic-metadata-v1',persistence_allowed=true,retained_byte_limit=10485760 WHERE purpose='community.social-thumbnail'");
+  const postSchema = z.object({post_id: z.uuid(), title: z.string(), thumbnail_url: z.string().nullable()}).passthrough();
+  const image = '<meta property=og:image content=https://a.cdninstagram.com/image.png>';
+  const fixtures = [
+    {name: 'western', body: Buffer.from('<meta property=og:title content="Caf\xe9 \x80">' + image, 'latin1'), type: 'text/html; CHARSET="windows-1252"', title: 'Café €', thumbnail: true},
+    {name: 'big5', body: Buffer.concat([Buffer.from('<meta property=og:title content="'), Buffer.from([0xa4,0xa4,0xa4,0xe5]), Buffer.from('">' + image)]), type: 'text/html; charset=Big5', title: '中文', thumbnail: true},
+    {name: 'unfinished', body: Buffer.from('<meta property=og:title content="工坊 Café">' + image), type: 'text/html; note="unfinished; charset=windows-1252', title: '工坊 Café', thumbnail: true},
+    {name: 'numeric', body: Buffer.from('<meta property=og:title content=before&#1114112;&#xD800;&#0;after><meta property=og:image content=https://127.0.0.1/private>'), type: 'text/html', title: 'before���after', thumbnail: false},
+  ];
+  for (const fixture of fixtures.slice(0, 2)) {
+    const charset = fixture.name === 'western' ? 'windows-1252' : 'Big5';
+    for (const [name, type] of [
+      ['trailing', `text/html; charset=${charset};`],
+      ['leading', `text/html;; charset=${charset}`],
+      ['consecutive', `text/html; note=ok;;; charset=${charset}`],
+      ['whitespace-only', `text/html; \t ; charset=${charset}; \t `],
+    ]) fixtures.push({...fixture, name: fixture.name + '-' + name, type});
+  }
+  for (const [name, type] of [
+    ['unfinished-big5', 'text/html;; note="unfinished; charset=big5'],
+    ['quoted-fake', 'text/html; note="x; charset=windows-1252";'],
+    ['malformed-after-valid', 'text/html; charset=windows-1252;; malformed; charset=utf-8'],
+    ['unfinished-after-valid', 'text/html; charset=big5; note="unfinished'],
+  ]) fixtures.push({name, body: Buffer.from('<meta property=og:title content="工坊 Café">' + image), type, title: '工坊 Café', thumbnail: true});
+  for (const fixture of fixtures) {
+    const path = '/metadata-' + fixture.name;
+    metadataPages.set(path, {body: new Uint8Array(fixture.body), type: fixture.type});
+    const key = randomUUID(), body = JSON.stringify({url: 'https://x.com' + path});
+    const send = () => call(installed, '/api/v1/social-posts', {method: 'POST', headers: {...headers(human), 'Content-Type': 'application/json', 'Idempotency-Key': key}, body});
+    const response = await send();
+    assert.equal(response.status, 201, await response.clone().text());
+    const post = postSchema.parse(await response.json());
+    assert.equal(post.title, fixture.title);
+    assert.equal(Boolean(post.thumbnail_url), fixture.thumbnail);
+    assert.deepEqual((await owner.query('SELECT title FROM community_social_posts WHERE post_id=$1', [post.post_id])).rows, [{title: fixture.title}]);
+    const reread = await call(installed, '/api/v1/social-posts', {headers: headers(human)});
+    assert.equal(reread.status, 200);
+    const feed = z.object({items: z.array(postSchema)}).parse(await reread.json());
+    assert.deepEqual(feed.items.find(item => item.post_id === post.post_id)?.title, fixture.title);
+    assert.deepEqual(await (await send()).json(), post);
+    if (post.thumbnail_url) {
+      const thumbnail = await call(installed, post.thumbnail_url, {headers: headers(human)});
+      assert.equal(thumbnail.status, 200);
+      const metadata = await sharp(Buffer.from(await thumbnail.arrayBuffer())).metadata();
+      assert.equal(metadata.format, 'webp');
+      assert.equal(metadata.width, 640);
+      assert.equal(metadata.height, 360);
+    }
+  }
 });
