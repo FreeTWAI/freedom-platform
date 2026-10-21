@@ -184,8 +184,8 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4213,
-      "sha256": "0d695919a26f11c5ec4ea018daed7e5e7ac7da9859343a7c47fb33cb7e9de747"
+      "bytes": 4186,
+      "sha256": "45bba9498b219c048d49cedc4fa1f7ea8888fa024bce0418afb2b901c5be293c"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -1844,8 +1844,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 67176,
-      "sha256": "2ffce83653761785afe98aaec7e958d220c779418cd965680ce770b8ae1a3c99"
+      "bytes": 67201,
+      "sha256": "cfdc38ee27d37e792af03ccbe56f0bf812c0700f9c87dcc3ae791f135e4973c9"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -3609,8 +3609,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/cart-store.ts",
-      "bytes": 4638,
-      "sha256": "5a58ad03d0a984f3a1f55ca22e8d2b0a1c8491f4bc140337932fff00309a1261"
+      "bytes": 4668,
+      "sha256": "a6d7a2fd767df58c8e258a86bd77f867879e2941a5865d113a554d34373d1514"
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
@@ -3644,8 +3644,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/return-path.ts",
-      "bytes": 3562,
-      "sha256": "dec27157abb17b105090113ff9383efaff4c3731dd8363db0da27c71b0b6e43b"
+      "bytes": 560,
+      "sha256": "083e0d990794e09cf1580f85cae19ebe52287f90d4ccf444cda177fe7eee433c"
     },
     {
       "path": "apps/private-ai-authority/README.md",
@@ -17366,6 +17366,11 @@
       "path": "modules/agent-commerce/service-command.ts",
       "bytes": 4259,
       "sha256": "056c1bda67108ad20e732cf4641b59e294214ad901cec0082aa3982e1bce677f"
+    },
+    {
+      "path": "modules/agent-commerce/storefront-return.ts",
+      "bytes": 3498,
+      "sha256": "b99e3897c384f62a2780253209c681a344e107603d180da345d2668942ba64f7"
     },
     {
       "path": "modules/agent-commerce/checkout/README.md",
