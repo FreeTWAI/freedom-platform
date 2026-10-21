@@ -1,7 +1,7 @@
 import { expect, type Page } from './fixtures.js';
 
 /** Member tools are secondary; open their visible disclosure before choosing one.
- * Sign-in uses the same disclosure; management may retain inline tools. */
+ * Sign-in and the admin header use the same disclosure. */
 export async function openPageTools(page:Page){
   // Wait for the actual toolbar to mount before inspecting its disclosure.
   // page.goto can finish while the first session/site reads are still pending.
@@ -136,4 +136,27 @@ export async function openGuildSection(page: Page, label: string) {
   await expect(mobile.or(page.getByRole('navigation', {name: '公會功能', exact: true}))).toBeVisible();
   if (await mobile.isVisible()) await mobile.selectOption({label});
   else await page.getByRole('navigation', {name: '公會功能', exact: true}).getByRole('button', {name: label, exact: true}).click();
+}
+
+/** Admin workspaces use a sidebar on desktop and the same menu in a phone dialog. */
+export async function openAdminNavigation(page:Page){
+  const mobile=await page.evaluate(()=>window.matchMedia('(max-width: 960px)').matches);
+  if(mobile){
+    const dialog=page.getByRole('dialog',{name:'切換管理功能',exact:true});
+    if(!await dialog.isVisible())await page.getByRole('button',{name:'開啟管理選單',exact:true}).click();
+    await expect(dialog).toBeVisible();
+  }
+  const navigation=page.getByRole('navigation',{name:'平台管理選單',exact:true});
+  await expect(navigation).toBeVisible();
+  return navigation;
+}
+export async function navigateAdmin(page:Page,name:string){
+  const navigation=await openAdminNavigation(page);
+  const button=navigation.getByRole('button',{name,exact:true});
+  const changed=await button.getAttribute('aria-current')!=='page';
+  await button.click();
+  const workspace=page.getByRole('region',{name:`${name}工作區`,exact:true});
+  await expect(workspace).toBeVisible();
+  if(changed)await expect(workspace).toBeFocused();
+  await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
 }

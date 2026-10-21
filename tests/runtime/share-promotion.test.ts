@@ -1158,7 +1158,7 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
   try {
     if (!server.listening) await once(server, 'listening');
     const httpOrigin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    let page = '', format = 'text/html';
+    let page: string | Uint8Array<ArrayBuffer> = '', format = 'text/html';
     httpApp = createApp(pool, httpOrigin, 'local', {
       linkPreviewFetch: async input => String(input).startsWith('https://i.ytimg.com/')
         ? new Response(null, { status: 404 })
@@ -1169,7 +1169,7 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       body: JSON.stringify({ email: DEMO_USERS[0].email, password: DEMO_PASSWORD }),
     });
     assert.equal(login.status, 200);
-    const { csrf_token: csrf } = await login.json() as { csrf_token: string };
+    const { csrf_token: csrf } = z.object({csrf_token: z.string()}).parse(await login.json());
     const headers = {
       Origin: httpOrigin, 'Content-Type': 'application/json',
       Cookie: login.headers.get('set-cookie')!.split(';')[0], 'X-CSRF-Token': csrf,
@@ -1182,7 +1182,12 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       { page: '<title>合法中文 😀</title>', format: 'text/html', url: 'https://raw-title.example/control', title: undefined, expected: '合法中文 😀' },
       { page: JSON.stringify({ title: '<影片> &amp; 😀' }), format: 'application/json', url: 'https://www.youtube.com/watch?v=rawSafe0001', title: undefined, expected: '<影片> &amp; 😀' },
       { page: '<title>保留有效標題</title><meta property="og:image" content="https://raw-title.example/\u0000.png">', format: 'text/html', url: 'https://raw-title.example/image', title: undefined, expected: '保留有效標題' },
+      { page: '<meta property=og:title content=前&#1114112;&#xD800;&#0;後>', format: 'text/html', url: 'https://raw-title.example/numeric', expected: '前���後' },
+      { page: '<meta property=og:title content="工坊 Café">', format: 'text/html; note="unfinished; charset=windows-1252', url: 'https://raw-title.example/unterminated', expected: '工坊 Café' },
+      { page: new Uint8Array(Buffer.from('<meta property=og:title content="Caf\xe9 \x80">', 'latin1')), format: 'text/html; charset=windows-1252', url: 'https://raw-title.example/western', expected: 'Café €' },
+      { page: new Uint8Array(Buffer.concat([Buffer.from('<meta property=og:title content="'), Buffer.from([0xa4,0xa4,0xa4,0xe5]), Buffer.from('">')])), format: 'text/html; charset=Big5', url: 'https://raw-title.example/big5', expected: '中文' },
     ];
+    const postSchema = z.object({post_id: z.uuid(), title: z.string()}).passthrough();
     for (const entry of cases) {
       page = entry.page; format = entry.format;
       const body = JSON.stringify({ url: entry.url, ...(entry.title ? { title: entry.title } : {}) });
@@ -1192,10 +1197,14 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       });
       const created = await send();
       assert.equal(created.status, 201, await created.clone().text());
-      const post = await created.json() as { post_id: string; title: string };
+      const post = postSchema.parse(await created.json());
       const title = entry.title ?? entry.expected ?? '前\uFFFD後';
       assert.equal(post.title, title);
       assert.deepEqual((await pool.query('SELECT title FROM community_social_posts WHERE post_id=$1', [post.post_id])).rows, [{ title }]);
+      const reread = await fetch(`${httpOrigin}/api/v1/social-posts`, {headers});
+      assert.equal(reread.status, 200);
+      const feed = z.object({items: z.array(postSchema)}).parse(await reread.json());
+      assert.equal(feed.items.find(item => item.post_id === post.post_id)?.title, title);
       const replay = await send();
       assert.equal(replay.status, 201);
       assert.deepEqual(await replay.json(), post);

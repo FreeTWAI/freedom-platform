@@ -4,6 +4,7 @@ import {communityCatalog,skillBooksForGuild} from '../../modules/community/catal
 import {skillBookGuides} from '../../modules/community/skill-book-guides.js';
 import {developmentMap,skillMarkdown,pageHtml} from '../../modules/development/service.js';
 import {skillBookCoverUrl,skillBookStarUrl} from '../../apps/portal-web/src/modules/SkillBookCover.js';
+import {escapeHtml} from '../../packages/shared/html.js';
 
 test('every catalog and featured skill book carries a complete, specific guide with pinned primary evidence',()=>{
   assert.deepEqual(Object.keys(skillBookGuides).sort(),communityCatalog.skill_books.map(book=>book.id).sort());
@@ -36,7 +37,7 @@ test('guides keep working client, local demo, alpha and unimplemented service bo
   assert.match(skillBookGuides['social-post'].status,/未全面驗收/);
 });
 
-test('all 41 books expose distinct covers, original-author stars and the same beginner guidance in public formats',()=>{
+test('all 53 books expose distinct covers, original-author stars and the same beginner guidance in public formats',()=>{
   const covers=new Set<string>();
   for(const book of developmentMap().skill_books){
     const guide=book.guide!;
@@ -55,11 +56,26 @@ test('all 41 books expose distinct covers, original-author stars and the same be
     assert.ok(html.includes('href="/#skills">登入工坊 Star'),book.id);
     assert.ok(html.includes(`href="${book.upstream_url}/fork"`),book.id);
   }
-  assert.equal(covers.size,41);
+  assert.equal(covers.size,53);
   const external=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
   assert.notEqual(external.star_url,external.repository_url);
   assert.equal(external.star_url,'https://github.com/Hao0321/claude-skill-social-post');
   for(const book of skillBooksForGuild('guild_marketing'))assert.ok(book.cover_url&&book.star_url&&book.guide?.beginner);
+});
+
+test('all 53 books keep values checked by raw public HTML assertions unchanged by escapeHtml',()=>{
+  const books=developmentMap().skill_books;
+  assert.equal(books.length,53);
+  for(const book of books){
+    const guide=book.guide!;
+    const fields={
+      ...Object.fromEntries(Object.entries(guide.beginner).map(([field,value])=>[`guide.beginner.${field}`,value])),
+      'guide.first_result':guide.first_result,'guide.status':guide.status,'guide.source_commit':guide.source_commit,
+      repository_url:book.repository_url,fork_url:book.fork_url,upstream_url:book.upstream_url,
+      cover_url:book.cover_url!,license_status:book.license_status,
+    };
+    for(const [field,value] of Object.entries(fields))assert.equal(escapeHtml(value),value,`${book.id}/${field}`);
+  }
 });
 
 test('covers accept catalog or granted-book identities and star links stay on an original GitHub repository',()=>{

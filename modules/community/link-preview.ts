@@ -24,14 +24,14 @@ function decodeEntities(value: string) {
 
 function attributes(tag: string) {
   const found: Record<string, string> = {};
-  for (const match of tag.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g)) {
-    found[match[1].toLowerCase()] = decodeEntities(match[3] ?? match[4] ?? '');
+  for (const match of tag.matchAll(/(?:^|\s)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
+    found[match[1].toLowerCase()] = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '');
   }
   return found;
 }
 
 function meta(html: string, key: string) {
-  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+  for (const tag of html.match(/<meta\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi) ?? []) {
     const attrs = attributes(tag);
     if ((attrs.property || attrs.name || '').toLowerCase() === key && attrs.content?.trim()) return attrs.content.trim();
   }
@@ -114,7 +114,8 @@ async function fetchChecked(fetcher: PreviewFetch, start: string, deadline: numb
       if (response.status !== 200) { await response.body?.cancel().catch(() => {}); return null; }
       const body = await readBounded(response, max);
       if (!body) return null;
-      return { url: current, type: (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase(), body };
+      const contentType = response.headers.get('content-type') ?? '';
+      return { url: current, type: contentType.split(';')[0].trim().toLowerCase(), contentType, body };
     } catch { return null; }
     finally { clearTimeout(timer); controller.abort(); }
   }
@@ -125,6 +126,33 @@ async function asThumbnail(bytes: Buffer, type: string) {
   // Any declared image/* is accepted. The format comes from the bytes, never from Content-Type.
   if (!type.startsWith('image/')) return null;
   try { return await normalizeRemoteThumbnail(bytes); } catch { return null; }
+}
+
+function htmlText(body: Buffer, contentType: string) {
+  // Consume parameters in order: a failed quoted value must not restart at its inner semicolon.
+  const emptyParameter = /;[ \t]*(?=;|$)/y;
+  const parameter = /;\s*([^;=\s]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^;"\s]+))\s*(?=;|$)/y;
+  let offset = contentType.indexOf(';');
+  let charset: string | undefined;
+  while (offset >= 0 && offset < contentType.length) {
+    emptyParameter.lastIndex = offset;
+    if (emptyParameter.exec(contentType)) {
+      offset = emptyParameter.lastIndex;
+      continue;
+    }
+    parameter.lastIndex = offset;
+    const match = parameter.exec(contentType);
+    if (!match) return body.toString('utf8');
+    if (charset === undefined && match[1].toLowerCase() === 'charset') {
+      charset = (match[2] ?? match[3]).replace(/\\(.)/g, '$1');
+    }
+    offset = parameter.lastIndex;
+  }
+  if (charset !== undefined) {
+    try { return new TextDecoder(charset).decode(body); }
+    catch { /* Unsupported labels retain best-effort UTF-8 decoding. */ }
+  }
+  return body.toString('utf8');
 }
 
 /** Best-effort title and 640×360 thumbnail. Failures return nulls; they never throw. */
@@ -146,7 +174,7 @@ export async function previewLink(rawUrl: string, fetcher: PreviewFetch, timeout
   }
   const page = await fetchChecked(fetcher, normalized.url, deadline, 'text/html', HTML_LIMIT);
   if (!page || page.type.startsWith('image/')) return empty;
-  const html = page.body.toString('utf8');
+  const html = htmlText(page.body, page.contentType);
   const title = previewTitle(html);
   const imageUrl = previewImageUrl(html, page.url);
   if (!imageUrl) return { title, image: null, source: null };
