@@ -183,7 +183,7 @@ async function acceptProposalInUi(page: Page, storeHash: string, selectionId: st
   await openSupplyPage(page, `${storeHash}/supply/terms/${selectionId}`, '審核售價申請');
   await activePage(page).getByRole('button', {name: '同意', exact: true}).click();
   await expect(consoleRoot(page).locator('.sc-announcement')).toHaveText('已保存：同意售價申請。');
-  await expect(activePage(page).locator('.badge').filter({hasText: '可售'})).toBeVisible();
+  await expect(activePage(page).locator('.badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toBeVisible();
 }
 
 async function publishAndEnableSellerStore(page: Page, storeRoot: string) {

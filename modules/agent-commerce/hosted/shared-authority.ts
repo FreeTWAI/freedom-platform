@@ -1,3 +1,4 @@
+import {supplierReservationEnabled} from './supply-availability.js';
 import type {PoolClient} from 'pg';
 import {bindTenantContext, bindPrincipalContext, clearTenantContext} from '../../../packages/resource-scopes/tenant-transaction.js';
 import {requireCondition} from '../../../packages/shared/problem.js';
@@ -76,7 +77,7 @@ export async function sharedSupplier(q: PoolClient, seller: Profile, shared: Sha
   try {
     await bindParty(q, shared.principalId, party.tenant_id, party.scope_id);
     const supplier = await profile(q, party.tenant_id, party.instance_id); ready(supplier);
-    requireCondition(supplier.reservation_enabled && supplier.currency === seller.currency,
+    requireCondition(supplierReservationEnabled(supplier, seller),
       409, 'supply_unavailable', '供貨商尚未開放預留或幣別不符。');
     return supplier;
   } finally { await bindParty(q, shared.principalId, own.tenant_id, own.scope_id); }

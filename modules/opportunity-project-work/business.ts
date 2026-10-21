@@ -147,6 +147,18 @@ export async function listEngagements(pool:Pool,actor:Actor) {
     LEFT JOIN receipt_observations r USING(engagement_id)
     WHERE e.community_id=$1 AND ($2=e.provider_ref OR $2=e.client_ref) ORDER BY e.created_at DESC`,[actor.community_id,actor.user_id])).rows);
 }
+/** Home needs two facts, not the unbounded list of private terms and receipts. */
+export async function readEngagementSummary(pool:Pool,actor:Actor) {
+  return readWithMemberSession(pool,actor,async q=>(await q.query<{has_engagements:boolean;needs_response:boolean}>(`
+    SELECT EXISTS(SELECT 1 FROM engagements e
+      WHERE e.community_id=$1 AND ($2=e.provider_ref OR $2=e.client_ref)) AS has_engagements,
+    EXISTS(SELECT 1 FROM engagements e LEFT JOIN receipt_observations r USING(engagement_id)
+      WHERE e.community_id=$1 AND ($2=e.provider_ref OR $2=e.client_ref) AND (
+        (e.client_ref=$2 AND e.state IN ('proposed','delivered')) OR
+        (e.provider_ref=$2 AND e.state='agreed') OR
+        (e.client_ref=$2 AND e.state='accepted' AND r.verification_status='self_reported')
+      )) AS needs_response`,[actor.community_id,actor.user_id])).rows[0]);
+}
 async function scopedEngagement(q:PoolClient,actor:Actor,id:string,role:'client'|'provider',lock=false) {
   const column=role==='client'?'client_ref':'provider_ref';
   const row=(await q.query(`SELECT * FROM engagements WHERE engagement_id=$1 AND community_id=$2 AND ${column}=$3${lock?' FOR UPDATE':''}`,[id,actor.community_id,actor.user_id])).rows[0];

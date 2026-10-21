@@ -248,3 +248,28 @@ p { margin: 0 0 .65rem; }
 .shop-checkout-choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 8px 0; cursor: pointer; }
 .shop-checkout-choice input { margin-top: 6px; flex-shrink: 0; }
 .shop-checkout-reason { display: block; color: var(--muted); font-size: .9rem; }
+
+/* Appearance is opt-in markup. The legacy tokens and selectors above keep
+   their exact OFF-mode values; light fills gain a contrasting boundary here. */
+body[data-store-appearance="v1"] { --shop-accent: #c4ff20; --shop-on-accent: #172200; --shop-accent-border: #537300; --shop-focus: #537300; }
+body[data-shop-accent="forest"] { --shop-accent: #166534; --shop-on-accent: #ffffff; --shop-accent-border: #166534; --shop-focus: #166534; }
+body[data-shop-accent="ocean"] { --shop-accent: #1d4ed8; --shop-on-accent: #ffffff; --shop-accent-border: #1d4ed8; --shop-focus: #1d4ed8; }
+body[data-shop-accent="indigo"] { --shop-accent: #5b21b6; --shop-on-accent: #ffffff; --shop-accent-border: #5b21b6; --shop-focus: #5b21b6; }
+body[data-shop-accent="rose"] { --shop-accent: #9f1239; --shop-on-accent: #ffffff; --shop-accent-border: #9f1239; --shop-focus: #9f1239; }
+body[data-shop-accent="terracotta"] { --shop-accent: #9a3412; --shop-on-accent: #ffffff; --shop-accent-border: #9a3412; --shop-focus: #9a3412; }
+body[data-shop-accent="gold"] { --shop-accent: #facc15; --shop-on-accent: #422006; --shop-accent-border: #854d0e; --shop-focus: #854d0e; }
+body[data-shop-accent="graphite"] { --shop-accent: #334155; --shop-on-accent: #ffffff; --shop-accent-border: #334155; --shop-focus: #334155; }
+body[data-store-appearance="v1"] .shop-button:not(.shop-button-secondary) { background: var(--shop-accent); color: var(--shop-on-accent); border-color: var(--shop-accent-border); }
+body[data-store-appearance="v1"] :focus-visible { outline-color: var(--shop-focus); }
+.shop-announcement { padding: 10px 16px; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); text-align: center; font-size: .92rem; }
+.shop-announcement p { margin: 0; }
+.shop-merchant-logo { display: block; flex: 0 0 auto; width: 48px; height: 48px; object-fit: contain; }
+body[data-store-appearance="v1"] .shop-top-store { display: inline-flex; align-items: center; gap: 12px; min-width: 0; }
+.shop-hero { padding-bottom: 32px; }
+.shop-cover { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.shop-cover img { display: block; max-width: 100%; width: auto; height: auto; max-height: min(60vh, 520px); object-fit: contain; }
+.shop-featured { margin-bottom: 36px; }
+@media (min-width: 1100px) {
+  .shop-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; padding: 32px 0 40px; }
+  .shop-hero .shop-brand-header { padding: 20px 0; }
+}

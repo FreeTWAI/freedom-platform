@@ -2,7 +2,7 @@ import {useContext} from 'react';
 import {GitHubBookSocial,SkillBookStarGateContext} from './GitHubSocial';
 
 type BookIdentity = { id?: string; book_id?: string; cover_url?: string };
-type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string };
+type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string; guide?: {credit_role?: '維護'|'策展'} };
 
 export function skillBookCoverUrl(book: BookIdentity) {
   // Platform books and 社群技能書 share one cover format; see docs/design/*-art-manifest.json.
@@ -26,9 +26,14 @@ export function SkillBookCover({ book, className = '' }: { book: BookIdentity; c
   return url ? <img className={`skill-book-illustration ${className}`} src={url} alt="" width="768" height="512" loading="lazy" decoding="async"/> : null;
 }
 
+export function SkillBookSourceAccount({book}:{book:BookSource}) {
+  const repository=skillBookStarUrl(book),account=repository?new URL(repository).pathname.split('/')[1]:null;
+  return account?<p className="field-hint">來源 GitHub 帳號：<a href={`https://github.com/${account}`} target="_blank" rel="noopener noreferrer">{account}</a>（Repo 擁有者帳號，不代表會員身分已核實。）</p>:<p>來源資訊請見原作連結。</p>;
+}
+
 export function SkillBookStar({ book,compact=false }: { book: BookSource;compact?:boolean }) {
   const url = skillBookStarUrl(book),id=book.id??book.book_id;
-  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact}/> : null;
+  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact} sourceCredit={Boolean(book.guide?.credit_role)}/> : null;
 }
 
 export function SkillBookStarGate({books}:{books:(BookSource&{title:string})[]}){

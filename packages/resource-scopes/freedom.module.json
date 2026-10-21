@@ -10,6 +10,7 @@
     "tests/runtime/resource-scopes.test.ts",
     "migrations/118_shop_service_identity.sql",
     "tests/runtime/shop-service-identity.test.ts",
+    "tests/runtime/shop-service-grammar.test.ts",
     "migrations/125_tenant_row_security.sql"
   ],
   "public_exports": [

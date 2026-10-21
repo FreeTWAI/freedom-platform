@@ -13,6 +13,7 @@ import {MemberRecommendations} from './MemberRecommendations';
 import {SkillBookIntro, type IntroBook} from './SkillBookIntro';
 import {openMemberChat} from './chat-entry';
 import {SocialZone} from './SocialZone';
+import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, type HomeRefreshReason} from './member-home-loading';
 
@@ -35,7 +36,7 @@ type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
 type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
 type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
-export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const sessionGeneration = client.sessionGeneration;
@@ -171,6 +172,28 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
+    <details className="home-participation-disclosure" open={wide}>
+    <summary>一起學、一起做</summary>
+    <HomeParticipation key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
+    </details>
+    {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
+      <div className="home-next-copy">
+      <h2 className="home-next-eyebrow">公會與學習</h2>
+      <p id="home-next-step-description">{nextStep.message}</p>
+      {internPrimary && <p className="field-hint guild-intern-notice" role="status">你是這個公會的實習成員：可以閱讀公會內容、在公會聊天室聊天。想發布或編輯，可以在聊天室跟會長打聲招呼，會長能把你設為正式成員。</p>}
+      {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
+      {primaryGuild ? <div className="home-next-actions">
+        {guideBook
+          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
+          : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
+        <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
+        {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
+      </div> : <div className="home-next-actions"><button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.(nextStep.action)}>{nextStep.label}</button></div>}
+      {primaryGuild && <FirstParticipation client={client} session={session} onNavigate={onNavigate} primaryGuild={primaryGuild} firstParticipationEnabled={firstParticipationEnabled}/>}
+      </div>
+      <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
+    </section>}
+
     <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
@@ -192,23 +215,6 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
         <button type="button" onClick={() => onNavigate?.('events')}><strong>社群活動</strong><span>查看、提交與管理活動</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
       </section>
     </nav>
-    {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
-      <div className="home-next-copy">
-      <h2 className="home-next-eyebrow">公會與學習</h2>
-      <p id="home-next-step-description">{nextStep.message}</p>
-      {internPrimary && <p className="field-hint guild-intern-notice" role="status">你是這個公會的實習成員：可以閱讀公會內容、在公會聊天室聊天。想發布或編輯，可以在聊天室跟會長打聲招呼，會長能把你設為正式成員。</p>}
-      {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
-      {primaryGuild ? <div className="home-next-actions">
-        {guideBook
-          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
-          : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
-        <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
-        {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
-      </div> : <div className="home-next-actions"><button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.(nextStep.action)}>{nextStep.label}</button></div>}
-      {primaryGuild && <FirstParticipation client={client} session={session} onNavigate={onNavigate} primaryGuild={primaryGuild} firstParticipationEnabled={firstParticipationEnabled}/>}
-      </div>
-      <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
-    </section>}
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">
       {shortcuts.map(entry => <button key={entry.id} type="button" className="home-shortcut" onClick={() => onNavigate?.(entry.id)}>

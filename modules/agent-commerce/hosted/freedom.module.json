@@ -3,6 +3,8 @@
   "module_id": "hosted-distribution",
   "owner_role": "foundation",
   "owned_paths": [
+    "migrations/173_supply_structured_terms.sql",
+    "tests/runtime/hosted-supply-structured-terms.test.ts",
     "modules/agent-commerce/hosted/distribution.ts",
     "modules/agent-commerce/hosted/distribution.md",
     "apps/platform-api/src/routes/hosted-distribution.ts",
@@ -29,11 +31,20 @@
     "apps/portal-web/src/modules/HostedSupplyCatalog.tsx",
     "tests/runtime/hosted-supply-catalog.test.ts",
     "tests/e2e/hosted-supply-catalog.spec.ts",
-    "migrations/164_hosted_supply_catalogs.sql"
+    "migrations/164_hosted_supply_catalogs.sql",
+    "modules/agent-commerce/hosted/supply-availability.ts",
+    "apps/portal-web/src/modules/HostedSupplyOffer.tsx",
+    "modules/agent-commerce/hosted-ui/SupplyOfferPresentation.tsx",
+    "modules/agent-commerce/hosted-ui/SupplyOfferText.ts",
+    "modules/agent-commerce/hosted-ui/SupplyOffer.css",
+    "modules/agent-commerce/hosted-ui/reseller-arrangement.ts",
+    "tests/runtime/hosted-supply-offer-page.test.ts",
+    "tests/e2e/hosted-supply-offer.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
-    "agent-commerce"
+    "agent-commerce",
+    "commerce-fulfilment"
   ],
   "contract_families": [
     "common"
@@ -71,7 +82,8 @@
         "store.distribution.list",
         "store.distribution.propose",
         "store.distribution.decide",
-        "store.distribution.withdraw"
+        "store.distribution.withdraw",
+        "store.supply-offer.read"
       ],
       "auth_profile": "member-session"
     },
@@ -80,6 +92,7 @@
       "kind": "page",
       "entry": "apps/portal-web/src/modules/HostedDistribution.tsx",
       "operations": [
+        "storefront.supply-catalog-photos.read",
         "store.supply-offer.list",
         "store.supply-offer.publish",
         "store.supply-offer.withdraw",
@@ -121,6 +134,17 @@
         "storefront.reservations.read",
         "storefront.reservations.configure",
         "storefront.supplier.orders.list"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "commerce.hosted-supply-offer-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/HostedSupplyOffer.tsx",
+      "operations": [
+        "store.supply-offer.read",
+        "store.distribution.propose",
+        "store.distribution.withdraw"
       ],
       "auth_profile": "member-session"
     }

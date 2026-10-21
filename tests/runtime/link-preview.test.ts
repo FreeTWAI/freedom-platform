@@ -78,6 +78,34 @@ test('unterminated title delimiters stay bounded at the HTML input limit', async
     'First & 😀titlenested');
 });
 
+test('legal unquoted meta attributes retain OG title and relative image metadata', () => {
+  const page = '<title>Fallback</title><META CONTENT=Correct PROPERTY=og:title><meta content=/images/a.png name=og:image>';
+  assert.equal(previewTitle(page), 'Correct');
+  assert.equal(previewImageUrl(page, 'https://cdn.example/posts/1'), 'https://cdn.example/images/a.png');
+});
+
+test('greater-than signs inside either quote style do not terminate metadata', () => {
+  const page = `<title>Fallback</title><meta data-note='x > y' content="A > B &amp; C" property="og:title"><meta data-note="x > y" name='og:image' content='/images/a.png'>`;
+  assert.equal(previewTitle(page), 'A B & C');
+  assert.equal(previewImageUrl(page, 'https://cdn.example/posts/1'), 'https://cdn.example/images/a.png');
+});
+
+test('legal unquoted metadata reaches thumbnail normalization without relaxing image URL admission', async () => {
+  const pageUrl = 'https://cdn.example/posts/unquoted';
+  const fetcher: PreviewFetch = async input => input === pageUrl
+    ? htmlResponse('<title>Fallback</title><meta property=og:title content="正確預覽"><meta property=og:image content=/images/a.png>')
+    : input === 'https://cdn.example/images/a.png' ? imageResponse(PNG) : new Response(null, {status: 404});
+  const result = await previewLink(pageUrl, fetcher);
+  assert.equal(result.title, '正確預覽');
+  assert.equal(result.source, 'page');
+  assert.ok(result.image);
+  const image = await sharp(result.image).metadata();
+  assert.equal(image.format, 'webp');
+  assert.equal(image.width, 640);
+  assert.equal(image.height, 360);
+  assert.equal(previewImageUrl('<meta property=og:image content=https://127.0.0.1/private>', pageUrl), null);
+});
+
 test('preview titles contain no markup after entity decoding', () => {
   const script = previewTitle('<title>&lt;script&gt;alert(1)&lt;/script&gt; 好物分享</title>');
   assert.ok(script && !script.includes('<') && !script.includes('>') && script.includes('好物分享'), script ?? 'null');
@@ -101,12 +129,16 @@ test('numeric preview references replace invalid scalars and preserve valid Unic
     for (const html of [
       `<title>before${reference}after</title>`,
       `<title>fallback</title><meta property="og:title" content="before${reference}after">`,
+      `<title>fallback</title><meta property=og:title content=before${reference}after>`,
+      `<title>fallback</title><meta property='og:title' content='before${reference}after'>`,
     ]) {
       assert.equal(previewTitle(html), expected, reference);
       assert.deepEqual(await previewLink('https://example.com/numeric', async () => htmlResponse(html)),
         {title: expected, image: null, source: null}, reference);
     }
     assert.equal(previewImageUrl(`<meta name="twitter:image" content="/before${reference}after.png">`, 'https://example.com/page'),
+      new URL(`/before${decoded}after.png`, 'https://example.com').href, reference);
+    assert.equal(previewImageUrl(`<meta name=twitter:image content=/before${reference}after.png>`, 'https://example.com/page'),
       new URL(`/before${decoded}after.png`, 'https://example.com').href, reference);
   }
 });
@@ -269,4 +301,64 @@ test('preview title caps never retain half a supplementary character', async () 
       ? new Response(JSON.stringify({title}), {headers: {'content-type': 'application/json'}})
       : new Response(null, {status: 404}));
   assert.deepEqual(youtube, {title: 'a'.repeat(119), image: null, source: null});
+});
+
+for (const fixture of [
+  {
+    label: 'windows-1252',
+    contentType: 'text/html; note="x; charset=bogus"; CHARSET="windows-1252"',
+    html: Buffer.from('<title>Caf\xe9 \x80</title>', 'latin1'),
+    title: 'Café €',
+  },
+  {
+    label: 'big5',
+    contentType: 'text/html; charset=Big5',
+    html: Buffer.concat([Buffer.from('<title>'), Buffer.from([0xA4, 0xA4, 0xA4, 0xE5]), Buffer.from('</title>')]),
+    title: '中文',
+  },
+]) {
+  test(`declared HTML charset decodes ${fixture.label} before title parsing`, async () => {
+    const result = await previewLink('https://cdn.example/charset', async () =>
+      new Response(new Uint8Array(fixture.html), {headers: {'content-type': fixture.contentType}}));
+    assert.equal(result.title, fixture.title);
+    assert.equal(result.image, null);
+  });
+  for (const [name, contentType] of [
+    ['trailing', `text/html; charset=${fixture.label};`],
+    ['leading', `text/html;; charset=${fixture.label}`],
+    ['consecutive', `text/html; note=ok;;; charset=${fixture.label}`],
+    ['whitespace-only', `text/html; \t ; charset=${fixture.label}; \t `],
+  ]) {
+    test(`declared HTML charset decodes ${fixture.label} across ${name} empty parameters`, async () => {
+      const result = await previewLink('https://cdn.example/charset', async () =>
+        new Response(new Uint8Array(fixture.html), {headers: {'content-type': contentType}}));
+      assert.equal(result.title, fixture.title);
+      assert.equal(result.image, null);
+    });
+  }
+}
+
+test('absent, unsupported and malformed HTML charset labels retain UTF-8 fallback', async () => {
+  for (const contentType of [
+    'text/html', 'text/html; charset=x-unsupported', 'text/html; charset=""', 'text/html; charset="unfinished',
+    'text/html; note="unfinished; charset=windows-1252',
+    'text/html; note="unfinished; charset=big5',
+    'text/html; charset=windows-1252; note="unfinished',
+    'text/html; charset=big5; malformed',
+    'text/html;; note="unfinished; charset=windows-1252',
+    'text/html; note="x; charset=big5";',
+    'text/html; charset=windows-1252;; malformed; charset=utf-8',
+  ]) {
+    const result = await previewLink('https://cdn.example/utf8', async () => htmlResponse('<title>工坊 Café</title>', 200, {'content-type': contentType}));
+    assert.equal(result.title, '工坊 Café', contentType);
+  }
+});
+
+test('oEmbed JSON remains UTF-8 even if an unrelated charset is declared', async () => {
+  const result = await previewLink('https://www.youtube.com/watch?v=e2eDemo0001', async input =>
+    input.startsWith('https://www.youtube.com/oembed')
+      ? new Response(JSON.stringify({title: '工坊 Café'}), {headers: {'content-type': 'application/json; charset=windows-1252'}})
+      : new Response(null, {status: 404}));
+  assert.equal(result.title, '工坊 Café');
+  assert.equal(result.image, null);
 });

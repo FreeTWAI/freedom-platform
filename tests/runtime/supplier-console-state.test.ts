@@ -1,3 +1,6 @@
+import {MerchantInventorySummary,InventoryDefinition} from '../../modules/agent-commerce/hosted-ui/CommerceTools';
+import {MerchantInventorySchema,MerchantProductViewSchema as ProductViewSchema,ProductViewSchema as FrozenProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront';
+import {SupplyProductViewSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {test} from 'node:test';
 import * as React from 'react';
 import {createElement} from 'react';
@@ -64,7 +67,12 @@ test('SC-UI-07 matching receipt succeeds; incomplete schema and wrong target rem
  const a=attempt();assert.equal(classifyCommandOutcome(a,{response:{product_id:id,version:'2'}}).state,'success');
  for(const response of [{product_id:id},{product_id:other,version:'2'},{product_id:id,version:'2',unexpected:1}])assert.equal(classifyCommandOutcome(a,{response}).state,'unknown');
  const setup=attempt({kind:'profile.setup',target:i});assert.equal(classifyCommandOutcome(setup,{response:{instance_id:i,version:'1',created:true}}).state,'success');
- assert.deepEqual(Object.keys(ATTEMPT_KINDS).sort(),['material.access','material.copy','material.create','material.grant','material.revoke','material.update','material.withdraw','offer.publish','offer.withdraw','product.create','product.update','profile.setup','profile.update','request.decide','reservation.toggle','terms.update'].sort());
+ for(const kind of ['offer.photo.share','offer.photo.stop'] as const){
+  const photo=attempt({kind,target:id});
+  for(const response of [{state:'shared',seq:'1',matches_current_photo:true},{state:'not_shared',seq:'2',matches_current_photo:false}])assert.equal(classifyCommandOutcome(photo,{response}).state,'success');
+  for(const response of [{state:'shared',seq:'1'},{state:'shared',seq:1,matches_current_photo:true},{state:'shared',seq:'1',matches_current_photo:true,unexpected:true}])assert.equal(classifyCommandOutcome(photo,{response}).state,'unknown');
+ }
+ assert.deepEqual(Object.keys(ATTEMPT_KINDS).sort(),['material.access','material.copy','material.create','material.grant','material.revoke','material.update','material.withdraw','offer.photo.share','offer.photo.stop','offer.publish','offer.withdraw','product.create','product.update','profile.setup','profile.update','request.decide','reservation.toggle','terms.update'].sort());
 });
 for(const [name,error] of [
  ['non-API',new Error('lost')],['network',new ApiError({message:'lost',network:true})],['timeout',new ApiError({message:'late',status:408,timedOut:true})],['500',new ApiError({message:'server',status:500})],['401',new ApiError({message:'expired',status:401})],['accessExpired',new ApiError({message:'access',status:403,accessExpired:true})],['missing status',new ApiError({message:'unknown'})],
@@ -102,7 +110,7 @@ test('SC-UI-14 leave guard permits in-scope routes but guards other scopes and l
   for(const key of ['sending','held','photoBlocking'] as const)assert.equal(leaveDecision(next,scope,{...state,[key]:true}).allow,false);
  }
 });
-const product=(n:number,offer:SupplierProduct['offer'],available:number):SupplierProduct=>({product_id:`p${n}`,sku:`P000${n}`,title:`商品 ${n}`,description:'茶杯',currency:'TWD',supply_price_minor:100,shipping_minor:0,stock:10,reserved:10-available,available,version:'1',offer,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}});
+const product=(n:number,offer:SupplierProduct['offer'],available:number):SupplierProduct=>({product_id:`p${n}`,sku:`P000${n}`,title:`商品 ${n}`,description:'茶杯',currency:'TWD',supply_price_minor:100,shipping_minor:0,stock:10,reserved:10-available,available,version:'1',offer,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}});
 const offered={offer_id:id,version:'1',terms_sha256:'a'.repeat(64),matches_current_terms:true};
 const products=[product(1,offered,10),product(2,{...offered,matches_current_terms:false},3),product(3,null,0),product(4,offered,0)];
 test('SC-UI-15 complete-set product filters have exactly the overview definitions',()=>{
@@ -205,7 +213,7 @@ test('SC-UI-S2-05 change labels exhaust the wire enum and preserve publish versi
   'storefront.supply-catalog.setup':'建立供貨商品庫','storefront.supply-profile.update':'更新商品庫資料','storefront.reservations.configure':'變更預留設定',
   'storefront.supply-product.create':'新增商品','storefront.product.create':'在商店新增商品','storefront.supply-product.update':'更新商品內容或庫存',
   'storefront.product.update':'在商店更新商品','storefront.supply-terms.update':'更新供貨條件','storefront.product.photo.upload':'上傳商品照片',
-  'storefront.product.photo.remove':'移除商品照片','storefront.supply-offer.publish':'公開新的供貨版本','storefront.supply-offer.withdraw':'撤回供貨版本','storefront.distribution.decide':'處理售價申請',
+  'storefront.product.photo.remove':'移除商品照片','storefront.supply-offer.publish':'公開新的供貨版本','storefront.supply-offer.withdraw':'撤回供貨版本','storefront.supply-offer.photo.share':'提供或更換方案照片','storefront.supply-offer.photo.stop':'停止提供方案照片','storefront.distribution.decide':'處理售價申請',
  };
  assert.deepEqual(Object.keys(CHANGE_LABELS).sort(),[...SupplierChangeOperationSchema.options].sort());assert.deepEqual(CHANGE_LABELS,expected);
  for(const operation of SupplierChangeOperationSchema.options)assert.equal(changeLabel({operation,version:'1'}),expected[operation]);
@@ -571,4 +579,44 @@ import {markMaterialUploadUnknown} from '../../modules/agent-commerce/supplier-c
 test('SC-UI-M3-24 a late unknown response cannot resurrect a completed upload or disturb a newer tuple',()=>{
  const client={},a=uploadAttempt();holdMaterialUpload(client,'member',a);assert.equal(markMaterialUploadUnknown(client,'member',a),true);assert.equal(heldMaterialUpload(client,'member',a)?.hadUnknown,true);releaseMaterialUpload(client,'member',a);assert.equal(markMaterialUploadUnknown(client,'member',a),false);assert.equal(heldMaterialUpload(client,'member',a),null);
  const b=uploadAttempt({key:'new-key'});holdMaterialUpload(client,'member',b);assert.equal(markMaterialUploadUnknown(client,'member',a),false);assert.equal(heldMaterialUpload(client,'member',b)?.key,b.key);assert.equal(heldMaterialUpload(client,'member',b)?.hadUnknown,false);releaseMaterialUpload(client,'member',b);
+});
+
+
+test('structured supply references parse optional text, retain labels and format attempt values',()=>{
+ assert.deepEqual(commandFields('terms.update',{msrp_minor:'450.25',minimum_order_quantity:'2',lead_time_days:'0'}),{msrp_minor:45025,minimum_order_quantity:2,lead_time_days:0});
+ assert.deepEqual(commandFields('terms.update',{msrp_minor:'',minimum_order_quantity:' ',lead_time_days:''}),{msrp_minor:null,minimum_order_quantity:null,lead_time_days:null});
+ assert.deepEqual(commandFields('terms.update',{shipping_minor:'0'}),{shipping_minor:0});
+ for(const [field,text] of [['msrp_minor','0'],['msrp_minor','1000000.01'],['minimum_order_quantity','0'],['minimum_order_quantity','10001'],['minimum_order_quantity','2.5'],['lead_time_days','-1'],['lead_time_days','366'],['lead_time_days','1.2'],['lead_time_days','1e2']])assert(Number.isNaN(commandFields('terms.update',{[field]:text})[field]),field+' '+text);
+ assert.equal(fieldLabels.msrp_minor,'建議售價');assert.equal(fieldLabels.minimum_order_quantity,'最低訂量');assert.equal(fieldLabels.lead_time_days,'交期');
+ assert.equal(attemptFieldText('msrp_minor',45025,'TWD'),'$450.25');assert.equal(attemptFieldText('minimum_order_quantity',2,'TWD'),'2 件');assert.equal(attemptFieldText('lead_time_days',3,'TWD'),'3 天');assert.equal(attemptFieldText('lead_time_days',0,'TWD'),'當天');assert.equal(attemptFieldText('lead_time_days',null,'TWD'),'（空白）');
+});
+
+test('merchant stock contracts accept legacy absence and validate all occupied-stock equations',()=>{
+ const ready={state:'ready' as const,stock:20,reserved:8,available:12,held:3,allocated:5};
+ assert.deepEqual(MerchantInventorySchema.parse(ready),ready);
+ for(const field of ['stock','reserved','available','held','allocated'] as const)for(const value of [-1,0.5,1000001])
+  assert.equal(MerchantInventorySchema.safeParse({...ready,[field]:value}).success,false,field+':'+value);
+ for(const invalid of [{...ready,reserved:7},{...ready,available:13},{...ready,secret:'private'},{state:'inconsistent',code:'reservation_inconsistent',held:0}])
+  assert.equal(MerchantInventorySchema.safeParse(invalid).success,false);
+ assert.deepEqual(MerchantInventorySchema.parse({state:'inconsistent',code:'reservation_inconsistent'}),{state:'inconsistent',code:'reservation_inconsistent'});
+ const product={product_id:id,sku:'P0001',title:'合成茶杯',description:'',price_minor:100,currency:'TWD',stock:20,version:'1'};
+ assert.equal(FrozenProductViewSchema.safeParse({...product,inventory:ready}).success,false);
+ assert(ProductViewSchema.safeParse(product).success);assert(ProductViewSchema.safeParse({...product,inventory:ready}).success);
+ assert.equal(ProductViewSchema.safeParse({...product,stock:21,inventory:ready}).success,false);
+ const {price_minor,...supply}=product;
+ assert(SupplyProductViewSchema.safeParse({...supply,cost_minor:price_minor,inventory:ready}).success);
+ assert.equal(SupplyProductViewSchema.safeParse({...supply,stock:21,cost_minor:price_minor,inventory:ready}).success,false);
+});
+test('merchant inventory renders unavailable values locally and keeps unknown products after known availability',()=>{
+ const inventory={state:'ready' as const,stock:20,reserved:8,available:12,held:3,allocated:5};
+ const render=(props:Parameters<typeof MerchantInventorySummary>[0])=>renderToStaticMarkup(createElement(MerchantInventorySummary,props));
+ const html=render({stock:20,inventory});for(const text of ['庫存 20・已占用 8・可售 12','預留中 3','已付款待出貨 5','merchant-inventory-values','merchant-inventory-breakdown'])assert(html.includes(text),text);
+ assert(render({stock:20,inventory,supplier:true}).includes('庫存 20／已占用 8／可用 12'));
+ const bad=render({stock:20,inventory:{state:'inconsistent',code:'reservation_inconsistent'}});assert(bad.includes('已占用 —・可售 —'));assert(bad.includes('庫存紀錄不一致'));assert(!bad.includes('已付款待出貨 0'));
+ assert(render({stock:20}).includes('庫存明細暫時無法讀取，請重新讀取。'));
+ const definition=renderToStaticMarkup(createElement(InventoryDefinition,{supplier:true}));assert(definition.includes('可用與可售是同一數量'));assert.equal(definition.split('預留不是成交').length,2);
+ const base={product_id:id,sku:'P0001',title:'合成茶杯',description:'',currency:'TWD' as const,supply_price_minor:100,shipping_minor:0,stock:20,reserved:8,available:12,version:'1',offer:null,offer_photo:null,cooperation:{awaiting:0,sellable:0,changes_requested:0,inactive:0}};
+ const unknown={...base,product_id:other,sku:'P0002',available:0,reserved:20,inventory:{state:'inconsistent' as const,code:'reservation_inconsistent' as const}};
+ assert.deepEqual(filterProducts([unknown,{...base,inventory}],undefined,'available').map(i=>i.product_id),[id,other]);
+ assert.deepEqual(filterProducts([unknown,{...base,inventory}],'out_of_stock').map(i=>i.product_id),[other]);
 });

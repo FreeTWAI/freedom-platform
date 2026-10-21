@@ -253,3 +253,16 @@ published links, themes, product photos and social image preparation. The photo
 suite must run with FREEDOM_E2E_STORE_PHOTO_FIXTURE=1, not as a skipped default
 pass. Local Chromium and PostgreSQL 17 results are source evidence; required
 PostgreSQL 18 CI and real phone/production acceptance remain separate.
+
+## Live merchant stock and order-taking state
+
+Private merchant reads distinguish held reservations from remaining paid
+allocations. 已占用 includes both; 可售 and the supplier console's 可用 equal
+`available`. See [inventory observations](hosted/inventory-reservations.md) for
+strict/reporting semantics and [seller console](seller-console/README.md) for the
+shared readiness presentation. Historical display-only/v1 descriptions above
+remain scoped to those increments; checkout availability comes from the existing
+site flags and current store readiness. No migration, capability release, host
+flag change or new payment/shipping command is introduced by this presentation
+change. Drop-ship consent (C2), exposing supplier breakdowns to retailers and
+stability guarantees for CSV consumers require separate product decisions.
