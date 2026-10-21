@@ -113,6 +113,11 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
   await page.route(pattern,async route=>{if(route.request().method()==='PUT'){await route.fetch();await route.abort('failed');}else await route.continue();});
   await editor.getByRole('button',{name:'儲存規格',exact:true}).click();await expect(editor.getByRole('status')).toContainText('暫時無法確認儲存結果');await expect(editor.getByLabel('商品組名稱',{exact:true})).toBeDisabled();
   await page.unroute(pattern);await editor.getByRole('button',{name:'重試原操作',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存規格');expect(signatures).toHaveLength(2);expect(signatures[1]).toEqual(signatures[0]);
+  await editor.getByRole('button',{name:'移除選項：顏色',exact:true}).click();
+  await expect(editor.getByLabel(store.products[0].sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('M');
+  await expect(editor.getByLabel(store.products[1].sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('L');
+  await expect(editor.getByLabel(store.soldOutProduct.sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('L');
+  await editor.getByRole('button',{name:'取消變更',exact:true}).click();
   for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByLabel('商品組名稱',{exact:true}).focus();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-editor-'+width+'.png'),fullPage:true});}
   await store.republish();const detail=await buyer.newPage();await detail.goto('/shops/'+store.slug);await expect(detail.getByRole('link',{name:'查看商品：經典 T 恤',exact:true})).toHaveCount(1);await expect(detail.locator('.shop-catalog')).toContainText('部分規格售完');
   for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-grid-'+width+'.png'),fullPage:true});}

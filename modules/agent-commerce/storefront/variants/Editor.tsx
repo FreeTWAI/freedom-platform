@@ -82,7 +82,7 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
  const metadataDirty=JSON.stringify(draft)!==JSON.stringify(fromGroup(g)),otherDirty=Object.values(productDirty).some(Boolean),dirty=metadataDirty||otherDirty||newOpen;
  useEffect(()=>onDirty(dirty),[dirty]);
  const update=(patch:Partial<Draft>)=>{setFieldError('');setInvalidFields([]);setDraft(old=>({...old,...patch}));};
- const axes=(next:Draft['axes'])=>setDraft(old=>({...old,axes:next,members:old.members.map(m=>({...m,value_keys:next.map((a,n)=>a.values.some(v=>v.key===m.value_keys[n])?m.value_keys[n]:a.values[0]?.key??'')}))}));
+ const axes=(next:Draft['axes'])=>setDraft(old=>({...old,axes:next,members:old.members.map(m=>({...m,value_keys:next.map(a=>{const value=m.value_keys[old.axes.findIndex(axis=>axis.key===a.key)];return a.values.some(v=>v.key===value)?value:a.values[0]?.key??'';})}))}));
  const candidates=page.items.filter(row=>row.group_id===null&&row.editable&&!draft.members.some(m=>m.product_id===row.members[0].product.product_id));
  const member=(id:string)=>page.items.flatMap(g=>g.members).find(m=>m.product.product_id===id)!;
  function create(){try{const fields=numericProductFields(newProduct.price_minor,newProduct.stock,g.members[0].product.currency),parsed=CreateVariantProductInputSchema.shape.product.safeParse({title:newProduct.title,description:newProduct.description,...fields});if(!parsed.success){invalid('有欄位格式不符，請檢查後再送出。',parsed.error.issues.map(i=>'new.'+i.path.join('.')));return;}setFieldError('');setInvalidFields([]);onCreate({product:parsed.data,value_keys:newValues});}catch(e){invalid(e instanceof Error?e.message:'請檢查商品資料。',['new.'+((e as {field?:string})?.field??(e instanceof Error&&e.message.includes('庫存')?'stock':'price_minor'))]);}}
