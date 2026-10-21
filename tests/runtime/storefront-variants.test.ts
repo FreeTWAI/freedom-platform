@@ -168,6 +168,15 @@ test('VARIANTS-05 write capability, replay reauthorization, compound create roll
  const added=f.ok(await call('POST','/product-groups/P0001/products',{product:{title:'新增白色 L',description:'原本新品介紹',price_minor:33000,stock:1},value_keys:[axes[0].values[0].key,axes[1].values[1].key]},g.version),201);assert.equal(added.current.items.find((g:any)=>g.group_key==='P0001').members.length,3);
  g=(await page()).items.find(g=>g.group_key==='P0001')!;f.ok(await call('POST','/product-groups/P0001/split',{},g.version));
  assert.equal((await page()).items.find(g=>g.group_key==='P0002')!.title,'原本黑色商品');
+ // A former member uses its own lazy gallery group version when it becomes
+ // an anchor. Membership revisions belong to the group it just left.
+ const detached=(await page()).items.find(g=>g.group_key==='P0002')!;
+ const home=(await f.h.pool.query('SELECT version::text FROM commerce_product_groups WHERE tenant_id=$1 AND anchor_product_id=$2',[s.tenantId,second.product_id])).rows[0];
+ assert.equal(detached.version,home.version,'singleton edit version must match its own lazy group');
+ const restarted=f.ok(await call('PUT','/product-groups/P0002',{...body(detached),title:'原成員的新商品組',axes:[axes[0]],members:body(detached).members.map(m=>({...m,value_keys:[axes[0].values[0].key]}))},detached.version));
+ const expanded=f.ok(await call('POST','/product-groups/P0002/products',{product:{title:'新組的黑色商品',price_minor:200,stock:2},value_keys:[axes[0].values[1].key]},restarted.completed_version),201);
+ assert.equal(expanded.current.items.find((g:any)=>g.group_key==='P0002').members.length,2);
+ await publish();assert.match(await(await app.request(f.h.origin+'/shops/'+s.slug+'/products/P0002')).text(),/原成員的新商品組/);
  const current=f.ok(await call('GET','/products')).items.find((p:any)=>p.product_id===second.product_id);f.ok(await call('PATCH','/products/'+second.product_id,{description:'舊 binary 發布的介紹'},current.version));await publish(f.app);
  const publicProjection=await(await f.app.request(f.h.origin+'/api/v1/public/stores/'+s.slug)).json() as any;
  const fallback=await(await app.request(f.h.origin+'/shops/'+s.slug)).text();assert.match(fallback,new RegExp(publicProjection.products.length+' 件商品'));
