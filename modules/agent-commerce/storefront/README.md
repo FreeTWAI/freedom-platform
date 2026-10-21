@@ -3,6 +3,30 @@
 Buyer pages under `/shops/:slug` that need browser code, and the storefront
 client bundle they share (EC-SPEC-01 §3, EC-SPEC-02 §4.2 and §6).
 
+2026-10-20 buyer journey: when `FREEDOM_COMMERCE_CHECKOUT_ENABLED` is on, B05,
+B10 and the hydrated missing-B07 state for a valid UUID offer 「登入會員」.
+The portal accepts only the closed checkout/order-access/order-UUID return paths,
+validates the current public store, rechecks the successful session and performs
+a full navigation after password, TOTP, backup-code login or registration.
+Unavailable stores keep the member in the portal with a notice. Registration
+can defer guild choice and positioning. B01/B03 reservation prompts are unchanged;
+there is no cart return route.
+
+`buyer-state.ts` and `checkout-page.tsx` implement EC-AT49: changed identities
+cannot send old intents, and the retained cart gets a new quote before another
+explicit confirmation. `delivery-copy.ts` maps every server delivery reason to
+buyer copy. B05 names blocked items and offers only usable all-line alternatives;
+otherwise it links to 「回購物車調整」. B04 validates and retains delivery options
+and notes only items blocked by every configured option, without calculating
+shipping. Prices, quoting, stock and holds retain their existing rules.
+
+Flag-off compatibility covers storefront HTML response bytes, security/cache
+headers and stable hydrated DOM for fixed fixtures, plus portal login and
+`#reservations`. Edited JavaScript asset bytes are excluded from that comparison.
+The existing directly addressable checkout HTML remains available when off;
+its API gate still rejects checkout. No site JSON or Worker readiness change is
+needed. The portal ignores storefront returns when the flag is off.
+
 - Server HTML for these pages lives in this directory. The routes stay in
   `apps/platform-api/src/routes/hosted-store.ts` next to the other `/shops`
   pages.
@@ -12,6 +36,27 @@ client bundle they share (EC-SPEC-01 §3, EC-SPEC-02 §4.2 and §6).
   and never loads the portal app, themes, navigation or chat.
 - Orders are read only through the public checkout API (`hosted-checkout`).
   The pages show no data that the API did not return.
+- The shop, product and buyer pages share the published merchant name and
+  navigation through `hosted/storefront-shell.ts`. The original Freedom Workshop
+  logo and platform attribution stay in the footer. Order guidance remains
+  reachable when new checkout is closed; it does not grant access to any order.
+  Private previews show the saved merchant identity without public navigation
+  or checkout actions. The shared 「商店說明與聯絡」 section displays the
+  merchant-authored `description` from that same publication (or saved draft
+  in private preview). It is available without JavaScript on shop, product,
+  cart, checkout, order-access, order and payment-return pages, including
+  missing-order guidance for a still-published shop. Empty descriptions say
+  that the merchant has not supplied this information.
+  Member contact details, buyer data, bank settings and supplier agreement
+  terms are never used to fill this section. Text is escaped, line breaks are
+  preserved and URLs are not automatically turned into links. The shop header
+  shows a short introduction; the full text remains in the shared section.
+- Merchants edit the existing 「商店介紹」 field under 「商店資料」, save,
+  preview, then publish. Its guidance asks for their public contact, payment,
+  delivery and after-sales information; it does not invent or verify those
+  claims. Draft changes do not update public pages. Withdrawal and current
+  store visibility checks still govern all pages. No new DTO, migration,
+  payment setting, transaction authority or frozen order term is introduced.
 - Before Ted authorises `FREEDOM_COMMERCE_EMAIL_ENABLED`, B10 shows the
   EC-SPEC-10 §6.2 explanation and collects no Email.
 

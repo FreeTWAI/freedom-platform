@@ -7,6 +7,13 @@ import {uploadMemberAvatar} from '../../apps/portal-web/src/modules/avatar-clien
 
 const NETWORK_MESSAGE='目前無法連線。操作不會自動重送，請重新載入確認結果。';
 
+test('admission errors retain server detail and code through the shared panel mutation client',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>Response.json({code:'store_admission_exists',detail:'這間商店已有有效的准入紀錄。'},{status:409}));
+ const client=new AdminClient();client.csrf='synthetic';
+ await assert.rejects(client.request('/commerce/store-admissions',{}, {key:'same-attempt'}),(cause:unknown)=>cause instanceof AdminRequestError&&cause.status===409&&cause.message==='這間商店已有有效的准入紀錄。（store_admission_exists）');
+ assert.equal(client.csrf,'synthetic');
+});
+
 function opaqueRedirect():Response{
   return {type:'opaqueredirect',status:0,ok:false,headers:new Headers(),clone(){return opaqueRedirect();},text:async()=>'',json:async()=>{throw new SyntaxError('no body');}} as unknown as Response;
 }

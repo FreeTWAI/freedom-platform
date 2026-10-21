@@ -102,7 +102,7 @@ test('October 16 measured costs balance six and eight partitions inside the host
 
   // Per-file minima understate a single hosted run. Run 38968059268 needed up to about
   // 1.33 times the minima of a six-way share, which left six partitions only a few percent
-  // inside 1,500s minus the 24s reserve; eight partitions leave room for about 1.9 times.
+  // inside 1,500s minus the 64s reserve; eight partitions leave room for about 1.8 times.
   for (const [count, bound] of [[6, 1_040_000], [8, 780_000]]) {
     const partitions = partitionRuntimeFiles(files, count);
     assert.deepEqual(partitions.flat().sort(), files);

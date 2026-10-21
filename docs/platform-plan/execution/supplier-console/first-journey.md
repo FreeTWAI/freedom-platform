@@ -10,18 +10,20 @@ S1 的「素材」是商品照片（含純供貨商品）。給合作店家取�
 
 | 代號 | 身分 | 說明 |
 | --- | --- | --- |
-| A | 供應商，純供貨事業的 owner | 主角 |
+| A | 供應商公會的有效實習成員，純供貨事業的 owner | 主角；正式成員同樣可開始供貨 |
 | A2 | A 事業的 viewer（只有 `store:read`） | 權限反例 |
-| B | 賣家，已開零售店 | 選品、售價、發布 |
+| B | 電商公會有效實習或正式成員，已開零售店 | 選品、售價、發布 |
 | C | 另一間賣家，店名與 B 相同 | AT-16 |
 | 買家 | 未登入的訪客 | 在 B 的店預留 |
+
+首次供貨與零售各自核對資格：供應商與電商公會的 active intern／full 成員可開始自己的對應設定，不須先升等。首次 `/supply-profile` 也接受電商身分；首次 `/setup` 仍須電商公會有效身分，供應商實習成員不能憑供貨安裝直接建立零售店。既有事業仍依當前 tenant／instance 授權操作；其他供應商公會成員不能讀取 A 的私人商品或訂單。
 
 ## 旅程步驟
 
 | 步 | 誰 | 畫面 | API | 預期 | 驗收 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | A | 公會區塊「開始供貨設定」→ `#stores/<t>/<i>/supply` | `GET R/supply-profile` 回 `setup_state=setup_required` → `POST R/supply-profile` | 只顯示設定表單，其餘導覽停用並說明；建立後進入概覽；沒有要求零售網址 | AT-01 |
-| 2 | A | 概覽 | `GET R/supplier-console/overview` | 四項指標為 ready 的 0、待辦為空、第一步「新增商品」可按 | AT-39 |
+| 2 | A | 概覽 | `GET R/supplier-console/overview` | 四項指標為 ready 的 0、待辦為空；供貨準備先給「新增商品」，說明公開供貨、素材另行授權、合作確認及預留的區別 | AT-39 |
 | 3 | A | `…/supply/products/new` | `POST R/supply-products` | 進入商品詳情；所有欄位讀回相同；金額標示「供貨單價」 | AT-05 |
 | 4 | A | 商品詳情「照片」 | 照片命令（純供貨商品） | 預覽、上傳、讀回；公開頁不出現 | AT-11 |
 | 5 | A | 商品詳情「供貨條件」→「供貨版本」 | `PATCH …/supply-terms`、`POST …/supply-offer` | 公開後概覽「公開供貨商品」＝1 | AT-05 |
@@ -60,7 +62,7 @@ S1 的「素材」是商品照片（含純供貨商品）。給合作店家取�
 | 步驟 1～15 連續一條、舊書籤、新版關閉時回退 | `tests/e2e/supplier-console.spec.ts` | 整合瀏覽器 |
 | 步驟 8～11 的分支（改價、改條件、不同意／撤回、同名店、唯讀成員） | `tests/e2e/supplier-console-cooperation.spec.ts` | 整合瀏覽器 |
 | J06 | `tests/e2e/supplier-console-recovery.spec.ts` | 整合瀏覽器 |
-| 事業切換、200 件商品的清單與返回位置、鍵盤操作 | `tests/e2e/supplier-console-navigation.spec.ts` | 整合瀏覽器 |
+| 事業切換、200 件商品的清單與返回位置、鍵盤操作、供貨準備的讀取失敗與既有頁面入口 | `tests/e2e/supplier-console-navigation.spec.ts` | 整合瀏覽器 |
 | 核心頁的寬度與外觀 | `tests/e2e/supplier-console-visual.spec.ts` | 整合瀏覽器＋截圖 |
 | 步驟 4 的真實上傳 | `tests/e2e/hosted-store-photo.spec.ts`（照片 pass） | 整合瀏覽器 |
 | 共用庫存 6＋5、取消、到期、撤回後歷史 | 既有 `tests/runtime/hosted-shared-orders.test.ts` | 隔離 PostgreSQL／HTTP |

@@ -92,11 +92,17 @@ test('visitor sees application cards and public release details without launch c
   await cards(page).getByRole('button',{name:'登入查看資格',exact:true}).click(); await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
 });
 
-test('intern keeps the card and the full-member reason with disabled launch', async ({page,e2eAuthPool}) => {
-  await member(e2eAuthPool,page,'intern'); await open(page);
+test('other-guild intern needs commerce membership for retail while manual work still needs full membership', async ({page,e2eAuthPool}) => {
+  const userId=await member(e2eAuthPool,page,'intern'); await open(page);
   await expect(cards(page)).toContainText('需要這個公會的正式會員身分');
   await expect(manualCard(page).getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
   await expect(cards(page).locator('.application-card').filter({has: page.getByRole('heading',{name:'線上商店',exact:true})}).getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
+  await expect(cards(page)).toContainText('建立零售商店需要電商公會的有效成員身分，實習成員也可以開始。');
+  await e2eAuthPool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+    VALUES($1,$2,$3,'guild_commerce_sales','active','intern')`,[randomUUID(),DEMO_COMMUNITY,userId]);
+  await page.reload(); await open(page);
+  await expect(cards(page).locator('.application-card').filter({has: page.getByRole('heading',{name:'線上商店',exact:true})}).getByRole('button',{name:'啟動應用',exact:true})).toBeEnabled();
+  await expect(manualCard(page).getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
   await manualCard(page).getByRole('button',{name:'版本資料',exact:true}).click(); await expect(cards(page)).toContainText('來源提交：');
 });
 
@@ -229,7 +235,11 @@ test('leader configuration cannot remove a committed pending tenant creation or 
 });
 
 test('unreadable committed tenant creation retains its name and key across two retries', async ({page,e2eAuthPool},testInfo) => {
-  const userId=await member(e2eAuthPool,page); await open(page); await begin(page);
+  const userId=await member(e2eAuthPool,page);
+  // Retail uses active commerce membership under the cohort rule; this full member still qualifies.
+  await e2eAuthPool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+    VALUES($1,$2,$3,'guild_commerce_sales','active','full')`,[randomUUID(),DEMO_COMMUNITY,userId]);
+  await open(page); await begin(page);
   const name='原操作業務空間';
   const input=flow(page).getByLabel('業務空間名稱',{exact:true});
   const create=flow(page).getByRole('button',{name:'建立業務空間',exact:true});
@@ -720,11 +730,17 @@ test('successful manual progress after a refusal hides forgetting and restarts a
   await expect(flow(page).getByRole('button',{name:'不再追蹤',exact:true})).toHaveCount(0);
 });
 
-test('signed-in non-member receives the join-guild next step and no enabled launch', async ({page,e2eAuthPool}) => {
-  const userId=await member(e2eAuthPool,page); await e2eAuthPool.query(`UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1 AND guild_key=$2`,[userId,GUILD]);
-  await open(page); await expect(cards(page)).toContainText('先加入這個公會，才能啟動應用。');
+for (const guild of [GUILD, 'guild_commerce_sales', 'guild_product_quality_supply']) test(`signed-in non-member on ${guild} receives the precise join-guild next step`, async ({page,e2eAuthPool}) => {
+  const userId=await member(e2eAuthPool,page);
+  await e2eAuthPool.query(`UPDATE positioning_profession_memberships SET state='left' WHERE community_id=$1 AND user_id=$2`,[DEMO_COMMUNITY,userId]);
+  await page.goto(`/#guilds/${guild}`); await openGuildSection(page, '工具目錄');
+  await expect(manualCard(page)).toContainText('先加入這個公會，才能啟動應用。');
   await expect(manualCard(page).getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
-  await expect(cards(page).locator('.application-card').filter({has: page.getByRole('heading',{name:'線上商店',exact:true})}).getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
+  const store = cards(page).locator('.application-card').filter({has: page.getByRole('heading',{name:guild==='guild_product_quality_supply'?'商品與供貨':'線上商店',exact:true})});
+  await expect(store).toContainText(guild===GUILD
+    ? '建立零售商店需要電商公會的有效成員身分，實習成員也可以開始。'
+    : '先加入這個公會，實習成員也可以開始設定。');
+  await expect(store.getByRole('button',{name:'啟動應用',exact:true})).toBeDisabled();
 });
 
 test('rejected reuse candidates stay disabled for the panel session', async ({page,e2eAuthPool}) => {

@@ -77,7 +77,7 @@ test('order page serves identical no-store HTML shell for real and random order 
   const emailRes = await emailApp.request(`${x.h.origin}/shops/${s.slug}/orders/${placed.order_id}`);
   assert.equal(emailRes.status, 200);
   const emailHtml = await emailRes.text();
-  assert.equal(emailHtml, orderPageHtml({ slug: s.slug, name: '合成商店' }, placed.order_id, { emailEnabled: true }));
+  assert.equal(emailHtml, orderPageHtml({ slug: s.slug, name: '合成商店' }, placed.order_id, { emailEnabled: true, buyerJourneyEnabled: true }));
   assert.ok(emailHtml.includes('data-email-enabled="true"'));
 
   assert.deepEqual(await accessCounts(), before);
@@ -164,7 +164,7 @@ test('B10 order-access page serves the form with Email, 訂單編號, submit but
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('x-robots-tag'), 'noindex');
   assert.equal(res.headers.get('set-cookie'), null);
-  assert.equal(html, orderAccessPageHtml({ slug: s.slug, name: '合成商店' }, { emailEnabled: true }));
+  assert.equal(html, orderAccessPageHtml({ slug: s.slug, name: '合成商店' }, { emailEnabled: true, buyerJourneyEnabled: true }));
   assert.ok(html.includes('<script type="module" src="/assets/storefront.js"></script>'));
   assert.ok(html.includes('<h1 id="shop-order-access-title" tabindex="-1">找回訂單</h1>'));
   assert.ok(html.includes('<form class="shop-order-section" method="post" novalidate>'));

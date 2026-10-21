@@ -1,11 +1,14 @@
 import {randomUUID} from 'node:crypto';
 import type {Route, Browser, TestInfo} from '@playwright/test';
 import type {Pool} from 'pg';
-import {test, expect, type Page} from './fixtures.js';
+import {test, expect, type Page} from './seller-console-fixture.js';
+import {test as registrationTest} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {apiLogin, buyerLogin, enableStore, fixtureStore, offListener} from './hosted-order-fixture.js';
 import {OrderSchema, QuoteSchema} from '../../contracts/guild-launchpad/v1/hosted-order.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
+// These cases exercise the retained reservation UI with checkout and seller console disabled.
+test.use({sellerConsoleEnabled:false});
 const surface = (page: Page) => page.locator('.hosted-store');
 async function capture(page: Page, info: TestInfo, state: string) {
   for (const theme of ['light', 'dark']) for (const width of [360, 768, 1440]) {
@@ -125,7 +128,8 @@ test('HO-SUI03 a known 412 refreshes the terminal state without silently resubmi
   expect(posts).toBe(1); await navigate(page, '會員首頁'); await expect(page).toHaveURL(/#home$/);
 });
 
-test('HO-SUI04 fresh UI and API registrations keep the configured community while a cross-community store fixture remains', async ({page, browser, baseURL, e2eAuthPool}) => {
+// Registration retains the shared host's explicit community setting; it does not exercise seller UI.
+registrationTest('HO-SUI04 fresh UI and API registrations keep the configured community while a cross-community store fixture remains', async ({page, browser, baseURL, e2eAuthPool}) => {
   const store = await fixtureStore(e2eAuthPool, browser, baseURL!);
   const foreign = (await e2eAuthPool.query('SELECT user_id,community_id FROM users WHERE user_id=ANY($1::uuid[]) ORDER BY user_id', [[store.buyer.id, store.stranger.id]])).rows;
   expect(foreign).toHaveLength(2); expect(foreign[0].community_id).not.toBe(DEMO_COMMUNITY);
