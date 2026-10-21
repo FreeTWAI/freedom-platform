@@ -22659,8 +22659,8 @@
     },
     {
       "path": "tests/e2e/member-feature-fixture.ts",
-      "bytes": 2408,
-      "sha256": "987b8b26c70693f098dd5cd6a96ca9ac8aba521c3c2d64d98646dbddae61f6a9"
+      "bytes": 2510,
+      "sha256": "b5f3e366b380d8d17aeeec090f60809a4c8df46811f1e5b3a2f4a86359aa4004"
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",
@@ -22999,8 +22999,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart-fixture.ts",
-      "bytes": 17719,
-      "sha256": "64b2a9a4a0b701d886f7acf74a6eae59839536d07d3037b8a72b64409a8f3045"
+      "bytes": 17766,
+      "sha256": "6743f1864766552a47471afaa698aced849bfbed24f99048123c48df92819d0f"
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",

@@ -4,6 +4,7 @@ import {test as base} from './fixtures.js';
 import {ownedSchema} from './hosted-order-fixture.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {TENANT_CURSOR_TEST_KEY} from '../runtime/tenant-cursor-fixture.js';
+import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 
 export * from './fixtures.js';
 type Features=Pick<NonNullable<Parameters<typeof createApp>[3]>,
@@ -25,7 +26,7 @@ export const test=base.extend<{memberFeatures:Features;memberRequestGate:{before
       if(!server.listening)await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
       const address=server.address();if(!address||typeof address==='string')throw Error('Owned feature listener unavailable.');
       const origin=`http://127.0.0.1:${address.port}`;
-      app=createApp(e2eAuthPool,origin,'local',{...memberFeatures,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
+      app=createApp(e2eAuthPool,origin,'local',{...memberFeatures,registrationCommunityId:DEMO_COMMUNITY,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
       app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));
       app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));
       await use(origin);
