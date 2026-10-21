@@ -18,13 +18,16 @@ async function bindStore(q:PoolClient,admin:AdminActor,tenantId:string,instanceI
     requireCondition(instance,404,'not_found','找不到這間商店。');
     if(active)requireCondition(tenant.status==='active'&&instance.status==='active',409,'store_admission_unavailable','目前無法准入這間商店。');
   }
-  const member=await q.query(`SELECT 1 FROM tenant_memberships m JOIN principals p ON p.principal_id=m.principal_id
-    JOIN users u ON u.user_id=p.user_ref WHERE m.tenant_id=$1 AND m.status='active' AND lower(u.email)=lower($2) LIMIT 1`,[tenantId,admin.email]);
-  requireCondition(member.rowCount===0,403,'admission_not_independent','准入管理員不能是這個業務空間的成員。');
+  requireCondition(!await admissionAdminIsMember(q,admin,tenantId),403,'admission_not_independent','准入管理員不能是這個業務空間的成員。');
 }
-function view(row:Record<string,any>){
+export async function admissionAdminIsMember(q:PoolClient,admin:AdminActor,tenantId:string){
+  return (await q.query(`SELECT 1 FROM tenant_memberships m JOIN principals p ON p.principal_id=m.principal_id
+    JOIN users u ON u.user_id=p.user_ref WHERE m.tenant_id=$1 AND m.status='active' AND lower(u.email)=lower($2) LIMIT 1`,[tenantId,admin.email])).rowCount===1;
+}
+export function storeAdmissionView(row:Record<string,any>){
   return wire.StoreAdmissionViewSchema.parse({...row,admitted_at:row.admitted_at.toISOString(),revoked_at:row.revoked_at?.toISOString()??null});
 }
+const view=storeAdmissionView;
 const load=async(q:PoolClient,id:string)=>{
   const row=(await q.query('SELECT * FROM commerce_store_admissions WHERE admission_id=$1',[id])).rows[0];
   requireCondition(row,404,'store_admission_not_found','找不到商店准入紀錄。');return row;
@@ -72,20 +75,37 @@ export async function listStoreAdmissions(pool:Pool,admin:AdminActor,tenantId:st
 export function createStoreAdmissionPort(environment:CommerceProviderEnvironment,profiles:readonly string[]):CheckoutAdmissionPort{
   return {async allowed(q,store){
     if(!profiles.length)return false;
-    const owner=(await q.query('SELECT tenant_id FROM commerce_storefront_profiles WHERE storefront_shop_id=$1',[store.storefront_shop_id])).rows[0];
+    const owner=(await q.query('SELECT tenant_id,instance_id FROM commerce_storefront_profiles WHERE storefront_shop_id=$1',[store.storefront_shop_id])).rows[0];
     if(!owner)return false;await bindCheckoutStore(q,owner.tenant_id);
-    return (await q.query(`SELECT 1 FROM commerce_storefront_profiles p
-      JOIN module_instances i ON i.tenant_id=p.tenant_id AND i.instance_id=p.instance_id AND i.module_key='storefront'
-      JOIN module_definitions actual ON actual.module_key=i.module_key AND actual.release_ref=i.module_release_ref
-      JOIN module_definitions required ON required.module_key='storefront' AND required.release_ref='storefront@1.1.0'
-      JOIN commerce_store_admissions a ON a.tenant_id=i.tenant_id AND a.instance_id=i.instance_id AND a.environment=$2 AND a.revoked_at IS NULL
-      WHERE p.storefront_shop_id=$1 AND actual.capabilities @> required.capabilities
-        AND (EXISTS(SELECT 1 FROM commerce_provider_account_services service WHERE service.tenant_id=p.tenant_id AND service.instance_id=p.instance_id
-          AND service.environment=$2 AND service.purpose='payment' AND service.state='active' AND service.profile=ANY($3::text[]))
-          OR EXISTS(SELECT 1 FROM commerce_offline_payment_settings s WHERE s.tenant_id=p.tenant_id AND s.instance_id=p.instance_id
-            AND s.version=(SELECT max(version) FROM commerce_offline_payment_settings WHERE tenant_id=p.tenant_id AND instance_id=p.instance_id)
-            AND ((jsonb_typeof(s.document->'bank_transfer')='object' AND 'offline.bank_transfer.v1'=ANY($3::text[]))
-              OR (jsonb_typeof(s.document->'cash_on_meetup')='object' AND 'offline.cash_on_meetup.v1'=ANY($3::text[])))))
-      LIMIT 1`,[store.storefront_shop_id,environment,profiles])).rowCount===1;
+    const facts=await findStoreAdmissionFacts(q,owner.tenant_id,owner.instance_id,environment,profiles);
+    return facts!==null&&facts.release_ready&&facts.active_admission&&facts.usable_payment;
   }};
+}
+
+/** SQL facts shared by the runtime gate and readiness. Never select payment documents or credentials. */
+export async function readStoreAdmissionFacts(q:PoolClient,tenantId:string,instanceId:string,environment:CommerceProviderEnvironment,profiles:readonly string[]){
+  const facts=await findStoreAdmissionFacts(q,tenantId,instanceId,environment,profiles);
+  requireCondition(facts,404,'not_found','找不到這間商店。');
+  return facts;
+}
+async function findStoreAdmissionFacts(q:PoolClient,tenantId:string,instanceId:string,environment:CommerceProviderEnvironment,profiles:readonly string[]){
+  const row=(await q.query(`SELECT i.module_release_ref,coalesce(actual.capabilities @> required.capabilities,false) AS release_ready,
+    EXISTS(SELECT 1 FROM commerce_store_admissions a WHERE a.tenant_id=i.tenant_id AND a.instance_id=i.instance_id AND a.environment=$3 AND a.revoked_at IS NULL) AS active_admission,
+    (SELECT a.revoked_at IS NOT NULL FROM commerce_store_admissions a WHERE a.tenant_id=i.tenant_id AND a.instance_id=i.instance_id AND a.environment=$3 ORDER BY admitted_at DESC,admission_id DESC LIMIT 1) AS last_revoked,
+    s.version::text AS payment_version,coalesce(jsonb_typeof(s.document->'bank_transfer')='object',false) AS bank_transfer,
+    coalesce(jsonb_typeof(s.document->'cash_on_meetup')='object',false) AS cash_on_meetup,
+    EXISTS(SELECT 1 FROM commerce_provider_account_services service WHERE service.tenant_id=i.tenant_id AND service.instance_id=i.instance_id
+      AND service.environment=$3 AND service.purpose='payment' AND service.state='active') AS card,
+    EXISTS(SELECT 1 FROM commerce_provider_account_services service WHERE service.tenant_id=i.tenant_id AND service.instance_id=i.instance_id
+      AND service.environment=$3 AND service.purpose='payment' AND service.state='active' AND service.profile=ANY($4::text[])) AS usable_card
+    FROM module_instances i
+    LEFT JOIN module_definitions actual ON actual.module_key=i.module_key AND actual.release_ref=i.module_release_ref
+    LEFT JOIN module_definitions required ON required.module_key='storefront' AND required.release_ref='storefront@1.1.0'
+    LEFT JOIN LATERAL (SELECT version,document FROM commerce_offline_payment_settings WHERE tenant_id=i.tenant_id AND instance_id=i.instance_id ORDER BY version DESC LIMIT 1) s ON true
+    WHERE i.tenant_id=$1 AND i.instance_id=$2 AND i.module_key='storefront'`,[tenantId,instanceId,environment,profiles])).rows[0];
+  if(!row)return null;
+  return {...row,usable_payment:row.usable_card||row.bank_transfer&&profiles.includes('offline.bank_transfer.v1')||row.cash_on_meetup&&profiles.includes('offline.cash_on_meetup.v1')} as {
+    module_release_ref:string;release_ready:boolean;active_admission:boolean;last_revoked:boolean|null;payment_version:string|null;
+    bank_transfer:boolean;cash_on_meetup:boolean;card:boolean;usable_payment:boolean;
+  };
 }

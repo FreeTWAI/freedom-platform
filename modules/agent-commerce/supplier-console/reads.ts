@@ -28,14 +28,14 @@ export const own = `own AS (
 )`;
 export const offers = `offers AS (
   SELECT o.offer_id,o.item_id,o.supplier_name,o.source_version::text AS source_version,
-    o.terms,o.terms_sha256,o.state,o.version::text AS version FROM commerce_hosted_supply_offers o
+    o.terms,o.terms_sha256,o.state,o.created_at,o.version::text AS version FROM commerce_hosted_supply_offers o
   JOIN commerce_items i ON i.item_id=o.item_id AND i.shop_id=$3
   JOIN commerce_storefront_profiles source ON source.tenant_id=o.tenant_id AND source.instance_id=o.instance_id
     AND source.supply_shop_id=$3 AND source.storefront_shop_id=$4
   WHERE o.tenant_id=$1 AND o.instance_id=$2
 )`;
 export const selections = `selections AS (
-  SELECT o.*,l.selection_id,l.shop_id AS partner_id,l.hosted_sku,l.retail_price_minor,l.listing_sha256,l.acceptance_state,
+  SELECT o.*,l.selection_id,l.shop_id AS partner_id,l.hosted_sku,l.retail_price_minor,l.listing_sha256,l.acceptance_state,l.snapshot,
     l.aggregate_version::text AS selection_version,s.name AS seller_name,
     CASE WHEN o.state='withdrawn' OR l.acceptance_state IN ('declined','revoked') THEN 'inactive'
       WHEN l.acceptance_state='awaiting_supply_acceptance' THEN 'awaiting'

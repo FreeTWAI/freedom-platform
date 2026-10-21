@@ -1,12 +1,18 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import { Pool } from 'pg';
+import { serve } from '@hono/node-server';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { z } from 'zod';
 import { createPool, LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_PASSWORD, DEMO_COMMUNITY } from '../../packages/testing/seed.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
-import { hashPassword, tokenHash } from '../../modules/identity-membership/service.js';
+import { authenticate, hashPassword, tokenHash } from '../../modules/identity-membership/service.js';
+import {createHighRiskVerification} from '../../modules/tenant-workspaces/high-risk-verification.js';
 
 const origin = 'http://127.0.0.1:4310';
 const databaseUrl = process.env.TEST_DATABASE_URL ?? LOCAL_DATABASE_URL;
@@ -83,6 +89,165 @@ async function propose(owner: Session, tenantId: string, to: string, verificatio
     to_principal_id: to, from_role_after: 'admin', expires_at: expiresAt, reason: '交給下一位擁有者', fresh_auth_verification_id: verificationId,
   }, { key });
 }
+
+async function waitForProofLock(pid:number) {
+  const deadline=Date.now()+5000;
+  while(Date.now()<deadline){
+    if((await admin.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount)return;
+    await delay(10);
+  }
+  assert.fail('the native proof transaction must reach its SQL barrier');
+}
+async function expireProofSession(hash:string) {
+  await pool.query('SELECT pg_sleep(GREATEST(0,extract(epoch FROM expires_at-clock_timestamp()))+0.05) FROM sessions WHERE token_hash=$1',[hash]);
+  assert.equal((await pool.query('SELECT expires_at<=clock_timestamp() AS expired FROM sessions WHERE token_hash=$1',[hash])).rows[0].expired,true);
+}
+
+for(const phase of ['created','invalid','blocked','unconfigured','proof-insert','failure-update'] as const)
+for(const expired of [true,false])test(`issuer session fence after ${phase} wait (expired=${expired})`,async()=>{
+  const owner=await person('合成擁有者'),tenant=await createTenant(owner.session);
+  const hash=tokenHash(owner.session.cookie.split('=')[1]),bucket=tokenHash(`high-risk-verification:${owner.id}`);
+  const failures=phase==='blocked'?10:3;
+  await pool.query('INSERT INTO login_attempts VALUES($1,$2,clock_timestamp())',[bucket,failures]);
+  const attempt=async()=>(await pool.query('SELECT failures,window_start::text AS window_start FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0];
+  const before=await attempt(),gateKey=schema+'/fresh-proof';
+  const blocker=await pool.connect();let pending:Promise<unknown>|undefined,triggerTable:string|undefined;
+  try{
+    if(phase==='proof-insert'||phase==='failure-update'){
+      triggerTable=phase==='proof-insert'?'tenant_high_risk_verifications':'login_attempts';
+      const guard=phase==='failure-update'?'IF NEW.failures=OLD.failures+1 THEN':'';
+      await pool.query(`CREATE FUNCTION wait_proof_sql() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN ${guard} PERFORM pg_advisory_xact_lock(hashtextextended('${gateKey}',0));
+        ${guard?'END IF;':''} RETURN NEW; END $$;
+        CREATE TRIGGER wait_proof_sql AFTER ${phase==='proof-insert'?'INSERT':'UPDATE'} ON ${triggerTable}
+        FOR EACH ROW EXECUTE FUNCTION wait_proof_sql()`);
+    }
+    await blocker.query('BEGIN');
+    if(triggerTable)await blocker.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[gateKey]);
+    else if(phase==='unconfigured')await blocker.query("UPDATE tenant_authority_policies SET status='retired' WHERE status='active'");
+    else await blocker.query('SELECT 1 FROM login_attempts WHERE attempt_key=$1 FOR UPDATE',[bucket]);
+    await pool.query('UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>$2) WHERE token_hash=$1',[hash,expired?2:3600]);
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    const invalid=phase==='invalid'||phase==='failure-update';
+    const reply=verify(owner.session,tenant.tenant_id,'tenant.ownership.propose',invalid?'synthetic-invalid-password':DEMO_PASSWORD);
+    pending=reply.catch(()=>undefined);
+    await waitForProofLock(pid);
+    if(expired)await expireProofSession(hash);
+    await blocker.query('COMMIT');const response=await reply;
+    const expectedStatus=expired?401:phase==='blocked'?429:phase==='unconfigured'||invalid?403:201;
+    assert.equal(response.status,expectedStatus,response.text);
+    if(expired)assert.equal(response.data.code,'session_expired');
+    else if(phase==='blocked')assert.equal(response.data.code,'fresh_auth_rate_limited');
+    else if(phase==='unconfigured')assert.equal(response.data.code,'policy_unconfigured');
+    else if(invalid)assert.equal(response.data.code,'fresh_auth_required');
+    const proofs=(await pool.query('SELECT verification_id,principal_id,tenant_id,purpose FROM tenant_high_risk_verifications WHERE session_hash=$1',[hash])).rows;
+    if(expectedStatus===201){
+      assert.deepEqual(proofs,[{verification_id:response.data.verification_id,principal_id:tenant.my_membership.principal_id,tenant_id:tenant.tenant_id,purpose:'tenant.ownership.propose'}]);
+    }else assert.deepEqual(proofs,[]);
+    if(expired)assert.deepEqual(await attempt(),before,'expired outcomes roll back the whole failure budget');
+    else assert.equal((await attempt()).failures,expectedStatus===201?0:invalid?4:failures);
+  }finally{
+    await blocker.query('ROLLBACK');blocker.release();await pending;
+    if(triggerTable)await pool.query(`DROP TRIGGER wait_proof_sql ON ${triggerTable}; DROP FUNCTION wait_proof_sql()`);
+  }
+});
+
+test('issuer preserves the original SQLSTATE when proof insertion fails after session expiry',async()=>{
+  const owner=await person('合成擁有者'),tenant=await createTenant(owner.session),hash=tokenHash(owner.session.cookie.split('=')[1]);
+  const actor=await authenticate(pool,owner.session.cookie.split('=')[1]),bucket=tokenHash(`high-risk-verification:${owner.id}`);
+  await pool.query('INSERT INTO login_attempts VALUES($1,3,clock_timestamp())',[bucket]);
+  await pool.query(`CREATE FUNCTION fail_expired_proof() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM pg_sleep(GREATEST(0,extract(epoch FROM
+        ((SELECT expires_at FROM sessions WHERE token_hash=NEW.session_hash)-clock_timestamp())))+0.05);
+      RAISE EXCEPTION 'synthetic proof insertion failure' USING ERRCODE='23514';
+    END $$;
+    CREATE TRIGGER fail_expired_proof AFTER INSERT ON tenant_high_risk_verifications
+    FOR EACH ROW EXECUTE FUNCTION fail_expired_proof()`);
+  try{
+    await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '2 seconds' WHERE token_hash=$1",[hash]);
+    await assert.rejects(createHighRiskVerification(pool,actor,{tenant_id:tenant.tenant_id,purpose:'tenant.ownership.propose',password:DEMO_PASSWORD}),
+      (error:unknown)=>!!error&&typeof error==='object'&&'code' in error&&error.code==='23514');
+    assert.equal((await pool.query('SELECT expires_at<=clock_timestamp() AS expired FROM sessions WHERE token_hash=$1',[hash])).rows[0].expired,true);
+    assert.deepEqual((await pool.query('SELECT verification_id FROM tenant_high_risk_verifications WHERE session_hash=$1',[hash])).rows,[]);
+    assert.equal((await pool.query('SELECT failures FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0].failures,3);
+  }finally{await pool.query('DROP TRIGGER fail_expired_proof ON tenant_high_risk_verifications; DROP FUNCTION fail_expired_proof()');}
+});
+
+for(const skew of ['ahead','behind'] as const)test(`high-risk password budget follows DB time with application clock ${skew}`,async t=>{
+  const owner=await person('合成擁有者'),tenant=await createTenant(owner.session),bucket=tokenHash(`high-risk-verification:${owner.id}`);
+  await pool.query('INSERT INTO login_attempts VALUES($1,10,clock_timestamp()-make_interval(secs=>$2))',[bucket,skew==='ahead'?0:960]);
+  const realNow=Date.now();t.mock.method(Date,'now',()=>realNow+(skew==='ahead'?1:-1)*86400000);
+  const response=await verify(owner.session,tenant.tenant_id,'tenant.ownership.propose','synthetic-invalid-password');
+  assert.equal(response.status,skew==='ahead'?429:403,response.text);
+  assert.equal(response.data.code,skew==='ahead'?'fresh_auth_rate_limited':'fresh_auth_required');
+  assert.equal((await pool.query('SELECT failures FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0].failures,skew==='ahead'?10:1);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications')).rows[0].n,0);
+});
+
+test('a high-risk password failure window starts after its budget row wait',async()=>{
+  const owner=await person('合成擁有者'),tenant=await createTenant(owner.session),bucket=tokenHash(`high-risk-verification:${owner.id}`);
+  await pool.query("INSERT INTO login_attempts VALUES($1,10,clock_timestamp()-interval '1 day')",[bucket]);
+  const blocker=await pool.connect();let pending:Promise<unknown>|undefined;
+  try{
+    await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM login_attempts WHERE attempt_key=$1 FOR UPDATE',[bucket]);
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    const reply=verify(owner.session,tenant.tenant_id,'tenant.ownership.propose','synthetic-invalid-password');pending=reply;
+    const deadline=Date.now()+5000;let waiting=false;
+    while(Date.now()<deadline){
+      if((await admin.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount){waiting=true;break;}
+      await delay(10);
+    }
+    assert.equal(waiting,true,'the actual high-risk recheck must wait on its budget');
+    const marker=(await admin.query('SELECT clock_timestamp()::text AS at')).rows[0].at;
+    await blocker.query('COMMIT');assert.equal((await reply).status,403);
+    assert.deepEqual((await pool.query('SELECT failures,window_start>=$2::timestamptz AS fresh FROM login_attempts WHERE attempt_key=$1',[bucket,marker])).rows[0],{failures:1,fresh:true});
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications')).rows[0].n,0);
+  }finally{await blocker.query('ROLLBACK');blocker.release();await pending;}
+});
+
+for(const expired of [true,false])test(`native HTTP proof issuance after budget wait (expired=${expired})`,async()=>{
+  let httpApp=app;
+  const server=serve({hostname:'127.0.0.1',port:0,fetch:request=>httpApp.fetch(request)});
+  const blocker=await pool.connect();let pending:Promise<Response>|undefined;
+  try{
+    if(!server.listening)await once(server,'listening');
+    const httpOrigin=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    httpApp=createApp(pool,httpOrigin,'local',{guildLaunchpadEnabled:true});
+    const login=await fetch(httpOrigin+'/api/v1/auth/login',{
+      method:'POST',headers:{Origin:httpOrigin,'Content-Type':'application/json'},
+      body:JSON.stringify({email:DEMO_USERS[0].email,password:DEMO_PASSWORD}),
+    });
+    assert.equal(login.status,200);
+    const data=z.object({csrf_token:z.string(),user:z.object({user_id:z.uuid()})}).parse(await login.json());
+    const session:Session={cookie:login.headers.get('set-cookie')!.split(';')[0],csrf:data.csrf_token,user:data.user};
+    const tenant=await createTenant(session),hash=tokenHash(session.cookie.split('=')[1]);
+    const bucket=tokenHash(`high-risk-verification:${session.user.user_id}`);
+    await pool.query('INSERT INTO login_attempts VALUES($1,3,clock_timestamp())',[bucket]);
+    const before=(await pool.query('SELECT failures,window_start::text AS window_start FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0];
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT 1 FROM login_attempts WHERE attempt_key=$1 FOR UPDATE',[bucket]);
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    await pool.query('UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>$2) WHERE token_hash=$1',[hash,expired?2:3600]);
+    pending=fetch(httpOrigin+'/api/v1/me/high-risk-verifications',{
+      method:'POST',headers:{Origin:httpOrigin,Cookie:session.cookie,'X-CSRF-Token':session.csrf,'Content-Type':'application/json'},
+      body:JSON.stringify({tenant_id:tenant.tenant_id,purpose:'tenant.ownership.propose',password:DEMO_PASSWORD}),
+    });
+    await waitForProofLock(pid);
+    if(expired)await expireProofSession(hash);
+    await blocker.query('COMMIT');
+    const response=await pending,body=z.record(z.string(),z.unknown()).parse(await response.json());
+    assert.equal(response.status,expired?401:201,JSON.stringify(body));
+    if(expired){assert.equal(body.code,'session_expired');assert.equal(body.verification_id,undefined);}
+    else assert.equal(typeof body.verification_id,'string');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications WHERE session_hash=$1',[hash])).rows[0].n,expired?0:1);
+    const after=(await pool.query('SELECT failures,window_start::text AS window_start FROM login_attempts WHERE attempt_key=$1',[bucket])).rows[0];
+    assert.deepEqual(after,expired?before:{...before,failures:0});
+  }finally{
+    await blocker.query('ROLLBACK');blocker.release();await pending;
+    await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+  }
+});
 
 test('fresh verification rejects a wrong password without becoming 401 and ignores Idempotency-Key', async () => {
   const owner = await person('擁有者');

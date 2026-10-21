@@ -16,6 +16,39 @@ POSTs require CSRF and Idempotency-Key; updates to an existing version require
 `If-Match: "<aggregate_version>"`. Authentication/register is the exception and
 uses persisted rate limits instead. IDs are UUIDs.
 
+The `login_attempts` failure budgets for email login, signed-in password change
+and tenant high-risk password verification retain their separate keys and
+10-failure/15-minute policy. Their existing UPSERT owns the budget row before
+SQL decides expiry with PostgreSQL `clock_timestamp()`. New/reopened windows,
+including the window cleared by a valid mailbox recovery, use that actual
+database clock rather than transaction-start `now()` or application `Date.now()`.
+An old queued transaction must not reopen an already-expired window and lose
+failures admitted after the lock is released. This is a budget decision, not a
+promise that the window remains active through commit or response delivery.
+Failure commits, successful-login counter clearing, mailbox-proof recovery,
+MFA, credential/session lifetimes and domain lock order remain unchanged.
+The [login recovery](../../tests/runtime/login-lockout-recovery.test.ts),
+[account security](../../tests/runtime/account-security.test.ts) and
+[high-risk verification](../../tests/runtime/tenant-high-risk-verification.test.ts)
+regressions use native PostgreSQL lock barriers/database markers and scoped
+application-clock skew; they do not shorten production windows or add a
+production clock override.
+
+The separate shared `auth_rate_limits` admission budgets serialize on the bucket row before deciding expiration
+with PostgreSQL `clock_timestamp()`. Reopened windows also start at that actual
+database clock, not Node time or transaction-start `now()`: an old transaction
+waiting for the bucket cannot repeatedly reopen an already-expired window.
+The existing scope/network hash, per-caller limits and durations remain unchanged.
+Charges made inside a domain command still roll back with its failed effects;
+standalone authentication charges retain their own transaction. The decision
+does not promise that a window remains active through commit or response delivery.
+[Window regressions](../../tests/runtime/auth-rate-limit-window.test.ts) use
+real PostgreSQL row waits, aged transactions and natural expiration in an isolated
+schema; their two-second fixture does not reduce any deployed limit or duration.
+This regression is exactly owned by identity-membership and retained in the
+central `FULL_RUNTIME_BASELINE` for deletion protection; discovery alone is not
+that protection. Neither budget replaces the issuer's final session-clock fence.
+
 Event `starts_at`/`ends_at` (create, edit and schedule), Work
 `claim_by`/`finish_by`, and receipt `received_at` share the existing ISO datetime
 syntax with `Z` or a numeric offset (`±HH:MM`). Years must be AD 0001–9999 and
@@ -92,9 +125,17 @@ JavaScript dates. No feature activation or deployment is implied by this fix.
 `GET /api/v1/community-search/mine` reads the member's taggable content on
 one transaction client, awaiting posts, works, events and book appointments
 sequentially. It does not rely on pg's deprecated implicit concurrent-query
-queue. Source SQL, per-kind limits, current skill-book authority and response
-shape stay unchanged; the final database-clock session check still runs after
-all four projections. This changes neither feature activation nor driver version.
+queue. Per-kind limits, current skill-book authority and response shape stay
+unchanged; the final database-clock session check still runs after all four
+projections. This changes neither feature activation nor driver version.
+
+The work projection includes only the owner's `published` showcases and skill
+submissions. Showcase status is filtered before the combined ordering and
+20-work limit, so newer private drafts cannot displace eligible published works.
+Draft and withdrawn showcases remain available through the private owner
+management APIs, but cannot receive topic writes. Withdrawal retains the
+existing topic set and its version; republishing restores them to the editor.
+This does not change publication consent, other owners' access or pagination.
 
 ## Member reporting and moderation cases
 

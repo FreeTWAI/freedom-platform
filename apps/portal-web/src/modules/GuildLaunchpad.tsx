@@ -262,7 +262,7 @@ function Reading({guild, config, announcements, skillBooks, applications, visito
         navigate={path => {if (canNavigate()) window.location.hash = path;}}
         startableApplications={applications.filter(startable).map(app => app.application_key)}
         supplierConsoleEnabled={supplierConsoleEnabled === true}
-        startApplication={memberTier === 'full' && blocks.some(item => item.kind === 'applications') ? key => {
+        startApplication={!visitor && mode !== 'public' && applications.some(startable) && blocks.some(item => item.kind === 'applications') ? key => {
           const app = applications.find(item => item.application_key === key);
           if (app && startable(app) && canLeave()) setLaunchRequest({application_key: app.application_key, release_ref: app.release_ref, nonce: (launchRequest?.nonce ?? 0) + 1});
         } : undefined}/>}

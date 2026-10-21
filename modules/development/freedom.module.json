@@ -14,7 +14,8 @@
     "tests/runtime/skill-sharing.test.ts",
     "tests/runtime/skill-book-guides.test.ts",
     "tests/runtime/member-skill-registration.test.ts",
-    "tests/e2e/development-guide.spec.ts"
+    "tests/e2e/development-guide.spec.ts",
+    "tests/e2e/skill-book-library.spec.ts"
   ],
   "public_exports": [
     "modules/development/page-github.ts",

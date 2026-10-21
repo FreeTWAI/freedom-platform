@@ -103,10 +103,10 @@ export function supplierRun(options:RunOptions,client:CandidateClient,secrets:Se
     const space=await send(c,'POST','/api/v1/tenants',{json:{display_name:name},idempotency:true});ctx.check('supplier_tenant_created',space.status===201);
     const tenant=space.json()?.tenant?.tenant_id,workspace=space.json()?.workspace?.workspace_id;ctx.check('supplier_launch_identifiers',isId(tenant)&&isId(workspace));
     const plan=await send(c,'POST',`/api/v1/tenants/${tenant}/application-launch-plans`,{json:{guild_key:guild,workspace_id:workspace,application_key:'hosted-store',release_ref:'hosted-store@1.1.0',installation_choice:'create_new',dependencies:[{requirement_key:'storefront',choice:'create',configuration:{}}],configuration:{}},idempotency:true});
-    if(plan.status===403&&['full_membership_required','guild_membership_required','guild_full_membership_required','guild_full_member_required'].includes(plan.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
+    if(plan.status===403&&['guild_member_required','commerce_guild_member_required'].includes(plan.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
     ctx.check('supplier_launch_plan_created',plan.status===201);const p=plan.json();ctx.check('supplier_launch_plan_values',isId(p?.plan_id)&&isVersion(p?.version)&&p?.configuration_digest?.algorithm==='sha256'&&/^[0-9a-f]{64}$/.test(p.configuration_digest.value));
     const install=await send(c,'POST',`/api/v1/tenants/${tenant}/application-installations`,{json:{plan_id:p.plan_id,expected_plan_version:p.version,configuration_digest:p.configuration_digest},idempotency:true});
-    if(install.status===403&&['full_membership_required','guild_membership_required','guild_full_membership_required','guild_full_member_required'].includes(install.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
+    if(install.status===403&&['guild_member_required','commerce_guild_member_required'].includes(install.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
     ctx.check('supplier_installation_succeeded',install.status===200&&install.json()?.state==='succeeded'&&isId(install.json()?.operation_id));
     const view=await read(ctx,c,`/api/v1/tenants/${tenant}/application-installations/by-operation/${install.json().operation_id}`,'supplier_installation_read');
     const instance=view.modules?.find((m:any)=>m.requirement_key==='storefront')?.instance_id;ctx.check('supplier_storefront_present',isId(instance));return {tenant_id:tenant,instance_id:instance};

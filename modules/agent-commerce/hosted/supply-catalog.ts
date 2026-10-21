@@ -9,6 +9,7 @@ import type {Actor} from '../../identity-membership/service.js';
 import {effectiveStoreCapabilities} from './capabilities.js';
 import {profile,ready,createHostedProfile,productCount,storeRead,storeCommand,storeFact,type Instance,type Profile} from './store.js';
 import {addProduct} from './products.js';
+import {assertGuildMembership, supplierMembership, commerceMembership} from '../../module-registry/membership.js';
 
 export async function supplyCatalogView(q:PoolClient,context:TenantScopeContext,inst:Instance) {
   const p=await profile(q,context.tenant_id,inst.instance_id),keys=await effectiveStoreCapabilities(q,context,inst.instance_id);
@@ -27,6 +28,7 @@ export async function setupSupplyCatalog(pool:Pool,actor:Actor,tenantId:string,i
   return storeCommand(pool,actor,tenantId,instanceId,'store:manage','storefront.supply-catalog.setup',input,key,undefined,async(q,context,inst)=>{
     const prior=await profile(q,tenantId,instanceId,true);
     if(prior)return SupplyCatalogReceiptSchema.parse({instance_id:instanceId,version:prior.version,created:false});
+    await assertGuildMembership(q,context.community_id,actor.user_id,[supplierMembership,commerceMembership],true);
     await createHostedProfile(q,context,actor,instanceId,{...input,slug:null,brand:null});
     await storeFact(q,context,instanceId,'1','storefront.supply-catalog.setup');
     return SupplyCatalogReceiptSchema.parse({instance_id:instanceId,version:'1',created:true});

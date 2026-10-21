@@ -5,6 +5,8 @@ import { PINNED_SUITES } from '../../packages/contribution-tools/pinned-suites.m
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 async function withFixture(fn) {
   const tmp = await mkdtemp(join(tmpdir(), 'fp-pinned-'));
@@ -106,15 +108,37 @@ test('A failing test', async () => {
     for (const f of PINNED_SUITES['ci.contracts-pytest'].baseline) {
       await writeFile(join(root, f), "def test_ok(): pass\n");
     }
+    const privateText = '::error:: freedom.test-failure-diagnostic\\nprivate-message\\x01';
     await writeFile(join(root, PINNED_SUITES['ci.contracts-pytest'].baseline[0]), `
-def test_fail():
-    assert False
+import pytest
+@pytest.mark.parametrize('value', [1, 2, 3, 4, 5, 6, 7], ids=lambda value: '${privateText}' + str(value))
+def test_fail(value):
+    assert False, '${privateText}'
+def test_ok(): pass
 `);
 
     const result = await runPinnedSuite(root, 'ci.contracts-pytest');
     assert.equal(result.status, 'failed');
     // pytest exits with 1 -> test_process_failed
     assert.equal(result.reason, 'test_process_failed');
+    assert.equal(result.test_count, 0);
+    const files = PINNED_SUITES['ci.contracts-pytest'].baseline;
+    const failedCounts = { tests: 8, passed: 1, failed: 7, cancelled: 0, skipped: 0, todo: 0 };
+    assert.deepEqual(result.test_files, files.map((path, index) => ({ path,
+      counts: index === 0 ? failedCounts : { tests: 1, passed: 1, failed: 0, cancelled: 0, skipped: 0, todo: 0 },
+      cases: [], suite_events: [] })));
+    assert.ok(!Object.hasOwn(result, 'evidence_sha256'));
+    assert.doesNotMatch(JSON.stringify(result), /::error::|freedom\.test-failure-diagnostic|private-message|\\u0001/);
+
+    const cli = fileURLToPath(new URL('../../scripts/ci/run-pinned-suite.mjs', import.meta.url));
+    const child = spawnSync(process.execPath, [cli, '--root', root, '--suite', 'ci.contracts-pytest'], { encoding: 'utf8' });
+    assert.equal(child.status, 1);
+    assert.equal(child.stderr, '');
+    assert.deepEqual(child.stdout.trim().split('\n').map(line => JSON.parse(line)), [
+      { check_id: 'ci.contracts-pytest', status: 'failed', reason: 'test_process_failed', test_count: 0, file_count: files.length },
+      { path: files[0], counts: failedCounts }
+    ]);
+    assert.doesNotMatch(child.stdout, /::error::|freedom\.test-failure-diagnostic|private-message|\\u0001/);
   });
 });
 

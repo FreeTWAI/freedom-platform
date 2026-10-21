@@ -1,26 +1,67 @@
 # Commerce host operations
 
+## Store readiness and admission receipt
+
+`store-readiness.ts` accepts an already-authorized, tenant-bound client. Seller
+overview and the community admin list use the same eight ordered items. The
+buyer decision comes directly from `publicPurchaseStateWithClient`; admission
+capabilities, active admission and usable payment come from
+`readStoreAdmissionFacts`, also used by the runtime admission port. Product
+availability uses actual cart quotes in batches of at most 50. Delivery uses
+the runtime checkout shipping port's choices for actual own-stock lines.
+Node and Worker install that SQL-local port even when checkout is off; a direct
+caller without it uses the same delivery-choice implementation. These reads
+neither settle inventory nor call providers.
+
+The console-only seller `/overview` checks `store:read` before projection and
+returns order counts only with `store:orders:read`. Counts share the order list's
+SQL predicates, stop at 100 and expose `99+` through `more`; a failed read never
+becomes zero. Seller data excludes admission reasons/actors, host profiles and
+quarantine details, as well as payment and contact contents.
+
+`GET /admin/api/commerce/store-readiness` rechecks the active admin, enumerates
+tenant scope identities, binds one tenant per isolated transaction, and checks
+community before reading its instances. No RLS bypass is used. Every storefront
+instance is retained, including unconfigured and inactive ones; whole-community
+totals are independent of the requested page. Admin membership uses the same
+independence query as the unchanged admission commands. The admin UI downloads
+all pages as `freedom.commerce-scope-receipt/v1`, refusing an incomplete receipt
+after 20 pages. Pages are observations, not an atomic environment-wide snapshot.
+The receipt assists operator scope review; it does not prove consent, enable a
+flag or authorize a deployment. No schema change is required.
+
+The list currently walks all tenant scope identities on each page request and
+reads each community store for its summary. Only page items receive full cart
+and delivery readiness; off-page items use the buyer gate alone. This is intended
+for trial scale. A measured one-product own-stock/meetup fixture used 51 SQL
+queries for full readiness versus 16 for the buyer gate, excluding caller
+authorization, transaction and admin-context restoration. Counts grow with cart
+batches and own-stock delivery candidates; receipt pagination repeats the walk.
+
 `readCommerceSettings` defaults console/checkout/quarantine/email off and accepts only
 exact `true`/`false`. FREEDOM_COMMERCE_CONSOLE_ENABLED=true requires
 FREEDOM_GUILD_LAUNCHPAD_ENABLED=true; checkout=true requires console=true. The
 parser always sets consoleEnabled; its optional type keeps older fixtures
 compatible, and absence is off. Worker/deployment readiness applies the same
-commerce_launchpad_required, commerce_supplier_console_required (console=true
-also requires FREEDOM_SUPPLIER_CONSOLE_ENABLED=true, whose shell hosts the seller
-pages) and commerce_console_required dependency errors. `providerProfiles` is empty
-unless `FREEDOM_COMMERCE_PROVIDER_PROFILES` lists implemented IDs, comma-separated
-without whitespace, empty entries or duplicates. Only `ecpay.aio.credit.v1` is
-implemented. Invalid configuration fails readiness with a fixed value-free code.
-A nonempty Worker list requires a usable credential keyring and COMMERCE_JOURNAL
-R2 binding; `FREEDOM_COMMERCE_EMAIL_ENABLED='true'` requires the Worker `EMAIL`
-(`send_email`) binding and COMMERCE_JOURNAL. Node refuses both a nonempty profile
-list and `emailEnabled` (`commerce_email_requires_worker`) because it has no
+commerce_launchpad_required and commerce_console_required dependency errors.
+Seller and supplier pages share the hosted-ui ConsoleShell component, but their
+activation flags are independent. Supplier console may remain off during an
+own-stock offline checkout trial; its routes and site flag stay off.
+`providerProfiles` is empty unless `FREEDOM_COMMERCE_PROVIDER_PROFILES` lists implemented IDs, comma-separated
+without whitespace, empty entries or duplicates. `ecpay.aio.credit.v1`,
+`offline.bank_transfer.v1` and `offline.cash_on_meetup.v1` are implemented. Invalid
+configuration fails readiness with a fixed value-free code.
+A Worker list containing `ecpay.*` requires a usable credential keyring and
+COMMERCE_JOURNAL R2 binding; offline-only profiles need neither.
+`FREEDOM_COMMERCE_EMAIL_ENABLED='true'` requires the Worker `EMAIL`
+(`send_email`) binding and COMMERCE_JOURNAL. Node refuses both an `ecpay.*` profile
+and `emailEnabled` (`commerce_email_requires_worker`) because it has no
 journal or email binding. Only the local E2E host installs memory storage, a
 fixture gateway and `FixtureEmailSender`.
 
 Production wiring installs store admission, the optional payment port and, when
 `emailEnabled` is true on the Worker, the outbox and Worker email sender.
-Shipping and policy adapters remain absent. Admission
+The SQL-local shipping adapter is always installed; policy adapters remain absent. Admission
 requires an unrevoked row in the current `providerEnvironment()`, every capability
 registered by storefront 1.1.0 and an active payment service whose profile the
 host lists. An empty profile list refuses admission. A 1.0.0 store needs its

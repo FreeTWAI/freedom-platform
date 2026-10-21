@@ -29,7 +29,12 @@ test('1. checkout off (main E2E server) serves v1 B01/B03 without scripts or /as
     await page.goto(`/shops/${store.slug}`);
     await expect(page.getByRole('heading', { level: 1, name: store.storeName })).toBeVisible();
     await expect(page.locator('script')).toHaveCount(0);
-    await expect(page.locator('.shop-top')).toContainText('會員的商品與商店');
+    await expect(page.locator('.shop-top > .shop-top-store')).toHaveText(store.storeName);
+    const navigation = page.getByRole('navigation', {name: '商店導覽'});
+    await expect(navigation.getByRole('link', {name: '商品', exact: true})).toHaveAttribute('href', `/shops/${store.slug}#products`);
+    await expect(navigation.getByRole('link', {name: '訂單查詢', exact: true})).toHaveAttribute('href', `/shops/${store.slug}/order-access`);
+    await expect(navigation.getByRole('link', {name: '購物車', exact: true})).toHaveCount(0);
+    await expect(page.locator('footer .shop-logo')).toBeVisible();
     await expect(page.getByRole('link', { name: '登入查看預留狀態', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: '查詢我的預留', exact: true })).toBeVisible();
     expect(assetRequests).toEqual([]);
@@ -71,7 +76,7 @@ test('1. checkout off (main E2E server) serves v1 B01/B03 without scripts or /as
     const quoteResponse = await quoteResponsePromise;
     expect(quoteResponse.status()).toBe(409);
 
-    await expect(page.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await expect(page.getByRole('region', { name: '商品' })).toContainText(p1.title);
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(page.locator('#shop-cart')).not.toContainText('單價');
@@ -682,7 +687,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
       });
     });
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: `回到「${store.storeName}」`, exact: true })).toHaveAttribute(
       'href',
@@ -699,7 +704,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
       });
     });
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('這間商店目前沒有公開。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間商店目前沒有公開。');
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(
       page.locator('#shop-cart').getByRole('link', { name: '返回自由工坊', exact: true }),
@@ -1202,7 +1207,7 @@ test('14. responsive layout and full-page screenshots across 1440, 1280, 768, 39
       { slug: store.slug, revision: store.revision, sku: p1.sku, title: p1.title, priceMinor: p1.price_minor },
     );
     await closedPage.goto(`/shops/${store.slug}/cart`);
-    await expect(closedPage.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(closedPage.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await assertCartResponsiveLayout(closedPage, RESPONSIVE_WIDTHS, w => info.outputPath(`b04-not-open-${w}.png`));
 
     // 12. B04 error alert (503 commerce_quarantined)

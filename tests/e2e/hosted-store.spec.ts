@@ -14,6 +14,72 @@ const primary = (page: Page) => page.getByRole('region', {name: '主要動作', 
 const flow = (page: Page) => page.getByRole('region', {name: '啟動應用', exact: true});
 const storePage = (page: Page) => page.locator('.hosted-store');
 const slugFor = () => 'Island-' + randomUUID().replaceAll('-', '').slice(0, 8).replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit)));
+
+test('a merchant publishes service information that buyers can read on mobile without JavaScript', async ({page, browser, baseURL, e2eAuthPool}, testInfo) => {
+  const member = await person(e2eAuthPool), slug = slugFor().toLowerCase();
+  const description = '合成商店，僅供本機操作驗證。\n客服：shop@example.test（由合成店主處理）\n交付：先聯絡確認面交時間。\n取消與售後：請提供訂單編號聯絡店主。\n說明網址：https://example.test/' + 'long-path-'.repeat(20);
+  const updated = description.replace('shop@example.test', 'updated@example.test');
+  await login(page, member.email);
+  const launched = await launchStore(page, '合成服務說明工作室');
+  await open(page, launched.hash);
+  const setup = page.getByRole('form', {name: '建立商店', exact: true});
+  await setup.getByLabel('商店名稱', {exact: true}).fill('合成服務說明商店');
+  await setup.getByLabel('商店網址', {exact: true}).fill(slug);
+  await setup.getByRole('textbox', {name: '商店介紹', exact: true}).fill(description);
+  await expect(setup.getByRole('textbox', {name: '商店介紹', exact: true})).toHaveAccessibleDescription(/客服方式.*儲存後可先預覽/);
+  await setup.getByRole('button', {name: '建立商店', exact: true}).click();
+  await addProduct(page, '合成展示商品', '120', '3');
+  await storeArea(page, '店面與發布');
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
+  const preview = await popup;
+  await expect(preview.getByRole('region', {name: '商店說明與聯絡', exact: true})).toHaveText('商店說明與聯絡' + description);
+  await expect(preview.getByRole('navigation', {name: '商店導覽'})).toHaveCount(0);
+  await preview.close();
+  await page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  const anonymous = await browser.newContext({baseURL, javaScriptEnabled: false, viewport: {width: 390, height: 844}});
+  try {
+    const buyer = await anonymous.newPage();
+    for (const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access', '/orders/invalid']) {
+      await buyer.goto(`/shops/${slug}${path}`);
+      await buyer.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '商店說明', exact: true}).click();
+      const information = buyer.getByRole('region', {name: '商店說明與聯絡', exact: true});
+      await expect(information).toBeInViewport();
+      await expect(information.getByRole('heading')).toBeFocused();
+      await expect(information).toHaveText('商店說明與聯絡' + description);
+      expect(await buyer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (path === '/order-access') await buyer.screenshot({path: testInfo.outputPath('merchant-info-order-access-390.png'), fullPage: true});
+    }
+    await buyer.setViewportSize({width: 320, height: 740});
+    await buyer.goto(`/shops/${slug}/order-access`);
+    expect(await buyer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await buyer.screenshot({path: testInfo.outputPath('merchant-info-order-access-320.png'), fullPage: true});
+    await storeArea(page, '商店資料');
+    const form = page.getByRole('form', {name: '商店資料', exact: true});
+    await form.getByRole('textbox', {name: '商店介紹', exact: true}).fill(updated);
+    await form.getByRole('button', {name: '儲存商店資料', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+    await buyer.goto(`/shops/${slug}/order-access`);
+    await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('shop@example.test');
+    await expect(buyer.locator('body')).not.toContainText('updated@example.test');
+    await storeArea(page, '店面與發布');
+    await page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版');
+    await buyer.reload();
+    await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('updated@example.test');
+    await buyer.setViewportSize({width: 1280, height: 900});
+    await buyer.goto(`/shops/${slug}/products/P0001`);
+    await buyer.screenshot({path: testInfo.outputPath('merchant-info-product-1280.png'), fullPage: true});
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '停止公開', exact: true}).click();
+    await expect(storePage(page).getByRole('status')).toContainText('已停止公開');
+    await buyer.reload();
+    await expect(buyer.locator('body')).not.toContainText('updated@example.test');
+    await expect(buyer.getByRole('heading', {name: '找不到這項商品', exact: true})).toBeVisible();
+  } finally {await anonymous.close();}
+});
+
 async function addProduct(page: Page, title: string, price: string, stock = '0') {
   const form = page.getByRole('form', {name: '新增商品', exact: true});
   await form.getByLabel('商品名稱', {exact: true}).fill(title);
@@ -186,7 +252,10 @@ test('store pages stay readable in every theme and width', async ({page, browser
     await expect(pub.getByRole('complementary', {name: '預留與交易說明'})).toContainText('此頁不提供付款，也不會安排出貨。');
     await expect(pub.locator('form,button,script,input')).toHaveCount(0);
     const links = pub.locator('.shop-notice a, .shop-footer a');
-    await expect(links).toHaveCount(2);
+    await expect(links).toHaveCount(4);
+    expect(await links.evaluateAll(elements => elements.map(element => element.getAttribute('href')))).toEqual([
+      `/#reservations/${slug}`, '/', `/shops/${slug}/order-access`, '/#reservations',
+    ]);
     const targets = await links.evaluateAll(elements => elements.map(element => {
       const {left, right, top, bottom, width, height} = element.getBoundingClientRect();
       return {left, right, top, bottom, width, height};
@@ -195,10 +264,15 @@ test('store pages stay readable in every theme and width', async ({page, browser
       expect(target.width).toBeGreaterThanOrEqual(44); expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0); expect(target.right).toBeLessThanOrEqual(width);
     }
-    expect(targets[0].right <= targets[1].left || targets[1].right <= targets[0].left || targets[0].bottom <= targets[1].top || targets[1].bottom <= targets[0].top).toBe(true);
+    for (let i = 0; i < targets.length; i++) for (let j = i + 1; j < targets.length; j++) {
+      const a = targets[i], b = targets[j];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+    }
     await links.nth(0).focus();
     await expect(links.nth(0)).toBeFocused();
-    await pub.keyboard.press('Tab'); await expect(links.nth(1)).toBeFocused();
+    for (let i = 1; i < targets.length; i++) {
+      await pub.keyboard.press('Tab'); await expect(links.nth(i)).toBeFocused();
+    }
     await pub.screenshot({path: testInfo.outputPath(`store-public-${width}.png`), fullPage: true});
     for (const [name, hash] of [['登入查看預留狀態', `#reservations/${slug}`], ['查詢我的預留', '#reservations']]) {
       await pub.goto(`/shops/${slug}`);
