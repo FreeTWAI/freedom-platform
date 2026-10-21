@@ -55,6 +55,7 @@
     "modules/member-communications/channel-types.ts",
     "modules/member-communications/content.ts",
     "tests/e2e/message-retraction.spec.ts",
+    "tests/e2e/message-load-older.spec.ts",
     "tests/runtime/direct-message-receipts.test.ts",
     "tests/runtime/member-channels-core.test.ts",
     "tests/runtime/member-communications.test.ts",
