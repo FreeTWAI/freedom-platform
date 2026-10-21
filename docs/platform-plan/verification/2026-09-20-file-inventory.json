@@ -22669,8 +22669,8 @@
     },
     {
       "path": "tests/e2e/member-home-loading.spec.ts",
-      "bytes": 17910,
-      "sha256": "23f9dceea622b81ff56fa6a35197d76e7abc9acc83b39e09d22d871ff92a9812"
+      "bytes": 18225,
+      "sha256": "ea3c593655ff3c6e9d2384f86c43ec1d210175d3e3ec55dbd13c582f5bd400ae"
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",

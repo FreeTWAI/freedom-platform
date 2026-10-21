@@ -138,7 +138,7 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
   const originalResume = await resume.elementHandle();
   await guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
-  const statement = dialog.getByLabel('聲明', {exact: true});
+  const statement = dialog.getByRole('textbox', {name: '聲明', exact: true});
   const draft = '這是尚未送出的原作認領聲明，返回分頁後應保留。';
   await statement.fill(draft);
   await expect(statement).toBeFocused();
@@ -155,8 +155,8 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
   } finally { held.release(); }
   const updatedDialog = page.getByRole('dialog', {name: '更新後的分段載入技能書', exact: true});
   await expect(updatedDialog).toHaveJSProperty('open', true);
-  await expect(updatedDialog.getByLabel('聲明', {exact: true})).toHaveValue(draft);
-  await expect(updatedDialog.getByLabel('聲明', {exact: true})).toBeFocused();
+  await expect(updatedDialog.getByRole('textbox', {name: '聲明', exact: true})).toHaveValue(draft);
+  await expect(updatedDialog.getByRole('textbox', {name: '聲明', exact: true})).toBeFocused();
   expect(await originalResume!.evaluate(element => element.isConnected)).toBe(true);
   await updatedDialog.getByRole('button', {name: '關閉技能書介紹', exact: true}).click();
   expect(await resume.evaluate((element, original) => element === original, originalResume)).toBe(true);
@@ -195,8 +195,8 @@ test('automatic same-guild refresh to a different guide book discards the old cl
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
   const draft = '這是只屬於第一本技能書、尚未送出的原作認領聲明。';
   const evidence = 'https://example.com/first-book-evidence';
-  await dialog.getByLabel('聲明', {exact: true}).fill(draft);
-  await dialog.getByLabel('證據網址（建議提供）', {exact: true}).fill(evidence);
+  await dialog.getByRole('textbox', {name: '聲明', exact: true}).fill(draft);
+  await dialog.getByRole('textbox', {name: '證據網址（建議提供）', exact: true}).fill(evidence);
   await dialog.getByRole('checkbox').check();
   await expect(dialog.getByRole('button', {name: '送出認領', exact: true})).toBeEnabled();
   refreshed = true;
@@ -218,8 +218,8 @@ test('automatic same-guild refresh to a different guide book discards the old cl
     await expect(nextDialog).not.toContainText(evidence);
     expect(submitted).toEqual([]);
   } finally { held.release(); }
-  await expect(nextDialog.getByLabel('聲明', {exact: true})).toHaveValue('');
-  await expect(nextDialog.getByLabel('證據網址（建議提供）', {exact: true})).toHaveValue('');
+  await expect(nextDialog.getByRole('textbox', {name: '聲明', exact: true})).toHaveValue('');
+  await expect(nextDialog.getByRole('textbox', {name: '證據網址（建議提供）', exact: true})).toHaveValue('');
   await expect(nextDialog.getByRole('checkbox')).not.toBeChecked();
   await expect(nextDialog.getByRole('button', {name: '送出認領', exact: true})).toBeDisabled();
   expect(submitted).toEqual([]);
@@ -255,12 +255,15 @@ test('failed automatic card and onboarding reads keep good values quiet and retr
   await expect(summary).toHaveAttribute('aria-busy', 'false');
   await expect(assessment).toBeVisible();
   await expect(summary).toContainText('synthetic-skill');
-  await expect.poll(() => labelReads).toBe(1);
+  // Recommendations also load labels; capture the settled total before refreshing home.
+  await page.waitForLoadState('networkidle');
+  const initialLabelReads = labelReads;
+  expect(initialLabelReads).toBeGreaterThan(0);
   failing = true;
   await returnAfterStale(page);
   await expect.poll(() => reported).toContain('GET /me/onboarding');
   await expect.poll(() => reported.some(action => action.startsWith('GET /members/'))).toBe(true);
-  await expect.poll(() => labelReads).toBe(2);
+  await expect.poll(() => labelReads).toBeGreaterThan(initialLabelReads);
   await expect(summary).toHaveAttribute('aria-busy', 'false');
   await expect(summary).toContainText(memberCard.nickname);
   await expect(summary).toContainText('重試取得的能力標籤');
