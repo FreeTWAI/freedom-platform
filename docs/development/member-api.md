@@ -678,10 +678,35 @@ newest read's feedback. These read continuations never reset editor drafts.
 Before starting that background refresh, saving publishes the authoritative
 event returned by the command and any completed media upload into local items.
 Reopening an edit or cancelling from detail therefore uses the confirmed
-aggregate version without waiting for the list. Partial media failure publishes
-the latest known event too, retaining the editable draft and only failed or
-not-yet-sent files; retrying does not re-upload successful media. Detail-only
+aggregate version without waiting for the list. Known media rejection publishes
+the latest confirmed event too, retaining the editable draft and only failed or
+not-yet-sent files; retrying does not re-upload confirmed successful media. Detail-only
 events use the same current-item fallback for their next update command.
+
+### 媒體未知結果對帳（#793）
+
+Banner／video 的傳輸中斷、成功回應 JSON 無法解析或必要 DTO 欄位不符，
+都屬於結果未知；已知 415 則可更正檔案。未知操作在目前工作階段記憶體保留
+原 File bytes、MIME、海報方向、Idempotency-Key、原 aggregate version 與
+登入世代。先等待 `GET /events/:id` 讀回，再以完整原命令重播查核伺服器 receipt；
+不插入 `/update`，也不因讀回版本提高或已有媒體 URL 就猜測該檔案已提交。
+媒體 URL 不帶來源 digest，所以讀回本身不足以識別原操作；原 key 的重播可能
+再次傳輸 bytes，但既有 receipt 保證不再新增一次媒體保存／版本／journal。
+若讀回比 receipt 新，保留讀回的較新事件；原命令確認後只處理尚未送出的媒體。
+
+對帳完成前，儲存、編輯、取消、移除媒體、新活動與離開保護都保持鎖定。
+讀回失敗仍保留原命令，可按「重試確認保存」重試讀回；不會退回一般 metadata
+儲存。全部命令確認後立刻關閉編輯器並允許離開，背景列表刷新不延長此鎖。
+保留的檔案與命令不寫入永久儲存，重新整理／關閉視窗仍只有 beforeunload 提醒，
+不宣稱具有跨程序恢復能力。
+
+本次新增 banner／video 各自已提交後 ACK 遺失、成功 ACK 格式錯誤的瀏覽器案例，
+會暫停對帳 GET，核對沒有第二次 metadata 更新或競爭操作，再驗原 key／bytes／
+版本重播與每種媒體各一次 durable journal；其中一例先讓讀回 503，再重試恢復。
+既有 415 案例保留。刷新案例使用獨立社群，分別覆蓋較舊成功晚到，以及較舊失敗
+不能結束較新載入或顯示錯誤。這些瀏覽器案例本輪未執行：現有 fixture 需要
+PostgreSQL，依本輪限制沒有啟動資料庫。以下本機 Chromium／PostgreSQL 結果是
+原作者先前證據，不能當成本次修改的瀏覽器通過紀錄。
 
 The existing event-member journey holds a real successful list response after
 an original-key retry and verifies immediate departure at 1440px and 390px,

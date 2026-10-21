@@ -2414,8 +2414,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/EventsPanel.tsx",
-      "bytes": 40564,
-      "sha256": "fde5d15ae475a08510a427b69c74b51a8bdda9d0c30e5f98164161221c49240e"
+      "bytes": 43759,
+      "sha256": "2508d66b58e92540f1e2207c5d287f4cdf78c9617086f694bd017ee2f86461cd"
     },
     {
       "path": "apps/portal-web/src/modules/ExpeditionDesign.css",
@@ -3149,8 +3149,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/event-banner-client.ts",
-      "bytes": 4081,
-      "sha256": "79e4f4a7e07e644e823da33bd93512cd2428a9a2fb713867522d1c02d9fd90db"
+      "bytes": 5839,
+      "sha256": "6766da864a1a9601250c7d274b0874a30ae3a02287b6a275a967d691ef5c802b"
     },
     {
       "path": "apps/portal-web/src/modules/freedom.module.json",
@@ -14274,8 +14274,8 @@
     },
     {
       "path": "docs/development/member-api.md",
-      "bytes": 89334,
-      "sha256": "de04826372ef0e152c4f2da6ff4a271b29a27a540e5585ed00af43c34a8d36fc"
+      "bytes": 95539,
+      "sha256": "4a6af70e14a28ffc89ad69d36ae2baa48003aa8a8a90a7bf8ead0a9511bc6ad1"
     },
     {
       "path": "docs/development/member-communications.md",
@@ -19069,8 +19069,8 @@
     },
     {
       "path": "modules/assets/freedom.module.json",
-      "bytes": 2385,
-      "sha256": "877d94e4c2d2efb42ce0e3f76d3f932e175d801310adb5db09789969a42508d4"
+      "bytes": 2437,
+      "sha256": "c9a888ca25116aa1e4df3c44b833ac50307be898e9b543c785d9aaa232b3834b"
     },
     {
       "path": "modules/assets/index.ts",
@@ -22464,8 +22464,8 @@
     },
     {
       "path": "tests/e2e/event-member-journey.spec.ts",
-      "bytes": 20465,
-      "sha256": "021f72f216d16e64503363cbee346daaec67c7f4bda1be204d38a7d67fc15a3e"
+      "bytes": 40212,
+      "sha256": "1ef65f3206d281e46a1ce6d7078296485d693bdfd8ec069b5d07348729a38546"
     },
     {
       "path": "tests/e2e/event-outcomes.spec.ts",
@@ -22849,8 +22849,8 @@
     },
     {
       "path": "tests/e2e/notification-preferences.spec.ts",
-      "bytes": 9606,
-      "sha256": "07005c46894d50624150bb1ba172481ac7ee5fe39db06a52b5ca97e98678aed2"
+      "bytes": 10619,
+      "sha256": "a7c5affee1e81511850f0457d02d5b883a1e0bbee15b80f8e6aa31e956b61f2b"
     },
     {
       "path": "tests/e2e/onboarding-members.spec.ts",
@@ -24534,8 +24534,8 @@
     },
     {
       "path": "tests/runtime/media-session-recovery.test.ts",
-      "bytes": 4054,
-      "sha256": "9fa8226b8b70eb69a1baeb074af3ddd82b6f986bf162a631cdb3b169d4b1c52e"
+      "bytes": 8743,
+      "sha256": "e5cf9e2c7702b6907de1282b4fa4ea9ad0dd07b95b369f43ad358a6df1a19e63"
     },
     {
       "path": "tests/runtime/media-verify.test.ts",

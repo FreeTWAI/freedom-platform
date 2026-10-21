@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApiError, PortalClient } from '../../apps/portal-web/src/api.js';
 import { uploadMemberAvatar } from '../../apps/portal-web/src/modules/avatar-client.js';
-import { uploadEventBanner, uploadEventVideo } from '../../apps/portal-web/src/modules/event-banner-client.js';
+import { uploadEventBanner, uploadEventVideo, prepareEventMedia, readEventMedia, sendEventMedia, currentMediaEvent } from '../../apps/portal-web/src/modules/event-banner-client.js';
 import { uploadHighlightImage } from '../../apps/portal-web/src/modules/highlight-media.js';
 import type { CommunityEvent } from '../../apps/portal-web/src/modules/EventsPanel.js';
 
 const file = new File([new Uint8Array([1, 2, 3])], 'synthetic.png', { type: 'image/png' });
-const event = { event_id: 'synthetic-event', aggregate_version: 3 } as CommunityEvent;
+const event = { event_id: 'synthetic-event', aggregate_version: 3, organizer_ref:'synthetic-member', organizer_name:'Synthetic',
+  title:'Synthetic event',description:'Synthetic',location:'Synthetic',starts_at:'2030-01-01T12:00:00Z',ends_at:'2030-01-01T13:00:00Z',mode:'online',state:'pending',
+  banner_url:null,video_url:null } as CommunityEvent;
 const uploads: [string, (client: PortalClient) => Promise<unknown>][] = [
   ['avatar', client => uploadMemberAvatar(client, file, 3, 'synthetic-key')],
   ['banner', client => uploadEventBanner(client, event, file)],
@@ -69,3 +71,71 @@ test('banner decoding cannot transfer an upload to the member who signed in whil
   assert.equal(closed, true);
   assert.equal(fetcher.mock.callCount(), 0);
 });
+
+for (const kind of ['banner', 'video'] as const) {
+  test(`${kind}: a lost ACK replays the original media bytes, key and version`, async t => {
+    const client = new PortalClient(); client.csrfToken = 'current-session';
+    const calls: RequestInit[] = [];
+    t.mock.method(globalThis, 'fetch', async (_input: unknown, init?: RequestInit) => {
+      calls.push(init!);
+      if (calls.length === 1) throw Error('lost ACK after commit');
+      return Response.json({...event, aggregate_version: 4, [`${kind}_url`]: '/saved-media'});
+    });
+    const command = {kind, eventId: event.event_id, file, key: 'original-media-key', version: 3,
+      orientation: 'landscape', csrfToken: client.csrfToken, generation: client.sessionGeneration};
+    const upload = (kind === 'banner' ? uploadEventBanner : uploadEventVideo) as
+      (client: PortalClient, event: CommunityEvent, file: File, originalCommand: typeof command) => Promise<CommunityEvent>;
+    await assert.rejects(upload(client, event, file, command), (cause: unknown) => cause instanceof ApiError && cause.network);
+    await upload(client, {...event, aggregate_version: 4}, file, command);
+    assert.equal(calls[0].body, file);
+    assert.equal(calls[1].body, calls[0].body);
+    assert.equal(new Headers(calls[0].headers).get('Idempotency-Key'), command.key);
+    assert.deepEqual([...new Headers(calls[1].headers)], [...new Headers(calls[0].headers)]);
+    assert.equal(new Headers(calls[1].headers).get('If-Match'), '\"3\"');
+  });
+}
+
+for (const kind of ['banner', 'video'] as const) {
+  for (const body of ['{', '{}', 'null', JSON.stringify({...event, aggregate_version: 3, [`${kind}_url`]: '/existing-media'})]) {
+    test(`${kind}: malformed success ACK ${body.slice(0, 15)} stays unknown`, async t => {
+      t.mock.method(globalThis, 'fetch', async () => new Response(body, {headers:{'content-type':'application/json'}}));
+      const client = new PortalClient(); client.csrfToken = 'current-session';
+      const command = await prepareEventMedia(client, event, file, kind);
+      await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.network);
+    });
+  }
+  test(`${kind}: known 415 stays correctable`, async t => {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({detail:'unsupported media'}, {status:415}));
+    const client = new PortalClient(); client.csrfToken = 'current-session';
+    const command = await prepareEventMedia(client, event, file, kind);
+    await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 415 && !cause.network);
+  });
+  test(`${kind}: reconciliation GET failure retains a replayable original command`, async t => {
+    const client = new PortalClient(); client.csrfToken = 'current-session';
+    const command = await prepareEventMedia(client, event, file, kind);
+    let reads = 0, writes = 0;
+    t.mock.method(client, 'get', async () => {
+      reads++;
+      if (reads === 1) throw new ApiError({message:'readback unavailable', status:503});
+      return {...event, aggregate_version:4, [`${kind}_url`]:'/saved-media'};
+    });
+    t.mock.method(globalThis, 'fetch', async (_input: unknown, init?: RequestInit) => {
+      writes++;
+      assert.equal(init!.body, file);
+      assert.equal(new Headers(init!.headers).get('Idempotency-Key'), command.key);
+      assert.equal(new Headers(init!.headers).get('If-Match'), '\"3\"');
+      // Model the server's durable receipt, already committed before ACK loss.
+      return Response.json({...event, aggregate_version:4, [`${kind}_url`]:'/saved-media'});
+    });
+    await assert.rejects(readEventMedia(client, command));assert.equal(writes, 0);
+    const readback = await readEventMedia(client, command);
+    const receipt = await sendEventMedia(client, command);
+    assert.equal(currentMediaEvent(readback, receipt).aggregate_version, 4);
+    assert.equal(writes, 1);
+    const newer = {...readback, aggregate_version:6, title:'Concurrent edit'};
+    assert.equal(currentMediaEvent(newer, receipt), newer, 'a receipt cannot roll back a newer readback');
+    client.csrfToken = 'another-member';
+    await assert.rejects(readEventMedia(client, command));await assert.rejects(sendEventMedia(client, command));
+    assert.equal(reads, 2);assert.equal(writes, 1);
+  });
+}
