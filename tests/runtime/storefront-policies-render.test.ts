@@ -78,7 +78,10 @@ test('POL-PAGE-02 seller replaces responsibility and empty-description placehold
 test('POL-PAGE-03 B03 links, escaping, paragraphs and public version labels',()=>{
  const i=input();i.policies.shipping.body='<script>alert(1)</script>\njavascript:alert(2)\n\nשלום';const legal=renderDraftLegal(i),s={...store,policies:legal};
  const html=policyHtml(s,'shipping',{version_id:randomUUID(),policy:i.policies.shipping,first_published_at:'2026-10-20T00:00:00.000Z',current:false});
- assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;<br>javascript:alert\(2\)<\/p><p>שלום/);assert.doesNotMatch(html,/<script>|href="javascript:|版本 [0-9]/);assert.match(html,/首次發布於/);assert.match(html,/歷史版本/);
+ assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;<br>javascript:alert\(2\)<\/p><p>שלום/);assert.doesNotMatch(html,/<script>/i);assert.doesNotMatch(html,/href="javascript:|版本 [0-9]/);assert.match(html,/首次發布於/);assert.match(html,/歷史版本/);
+ const mixed=input();mixed.policies.shipping.body='<ScRiPt>alert(1)</sCrIpT>\njavascript:alert(2)\n\nשלום';const mixedStore={...store,policies:renderDraftLegal(mixed)};
+ const mixedHtml=policyHtml(mixedStore,'shipping',{version_id:randomUUID(),policy:mixed.policies.shipping,first_published_at:'2026-10-20T00:00:00.000Z',current:false});
+ assert.match(mixedHtml,/&lt;ScRiPt&gt;alert\(1\)&lt;\/sCrIpT&gt;<br>javascript:alert\(2\)<\/p><p>שלום/);assert.doesNotMatch(mixedHtml,/<script>/i);
  const p=productHtml(store,'P0001',[],undefined,undefined,undefined,legal)!;assert.match(p,/aria-label="配送與退換貨政策"/);assert.match(p,/policies\/shipping/);assert.match(p,/policies\/returns/);
  assert.equal(legalParagraphs('a\nb\n\nc'),'<p>a<br>b</p><p>c</p>');
  i.policies.privacy.drop_ship_disclosed=true;const privacy={...store,policies:renderDraftLegal(i)};
@@ -124,5 +127,6 @@ test('POL-CONTRACT-03 immutable content digests are checked and errors never inc
  const policy={kind:'shipping' as const,body:'合成政策'};assert.deepEqual(policyFromRow({...policy,content_sha256:digest(policy)}),policy);
  assert.throws(()=>policyFromRow({...policy,body:'合成變更政策',content_sha256:digest(policy)}),{message:'賣方資訊與商店政策暫時無法讀取。'});
  for(const cp of [0x061c,0x200e,0x200f,0x202a,0x202b,0x202c,0x202d,0x202e,0x2066,0x2067,0x2068,0x2069]){const v=emptySellerPolicies();v.policies.shipping.body='a'+String.fromCodePoint(cp)+'b';assert.equal(SellerPoliciesInputSchema.safeParse(normalizeSellerPolicies(SellerPoliciesWireSchema.parse(v))).success,false);}
- const v=input();v.seller.business_name='<script>合成</script>';const html=aboutHtml({...store,policies:renderDraftLegal(v)});assert.doesNotMatch(html,/<script>/);assert.match(html,/&lt;script&gt;合成&lt;\/script&gt;/);
+ const v=input();v.seller.business_name='<script>合成</script>';const html=aboutHtml({...store,policies:renderDraftLegal(v)});assert.doesNotMatch(html,/<script>/i);assert.match(html,/&lt;script&gt;合成&lt;\/script&gt;/);
+ const mixed=input();mixed.seller.business_name='<ScRiPt>合成</sCrIpT>';const mixedHtml=aboutHtml({...store,policies:renderDraftLegal(mixed)});assert.doesNotMatch(mixedHtml,/<script>/i);assert.match(mixedHtml,/&lt;ScRiPt&gt;合成&lt;\/sCrIpT&gt;/);
 });
