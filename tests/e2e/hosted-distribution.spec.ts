@@ -88,7 +88,7 @@ test(`${supplierOnly ? 'supply-only' : 'retail'} supplier A and independent B/C 
       await storeArea(s.page,'店面與發布');
       await expect(s.page.getByRole('button',{name:'發布展示頁',exact:true})).toBeEnabled();
       await s.page.getByRole('button',{name:'發布展示頁',exact:true}).click();
-      await expect(s.page.locator('.hosted-store > [role="status"]')).toContainText('已發布展示頁');
+      await expect(s.page.locator('.hosted-store > [role="status"]')).toContainText('已上架 1 件商品，公開頁已更新。');
       const published=await s.page.request.get(`/api/v1/public/stores/${s.slug}`); expect(published.status()).toBe(200);
       const dto=await published.json(); expect(dto.products[0].price_minor).toBe(s===b?1100:1300);
       expect(JSON.stringify(dto)).not.toContain('cost_minor'); expect(JSON.stringify(dto)).not.toContain('瑕疵品');
