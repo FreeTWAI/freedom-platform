@@ -15,11 +15,17 @@ test('published candidate introduction has own illustration metadata, persistent
   assert.ok(html.includes('第17個測試情境'));assert.ok(html.includes('?intro=17'));
   assert.ok(html.includes(`rel="canonical" href="https://freetwai.com${skill.public_path}"`));
   assert.ok(html.includes('/issues'));assert.ok(html.includes('/pulls'));assert.ok(html.includes('/SKILL.md'));
-  assert.match(html,/<div class="public-skill-actions"><a href="https:\/\/github\.com\/example\/editor"/);
+  assert.match(html,/<a href="https:\/\/github\.com\/example\/editor" target="_blank" rel="noopener noreferrer">到 GitHub 看原始碼 ↗<\/a>/);
   // Same entry packaging as a platform skill book: cover first, then purpose, source and the 社群技能書 badge.
   assert.match(html,/<section class="public-skill-entry"><figure class="public-skill-cover"><img src="\/art\/community-skills\/default\.webp" alt="" width="768" height="512"><\/figure>/);
   assert.ok(html.includes('原作：example/editor'));
-  assert.ok(html.includes('開啟展示 ↗'));
+  assert.ok(html.includes('開啟專案線上示範 ↗'));
+  assert.ok(html.includes('目的地：<bdi>example.com/demo</bdi>'));
+  assert.ok(html.includes('用途與適用範圍'));assert.ok(html.includes('投稿者尚未分別補充'));
+  assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2>一起開發</h2>'));
+  assert.ok(html.includes('投稿公開日期'));assert.ok(html.includes('2026-09-23'));
+  assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
+  assert.ok(!html.includes('<pre>'));assert.ok(!html.includes('立即啟動'));assert.ok(!html.includes('下載應用'));
   assert.ok(html.indexOf('Fork 專案')>html.indexOf('<h2>一起開發</h2>'));
   assert.ok(html.includes('>社群技能書</span>'));assert.ok(!html.includes('社群投稿'));assert.ok(html.includes('自行聲明'));assert.ok(html.includes('a'.repeat(40)));
   assert.ok(!html.includes('<script>alert'));assert.ok(html.includes('&lt;script&gt;'));
@@ -30,7 +36,8 @@ test('optional illustration and invalid share query do not manufacture metadata 
   const html=submittedSkillHtml({...skill,illustration_url:null},'101');
   assert.ok(!html.includes('property="og:image"'));assert.ok(!html.includes('?intro=101'));
   assert.ok(html.includes('整理素材 &amp; 檢查時間軸'));
-  assert.match(submittedSkillHtml({...skill,demo_url:null}),/<div class="public-skill-actions"><a href="https:\/\/github\.com\/example\/editor"/);
+  const noDemo=submittedSkillHtml({...skill,demo_url:null});
+  assert.ok(!noDemo.includes('開啟專案線上示範'));assert.ok(noDemo.includes('到 GitHub 看原始碼'));
 });
 
 test('submitted skill agent guide keeps user text as quoted untrusted data and routes to actual source repository',()=>{
@@ -56,4 +63,12 @@ test('every 社群技能書 gets a delivered cover, and drawn art follows the so
     assert.equal(bytes.length,asset.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),asset.sha256);
     assert.deepEqual([asset.width,asset.height],url!.endsWith('-illustration.webp')?[1200,630]:[768,512]);
   }
+});
+
+
+test('member-authored usage remains readable plain text; absent instructions and unknown licenses stay explicit',()=>{
+ const html=submittedSkillHtml({...skill,use_notes:'第一段 <img src=x onerror=alert(1)>\n第二行\n\n下一步：先閱讀 README。',source:{...skill.source,license_spdx:'NOASSERTION'}});
+ assert.match(html,/<p class="public-skill-notes">第一段 &lt;img src=x onerror=alert\(1\)&gt;\n第二行<\/p><p class="public-skill-notes">下一步：先閱讀 README。<\/p>/);
+ assert.ok(!html.includes('<img src=x'));assert.match(html,/<dt>收錄授權<\/dt><dd>尚未確認<\/dd>/);
+ assert.ok(submittedSkillHtml({...skill,use_notes:'',demo_url:null}).includes('使用步驟尚待補充'));
 });

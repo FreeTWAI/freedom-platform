@@ -75,6 +75,7 @@ export type PlatformRuntime = {
   /** Explicit AR read/upload port and release setting; both absent by default. */
   arAssetStore?:ObjectStore;
   arEnabled?:boolean;
+  shortVideosEnabled?:boolean;
   /** Explicit installed cover lifecycle/read store; no ambient activation. */
   serviceCoverAssets?: ServiceCoverAssetService;
   serviceCoverAssetStore?: ObjectStore;

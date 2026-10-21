@@ -17,7 +17,7 @@ async function supplyPerson(db: Pool) {
   await db.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
     VALUES($1,$2,$3,'純供貨測試會員',$4,$5,false)`, [id, DEMO_COMMUNITY, email, hashPassword(DEMO_PASSWORD), randomUUID()]);
   await db.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
-    VALUES($1,$2,$3,$4,'active','full')`, [randomUUID(), DEMO_COMMUNITY, id, supplierGuild]);
+    VALUES($1,$2,$3,$4,'active','intern')`, [randomUUID(), DEMO_COMMUNITY, id, supplierGuild]);
   await db.query('INSERT INTO guild_member_preferences(community_id,user_id,primary_guild_key) VALUES($1,$2,$3)', [DEMO_COMMUNITY, id, supplierGuild]);
   return {id, email};
 }
@@ -44,7 +44,7 @@ async function captureConsoleWidths(page: Page, info: {outputPath: (...segments:
   await page.setViewportSize({width: 1440, height: 900});
 }
 
-test('SC-E2E-01 supply-only supplier completes the S1 journey from the guild to a fresh login (AT-01,02,05,12,22,31,39,42)', async ({browser, baseURL, e2eAuthPool}, info) => {
+test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fresh login (AT-01,02,05,12,22,31,39,42)', async ({browser, baseURL, e2eAuthPool}, info) => {
   test.setTimeout(180_000);
   const suffix = randomUUID().slice(0, 6);
   const catalogName = `山林供貨商品庫 ${suffix}`;
@@ -76,10 +76,22 @@ test('SC-E2E-01 supply-only supplier completes the S1 journey from the guild to 
     await open(a, `guilds/${supplierGuild}`);
     const primary = a.getByRole('region', {name: '主要動作', exact: true});
     await expect(primary).toBeVisible();
+    await expect(a.getByText('成員身分：實習成員', {exact: true})).toBeVisible();
     await primary.getByRole('button', {name: '開始供貨設定', exact: true}).click();
     const flow = a.getByRole('region', {name: '啟動應用', exact: true});
     await flow.getByLabel('業務空間名稱', {exact: true}).fill(`山林供應空間 ${suffix}`);
     await flow.getByRole('button', {name: '建立業務空間', exact: true}).click();
+    await flow.getByRole('button', {name: '產生啟動方案', exact: true}).click();
+    await expect(flow.getByRole('heading', {name: '確認啟動方案', exact: true})).toBeVisible();
+    // A definite membership refusal must not leave a launch with an unknown outcome.
+    await e2eAuthPool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1 AND guild_key=$2", [supplier.id, supplierGuild]);
+    const refusedLaunch = a.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/application-installations'));
+    await flow.getByRole('button', {name: '確認啟動', exact: true}).click();
+    const refused = await refusedLaunch;
+    expect(refused.status()).toBe(403); expect((await refused.json()).code).toBe('guild_member_required');
+    await expect(flow.getByRole('button', {name: '產生啟動方案', exact: true})).toBeEnabled();
+    await expect(flow.getByRole('region', {name: '啟動進度', exact: true})).toHaveCount(0);
+    await e2eAuthPool.query("UPDATE positioning_profession_memberships SET state='active' WHERE user_id=$1 AND guild_key=$2", [supplier.id, supplierGuild]);
     await flow.getByRole('button', {name: '產生啟動方案', exact: true}).click();
     await flow.getByRole('button', {name: '確認啟動', exact: true}).click();
     await flow.getByRole('button', {name: '設定供貨資料', exact: true}).click();
@@ -121,6 +133,14 @@ test('SC-E2E-01 supply-only supplier completes the S1 journey from the guild to 
     await expect(consoleRoot.locator('.sc-business-bar')).toContainText(catalogName);
     await expect(consoleRoot.locator('.sc-business-bar .badge')).toHaveText('純供貨');
     await expect(consoleRoot.locator('.sc-business-bar').getByRole('link', {name: '前往商店', exact: true})).toHaveCount(0);
+    const preparation = consoleRoot.getByRole('region', {name: '供貨準備', exact: true});
+    await expect(preparation.locator('details')).toHaveAttribute('open', '');
+    await expect(preparation).toContainText('只保存商品不會自動公開供貨');
+    await expect(preparation).toContainText('商品供貨同意不會自動授權素材');
+    await expect(preparation).toContainText('不代表成交或付款');
+    for (const [label, suffix] of [['管理行銷素材與授權', 'materials'], ['查看供貨申請', 'terms'], ['查看合作店家', 'partners'], ['查看供貨預留', 'reservations']]) {
+      await expect(preparation.getByRole('link', {name: label, exact: true})).toHaveAttribute('href', `#${storePrefix}/supply/${suffix}`);
+    }
 
     // Step 2: Overview metrics are ready zeros, no todo, first step to add a product is available. (AT-39)
     const metricCards = consoleRoot.locator('.sc-metrics article');
@@ -133,7 +153,7 @@ test('SC-E2E-01 supply-only supplier completes the S1 journey from the guild to 
     await assertConsoleWording(a);
     await captureConsoleWidths(a, info, 'step2-overview');
 
-    const firstAddProductLink = consoleRoot.locator('.sc-content').getByRole('link', {name: '新增商品', exact: true});
+    const firstAddProductLink = preparation.getByRole('link', {name: '新增商品', exact: true});
     await expect(firstAddProductLink).toBeVisible();
     await firstAddProductLink.click();
 
@@ -227,7 +247,7 @@ test('SC-E2E-01 supply-only supplier completes the S1 journey from the guild to 
 
     await a.getByRole('button', {name: '同意', exact: true}).click();
     await expect(consoleRoot.locator('.sc-announcement')).toHaveText('已保存：同意售價申請。');
-    await expect(activeView.locator('.badge')).toHaveText('可售');
+    await expect(activeView.locator('.badge')).toHaveText('已同意，可加入展示頁（尚不能結帳購買）');
 
     await storeArea(b, '供貨合作');
     await b.getByRole('button', {name: '更新供貨狀態', exact: true}).click();

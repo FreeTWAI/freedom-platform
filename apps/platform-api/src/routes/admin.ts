@@ -1,6 +1,7 @@
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
 import type {CommerceProviderEnvironment} from '../../../../modules/agent-commerce/operations/admissions.js';
+import type {StoreReadinessDependencies} from '../../../../modules/agent-commerce/operations/store-readiness.js';
 import {Hono,type Context} from 'hono';
 import {createGuildWorkspaceAdminRoutes} from './guild-workspace.js';
 import {createRepoMaintainerAdminRoutes} from './repo-maintainer.js';
@@ -24,7 +25,7 @@ import {participationMetrics} from '../../../../modules/community/participation-
 import {listCredentials,requestCloudflareRenewal} from '../../../../modules/platform-admin/credentials.js';
 import {approveRecoveryCase,closeRecoveryCase,executeRecoveryCase,getRecoveryCase,openRecoveryCase} from '../../../../modules/tenant-workspaces/recovery.js';
 type AdminEnv={Variables:{admin:AdminActor;adminCsrf:string}};
-export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=verifyAdminAccess,github:{origin:string;tokenKey?:string;fetcher?:typeof fetch;readToken?:()=>string|undefined;guildReviewer?:GuildReviewer}={origin:'http://127.0.0.1:4310'},guildLaunchpadEnabled=false,participationMetricsEnabled=false,commerceProviderEnvironment:CommerceProviderEnvironment='sandbox',commerceJournal?:EffectJournalPort){
+export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=verifyAdminAccess,github:{origin:string;tokenKey?:string;fetcher?:typeof fetch;readToken?:()=>string|undefined;guildReviewer?:GuildReviewer}={origin:'http://127.0.0.1:4310'},guildLaunchpadEnabled=false,participationMetricsEnabled=false,commerceProviderEnvironment:CommerceProviderEnvironment='sandbox',commerceJournal?:EffectJournalPort,commerceReadiness?:StoreReadinessDependencies & {releaseSha:string|null}){
   const app=new Hono<AdminEnv>();
   app.use('/participation-metrics',async(_c,next)=>{
     requireCondition(participationMetricsEnabled===true,404,'not_found','找不到這個頁面。');
@@ -121,7 +122,7 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   }
   app.route('/',createRepoMaintainerAdminRoutes(pool));
   if(guildLaunchpadEnabled){
-    app.route('/',createCommerceAdmissionRoutes(pool,command,commerceProviderEnvironment,commerceJournal));
+    app.route('/',createCommerceAdmissionRoutes(pool,command,commerceProviderEnvironment,commerceJournal,commerceReadiness));
     const matched=async(c:Context<AdminEnv>)=>{
       const version=c.req.header('If-Match');
       if(version===undefined)throw new Problem(428,'version_required','請提供 If-Match 版本。');

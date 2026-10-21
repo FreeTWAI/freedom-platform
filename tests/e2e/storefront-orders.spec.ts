@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures.js';
-import { apiLogin } from './hosted-order-fixture.js';
+import { apiLogin, member } from './hosted-order-fixture.js';
+import {setupCartFixtureStore} from './storefront-cart-fixture.js';
+import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {
   assertResponsiveLayout,
   buildVerifiedError,
@@ -39,7 +41,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     expect(new URL(page.url()).hash).toBe('');
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
-    await expect(page.getByRole('status')).toHaveText(
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText(
       '這個訂單連結只能使用一次。開啟後，這個瀏覽器會記住這筆訂單，之後可以直接查看。',
     );
     expect(recordedRequests.some(req => req.method === 'POST')).toBe(false);
@@ -106,7 +108,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
       await page2.getByRole('button', { name: '在這個瀏覽器開啟訂單', exact: true }).click();
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page2.getByRole('status')).toHaveText(
+      await expect(page2.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       await expect(page2.getByRole('link', { name: '找回訂單', exact: true })).toHaveAttribute(
@@ -142,7 +144,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await page3.goto(`${seeded.orderPath}#access=abc`);
       expect(new URL(page3.url()).hash).toBe('');
       await expect(page3.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page3.getByRole('status')).toHaveText(
+      await expect(page3.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       expect(thirdPosts).toEqual([]);
@@ -199,7 +201,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     await expect(forgottenHeading).toBeVisible();
     await expect(forgottenHeading).toBeFocused();
     await expect(page).toHaveTitle('訂單｜山邊小店｜自由工坊');
-    await expect(page.getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
     await expect(page.getByRole('link', { name: '回到「山邊小店」', exact: true })).toHaveAttribute(
       'href',
       `/shops/${store.slug}`,
@@ -255,7 +257,7 @@ test('member-owned order opens for the logged-in buyer without a device cookie a
     const strangerPage = await strangerContext.newPage();
     await strangerPage.goto(memberOrder.orderPath);
     await expect(strangerPage.getByRole('heading', { level: 1 })).toHaveText('找不到這筆訂單');
-    await expect(strangerPage.getByRole('status')).toHaveText(
+    await expect(strangerPage.locator('#shop-order').getByRole('status')).toHaveText(
       '這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。',
     );
   } finally {
@@ -696,4 +698,43 @@ test('responsive layout and full-page screenshots across 1440, 1280, 768, 390 an
   } finally {
     await guestContext.close();
   }
+});
+
+test('B10 and valid missing orders return after real login; disabled checkout preserves the old prompts and ignores storefront returns', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const closed = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {checkoutEnabled: false});
+  const context = await browser.newContext({baseURL: store.origin});
+  const offContext = await browser.newContext({baseURL: closed.origin});
+  try {
+    const buyer = await member(e2eAuthPool), page = await context.newPage();
+    const login = async (target: typeof page) => {
+      await target.getByLabel('電子郵件', {exact: true}).fill(buyer.email);
+      await target.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+      await target.getByRole('button', {name: '登入', exact: true}).click();
+    };
+    for (const path of [`/shops/${store.slug}/order-access`, `/shops/${store.slug}/orders/${randomUUID()}`]) {
+      await context.clearCookies(); await page.goto(path);
+      await expect(page.getByRole('link', {name: '登入會員', exact: true})).toHaveAttribute('href', '/?return_to=' + encodeURIComponent(path));
+      await page.getByRole('link', {name: '登入會員', exact: true}).click();
+      await expect(page.getByText('登入後會返回原本的商店頁面。', {exact: true})).toBeVisible();
+      await login(page); await expect(page).toHaveURL(store.origin + path);
+      await expect(page.getByRole('heading', {level: 1})).toHaveText(path.endsWith('order-access') ? '找回訂單' : '找不到這筆訂單');
+    }
+    await page.goto(`/shops/${store.slug}/orders/invalid-uuid`);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('找不到這筆訂單');
+    await expect(page.getByRole('link', {name: '登入會員', exact: true})).toHaveCount(0);
+    const offPage = await offContext.newPage();
+    for (const path of [`/shops/${closed.slug}/order-access`, `/shops/${closed.slug}/orders/${randomUUID()}`]) {
+      await offPage.goto(path);
+      await expect(offPage.getByRole('heading', {level: 1})).toHaveText(path.endsWith('order-access') ? '找回訂單' : '找不到這筆訂單');
+      await expect(offPage.getByRole('link', {name: '登入會員', exact: true})).toHaveCount(0);
+      await expect(offPage.locator('[data-buyer-journey]')).toHaveCount(0);
+    }
+    await offPage.goto('/?return_to=' + encodeURIComponent(`/shops/${closed.slug}/order-access`));
+    await expect(offPage.getByText('登入後會返回原本的商店頁面。', {exact: true})).toHaveCount(0);
+    await login(offPage);
+    await expect(offPage.getByRole('heading', {name: '會員首頁', exact: true})).toBeVisible();
+    expect(new URL(offPage.url()).pathname).toBe('/');
+    await expect(offPage.getByRole('heading', {name: '找回訂單', exact: true})).toHaveCount(0);
+  } finally {await context.close(); await offContext.close(); await store.close(); await closed.close();}
 });

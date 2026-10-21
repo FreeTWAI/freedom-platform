@@ -1,16 +1,27 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {checkVersion, digest} from '../../../packages/db/index.js';
-import {requireCondition} from '../../../packages/shared/problem.js';
-import {SupplyOfferSchema, SupplyOffersSchema, SupplyOfferTermsSchema, DistributionInputSchema, DistributionDecisionSchema,
+import {Problem, requireCondition} from '../../../packages/shared/problem.js';
+import {SupplyOfferPageSchema, SupplyOfferSchema, SupplyOffersSchema, SupplyOfferTermsSchema, DistributionInputSchema, DistributionDecisionSchema,
   DistributionSchema, DistributionsSchema, type SupplyOffer} from '../../../contracts/guild-launchpad/v1/hosted-distribution.js';
 import type {Actor} from '../../identity-membership/service.js';
 import {resellerArrangement} from '../distribution.js';
+import {supplyDisplayPath, supplierReservationEnabled} from './supply-availability.js';
+import {sharedLines} from './shared-quotes.js';
+import {hostedLineFulfilment, fulfilmentConsentFailure} from '../fulfilment/rules/index.js';
+import {readPublicStorePage} from './public.js';
 import {profile, ready, retailReady, productCount, storeRead, storeCommand, storeFact, type Profile} from './store.js';
 
 export function offerView(row: Record<string, any>): SupplyOffer {
   return SupplyOfferSchema.parse({offer_id: row.offer_id, product_id: row.item_id, supplier_name: row.supplier_name,
-    source_version: String(row.source_version), terms: row.terms, terms_sha256: row.terms_sha256, state: row.state, version: String(row.version)});
+    source_version: String(row.source_version), terms: row.terms, terms_sha256: row.terms_sha256, state: row.state, version: String(row.version),
+    published_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+    arrangement: arrangementView(resellerArrangement('seller', 'supplier'))});
+}
+function arrangementView(value: Record<string, unknown> | undefined) {
+  if (!value || value.mode !== 'reseller' || !value.seller_of_record || !value.fulfillment_party) return null;
+  const expected = resellerArrangement(String(value.seller_of_record), String(value.fulfillment_party));
+  return Object.entries(expected).every(([key, role]) => value[key] === role) ? resellerArrangement('seller', 'supplier') : null;
 }
 export function supplyOfferTerms(row: {title: string; description: string; price_minor: string | number; shipping_minor: string | number; shipping_terms: string; return_terms: string}, currency: 'TWD' | 'USD') {
   return SupplyOfferTermsSchema.parse({title: row.title, description: row.description, currency,
@@ -61,21 +72,89 @@ export async function withdrawSupplyOffer(pool: Pool, actor: Actor, tenantId: st
   }, offerId);
 }
 
-async function selections(q: PoolClient, p: Profile, supplier: boolean, selectionId?: string) {
+async function selections(q: PoolClient, p: Profile, supplier: boolean, selectionId?: string, productId?: string) {
   return (await q.query(`SELECT l.selection_id,l.hosted_sku,l.retail_price_minor,l.snapshot,l.listing_sha256,l.acceptance_state,
-      l.aggregate_version::text AS selection_version,s.name AS seller_name,s.owner_id AS seller_user_id,ss.owner_id AS supplier_user_id,o.*
+      l.aggregate_version::text AS selection_version,s.name AS seller_name,s.owner_id AS seller_user_id,ss.owner_id AS supplier_user_id,
+      (SELECT NULLIF(a.note,'') FROM commerce_distribution_acceptances a WHERE a.selection_id=l.selection_id
+        ORDER BY a.created_at DESC,a.acceptance_id DESC LIMIT 1) AS decision_note,o.*
     FROM commerce_selections l JOIN commerce_hosted_supply_offers o ON o.offer_id=l.hosted_offer_id AND o.item_id=l.item_id
     JOIN commerce_shops s ON s.shop_id=l.shop_id AND s.origin='hosted'
     JOIN commerce_storefront_profiles source ON source.instance_id=o.instance_id AND source.tenant_id=o.tenant_id
     JOIN commerce_shops ss ON ss.shop_id=source.supply_shop_id AND ss.origin='hosted'
     WHERE ($2::boolean AND o.tenant_id=$3 AND o.instance_id=$4 OR NOT $2::boolean AND l.shop_id=$1)
-      AND ($5::uuid IS NULL OR l.selection_id=$5) ORDER BY l.selection_id LIMIT 201`,
-  [p.storefront_shop_id, supplier, p.tenant_id, p.instance_id, selectionId ?? null])).rows;
+      AND ($5::uuid IS NULL OR l.selection_id=$5) AND ($6::uuid IS NULL OR l.item_id=$6) ORDER BY l.selection_id LIMIT 201`,
+  [p.storefront_shop_id, supplier, p.tenant_id, p.instance_id, selectionId ?? null, productId ?? null])).rows;
 }
 export function selectionView(row: Record<string, any>) {
   return DistributionSchema.parse({selection_id: row.selection_id, offer: offerView(row), sku: row.hosted_sku,
     seller_name: row.seller_name, retail_price_minor: Number(row.retail_price_minor), state: row.acceptance_state,
-    listing_sha256: row.listing_sha256, version: row.selection_version});
+    listing_sha256: row.listing_sha256, version: row.selection_version, decision_note: row.decision_note ?? null,
+    arrangement: arrangementView(row.snapshot?.arrangement)});
+}
+/** Seller authority stays bound to the seller. Only the existing community offer,
+ * selection and profile paths are read here; supplier drafts/stock never enter. */
+export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerId: string, admissionEnabled: boolean) {
+  const findOffer = async (q: PoolClient, communityId: string, p: Profile) => {
+    const row = (await q.query(`SELECT o.*,source.slug,source.reservation_enabled,source.supply_shop_id,source.current_publication_id
+      FROM commerce_hosted_supply_offers o
+      JOIN commerce_storefront_profiles source ON source.tenant_id=o.tenant_id AND source.instance_id=o.instance_id
+      WHERE o.offer_id=$1 AND o.community_id=$2 AND o.instance_id<>$3 AND o.terms->>'currency'=$4
+      AND (o.state='offered' OR EXISTS(SELECT 1 FROM commerce_selections l
+        WHERE l.shop_id=$5 AND l.hosted_offer_id=o.offer_id AND l.item_id=o.item_id))`,
+    [offerId, communityId, instanceId, p.currency, p.storefront_shop_id])).rows[0];
+    requireCondition(row, 404, 'supply_offer_not_found', '找不到可選用的供貨版本。');
+    return row;
+  };
+  const slugs = await storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
+    const p = await profile(q, tenantId, instanceId); ready(p);
+    return {supplier: (await findOffer(q, context.community_id, p)).slug as string | null, seller: p.slug};
+  });
+  // The existing anonymous reader owns its own transaction. Release the seller
+  // client first (including on a one-client pool), then reauthorize the entire
+  // private response below. No tenant context is switched on a seller client.
+  const [publicStore, publicSeller] = await Promise.all([
+    slugs.supplier ? readPublicStorePage(pool, slugs.supplier) : null,
+    slugs.seller ? readPublicStorePage(pool, slugs.seller) : null,
+  ]);
+  return storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context, inst) => {
+    const p = await profile(q, tenantId, instanceId); ready(p);
+    const row = await findOffer(q, context.community_id, p);
+    const publiclyLive = publicStore?.publicationId === row.current_publication_id && slugs.supplier === row.slug;
+    const selected = (await selections(q, p, false, undefined, row.item_id))[0];
+    const selection = selected ? selectionView(selected) : null;
+    const display = supplyDisplayPath(selection?.state ?? 'sellable', selection?.offer.state ?? row.state);
+    let reservation = {available: false, reason: 'not_configured' as string | null};
+    if (admissionEnabled) {
+      const supplier = {reservation_enabled: row.reservation_enabled, currency: row.terms.currency};
+      if (context.tenant_status !== 'active' || inst.status !== 'active' || inst.deployment_state !== 'active') reservation.reason = 'store_unavailable';
+      else if (!p.reservation_enabled) reservation.reason = 'reservation_not_enabled';
+      else if (!supplierReservationEnabled(supplier, p)) reservation.reason = 'supply_unavailable';
+      else if (!display.available) reservation.reason = display.reason;
+      else if (!selection || !p.current_publication_id) reservation.reason = 'publication_required';
+      else if (publicSeller?.publicationId !== p.current_publication_id || slugs.seller !== p.slug) reservation.reason = 'store_unavailable';
+      // Private supplier lifecycle/mapping rows are deliberately inaccessible
+      // here. A new safe projection would require schema work; never infer it
+      // from an immutable offer or switch the seller's tenant context.
+      else if (!publiclyLive) reservation.reason = 'unknown';
+      else {
+        try {
+          // The same exact-version/publication decision as a shared reservation.
+          // This resolver reads only the already visible immutable source/settings.
+          await sharedLines(q, {profile: p, shared: {}}, [{sku: selection.sku, quantity: 1}], async () =>
+            ({...p, instance_id: row.instance_id, supply_shop_id: row.supply_shop_id, ...supplier}));
+          reservation = {available: true, reason: null};
+        } catch (error) {
+          if (!(error instanceof Problem) || !['publication_changed','supply_unavailable'].includes(error.code)) throw error;
+          reservation.reason = error.code;
+        }
+      }
+    }
+    const checkoutReason = fulfilmentConsentFailure(hostedLineFulfilment(row.instance_id === instanceId));
+    return SupplyOfferPageSchema.parse({offer: offerView(row), published_at: row.created_at.toISOString(),
+      supplier: {name: row.supplier_name, public_path: publiclyLive ? `/shops/${row.slug}` : null},
+      selection, decision_note: selection?.decision_note ?? null,
+      sale_paths: {display, reservation, checkout: {available: checkoutReason === null, reason: checkoutReason}}});
+  });
 }
 export async function listDistributions(pool: Pool, actor: Actor, tenantId: string, instanceId: string, supplier = false) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:write', async q => {
@@ -133,8 +212,10 @@ export async function decideDistribution(pool: Pool, actor: Actor, tenantId: str
     requireCondition(input.decision==='revoked' ? row.acceptance_state==='sellable' : row.acceptance_state==='awaiting_supply_acceptance' && row.state==='offered',
       409, 'invalid_state', '供貨狀態已改變，請重新確認。');
     const id = randomUUID(), state = input.decision==='accepted' ? 'sellable' : input.decision;
-    await q.query(`INSERT INTO commerce_distribution_acceptances(acceptance_id,selection_id,community_id,supplier_user_id,seller_user_id,listing_sha256,decision,signer_user_id,signed_digest,arrangement)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$6,$9)`, [id, selectionId, context.community_id, row.supplier_user_id, row.seller_user_id, input.listing_sha256, input.decision, actor.user_id, row.snapshot.arrangement]);
+    // Record decision order after the command locks, rather than transaction
+    // start time: a queued transaction may have begun before the prior decision.
+    await q.query(`INSERT INTO commerce_distribution_acceptances(acceptance_id,selection_id,community_id,supplier_user_id,seller_user_id,listing_sha256,decision,signer_user_id,signed_digest,arrangement,note,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$6,$9,$10,clock_timestamp())`, [id, selectionId, context.community_id, row.supplier_user_id, row.seller_user_id, input.listing_sha256, input.decision, actor.user_id, row.snapshot.arrangement, input.reason ?? '']);
     await q.query(`UPDATE commerce_selections SET acceptance_state=$2,current_acceptance_id=$3,aggregate_version=aggregate_version+1 WHERE selection_id=$1`, [selectionId, state, id]);
     const saved = (await selections(q, p, true, selectionId))[0];
     await storeFact(q, context, selectionId, saved.selection_version, 'storefront.distribution.decide', 'hosted_distribution');

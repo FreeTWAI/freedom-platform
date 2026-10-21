@@ -12,8 +12,11 @@ import { Problem, requireCondition } from '../../../packages/shared/problem.js';
 import type { Actor } from '../../identity-membership/service.js';
 import { effectiveStoreCapabilities, requireStoreInstance, storeCapabilities, STORE_MISSING } from './capabilities.js';
 import { encodeCursor, readCursor } from '../../tenant-workspaces/facts.js';
+import {assertGuildMembership, commerceMembership} from '../../module-registry/membership.js';
 
 export const SLUG_PATTERN = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+/** Canonical public path used by the store home and admin admission links. */
+export const publicStorePath = (slug: string) => `/shops/${encodeURIComponent(slug)}`;
 const reserved = new Set('admin api app apps assets auth billing cart checkout dashboard default freedom freetwai guild guilds help home login logout me new official order orders pay payment platform preview root search services settings shop shops signup static store stores support system test www'.split(' '));
 export const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 export interface Instance { instance_id: string; status: string; deployment_state: string | null }
@@ -73,7 +76,7 @@ export async function storeView(q: PoolClient, context: TenantScopeContext, inst
   return StoreViewSchema.parse({ tenant_id: context.tenant_id, instance_id: inst.instance_id, instance_status: inst.status,
     setup_state: p ? 'ready' : 'setup_required',
     store: p ? { slug: p.slug, name: p.name, brand: p.brand, description: p.description, currency: p.currency, slug_locked: p.first_published_at !== null } : null,
-    publication: { state: p?.current_publication_id ? 'published' : p?.first_published_at ? 'unpublished' : 'never_published', current_revision: p?.revision ?? null, published_at: p?.published_at?.toISOString() ?? null, public_path: p?.current_publication_id ? `/shops/${p.slug}` : null },
+    publication: { state: p?.current_publication_id ? 'published' : p?.first_published_at ? 'unpublished' : 'never_published', current_revision: p?.revision ?? null, published_at: p?.published_at?.toISOString() ?? null, public_path: p?.current_publication_id && p.slug ? publicStorePath(p.slug) : null },
     product_count: p ? await productCount(q, p) : 0, product_limit: 200, transaction_state: 'not_enabled',
     writable: context.tenant_status === 'active' && inst.status === 'active' && inst.deployment_state === 'active' && keys.some(k => k !== 'store:read'),
     capabilities: keys, version: p?.version ?? null });
@@ -149,6 +152,7 @@ export async function setupStore(pool: Pool, actor: Actor, tenantId: string, ins
       return { created: false, view: await storeView(q, context, inst) };
     }
     const slug = await assertSlug(q, input.slug, instanceId);
+    await assertGuildMembership(q, context.community_id, actor.user_id, [commerceMembership], true);
     await createHostedProfile(q, context, actor, instanceId, {...input, slug});
     await storeFact(q, context, instanceId, '1', 'storefront.setup');
     return { created: true, view: await storeView(q, context, inst) };
@@ -196,7 +200,7 @@ export async function listMyStores(pool: Pool, actor: Actor, cursor?: string, su
           if (p?.slug === null && !supplyCatalog) continue;
           items.push({ tenant_id: t.tenant_id, tenant_display_name: t.display_name, instance_id: inst.instance_id, setup_state: p ? 'ready' : 'setup_required',
             name: p?.name ?? null, slug: p?.slug ?? null, publication_state: p?.current_publication_id ? 'published' : p?.first_published_at ? 'unpublished' : 'never_published',
-            public_path: p?.current_publication_id ? `/shops/${p.slug}` : null, version: p?.version ?? null });
+            public_path: p?.current_publication_id && p.slug ? publicStorePath(p.slug) : null, version: p?.version ?? null });
         }
       } catch (e) { if (!(e instanceof Problem && ['tenant_not_found','scope_disabled'].includes(e.code))) throw e; }
       await clearTenantContext(q); await bindPrincipalContext(q, principal.principal_id);

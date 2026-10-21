@@ -100,3 +100,19 @@ test('quarantine also covers neighboring release, storefront root and product wr
   await blockedThenAllowed(s, 'PATCH', '', {name: '合成隔離商店'}, store.version);
   await blockedThenAllowed(s, 'PATCH', `/products/${s.product.product_id}`, {title: '合成隔離商品'}, s.product.version);
 });
+
+test('supply offer detail remains a private authorized read during quarantine',async()=>{
+  const supplier=await h.f.x.store(),seller=await h.f.x.store(10,false);
+  const offer=h.expect(await h.request(supplier,'POST',`/products/${supplier.product.product_id}/supply-offer`,{},supplier.product.version));
+  const path='/supply-catalog/'+offer.offer_id;
+  const before=h.expect(await h.request(seller,'GET',path));
+  const reader=await h.member(seller,['store:read']);
+  const denied=await h.request(seller,'GET',path,undefined,undefined,reader.session);
+  assert.equal(denied.status,403);
+  const persisted=await snapshot();h.f.settings.quarantine=true;
+  const during=await h.request(seller,'GET',path);
+  assert.deepEqual(h.expect(during),before);
+  assert.equal(during.response.headers.get('Cache-Control'),'private, no-store');
+  assert.equal((await h.request(seller,'GET',path,undefined,undefined,reader.session)).status,403);
+  assert.deepEqual(await snapshot(),persisted);
+});
