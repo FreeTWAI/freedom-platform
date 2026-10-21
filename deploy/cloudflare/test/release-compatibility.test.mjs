@@ -1285,7 +1285,7 @@ test('schema178 additive member checkout order index recognizes exact identity w
   assert(codes(evaluate(f)).includes('release_schema_unsupported'));
   const changed=fixtureAt(178);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed=fixtureAt(178);renamed.scan.ledger.at(-1).name='177_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  const renamed=fixtureAt(178);renamed.scan.ledger.at(-1).name='178_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
   const future=fixtureAt(178);future.scan.ledger.push({name:'179_unreviewed.sql',sha256:'e'.repeat(64)});
   future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
