@@ -56,3 +56,30 @@ export async function createGalleryHarness(){
  return {...f,galleryAssets:assets,galleryApplication:application,galleryApp:app,enable,galleryCall:call,galleryPath:path,draft,upload,publish};
 }
 export type GalleryHarness=Awaited<ReturnType<typeof createGalleryHarness>>;
+
+/** Owner-only A/B restore fixture: extend the retained gallery graph with a
+ * second own selection and a non-current immutable multi-SKU publication. The
+ * existing gallery publication and every Asset reference stay byte-identical. */
+export async function seedVariantsRows(q:PoolClient,input:{tenantId:string;instanceId:string;productId:string}){
+ const {variantsSnapshot}=await import('../../modules/agent-commerce/storefront/variants/model.js');
+ const {projectionDigest}=await import('../../modules/agent-commerce/hosted/publish.js');
+ const {productSnapshot}=await import('../../modules/agent-commerce/hosted/products.js');
+ const p=(await q.query('SELECT * FROM commerce_storefront_profiles WHERE tenant_id=$1 AND instance_id=$2',[input.tenantId,input.instanceId])).rows[0];
+ const first=(await q.query('SELECT s.selection_id,i.sku FROM commerce_selections s JOIN commerce_items i USING(item_id) WHERE s.shop_id=$1 AND i.item_id=$2',[p.storefront_shop_id,input.productId])).rows[0];
+ const home=(await q.query('SELECT * FROM commerce_product_groups WHERE tenant_id=$1 AND instance_id=$2 AND anchor_product_id=$3',[input.tenantId,input.instanceId,input.productId])).rows[0];
+ const secondId=randomUUID(),selectionId=randomUUID(),secondGroup=randomUUID(),axis={key:randomUUID(),name:'款式',values:[{key:randomUUID(),name:'原款'},{key:randomUUID(),name:'新款'}]};
+ const second={sku:'P0900',title:'合成第二規格',description:'',price_minor:200,currency:'TWD' as const};
+ await q.query(`INSERT INTO commerce_items(item_id,shop_id,sku,title,description,price_minor,stock,reserved,shipping_minor,shipping_terms,return_terms) VALUES($1,$2,$3,$4,'',200,10,0,0,'合成配送','合成退換貨')`,[secondId,p.supply_shop_id,second.sku,second.title]);
+ await q.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot,own_retail_enabled) VALUES($1,$2,$3,200,'合成條件',$4,true)`,[selectionId,p.storefront_shop_id,secondId,productSnapshot(second)]);
+ await q.query('UPDATE commerce_selections SET own_retail_enabled=true WHERE selection_id=$1',[first.selection_id]);
+ await q.query('INSERT INTO commerce_product_photo_targets(product_id,tenant_id,instance_id,scope_id) VALUES($1,$2,$3,$4)',[secondId,input.tenantId,input.instanceId,home.scope_id]);
+ await q.query('INSERT INTO commerce_product_groups(group_id,tenant_id,instance_id,scope_id,anchor_product_id,last_changed_at_product_version) VALUES($1,$2,$3,$4,$5,1)',[secondGroup,input.tenantId,input.instanceId,home.scope_id,secondId]);
+ await q.query('INSERT INTO commerce_product_group_members(tenant_id,instance_id,scope_id,group_id,selection_id,product_id) VALUES($1,$2,$3,$4,$5,$6)',[input.tenantId,input.instanceId,home.scope_id,secondGroup,selectionId,secondId]);
+ await q.query(`UPDATE commerce_product_groups SET catalog_anchor_sku=$4,title='合成規格商品',description='合成商品組介紹',option_axes=$5,default_selection_id=$6,version=version+1 WHERE tenant_id=$1 AND instance_id=$2 AND group_id=$3`,[input.tenantId,input.instanceId,home.group_id,first.sku,JSON.stringify([axis]),first.selection_id]);
+ for(const [n,id] of [first.selection_id,selectionId].entries())await q.query('UPDATE commerce_product_group_members SET catalog_group_id=$4,option_value_keys=$5,membership_version=membership_version+1,sort_order=$6 WHERE tenant_id=$1 AND instance_id=$2 AND selection_id=$3',[input.tenantId,input.instanceId,id,home.group_id,[axis.values[n].key],n]);
+ const original=(await q.query('SELECT * FROM commerce_storefront_publications WHERE publication_id=$1',[p.current_publication_id])).rows[0],revision=(await q.query('SELECT (max(revision)+1)::text AS revision FROM commerce_storefront_publications WHERE tenant_id=$1 AND instance_id=$2',[input.tenantId,input.instanceId])).rows[0].revision,publicationId=randomUUID(),projection={...original.projection,revision,products:[...original.projection.products,{sku:second.sku,title:second.title,description:'',price_minor:200}]};
+ await q.query(`INSERT INTO commerce_storefront_publications(publication_id,tenant_id,instance_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[publicationId,input.tenantId,input.instanceId,revision,projection.slug,projection,projectionDigest(projection),p.created_by_principal_id,projection.published_at]);
+ const snapshot=variantsSnapshot({profile:'freedom.hosted-store-variants/v1',groups:[{group_key:first.sku,title:'合成規格商品',description:'合成商品組介紹',axes:[axis],default_sku:first.sku,gallery_sku:first.sku,order:0,members:[first.sku,second.sku].map((sku,n)=>({sku,value_keys:[axis.values[n].key],values:[axis.values[n].name],buyer_label:'合成規格商品（'+axis.values[n].name+'）',order:n}))}]},projection.products.map((p:{sku:string})=>p.sku));
+ await q.query('INSERT INTO commerce_publication_variants(publication_id,tenant_id,instance_id,document,variants_sha256) VALUES($1,$2,$3,$4,$5)',[publicationId,input.tenantId,input.instanceId,snapshot.document,snapshot.sha256]);
+ return {groupId:home.group_id,publicationId,secondId};
+}

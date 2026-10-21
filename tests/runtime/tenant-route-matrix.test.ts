@@ -49,14 +49,14 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,storeVariantsEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 const checkoutApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]}});
 
 const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/(?:\*|:n)$/.test(path);
 const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
 function isOfferOrDistributionPhotoPath(path: string) {
-  return isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+  return path.includes('/product-groups')||isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
 }
 
 let created = false;
@@ -236,6 +236,11 @@ const routeTable: Record<string, string> = {
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/*': 'middleware',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key': 'tenant',
+  'PUT /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key/products': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key/split': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/reorder': 'tenant',
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key': 'tenant',
@@ -667,8 +672,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 154, middleware: 32 });
-  assert.equal(selectedRoutes.length, 228);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 159, middleware: 32 });
+  assert.equal(selectedRoutes.length, 233);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
@@ -847,6 +852,11 @@ const routes: Route[] = [
   {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-galleries'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key'},
+  {method:'PUT',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key',body:{title:'合成商品組',description:'',axes:[],members:[{product_id:':product_id',product_version:'1',value_keys:[]}],default_product_id:':product_id',order:0},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key/products',body:{product:{title:'合成規格',price_minor:100,stock:2},value_keys:[]},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/product-groups/:group_key/split',body:{},version:'"1"'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/reorder',body:{photo_keys:['main']},version:'"1"'},
   {method:'PATCH',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key',body:{alt_text:'合成說明'},version:'"1"'},
@@ -877,7 +887,7 @@ const isSellerOrderRoute = (path: string) => /\/storefronts\/[^/]+\/(?:orders|re
 type TenantData = Awaited<ReturnType<typeof buildFixture>>['A'];
 function ids(data: TenantData, route: Route): Record<string, string> {
   return { tenant_id: data.tenantId, workspace_id: data.workspaceId, work_id: data.workId, result_id: data.resultId,
-    sku:'P0001',photo_key:'main',photo_id:data.workId,kind:'shipping',version_id:randomUUID(),slug:'synthetic-matrix',role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
+    group_key:'P0001',sku:'P0001',photo_key:'main',photo_id:data.workId,kind:'shipping',version_id:randomUUID(),slug:'synthetic-matrix',role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
     principal_id: data.principalId, product_id: data.workId, order_id: data.workId, offer_id: data.workId, selection_id: data.workId,
     location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
     instance_id: data.instanceId, operation_id: data.operationId, plan_id: data.planId,

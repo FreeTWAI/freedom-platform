@@ -18,6 +18,7 @@ const schema = `e1cat_${process.pid}_${Date.now()}`;
 const admin = new Pool({ connectionString });
 const pool = new Pool({ connectionString, options: `-c search_path=${schema}`, max: 2 });
 const ENABLED = [
+  'commerce_publication_variants',
   'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
   'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
