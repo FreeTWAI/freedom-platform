@@ -1,12 +1,12 @@
 import {z} from 'zod';
 import {OpaqueId} from '../../contracts/guild-launchpad/v1/primitives.js';
 import {PublicStoreProjectionSchema} from '../../contracts/guild-launchpad/v1/storefront.js';
+
 export const STORE_SLUG_PATTERN = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 
 export function isValidStoreSlug(value: string): boolean {
   return STORE_SLUG_PATTERN.test(value);
 }
-
 
 /** An absolute path, never a URL to normalize or a credential-bearing destination. */
 export function storefrontReturnPath(value: string | null): string | null {
