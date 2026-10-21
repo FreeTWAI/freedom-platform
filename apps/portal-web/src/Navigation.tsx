@@ -41,6 +41,9 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
   useEffect(() => { setExpanded(groups.filter(group => group.pages.includes(current)).map(group => group.label)); }, [current]);
   useEffect(() => { setMoreOpen(false); }, [current]);
   useEffect(() => { const close=(event:PointerEvent)=>{if(!nav.current?.contains(event.target as Node))setMoreOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[]);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const searchMatches = (Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''}`.toLocaleLowerCase().includes(normalizedQuery));
+  const supplyMatches = guildLaunchpadEnabled && `${t('stores.supplyTitle')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalizedQuery);
   const supplySelected = /^#stores\/(?:supply$|[^/]+\/[^/]+\/supply(?:-orders)?(?:[/?]|$))/.test(currentHash);
   const item = (id: TabId, title: InterfaceMessage = `nav.${id}`, hash = `#${id}`) => {
     const active = current === id && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
@@ -55,7 +58,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
       <summary ref={moreTrigger} onClick={event => { event.preventDefault(); setMoreOpen(value => !value); }}>{t('nav.more')}<span aria-hidden="true">⌄</span></summary>
       <div className="nav-more-content">
     <label className="nav-search"><span className="sr-only">{t('nav.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} maxLength={80} placeholder={t('nav.example')}/></label>
-    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{guildLaunchpadEnabled && `${t('stores.supplyTitle')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) && item('stores', 'stores.supplyTitle', '#stores/supply')}{(Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(id => item(id))}<p className="field-hint">{t('nav.searchHint')}</p></div>:<>
+    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'stores.supplyTitle', '#stores/supply')}{searchMatches.map(id => item(id))}{!supplyMatches && searchMatches.length === 0 && <p className="field-hint" role="status">沒有符合的功能，請試試其他關鍵字。</p>}<p className="field-hint">{t('nav.searchHint')}</p></div>:<>
     {groups.map(group => <details className="nav-section" key={group.label} open={expanded.includes(group.label)}>
       <summary onClick={event => { event.preventDefault(); setExpanded(value => value.includes(group.label) ? value.filter(label => label !== group.label) : [...value, group.label]); }}>
         {t(groupKeys[group.label])}<span aria-hidden="true">⌄</span>
