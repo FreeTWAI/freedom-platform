@@ -1,4 +1,5 @@
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
+import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
 import {sellerOrdersRoute} from './modules/hosted-seller-order-state'
 import {buyerRoute} from './modules/hosted-order-state'
@@ -698,6 +699,18 @@ function Workspace({
     }
     else window.location.hash = nextHash
   }, [openMessages])
+  function navigateNotification(action:BellAction){
+    const destination=orderNotificationDestination(action)
+    if(destination?.tab==='stores'){selectTab('stores',destination.hash);return}
+    if(destination?.tab==='reservations'){
+      if(pageLeaveGuard.current&&!pageLeaveGuard.current(null))return
+      if(!canEndConsoleSession()||messageLeaveGuard.current&&!messageLeaveGuard.current())return
+      window.location.assign(destination.path);return
+    }
+    if(action.tab==='stores'||action.tab==='reservations')return
+    selectTab(action.tab);setNotificationTarget({...action,sequence:++notificationSequence.current})
+    if(action.tab==='events'&&action.resource_id)window.location.hash=`events/${action.resource_id}`
+  }
   function chooseShare(target:ShareTarget){
     const definition=SHARE_TARGETS[target]
     const destination=target==='post'&&tab==='home'?'home':definition.tab
@@ -848,7 +861,7 @@ function Workspace({
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
           </aside>
-          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={action=>{selectTab(action.tab);setNotificationTarget({...action,sequence:++notificationSequence.current});if(action.tab==='events'&&action.resource_id)window.location.hash=`events/${action.resource_id}`}}/><SettingsMenu current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
+          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">

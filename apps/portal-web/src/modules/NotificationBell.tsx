@@ -5,14 +5,19 @@ import {formatIsoLocal} from '../format';
 import {useLanguage} from '../language';
 import {INBOX_UPDATED,announceInboxChange,useReadAllInbox,type InboxUnread} from './member-inbox';
 import {PageLoadBoundary} from '../LazyPage';
+import {isOrderNotificationAction,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 const Notifications=lazy(()=>import('./MemberMessages').then(module=>({default:module.Notifications})));
 import './NotificationBell.css';
 
-export type BellAction={tab:'members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social';resource_id:string|null};
+type LegacyBellAction={tab:'members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social';resource_id:string|null};
+export type BellAction=LegacyBellAction|OrderNotificationAction;
 type Notice={notification_id:string;title:string;body:string;created_at:string;read_at:string|null;action:BellAction|null};
 type Page={items:Notice[];unread_count:number};
 const tabs=new Set<TabId>(['members','squads','guilds','guild-workspace','messages','events','social']);
-const validAction=(action:BellAction|null)=>action&&tabs.has(action.tab)&&(!action.resource_id||/^[0-9a-z_-]{1,100}$/i.test(action.resource_id))?action:null;
+const validAction=(action:BellAction|null)=>{
+  if(action?.tab==='stores'||action?.tab==='reservations')return isOrderNotificationAction(action)?action:null;
+  return action&&tabs.has(action.tab)&&(!action.resource_id||/^[0-9a-z_-]{1,100}$/i.test(action.resource_id))?action:null;
+};
 
 export function NotificationBell({client,onNavigate,preferencesEnabled=false}:{client:PortalClient;onNavigate?:(action:BellAction)=>void;preferencesEnabled?:boolean|null}){
   const {t}=useLanguage();
@@ -79,6 +84,6 @@ export function NotificationBell({client,onNavigate,preferencesEnabled=false}:{c
     {!showAll&&error&&<div><p role="alert">{t('notice.loadError')}</p><button type="button" className="btn btn-ghost" onClick={()=>void refresh()}>{t('feedback.retry')}</button></div>}
     {!showAll&&actionError&&<p role="alert">{t('notice.readError')}</p>}{!showAll&&!error&&!loading&&page?.items.length===0&&<p>{t('notice.empty')}</p>}
     {!showAll&&page?.items.map(item=><button key={item.notification_id} type="button" className={`notification-bell-item${item.read_at?'':' is-unread'}`} disabled={all.busy||busy===item.notification_id} onClick={()=>void choose(item)}><strong>{item.title}</strong><span>{item.body}</span><small>{formatIsoLocal(item.created_at)} · {busy===item.notification_id?t('notice.marking'):item.read_at?t('notice.read'):t('notice.unread')}</small></button>)}
-    {showAll?<PageLoadBoundary label={t('notice.title')} onHome={()=>setOpen(false)}><Notifications client={client} onUnread={updateUnread} onSocial={action=>{setOpen(false);onNavigate?.(action);}} onNavigate={tab=>{setOpen(false);onNavigate?.({tab:tab as BellAction['tab'],resource_id:null});}} onOpenPeer={id=>{setOpen(false);onNavigate?.({tab:'messages',resource_id:id});}}/></PageLoadBoundary>:<button type="button" className="btn btn-ghost notification-bell-all" onClick={()=>setShowAll(true)}>{t('notice.seeAll')}</button>}
+    {showAll?<PageLoadBoundary label={t('notice.title')} onHome={()=>setOpen(false)}><Notifications client={client} onUnread={updateUnread} onSocial={action=>{setOpen(false);onNavigate?.(action);}} onOrder={onNavigate?action=>{setOpen(false);onNavigate(action);}:undefined} onNavigate={tab=>{setOpen(false);onNavigate?.({tab:tab as LegacyBellAction['tab'],resource_id:null});}} onOpenPeer={id=>{setOpen(false);onNavigate?.({tab:'messages',resource_id:id});}}/></PageLoadBoundary>:<button type="button" className="btn btn-ghost notification-bell-all" onClick={()=>setShowAll(true)}>{t('notice.seeAll')}</button>}
   </div>}</div>;
 }

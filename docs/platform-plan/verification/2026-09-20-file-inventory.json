@@ -1884,8 +1884,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 68292,
-      "sha256": "121bd79959b60b7e3581ea33763a294dfe295abb6786a01d3a636b5353ebf07b"
+      "bytes": 68949,
+      "sha256": "594ea8101266b72ce31c3df4493d73974f2ca9c71cbd09983848ed09ca862569"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -2779,8 +2779,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
-      "bytes": 64254,
-      "sha256": "7f2df558060337e26ca6b7538b77598e7f9f17bacab05d47dc2f3f6ef40d0cbf"
+      "bytes": 64957,
+      "sha256": "95c8af826a6999c2565394a18adea886eadb1ef8ecb6ceb3131421827c967ac4"
     },
     {
       "path": "apps/portal-web/src/modules/MemberPresence.css",
@@ -2889,8 +2889,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/NotificationBell.tsx",
-      "bytes": 8046,
-      "sha256": "31b61591abc1e22f698d0482de2dfdddeb4ae9168fc662f2b028df6a337a4b91"
+      "bytes": 8438,
+      "sha256": "209fdc52907c73526aa6bd31f1b02ee185acba5f77aaff982cd274ac2510293d"
     },
     {
       "path": "apps/portal-web/src/modules/NotificationPreferences.css",
