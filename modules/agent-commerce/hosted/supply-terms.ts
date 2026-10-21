@@ -19,7 +19,9 @@ async function terms(q: PoolClient, p: Profile, productId: string) {
     WHERE supply.tenant_id=$1 AND supply.instance_id=$2 AND i.shop_id=$3 AND l.shop_id=$4 AND i.item_id=$5`,
   [p.tenant_id, p.instance_id, p.supply_shop_id, p.storefront_shop_id, productId])).rows[0];
   requireCondition(row, 404, 'not_found', '找不到這項商品。');
-  return SupplyTermsSchema.parse({...row, cost_minor: Number(row.cost_minor), shipping_minor: Number(row.shipping_minor), transaction_state: 'not_enabled'});
+  const offer=(await q.query(`SELECT terms,supplier_name,terms_sha256,created_at FROM commerce_hosted_supply_offers
+    WHERE tenant_id=$1 AND instance_id=$2 AND item_id=$3 AND state='offered'`,[p.tenant_id,p.instance_id,productId])).rows[0];
+  return SupplyTermsSchema.parse({...row, current_offer:offer?{terms:offer.terms,supplier_name:offer.supplier_name,terms_sha256:offer.terms_sha256,published_at:offer.created_at.toISOString()}:null, cost_minor: Number(row.cost_minor), shipping_minor: Number(row.shipping_minor), transaction_state: 'not_enabled'});
 }
 
 export async function readSupplyTerms(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string) {

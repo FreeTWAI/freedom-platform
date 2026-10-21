@@ -1,3 +1,4 @@
+import {fulfilmentConsentFailure} from './consent.js';
 import { FulfilmentRuleError, deepFreeze } from './errors.js';
 import {
   CVS_PARCEL_VALUE_MAX_MINOR,
@@ -375,7 +376,7 @@ export function planDelivery(input: PlanInput, method: DeliveryMethod): PlanDeli
     let failureReason: UnavailableReason | null = null;
 
     if (line.fulfilment.kind === 'not_agreed') {
-      failureReason = 'fulfilment_not_agreed';
+      failureReason = fulfilmentConsentFailure(line.fulfilment);
     } else if (line.attributes === null) {
       failureReason = 'shipping_attributes_missing';
     } else if (!option) {
