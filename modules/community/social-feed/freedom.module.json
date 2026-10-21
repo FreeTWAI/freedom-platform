@@ -3,6 +3,9 @@
   "module_id": "social-feed",
   "owner_role": "foundation",
   "owned_paths": [
+    "apps/platform-api/src/node-preview-fetch.ts",
+    "apps/platform-api/src/worker-preview-fetch.ts",
+    "tests/runtime/link-preview-egress.test.ts",
     "apps/portal-web/src/modules/SocialZone.tsx",
     "apps/portal-web/src/modules/SocialZone.css",
     "apps/portal-web/src/modules/social-image.ts",

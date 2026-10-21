@@ -323,6 +323,19 @@ for (const fixture of [
     assert.equal(result.title, fixture.title);
     assert.equal(result.image, null);
   });
+  for (const [name, contentType] of [
+    ['trailing', `text/html; charset=${fixture.label};`],
+    ['leading', `text/html;; charset=${fixture.label}`],
+    ['consecutive', `text/html; note=ok;;; charset=${fixture.label}`],
+    ['whitespace-only', `text/html; \t ; charset=${fixture.label}; \t `],
+  ]) {
+    test(`declared HTML charset decodes ${fixture.label} across ${name} empty parameters`, async () => {
+      const result = await previewLink('https://cdn.example/charset', async () =>
+        new Response(new Uint8Array(fixture.html), {headers: {'content-type': contentType}}));
+      assert.equal(result.title, fixture.title);
+      assert.equal(result.image, null);
+    });
+  }
 }
 
 test('absent, unsupported and malformed HTML charset labels retain UTF-8 fallback', async () => {
@@ -331,6 +344,10 @@ test('absent, unsupported and malformed HTML charset labels retain UTF-8 fallbac
     'text/html; note="unfinished; charset=windows-1252',
     'text/html; note="unfinished; charset=big5',
     'text/html; charset=windows-1252; note="unfinished',
+    'text/html; charset=big5; malformed',
+    'text/html;; note="unfinished; charset=windows-1252',
+    'text/html; note="x; charset=big5";',
+    'text/html; charset=windows-1252;; malformed; charset=utf-8',
   ]) {
     const result = await previewLink('https://cdn.example/utf8', async () => htmlResponse('<title>工坊 Café</title>', 200, {'content-type': contentType}));
     assert.equal(result.title, '工坊 Café', contentType);

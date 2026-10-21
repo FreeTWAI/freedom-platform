@@ -101,6 +101,21 @@ test('native Worker publishes and rereads legal charset and malformed unquoted m
     {name: 'unfinished', body: Buffer.from('<meta property=og:title content="工坊 Café">' + image), type: 'text/html; note="unfinished; charset=windows-1252', title: '工坊 Café', thumbnail: true},
     {name: 'numeric', body: Buffer.from('<meta property=og:title content=before&#1114112;&#xD800;&#0;after><meta property=og:image content=https://127.0.0.1/private>'), type: 'text/html', title: 'before���after', thumbnail: false},
   ];
+  for (const fixture of fixtures.slice(0, 2)) {
+    const charset = fixture.name === 'western' ? 'windows-1252' : 'Big5';
+    for (const [name, type] of [
+      ['trailing', `text/html; charset=${charset};`],
+      ['leading', `text/html;; charset=${charset}`],
+      ['consecutive', `text/html; note=ok;;; charset=${charset}`],
+      ['whitespace-only', `text/html; \t ; charset=${charset}; \t `],
+    ]) fixtures.push({...fixture, name: fixture.name + '-' + name, type});
+  }
+  for (const [name, type] of [
+    ['unfinished-big5', 'text/html;; note="unfinished; charset=big5'],
+    ['quoted-fake', 'text/html; note="x; charset=windows-1252";'],
+    ['malformed-after-valid', 'text/html; charset=windows-1252;; malformed; charset=utf-8'],
+    ['unfinished-after-valid', 'text/html; charset=big5; note="unfinished'],
+  ]) fixtures.push({name, body: Buffer.from('<meta property=og:title content="工坊 Café">' + image), type, title: '工坊 Café', thumbnail: true});
   for (const fixture of fixtures) {
     const path = '/metadata-' + fixture.name;
     metadataPages.set(path, {body: new Uint8Array(fixture.body), type: fixture.type});

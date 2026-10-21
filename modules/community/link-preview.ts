@@ -130,10 +130,16 @@ async function asThumbnail(bytes: Buffer, type: string) {
 
 function htmlText(body: Buffer, contentType: string) {
   // Consume parameters in order: a failed quoted value must not restart at its inner semicolon.
+  const emptyParameter = /;[ \t]*(?=;|$)/y;
   const parameter = /;\s*([^;=\s]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^;"\s]+))\s*(?=;|$)/y;
   let offset = contentType.indexOf(';');
   let charset: string | undefined;
   while (offset >= 0 && offset < contentType.length) {
+    emptyParameter.lastIndex = offset;
+    if (emptyParameter.exec(contentType)) {
+      offset = emptyParameter.lastIndex;
+      continue;
+    }
     parameter.lastIndex = offset;
     const match = parameter.exec(contentType);
     if (!match) return body.toString('utf8');
