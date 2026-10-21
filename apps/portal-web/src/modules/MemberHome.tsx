@@ -43,9 +43,11 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const request = useRef(0);
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
+  const lastRefresh = useRef(0);
 
   const load = useCallback((withLabels: boolean) => {
     const current = ++request.current;
+    lastRefresh.current = Date.now();
     setLoading(true);
     void client.get<MemberCardData>(`/members/${session.user.user_id}`).then(data => {
       if (current !== request.current) return;
@@ -75,6 +77,16 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     setMember(null); setLabels(null); setOnboarding(null); setLoadError(null);
     load(true);
     return () => { request.current++; };
+  }, [load]);
+
+  // Refresh stale membership data after returning to the tab, without polling in the background.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastRefresh.current < 60_000) return;
+      load(false);
+    };
+    document.addEventListener('visibilitychange', onReturn);
+    return () => document.removeEventListener('visibilitychange', onReturn);
   }, [load]);
 
   // One request at a time and only on an explicit click; the button keeps focus while it waits.
