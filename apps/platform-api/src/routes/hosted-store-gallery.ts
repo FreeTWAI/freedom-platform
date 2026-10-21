@@ -39,12 +39,12 @@ export function createHostedStoreGalleryRoutes(pool:Pool,runtime:PlatformRuntime
 
 export function createPublicStoreGalleryRoutes(pool:Pool,runtime:PlatformRuntime){
  const app=new Hono<PlatformEnv>();
- app.use('/shops/:slug/media/:revision/:sku/*',async(c,next)=>{c.header('Cache-Control','no-store');c.header('X-Robots-Tag','noindex');await next();});
+ app.use('/shops/:slug/media/:revision/:sku/:n/*',async(c,next)=>{c.header('Cache-Control','no-store');c.header('X-Robots-Tag','noindex');await next();});
  app.on(['GET','HEAD'],'/shops/:slug/media/:revision/:sku/:n',async c=>{
   EmptyStoreInputSchema.parse(singleQuery(c));const {readPublicGalleryPhoto}=await import('../../../../modules/agent-commerce/storefront/gallery/read.js');
   const bytes=await readPublicGalleryPhoto(pool,runtime.storePhotoAssetStore!,c.req.param('slug'),c.req.param('revision'),c.req.param('sku'),c.req.param('n'));
   requireCondition(bytes,404,'not_found','找不到這張商品照片。');c.header('Content-Type','image/webp');c.header('Content-Length',String(bytes.length));c.header('X-Content-Type-Options','nosniff');return c.req.method==='HEAD'?c.body(null):c.body(bytes as Uint8Array<ArrayBuffer>);
  });
- app.on(['GET','HEAD'],'/shops/:slug/media/:revision/:sku/*',()=>{throw new Problem(404,'not_found','找不到這張商品照片。');});
+ app.on(['GET','HEAD'],'/shops/:slug/media/:revision/:sku/:n/*',()=>{throw new Problem(404,'not_found','找不到這張商品照片。');});
  return app;
 }

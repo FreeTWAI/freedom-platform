@@ -3721,6 +3721,24 @@ test.describe('C1 own product gallery',()=>{
   await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
  }
  async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ test('GALLERY-E2E-legacy primary photos decode on B01 and serve B01/B03 Open Graph images',async({browser,e2eAuthPool},info)=>{
+  const s=await setup(browser,e2eAuthPool),buyer=await browser.newContext({baseURL:server.origin,viewport:{width:390,height:900}});
+  try{
+   await add(s.page,await source('synthetic-primary.png','#5e8ca0'));await publish(s.page);
+   const page=await buyer.newPage();await page.goto('/shops/'+s.slug);
+   const cards=page.locator('.shop-products article img');await expect(cards).toHaveCount(1);
+   for(const width of [390,1440]){
+    await page.setViewportSize({width,height:900});for(const image of await cards.all()){await decoded(image);await expect(image).toBeVisible();}
+    await page.screenshot({path:info.outputPath(`gallery-legacy-b01-${width}.png`),fullPage:true});
+   }
+   async function checkOpenGraph(){
+    const content=await page.locator('meta[property="og:image"]').getAttribute('content');expect(content).toBe(LIVE_PUBLIC_ORIGIN+`/shops/${s.slug}/media/1/${s.product.sku}`);
+    // Resolve the declared public asset path against this isolated local fixture.
+    const response=await buyer.request.get(new URL(content!).pathname);expect(response.status()).toBe(200);expect(response.headers()['content-type']).toBe('image/webp');
+   }
+   await checkOpenGraph();await page.getByRole('link',{name:'查看商品：合成圖組商品',exact:true}).click();await expect(page.locator('.shop-gallery-photo')).toHaveCount(1);await checkOpenGraph();
+  }finally{await buyer.close();await s.context.close();}
+ });
  for(const width of [390,768,1440])test(`GALLERY-E2E-responsive-${width} editor, frozen detail, keyboard and no-JS photos`,async({browser,e2eAuthPool},info)=>{
   const s=await setup(browser,e2eAuthPool,width),{page}=s;
   const buyer=await browser.newContext({baseURL:server.origin,viewport:{width,height:900}}),noJs=await browser.newContext({baseURL:server.origin,javaScriptEnabled:false,viewport:{width,height:900}});

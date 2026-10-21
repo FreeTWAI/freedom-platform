@@ -614,8 +614,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-gallery.ts",
-      "bytes": 6815,
-      "sha256": "6d9a3cddf1ce5314f49f7851dd5eb03bd9444957ae500da758bc87af7fd64d06"
+      "bytes": 6821,
+      "sha256": "9b64be98457c47319b2b7bdb4ad717c1822c214a30655b090b46372a241a337f"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-store-media.ts",
@@ -22884,8 +22884,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-photo.spec.ts",
-      "bytes": 277545,
-      "sha256": "bb2a0bad7bb47c802b9658b2994c29836e892d72b10e3ac8e6b227948184c16a"
+      "bytes": 279094,
+      "sha256": "109d3090de9b01a132f9175439d247732ab633f62f2b7f6a747ebba024a4203c"
     },
     {
       "path": "tests/e2e/hosted-store-policies.spec.ts",
@@ -25699,8 +25699,8 @@
     },
     {
       "path": "tests/runtime/storefront-gallery-media.test.ts",
-      "bytes": 13317,
-      "sha256": "e7d2f5cce08e2c8704752631825728cab1bd885d786776ce63fa6b42b4ae6ac9"
+      "bytes": 14947,
+      "sha256": "98ea1bd6d87dd2e28352109a63a6e33ecf68cb53949c3b078ea4650e490469a0"
     },
     {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
