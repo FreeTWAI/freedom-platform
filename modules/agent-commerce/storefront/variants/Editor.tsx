@@ -1,7 +1,7 @@
 import {parseMajorToMinor,formatMinor} from '../../../../apps/portal-web/src/format';
 import {useEffect,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../../../../apps/portal-web/src/api';
-import {ProductViewSchema} from '../../../../contracts/guild-launchpad/v1/storefront';
+import {ProductViewSchema,ProductInputSchema,ProductUpdateInputSchema} from '../../../../contracts/guild-launchpad/v1/storefront';
 import {ProductGroupPageSchema,ReplaceProductGroupInputSchema,VariantCommandAckSchema,type ProductGroupDraft} from '../../../../contracts/guild-launchpad/v1/storefront-variants';
 import {catalogAttempt,holdCatalogAttempt,releaseCatalogAttempt,type CatalogAttempt} from './editor-state';
 import './editor.css';
@@ -9,10 +9,10 @@ type Page=ReturnType<typeof ProductGroupPageSchema.parse>;
 type Draft=ReturnType<typeof ReplaceProductGroupInputSchema.parse>;
 const fromGroup=(g:ProductGroupDraft):Draft=>({title:g.title,description:g.description,axes:structuredClone(g.axes),members:g.members.map(m=>({product_id:m.product.product_id,product_version:m.product.version,value_keys:[...m.value_keys]})),default_product_id:g.default_product_id,order:g.order});
 export function VariantsEditor({client,userId,root,writable,locked,refresh,onState,onSaved}:{client:PortalClient;userId:string;root:string;writable:boolean;locked:boolean;refresh:string;onState:(dirty:boolean,blocking:boolean)=>void;onSaved:()=>Promise<void>}){
- const scope=userId+'/'+root,[page,setPage]=useState<Page|null>(null),[selected,setSelected]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const scope=userId+'/'+root+'/variants',[page,setPage]=useState<Page|null>(null),[selected,setSelected]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(()=>catalogAttempt(client,scope)?'暫時無法確認儲存結果，請用原操作重試。':'');
  const [attempt,setAttempt]=useState<CatalogAttempt|undefined>(()=>catalogAttempt(client,scope)),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[revision,setRevision]=useState(0);
  const session=useRef(client.sessionGeneration),alive=useRef(true),sequence=useRef(0),sending=useRef(false),state=useRef(onState);state.current=onState;
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;sequence.current++;};},[]);
+ useEffect(()=>{alive.current=true;return()=>{const pending=catalogAttempt(client,scope);if(pending)holdCatalogAttempt(client,scope,{...pending,hadUnknown:true});alive.current=false;sequence.current++;};},[]);
  useEffect(()=>{state.current(dirty||!!attempt,busy||!!attempt);},[dirty,attempt,busy]);
  useEffect(()=>()=>state.current(false,false),[]);
  const current=()=>alive.current&&session.current===client.sessionGeneration;
@@ -46,7 +46,7 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
   {!page&&!error&&<p role="status">正在讀取規格…</p>}{error&&<p role="alert">{error} <button type="button" className="btn btn-ghost" disabled={blocked} onClick={()=>void load()}>重試</button></p>}
   {message&&<p role="status" aria-live="polite">{message}</p>}
   {attempt&&!busy&&<button type="button" className="btn btn-ghost" disabled={locked||!writable} onClick={()=>void send(attempt)}>重試原操作</button>}
-  {page&&page.items.length>0&&<label>規格商品<select value={selected} disabled={blocked||dirty} onChange={e=>setSelected(e.target.value)}>{page.items.map(g=><option key={g.group_key} value={g.group_key}>{g.title} · {g.members.map(m=>m.product.sku).join('／')}</option>)}</select></label>}
+  {page&&page.items.length>0&&<label>規格商品<select aria-label="規格商品" value={selected} disabled={blocked||dirty} onChange={e=>setSelected(e.target.value)}>{page.items.map(g=><option key={g.group_key} value={g.group_key}>{g.title} · {g.members.map(m=>m.product.sku).join('／')}</option>)}</select></label>}
   {g&&(!writable||!g.editable)&&<div className="stack"><h4>{g.title}</h4><p>{g.description}</p>{g.members.map(m=><p key={m.selection_id}>{m.buyer_label} · {m.product.sku} · {formatMinor(m.product.price_minor,m.product.currency)}</p>)}{!g.editable&&<p>供貨選品目前各自顯示，不可加入商品組。</p>}</div>}
   {g&&writable&&g.editable&&<GroupEditor key={g.group_key+'/'+g.version+'/'+g.members.map(m=>m.product.version).join('/')} group={g} page={page!} writable={writable&&g.editable} locked={blocked} onDirty={setDirty}
    onSave={body=>fresh('put',root+'/product-groups/'+g.group_key,body,g.version,'已儲存規格，尚未發布。')}
@@ -57,6 +57,13 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
   {!writable&&<p>你目前只有檢視權限。</p>}
  </section>;
 }
+function numericProductFields(price:string,stock:string,currency:string){
+ const amount=parseMajorToMinor(price),cap=ProductInputSchema.shape.price_minor.maxValue!;
+ if(amount>cap)throw new Error(`價格上限為 ${formatMinor(cap,currency)}。`);
+ if(!/^\d+$/.test(stock))throw new Error('庫存須為整數。');
+ const parsed=ProductUpdateInputSchema.safeParse({price_minor:amount,stock:Number(stock)});
+ if(!parsed.success)throw new Error('有欄位格式不符，請檢查後再送出。');return parsed.data;
+}
 function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCreate,onProduct,onReload}:{group:ProductGroupDraft;page:Page;writable:boolean;locked:boolean;onDirty:(v:boolean)=>void;onSave:(v:Draft)=>void;onSplit:()=>void;onCreate:(v:unknown)=>void;onProduct:(id:string,version:string,body:unknown)=>void;onReload:()=>void}){
  const [draft,setDraft]=useState(()=>fromGroup(g)),[attach,setAttach]=useState(''),[newOpen,setNewOpen]=useState(false),[newProduct,setNewProduct]=useState({title:'',description:'',price_minor:'',stock:'0'}),[newValues,setNewValues]=useState<string[]>([]),[productDirty,setProductDirty]=useState<Record<string,boolean>>({}),[fieldError,setFieldError]=useState(''),[reset,setReset]=useState(0);
  const metadataDirty=JSON.stringify(draft)!==JSON.stringify(fromGroup(g)),otherDirty=Object.values(productDirty).some(Boolean),dirty=metadataDirty||otherDirty||newOpen;
@@ -65,13 +72,13 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
  const axes=(next:Draft['axes'])=>setDraft(old=>({...old,axes:next,members:old.members.map(m=>({...m,value_keys:next.map((a,n)=>a.values.some(v=>v.key===m.value_keys[n])?m.value_keys[n]:a.values[0]?.key??'')}))}));
  const candidates=page.items.filter(row=>row.group_id===null&&row.editable&&!draft.members.some(m=>m.product_id===row.members[0].product.product_id));
  const member=(id:string)=>page.items.flatMap(g=>g.members).find(m=>m.product.product_id===id)!;
- function create(){try{const price=parseMajorToMinor(newProduct.price_minor);setFieldError('');onCreate({product:{...newProduct,price_minor:price,stock:Number(newProduct.stock)},value_keys:newValues});}catch(e){setFieldError(e instanceof Error?e.message:'請檢查商品資料。');}}
+ function create(){try{const fields=numericProductFields(newProduct.price_minor,newProduct.stock,g.members[0].product.currency),parsed=ProductInputSchema.safeParse({title:newProduct.title,description:newProduct.description,...fields});if(!parsed.success)throw new Error('有欄位格式不符，請檢查後再送出。');setFieldError('');onCreate({product:parsed.data,value_keys:newValues});}catch(e){setFieldError(e instanceof Error?e.message:'請檢查商品資料。');}}
  return <div className="stack">
   {fieldError&&<p role="alert">{fieldError}</p>}
   {!g.group_id&&<p className="field-hint">這是單一商品。加入選項與商品即可建立規格。</p>}
   {!g.can_anchor&&<p role="note">這項商品仍是原商品組的保留起點，不能建立新的商品組；可重新加入原商品組，或加入其他商品組。</p>}
   <fieldset disabled={locked||!writable||!g.can_anchor} className="store-variant-fields stack"><label>商品組名稱<input value={draft.title} maxLength={120} onChange={e=>update({title:e.target.value})}/></label>
-   <label>商品組介紹<textarea value={draft.description} maxLength={2000} onChange={e=>update({description:e.target.value})}/></label>
+   <label>商品組介紹<textarea aria-label="商品組介紹" value={draft.description} maxLength={2000} onChange={e=>update({description:e.target.value})}/></label>
    <p className="field-hint">商品組名稱與介紹會顯示在商品卡與商品頁；各規格原有的名稱與介紹會保留，拆分後恢復顯示。預設款的圖組會共用在這個商品組；各商品原有照片會保留，拆分後恢復顯示。</p>
    <div className="store-variant-axes">{draft.axes.map((axis,n)=><section className="stack" key={axis.key}><label>選項名稱<input aria-label={`選項 ${n+1} 名稱`} value={axis.name} onChange={e=>axes(draft.axes.map((a,k)=>k===n?{...a,name:e.target.value}:a))}/></label>
     {axis.values.map((v,k)=><div className="store-variant-inline" key={v.key}><label>選項值<input aria-label={`選項 ${n+1} 值 ${k+1}`} value={v.name} onChange={e=>axes(draft.axes.map((a,j)=>j===n?{...a,values:a.values.map(value=>value.key===v.key?{...value,name:e.target.value}:value)}:a))}/></label><button type="button" className="btn btn-ghost" aria-label={`移除選項值：${axis.name} ${v.name||k+1}`} disabled={axis.values.length===1} onClick={()=>axes(draft.axes.map((a,j)=>j===n?{...a,values:a.values.filter(value=>value.key!==v.key)}:a))}>移除選項值</button></div>)}
@@ -85,11 +92,11 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
     <MemberPrice key={row.product.version+'/'+reset} row={row} locked={locked||metadataDirty||newOpen} writable={writable} onDirty={value=>setProductDirty(old=>({...old,[m.product_id]:value}))} onSave={body=>onProduct(m.product_id,row.product.version,body)}/>
     <div className="actions">{(['上移','下移'] as const).map((text,k)=><button type="button" className="btn btn-ghost" key={text} disabled={k===0?n===0:n===draft.members.length-1} aria-label={`${text}：${row.product.sku}`} onClick={()=>{const members=[...draft.members],to=n+(k===0?-1:1);[members[n],members[to]]=[members[to],members[n]];update({members});}}>{text}</button>)}<button type="button" className="btn btn-ghost" disabled={draft.members.length===1} aria-label={`拆成單一商品：${row.product.sku}`} onClick={()=>update({members:draft.members.filter(v=>v.product_id!==m.product_id),default_product_id:draft.default_product_id===m.product_id?draft.members.find(v=>v.product_id!==m.product_id)!.product_id:draft.default_product_id})}>拆成單一商品</button></div>
    </article>;})}</div>
-   <label>加入現有商品<select value={attach} onChange={e=>setAttach(e.target.value)}><option value="">選擇商品</option>{candidates.map(g=><option key={g.group_key} value={g.members[0].product.product_id}>{g.title} · {g.members[0].product.sku}</option>)}</select></label>
+   <label>加入現有商品<select aria-label="加入現有商品" value={attach} onChange={e=>setAttach(e.target.value)}><option value="">選擇商品</option>{candidates.map(g=><option key={g.group_key} value={g.members[0].product.product_id}>{g.title} · {g.members[0].product.sku}</option>)}</select></label>
    {!candidates.length&&<p className="field-hint">沒有可加入的單一商品。你可以新增規格商品。</p>}
    <div className="actions"><button type="button" className="btn btn-ghost" disabled={!attach} onClick={()=>{const row=member(attach);update({members:[...draft.members,{product_id:attach,product_version:row.product.version,value_keys:draft.axes.map(a=>a.values[0]?.key??'')}]});setAttach('');}}>加入商品組</button>
     <button type="button" className="btn btn-ghost" disabled={metadataDirty||otherDirty||!g.axes.length} onClick={()=>{setNewOpen(true);setNewValues(g.axes.map(a=>a.values[0].key));}}>新增規格商品</button></div>
-   {newOpen&&<div className="store-variant-new stack"><label>商品名稱<input value={newProduct.title} onChange={e=>setNewProduct({...newProduct,title:e.target.value})}/></label><label>商品介紹<textarea value={newProduct.description} onChange={e=>setNewProduct({...newProduct,description:e.target.value})}/></label><label>售價<input inputMode="numeric" value={newProduct.price_minor} onChange={e=>setNewProduct({...newProduct,price_minor:e.target.value})}/></label><label>庫存<input inputMode="numeric" value={newProduct.stock} onChange={e=>setNewProduct({...newProduct,stock:e.target.value})}/></label>{g.axes.map((a,n)=><label key={a.key}>{a.name}<select value={newValues[n]} onChange={e=>setNewValues(old=>old.map((v,k)=>k===n?e.target.value:v))}>{a.values.map(v=><option key={v.key} value={v.key}>{v.name}</option>)}</select></label>)}<div className="actions"><button type="button" className="btn btn-primary" onClick={create}>加入商品組</button><button type="button" className="btn btn-ghost" onClick={()=>setNewOpen(false)}>取消變更</button></div></div>}
+   {newOpen&&<div className="store-variant-new stack"><label>商品名稱<input value={newProduct.title} onChange={e=>setNewProduct({...newProduct,title:e.target.value})}/></label><label>商品介紹<textarea aria-label="商品介紹" value={newProduct.description} onChange={e=>setNewProduct({...newProduct,description:e.target.value})}/></label><label>售價<input inputMode="numeric" value={newProduct.price_minor} onChange={e=>setNewProduct({...newProduct,price_minor:e.target.value})}/></label><label>庫存<input inputMode="numeric" value={newProduct.stock} onChange={e=>setNewProduct({...newProduct,stock:e.target.value})}/></label>{g.axes.map((a,n)=><label key={a.key}>{a.name}<select value={newValues[n]} onChange={e=>setNewValues(old=>old.map((v,k)=>k===n?e.target.value:v))}>{a.values.map(v=><option key={v.key} value={v.key}>{v.name}</option>)}</select></label>)}<div className="actions"><button type="button" className="btn btn-primary" onClick={create}>加入商品組</button><button type="button" className="btn btn-ghost" onClick={()=>setNewOpen(false)}>取消變更</button></div></div>}
    <div className="actions"><button type="button" className="btn btn-primary" disabled={!metadataDirty||otherDirty||newOpen} onClick={()=>onSave(draft)}>儲存規格</button><button type="button" className="btn btn-ghost" disabled={!dirty} onClick={()=>{setDraft(fromGroup(g));setNewOpen(false);setProductDirty({});setReset(n=>n+1);}}>取消變更</button>{g.group_id&&<button type="button" className="btn btn-ghost" disabled={dirty} onClick={()=>{if(window.confirm('要拆成各別商品嗎？各商品會恢復原有名稱、介紹與照片；發布後才會更新公開頁。'))onSplit();}}>拆成各別商品</button>}</div>
    {metadataDirty&&<p className="field-hint">請先儲存規格，再新增規格商品或調整售價與庫存。</p>}
   </fieldset>
@@ -99,6 +106,6 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
 function MemberPrice({row,locked,writable,onDirty,onSave}:{row:ProductGroupDraft['members'][number];locked:boolean;writable:boolean;onDirty:(v:boolean)=>void;onSave:(v:unknown)=>void}){
  const [price,setPrice]=useState(String(row.product.price_minor/100)),[stock,setStock]=useState(String(row.product.stock??'')),[error,setError]=useState(''),dirty=price!==String(row.product.price_minor/100)||stock!==String(row.product.stock??'');
  useEffect(()=>onDirty(dirty),[dirty]);
- function save(){try{const price_minor=parseMajorToMinor(price);setError('');onSave({price_minor,stock:Number(stock)});}catch(e){setError(e instanceof Error?e.message:'請檢查售價與庫存。');}}
+ function save(){try{const fields=numericProductFields(price,stock,row.product.currency);setError('');onSave(fields);}catch(e){setError(e instanceof Error?e.message:'請檢查售價與庫存。');}}
  return <fieldset className="store-variant-price" disabled={locked||!writable}><label>售價<input aria-label={`${row.product.sku} 售價`} inputMode="numeric" value={price} onChange={e=>setPrice(e.target.value)}/></label><label>庫存<input aria-label={`${row.product.sku} 庫存`} inputMode="numeric" value={stock} onChange={e=>setStock(e.target.value)}/></label><button type="button" className="btn btn-ghost" disabled={!dirty} onClick={save}>儲存商品：{row.product.sku}</button>{error&&<p role="alert">{error}</p>}</fieldset>;
 }
