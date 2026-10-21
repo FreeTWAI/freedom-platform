@@ -7,6 +7,67 @@ import {navigate,signOut} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 
 test.use({timezoneId:'America/New_York'});
+const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
+  eventFixture:async({page,e2eAuthPool},use,info)=>{
+    const community=randomUUID(),user=randomUUID(),email=`event-fixture-${user}@example.test`;
+    const before=Number((await e2eAuthPool.query('SELECT count(*) FROM communities')).rows[0].count);
+    let setupFailed=false;
+    try{
+      await e2eAuthPool.query("INSERT INTO communities(community_id,name) VALUES($1,'合成活動隔離社群')",[community]);
+      await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+        VALUES($1,$2,$3,'合成活動會員',$4,$5,false)`,[user,community,email,hashPassword('freedom-local-demo'),randomUUID()]);
+      await use({user,email});
+    }catch(error){setupFailed=true;throw error;}
+    finally{
+      // Test finally blocks release the gates before fixture teardown. Settle
+      // their handlers and close the page before deleting any application data.
+      const results=await Promise.allSettled([page.unrouteAll({behavior:'wait'})]);
+      results.push(...await Promise.allSettled([page.close()]));
+      results.push(...await Promise.allSettled([(async()=>{
+        const q=await e2eAuthPool.connect();
+        try{
+          await q.query('BEGIN');
+          // Match member-command lock order; pending writes finish before the
+          // owned user is removed, and later requests cannot recreate fixtures.
+          await q.query('SELECT user_id FROM users WHERE community_id=$1 FOR UPDATE',[community]);
+          // This harness uses legacy event media, not the immutable Asset/R2
+          // lifecycle. Fail explicitly if that contract changes; never disable
+          // its preservation triggers to make fixture cleanup pass.
+          expect(Number((await q.query('SELECT count(*) FROM assets WHERE owner_user_id=$1 OR community_ref=$2',[user,community])).rows[0].count)).toBe(0);
+          await q.query('DELETE FROM community_event_bulletins WHERE community_id=$1',[community]);
+          for(const table of ['community_event_banners','community_event_videos']){
+            await q.query(`DELETE FROM ${table} WHERE event_id IN (SELECT event_id FROM community_events WHERE community_id=$1)`,[community]);
+          }
+          await q.query('DELETE FROM community_events WHERE community_id=$1',[community]);
+          await q.query('DELETE FROM member_notifications WHERE community_id=$1',[community]);
+          // Injected 503/415 and lost ACKs also write bounded client diagnostics.
+          await q.query('DELETE FROM member_client_errors WHERE community_id=$1',[community]);
+          await q.query('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE community_id=$1)',[community]);
+          await q.query('DELETE FROM transition_journal WHERE community_id=$1',[community]);
+          await q.query('DELETE FROM command_receipts WHERE user_id=$1',[user]);
+          for(const table of ['member_accounts','member_notification_preferences','member_first_participation','guild_preference_sets','guild_member_preferences','member_skill_book_grants','positioning_profession_memberships']){
+            await q.query(`DELETE FROM ${table} WHERE community_id=$1`,[community]);
+          }
+          await q.query('DELETE FROM sessions WHERE user_id=$1',[user]);
+          await q.query('DELETE FROM users WHERE community_id=$1',[community]);
+          await q.query('DELETE FROM communities WHERE community_id=$1',[community]);
+          await q.query('COMMIT');
+        }catch(error){await q.query('ROLLBACK');throw error;}
+        finally{q.release();}
+        const remaining=Number((await e2eAuthPool.query('SELECT count(*) FROM communities WHERE community_id=$1',[community])).rows[0].count);
+        const after=Number((await e2eAuthPool.query('SELECT count(*) FROM communities')).rows[0].count);
+        expect(remaining).toBe(0);expect(after).toBe(before);
+        await info.attach('event-fixture-cleanup',{body:JSON.stringify({community,before,after,remaining}),contentType:'application/json'});
+      })()]));
+      for(const result of results)if(result.status==='rejected'){
+        // Keep the journey/setup error primary, but retain cleanup failures in
+        // the report. A cleanup failure alone must still fail the test.
+        if(setupFailed||info.errors.length)info.annotations.push({type:'fixture-cleanup-failed',description:String(result.reason)});
+        else throw result.reason;
+      }
+    }
+  },
+});
 async function login(page:Page,email='maker@local.test'){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
@@ -225,11 +286,7 @@ test('a known event rejection unlocks the draft for correction and a new submiss
   expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
 });
 
-for(const width of [1440,390])test(`confirmed event versions and partial media survive held refreshes at ${width}px`,async({page,e2eAuthPool},info)=>{
-  const user=randomUUID(),community=randomUUID(),email=`event-refresh-${user}@example.test`;
-  await e2eAuthPool.query("INSERT INTO communities(community_id,name) VALUES($1,'活動刷新隔離社群')",[community]);
-  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
-    VALUES($1,$2,$3,'合成活動刷新會員',$4,$5,false)`,[user,community,email,hashPassword('freedom-local-demo'),randomUUID()]);
+for(const width of [1440,390])eventTest(`confirmed event versions and partial media survive held refreshes at ${width}px`,async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
   await page.setViewportSize({width,height:844});await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
   const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
@@ -240,6 +297,7 @@ for(const width of [1440,390])test(`confirmed event versions and partial media s
   await page.route('**/api/v1/events',async route=>{
     if(route.request().method()!=='GET'||!hold)return route.continue();
     const response=await route.fetch();expect(response.status()).toBe(200);
+    if(!hold)return route.fulfill({response});
     let release!:()=>void,complete!:()=>void;
     const wait=new Promise<void>(resolve=>{release=resolve;}),done=new Promise<void>(resolve=>{complete=resolve;});
     snapshots.push({release,done,body:await response.json()});
@@ -322,11 +380,8 @@ for(const width of [1440,390])test(`confirmed event versions and partial media s
   }finally{hold=false;for(const snapshot of snapshots)snapshot.release();}
 });
 
-for(const kind of ['banner','video'] as const)for(const ack of ['lost','malformed'] as const)test(`${kind} committed with ${ack} ACK reconciles before another mutation`,async({page,e2eAuthPool},info)=>{
-  const community=randomUUID(),user=randomUUID(),email=`media-${user}@example.test`,title=`媒體對帳 ${user}`;
-  await e2eAuthPool.query("INSERT INTO communities(community_id,name) VALUES($1,'媒體對帳隔離社群')",[community]);
-  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
-    VALUES($1,$2,$3,'合成媒體會員',$4,$5,false)`,[user,community,email,hashPassword('freedom-local-demo'),randomUUID()]);
+for(const kind of ['banner','video'] as const)for(const ack of ['lost','malformed'] as const)eventTest(`${kind} committed with ${ack} ACK reconciles before another mutation`,async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
+  const title=`媒體對帳 ${user}`;
   await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
@@ -398,17 +453,15 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   }finally{release();releaseList();}
 });
 
-test('superseded event reads cannot replace the newest loading or error state',async({page,e2eAuthPool})=>{
-  const community=randomUUID(),user=randomUUID(),email=`list-state-${user}@example.test`;
-  await e2eAuthPool.query("INSERT INTO communities(community_id,name) VALUES($1,'活動讀取隔離社群')",[community]);
-  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
-    VALUES($1,$2,$3,'合成列表會員',$4,$5,false)`,[user,community,email,hashPassword('freedom-local-demo'),randomUUID()]);
+eventTest('superseded event reads cannot replace the newest loading or error state',async({page,eventFixture:{user,email}})=>{
   await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
   const snapshots:{release:(failure:boolean)=>void;done:Promise<void>}[]=[];
+  let closing=false;
   await page.route('**/api/v1/events',async route=>{
     if(route.request().method()!=='GET')return route.continue();
     const response=await route.fetch();expect(response.status()).toBe(200);
+    if(closing)return route.fulfill({response});
     let release!:(failure:boolean)=>void,complete!:()=>void;
     const wait=new Promise<boolean>(resolve=>{release=resolve;}),done=new Promise<void>(resolve=>{complete=resolve;});
     const index=snapshots.length;snapshots.push({release,done});
@@ -426,9 +479,9 @@ test('superseded event reads cannot replace the newest loading or error state',a
     await create(1);await expect.poll(()=>snapshots.length).toBe(1);
     await create(2);await expect.poll(()=>snapshots.length).toBe(2);
     snapshots[1].release(true);await snapshots[1].done;
-    await expect(page.getByRole('alert').filter({hasText:'合成刷新失敗 1'})).toBeVisible();await expect(loading).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();await expect(loading).toHaveCount(0);
     snapshots[0].release(false);await snapshots[0].done;
-    await expect(page.getByRole('alert').filter({hasText:'合成刷新失敗 1'})).toBeVisible();await expect(loading).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();await expect(loading).toHaveCount(0);
     await page.getByRole('button',{name:'重試',exact:true}).click();await expect.poll(()=>snapshots.length).toBe(3);
     await create(3);await expect.poll(()=>snapshots.length).toBe(4);
     snapshots[2].release(true);await snapshots[2].done;
@@ -436,5 +489,5 @@ test('superseded event reads cannot replace the newest loading or error state',a
     snapshots[3].release(false);await snapshots[3].done;
     await expect(loading).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('heading',{name:`讀取狀態 3 ${user}`,exact:true})).toBeVisible();
-  }finally{for(const snapshot of snapshots)snapshot.release(false);}
+  }finally{closing=true;for(const snapshot of snapshots)snapshot.release(false);}
 });
