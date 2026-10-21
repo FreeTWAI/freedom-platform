@@ -61,12 +61,13 @@ function expiryLine(item: Credential): string {
   return when;
 }
 
-export function AdminCredentials({client}: {client: AdminClient}) {
+export function AdminCredentials({client,onAttention}: {client: AdminClient;onAttention?:(message:string)=>void}) {
   const [items, setItems] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const sequence = useRef(0);
+  const disclosure=useRef<HTMLDetailsElement>(null);
   const load = useCallback(async () => {
     const ticket = ++sequence.current;
     setLoading(true);
@@ -97,9 +98,15 @@ export function AdminCredentials({client}: {client: AdminClient}) {
     }
   }
   const alarms = items.map(alarm).filter((text): text is string => Boolean(text));
+  const attention=alarms.join('；'),unknown=items.filter(item=>item.level==='unknown').length;
+  useEffect(()=>{onAttention?.(error?`憑證狀態暫時無法讀取：${error}`:attention);},[attention,error,onAttention]);
+  useEffect(()=>()=>onAttention?.(''),[onAttention]);
+  useEffect(()=>{if((attention||error||unknown)&&disclosure.current)disclosure.current.open=true;},[attention,error,unknown]);
   return <>
-    {alarms.length > 0 && <a className="admin-credential-banner" href="#admin-credentials">{alarms.join('；')}</a>}
-    <section className="card admin-credentials" id="admin-credentials">
+    {!onAttention&&alarms.length > 0 && <a className="admin-credential-banner" href="#admin-credentials" onClick={()=>{if(disclosure.current)disclosure.current.open=true;}}>{attention}</a>}
+    <details ref={disclosure} className="card admin-credential-disclosure" id="admin-credentials">
+      <summary><span>系統憑證</span><span className="admin-credential-summary-state">{loading?'更新中…':error?'需要重新讀取':attention?'需要處理':unknown?`${unknown} 項尚未檢查`:items.length?`${items.length} 項正常`:'尚無狀態'}</span></summary>
+    <section className="admin-credentials">
       <div className="card-head">
         <h2>憑證到期</h2>
         <button type="button" className="btn btn-ghost" onClick={() => void load()} disabled={loading || busy}>重新整理</button>
@@ -127,5 +134,6 @@ export function AdminCredentials({client}: {client: AdminClient}) {
         </div>}
       </article>)}
     </section>
+    </details>
   </>;
 }

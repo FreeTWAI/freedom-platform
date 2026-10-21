@@ -29,6 +29,7 @@
     "tests/runtime/event-waitlist.test.ts",
     "tests/e2e/event-participation.spec.ts",
     "migrations/153_event_participation.sql",
+    "migrations/178_guest_invitation_credit.sql",
     "tests/e2e/event-public.spec.ts",
     "tests/runtime/member-experience.test.ts",
     "tests/runtime/verification-test-data.test.ts",

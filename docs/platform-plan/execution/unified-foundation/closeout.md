@@ -10,6 +10,45 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-20 main cf7e518b 發布完成（供貨／零售公會資格與修正）
+
+**截至22:28 UTC，staging 與 production 都已部署 `cf7e518b`／schema172，
+四組成功 before／after 備份、隔離還原與清理通過，兩環境 dispatcher 已綁定本次來源，
+原 timer 已恢復 active／enabled。會員 UX 驗收未執行。**
+來源為 #928 的 main，接續兩環境原 `3a6e2506`；main Verify 39426654402 的17個 jobs
+與 CodeQL 39426654398 的3個 jobs 全部通過。本輪沒有 migration，27個旗標、路由與 cron 維持；
+Supplier／Commerce console 與 Short 保持 ON，checkout／交易 Email 保持 OFF，
+供貨素材／上傳與選品照片仍為 staging開、production關。完整證據見
+[供貨／零售公會發布收據](rollout-commerce-cohorts-2026-10-20.json)。
+
+#916：供應商／電商公會的 active intern／full 成員可開始各自首次供貨／零售設定，獨立店家准入與 checkout 門檻保留；同儕確認無發布時額外步驟。
+#903：會員服務遺失寫入回覆後保留原儲存／封面操作，並帶入選填欄位驗證與隱藏確認修正。
+#922：合作摘要載入時保留供貨狀態列高度，讓「供貨條件」按鈕維持位置。
+#926（TSY3991）：切換全螢幕 Short 時保留對話框內的鍵盤焦點。
+另含 #914 fork PR CodeQL、#924 batch（#903／#913／#915／#920／#922）與 #928 runtime DB 清理時限修正；文件與 CI 不當作會員驗收。
+
+Ted 於20:52:45.424 UTC 回答是否今晚發布 main cf7e518b：「1. 要」。
+依既有方針無 staging acceptance window，member UX acceptance 為 `not_run`；真實手機與 Safari 未驗。
+Production 公開唯讀 smoke 於22:14:50.469 UTC 通過14項，未登入正式會員或建立訂單。
+`/` 線上 Worker CSP 已確認允許 youtube-nocookie frame，`/pay/ecpay/` 加43個 A 無 frame-src；
+`/admin` 與 `/admin/github/callback` 在 Worker 前被 Access 以302攔截，**未觀察線上 admin Worker CSP**，
+僅驗精確部署來源函式（`liveAdminWorkerCsp=not_observed_access_protected`、`adminCspSource=exact_source_function`）。
+Smoke 的 `priorFailedAttempt` 是前輪 Short kit 的歷史失敗與 Access 修正背景，並非本輪失敗嘗試。
+
+兩環境 before 備份於本日21:17／21:31 UTC 在前輪 Short kit 新擷取，來源仍為 `3a6e2506`，均首試通過。
+Staging after 首試 `54e05840` 於21:45:42.694 UTC 建立，在 capture 以 `daily_backup_phase_failed` 失敗，
+清理通過，沒有 seal／offsite／restore。非私密檔案證據為 dump 3,089,221 bytes、stderr空，
+66個物件只寫入62個、間隔約4.6秒，最後一個後約4.7秒出現失敗；首個缺失物件在 before 與第二次皆擷取成功。
+例外文字未保留，**確切原因未知**；與暫時物件讀取失敗相符僅是推論，不能以既往 capture 失敗推定原因。
+第二次 `6d8aeb25` 使用新的通過 IO gate 與同一 `f8cec4d4` adapter，未改 kit，通過後才綁定。
+Production after `c567ffd4` 於22:15:37.685 UTC 建立、首試通過；成功備份各還原66／48個物件，
+172 floor與素材政策通過，production另驗10項座標約束；不把隔離還原當成新線上 ledger查詢。
+
+日常兩個 backup timers 曾為發布暫停；dispatcher 約22:13:45 UTC完成 staging階段後，兩環境綁定為 `0a478a84`，
+22:28:23 UTC由 `restore-timers.py` 恢復，原03:30／04:30 UTC、5分鐘隨機延遲、Persistent與service argv維持。
+觀察到下次排程為10月21日03:32:29／04:32:56 UTC，**新 dispatcher 自然備份尚未觀察**。
+GitHub Deployments staging-next／next 已各記錄 success；原168項需求、T-047、第二操作者與真人成果未驗項保留。
+
 ## 2026-10-20 Short 短影音發布完成
 
 **截至07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，

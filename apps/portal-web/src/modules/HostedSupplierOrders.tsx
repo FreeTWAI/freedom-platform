@@ -57,7 +57,7 @@ export function HostedSupplierOrders({client,route}:{client:PortalClient;route:S
       {retailEnabled === true && <><a className="btn btn-ghost" href={`#stores/${route.tenantId}/${route.instanceId}`}>返回商店後台</a>
         <a className="btn btn-ghost" href={`#stores/${route.tenantId}/${route.instanceId}/orders`}>查看本店預留</a></>}
     </div>
-    <h2>供貨訂單</h2><p className="banner" role="note">只顯示你供應的商品。預留最多 30 分鐘，尚未付款或安排出貨；供貨金額不是請款紀錄。</p>
+    <h2>供貨訂單</h2><p className="banner" role="note">本頁只顯示你供應商品的 30 分鐘預留，不包含付款後的履約單。預留尚未付款或安排出貨；供貨金額不是請款紀錄。</p>
     <div className="actions"><button className="btn btn-ghost" disabled={loading} onClick={()=>void load()}>更新供貨訂單</button></div>
     <p role="status">{loading?'正在確認供貨訂單…':''}</p>{error&&<p role="alert" className="banner banner-error">{error}</p>}
     {page&&<>{!page.items.length&&<p>這一頁沒有供貨預留。</p>}

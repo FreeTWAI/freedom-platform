@@ -1,3 +1,4 @@
+import {navigateAdmin} from './navigation.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 
@@ -23,7 +24,7 @@ async function adminFixtures(page:Page,options:{status?:()=>unknown;start?:(rout
   });
   return calls;
 }
-async function openSetup(page:Page){await page.goto('/admin');await page.getByRole('button',{name:'GitHub 連結',exact:true}).click();await expect(page.getByRole('heading',{name:'啟用站內 GitHub 操作',exact:true})).toBeVisible();}
+async function openSetup(page:Page){await page.goto('/admin');await navigateAdmin(page,'GitHub 連結');await expect(page.getByRole('heading',{name:'啟用站內 GitHub 操作',exact:true})).toBeVisible();}
 function expectAdminCommand(call:Call){expect(call.method).toBe('POST');expect(call.headers['x-admin-csrf']).toBe(csrf);expect(call.headers['idempotency-key']).toBeTruthy();}
 
 test('admin setup submits the manifest through native GitHub POST with starring write and metadata read',async({page})=>{
@@ -54,8 +55,55 @@ test('admin callback clears sensitive query parameters and completes once across
   await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toHaveCount(0);
   await page.locator('.admin-account > summary').click();
   await page.getByRole('button',{name:'重新確認管理身分',exact:true}).click();await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'會員管理',exact:true}).click();await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();await page.getByRole('button',{name:'GitHub 連結',exact:true}).click();await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toBeVisible();
+  await navigateAdmin(page,'會員管理');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();await navigateAdmin(page,'GitHub 連結');await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toBeVisible();
   const complete=calls.filter(call=>call.path==='/github-app/complete');expect(complete).toHaveLength(1);expectAdminCommand(complete[0]);expect(complete[0].body).toEqual({code,state});
+  expect(calls.filter(call=>call.path==='/github-app/start')).toHaveLength(0);
+  await expect(page.locator('body')).not.toContainText(code);await expect(page.locator('body')).not.toContainText(state);
+});
+
+const setupChunk='**/assets/AdminGitHubSetup-*.js';
+for(const width of [1280,390]){
+  test(`admin callback completes once when leaving a delayed setup chunk at ${width}px`,async({page})=>{
+    await page.setViewportSize({width,height:900});
+    let releaseChunk!:()=>void,releaseComplete!:()=>void,chunks=0;
+    const chunkGate=new Promise<void>(resolve=>{releaseChunk=resolve;}),completeGate=new Promise<void>(resolve=>{releaseComplete=resolve;});
+    const calls=await adminFixtures(page,{complete:async route=>{await completeGate;await route.fulfill({json:app});}});
+    await page.route(setupChunk,async route=>{chunks++;await chunkGate;await route.continue();});
+    try{
+      await page.goto(`/admin/github/callback?code=${code}&state=${state}`,{waitUntil:'domcontentloaded'});
+      await expect.poll(()=>chunks).toBe(1);
+      await expect.poll(()=>calls.filter(call=>call.path==='/github-app/complete').length).toBe(1);
+      await expect(page).toHaveURL(/\/admin$/);
+      await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toHaveCount(0);
+      await navigateAdmin(page,'會員管理');
+      await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+      const url=new URL(page.url());expect(url.pathname).toBe('/admin');expect(url.searchParams.has('code')).toBe(false);expect(url.searchParams.has('state')).toBe(false);
+      releaseComplete();releaseChunk();
+      await navigateAdmin(page,'GitHub 連結');
+      await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toBeVisible();
+      const completions=calls.filter(call=>call.path==='/github-app/complete');expect(completions).toHaveLength(1);expectAdminCommand(completions[0]);expect(completions[0].body).toEqual({code,state});
+      expect(calls.filter(call=>call.path==='/github-app/start')).toHaveLength(0);
+      await expect(page.locator('body')).not.toContainText(code);await expect(page.locator('body')).not.toContainText(state);
+    }finally{releaseComplete();releaseChunk();}
+  });
+}
+
+test('admin callback completes despite a failed setup chunk and reload recovers without replay',async({page})=>{
+  const calls=await adminFixtures(page,{status:()=>({...app,setup_available:true}),complete:route=>route.fulfill({json:app})});
+  let chunks=0;
+  await page.route(setupChunk,route=>{chunks++;return route.fulfill({status:503,contentType:'text/javascript',body:''});});
+  await page.goto(`/admin/github/callback?code=${code}&state=${state}`);
+  await expect.poll(()=>chunks).toBe(1);
+  await expect.poll(()=>calls.filter(call=>call.path==='/github-app/complete').length).toBe(1);
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole('alert')).toContainText('GitHub 連結暫時無法開啟。');
+  await navigateAdmin(page,'會員管理');await navigateAdmin(page,'GitHub 連結');
+  await expect(page.getByRole('alert')).toContainText('請確認網路後重新載入頁面。');
+  await page.unroute(setupChunk);
+  await page.getByRole('button',{name:'重新載入頁面',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'GitHub App 已建立',exact:true})).toBeVisible();
+  const url=new URL(page.url());expect(url.pathname).toBe('/admin');expect(url.searchParams.has('code')).toBe(false);expect(url.searchParams.has('state')).toBe(false);
+  const completions=calls.filter(call=>call.path==='/github-app/complete');expect(completions).toHaveLength(1);expectAdminCommand(completions[0]);expect(completions[0].body).toEqual({code,state});
   expect(calls.filter(call=>call.path==='/github-app/start')).toHaveLength(0);
   await expect(page.locator('body')).not.toContainText(code);await expect(page.locator('body')).not.toContainText(state);
 });
@@ -76,7 +124,7 @@ test('failed callback stays unconfigured and returns to fresh setup without resu
   await page.goto(`/admin/github/callback?code=${code}&state=${state}`);
   await expect(page).toHaveURL(/\/admin$/);await expect(page.getByRole('alert')).toHaveText('GitHub App 尚未完成連線設定，請重新開始。');
   await expect(page.getByRole('heading',{name:'GitHub App 已連結',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeDisabled();
-  await page.getByRole('link',{name:'返回後台',exact:true}).click();await page.getByRole('button',{name:'GitHub 連結',exact:true}).click();
+  await page.getByRole('link',{name:'返回後台',exact:true}).click();await navigateAdmin(page,'GitHub 連結');
   await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeEnabled();await expect(page.getByRole('alert')).toHaveCount(0);
   const completions=calls.filter(call=>call.path==='/github-app/complete');expect(completions).toHaveLength(1);expectAdminCommand(completions[0]);
   await page.goto(`/admin/github/callback?state=${state}`);await expect(page).toHaveURL(/\/admin$/);await expect(page.getByRole('alert')).toHaveText('GitHub App 建立未完成，請重新開始。');
@@ -87,5 +135,5 @@ test('setup blocks an unexpected external form target and never presents it as s
   await adminFixtures(page,{start:route=>route.fulfill({json:{target:'https://github.com.evil.invalid/organizations/FreeTWAI/settings/apps/new',manifest}})});
   const outbound:string[]=[];page.on('request',request=>{if(new URL(request.url()).protocol==='https:')outbound.push(request.url());});
   await openSetup(page);await page.getByRole('button',{name:'建立 GitHub App',exact:true}).click();
-  await expect(page.getByRole('alert')).toHaveText('GitHub 設定網址不正確。');await expect(page).toHaveURL(/\/admin$/);expect(outbound).toEqual([]);await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveText('GitHub 設定網址不正確。');await expect(page).toHaveURL(/\/admin\?view=github$/);expect(outbound).toEqual([]);await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeEnabled();
 });

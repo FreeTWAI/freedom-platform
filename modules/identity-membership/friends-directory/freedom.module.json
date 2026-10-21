@@ -1,0 +1,25 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "friends-directory",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "apps/portal-web/src/modules/FriendsPanel.tsx",
+    "apps/portal-web/src/modules/friends-directory-controller.ts",
+    "tests/runtime/friends-directory-controller.test.ts",
+    "tests/e2e/friends-directory-interaction.spec.ts"
+  ],
+  "public_exports": [],
+  "dependencies": ["member-card", "member-communications"],
+  "contract_families": [],
+  "client_profiles": ["member"],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "docs/development/member-connections.md",
+    "docs/development/member-settings-messages.md"
+  ],
+  "invariants": ["current-authority-before-replay", "no-secrets-in-artifacts"],
+  "tests": ["runtime.full"],
+  "surfaces": []
+}

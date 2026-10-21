@@ -1460,9 +1460,14 @@ test('SC-E2E-71 the report page shows the period, links to the lists and downloa
     expect(ownerCsvBytes[2]).toBe(0xbf);
     const ownerCsvText = ownerCsvBytes.toString('utf8');
     expect(ownerCsvText.startsWith('\uFEFF')).toBe(true);
-    const ownerHeaderRows = ownerCsvText.slice(1).split('\r\n').slice(0, 12).join('\n');
+    const ownerCsvRows = ownerCsvText.slice(1).split('\r\n');
+    const ownerHeaderEnd = ownerCsvRows.indexOf('');
+    expect(ownerHeaderEnd).toBeGreaterThan(0);
+    expect(ownerCsvRows[ownerHeaderEnd + 1]).toBe('"摘要"');
+    const ownerHeaderRows = ownerCsvRows.slice(0, ownerHeaderEnd).join('\n');
     expect(ownerHeaderRows).toContain('供應商營運報表');
     expect(ownerHeaderRows).toContain('本檔不是完整資料匯出');
+    expect(ownerHeaderRows).toContain('已占用包含預留中與已付款待出貨');
     expect(ownerCsvText).toContain(sup.product.sku);
     expect(ownerCsvText).toContain(product2.sku);
     expect(ownerCsvText).toContain('"\'=SUM(1,1)"');

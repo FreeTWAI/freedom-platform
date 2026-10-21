@@ -80,7 +80,7 @@ test(`${supplierOnly ? 'supply-only' : 'retail'} supplier A and independent B/C 
     for(const name of ['小島選物','山城選物']) {
       const row=requests.locator('article').filter({has:a.page.getByRole('heading',{name:`共用庫存茶杯・${name}`,exact:true})});
       await row.getByRole('button',{name:'同意這一版',exact:true}).click();
-      await expect(row).toContainText('已同意，可加入展示頁');
+      await expect(row).toContainText('已同意，可加入展示頁（尚不能結帳購買）');
     }
     for(const s of [b,c]) {
       await storeArea(s.page,'供貨合作');
@@ -116,7 +116,7 @@ test(`${supplierOnly ? 'supply-only' : 'retail'} supplier A and independent B/C 
     await a.page.getByRole('button',{name:'更新供貨狀態',exact:true}).click();
     const selected=requests.locator('article').filter({has:a.page.getByRole('heading',{name:'共用庫存茶杯・小島選物',exact:true})});
     await selected.getByRole('button',{name:'同意這一版',exact:true}).click();
-    await expect(selected).toContainText('已同意，可加入展示頁');
+    await expect(selected).toContainText('已同意，可加入展示頁（尚不能結帳購買）');
     await selected.getByRole('button',{name:'撤回這間店的同意',exact:true}).click();
     await expect(selected).toContainText('已撤回供貨');
     await b.page.getByRole('button',{name:'更新供貨狀態',exact:true}).click();

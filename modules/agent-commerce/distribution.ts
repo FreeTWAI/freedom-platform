@@ -5,13 +5,11 @@ import {readWithMemberSession} from '../../packages/db/member-session.js';
 import {requireCondition} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
 import {acceptanceInput} from './schema.js';
+import {resellerArrangement} from './hosted-ui/reseller-arrangement.js';
 
 function recorder(shop:{owner_id:string;community_id:string}){return {user_id:shop.owner_id,community_id:shop.community_id} as Actor;}
 
-// Launch default is reseller. The six responsibilities are snapshotted; page names do not imply them.
-export function resellerArrangement(sellerId:string,supplierId:string){
- return {mode:'reseller' as const,seller_of_record:sellerId,payment_collector:sellerId,invoice_issuer:sellerId,refund_owner:sellerId,price_owner:sellerId,fulfillment_party:supplierId};
-}
+export {resellerArrangement};
 export function listingDigest(snapshot:unknown){return digest(snapshot);}
 
 async function lockCommunity(q:PoolClient,community:string){await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`commerce-orders/${community}`]);}

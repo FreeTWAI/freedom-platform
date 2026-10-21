@@ -1,3 +1,4 @@
+import {suppliedConsentAvailable} from './supply-availability.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {QuoteInputSchema} from '../../../contracts/guild-launchpad/v1/hosted-order.js';
@@ -45,11 +46,7 @@ export async function sharedLines(q: PoolClient, context: Pick<DirectContext,'pr
     const supplier = await resolveSupplier(row.supplier_instance_id);
     requireCondition(supplier.supply_shop_id === row.supplier_shop_id, 409, 'supply_unavailable', '供貨來源已更新。');
     const own = supplier.instance_id === p.instance_id;
-    requireCondition(own ? row.hosted_offer_id === null : row.hosted_offer_id && row.offer_state === 'offered'
-      && row.acceptance_state === 'sellable' && row.acceptance_decision === 'accepted'
-      && row.current_acceptance_id === row.acceptance_id && row.listing_sha256 === row.accepted_sha256
-      && digest(row.snapshot) === row.listing_sha256 && row.snapshot.offer_sha256 === row.offer_sha256
-      && row.snapshot.offer_id === row.hosted_offer_id && row.offer_terms?.currency === p.currency,
+    requireCondition(own ? row.hosted_offer_id === null : suppliedConsentAvailable(row, p.currency),
     409, 'supply_unavailable', '這項供貨已停止或條件已更新，請重新確認。');
     const title = own ? row.own_title : row.offer_terms.title;
     requireCondition(title === published.title && Number(row.retail_price_minor) === published.price_minor,

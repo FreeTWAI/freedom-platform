@@ -6,6 +6,11 @@
     "overview": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.overview/v1"
@@ -416,7 +421,7 @@
         "product_limit"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: single_statement_snapshot, store_write_required_for_counts, owner_required_for_reservation_lines, unavailable_is_not_zero."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, single_statement_snapshot, store_write_required_for_counts, owner_required_for_reservation_lines, unavailable_is_not_zero."
     },
     "products": {
       "type": "object",
@@ -531,6 +536,46 @@
                   }
                 ]
               },
+              "offer_photo": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "shared",
+                          "not_shared"
+                        ]
+                      },
+                      "seq": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 19,
+                            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "matches_current_photo": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "seq",
+                      "matches_current_photo"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "cooperation": {
                 "type": "object",
                 "properties": {
@@ -562,6 +607,71 @@
                   "inactive"
                 ],
                 "additionalProperties": false
+              },
+              "inventory": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "ready"
+                      },
+                      "stock": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "reserved": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "available": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "held": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "allocated": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "stock",
+                      "reserved",
+                      "available",
+                      "held",
+                      "allocated"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "inconsistent"
+                      },
+                      "code": {
+                        "type": "string",
+                        "const": "reservation_inconsistent"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "code"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": [
@@ -577,6 +687,7 @@
               "available",
               "version",
               "offer",
+              "offer_photo",
               "cooperation"
             ],
             "additionalProperties": false
@@ -594,7 +705,7 @@
         "limit"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: complete_bounded_catalog, available_equals_stock_minus_reserved, private_cost_and_terms."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, complete_bounded_catalog, available_equals_stock_minus_reserved, private_cost_and_terms."
     },
     "product": {
       "type": "object",
@@ -706,6 +817,46 @@
                 }
               ]
             },
+            "offer_photo": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "shared",
+                        "not_shared"
+                      ]
+                    },
+                    "seq": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 19,
+                          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "matches_current_photo": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "seq",
+                    "matches_current_photo"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "cooperation": {
               "type": "object",
               "properties": {
@@ -737,6 +888,71 @@
                 "inactive"
               ],
               "additionalProperties": false
+            },
+            "inventory": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "const": "ready"
+                    },
+                    "stock": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "reserved": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "available": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "held": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "allocated": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "stock",
+                    "reserved",
+                    "available",
+                    "held",
+                    "allocated"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "const": "inconsistent"
+                    },
+                    "code": {
+                      "type": "string",
+                      "const": "reservation_inconsistent"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "required": [
@@ -752,9 +968,46 @@
             "available",
             "version",
             "offer",
+            "offer_photo",
             "cooperation"
           ],
           "additionalProperties": false
+        },
+        "msrp_minor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimum_order_quantity": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lead_time_days": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 365
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "shipping_terms": {
           "type": "string",
@@ -818,6 +1071,21 @@
                       "maxLength": 2000,
                       "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                     },
+                    "msrp_minor": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100000000
+                    },
+                    "minimum_order_quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000
+                    },
+                    "lead_time_days": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 365
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -862,6 +1130,60 @@
                   "type": "string",
                   "maxLength": 19,
                   "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                "published_at": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                },
+                "arrangement": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "const": "reseller"
+                        },
+                        "seller_of_record": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "payment_collector": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "invoice_issuer": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "refund_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "price_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "fulfillment_party": {
+                          "type": "string",
+                          "const": "supplier"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "seller_of_record",
+                        "payment_collector",
+                        "invoice_issuer",
+                        "refund_owner",
+                        "price_owner",
+                        "fulfillment_party"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -941,6 +1263,21 @@
                         "maxLength": 2000,
                         "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                       },
+                      "msrp_minor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000000
+                      },
+                      "minimum_order_quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "lead_time_days": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
                       "title": {
                         "type": "string",
                         "minLength": 1,
@@ -985,6 +1322,60 @@
                     "type": "string",
                     "maxLength": 19,
                     "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                  },
+                  "published_at": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                  },
+                  "arrangement": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "reseller"
+                          },
+                          "seller_of_record": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "payment_collector": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "invoice_issuer": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "refund_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "price_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "fulfillment_party": {
+                            "type": "string",
+                            "const": "supplier"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "seller_of_record",
+                          "payment_collector",
+                          "invoice_issuer",
+                          "refund_owner",
+                          "price_owner",
+                          "fulfillment_party"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1029,6 +1420,67 @@
                 "maxLength": 19,
                 "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
               },
+              "decision_note": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "arrangement": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "reseller"
+                      },
+                      "seller_of_record": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "payment_collector": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "invoice_issuer": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "refund_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "price_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "fulfillment_party": {
+                        "type": "string",
+                        "const": "supplier"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "seller_of_record",
+                      "payment_collector",
+                      "invoice_issuer",
+                      "refund_owner",
+                      "price_owner",
+                      "fulfillment_party"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "partner_id": {
                 "type": "string",
                 "minLength": 36,
@@ -1058,6 +1510,9 @@
         "profile",
         "as_of",
         "product",
+        "msrp_minor",
+        "minimum_order_quantity",
+        "lead_time_days",
         "shipping_terms",
         "return_terms",
         "current_offer",
@@ -1065,7 +1520,7 @@
         "truncated"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: private_cost_and_terms, impact_preview_is_not_authority."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, private_cost_and_terms, impact_preview_is_not_authority."
     },
     "request": {
       "type": "object",
@@ -1135,6 +1590,21 @@
                       "maxLength": 2000,
                       "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                     },
+                    "msrp_minor": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100000000
+                    },
+                    "minimum_order_quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000
+                    },
+                    "lead_time_days": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 365
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -1179,6 +1649,60 @@
                   "type": "string",
                   "maxLength": 19,
                   "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                "published_at": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                },
+                "arrangement": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "const": "reseller"
+                        },
+                        "seller_of_record": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "payment_collector": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "invoice_issuer": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "refund_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "price_owner": {
+                          "type": "string",
+                          "const": "seller"
+                        },
+                        "fulfillment_party": {
+                          "type": "string",
+                          "const": "supplier"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "seller_of_record",
+                        "payment_collector",
+                        "invoice_issuer",
+                        "refund_owner",
+                        "price_owner",
+                        "fulfillment_party"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -1222,6 +1746,67 @@
               "type": "string",
               "maxLength": 19,
               "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "decision_note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "arrangement": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "reseller"
+                    },
+                    "seller_of_record": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "payment_collector": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "invoice_issuer": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "refund_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "price_owner": {
+                      "type": "string",
+                      "const": "seller"
+                    },
+                    "fulfillment_party": {
+                      "type": "string",
+                      "const": "supplier"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "seller_of_record",
+                    "payment_collector",
+                    "invoice_issuer",
+                    "refund_owner",
+                    "price_owner",
+                    "fulfillment_party"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "partner_id": {
               "type": "string",
@@ -1521,6 +2106,21 @@
                         "maxLength": 2000,
                         "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
                       },
+                      "msrp_minor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000000
+                      },
+                      "minimum_order_quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "lead_time_days": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
                       "title": {
                         "type": "string",
                         "minLength": 1,
@@ -1565,6 +2165,60 @@
                     "type": "string",
                     "maxLength": 19,
                     "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                  },
+                  "published_at": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                  },
+                  "arrangement": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "reseller"
+                          },
+                          "seller_of_record": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "payment_collector": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "invoice_issuer": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "refund_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "price_owner": {
+                            "type": "string",
+                            "const": "seller"
+                          },
+                          "fulfillment_party": {
+                            "type": "string",
+                            "const": "supplier"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "seller_of_record",
+                          "payment_collector",
+                          "invoice_issuer",
+                          "refund_owner",
+                          "price_owner",
+                          "fulfillment_party"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1608,6 +2262,67 @@
                 "type": "string",
                 "maxLength": 19,
                 "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+              },
+              "decision_note": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "arrangement": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "reseller"
+                      },
+                      "seller_of_record": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "payment_collector": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "invoice_issuer": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "refund_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "price_owner": {
+                        "type": "string",
+                        "const": "seller"
+                      },
+                      "fulfillment_party": {
+                        "type": "string",
+                        "const": "supplier"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "seller_of_record",
+                      "payment_collector",
+                      "invoice_issuer",
+                      "refund_owner",
+                      "price_owner",
+                      "fulfillment_party"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -2323,6 +3038,8 @@
                   "storefront.product.photo.remove",
                   "storefront.supply-offer.publish",
                   "storefront.supply-offer.withdraw",
+                  "storefront.supply-offer.photo.share",
+                  "storefront.supply-offer.photo.stop",
                   "storefront.distribution.decide"
                 ]
               },
@@ -2482,6 +3199,11 @@
     "summary": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.summary/v1"
@@ -2564,7 +3286,7 @@
         "todos"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: one_business_per_read, store_write_required_for_counts, unavailable_is_not_zero."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, one_business_per_read, store_write_required_for_counts, unavailable_is_not_zero."
     },
     "report-query": {
       "type": "object",
@@ -2588,6 +3310,11 @@
     "report": {
       "type": "object",
       "properties": {
+        "inventory_inconsistent_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
         "profile": {
           "type": "string",
           "const": "freedom.supplier-console.report/v1"
@@ -2962,7 +3689,7 @@
         "csv_rows"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: one_statement_at_as_of, store_write_required, reservations_owner_only, supply_amount_is_not_revenue, refused_above_max_csv_rows, not_a_data_export."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: inventory_inconsistent_count_is_not_zero_stock, one_statement_at_as_of, store_write_required, reservations_owner_only, supply_amount_is_not_revenue, refused_above_max_csv_rows, not_a_data_export."
     },
     "materials": {
       "type": "object",

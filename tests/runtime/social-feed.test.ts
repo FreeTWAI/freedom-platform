@@ -122,6 +122,65 @@ test('numeric remote HTML titles create real HTTP posts and replay without dupli
   }
 });
 
+test('declared charsets survive empty parameters through HTTP publish, storage and readback', async () => {
+  let page = {body: Buffer.alloc(0), type: 'text/html'};
+  let liveApp = app;
+  const server = serve({fetch: req => liveApp.fetch(req), hostname: '127.0.0.1', port: 0});
+  try {
+    if (!server.listening) await once(server, 'listening');
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const liveOrigin = `http://127.0.0.1:${address.port}`;
+    liveApp = createApp(pool, liveOrigin, 'local', {linkPreviewFetch: async () =>
+      new Response(new Uint8Array(page.body), {headers: {'content-type': page.type}})});
+    const signed = await fetch(liveOrigin + '/api/v1/auth/login', {method: 'POST',
+      headers: {Origin: liveOrigin, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID()},
+      body: JSON.stringify({email: DEMO_USERS[0].email, password: DEMO_PASSWORD})});
+    assert.equal(signed.status, 200);
+    const session = await signed.json() as {csrf_token: string};
+    const headers = {Origin: liveOrigin, Cookie: signed.headers.get('set-cookie')!.split(';')[0],
+      'X-CSRF-Token': session.csrf_token, 'Content-Type': 'application/json'};
+    const cases = [];
+    for (const fixture of [
+      {charset: 'windows-1252', body: Buffer.from('<title>Caf\xe9 \x80</title>', 'latin1'), title: 'Café €'},
+      {charset: 'Big5', body: Buffer.concat([Buffer.from('<title>'), Buffer.from([0xa4,0xa4,0xa4,0xe5]), Buffer.from('</title>')]), title: '中文'},
+    ]) {
+      for (const type of [
+        `text/html; charset=${fixture.charset};`,
+        `text/html;; charset=${fixture.charset}`,
+        `text/html; note=ok;;; charset=${fixture.charset}`,
+        `text/html; \t ; charset=${fixture.charset}; \t `,
+      ]) cases.push({...fixture, type});
+    }
+    for (const type of [
+      'text/html;; note="unfinished; charset=windows-1252',
+      'text/html; note="x; charset=big5";',
+      'text/html; charset=windows-1252;; malformed; charset=utf-8',
+      'text/html; charset=big5; note="unfinished',
+    ]) cases.push({body: Buffer.from('<title>工坊 Café</title>'), type, title: '工坊 Café'});
+    for (const [index, fixture] of cases.entries()) {
+      page = fixture;
+      const key = randomUUID(), body = JSON.stringify({url: `https://example.org/charset-${index}`});
+      const submit = () => fetch(liveOrigin + '/api/v1/social-posts', {method: 'POST',
+        headers: {...headers, 'Idempotency-Key': key}, body});
+      const first = await submit(), created = await first.json() as {post_id: string; title: string};
+      assert.equal(first.status, 201, JSON.stringify(created));
+      assert.equal(created.title, fixture.title, fixture.type);
+      const stored = await pool.query('SELECT title FROM community_social_posts WHERE post_id=$1', [created.post_id]);
+      assert.deepEqual(stored.rows, [{title: fixture.title}]);
+      const reread = await fetch(liveOrigin + '/api/v1/social-posts?post_id=' + created.post_id, {headers});
+      assert.equal(reread.status, 200);
+      const feed = await reread.json() as {items: {post_id: string; title: string}[]};
+      assert.equal(feed.items.find(item => item.post_id === created.post_id)?.title, fixture.title);
+      const replay = await submit(); assert.equal(replay.status, 201);
+      assert.deepEqual(await replay.json(), created);
+    }
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM community_social_posts')).rows[0].n, cases.length);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM command_receipts')).rows[0].n, cases.length);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
 test('native content validation rejects empty, control characters, oversized and unknown fields', async () => {
   const session = await login();
   for (const body of [{text: '  '}, {text: 'a'.repeat(2001)}, {text: 'abc\u0000'}, {text: 'hello', url: 'https://example.com'}]) assert.equal((await request('/social-posts/notes', session, body)).status, 422);

@@ -75,3 +75,33 @@ stale/restore-era writers refuse; unrelated tenant D is unchanged. Payment,
 fulfilment, general module export and Foundation completion remain outside this
 local increment. Execution evidence belongs in the PR/operator receipt, not in
 the existence of these sources.
+
+## Merchant stock observations
+
+The released `ProductViewSchema` / `ProductPageSchema` and entire storefront/v1
+JSON bundle retain their pinned bytes. `MerchantProductViewSchema` and
+`MerchantProductPageSchema` extend those private views; their structural schemas
+and `MerchantInventorySchema` are generated in the existing hosted-supply-terms
+bundle. Private own-product GETs now expose optional `inventory`: `ready` contains
+stock, reserved, available, held and allocated; `inconsistent` contains only
+`code: reservation_inconsistent`. 已占用 = held + allocated = reserved;
+可售 (supplier console: 可用) = stock - reserved. A hold is not a sale.
+Expired but unsettled holds remain occupied. Payment confirmation, verified
+provider events and a successful paid-unallocatable retry create allocations;
+meetup confirmation also hands over stock in the same transaction. Shipping
+and releases subtract the remaining allocation. Disabling new checkout never
+erases retained allocations.
+
+The two-argument `inventoryPositions` still throws 409 on a balance mismatch.
+Its internal reporting overload marks only the inconsistent item. Trusted
+preloaded rows must come from the caller's already-authorized SQL statement
+using `INVENTORY_POSITION_COLUMNS`; no request, client or route accepts rows.
+This port binds no tenant and grants no authority. Lists batch at most 200 own
+products with indexed per-item sums in one existing statement. Retained history
+per item can grow; the sums do not truncate it or approximate a balance.
+
+Legacy numeric fields keep their meanings. Reporting overview, summary and CSV
+JSON add `inventory_inconsistent_count`; when nonzero the UI hides the unverified
+stock aggregate but retains unrelated counts. CSV renames 已預留 to 已占用 and
+appends 預留中, 已付款待出貨 and 庫存狀態. Inconsistent dependent cells are empty,
+not zero. Public JSON, frozen publications and preview v1 have no new fields.

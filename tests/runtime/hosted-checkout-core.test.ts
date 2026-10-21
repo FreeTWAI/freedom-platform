@@ -1,3 +1,5 @@
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import {createHmac,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -7,7 +9,7 @@ import {createDirectQuote} from '../../modules/agent-commerce/hosted/direct-quot
 import {createSharedQuote} from '../../modules/agent-commerce/hosted/shared-quotes.js';
 import {submitDirectOrder} from '../../modules/agent-commerce/hosted/direct-orders.js';
 import {submitSharedOrderOutcome} from '../../modules/agent-commerce/hosted/shared-orders.js';
-import {inventoryPositions} from '../../modules/agent-commerce/hosted/inventory.js';
+import {inventoryPositions,INVENTORY_POSITION_COLUMNS} from '../../modules/agent-commerce/hosted/inventory.js';
 import {applyConfirmedPayment,recordHandover,restockReturn,releaseAllocation,cancelPaidOrder,cancelUnpaidOrder,settleDueCheckoutHolds,sweepDueCheckoutHolds,retryAllocation,freezeCheckout,placeCheckoutOrder,ensureCustomer,hashJSON,canonicalJSON} from '../../modules/agent-commerce/checkout/index.js';
 import {checkoutHarness,code,ok,ports,type CheckoutHarness} from './hosted-checkout-harness.js';
 let x:CheckoutHarness;
@@ -105,7 +107,9 @@ test('bounded sweep releases due holds without a principal and rejects a limit a
 });
 test('inventoryPositions refuses a transient balance mismatch with reservation_inconsistent',async()=>{
   const s=await x.store();await x.place(s,await x.frozen(s));
-  await assert.rejects(x.tx(async q=>{await q.query('UPDATE commerce_items SET reserved=4 WHERE item_id=$1',[s.product.product_id]);await inventoryPositions(q,[s.product.product_id]);}),code('reservation_inconsistent'));
+  await assert.rejects(x.tx(async q=>{await q.query('UPDATE commerce_items SET reserved=4 WHERE item_id=$1',[s.product.product_id]);
+    assert.deepEqual((await inventoryPositions(q,[s.product.product_id],{onInconsistent:'report'})).get(s.product.product_id),{state:'inconsistent',code:'reservation_inconsistent'});
+    await inventoryPositions(q,[s.product.product_id]);}),code('reservation_inconsistent'));
   assert.equal((await position(s.product.product_id))?.held,5);
 });
 test('revising contact email preserves placed order contact/customer and original keyed response',async()=>{
@@ -407,4 +411,42 @@ test('payment unresolved port ignores expired unhanded holds and considers every
     await q.query("UPDATE commerce_payment_attempts SET state='expired_unpaid',expired_at=clock_timestamp(),version=version+1 WHERE order_id=$1 AND sequence=1",[due.order_id]);
     assert.equal(await p.unresolved.find(q,due.checkout.checkout_id),null,'every attempt is now definite unpaid');
   });
+});
+
+test('merchant inventory reports mixed holds and allocations from authorized GETs without publication changes',async t=>{
+ const s=await x.store(20),id=s.product.product_id;
+ const before=ok(await x.h.call('GET','/public/stores/'+s.slug));
+ await x.place(s,await x.frozen(s,3));const paid=await x.place(s,await x.frozen(s,5));await payment(paid.order_id);
+ const expected={state:'ready',stock:20,reserved:8,available:12,held:3,allocated:5};
+ const app=createApp(x.runtime,x.h.origin,'local',{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,supplierConsoleEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
+ const read=(path:string,who=s.owner)=>x.h.call('GET',s.root+path,who,undefined,{},app);
+ for(const path of ['/products','/supply-products','/products/'+id+'/supply-terms','/supplier-console/products','/supplier-console/products/'+id]) {
+  const response=ok(await read(path)),product=response.items?response.items.find((i:any)=>i.product_id===id):response.product??response;
+  assert.deepEqual(product.inventory,expected,path);
+ }
+ assert.deepEqual(ok(await x.h.call('GET','/public/stores/'+s.slug)),before);
+ const projection=ok(await read('/preview')).projection;assert.equal(JSON.stringify(projection).includes('inventory'),false);assert.equal(JSON.stringify(projection).includes('reserved'),false);
+ await x.tx(async q=>{
+  // This fixture already authorized these own-item identities through the GETs.
+  const rows=(await q.query(`SELECT i.item_id,i.stock,i.reserved,${INVENTORY_POSITION_COLUMNS} FROM commerce_items i WHERE i.item_id=$1`,[id])).rows;
+  const direct=await inventoryPositions(q,[id,id]);assert.deepEqual(direct.get(id),{stock:20,held:3,allocated:5,available:12});
+  const reporting=await inventoryPositions(q,[id],{onInconsistent:'report'});assert.deepEqual(reporting.get(id),expected);
+  const spy=t.mock.method(q,'query',()=>{throw Error('preloaded inventory must not issue another query');});
+  try {
+   assert.deepEqual(await inventoryPositions(q,[id,id],{onInconsistent:'report',rows}),reporting);
+   const bad={...rows[0],item_id:randomUUID(),reserved:9};
+   const mixed=await inventoryPositions(q,[id,bad.item_id],{onInconsistent:'report',rows:[...rows,bad]});
+   assert.deepEqual(mixed.get(id),expected);assert.deepEqual(mixed.get(bad.item_id),{state:'inconsistent',code:'reservation_inconsistent'});
+   await assert.rejects(inventoryPositions(q,[id],{onInconsistent:'report',rows:[...rows,bad]}),code('inventory_projection_inconsistent'));
+  } finally {spy.mock.restore();}
+ });
+ const stranger=(await x.h.person('另一事業合成會員')).session;
+ for(const path of ['/products','/supply-products','/products/'+id+'/supply-terms','/supplier-console/products','/supplier-console/products/'+id]) {
+  const response=await read(path,stranger);assert.equal(response.status,404,path);assert.equal(JSON.stringify(response.data).includes(id),false);
+ }
+ const edit=await x.send(s,'/products/'+id,{stock:7},s.product.version,'PATCH');ok(edit,409);assert.equal(edit.data.code,'stock_below_reserved');assert.match(edit.data.detail,/已占用.*預留中＋已付款待出貨/);
+ await x.tx(q=>recordHandover(q,s,{shipmentRef:randomUUID(),lines:[{orderId:paid.order_id,itemId:id,quantity:2}]}));
+ assert.deepEqual(ok(await read('/products')).items[0].inventory,{state:'ready',stock:18,reserved:6,available:12,held:3,allocated:3});
+ // The fixture host has checkout OFF: turning off new checkout never erases paid allocations.
+ const site=ok(await x.h.call('GET','/site',undefined,undefined,{},app));assert.equal(site.commerce_checkout_enabled,false);
 });

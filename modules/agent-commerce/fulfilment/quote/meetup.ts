@@ -1,4 +1,5 @@
 import type {ShippingQuoteLine} from '../../checkout/terms.js';
+import {hostedLineFulfilment, fulfilmentConsentFailure} from '../rules/consent.js';
 
 const bySku=(a:string,b:string)=>a<b?-1:a>b?1:0;
 
@@ -36,7 +37,8 @@ export function meetupQuote(input:MeetupQuoteRequest):MeetupQuoteResult {
   const lines=[...input.lines].sort((a,b)=>bySku(a.sku,b.sku));
   const failing:{sku:string;reason:'fulfilment_not_agreed'|'method_unsupported'}[]=[];
   for(const line of lines){
-    if(line.fulfilment.kind==='not_agreed')failing.push({sku:line.sku,reason:'fulfilment_not_agreed'});
+    const consentFailure=fulfilmentConsentFailure(line.fulfilment);
+    if(consentFailure)failing.push({sku:line.sku,reason:consentFailure});
     else if(line.fulfilment.kind==='drop_ship')failing.push({sku:line.sku,reason:'method_unsupported'});
   }
   if(failing.length)return {kind:'unavailable',lines:failing};
@@ -51,5 +53,5 @@ export function meetupQuote(input:MeetupQuoteRequest):MeetupQuoteResult {
 }
 
 export function meetupLines(lines:readonly ShippingQuoteLine[]):MeetupQuoteLine[] {
-  return lines.map(line=>({sku:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,supplier_shop_id:line.supplier_shop_id,fulfilment:line.own?{kind:'self' as const}:{kind:'not_agreed' as const}}));
+  return lines.map(line=>({sku:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,supplier_shop_id:line.supplier_shop_id,fulfilment:hostedLineFulfilment(line.own)}));
 }

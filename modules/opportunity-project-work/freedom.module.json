@@ -108,6 +108,7 @@
       "operations": [
         "work.list",
         "work.list.page",
+        "work.engagement.summary",
         "work.create",
         "work.claim",
         "work.claim.update",
