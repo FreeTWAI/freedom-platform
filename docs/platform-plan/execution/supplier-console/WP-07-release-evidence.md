@@ -55,7 +55,9 @@ npx tsx scripts/verify-cloud-candidate.ts execute --target staging --expected-re
 # 2. operator 在同一個 release 關閉旗標後（不換 origin 與資料庫）：
 #    舊讀取與 handle 同值，新營運中心路由 404。同一書籤打開舊供貨商品庫
 #    （.hosted-supply-catalog）：標題是供貨事業名稱；商品卡 article.hosted-store-product
-#    的商品名稱標題下，要有精確的「供貨單價 <TWD 金額>」、「庫存 <stock>」與商品說明。
+#    的商品名稱標題下，要有精確的「供貨單價 <TWD 金額>」與商品說明，
+#    且只有一列「庫存 <stock>・已占用 0・可售 <stock>」；庫存與可售都等於 handle 的庫存，確認複查時沒有占用。
+#    商品卡不得出現「庫存紀錄不一致」或「庫存明細暫時無法讀取」。
 #    不得出現「找不到這間商店」或「找不到這個供貨商品庫」。
 #    通過後 bookmark 為 old_page，bookmark_values_matched 為 true。
 npx tsx scripts/verify-cloud-candidate.ts execute --target staging --expected-release-sha <候選 SHA> \
