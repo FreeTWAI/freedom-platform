@@ -14,8 +14,12 @@ test('PROMO-01 document parsing detaches content and normalizes line endings wit
 });
 
 test('PROMO-02 reject URLs, authority fields, unsupported ratios and schema versions', () => {
+  for (const ratio of ['1:1', '4:5'] as const) {
+    assert.equal(parsePromoDocument({...initialPromoDocument(), ratio}).ratio, ratio);
+  }
   for (const patch of [{ownerId: 'another-member'}, {assetUrl: 'file:///private'}, {schemaVersion: 2},
-    {ratio: '9:16'}, {ratio: 'toString'}, {accent: 'url(https://example.invalid)'}]) {
+    {ratio: '9:16'}, {ratio: 'toString'}, {ratio: ['1:1']}, {ratio: ['4:5']},
+    {ratio: null}, {ratio: 1}, {accent: 'url(https://example.invalid)'}]) {
     assert.throws(() => parsePromoDocument({...initialPromoDocument(), ...patch}), PromoError);
   }
 });
