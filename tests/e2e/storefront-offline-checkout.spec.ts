@@ -907,9 +907,9 @@ test('VARIANTS-E2E each SKU keeps its stock and checkout/order labels survive a 
   const axes=[{key:randomUUID(),name:'顏色',values:[{key:randomUUID(),name:'白'},{key:randomUUID(),name:'黑'}]},{key:randomUUID(),name:'尺寸',values:[{key:randomUUID(),name:'M'}]}];
   const input={title:'經典 T 恤',description:'合成商品組介紹',axes,members:[{product_id:a.product_id,product_version:a.version,value_keys:[axes[0].values[0].key,axes[1].values[0].key]},{product_id:b.product_id,product_version:b.version,value_keys:[axes[0].values[1].key,axes[1].values[0].key]}],default_product_id:a.product_id,order:0};
   await store.sellerPut(store.root+'/product-groups/'+a.sku,input,'1');await store.republish();await openBuyer(e2eAuthPool,context,store);
-  const page=await context.newPage();await start(page,store);await expect(page.locator('#shop-checkout')).toContainText('經典 T 恤（白／M）');
+  const page=await context.newPage();await start(page,store);const checkout=await freeze(page,store);expect(checkout.terms.items[0].title).toBe('經典 T 恤（白／M）');await expect(page.locator('#shop-checkout')).toContainText('經典 T 恤（白／M）');
   for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-checkout-label-'+width+'.png'),fullPage:true});}
-  const checkout=await freeze(page,store);expect(checkout.terms.items[0].title).toBe('經典 T 恤（白／M）');const order=await place(page,'面交付款');expect(order.lines[0].title).toBe('經典 T 恤（白／M）');
+  const order=await place(page,'面交付款');expect(order.lines[0].title).toBe('經典 T 恤（白／M）');
   const group=await store.sellerGet(store.root+'/product-groups/'+a.sku);await store.sellerPut(store.root+'/product-groups/'+a.sku,{...input,title:'新版 T 恤'},group.version);await store.republish();
   await page.reload();await expect(page.locator('#shop-order')).toContainText('經典 T 恤（白／M）');await expect(page.locator('#shop-order')).not.toContainText('新版 T 恤');
   const seller=await store.sellerGet(store.root+'/checkout-orders/'+order.order_ref);expect(seller.lines[0].title).toBe('經典 T 恤（白／M）');
