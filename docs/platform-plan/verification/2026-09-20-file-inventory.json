@@ -23389,8 +23389,8 @@
     },
     {
       "path": "tests/e2e/supplier-console.spec.ts",
-      "bytes": 35778,
-      "sha256": "bf7a2470c49f85a4ec8890b1b19245ec4592fa1a0fc33a3032ef3ebe0f2bb103"
+      "bytes": 37139,
+      "sha256": "89f57c1ab17a4c409b86f8c3f849ec9661ad92b2a7aad0c063dd377acd0d856d"
     },
     {
       "path": "tests/e2e/tenant-member-grants-role-change.spec.ts",

@@ -449,10 +449,11 @@ test('SC-E2E-02 retail owner sees the same console with 已開零售 and 前往�
 });
 
 test('merchant stock shows real paid allocations and held units without losing healthy products',async({browser,e2eAuthPool},info)=>{
- const store=await setupCartFixtureStore(e2eAuthPool,browser,true),context=await browser.newContext({baseURL:store.origin});
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{realAdmission:true}),context=await browser.newContext({baseURL:store.origin});
  try {
   await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
   await apiLogin(context,store.origin,store.seller.email);
+  await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成付款與庫存驗證'});
   const order=async(quantity:number)=>{
    const response=await context.request.post(`/api/v1/public/stores/${store.slug}/checkouts`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:{publication_revision:store.revision,lines:[{sku:store.products[0].sku,quantity}],contact:{name:'合成庫存買家',email:'stock-buyer@example.test',phone:'0900000000'},delivery:{method:'meetup',name:'合成庫存買家',mobile:'0900000000'},invoice:null,consents:[]}});
    expect(response.status(),await response.text()).toBe(201);const checkout=await response.json();
@@ -483,8 +484,11 @@ test('merchant stock shows real paid allocations and held units without losing h
   });
   await page.goto('/'+hash);await expect(root).toContainText('庫存紀錄不一致');await expect(row.locator('.merchant-inventory-values')).toHaveText('5／—／—');
   await expect(root.locator('tbody tr').filter({hasText:store.products[1].title}).locator('.merchant-inventory-values')).toHaveText('8／0／8');
-  await page.setViewportSize({width:390,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:info.outputPath('stock-supplier-inconsistent-390.png'),fullPage:true});
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(root.locator('.merchant-inventory-definition')).toHaveCount(1);
+   await page.screenshot({path:info.outputPath(`stock-supplier-inconsistent-${width}.png`),fullPage:true});
+  }
   await page.unroute('**/supplier-console/products');await page.goto(`/#stores/${store.tenant}/${store.instance}`);
   const own=page.locator('.hosted-store-product').filter({has:page.getByRole('heading',{name:store.products[0].title,exact:true})});
   await expect(own.locator('.merchant-inventory-values')).toHaveText('庫存 5・已占用 3・可售 2');
@@ -494,6 +498,15 @@ test('merchant stock shows real paid allocations and held units without losing h
    await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    await expect(page.locator('.hosted-store .merchant-inventory-definition')).toHaveCount(1);
    await page.screenshot({path:info.outputPath(`stock-store-mixed-${width}.png`),fullPage:true});
+  }
+  await page.route('**/storefronts/*/products',async route=>{const response=await route.fetch(),data=await response.json();data.items[0].inventory={state:'inconsistent',code:'reservation_inconsistent'};await route.fulfill({response,json:data});});
+  await page.reload();await expect(own.locator('.merchant-inventory-values')).toHaveText('庫存 5・已占用 —・可售 —');
+  await expect(own.getByRole('button',{name:'重新讀取庫存',exact:true})).toHaveClass(/btn-small/);
+  await expect(page.locator('.hosted-store-product').filter({has:page.getByRole('heading',{name:store.products[1].title,exact:true})}).locator('.merchant-inventory-values')).toHaveText('庫存 8・已占用 0・可售 8');
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(page.locator('.hosted-store .merchant-inventory-definition')).toHaveCount(1);
+   await page.screenshot({path:info.outputPath(`stock-store-inconsistent-${width}.png`),fullPage:true});
   }
  } finally {try{await context.close();}finally{await store.close();}}
 });
