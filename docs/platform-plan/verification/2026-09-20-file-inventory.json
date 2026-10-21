@@ -23734,8 +23734,8 @@
     },
     {
       "path": "tests/integration/tenant-rls-restore-drill.test.ts",
-      "bytes": 91899,
-      "sha256": "8164c34fa4863b123855c0cb1264fa8121712f76d2c42a0b4d039aa0f5f8b1d0"
+      "bytes": 91886,
+      "sha256": "59402debf9a4a31b3188c6f21f732f5f7f421948af5ee540cd99719aa6c208ff"
     },
     {
       "path": "tests/integration/helpers/media-restore-fixtures.ts",
