@@ -24,6 +24,8 @@
 | [EC-SPEC-10](EC-SPEC-10-release-operations.md) | 能力開關、writer floor、發布順序、回退與試用 |
 | [EC-SPEC-11](EC-SPEC-11-offline-payment.md) | 線下付款：銀行匯款、面交付款與面交取貨，由店家確認收款 |
 | [work-plan.md](work-plan.md) | 工作包、依賴、CLI 分工、共用檔案與 Supplier Console 的接點 |
+| [creator-curation-plan.md](creator-curation-plan.md) | 創作者推薦與社群合作增量：固定 main 盤點、待審相依、分階段交付；提案，未實作 |
+| [creator-curation-spec.md](creator-curation-spec.md) | 無須開店的推薦清單、版本化合作與歸因、佣金證據、退出與退款、CC-01～24；planned／not_run |
 
 ## 分工
 
