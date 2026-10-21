@@ -19,7 +19,12 @@ export function HostedSupplyTerms({client, path, title, description, supplierNam
   useEffect(() => {
     const controller = new AbortController(); setError('');
     void client.get(path, {signal: controller.signal}).then(raw => {
-      if (!controller.signal.aborted) setView(SupplyTermsSchema.parse(raw));
+      if (!controller.signal.aborted) {
+        const next=SupplyTermsSchema.parse(raw);
+        // Refresh only stock: an edited form retains its original terms and CAS
+        // version, so another writer still requires the existing conflict review.
+        setView(current=>current?.product_id===next.product_id?{...current,stock:next.stock,reserved:next.reserved,available:next.available,inventory:next.inventory}:next);
+      }
     }).catch(cause => {
       if (!controller.signal.aborted) setError(cause instanceof ApiError && !cause.network ? cause.detail ?? '目前無法讀取供貨條件。' : '暫時無法讀取供貨條件，請重試。');
     });
@@ -30,7 +35,7 @@ export function HostedSupplyTerms({client, path, title, description, supplierNam
     <div className="actions">{error && <button type="button" className="btn btn-ghost" onClick={() => setReload(n => n + 1)}>重試讀取供貨條件</button>}
       <button type="button" className="btn btn-ghost" onClick={onCancel}>返回商品</button></div>
   </div>;
-  return <SupplyForm view={view} title={title} description={description} supplierName={supplierName} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly} onRefresh={()=>setReload(n=>n+1)}/>;
+  return <>{error&&<p className="field-hint" role="status">{error}</p>}<SupplyForm view={view} title={title} description={description} supplierName={supplierName} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly} onRefresh={()=>setReload(n=>n+1)}/></>;
 }
 
 function SupplyForm({view, title, description, supplierName, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false, onRefresh}: {
