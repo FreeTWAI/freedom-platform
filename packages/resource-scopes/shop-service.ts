@@ -41,10 +41,11 @@ function binding(row:any,host:ShopServiceHost,version:'legacy'|'v2'){
  * Caller must forget the context on both commit and rollback. No I/O here. */
 export async function lockShopService(q:PoolClient,authorization:string|undefined,host:ShopServiceHost):Promise<ShopContext>{
  requireShopHost(host);
- const version=typeof authorization==='string'&&/^Bearer fw_shop_v2_[A-Za-z0-9_-]{43}$/.test(authorization)?'v2':
-  typeof authorization==='string'&&/^Bearer fw_shop_[A-Za-z0-9_-]{43}$/.test(authorization)?'legacy':null;
- if(!version)invalid();
- const hash=createHash('sha256').update(authorization!.slice(7)).digest('hex');
+ const match=authorization?.match(/^[Bb][Ee][Aa][Rr][Ee][Rr] +(fw_shop_(?:v2_)?[A-Za-z0-9_-]{43})$/);
+ if(!match)invalid();
+ // The anchored match has length 51 for legacy, including suffixes starting v2_.
+ const credential=match![1],version=credential.length===54?'v2':'legacy';
+ const hash=createHash('sha256').update(credential).digest('hex');
  const owner=(await q.query("SELECT s.owner_id,s.community_id FROM commerce_shop_keys k JOIN commerce_shops s USING(shop_id) WHERE s.origin='imported' AND k.token_hash=$1",[hash])).rows[0];
  if(!owner)invalid();
  const user=await q.query('SELECT 1 FROM users WHERE user_id=$1 AND community_id=$2 AND active AND (NOT onboarding_required OR onboarding_completed_at IS NOT NULL) FOR SHARE',[owner.owner_id,owner.community_id]);
