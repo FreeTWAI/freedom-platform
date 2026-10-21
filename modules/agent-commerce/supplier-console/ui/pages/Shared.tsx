@@ -1,10 +1,11 @@
-import {useEffect,useId,useRef,type ReactNode} from 'react';
+import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import type {ConsoleController,ReadSlot} from '../../state/useSupplierConsoleController';
 import type {Fields} from '../../state/drafts';
 import type {AttemptKind} from '../../state/attempt';
 import {conflictRows} from '../../state/drafts';
 import {fieldLabels,changeLabel,changeSubject} from '../view';
 import type {SupplierChanges} from '../../../../../contracts/guild-launchpad/v1/supplier-console';
+import {SupplyProductInputSchema} from '../../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {formatIsoLocal,parseMajorToMinor} from '../../../../../apps/portal-web/src/format';
 import {supplierConsoleHref} from '../route';
 export function dataTime(time:string|null,seconds=true){return time?new Date(time).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',...(seconds?{second:'2-digit'}:{})}):'尚未取得';}
@@ -18,17 +19,29 @@ export function ReadStatus<T>({c,name,label,scopedAction=false,showLabel=false}:
 }
 export function WriteAccess({c,children}:{c:ConsoleController;children:ReactNode}) {return c.profile?.capabilities.includes('store:write')?<>{children}</>:<div className="stack"><h2 tabIndex={-1}>{c.route.page==='product'?'商品詳情':c.route.page==='partner'?'合作店家詳情':c.route.page==='review'?'審核售價申請':c.route.page==='product-new'?'新增商品':c.route.page==='partners'?'合作店家':c.route.page==='terms'?'供貨條件與審核':c.route.page==='reports'?'營運報表':c.route.page==='materials'?'行銷素材':c.route.page==='material-new'?'新增素材':c.route.page==='material'?'素材詳情':'商品與庫存'}</h2><p>需要商品編輯權限才能查看。供貨價與條件不會顯示，請聯絡業務空間擁有者。</p></div>;}
 export function Capacity({count}:{count:number}){return <p className="field-hint">共用商品容量 {count}／200（含供貨商品與商店選品）</p>;}
+const positiveMoneySchema=SupplyProductInputSchema.shape.cost_minor;
+const positiveMoneyMaximum=(positiveMoneySchema.maxValue!/100).toLocaleString('en-US');
 export function Editor({c,name,title,base,version,kind,path,target,productId,fields,primary=false,disabled=false,children}:{c:ConsoleController;name:string;title:string;base:Fields;version:string;kind:AttemptKind;path:string;target:string;productId?:string;fields:{key:string;label?:string;hint?:string;multiline?:boolean;money?:boolean;positiveMoney?:boolean;max?:number;required?:boolean;options?:{value:string;label:string}[]}[];primary?:boolean;disabled?:boolean;children?:ReactNode}){
  const draft=c.drafts[name],values={...base,...draft?.fields},conflict=c.conflicts[name],hintPrefix=useId(),validationId=useId();
- const errors:Record<string,string>={};
- for(const field of fields)if(field.positiveMoney){try{parseMajorToMinor(String(values[field.key]??''));}catch(error){errors[field.key]=(error as Error).message;}}
- const invalid=Object.keys(errors).length>0;
- return <form className="stack" aria-label={title} onSubmit={e=>{e.preventDefault();if(invalid)return;c.save(kind,title,name,base,version,target,path,productId);}}>
+ const [announcement,setAnnouncement]=useState(''),errors:Record<string,string>={};
+ const moneyRule=(label:string)=>`${label}須大於 0，最多兩位小數。最高 NT$ ${positiveMoneyMaximum}。`;
+ for(const field of fields)if(field.positiveMoney){
+  const value=String(values[field.key]??'').trim(),label=field.label??fieldLabels[field.key];
+  if(!value)continue;
+  try{if(!positiveMoneySchema.safeParse(parseMajorToMinor(value)).success)errors[field.key]=`${label}不可超過 NT$ ${positiveMoneyMaximum}。`;}
+  catch{errors[field.key]=`請輸入大於 0 的${label}，最多兩位小數；無效數字會被拒絕，不會四捨五入。`;}
+ }
+ const invalid=Object.keys(errors).length>0,incomplete=fields.some(f=>f.positiveMoney&&f.required&&!String(values[f.key]??'').trim());
+ return <form className="stack" aria-label={title} onSubmit={e=>{e.preventDefault();setAnnouncement(Object.values(errors).join(' '));if(invalid||incomplete)return;c.save(kind,title,name,base,version,target,path,productId);}}>
   <fieldset className="hosted-store-fields stack" disabled={c.locked||disabled||!!conflict}><legend className="sr-only">{title}</legend>
-   {fields.map(f=><div key={f.key}><label className="field">{f.label??fieldLabels[f.key]}{f.multiline?<textarea aria-describedby={f.hint?`${hintPrefix}-${f.key}`:undefined} maxLength={f.max??2000} required={f.required} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>:f.options?<select value={String(values[f.key])} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}>{f.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:<input aria-label={f.positiveMoney?(f.label??fieldLabels[f.key]):undefined} aria-invalid={f.positiveMoney?!!errors[f.key]:undefined} aria-describedby={f.positiveMoney?`${validationId}-${f.key}`:undefined} required={f.required} maxLength={f.max??120} inputMode={f.money?'decimal':f.key==='stock'?'numeric':undefined} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>}{f.positiveMoney&&<span id={`${validationId}-${f.key}`} className="field-hint" aria-live="polite">{errors[f.key]||'供貨單價須大於 0，最多兩位小數。'}</span>}</label>{f.hint&&<p id={`${hintPrefix}-${f.key}`} className="field-hint">{f.hint}</p>}</div>)}
+   {fields.map(f=>{
+    const label=f.label??fieldLabels[f.key],describedBy=[f.hint?`${hintPrefix}-${f.key}`:null,f.positiveMoney?`${validationId}-${f.key}`:null].filter(Boolean).join(' ')||undefined;
+    return <div key={f.key}><label className="field">{label}{f.multiline?<textarea aria-describedby={describedBy} maxLength={f.max??2000} required={f.required} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>:f.options?<select value={String(values[f.key])} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}>{f.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:<input aria-invalid={f.positiveMoney&&String(values[f.key]??'').trim()?!!errors[f.key]:undefined} aria-describedby={describedBy} required={f.required} maxLength={f.max??120} inputMode={f.money?'decimal':f.key==='stock'?'numeric':undefined} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)} onBlur={f.positiveMoney?()=>setAnnouncement(errors[f.key]??''):undefined}/>}</label>{f.hint&&<p id={`${hintPrefix}-${f.key}`} className="field-hint">{f.hint}</p>}{f.positiveMoney&&<p id={`${validationId}-${f.key}`} className="field-hint">{errors[f.key]||moneyRule(label)}</p>}</div>;
+   })}
    {children}
-   <div className="actions"><button className={primary?'btn btn-primary':'btn btn-ghost'} disabled={c.locked||disabled||!draft||!!conflict||invalid}>{title}</button>{draft&&!conflict&&<button type="button" className="btn btn-ghost" onClick={()=>c.discard(name)}>放棄我的修改</button>}</div>
+   <div className="actions"><button className={primary?'btn btn-primary':'btn btn-ghost'} disabled={c.locked||disabled||!draft||!!conflict||invalid||incomplete}>{title}</button>{draft&&!conflict&&<button type="button" className="btn btn-ghost" onClick={()=>c.discard(name)}>放棄我的修改</button>}</div>
   </fieldset>
+  {fields.some(f=>f.positiveMoney)&&<p className="sr-only" role="status" aria-live="polite">{announcement}</p>}
   {draft?.stale&&<p className="field-hint">保存前會以最新資料核對</p>}
   {c.sectionStatus[name]&&<p role="status">{c.sectionStatus[name]}</p>}
   {conflict&&draft&&<div className="banner stack"><p>資料剛剛被更新。你的修改還在，請確認後再套用。</p>
