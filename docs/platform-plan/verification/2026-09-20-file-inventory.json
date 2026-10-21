@@ -18688,6 +18688,11 @@
       "sha256": "761805d0d8a0795aa341b2e194b0e29ce7fefdd3141808b52574e841dcfb89c5"
     },
     {
+      "path": "modules/agent-commerce/storefront/categories/freedom.module.json",
+      "bytes": 1017,
+      "sha256": "2f92cde70f0c9bcc3376676d9b7bca78225e202d2a3646c1d3505d0c16bad63d"
+    },
+    {
       "path": "modules/agent-commerce/storefront/gallery/commands.ts",
       "bytes": 12213,
       "sha256": "9b7312e2d0af53ca41ffaaa3939b1c02b63e75b32ecb6d86689337102b7519e9"
