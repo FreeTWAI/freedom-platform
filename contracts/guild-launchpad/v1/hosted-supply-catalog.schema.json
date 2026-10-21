@@ -290,6 +290,71 @@
           "maxLength": 19,
           "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
         },
+        "inventory": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "stock": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "reserved": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "available": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "held": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "allocated": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "state",
+                "stock",
+                "reserved",
+                "available",
+                "held",
+                "allocated"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "inconsistent"
+                },
+                "code": {
+                  "type": "string",
+                  "const": "reservation_inconsistent"
+                }
+              },
+              "required": [
+                "state",
+                "code"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
         "cost_minor": {
           "type": "integer",
           "minimum": 1,
@@ -307,7 +372,7 @@
         "cost_minor"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: store_write_required_for_cost."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, store_write_required_for_cost."
     },
     "products": {
       "type": "object",
@@ -357,6 +422,71 @@
                 "maxLength": 19,
                 "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
               },
+              "inventory": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "ready"
+                      },
+                      "stock": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "reserved": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "available": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "held": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "allocated": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "stock",
+                      "reserved",
+                      "available",
+                      "held",
+                      "allocated"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "inconsistent"
+                      },
+                      "code": {
+                        "type": "string",
+                        "const": "reservation_inconsistent"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "code"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "cost_minor": {
                 "type": "integer",
                 "minimum": 1,
@@ -386,7 +516,7 @@
         "limit"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: store_write_required_for_cost."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: merchant_inventory_equations_and_parent_counts, item_local_inconsistency, store_write_required_for_cost."
     }
   }
 }

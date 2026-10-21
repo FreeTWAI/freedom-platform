@@ -1,5 +1,7 @@
 import {CategoriesEditor} from '../../../../modules/agent-commerce/storefront/categories/Editor';
 import {VariantsEditor} from '../../../../modules/agent-commerce/storefront/variants/Editor';
+import {StoreOverviewSchema,type StoreOverview} from '../../../../contracts/guild-launchpad/v1/hosted-commerce-setup';
+import {storeOrderStatus} from '../../../../modules/agent-commerce/seller-console/ui/view';
 import {HostedStoreGallery} from './HostedStoreGallery';
 import {ProductGalleriesSchema,type ProductGalleryDraft} from '../../../../contracts/guild-launchpad/v1/storefront-gallery';
 import {HostedStorePolicies} from './HostedStorePolicies';
@@ -18,8 +20,8 @@ import {z} from 'zod';
 import {OpaqueId} from '../../../../contracts/common/v1/identity';
 import {
   StoreViewSchema, StoreSetupInputSchema, StoreUpdateInputSchema, SlugAvailabilitySchema,
-  ProductInputSchema, ProductViewSchema, ProductPageSchema, ProductRemovedSchema, StorePreviewSchema,
-  type ProductView, type StoreView,
+  ProductInputSchema, MerchantProductViewSchema as ProductViewSchema, MerchantProductPageSchema as ProductPageSchema, ProductRemovedSchema, StorePreviewSchema,
+  type MerchantProductView as ProductView, type StoreView,
 } from '../../../../contracts/guild-launchpad/v1/storefront';
 import {StoreAppearanceSchema, type StoreAppearance, type StoreTemplate} from '../../../../contracts/guild-launchpad/v1/storefront-presentation';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
@@ -37,7 +39,7 @@ import {useLocalAction} from '../useLocalAction';
 import {HostedSupplyCatalog, SupplyCatalogList} from './HostedSupplyCatalog';
 import {HostedReservationSetting} from './HostedReservationSetting';
 import './HostedStore.css';
-import {ProductSearch,productMatches} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
+import {ProductSearch,productMatches,MerchantInventorySummary,InventoryDefinition,STOCK_HINT} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
 
 const NOTICE = '店鋪／商品展示已就緒，交易尚未啟用';
 // Same path as productPath in modules/agent-commerce/hosted/page.ts (not exported).
@@ -80,7 +82,7 @@ type Preview = z.infer<typeof StorePreviewSchema>;
 const SupplierConsole = lazy(() => import('../../../../modules/agent-commerce/supplier-console/ui/SupplierConsole').then(m => ({default:m.SupplierConsole})));
 const SellerConsole = lazy(() => import('../../../../modules/agent-commerce/seller-console/ui/SellerConsole').then(m => ({default:m.SellerConsole})));
 type RegisterLeave = (guard: ((nextHash:string|null) => boolean) | null) => void;
-export function HostedStore({client, enabled, appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false, locationHash, userId, registerLeave, photosEnabled=false, photoUploadsEnabled=false, materialMediaEnabled=false, materialUploadsEnabled=false, distributionPhotosEnabled=false, supplyOfferPhotosEnabled=false, consoleEnabled=false, commerceConsoleEnabled=false, providerEnvironment='sandbox'}: {galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;distributionPhotosEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;commerceConsoleEnabled?:boolean;providerEnvironment?:'sandbox'|'live';consoleEnabled?:boolean;client: PortalClient; photosEnabled?:boolean;photoUploadsEnabled?:boolean;enabled: boolean; locationHash: string; userId: string; registerLeave: RegisterLeave}) {
+export function HostedStore({client, enabled, appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false, locationHash, userId, registerLeave, photosEnabled=false, photoUploadsEnabled=false, materialMediaEnabled=false, materialUploadsEnabled=false, distributionPhotosEnabled=false, supplyOfferPhotosEnabled=false, consoleEnabled=false, commerceConsoleEnabled=false, checkoutEnabled=false, providerEnvironment='sandbox'}: {galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;distributionPhotosEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;commerceConsoleEnabled?:boolean;checkoutEnabled?:boolean;providerEnvironment?:'sandbox'|'live';consoleEnabled?:boolean;client: PortalClient; photosEnabled?:boolean;photoUploadsEnabled?:boolean;enabled: boolean; locationHash: string; userId: string; registerLeave: RegisterLeave}) {
   const consoleRoute = parseSupplierConsoleRoute(locationHash);
   if (consoleEnabled && enabled && consoleRoute) {
     const key = `${userId}:${client.sessionGeneration}:${consoleRoute.tenantId}:${consoleRoute.instanceId}`;
@@ -89,11 +91,11 @@ export function HostedStore({client, enabled, appearanceEnabled=false,policiesEn
   const sellerRoute = parseSellerConsoleRoute(locationHash);
   if (commerceConsoleEnabled && enabled && sellerRoute) {
     const key = `${userId}:${client.sessionGeneration}:${sellerRoute.tenantId}:${sellerRoute.instanceId}`;
-    return <PageLoadBoundary label="賣家主控台" resetKey={key}><SellerConsole key={key} client={client} userId={userId} route={sellerRoute} registerLeave={registerLeave} providerEnvironment={providerEnvironment}/></PageLoadBoundary>;
+    return <PageLoadBoundary label="賣家主控台" resetKey={key}><SellerConsole key={key} client={client} userId={userId} route={sellerRoute} registerLeave={registerLeave} providerEnvironment={providerEnvironment} checkoutEnabled={checkoutEnabled}/></PageLoadBoundary>;
   }
   const retained = sellerOrdersRoute(locationHash) ?? (!enabled ? sellerOrdersRoute(locationHash + '/orders') : null);
   if (retained?.supplier) return <HostedSupplierOrders key={`${userId}:${client.sessionGeneration}:${retained.tenantId}:${retained.instanceId}`} client={client} route={retained}/>;
-  if (retained) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${retained.tenantId}:${retained.instanceId}`} client={client} route={retained} registerLeave={registerLeave}/>;
+  if (retained) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${retained.tenantId}:${retained.instanceId}`} client={client} route={retained} registerLeave={registerLeave} commerceConsoleEnabled={commerceConsoleEnabled}/>;
   if (!enabled) return <p className="banner" role="status">目前不開放商店設定。若要查看或取消既有預留，請開啟你保存的店主管理連結；登入後會重新確認目前權限。</p>;
   if (consoleRoute && locationHash.split('?')[0].split('/')[3] === 'supply') return <HostedSupplyCatalog supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${consoleRoute.tenantId}:${consoleRoute.instanceId}`} client={client} tenantId={consoleRoute.tenantId} instanceId={consoleRoute.instanceId} registerLeave={registerLeave}/>;
   const path = locationHash.replace(/^#/, '').split('/');
@@ -104,9 +106,9 @@ export function HostedStore({client, enabled, appearanceEnabled=false,policiesEn
   const cooperation = path.length===4&&path[3]==='cooperation';
   const valid = (path.length === 3 || !!offerId || cooperation) && path[0] === 'stores' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success;
   const fallback = sellerSlugFallback(locationHash);
-  if (fallback?.orders) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} route={{tenantId:fallback.tenantId,instanceId:fallback.instanceId,supplier:false}} registerLeave={registerLeave}/>;
-  if (fallback) return <StorePage categoriesEnabled={categoriesEnabled} variantsEnabled={variantsEnabled} galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
-  return valid ? <StorePage categoriesEnabled={categoriesEnabled} variantsEnabled={variantsEnabled} galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}:${offerId??(cooperation?'cooperation':'store')}`} offerId={offerId} cooperation={cooperation} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
+  if (fallback?.orders) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} route={{tenantId:fallback.tenantId,instanceId:fallback.instanceId,supplier:false}} registerLeave={registerLeave} commerceConsoleEnabled={commerceConsoleEnabled}/>;
+  if (fallback) return <StorePage categoriesEnabled={categoriesEnabled} variantsEnabled={variantsEnabled} galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${fallback.tenantId}:${fallback.instanceId}`} client={client} userId={userId} tenantId={fallback.tenantId} instanceId={fallback.instanceId} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} checkoutEnabled={checkoutEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>;
+  return valid ? <StorePage categoriesEnabled={categoriesEnabled} variantsEnabled={variantsEnabled} galleryEnabled={galleryEnabled} policiesEnabled={policiesEnabled} appearanceEnabled={appearanceEnabled} supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}:${offerId??(cooperation?'cooperation':'store')}`} offerId={offerId} cooperation={cooperation} client={client} userId={userId} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} consoleEnabled={consoleEnabled} commerceConsoleEnabled={commerceConsoleEnabled} checkoutEnabled={checkoutEnabled} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/> : <MissingStore/>;
 }
 function BackLink() { return <div className="actions"><a href="#stores" className="btn btn-ghost">返回我的商店</a></div>; }
 function MissingStore() { return <div className="hosted-store stack"><BackLink/><p>找不到這間商店。</p></div>; }
@@ -128,7 +130,7 @@ function StoreList({client}: {client: PortalClient}) {
 
 type Attempt = {targetMissingIsStore?: boolean; method: 'post' | 'patch'; path: string; body: unknown; version?: string; schema: z.ZodType;
   key: string; success: (value: unknown) => void; notice: string; product?: boolean; fieldError?: (error: ApiError) => void};
-function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {supplyOfferPhotosEnabled?:boolean;galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
+function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, checkoutEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {supplyOfferPhotosEnabled?:boolean;galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; checkoutEnabled?:boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const [distributionRefresh,setDistributionRefresh]=useState(0);
   const [view, setView] = useState<StoreView | null>(null);
@@ -301,7 +303,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
       {!view.writable && <p>{view.capabilities.some(key => key !== 'store:read') ? '這間商店目前暫停，無法修改。' : '你可以檢視這間商店，但不能修改。'}</p>}
       {!store ? can('store:manage') ? <SettingsForm key="setup" client={client} root={root} busy={locked} onMissing={() => setMissing(true)} onDirty={value => markDirty('settings', value)} onSave={(body, success, fieldError) => command({method: 'post', path: root + '/setup', body, schema: StoreViewSchema, notice: '已建立商店。', success, fieldError})}/>
         : <p>這間商店還沒完成設定，請業務空間擁有者或管理員設定。</p> : <>
-        <p className="banner" role="note">{reservationSetting?.reservation_enabled && reservationSetting.admission_enabled ? '已開放 30 分鐘庫存預留；付款與出貨尚未啟用。' : NOTICE}</p>
+        {checkoutEnabled?<StoreOrderBanner client={client} tenantId={tenantId} instanceId={instanceId} consoleEnabled={commerceConsoleEnabled} refresh={distributionRefresh}/>:<p className="banner" role="note">{reservationSetting?.reservation_enabled && reservationSetting.admission_enabled ? '已開放 30 分鐘庫存預留；付款與出貨尚未啟用。' : NOTICE}</p>}
         <nav className="hosted-supply-nav hosted-retail-nav" aria-label="商店工作區">{([['products','商品'],['cooperation','供貨合作'],['publish','店面與發布'],['settings','商店資料']] as const).map(([key,label])=><button key={key} type="button" className="btn btn-ghost" aria-pressed={area===key} aria-controls={`store-${key}-panel`} onClick={()=>setArea(key)}>{label}</button>)}</nav>
         {otherDraft&&<div className="hosted-store-draft-note"><p>另一個工作區有未儲存內容，先儲存或取消後就能繼續修改。</p><button type="button" className="btn btn-ghost" onClick={()=>setArea(draftArea(otherDraft[0]))}>回到未儲存的工作區</button></div>}
         {reservationSetting && <HostedReservationSetting setting={reservationSetting} writable={view.writable} locked={locked || hasDraft || loading}
@@ -318,10 +320,10 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
             locked={loading||busy||retry!==null||!!otherDraft||(photoBlocking&&!photoBlocks.categories)} onState={(dirty,blocking)=>photoState('categories',dirty,blocking)} onSaved={load}/>}
           {variantsEnabled&&<VariantsEditor categoriesEnabled={categoriesEnabled} client={client} userId={userId} root={root} writable={can('store:write')} refresh={products.map(p=>p.product_id+':'+p.version).join(',')}
             locked={loading||busy||retry!==null||!!otherDraft||(photoBlocking&&!photoBlocks.variants)} onState={(dirty,blocking)=>photoState('variants',dirty,blocking)} onSaved={load}/>}
-          <div className="hosted-store-products">{products.map(product => <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
+          {!supplyEditing&&<InventoryDefinition/>}<div className="hosted-store-products">{products.map(product => <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
             {supplyEditing === product.product_id && can('store:write') ? <HostedSupplyTerms key={product.version} client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} description={product.description} supplierName={store.name} busy={areaLocked} onPublish={can('store:publish') ? version => command({method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined} onDirty={value => markDirty('supply', value)} onCancel={() => {if (leaveOk()) {setSupplyEditing(null); markDirty('supply', false);}}} onSave={(body, version, success) => command({method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, product: true, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}/>
               : editing === product.product_id && can('store:write') ? <ProductForm key={product.version} product={product} currency={store.currency} busy={areaLocked} onDirty={value => markDirty('edit', value)} onCancel={() => {if (leaveOk()) {setEditing(null); markDirty('edit', false);}}} onSave={(body, success) => command({method: 'patch', path: root + '/products/' + product.product_id, body, version: product.version, schema: ProductViewSchema, product: true, notice: '已儲存。', success: value => {success(value); setEditing(null); markDirty('edit', false);}})}/>
-              : <><h4>{product.title}</h4><p>{formatMinor(product.price_minor, product.currency)}</p><p>庫存 {product.stock}</p><p className="hosted-store-description">{product.description}</p>
+              : <><h4>{product.title}</h4><p>{formatMinor(product.price_minor, product.currency)}</p><MerchantInventorySummary stock={product.stock} inventory={product.inventory} onRefresh={()=>void load()} disabled={locked||hasDraft}/><p className="hosted-store-description">{product.description}</p>
                 {can('store:write') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (leaveOk()) {setSupplyEditing(null); setEditing(product.product_id); markDirty('edit', false);}}}>編輯</button>
                   <button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (leaveOk()) {setEditing(null); setSupplyEditing(product.product_id);}}}>供貨條件</button>
                   <button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (window.confirm(`要移除「${product.title}」嗎？已發布的展示頁要重新發布後才會更新。`)) void command({method: 'post', path: root + '/products/' + product.product_id + '/remove', body: {}, version: product.version, schema: ProductRemovedSchema, product: true, notice: '已移除商品。', success: () => {}});}}>移除</button></div>}
@@ -472,10 +474,32 @@ function ProductForm({product, currency, busy, primary, onDirty, onSave, onCance
     <fieldset disabled={busy} className="hosted-store-fields stack"><legend className="sr-only">{product ? '編輯商品' : '新增商品'}</legend>
       <label className="field">商品名稱<input required maxLength={ProductInputSchema.shape.title.maxLength!} value={fields.title} onChange={event => change('title', event.target.value)}/></label>
       <label className="field">價格（{currencyLabel(currency)}）<input required inputMode="decimal" value={fields.price} onChange={event => change('price', event.target.value)}/></label>
-      <label className="field">庫存<input required type="number" min={0} max={ProductInputSchema.shape.stock.unwrap().maxValue!} step={1} value={fields.stock} onChange={event => change('stock', event.target.value)}/></label>
+      <label className="field">庫存<input required type="number" min={0} max={ProductInputSchema.shape.stock.unwrap().maxValue!} step={1} value={fields.stock} onChange={event => change('stock', event.target.value)}/></label><p className="field-hint">{STOCK_HINT}</p>
       <label className="field">商品介紹<textarea maxLength={ProductInputSchema.shape.description.unwrap().maxLength!} value={fields.description} onChange={event => change('description', event.target.value)}/></label>
       {error && <p role="alert" className="banner banner-error">{error}</p>}
       <div className="actions"><button className={primary ? 'btn btn-primary' : 'btn btn-ghost'} disabled={busy}>{product ? '儲存' : '新增商品'}</button>{onCancel && <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>取消</button>}</div>
     </fieldset>
   </form>;
+}
+
+function StoreOrderBanner({client,tenantId,instanceId,consoleEnabled,refresh}:{client:PortalClient;tenantId:string;instanceId:string;consoleEnabled:boolean;refresh:number}) {
+ const [slot,setSlot]=useState<{data:StoreOverview|null;loading:boolean;status?:number}>({data:null,loading:true});
+ const [nonce,setNonce]=useState(0),generation=client.sessionGeneration,root=`/tenants/${tenantId}/storefronts/${instanceId}`;
+ useEffect(()=>{
+  const abort=new AbortController();
+  const current=()=>!abort.signal.aborted&&generation===client.sessionGeneration;
+  setSlot({data:null,loading:consoleEnabled});
+  if(consoleEnabled)void client.get(root+'/overview',{signal:abort.signal,suppressConsole:true}).then(raw=>{
+   const data=StoreOverviewSchema.parse(raw);
+   if(data.tenant_id!==tenantId||data.instance_id!==instanceId)throw Error('read_target_mismatch');
+   if(current())setSlot({data,loading:false});
+  }).catch(error=>{if(current())setSlot({data:null,loading:false,status:error instanceof ApiError?error.status:undefined});});
+  return()=>abort.abort();
+ },[client,generation,root,tenantId,instanceId,consoleEnabled,refresh,nonce]);
+ const state=storeOrderStatus({consoleEnabled,readiness:slot.data,loading:slot.loading,status:slot.status});
+ return <section className="banner merchant-order-status" aria-label="接單狀態"><p aria-live="polite">{state.text}</p>
+  {state.review&&<a className="btn btn-ghost btn-small" href={sellerConsoleHref({tenantId,instanceId},'overview')}>檢查開店準備</a>}
+  {slot.data&&<small className="field-hint">資料時間 {formatIsoLocal(slot.data.checked_at)}</small>}
+  {consoleEnabled&&(state.retry||slot.data!==null||slot.loading)&&<button type="button" className="btn btn-ghost btn-small" disabled={slot.loading} onClick={()=>setNonce(n=>n+1)}>更新接單狀態</button>}
+ </section>;
 }

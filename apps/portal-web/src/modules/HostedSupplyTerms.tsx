@@ -1,4 +1,4 @@
-import {SupplyReferenceFields} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
+import {SupplyReferenceFields,MerchantInventorySummary,InventoryDefinition} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
 import {SUPPLY_REFERENCE_FIELDS,supplyReferenceValue} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferText';
 import {SupplyOfferPresentation,SHIPPING_TERMS_HINT,RETURN_TERMS_HINT} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferPresentation';
 import {resellerRoles} from '../../../../modules/agent-commerce/hosted-ui/reseller-arrangement';
@@ -19,7 +19,12 @@ export function HostedSupplyTerms({client, path, title, description, supplierNam
   useEffect(() => {
     const controller = new AbortController(); setError('');
     void client.get(path, {signal: controller.signal}).then(raw => {
-      if (!controller.signal.aborted) setView(SupplyTermsSchema.parse(raw));
+      if (!controller.signal.aborted) {
+        const next=SupplyTermsSchema.parse(raw);
+        // Refresh only stock: an edited form retains its original terms and CAS
+        // version, so another writer still requires the existing conflict review.
+        setView(current=>current?.product_id===next.product_id?{...current,stock:next.stock,reserved:next.reserved,available:next.available,inventory:next.inventory}:next);
+      }
     }).catch(cause => {
       if (!controller.signal.aborted) setError(cause instanceof ApiError && !cause.network ? cause.detail ?? '目前無法讀取供貨條件。' : '暫時無法讀取供貨條件，請重試。');
     });
@@ -30,11 +35,11 @@ export function HostedSupplyTerms({client, path, title, description, supplierNam
     <div className="actions">{error && <button type="button" className="btn btn-ghost" onClick={() => setReload(n => n + 1)}>重試讀取供貨條件</button>}
       <button type="button" className="btn btn-ghost" onClick={onCancel}>返回商品</button></div>
   </div>;
-  return <SupplyForm view={view} title={title} description={description} supplierName={supplierName} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly}/>;
+  return <>{error&&<p className="field-hint" role="status">{error}</p>}<SupplyForm view={view} title={title} description={description} supplierName={supplierName} busy={busy} onDirty={onDirty} onCancel={onCancel} onSave={onSave} onPublish={onPublish} supplierOnly={supplierOnly} onRefresh={()=>setReload(n=>n+1)}/></>;
 }
 
-function SupplyForm({view, title, description, supplierName, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false}: {
-  supplierOnly?: boolean; view: SupplyTerms; title: string; description: string; supplierName: string; busy: boolean; onDirty: (dirty: boolean) => void; onCancel: () => void;
+function SupplyForm({view, title, description, supplierName, busy, onDirty, onCancel, onSave, onPublish, supplierOnly=false, onRefresh}: {
+  onRefresh:()=>void; supplierOnly?: boolean; view: SupplyTerms; title: string; description: string; supplierName: string; busy: boolean; onDirty: (dirty: boolean) => void; onCancel: () => void;
   onPublish?: (version: string) => Promise<void>;
   onSave: (body: SupplyTermsInput, version: string, success: () => void) => Promise<void>;
 }) {
@@ -58,7 +63,7 @@ function SupplyForm({view, title, description, supplierName, busy, onDirty, onCa
   return <form className="hosted-store-form stack" aria-label={`${title}供貨條件`} onSubmit={event => void submit(event)}>
     <h4>{title}・供貨條件</h4>
     <p className="field-hint">儲存的是私人草稿。按「公開供貨版本」後，同社群店主才能看到這份商品介紹、供貨價與條件，並申請選用。</p>
-    <p>庫存 {view.stock}・已預留 {view.reserved}・可供 {view.available}</p>
+    <MerchantInventorySummary stock={view.stock} inventory={view.inventory} onRefresh={onRefresh} disabled={busy}/><InventoryDefinition/>
     <fieldset className="hosted-store-fields stack" disabled={busy}>
       <legend className="sr-only">供貨條件</legend>
       <label className="field">供貨單價（{view.currency}）<input required inputMode="decimal" value={fields.cost} onChange={e => change('cost', e.target.value)}/></label>
