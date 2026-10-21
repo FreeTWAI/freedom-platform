@@ -23494,8 +23494,8 @@
     },
     {
       "path": "tests/e2e/storefront-product.spec.ts",
-      "bytes": 15733,
-      "sha256": "d061e167ab8c67c6f1c4cadaf7c4072899891de485597da35d4abd1c09bec319"
+      "bytes": 16800,
+      "sha256": "c123df11037557894aa619925e6a50d41b88b20f84492233d5fa36ae06de2caa"
     },
     {
       "path": "tests/e2e/supplier-console-cooperation.spec.ts",

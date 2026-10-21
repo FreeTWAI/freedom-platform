@@ -103,6 +103,12 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
  try{
   await apiLogin(owner,store.origin,store.seller.email);const page=await owner.newPage();await page.goto('/#stores/'+store.tenant+'/'+store.instance);
   const editor=page.locator('.store-variants-editor');await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveValue(store.products[0].title);
+  async function measureButtons(state:string,width:number){
+   const metrics=await page.locator('.btn').evaluateAll(buttons=>buttons.map(button=>({label:button.textContent?.trim()??'',width:button.getBoundingClientRect().width,height:button.getBoundingClientRect().height,editorWidth:button.closest('.store-variants-editor')?.getBoundingClientRect().width??null,primary:button.classList.contains('btn-primary')})));
+   await (await import('node:fs/promises')).writeFile(info.outputPath('variants-buttons-'+state+'-'+width+'.json'),JSON.stringify(metrics,null,2)+'\n');
+   for(const button of metrics.filter(b=>b.width>0&&b.editorWidth!==null&&!b.primary))expect(button.width,button.label).toBeLessThan(button.editorWidth!*.95);
+  }
+
   await editor.getByLabel('商品組名稱',{exact:true}).fill('');await editor.getByRole('button',{name:'儲存規格',exact:true}).click();await expect(editor.getByRole('alert')).toBeFocused();await expect(editor.getByLabel('商品組名稱',{exact:true})).toHaveAttribute('aria-invalid','true');await editor.getByRole('link',{name:'商品組名稱',exact:true}).click();await expect(editor.getByLabel('商品組名稱',{exact:true})).toBeFocused();await editor.getByLabel('商品組名稱',{exact:true}).fill('經典 T 恤');await editor.getByLabel('商品組介紹',{exact:true}).fill('合成商品組介紹，原本商品內容會保留。');
   await editor.getByRole('button',{name:'新增選項',exact:true}).click();await editor.getByLabel('選項 1 名稱',{exact:true}).fill('顏色');await editor.getByLabel('選項 1 值 1',{exact:true}).fill('白');await editor.getByRole('button',{name:'新增選項值',exact:true}).click();await editor.getByLabel('選項 1 值 2',{exact:true}).fill('黑');
   await editor.getByRole('button',{name:'新增選項',exact:true}).click();await editor.getByLabel('選項 2 名稱',{exact:true}).fill('尺寸');await editor.getByLabel('選項 2 值 1',{exact:true}).fill('M');await editor.getByRole('button',{name:'新增選項值',exact:true}).last().click();await editor.getByLabel('選項 2 值 2',{exact:true}).fill('L');
@@ -112,6 +118,7 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
   page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/product-groups/'+store.products[0].sku))signatures.push({key:request.headers()['idempotency-key'],version:request.headers()['if-match'],body:request.postData()});});
   await page.route(pattern,async route=>{if(route.request().method()==='PUT'){await route.fetch();await route.abort('failed');}else await route.continue();});
   await editor.getByRole('button',{name:'儲存規格',exact:true}).click();await expect(editor.getByRole('status')).toContainText('暫時無法確認儲存結果');await expect(editor.getByLabel('商品組名稱',{exact:true})).toBeDisabled();
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByRole('button',{name:'重試原操作',exact:true}).focus();await page.screenshot({path:info.outputPath('variants-editor-retry-'+width+'.png'),fullPage:true});await measureButtons('retry',width);}
   await page.unroute(pattern);await editor.getByRole('button',{name:'重試原操作',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存規格');expect(signatures).toHaveLength(2);expect(signatures[1]).toEqual(signatures[0]);
   await editor.getByRole('button',{name:'移除選項：顏色',exact:true}).click();
   await expect(editor.getByLabel(store.products[0].sku+' 尺寸',{exact:true}).locator('option:checked')).toHaveText('M');
@@ -129,7 +136,7 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
   await expect(editor.getByLabel('規格商品',{exact:true})).toBeDisabled();
   await editor.getByRole('button',{name:'儲存商品：'+store.products[1].sku,exact:true}).click();
   await expect(editor.getByLabel('規格商品',{exact:true})).toBeEnabled();
-  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByLabel('商品組名稱',{exact:true}).focus();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-editor-'+width+'.png'),fullPage:true});}
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await editor.getByLabel('商品組名稱',{exact:true}).focus();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-editor-'+width+'.png'),fullPage:true});await measureButtons('saved',width);}
   await store.republish();const detail=await buyer.newPage();await detail.goto('/shops/'+store.slug);await expect(detail.getByRole('link',{name:'查看商品：經典 T 恤',exact:true})).toHaveCount(1);await expect(detail.locator('.shop-catalog')).toContainText('部分規格售完');
   for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('variants-grid-'+width+'.png'),fullPage:true});}
   await detail.goto('/shops/'+store.slug+'/products/'+store.products[0].sku);const length=await detail.evaluate(()=>history.length);await detail.getByRole('link',{name:/^顏色：黑/}).click();await expect(detail).toHaveURL(store.origin+'/shops/'+store.slug+'/products/'+store.products[1].sku);expect(await detail.evaluate(()=>history.length)).toBe(length);await expect(detail.getByRole('link',{name:/^顏色：黑/})).toBeFocused();await expect(detail.locator('#shop-variant-status')).toContainText('黑／L');await expect(detail.locator('#shop-add-to-cart')).toHaveAttribute('data-title','經典 T 恤（黑／L）');
