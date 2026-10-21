@@ -63,19 +63,18 @@ function TaskBoardContent({client,onNavigate}: Props) {
 
   // Project choices do not depend on the work filter. Search must not re-fetch them.
   const loadProjects = useCallback(() => reads.projects.run('projects',async signal =>
-    requireItems<Project>(await client.get<unknown>('/co-creation/projects',{signal,background:true}),'共創專案'),
-  {retain:true}), [client,reads]);
+    requireItems<Project>(await client.get<unknown>('/co-creation/projects',{signal}),'共創專案'),
+  {retain:true,retainOnError:true}), [client,reads]);
   const loadActivity = useCallback((id:string) => reads.activity.run(id,async signal => {
-    const value = await client.get<Activity>(`/co-creation/projects/${encodeURIComponent(id)}/activity`,{signal,background:true});
+    const value = await client.get<Activity>(`/co-creation/projects/${encodeURIComponent(id)}/activity`,{signal});
     if (!Array.isArray(value?.issues)) throw new Error('Issue 回應格式不正確，請重新讀取。');
     return value;
   }, {retain:reads.activity.getSnapshot().key===id}), [client,reads]);
 
   useEffect(() => {
-    if (composing) return;
     searchTimer.current = setTimeout(() => {searchTimer.current=null;void loadWorks();},search?250:0);
     return () => {stopSearchTimer();reads.work.cancel();};
-  }, [loadWorks,search,composing,reads,stopSearchTimer]);
+  }, [loadWorks,search,reads,stopSearchTimer]);
   useEffect(() => {
     void loadProjects();
     return () => {reads.projects.reset();};
@@ -123,7 +122,7 @@ function TaskBoardContent({client,onNavigate}: Props) {
     <form className="experience-filters" onSubmit={event=>{event.preventDefault();if(!composition.current){stopSearchTimer();void loadWorks();}}}>
       <label className="field">搜尋任務<input data-guide-anchor="tasks:search" type="search" maxLength={2000} value={query}
         onChange={event=>changeQuery(event.target.value)}
-        onCompositionStart={()=>{composition.current=true;setComposing(true);stopSearchTimer();reads.work.cancel();}}
+        onCompositionStart={()=>{composition.current=true;setComposing(true);}}
         onCompositionEnd={event=>{composition.current=false;setComposing(false);changeQuery(event.currentTarget.value);}}
         onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||composition.current))event.preventDefault();}}
         placeholder="例如：設計、文件、開發"/></label>

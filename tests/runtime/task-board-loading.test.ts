@@ -89,6 +89,24 @@ test('a failed refresh drops data unless error retention was explicitly requeste
   assert.equal(lane.getSnapshot().value,null);
 });
 
+test('a failed project refresh retains the project choices for retry', async () => {
+  const projects=createTaskRead<string[]>(()=>1), choices=['selected project'];
+  await projects.run('projects',async()=>choices);
+  await projects.run('projects',async()=>{throw {status:503};},{retain:true,retainOnError:true});
+  assert.equal(projects.getSnapshot().status,'error');assert.equal(projects.getSnapshot().value,choices);
+  await projects.run('projects',async()=>choices,{retain:true,retainOnError:true});
+  assert.equal(projects.getSnapshot().status,'ready');assert.equal(projects.getSnapshot().value,choices);
+});
+
+for (const failure of [{status:401},{status:403},{accessExpired:true}]) {
+  test(`project refresh permission failure ${JSON.stringify(failure)} clears the project choices`, async () => {
+    const projects=createTaskRead<string[]>(()=>1);
+    await projects.run('projects',async()=>['selected project']);
+    await projects.run('projects',async()=>{throw failure;},{retain:true,retainOnError:true});
+    assert.equal(projects.getSnapshot().status,'error');assert.equal(projects.getSnapshot().value,null);
+  });
+}
+
 test('a failed pagination read retains the confirmed page and can retry the same cursor', async () => {
   const lane=createTaskRead<number[]>(()=>1);await lane.run('query',async()=>[1]);
   await lane.run('cursor',async()=>{throw new Error('failed');},{retain:true,retainOnError:true});
