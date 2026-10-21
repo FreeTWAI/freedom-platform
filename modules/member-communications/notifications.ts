@@ -1,7 +1,7 @@
 import type {PoolClient} from 'pg';
 import {z} from 'zod';
 import {
-  NOTIFICATION_ACTION_TABS,NOTIFICATION_BODY_MAX,NOTIFICATION_KINDS,NOTIFICATION_SOURCE_KEY_MAX,NOTIFICATION_TITLE_MAX,
+  NOTIFICATION_ACTION_TABS,NOTIFICATION_BODY_MAX,NOTIFICATION_KINDS,NOTIFICATION_SOURCE_KEY_MAX,NOTIFICATION_TITLE_MAX,isOrderNotificationAction,
   type NotificationAction,type NotificationKind,
 } from './types.js';
 
@@ -15,6 +15,8 @@ const action=z.discriminatedUnion('tab',[
   z.object({tab:z.literal('guild-workspace'),resource_id:guildKey.nullable()}).strict(),
   z.object({tab:z.literal('events'),resource_id:uuid.nullable()}).strict(),
   z.object({tab:z.literal('social'),resource_id:uuid}).strict(),
+  z.object({tab:z.literal('stores'),resource_id:z.string().refine(resource_id=>isOrderNotificationAction({tab:'stores',resource_id}))}).strict(),
+  z.object({tab:z.literal('reservations'),resource_id:z.string().refine(resource_id=>isOrderNotificationAction({tab:'reservations',resource_id}))}).strict(),
 ]);
 const notifyInput=z.object({
   community_id:uuid,

@@ -2039,8 +2039,8 @@
     },
     {
       "path": "apps/portal-web/src/game-console-routing.ts",
-      "bytes": 5395,
-      "sha256": "3490c8db9b6400dcb934db80760a3741bc4bd198661fe2d897e1bac605350f64"
+      "bytes": 5649,
+      "sha256": "4ea7f781888af040b74347b5830f241954d920aa15bcf53fe1c90d2c5151f9f9"
     },
     {
       "path": "apps/portal-web/src/interface-messages.ts",
@@ -20294,13 +20294,13 @@
     },
     {
       "path": "modules/member-communications/notification-preferences.ts",
-      "bytes": 20969,
-      "sha256": "35c3c97e6c72f1843526de91a09756eddc4728589fea00b9092d8e790a806462"
+      "bytes": 21284,
+      "sha256": "7c3d1d166a6be546d84237575dcbc1b9e72416512081e3f97b105ff0c1a0cc1b"
     },
     {
       "path": "modules/member-communications/notifications.ts",
-      "bytes": 3149,
-      "sha256": "29dd85662f812c41426af06db224501873ec60af652c268911504e85adf55734"
+      "bytes": 3479,
+      "sha256": "62e7c89120f8e6021f7c024d73c1ce5d838a4cbd13e54f36a2fe12da4fef8a6b"
     },
     {
       "path": "modules/member-communications/service.ts",
@@ -20314,8 +20314,8 @@
     },
     {
       "path": "modules/member-communications/types.ts",
-      "bytes": 3522,
-      "sha256": "5610e1908490e1e3ff44a9b2ec8739867a3db255077050aefa84e86a92d642ed"
+      "bytes": 5015,
+      "sha256": "ceba56838d61ae3867581be510ab0f553a2adf84a7bcff6e700b8c5e822e90d0"
     },
     {
       "path": "modules/module-data/AGENTS.md",
@@ -24294,8 +24294,8 @@
     },
     {
       "path": "tests/runtime/game-console-routing.test.ts",
-      "bytes": 4375,
-      "sha256": "a360e610e041a0c0089fdd21138899501cdeb148e9a678b9b0972a253991babd"
+      "bytes": 4621,
+      "sha256": "b04ede6c5ce20f90eef15abe8fe82f5936e4d87eba5c384cc078a5d955ce93b0"
     },
     {
       "path": "tests/runtime/game-console.test.ts",

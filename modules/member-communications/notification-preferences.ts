@@ -7,7 +7,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { lockMemberGuilds } from '../positioning/onboarding.js';
 import { readFollowUpdates } from '../community/content-relations.js';
 import { CHANNEL_KEY_MAX, GUILD_CHANNEL_KEY_PATTERN, SQUAD_CHANNEL_KEY_PATTERN, type ChannelKind } from './channel-types.js';
-import type { Notification, NotificationList } from './types.js';
+import { isOrderNotificationAction, type Notification, type NotificationList } from './types.js';
 
 export type NotificationCategory = 'friends' | 'squads' | 'events' | 'following';
 export type NotificationMode = 'instant' | 'summary' | 'off';
@@ -210,9 +210,15 @@ export async function readNotificationReminders(pool: Pool, actor: Actor, follow
     const items: Notification[] = [];
     for (const row of await unreadNotices(q, actor, suppressed, false)) {
       const group = category(row.kind);
-      let action: Notification['action'] = row.action_tab === 'events' ? { tab: 'events', resource_id: row.action_resource_id }
-        : row.action_tab === 'social' ? row.action_resource_id ? { tab: 'social', resource_id: row.action_resource_id } : null
-        : row.action_tab ? { tab: row.action_tab, resource_id: row.action_resource_id } : null;
+      let action: Notification['action'];
+      if (row.action_tab === 'stores' || row.action_tab === 'reservations') {
+        const candidate = { tab: row.action_tab, resource_id: row.action_resource_id };
+        action = isOrderNotificationAction(candidate) ? candidate : null;
+      } else {
+        action = row.action_tab === 'events' ? { tab: 'events', resource_id: row.action_resource_id }
+          : row.action_tab === 'social' ? row.action_resource_id ? { tab: 'social', resource_id: row.action_resource_id } : null
+          : row.action_tab ? { tab: row.action_tab, resource_id: row.action_resource_id } : null;
+      }
       if (group === 'events' && !row.action_resource_id) action = null;
       items.push({ notification_id: row.notification_id, kind: row.kind, title: group === 'events' ? '活動通知' : row.title,
         body: '', created_at: new Date(row.created_at).toISOString(), read_at: null, action });
