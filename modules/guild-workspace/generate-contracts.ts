@@ -1,3 +1,4 @@
+import * as variants from '../../contracts/guild-launchpad/v1/storefront-variants.js';
 import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import * as shipping from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
@@ -244,6 +245,17 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['seller-policies-command', policies.SellerPoliciesAckSchema, 'output', ['completion_metadata_only_receipt','current_store_manage']],
     ['policy-version', policies.PolicyVersionReadSchema, 'output', ['ever_published_same_store','no_private_version_number']],
     ['publication-seller-policies', policies.PublicationSellerPoliciesSchema, 'output', ['server_only_freeze_refs']],
+  ]],
+  ['storefront-variants', 'Own SKU groups with current store authorization and immutable publication sidecars; legacy storefront/v1 unchanged.', [
+    ['product-group-draft',variants.ProductGroupDraftSchema,'output',['current_store_read']],
+    ['product-group-page',variants.ProductGroupPageSchema,'output',['bounded_200_skus','current_store_read']],
+    ['replace-product-group-input',variants.ReplaceProductGroupInputSchema,'input',['group_cas','existing_own_selections','unique_existing_combinations','complete_label_120_utf16']],
+    ['create-variant-product-input',variants.CreateVariantProductInputSchema,'input',['group_cas','atomic_product_create','sku_limit_200']],
+    ['split-product-group-input',variants.SplitProductGroupInputSchema,'input',['group_cas','retain_home_gallery_and_group_identity']],
+    ['variant-command',variants.VariantCommandAckSchema,'output',['completion_metadata_only_receipt','current_store_write']],
+    ['publication-variants',variants.PublicationVariantsDocumentSchema,'output',['server_only','canonical_digest','exact_sku_partition']],
+    ['render-variant-group',variants.RenderVariantGroupSchema,'output',['no_source_identity']],
+    ['variant-error-code',variants.VariantErrorCodeSchema,'output',[]],
   ]],
   ['storefront-gallery', 'C1 own product galleries, product CAS and immutable server-only publication sidecar; public storefront/v1 unchanged.', [
     ['gallery-draft',gallery.ProductGalleryDraftSchema,'output',['current_store_read','exact_product_version_paths','virtual_primary','retained_recovery_rows']],
