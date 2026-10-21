@@ -18724,8 +18724,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/variants/Editor.tsx",
-      "bytes": 19126,
-      "sha256": "29a6eb2ce598cd7fce7a9d1627fe1dd6b18cbf5345d6d99dce267c58f52e5877"
+      "bytes": 22465,
+      "sha256": "9a1eeb18990d8a557dff60e4bd680c53d7604a872089fb17eca26d1cc64aecf2"
     },
     {
       "path": "modules/agent-commerce/storefront/variants/buyer.ts",
@@ -23494,8 +23494,8 @@
     },
     {
       "path": "tests/e2e/storefront-product.spec.ts",
-      "bytes": 13725,
-      "sha256": "d132f3453f771b28b67c827d796c38411ca34280cc9035a38f0e46cb29a70d7d"
+      "bytes": 14174,
+      "sha256": "26e1d50469e63b38f0d92142a65f0c2cb253f5b3fc912c3949d27f5411fd5243"
     },
     {
       "path": "tests/e2e/supplier-console-cooperation.spec.ts",
