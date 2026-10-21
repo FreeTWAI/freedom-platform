@@ -17589,8 +17589,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/freedom.module.json",
-      "bytes": 1779,
-      "sha256": "829d50fcb70ff6a9c5ae1a16c069cbd21055747b4075c9f51a1e07b36972e8c9"
+      "bytes": 1990,
+      "sha256": "0d4ed18005d049973579b6f3f95be8ec9adc763155d461712f8302ffdacfd7d7"
     },
     {
       "path": "modules/agent-commerce/checkout/index.ts",
@@ -20274,8 +20274,8 @@
     },
     {
       "path": "modules/member-communications/freedom.module.json",
-      "bytes": 4325,
-      "sha256": "08643c41f7eb326b08a7c68136c4981828a41d260a30dabec4b79be2460784b1"
+      "bytes": 4434,
+      "sha256": "a4f99fd6874edf4d31d0232ec0979b982ec09ec566576580dce2d1608f36fd5f"
     },
     {
       "path": "modules/member-communications/freetwai-stickers.ts",
