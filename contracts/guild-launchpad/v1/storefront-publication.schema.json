@@ -150,13 +150,22 @@
             "catalog-list-v1"
           ]
         },
+        "appearance_changed": {
+          "type": "boolean"
+        },
+        "policies_changed": {
+          "type": "boolean"
+        },
+        "gallery_changed": {
+          "type": "boolean"
+        },
         "photo_count": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 200
+          "maximum": 1600
         },
         "photos": {
-          "maxItems": 200,
+          "maxItems": 1600,
           "type": "array",
           "items": {
             "type": "object",
@@ -167,41 +176,82 @@
               "photo": {
                 "anyOf": [
                   {
-                    "type": "object",
-                    "properties": {
-                      "content_type": {
-                        "type": "string",
-                        "const": "image/webp"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "content_type": {
+                            "type": "string",
+                            "const": "image/webp"
+                          },
+                          "byte_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1048576
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "read_path": {
+                            "type": "string",
+                            "maxLength": 220,
+                            "pattern": "^\\/api\\/v1\\/tenants\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/storefronts\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/products\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/photo\\/([1-9][0-9]{0,18})$(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "content_type",
+                          "byte_size",
+                          "width",
+                          "height",
+                          "read_path"
+                        ],
+                        "additionalProperties": false
                       },
-                      "byte_size": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 1048576
-                      },
-                      "width": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 1920
-                      },
-                      "height": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 1920
-                      },
-                      "read_path": {
-                        "type": "string",
-                        "maxLength": 220,
-                        "pattern": "^\\/api\\/v1\\/tenants\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/storefronts\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/products\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/photo\\/([1-9][0-9]{0,18})$(?![\\s\\S])"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "content_type": {
+                            "type": "string",
+                            "const": "image/webp"
+                          },
+                          "byte_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1048576
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "read_path": {
+                            "type": "string",
+                            "maxLength": 230,
+                            "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]{36}\\/storefronts\\/[0-9a-f-]{36}\\/distribution-photos\\/[0-9a-f-]{36}\\/photo\\/[1-9][0-9]{0,18}$(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "content_type",
+                          "byte_size",
+                          "width",
+                          "height",
+                          "read_path"
+                        ],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "content_type",
-                      "byte_size",
-                      "width",
-                      "height",
-                      "read_path"
-                    ],
-                    "additionalProperties": false
+                    ]
                   },
                   {
                     "type": "object",
@@ -225,10 +275,32 @@
                         "minimum": 1,
                         "maximum": 1920
                       },
+                      "photo_key": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "main"
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8
+                      },
+                      "alt_text": {
+                        "type": "string"
+                      },
                       "read_path": {
                         "type": "string",
-                        "maxLength": 230,
-                        "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]{36}\\/storefronts\\/[0-9a-f-]{36}\\/distribution-photos\\/[0-9a-f-]{36}\\/photo\\/[1-9][0-9]{0,18}$(?![\\s\\S])"
+                        "maxLength": 310,
+                        "pattern": "^\\/api\\/v1\\/tenants\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/storefronts\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/products\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/gallery\\/photos\\/(main|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/([1-9][0-9]{0,18})$(?![\\s\\S])"
                       }
                     },
                     "required": [
@@ -236,6 +308,9 @@
                       "byte_size",
                       "width",
                       "height",
+                      "photo_key",
+                      "position",
+                      "alt_text",
                       "read_path"
                     ],
                     "additionalProperties": false
@@ -265,7 +340,7 @@
         "review_digest"
       ],
       "additionalProperties": false,
-      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_same_instance_store_publish, public_content_template_and_media_digest, review_photo_count_and_unique_product_skus, same_rowset_versioned_private_photos."
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_same_instance_store_publish, public_content_template_and_enabled_dimension_digests, review_photo_count_and_bounded_product_photos, same_rowset_versioned_private_photos."
     },
     "reviewed-publication-input": {
       "type": "object",

@@ -121,6 +121,8 @@ createRoot(document.getElementById('root')).render(<Screen/>);`);
     const retry=page.getByRole('button',{name:'重試原照片操作',exact:true});await retry.waitFor({state:'visible'});
     assert.match(await page.locator('body').innerText(),/old-member.png/);assert.equal(requests.length,2);
     await retry.click();await retry.waitFor({state:'hidden'});
+    // The retry button disappears on send, before its response or readback.
+    await page.getByRole('status').filter({hasText:'已儲存照片變更'}).waitFor({state:'visible'});
     assert.equal(requests.length,3);assert.deepEqual(requests[2],requests[1]);
     assert.equal(await page.evaluate(()=>(window as any).photoReads()),3);
   }finally{release?.();try{await browser?.close();}finally{await rm(dir,{recursive:true,force:true});}}

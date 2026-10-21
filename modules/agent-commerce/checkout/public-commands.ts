@@ -45,20 +45,27 @@ export async function quotePublicCartWithIdentity(pool:Pool,slug:string,input:wi
   });
 }
 export type PublicPurchaseState={open:false}|{open:true;product?:'available'|'sold_out'};
+export function publicCheckoutPlatformOpen(options:Pick<HostedCheckoutOptions,'settings'>){
+  const settings=options.settings??defaults;return settings.checkoutEnabled&&!settings.quarantine;
+}
 /** What B01/B03 may offer: the cart quote's own gates and, for a product page, the
  * quote's availability for one unit. Read only and without rate budgets; pages only. */
 export async function publicPurchaseState(pool:Pool,slug:string,options:HostedCheckoutOptions,sku?:string):Promise<PublicPurchaseState> {
-  const settings=options.settings??defaults;
-  if(settings.quarantine||!settings.checkoutEnabled)return {open:false};
+  if(!publicCheckoutPlatformOpen(options))return {open:false};
   return isolatedTransaction(pool,async q=>{
     await q.query('SET TRANSACTION READ ONLY');
+    return publicPurchaseStateWithClient(q,slug,options,sku);
+  });
+}
+/** Same buyer decision inside an already-authorized caller's transaction. */
+export async function publicPurchaseStateWithClient(q:PoolClient,slug:string,options:HostedCheckoutOptions,sku?:string):Promise<PublicPurchaseState> {
+  if(!publicCheckoutPlatformOpen(options))return {open:false};
     let store;
     try {store=await resolve(q,slug,options,true);}
     catch(error) {if(error instanceof Problem&&['checkout_store_not_found','checkout_not_enabled'].includes(error.code))return {open:false} as const;throw error;}
     if(sku===undefined)return {open:true} as const;
     const line=(await cartQuote(q,store,{publication_revision:store.projection.revision,lines:[{sku,quantity:1}]},options)).lines[0];
     return {open:true,product:line.state==='insufficient'||line.state==='unavailable'?'sold_out':'available'} as const;
-  });
 }
 
 export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutInput,key:string,access:BrowserAccess,options:HostedCheckoutOptions) {

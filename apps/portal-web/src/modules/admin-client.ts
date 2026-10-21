@@ -57,7 +57,9 @@ export class AdminClient {
     catch { throw new AdminRequestError(INCOMPLETE_MESSAGE, response.status); }
     if (!response.ok) {
       if (this.csrf === requestCsrf && (response.status === 401 || response.status === 403)) this.csrf = null;
-      throw new AdminRequestError(typeof value?.detail === 'string' ? value.detail : '無法完成管理操作，請重新載入確認。', response.status);
+      const detail=typeof value?.detail === 'string' ? value.detail : '無法完成管理操作，請重新載入確認。';
+      const admissionCode=path.startsWith('/commerce/store-admissions')&&typeof value?.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value.code)?`（${value.code}）`:'';
+      throw new AdminRequestError(detail+admissionCode, response.status);
     }
     if (ticket === this.latestRequest && this.csrf === requestCsrf) this.onAccessRecovered?.();
     return value as T;

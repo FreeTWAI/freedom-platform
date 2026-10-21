@@ -144,9 +144,16 @@ Neither route changes the primary guild or bypasses membership/capacity checks.
 A pure supply catalog cannot be reused as a retail store; the journey offers a
 separate store space without changing the original catalog or inventory.
 `#stores/<tenant_id>/<instance_id>` retains store settings, product drafts and
-publication. Selecting a valid own-product photo automatically saves its draft;
-unknown results retain the original upload tuple, and a failed read after an
-acknowledged write retries only the read.
+publication.
+
+僅在 gallery 關閉、單張照片編輯器啟用時，選取有效照片會自動儲存草稿；
+gallery 開啟時沿用圖組編輯器的明確儲存操作。結果不明時保留原上傳操作，
+已確認寫入後讀取失敗時，只重試讀取。
+
+啟用的外觀、賣方資訊與商店政策、商品圖組都納入同一次上架審閱及交易內摘要核對，
+並以既有快照 helper 凍結；任一內容在審閱後改變，須重新確認。
+審閱顯示各維度是否變更；圖組啟用時顯示圖組的全部照片與張數。
+旗標全部關閉時，審閱回應與摘要維持原格式。
 
 The product area can publish all saved, publishable store content in one click.
 The additive `storefront-publication` contract exposes a private
@@ -278,3 +285,16 @@ published links, themes, product photos and social image preparation. The photo
 suite must run with FREEDOM_E2E_STORE_PHOTO_FIXTURE=1, not as a skipped default
 pass. Local Chromium and PostgreSQL 17 results are source evidence; required
 PostgreSQL 18 CI and real phone/production acceptance remain separate.
+
+## Live merchant stock and order-taking state
+
+Private merchant reads distinguish held reservations from remaining paid
+allocations. 已占用 includes both; 可售 and the supplier console's 可用 equal
+`available`. See [inventory observations](hosted/inventory-reservations.md) for
+strict/reporting semantics and [seller console](seller-console/README.md) for the
+shared readiness presentation. Historical display-only/v1 descriptions above
+remain scoped to those increments; checkout availability comes from the existing
+site flags and current store readiness. No migration, capability release, host
+flag change or new payment/shipping command is introduced by this presentation
+change. Drop-ship consent (C2), exposing supplier breakdowns to retailers and
+stability guarantees for CSV consumers require separate product decisions.

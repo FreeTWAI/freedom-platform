@@ -8,7 +8,7 @@
     "contracts/guild-launchpad/v1/storefront-publication.schema.json"
   ],
   "public_exports": [],
-  "dependencies": ["agent-commerce", "supplier-console"],
+  "dependencies": ["agent-commerce", "supplier-console", "commerce-storefront"],
   "contract_families": ["common"],
   "client_profiles": ["member"],
   "instructions": [

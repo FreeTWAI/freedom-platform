@@ -16,7 +16,26 @@ export const ProductUpdateInputSchema = z.object(product).partial().strict().ref
 export const EmptyStoreInputSchema = z.object({}).strict();
 export const SlugQuerySchema = z.object({ slug: z.string().max(256) }).strict();
 export const SlugAvailabilitySchema = z.object({ slug: z.string(), available: z.boolean(), reason: z.enum(['taken','reserved','invalid']).nullable() }).strict();
+const units = z.number().int().min(0).max(1000000);
+/** Private live stock observation, never publication or buyer/order authority. */
+export const MerchantInventorySchema = z.discriminatedUnion('state', [
+  z.object({state:z.literal('ready'),stock:units,reserved:units,available:units,held:units,allocated:units}).strict()
+    .refine(v => v.reserved === v.held + v.allocated && v.available === v.stock - v.reserved, 'inventory balance must equal held plus allocated'),
+  z.object({state:z.literal('inconsistent'),code:z.literal('reservation_inconsistent')}).strict(),
+]);
+export type MerchantInventory = z.infer<typeof MerchantInventorySchema>;
+export function merchantInventoryMatches(row:{stock:number;reserved?:number;available?:number;inventory?:MerchantInventory}) {
+  const i=row.inventory;
+  return !i || i.state==='inconsistent' || i.stock===row.stock && (row.reserved===undefined || i.reserved===row.reserved)
+    && (row.available===undefined || i.available===row.available);
+}
 export const ProductViewSchema = z.object({ product_id: OpaqueId, sku: z.string().regex(/^P[0-9]{4,}$/), title: text(120, 1), description: text(2000, 0, true), price_minor: product.price_minor, currency: CurrencySchema, stock: z.number().int().min(0).max(1000000), version: Version }).strict();
+// Preserve the released storefront/v1 shape and digest; live tenant reads use
+// the private extension, generated in the hosted-supply-terms bundle.
+export const MerchantProductViewBaseSchema = ProductViewSchema.extend({inventory: MerchantInventorySchema.optional()});
+export const MerchantProductViewSchema = MerchantProductViewBaseSchema.refine(merchantInventoryMatches, 'inventory must match product counters');
+export const MerchantProductPageSchema = z.object({items:z.array(MerchantProductViewSchema).max(200),limit:z.literal(200)}).strict();
+export type MerchantProductView = z.infer<typeof MerchantProductViewSchema>;
 export const ProductPageSchema = z.object({ items: z.array(ProductViewSchema).max(200), limit: z.literal(200) }).strict();
 export const ProductRemovedSchema = z.object({ product_id: OpaqueId, removed: z.literal(true) }).strict();
 export const PublicationStateSchema = z.enum(['never_published','published','unpublished']);

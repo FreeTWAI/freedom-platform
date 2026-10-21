@@ -196,7 +196,7 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
     await expect(activePage(pageA).getByText('$11.00')).toBeVisible();
     await expect(activePage(pageA).locator('.badge').filter({hasText: '待確認'})).toBeVisible();
     await pageA.getByRole('button', {name: '同意', exact: true}).click();
-    await expect(activePage(pageA).locator('.badge').filter({hasText: '可售'})).toBeVisible();
+    await expect(activePage(pageA).locator('.badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toBeVisible();
     await expect(pageA.locator('.sc-announcement')).toContainText('已保存：同意售價申請');
 
     // 7. A declines C (不同意 → dialog → the dialog's 取消 keeps the request pending and returns focus to 不同意; then 確認不同意 → 未同意)
@@ -237,7 +237,7 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
 
     const acceptedItemB = activePage(pageA).locator('.sc-row').filter({hasText: '$11.00'});
     await expect(acceptedItemB).toBeVisible();
-    await expect(acceptedItemB.locator('.badge')).toHaveText('可售');
+    await expect(acceptedItemB.locator('.badge')).toHaveText('已同意，可加入展示頁（尚不能結帳購買）');
 
     // 9. B is sellable (B's store can publish); C is not
     await pageB.goto(`/#stores/${storeB.tenantId}/${storeB.instanceId}`);
@@ -245,7 +245,7 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
     const publishBtnB = pageB.getByRole('button', {name: '發布展示頁', exact: true});
     await expect(publishBtnB).toBeEnabled();
     await publishBtnB.click();
-    await expect(pageB.locator('.hosted-store > [role="status"]')).toContainText('已發布展示頁');
+    await expect(pageB.locator('.hosted-store > [role="status"]')).toContainText('已上架 1 件商品，公開頁已更新。');
 
     const pubResB = await pageB.request.get(`/api/v1/public/stores/shop-b-${suffix}`);
     expect(pubResB.status()).toBe(200);
@@ -313,7 +313,7 @@ test('SC-E2E-11 a reprice needs new consent; withdrawing consent keeps history (
     await openSupplyPage(pageA, `${storeA.hash}/supply/terms/${propB.selection_id}`, '審核售價申請');
     await expect(activePage(pageA).getByText('$11.00')).toBeVisible();
     await pageA.getByRole('button', {name: '同意', exact: true}).click();
-    await expect(activePage(pageA).locator('.badge').filter({hasText: '可售'})).toBeVisible();
+    await expect(activePage(pageA).locator('.badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toBeVisible();
 
     // Verify B's accepted state in seller store
     const selBeforeReprice = (await (await pageB.request.get(`/api/v1${storeB.root}/distribution-selections`)).json()).items[0];
@@ -342,13 +342,13 @@ test('SC-E2E-11 a reprice needs new consent; withdrawing consent keeps history (
     await expect(rowsB).not.toContainText('$11.00');
     await expect(rowsB.locator('.badge')).toHaveText('待確認');
     await expect(activePage(pageA).locator('h3:text-is("其他申請紀錄") + p')).toHaveText('目前沒有申請。');
-    await expect(activePage(pageA).locator('.sc-row .badge').filter({hasText: '可售'})).toHaveCount(0);
+    await expect(activePage(pageA).locator('.sc-row .badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toHaveCount(0);
 
     // 6. A accepts P2 on review page
     await openSupplyPage(pageA, `${storeA.hash}/supply/terms/${selBeforeReprice.selection_id}`, '審核售價申請');
     await expect(activePage(pageA).getByText('$15.00')).toBeVisible();
     await pageA.getByRole('button', {name: '同意', exact: true}).click();
-    await expect(activePage(pageA).locator('.badge').filter({hasText: '可售'})).toBeVisible();
+    await expect(activePage(pageA).locator('.badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toBeVisible();
 
     // 7. Withdraw consent: 撤回同意 → dialog → 確認撤回同意 → state 停用
     const withdrawBtn = pageA.getByRole('button', {name: '撤回同意', exact: true});
@@ -439,7 +439,7 @@ test('SC-E2E-12 changing terms marks the version outdated and republishing needs
 
     await openSupplyPage(pageA, `${storeA.hash}/supply/terms/${propB.selection_id}`, '審核售價申請');
     await pageA.getByRole('button', {name: '同意', exact: true}).click();
-    await expect(activePage(pageA).locator('.badge').filter({hasText: '可售'})).toBeVisible();
+    await expect(activePage(pageA).locator('.badge').filter({hasText: '已同意，可加入展示頁（尚不能結帳購買）'})).toBeVisible();
 
     // 3. A edits 供貨單價 on the product page (儲存供貨條件)
     await openSupplyPage(pageA, `${storeA.hash}/supply/products/${product.product_id}`);
@@ -470,7 +470,7 @@ test('SC-E2E-12 changing terms marks the version outdated and republishing needs
     await expect(publishDialog).toBeVisible();
     await expect(publishDialog.getByRole('heading', {name: '公開供貨版本的影響', exact: true})).toBeVisible();
     await expect(publishDialog.getByRole('list')).toContainText(shopNameB);
-    await expect(publishDialog.getByRole('list')).toContainText('可售');
+    await expect(publishDialog.getByRole('list')).toContainText('已同意，可加入展示頁（尚不能結帳購買）');
 
     // 取消 first (nothing is sent)
     let publishReqSent = false;
@@ -782,7 +782,7 @@ test('SC-E2E-14 a request outside the first 200 opens from every entry and after
     expect(sent.postDataJSON()).toEqual({decision:'accepted',listing_sha256:target.listing_sha256});
     await refreshed;
     await expect(pageA.locator('.sc-announcement')).toHaveText('已保存：同意售價申請。');
-    await expect(review.locator('.badge')).toHaveText('可售');
+    await expect(review.locator('.badge')).toHaveText('已同意，可加入展示頁（尚不能結帳購買）');
     await expect(review.getByText('未在目前的部分清單中',{exact:false})).toHaveCount(0);
     expect(sawCappedReview).toBe(false);
   } finally {

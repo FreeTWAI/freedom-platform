@@ -2,9 +2,9 @@ import {useEffect,useId,useRef,useState} from 'react';
 import type {ProductView} from '../../../../contracts/guild-launchpad/v1/storefront';
 import type {ProductMediaView} from '../../../../contracts/guild-launchpad/v1/hosted-store-media';
 import {ApiError,type PortalClient} from '../api';
-import {sendProductPhoto,productPhotoFileError} from './hosted-store-photo-client';
+import {sendProductPhoto,productPhotoFileError,prepareProductPhotoFile} from './hosted-store-photo-client';
 import {retainedPhotoFailure,reviewPhotoAttempt,holdPhotoAttempt,heldPhotoAttempt,restorePhotoAttempt,releasePhotoAttempt,forgetRefusedPhotoAttempt,photoBlocksLeaving,type PhotoAttempt} from './hosted-store-photo-state';
-import {prepareBrowserRaster,socialImageProblem} from '../../../../packages/asset-storage/browser-raster';
+import {socialImageProblem} from '../../../../packages/asset-storage/browser-raster';
 
 interface HostedStorePhotoProps {
   client:PortalClient;userId:string;tenantId:string;instanceId:string;product:Pick<ProductView,'product_id'|'title'|'version'>;media?:ProductMediaView;writable:boolean;uploadsEnabled:boolean;locked:boolean;
@@ -39,7 +39,7 @@ function PhotoEditor({client,userId,tenantId,instanceId,product,media,writable,u
     if(!current()||locked||!writable||!uploadsEnabled||held.current?.hadUnknown||busy.current)return;
     const error=socialImageProblem(selected);if(error){setMessage(error);if(input.current)input.current.value='';return;}
     const serial=++preparation.current,expected=product.version;setPreparing(true);onState(true,true);setMessage('正在裝置上準備照片…');
-    try{const prepared=selected.size>2*1024*1024?await prepareBrowserRaster(selected):selected;
+    try{const prepared=await prepareProductPhotoFile(selected);
       if(!current()||serial!==preparation.current)return;
       if(!permissions.current.writable||!permissions.current.uploadsEnabled){setMessage('目前無法儲存照片，請確認權限與上傳狀態後重新選擇。');return;}
       const invalid=productPhotoFileError(prepared);if(invalid)throw new Error(invalid);

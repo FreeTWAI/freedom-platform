@@ -4,6 +4,77 @@
 
 本文件把計畫 §20 的 EC-WP00～11 對到規格、里程碑與實際分支。進度以 commit、測試證據與 PR 為準；「現況」欄只記錄 2026-10-15 的狀態，之後不在這裡追進度。
 
+## 2026-10-20：C1 商品圖組本機候選
+
+在 store-policies 基準 `e17364831414bf4bd9a77eab2adf11945762f3df` 上加入單一 migration
+`177_storefront_product_gallery.sql`（暫定編號）。五張 retained tenant 表、lazy singleton groups 與
+141 唯一主照指標支援自有商品最多八張、選填說明、排序、預覽及第六個發布 dirty 維度。
+公開 v1 projection／media JSON、舊照片 URL、既有 storefront entry 與 shops.css 不擴充。
+`FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF；site 唯一新增 `store_gallery_enabled:false`，
+其餘 OFF 頁面、媒體與 host SPA fallback 保留。沒有部署、真實開關、秘密或容量政策變更。
+
+這不完成整個 C1：變體、分類、供貨商品圖組仍在後續。供貨買家頁只用 D-11 店主副本，
+offer 圖片只供私人評估。舊版移除主照後的保留照片不自動重接，必須明確設主照或移除。
+主照說明依 tuple digest 綁定，舊 binary 的主照替換不繼承舊說明。
+
+驗證維持三個 gallery runtime 檔（SQL、commands、media）；瀏覽器在既有 photo pass 最後追加
+十例，另有兩例 default-mode OFF。還原保留原 17 個物件，再精確加入八個 gallery 物件；
+A／B gallery 圖均非空，tenant RLS sealed drill 另精確包含兩個 Work 與四個照片物件。
+以 exact-base Git blobs 編譯舊 reader／renderer，撤銷五表 SELECT 比較現有 publication。
+詳細行為、命令與驗證入口見 storefront README；本機合成資料不等於部署或真人採用驗收。
+
+## 2026-10-20：C1 賣方資訊與商店政策本機候選
+
+在 appearance follow-up `1b2c5dc12555212840dc5713cc1153b72c31ff05` 上新增單一 migration
+`176_storefront_seller_policies.sql`（暫定編號）。六張新增租戶表保存不可改的賣方／政策版本、
+草稿指標及發布 freeze，沒有修改既有表／函式／projection。`FREEDOM_STORE_POLICIES_ENABLED`
+預設 OFF；本工作沒有部署、真實環境設定或秘密變更，不改寫下方具日期的發布收據。
+
+店主自行填資料，整節以 `store:manage`／profile CAS／冪等鍵儲存；發布仍需 `store:publish`。
+新 digest 為第五 dirty 維度，預覽只讀保存的草稿，匿名頁只讀當前發布及同店曾發布的政策。
+賣方固定責任句取代舊句；無營業名稱或旗標 OFF 時頁尾保持原樣。政策只顯示跳脫純文字，
+產品頁有已發布配送／退換貨連結，舊賣方版本不公開。移除電話／地址後重新發布會撤回公開資料；
+歷史政策正文個資的移除仍待 Ted 決定。每項最多 500 版，滿額以 409 拒絕並原子回滾。
+
+這是 C1 顯示候選；沒有新增結帳啟用條件、買家同意、訂單欄位、AI、供貨規則或 readiness 項目。
+本機驗證與 hosted CI、正式發布、真實手機／Safari、法律內容確認及真人採用分別對帳；
+測試入口與限制見 storefront README，不能由本機合成旅程推定上述未驗項完成。
+
+## 2026-10-20：C1 店面外觀本機候選
+
+在既有商店、結構化供貨條件（schema173）與供貨方案照片（schema174）的堆疊來源上，
+新增單一 migration `175_storefront_appearance.sql`。**175 是本機候選，沒有部署、正式旗標
+或秘密變更**；不改寫下方具日期發布收據，也不把整個 C1 或真人開店旅程列為完成。
+
+`FREEDOM_STORE_APPEARANCE_ENABLED` 預設 OFF。ON 時既有「店面與發布」提供店面外觀：
+八組有文字名稱的主色、明確儲存的封面與方形店標、最多 80 字單行公告及最多八件有序
+自有零售主打。草稿、預覽與發布分開，公開店面及商品／購物車／結帳／訂單殼使用同一
+發布的主色與店標；無封面使用文字首屏，完整封面依原比例限高，工坊原始 Logo 留在頁尾。
+
+兩項規格差異已明列在 EC-SPEC-01 §4.2、EC-SPEC-02 §2／§7：圖片是既有
+`storefront.product-photo` purpose 下的封閉 cover/logo target kinds，保留舊版配額與備份相容；
+全部外觀寫入沿用版型的 `store:manage`，發布仍需 `store:publish`。
+淺色主色的非文字對比由深色邊框達成，OFF 呈現不變。沒有媒體安裝時仍能調整文字與主打。
+
+本機合成驗證涵蓋 SQL/RLS、命令與冪等/CAS、發布凍結、第四 dirty 維度、舊版形狀回退、
+獨立對比計算、官方 PG18／原生 R2 非空還原，以及編輯器與公開頁面旅程。
+新的 fixture ON 瀏覽器案例只追加至既有 `hosted-store-photo.spec.ts`；獨立外觀 spec 只有
+預設模式會通過的 OFF 案例，不修改 pinned runner、passes、shards、timeout 或 runtime 登錄。
+CI、發布、真實手機／Safari、分享平台抓取與真人採用各自仍須對帳；本機成功不代替這些證據。
+分類、變體、政策、賣方揭露、供貨商品主打及新的結帳啟用條件留給後續工作包。
+
+## 2026-10-20：開店準備與商店准入頁
+
+店主可從商店首頁進入「開店準備」，看到發布、可售商品、公開說明、版本、付款、交付、
+平台准入及接單服務的缺項與既有修正入口；具有訂單讀權時另顯示三項訂單概況。
+平台管理員可在「商店准入」讀取社群內所有商店及目前環境的全部有效准入，
+沿原獨立管理員命令准入／撤銷，並直接下載 JSON 實際範圍收據，免去手工編排 API 結果。
+收據列識別碼、版本及設定狀態，不含銀行或聯絡內容；超過 20 頁不產生不完整收據。
+
+這項程式工作補上店主缺項提示與收據產生入口；沒有旗標變更、部署或真人試用。
+它不代替已同意店家的實際設定、同意依據、部署／schema 核對、console／Supplier 曝光對帳及真人旅程，
+也不改變誰能准入、准入獨立性或供貨履約同意。以下具日期的發布現況保持其原時間範圍。
+
 ## 2026-10-19：會員交付現況與共同候選
 
 依 [#234 的當日發布對帳](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6262757310)，

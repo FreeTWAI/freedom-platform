@@ -39,6 +39,39 @@ function prefix(value, last) {
   return { ...value, ledger: rows, ledger_digest: compatibilityLedgerDigest(rows) };
 }
 
+test('schema174 recognizes offer-photo history without reusing schema173 approvals',()=>{
+  const f=fixtureAt(174),old=prefix(f.scan,173);
+  assert.equal(f.scan.ledger.at(-1).name,'174_supply_offer_photos.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(174);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(174);renamed.scan.ledger.at(-1).name='174_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(174);future.scan.ledger.push({name:'175_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+// Replacing slot 174 with 175 leaves a ledger gap; sequence validation rejects
+// that gap before evaluating whether the migration identity is known.
+test('schema174 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(174);f.scan.ledger.at(-1).name='175_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained offer-photo history preserves schema174 and its reader floor after the flag is off',()=>{
+  const f=fixtureAt(174),shape='media.supply-offer-photo.asset.v1';
+  f.host.observation.written_shapes=[shape];
+  assert(evaluate(f).issues.some(i=>i.code==='release_capability_missing'&&i.capability===shape));
+  f.host.release_records[0].capabilities.push(shape,'media.server-policy.v1');
+  assert.equal(evaluate(f).status,'compatible');
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  const old=prefix(f.scan,173);f.host.observation.schema_ledger=old.ledger;f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
 test('persisted historical avatar representation fences every old reader even after the feature is disabled',()=>{
  const f=fixture(),old={source_sha:'c'.repeat(40),artifact_sha256:'d'.repeat(64)};
  f.host.observation.written_shapes=['avatar.legacy-bytes.v1'];
@@ -1095,10 +1128,150 @@ test('retained schema172 cannot be erased by a schema171 restore or rollback pla
 });
 
 
+test('schema173 recognition keeps schema172 approvals separate and rejects unknown supply reference ledger bytes', () => {
+  const f = fixtureAt(173), old = prefix(f.scan, 172);
+  assert.equal(f.scan.ledger.at(-1).name, '173_supply_structured_terms.sql');
+  const current = evaluate(f);
+  assert.equal(current.status, 'compatible');
+  assert.deepEqual(current.required_shapes, []);
+  for (const flag of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(current[flag], false);
+  f.host.release_records[0].schema_ledger_digests = [old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  f.scan = old; f.host.observation.schema_ledger = old.ledger; f.host.observation.schema_ledger_digest = old.ledger_digest;
+  assert.equal(evaluate(f).status, 'compatible', 'the exact schema172 release remains independently compatible');
+  const changed = fixtureAt(173); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
+  changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed = fixtureAt(173); renamed.scan.ledger.at(-1).name = '173_unreviewed.sql';
+  renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
+  const future = fixtureAt(173); future.scan.ledger.push({name: '174_unreviewed.sql', sha256: 'e'.repeat(64)});
+  future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
+});
+
+test('retained schema173 cannot be erased by a schema172 restore or rollback plan', () => {
+  const f = fixtureAt(173), old = prefix(f.scan, 172);
+  f.host.rollback_floor.schema_ledger = structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest = f.scan.ledger_digest;
+  f.host.observation.schema_ledger = old.ledger; f.host.observation.schema_ledger_digest = old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  for (const scan of [f.scan, old]) {
+    f.scan = scan;
+    const result = evaluate(f);
+    assert.equal(result.status, 'incompatible');
+    assert(codes(result).includes('historical_schema_floor_mismatch'));
+    for (const flag of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[flag], false);
+  }
+});
+
+
 test('distribution copies retain a schema172 reader capability after the flag is off',()=>{
  const f=fixtureAt(172);f.host.observation.written_shapes=['media.distribution-photo.asset.v1'];
  assert(evaluate(f).issues.some(i=>i.code==='release_capability_missing'&&i.capability==='media.distribution-photo.asset.v1'));
  f.host.release_records[0].capabilities.push('media.distribution-photo.asset.v1','media.server-policy.v1');assert.equal(evaluate(f).status,'compatible');
  f.host.observation.schema_ledger=prefix(f.scan,171).ledger;f.host.observation.schema_ledger_digest=compatibilityLedgerDigest(f.host.observation.schema_ledger);
  assert(evaluate(f).issues.some(i=>i.code==='observed_shape_schema_missing'&&i.shape==='media.distribution-photo.asset.v1'));
+});
+
+
+test('schema175 additive appearance recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(175),old=prefix(f.scan,174);
+  assert.equal(f.scan.ledger.at(-1).name,'175_storefront_appearance.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(174)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(175);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(175);renamed.scan.ledger.at(-1).name='175_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(175);future.scan.ledger.push({name:'176_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+
+test('schema175 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(175);f.scan.ledger.at(-1).name='176_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained appearance schema175 floor refuses a schema174 observation without adding a written shape',()=>{
+  const f=fixtureAt(175);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,174);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+
+test('schema176 additive seller policies recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(176),old=prefix(f.scan,175);
+  assert.equal(f.scan.ledger.at(-1).name,'176_storefront_seller_policies.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(175)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(176);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(176);renamed.scan.ledger.at(-1).name='176_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(176);future.scan.ledger.push({name:'177_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema176 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(176);f.scan.ledger.at(-1).name='177_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained seller policies schema176 floor refuses a schema175 observation without adding a written shape',()=>{
+  const f=fixtureAt(176);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,175);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('schema177 additive product gallery recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(177),old=prefix(f.scan,176);
+  assert.equal(f.scan.ledger.at(-1).name,'177_storefront_product_gallery.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(176)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(177);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(177);renamed.scan.ledger.at(-1).name='177_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(177);future.scan.ledger.push({name:'178_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema177 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(177);f.scan.ledger.at(-1).name='178_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained product gallery schema177 floor refuses a schema176 observation without adding a written shape',()=>{
+  const f=fixtureAt(177);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,176);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
 });

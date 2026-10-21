@@ -1,3 +1,6 @@
+import {galleryTables,seedGalleryRows} from '../helpers/storefront-gallery.js';
+import {seedSellerPolicyRows} from '../helpers/storefront-policies.js';
+import {seedAppearanceRows} from '../helpers/storefront-appearance.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
@@ -581,7 +584,10 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
     'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
-    'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets',
+    'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
+  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs',
+  'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
+    'commerce_storefront_appearance_drafts', 'commerce_storefront_appearance_targets', 'commerce_publication_appearances', 'commerce_publication_appearance_refs',
     'tenant_capacity_policies', 'tenant_module_permissions', 'work_items', 'scoped_command_receipts', 'scoped_transition_journal', 'scoped_outbox',
     'supply_materials', 'supply_material_versions', 'supply_material_grants',
   ].sort(), 'RLS discovery must match the merged schema; new tables need A/B fixture coverage or an explicit uncovered reason');
@@ -635,6 +641,18 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     }
   } finally {
     await owner.query("UPDATE domain_media_storage_policy SET persistence_allowed=false WHERE purpose='storefront.product-photo'");
+  }
+  for(let index=0;index<hosted.length;index++) {
+    const data=index===0?A:B,store=hosted[index];
+    await owner.query(`INSERT INTO commerce_hosted_offer_photos(offer_id,seq,tenant_id,instance_id,item_id,scope_id,asset_id,representation_id,policy_revision,shared_by_principal_id)
+      SELECT o.offer_id,1,o.tenant_id,o.instance_id,o.item_id,t.scope_id,t.asset_id,t.representation_id,t.policy_revision,$2
+      FROM commerce_hosted_supply_offers o JOIN commerce_product_photo_targets t ON t.tenant_id=o.tenant_id AND t.instance_id=o.instance_id AND t.product_id=o.item_id
+      WHERE o.instance_id=$1`,[store.instanceId,data.principalId]);
+  }
+  for(const data of hosted) {
+    const q=await owner.connect();
+    try { await q.query('BEGIN');await seedAppearanceRows(q,{tenantId:data.tenantId,instanceId:data.instanceId,productId:data.itemId});await seedSellerPolicyRows(q,data);await seedGalleryRows(q,{...data,productId:data.itemId});await q.query('COMMIT'); }
+    catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
   }
   // A/B distribution rows retain an own ready Asset with foreign material
   // provenance. They exercise retargeting with every FK and trigger enabled.
@@ -724,6 +742,44 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     if (!aRow || !bRow) {
       assert.ok(DOCUMENTED_UNCOVERED_RLS_TABLES[table], `${table}: missing A/B fixture without documented reason`);
       record.push({ table, mechanism: 'documented_exception', update_covered: false, outcome: 'uncovered', reason: DOCUMENTED_UNCOVERED_RLS_TABLES[table] });
+      continue;
+    }
+    if ([...galleryTables,'commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
+      const mutable=table==='commerce_product_groups'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');
+      const policies=(await owner.query<Policy>(`SELECT policyname,cmd,permissive,qual,with_check FROM pg_policies
+        WHERE schemaname=current_schema() AND tablename=$1 ORDER BY policyname`,[table])).rows;
+      assert.deepEqual(policies,[
+        {policyname:table+'_insert',cmd:'INSERT',permissive:'PERMISSIVE',qual:null,with_check:'(tenant_id = freedom_ctx_tenant())'},
+        {policyname:table+'_read',cmd:'SELECT',permissive:'PERMISSIVE',qual:'(tenant_id = freedom_ctx_tenant())',with_check:null},
+        ...(mutable?[{policyname:table+'_update',cmd:'UPDATE',permissive:'PERMISSIVE',qual:'(tenant_id = freedom_ctx_tenant())',with_check:'(tenant_id = freedom_ctx_tenant())'}]:[]),
+      ],'appearance policies admit no unbound or foreign tenant exception');
+      await isolatedTransaction(runtime,async q=>{
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted}`)).rowCount,0);
+        await bindPrincipalContext(q,A.principalId);await bindTenantContext(q,{tenantId:A.tenantId,tenantScopeId:A.scopeId});
+        assert.ok((await q.query(`SELECT 1 FROM ${quoted} WHERE tenant_id=$1`,[aKey])).rowCount);
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted} WHERE tenant_id=$1`,[bKey])).rowCount,0);
+        assert.equal((await q.query(`UPDATE ${quoted} SET tenant_id=tenant_id WHERE tenant_id=$1`,[bKey])).rowCount,0);
+        if(!mutable)assert.equal((await q.query(`UPDATE ${quoted} SET tenant_id=tenant_id WHERE tenant_id=$1`,[aKey])).rowCount,0);
+        assert.equal((await q.query(`DELETE FROM ${quoted}`)).rowCount,0,'no appearance DELETE policy');
+      });
+      assert.deepEqual((await owner.query(`SELECT * FROM ${quoted} WHERE ${column}=$1 ORDER BY ${pk.map(identifier).join(',')} LIMIT 1`,[aKey])).rows[0],aRow);
+      record.push({table,mechanism:'policy_assertion',update_covered:false,outcome:'exact tenant INSERT/SELECT and mutable-only UPDATE policies; unbound and foreign reads hidden; foreign UPDATE and all DELETE hidden',select:0,own_select:1,policies:policies.map(p=>p.policyname)});
+      continue;
+    }
+    if (table === 'commerce_hosted_offer_photos') {
+      await isolatedTransaction(runtime,async q=>{
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted}`)).rowCount,0);
+        await bindPrincipalContext(q,A.principalId);await bindTenantContext(q,{tenantId:A.tenantId,tenantScopeId:A.scopeId});
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted} WHERE offer_id=$1`,[aRow.offer_id])).rowCount,1);
+        assert.equal((await q.query(`SELECT 1 FROM ${quoted} WHERE offer_id=$1`,[bRow.offer_id])).rowCount,1,'photo history inherits the same-community offer audience');
+        assert.equal((await q.query(`UPDATE ${quoted} SET tenant_id=$1 WHERE offer_id=$2`,[bKey,aRow.offer_id])).rowCount,0,'append-only history has no UPDATE policy');
+        await q.query('SAVEPOINT foreign_photo');
+        await assert.rejects(q.query(`INSERT INTO ${quoted}(offer_id,seq,tenant_id,instance_id,item_id,shared_by_principal_id) VALUES($1,2,$2,$3,$4,$5)`,[bRow.offer_id,bKey,bRow.instance_id,bRow.item_id,A.principalId]),(e:unknown)=>['42501','P0002'].includes((e as {code:string}).code));
+        await q.query('ROLLBACK TO SAVEPOINT foreign_photo');
+      });
+      assert.deepEqual((await owner.query(`SELECT * FROM ${quoted} WHERE offer_id=$1`,[aRow.offer_id])).rows[0],aRow);
+      assert.deepEqual((await owner.query(`SELECT * FROM ${quoted} WHERE offer_id=$1`,[bRow.offer_id])).rows[0],bRow);
+      record.push({table,mechanism:'policy_assertion',update_covered:false,outcome:'append-only UPDATE hidden; foreign INSERT rejected; same-community offer audience retained',select:1,own_select:1,policies:['commerce_hosted_offer_photos_insert','commerce_hosted_offer_photos_read']});
       continue;
     }
     if (table === 'commerce_hosted_supply_offers') {

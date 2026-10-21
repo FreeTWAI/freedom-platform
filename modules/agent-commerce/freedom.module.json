@@ -199,6 +199,7 @@
       "operations": [
         "store.mine",
         "store.read",
+        "store.overview",
         "store.setup",
         "store.update",
         "store.slug-availability",

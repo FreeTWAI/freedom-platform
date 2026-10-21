@@ -11,7 +11,7 @@ import { readBounded, snapshotBoundedBytes, prepareLegacyMediaRepresentation } f
 import { lockCapacityPolicy, lockDimension, retainedByteUsage } from '../opportunity-project-work/tenant-capacity.js';
 import { lockStorefrontPhotoBoundary, type StorefrontPhotoActor } from '../agent-commerce/hosted/photo-authority.js';
 import { lockCurrentPhotoProduct, publishPhotoPointer, type PhotoCompletion } from '../agent-commerce/hosted/photo-target.js';
-import { assetCommandKey, assetVersion, createAssetLifecycleWithAuthority, type LifecyclePolicy, type LifecycleDependencies } from './engine.js';
+import { assetCommandKey, assetVersion, createAssetLifecycleWithAuthority, type LifecyclePolicy, type LifecycleDependencies, type LifecycleProfile } from './engine.js';
 import { createStorefrontLifecycleAuthority } from './storefront-lifecycle-authority.js';
 
 export const PRODUCT_PHOTO_INPUT_BYTES = 2 * 1024 * 1024;
@@ -64,26 +64,27 @@ export async function lockProductPhotoPolicy(q: PoolClient, tenantId: string) {
   return { policy, tenant };
 }
 interface ValidatedSource { readonly mime: string; readonly byteSize: number; readonly sha256: string; readonly webp: Buffer }
-function lifecycle(pool: Pool, dependencies: LifecycleDependencies, source: ValidatedSource) {
-  return createAssetLifecycleWithAuthority<StorefrontProductPhotoPrepare, PhotoCompletion, StorefrontPhotoActor, TenantScopeContext>(pool, dependencies, {
-    purpose: 'storefront.product-photo', targetKind: 'storefront.product-photo', variant: 'image',
+type PhotoPorts<P extends StorefrontProductPhotoPrepare,R> = Pick<LifecycleProfile<P,R,StorefrontPhotoActor,TenantScopeContext>,
+ 'parsePrepare'|'targetId'|'lockTarget'|'publish'> & {targetKind:'storefront.product-photo'|'storefront.gallery-photo'};
+function lifecycle<P extends StorefrontProductPhotoPrepare,R>(pool:Pool,dependencies:LifecycleDependencies,source:ValidatedSource,ports:PhotoPorts<P,R>) {
+  return createAssetLifecycleWithAuthority<P, R, StorefrontPhotoActor, TenantScopeContext>(pool, dependencies, {
+    purpose: 'storefront.product-photo', targetKind: ports.targetKind, variant: 'image',
     inputMaxBytes: PRODUCT_PHOTO_INPUT_BYTES, outputMaxBytes: PRODUCT_PHOTO_OUTPUT_BYTES, retireReplacedAsset: false,
     parsePrepare(raw) {
-      const value = input.parse(raw);
+      const value = ports.parsePrepare(raw);
       requireCondition(value.contentType === source.mime && value.byteSize === source.byteSize && value.sha256 === source.sha256,
         409, 'asset_source_mismatch', '上傳內容與準備紀錄不同。');
       return value;
     },
-    targetId: value => value.targetProductId,
+    targetId: ports.targetId,
     async lockTarget(q, context, actor, id, create) {
-      // All phases acquire policy BEFORE item/selection/target, including reads,
-      // leases and finalizeVia. The boundary remains the named domain authority.
       await lockStorefrontPhotoBoundary(q, context, actor);
       await lockProductPhotoPolicy(q, context.tenant_id);
-      return lockCurrentPhotoProduct(q, context, actor, id, create);
+      return ports.lockTarget(q, context, actor, id, create);
     },
     resolvePolicy: async (q, context) => (await lockProductPhotoPolicy(q, context.tenant_id)).policy,
     async requireCapacity(q, context, _actor, _target, policy, reserve) {
+      if(ports.targetKind==='storefront.gallery-photo')requireCondition(!_target.assetId,409,'gallery_photo_exists','這張照片已經加入，請重新讀取。');
       const { tenant } = await lockProductPhotoPolicy(q, context.tenant_id);
       await lockDimension(q, context.tenant_id, 'retained_bytes');
       const shared = await retainedByteUsage(q, context.scope.scope_id, context.tenant_id);
@@ -101,19 +102,27 @@ function lifecycle(pool: Pool, dependencies: LifecycleDependencies, source: Vali
         'image/webp', 'storefront.product-photo', policy);
     },
     async lockPublication() { return undefined; },
-    publish: (q, context, actor, intent, target) => publishPhotoPointer(q, context, actor, intent, target),
+    publish: ports.publish,
   }, createStorefrontLifecycleAuthority());
 }
 /** Receipt facade first probes the same original tuple under current authority.
  * Only a new/unfinished effect calls this decoder. No canonical bytes or decoder
  * callback can be injected by the route. Decode occurs before quota commits. */
-export function createStorefrontProductPhotoLifecycle(pool: Pool, dependencies: LifecycleDependencies) {
+export function createProductPhotoLifecycleFactory<P extends StorefrontProductPhotoPrepare,R>(pool:Pool,dependencies:LifecycleDependencies,ports:PhotoPorts<P,R>) {
   if (!dependencies?.store) throw unavailable();
   return Object.freeze({ async forProduct(file: { mime: string; bytes: Buffer }) {
     const bytes = Buffer.from(snapshotBoundedBytes(file.bytes, PRODUCT_PHOTO_INPUT_BYTES)), mime = file.mime;
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const webp = Buffer.from(await normalizeProductPhoto(mime, bytes));
-    return lifecycle(pool, dependencies, Object.freeze({ mime, byteSize: bytes.length, sha256, webp }));
+    return lifecycle(pool, dependencies, Object.freeze({ mime, byteSize: bytes.length, sha256, webp }),ports);
   } });
 }
 export type StorefrontProductPhotoLifecycle = ReturnType<typeof createStorefrontProductPhotoLifecycle>;
+
+/** Original single-photo port. Its parser, target and completion remain unchanged. */
+export function createStorefrontProductPhotoLifecycle(pool:Pool,dependencies:LifecycleDependencies){
+ return createProductPhotoLifecycleFactory<StorefrontProductPhotoPrepare,PhotoCompletion>(pool,dependencies,{
+  targetKind:'storefront.product-photo',parsePrepare:raw=>input.parse(raw),targetId:value=>value.targetProductId,
+  lockTarget:lockCurrentPhotoProduct,publish:publishPhotoPointer,
+ });
+}
