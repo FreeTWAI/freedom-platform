@@ -3,6 +3,30 @@
 Buyer pages under `/shops/:slug` that need browser code, and the storefront
 client bundle they share (EC-SPEC-01 §3, EC-SPEC-02 §4.2 and §6).
 
+2026-10-20 buyer journey: when `FREEDOM_COMMERCE_CHECKOUT_ENABLED` is on, B05,
+B10 and the hydrated missing-B07 state for a valid UUID offer 「登入會員」.
+The portal accepts only the closed checkout/order-access/order-UUID return paths,
+validates the current public store, rechecks the successful session and performs
+a full navigation after password, TOTP, backup-code login or registration.
+Unavailable stores keep the member in the portal with a notice. Registration
+can defer guild choice and positioning. B01/B03 reservation prompts are unchanged;
+there is no cart return route.
+
+`buyer-state.ts` and `checkout-page.tsx` implement EC-AT49: changed identities
+cannot send old intents, and the retained cart gets a new quote before another
+explicit confirmation. `delivery-copy.ts` maps every server delivery reason to
+buyer copy. B05 names blocked items and offers only usable all-line alternatives;
+otherwise it links to 「回購物車調整」. B04 validates and retains delivery options
+and notes only items blocked by every configured option, without calculating
+shipping. Prices, quoting, stock and holds retain their existing rules.
+
+Flag-off compatibility covers storefront HTML response bytes, security/cache
+headers and stable hydrated DOM for fixed fixtures, plus portal login and
+`#reservations`. Edited JavaScript asset bytes are excluded from that comparison.
+The existing directly addressable checkout HTML remains available when off;
+its API gate still rejects checkout. No site JSON or Worker readiness change is
+needed. The portal ignores storefront returns when the flag is off.
+
 - Server HTML for these pages lives in this directory. The routes stay in
   `apps/platform-api/src/routes/hosted-store.ts` next to the other `/shops`
   pages.
