@@ -21509,13 +21509,13 @@
     },
     {
       "path": "packages/contribution-tools/runtime-file-weights.mjs",
-      "bytes": 21679,
-      "sha256": "913de8fd634920ed24aef03722af1194952213df551a46a1daf1cc947fb3a158"
+      "bytes": 25189,
+      "sha256": "6cb9c694595fa73883c2f32508b3f63f458ac487d2cb5c0df6210f33ed0a908f"
     },
     {
       "path": "packages/contribution-tools/runtime-matrix.md",
-      "bytes": 27918,
-      "sha256": "3f36ce0abba53f6246e8b767b05d805594ccd7cfb65f4f0fb9b0c15deedcf199"
+      "bytes": 32746,
+      "sha256": "ccf799088e658cfae4c4989cea022f1d50011ce3906222267d1d0da40e3fabc0"
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
@@ -21794,13 +21794,13 @@
     },
     {
       "path": "packages/contribution-tools/test/runtime-sharding.test.mjs",
-      "bytes": 7508,
-      "sha256": "91214eb9418ffa7c66e1966626bec9965c19cb27a54cbe9b879a1a19cf514ccc"
+      "bytes": 9317,
+      "sha256": "8e47c6a84c223e2ed3a886a5b5476cd21bfbcf3eb25441dbc20dc0839ec058bf"
     },
     {
       "path": "packages/contribution-tools/test/runtime-weights.test.mjs",
-      "bytes": 16654,
-      "sha256": "3769aef3b7581d8a6ac07e429a69ce24209b3aff741f9b9323b48959fae49f0f"
+      "bytes": 16665,
+      "sha256": "7d2f91b1578462f353f55fb34f86c7567b10d1a84b9685c9c7ac51c31bc97a15"
     },
     {
       "path": "packages/contribution-tools/test/suite-runner.test.mjs",
@@ -21856,6 +21856,11 @@
       "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261016.json",
       "bytes": 17623,
       "sha256": "c0a8d7ac58f7f8adac470b86b30d4c7c655f7b02c99f37de76e61e9f0171d7af"
+    },
+    {
+      "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261021.json",
+      "bytes": 20614,
+      "sha256": "91b9ba9ad89ad7d9ee9d23a881fe3e242cb95754626e9db69dc2669ee433c003"
     },
     {
       "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-37567098443.json",
@@ -23799,8 +23804,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 89629,
-      "sha256": "26a4c332f01d91b7a64e186622212c535de4ea7e645d91052a1fdc537ce81cf3"
+      "bytes": 90016,
+      "sha256": "9d7696ccd518cd809c407ea8fafac0f65e2de043814467ca56d2a25304ccb6c9"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
