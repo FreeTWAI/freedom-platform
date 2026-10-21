@@ -3,7 +3,14 @@
   "module_id": "social-feed",
   "owner_role": "foundation",
   "owned_paths": [
+    "apps/platform-api/src/node-preview-fetch.ts",
+    "apps/platform-api/src/worker-preview-fetch.ts",
+    "tests/runtime/link-preview-egress.test.ts",
     "apps/portal-web/src/modules/SocialZone.tsx",
+    "apps/portal-web/src/share-module-loader.ts",
+    "apps/portal-web/src/modules/text-edit-history.ts",
+    "tests/runtime/social-text-history.test.ts",
+    "tests/e2e/social-text-history.spec.ts",
     "apps/portal-web/src/modules/SocialZone.css",
     "apps/portal-web/src/modules/social-image.ts",
     "tests/e2e/social-feed.spec.ts",
@@ -13,6 +20,8 @@
     "apps/portal-web/src/PlatformPurpose.tsx",
     "apps/portal-web/src/SocialLayout.css",
     "apps/portal-web/src/modules/MemberHome.tsx",
+    "apps/portal-web/src/modules/HomeParticipation.tsx",
+    "docs/development/member-participation-plan.md",
     "apps/portal-web/src/modules/SocialCrossPlatformShare.tsx",
     "apps/portal-web/src/modules/SocialInteractions.tsx",
     "apps/portal-web/src/modules/SocialPostEditor.tsx",
@@ -43,6 +52,7 @@
   "public_exports": [],
   "dependencies": [
     "community",
+    "work",
     "asset-lifecycle",
     "skill-submissions",
     "asset-storage"

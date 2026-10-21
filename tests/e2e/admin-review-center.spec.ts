@@ -332,6 +332,7 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
     expect((await e2eAuthPool.query(`SELECT kind FROM maintainer_jobs WHERE repository_id=$1 ORDER BY kind`, [REPO])).rows.map(row => row.kind)).toEqual(['request_reviewer', 'request_reviewer']);
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: '開啟管理選單', exact: true }).click();
     await page.getByRole('button', { name: 'PR 審核', exact: true }).click();
     await page.getByRole('tab', { name: '待審', exact: true }).click();
     const phone = page.locator(`[data-pull-id="${PULL_LOW}"]`);

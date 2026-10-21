@@ -23,7 +23,7 @@
     "tests/runtime/hosted-seller-exceptions.test.ts",
     "tests/runtime/hosted-seller-contracts.test.ts",
     "tests/runtime/checkout-buyer-identity.test.ts",
-    "migrations/178_member_checkout_order_index.sql",
+    "migrations/180_member_checkout_order_index.sql",
     "apps/platform-api/src/routes/member-checkout-orders.ts",
     "tests/runtime/member-checkout-orders.test.ts",
     "modules/agent-commerce/checkout/order-notifications.ts",

@@ -4,7 +4,7 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/agent-commerce/storefront/variants/**",
-    "migrations/179_storefront_product_variants.sql",
+    "migrations/181_storefront_product_variants.sql",
     "contracts/guild-launchpad/v1/storefront-variants.ts",
     "contracts/guild-launchpad/v1/storefront-variants.schema.json",
     "apps/platform-api/src/routes/hosted-store-variants.ts",

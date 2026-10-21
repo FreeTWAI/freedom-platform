@@ -50,7 +50,7 @@ active person principal before returning. Disabled principals are refused;
 an unmapped active member gets an empty page. Guild and seller-tenant membership
 are not conditions of the original buyer's retained order access.
 
-Migration178 adds only the partial buyer/creation/UUID index. Candidate discovery
+Migration180 adds only the partial buyer/creation/UUID index. Candidate discovery
 is `buyer_principal_id = actual principal AND order_profile = 'hosted_checkout'`,
 ordered newest first, at most 21 candidates for a page of at most 20. Dependent
 exact-key sidecar/publication/provenance lookups export only frozen store name

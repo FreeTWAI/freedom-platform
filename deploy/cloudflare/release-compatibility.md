@@ -472,3 +472,20 @@ floor. Enabled/written shapes and capability-only retained history require the
 same schema and exact independently approved source/artifact/ledger identities.
 Acknowledging the capability grants no payment, deploy or ECPay authority.
 See [EC-SPEC-10](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md).
+
+## Guest invitation credit schema178 write floor
+
+`community.guest-invitation-credit.v1` is mandatory for every candidate and active
+binary when the planned schema or retained historical floor reaches migration178,
+even while guest admission is disabled. Old writers must not ignore the durable
+credited invitation identity or confuse it with the fresh registration attempt.
+Application-only rollback requires this capability; restoring below178 cannot
+erase the retained floor. Capability-only retained history and enabled/written
+shapes require schema178 and exact independently approved source/artifact/ledger
+identities. Recognition does not enable guest admission or grant deployment or
+restore authority.
+
+Migration178 adds nullable `community_event_guest_rsvps.credited_invitation_id`
+without inferring historical credit or backfilling existing RSVPs. Existing
+runtime table-level SELECT/INSERT/UPDATE grants cover the added column; no grant
+expansion is required.

@@ -82,7 +82,7 @@ export async function categoryCommand(pool:Pool,actor:Actor,t:string,i:string,op
  }catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);const x=e as {code?:string;constraint?:string;message?:string};
   if(x.code==='23505'&&x.constraint==='storefront_category_name')categoryCheck(false,'category_name_taken',409);
   if(x.code==='23514'&&x.constraint==='storefront_category_limit')categoryCheck(false,'category_limit',409);
-  // Migration 181's deferred member validator raises this exact message without a constraint name.
+  // Migration 183's deferred member validator raises this exact message without a constraint name.
   if(x.code==='23514'&&x.message==='Category group no longer resolves')categoryCheck(false,'category_groups_changed',409);
   throw e;}
 }

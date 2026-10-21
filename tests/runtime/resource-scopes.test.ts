@@ -325,6 +325,9 @@ test('a scope revocation that holds the row lock wins before new authorization',
 });
 
 test('upgrade from 075 preserves every legacy table and receipt; migration/backfill are repeatable', async () => {
+  // Migration 179 adds exactly these publications without changing legacy rows.
+  const addedBookIds = ['hrflow', 'hdsljp-api', 'usage', 'photo-border-remover', 'ga4-lp-analytics', 'sns-feedback-collect',
+    'ultracode-token-optimization', 'keynote-pptx-doctor', 'webchat-mcp', 'gemini-voice-lab', 'story-bible', 'human-mode'];
   const upgradeSchema = schema + '_upgrade', upgrade = new Pool({ connectionString, options: `-c search_path=${upgradeSchema}`, max: 4 });
   await admin.query(`CREATE SCHEMA ${upgradeSchema}`);
   try {
@@ -360,19 +363,31 @@ test('upgrade from 075 preserves every legacy table and receipt; migration/backf
     for (const table of tables) legacyColumns.set(table, (await upgrade.query('SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position', [upgradeSchema, table])).rows.map(row => row.column_name));
     const snapshot = async () => {
       const hashes: Record<string, string> = {};
-      for (const table of tables) {
+      for (const table of tables.filter(table => table !== 'skill_publications')) {
         assert.match(table, /^[a-z_][a-z0-9_]*$/);
         const columns = legacyColumns.get(table)!; for (const column of columns) assert.match(column, /^[a-z_][a-z0-9_]*$/);
         hashes[table] = digest((await upgrade.query(`SELECT to_jsonb(t)::text AS row FROM (SELECT ${columns.map(column => '"' + column + '"').join(',')} FROM ${table}) t ORDER BY to_jsonb(t)::text`)).rows);
       }
       return hashes;
     };
+    const publicationSnapshot = async () => {
+      const columns = legacyColumns.get('skill_publications')!;
+      for (const column of columns) assert.match(column, /^[a-z_][a-z0-9_]*$/);
+      return new Map((await upgrade.query<{ book_id: string; row: string }>(`SELECT t.book_id,to_jsonb(t)::text AS row FROM (SELECT ${columns.map(column => '"' + column + '"').join(',')} FROM skill_publications) t ORDER BY t.book_id`)).rows.map(row => [row.book_id, row.row]));
+    };
+    const oldPublications = await publicationSnapshot();
     const old = await snapshot(), oldLedger = (await upgrade.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
     await migrate(upgrade); await finishBackfill(upgrade);
     assert.deepEqual(await snapshot(), old);
+    const publications = await publicationSnapshot();
+    for (const [bookId, row] of oldPublications) assert.equal(publications.get(bookId), row);
+    assert.deepEqual([...publications.keys()].filter(bookId => !oldPublications.has(bookId)).sort(), [...addedBookIds].sort());
+    for (const bookId of addedBookIds) assert.notEqual(JSON.parse(publications.get(bookId)!).published_at, null);
     assert.deepEqual((await upgrade.query("SELECT * FROM schema_migrations WHERE name<'076_' ORDER BY name")).rows, oldLedger);
     assert.deepEqual(await command(upgrade, receiptInput, async () => {}, async () => { assert.fail('Must replay old receipt.'); }), { original: true });
+    const published = (await upgrade.query('SELECT to_jsonb(t)::text AS row FROM skill_publications t ORDER BY book_id')).rows;
     const mapped = await mappingSnapshot(upgrade); await migrate(upgrade); await finishBackfill(upgrade);
+    assert.deepEqual((await upgrade.query('SELECT to_jsonb(t)::text AS row FROM skill_publications t ORDER BY book_id')).rows, published);
     assert.deepEqual(await mappingSnapshot(upgrade), mapped);
   } finally { await upgrade.end(); await admin.query(`DROP SCHEMA ${upgradeSchema} CASCADE`); }
 });

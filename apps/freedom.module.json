@@ -28,7 +28,8 @@
     "guild-supply",
     "guild-open-source",
     "guild-events",
-    "community-ar"
+    "community-ar",
+    "platform-admin-portal"
   ],
   "format": "freedom.module/v1",
   "instructions": [
@@ -106,7 +107,8 @@
     "tests/e2e/platform-purpose.spec.ts",
     "tests/e2e/audit-skills.spec.ts",
     "apps/portal-web/src/modules/GuildWorkspace.tsx",
-    "tests/e2e/guild-workspace.spec.ts"
+    "tests/e2e/guild-workspace.spec.ts",
+    "scripts/verify-public.mjs"
   ],
   "owner_role": "foundation",
   "public_exports": [],

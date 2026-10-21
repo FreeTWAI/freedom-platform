@@ -4,7 +4,7 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/agent-commerce/storefront/categories/**",
-    "migrations/181_storefront_categories.sql",
+    "migrations/183_storefront_categories.sql",
     "contracts/guild-launchpad/v1/storefront-categories.ts",
     "contracts/guild-launchpad/v1/storefront-categories.schema.json",
     "apps/platform-api/src/routes/hosted-store-categories.ts",

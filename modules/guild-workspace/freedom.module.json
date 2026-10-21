@@ -57,6 +57,7 @@
     "tests/runtime/work-result-client.test.ts",
     "tests/runtime/production-dossier.test.ts",
     "tests/e2e/guild-launchpad.spec.ts",
+    "tests/e2e/skill-editor-guild-access.spec.ts",
     "tests/e2e/guild-launchpad-my-work.spec.ts",
     "tests/e2e/guild-launchpad-profiles.spec.ts",
     "apps/portal-web/src/modules/PositioningActionCard.tsx",

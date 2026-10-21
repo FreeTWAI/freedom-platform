@@ -212,7 +212,7 @@ test('VARIANTS-06 predecessor function and attachment guards reject drift before
    await q.query(predecessor.slice(start,end));await q.query(`ALTER FUNCTION ${name}() SET search_path=pg_catalog,${schema}`);
   }
   for(const [table,name] of [['commerce_product_groups','preserve_storefront_gallery_draft'],['commerce_product_gallery_photos','preserve_storefront_gallery_draft'],['commerce_product_group_members','preserve_storefront_gallery_member']])await q.query(`CREATE TRIGGER ${name} BEFORE INSERT OR UPDATE OR DELETE ON ${table} FOR EACH ROW EXECUTE FUNCTION ${name}()`);
-  const migration=await readFile(new URL('../../migrations/179_storefront_product_variants.sql',import.meta.url),'utf8'),guard=migration.slice(0,migration.indexOf('CREATE FUNCTION storefront_variant_text_valid'));
+  const migration=await readFile(new URL('../../migrations/181_storefront_product_variants.sql',import.meta.url),'utf8'),guard=migration.slice(0,migration.indexOf('CREATE FUNCTION storefront_variant_text_valid'));
   await q.query(guard);
   await q.query('SAVEPOINT function_drift');await q.query('CREATE OR REPLACE FUNCTION preserve_storefront_gallery_member() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW;END $$');
   await assert.rejects(q.query(guard));await q.query('ROLLBACK TO SAVEPOINT function_drift');

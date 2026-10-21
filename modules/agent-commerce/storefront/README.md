@@ -42,7 +42,7 @@ It exposes only the original buyer's frozen order and bank instructions, with
 no historical storefront/footer replay and no command fallback. Anonymous or
 other members receive the existing missing-store HTML. The list and retained
 read do not change PR-A quotes, identity fences, delivery reasons or unknown ACK
-copy. Migration178 is a partial index only; it changes no table or RLS policy.
+copy. Migration180 is a partial index only; it changes no table or RLS policy.
 
 - Server HTML for these pages lives in this directory. The routes stay in
   `apps/platform-api/src/routes/hosted-store.ts` next to the other `/shops`
@@ -330,7 +330,7 @@ SELECT on all five gallery tables. The contract generator emits the independent
 
 ## Store categories (2026-10-21 local candidate)
 
-Migration181 adds retained `commerce_storefront_categories`,
+Migration183 adds retained `commerce_storefront_categories`,
 `commerce_storefront_category_members` and immutable
 `commerce_publication_categories`. `FREEDOM_STORE_CATEGORIES_ENABLED` defaults
 OFF and independently requires launchpad; it requires neither variants, media

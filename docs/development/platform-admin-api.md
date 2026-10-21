@@ -1,5 +1,31 @@
 # 平台管理介面 API
 
+## 管理工作區（2026-10-18）
+
+後台先呈現真實會員／公會摘要與可直接開啟的待審入口。桌面用固定側欄，
+手機以單一原生對話框切換管理功能，支援功能搜尋、Escape、焦點返回與瀏覽器返回。
+`?view=` 只接受既有管理頁名稱，網址不放會員搜尋、Email 或私人審核內容。
+頁面工具沿用既有元件，以收合入口呈現；品牌使用原始工坊圖。
+
+公會申請預設呼叫既有 `state=pending` API；已核准、未核准與全部各自查詢並分頁。
+每列先呈現名稱、申請人、專業與狀態，第一次展開時才掛載完整內容與審核表單；
+再次收合仍保留本頁輸入，避免預先建立每筆申請的全部技能書選項。
+同一管理身分在其他管理功能間切換，會保留目前載入申請的本地表單；
+重新整理、切換申請分類或資料版本改變仍會清除未送出輸入，不是持久化草稿。
+管理身分／社群／角色改變會清除前一身分的名單、搜尋條件、測試資料開關與表單，
+並重新掛載按需載入的子工作區，避免沿用前一身分的本地輸入。
+
+憑證細節放在管理工作區之後；正常狀態預設收合，需要處理或無法確認時顯示狀態。
+選單提供「系統憑證」直達入口；到期／失敗警示也在頁面上方提供入口，
+開啟時將焦點移至憑證摘要，續期仍由本人明確按下原按鈕。
+修改後重新整理目前正在操作的工作區；較早的查詢結果不覆蓋新的功能或篩選。
+
+公會設定、會長工作區、作者認領、GitHub 設定與 PR 審核以既有錯誤／載入邊界按需載入。
+模組歸屬由 `apps/admin/freedom.module.json` 列出實際後台檔案及既有完整 runtime／UI 義務，
+主應用宣告此組合依賴；本機 context 不代表可信 CI、獨立 review 或發布授權。
+
+以下 API 與身分、CSRF、版本及稽核契約繼續適用。
+
 管理介面位於 `/admin`；後端為 `/admin/api/*`。它使用 Cloudflare Access 簽章驗證後的真人身分，再查詢 `platform_admins` 有效名單；初始人選私下建立，後續由既有管理員在後台任命。平台一般註冊、會員 cookie、自填 email、GitHub slug 或自行加上的 email header 都不授予管理權。真實管理員信箱及 Access 設定不放進 repo。
 
 所有讀取重新驗證 Access JWT 和管理名單；所有修改還需要同源 JSON、`X-Admin-CSRF`（取自 bootstrap）與 `Idempotency-Key`（8–128 個英數、底線或連字號）。修改既有資料需要 `If-Match: "<aggregate_version>"`。缺版本回 428、版本過期 412、重用操作識別碼但內容不同 409。API 採 `Cache-Control: no-store`，失敗不回傳 JWT、SQL、密碼或 provider 原始錯誤。
@@ -120,3 +146,10 @@
 `GET /members` 附帶 `platform_admin`（null 或 admin_id、active、aggregate_version、access_state），方便直接任命。所有任命由既有 Access 管理員明確確認並留下 audit；會員信箱只是被任命的地址，仍須本人通過 Access OTP 才能使用管理權限。
 
 `access_state` 為 pending、ready、pending_removal、revoked。同步仍是 `scripts/sync-admin-access.ts`：Castle timer 每15秒跑一次，或改由沒有 route 的 cron Worker 每分鐘跑一次（見 [deploy/cloudflare README](../../deploy/cloudflare/README.md)）。兩者不要同時跑。讀回比對成功才寫入 access_synced_version/at。Web API 不持有 Cloudflare token。停用先在資料庫立即生效，舊 Access JWT 也無法再管理；邊緣名單移除可能稍後完成。服務失敗時維持待同步，不假報可登入。Timer 的環境變數見 [部署設定](member-toolkit.md)。
+
+GitHub App 建立回呼由管理頁 shell 在 `/bootstrap` 成功、取得 CSRF 後立即處理，
+先將 `/admin/github/callback?code=…&state=…` 清為 `/admin`，再送出一次
+`POST /github-app/complete`；之後才呈現工作區導覽。交換不依賴 GitHub 設定區塊的
+lazy chunk，切換工作區或載入失敗不會取消交換。設定區塊接收同一份結果／錯誤；
+重新確認身分與往返工作區不重送回呼，管理身分更換時不呈現前一身分的回呼結果。
+後端原有 state、社群／管理員、來源與有效期驗證，以及建立 App 的 GitHub 目的地限制維持原值。

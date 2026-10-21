@@ -7,7 +7,7 @@ selection price and item inventory authority. It must not add a layer below item
 
 ## Identity and retained gallery homes
 
-Migration 179 extends the lazy 177 group/member rows without a backfill. An
+Migration 181 extends the lazy 177 group/member rows without a backfill. An
 unedited product remains an implicit singleton. Each member keeps its immutable
 original gallery `group_id`, product, selection, tenant, instance and scope.
 `catalog_group_id` is the separate pointer to the current catalog group. It never
@@ -32,7 +32,7 @@ UNIQUE arbiter. Replacement therefore detaches old pairs, updates group metadata
 then attaches new pairs atomically. Immediate tuple checks and deferred group/
 default checks preserve the invariants without rescanning all 200 members after
 each unrelated tuple change. Original trigger function hashes and attachments are
-pinned to the installed schema-178 predecessor before replacement.
+pinned to the installed schema-180 predecessor before replacement.
 
 ## Publication, buyer labels and rollback
 

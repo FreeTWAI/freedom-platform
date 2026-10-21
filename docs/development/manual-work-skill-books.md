@@ -45,3 +45,5 @@
 ## 驗證入口
 
 目錄與導讀：`tests/runtime/member-skill-registration.test.ts`、`skill-book-guides.test.ts`、`skill-book-upstreams.test.ts`、`skill-collaboration.test.ts`、`development-map.test.ts`。分享介紹：`tests/runtime/skill-share-content.test.ts`。書架：`tests/e2e/skill-book-library.spec.ts`、`tests/e2e/audit-skills.spec.ts`。部署腳本的本數期望寫在 `scripts/verify-public.mjs`；本輪只改期望，沒有執行該腳本，也沒有對公開站送出請求。
+
+後續：2026-10-20 的[會員分享社群技能書整理](member-shared-skill-books-2026-10-20.md)沿用本次格式與權限邊界。

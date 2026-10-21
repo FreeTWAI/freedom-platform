@@ -151,7 +151,7 @@ session 自然到期不會修改已鎖列或觸發 `40001`，交易內的 `now()
 
 `notifyMember(q, input)`（`notifications.ts`）在呼叫端的交易內寫入，與領域變更一起提交或回滾；同一 `(community, recipient, source_key)` 只寫一次。輸入不合法（未知 kind、任意網址或額外欄位的 action）或收件者不在同社群會直接丟錯，讓整個指令回滾。通知只是站內提示，不授予任何權限。
 
-### 訂單站內通知（候選 schema180）
+### 訂單站內通知（候選 schema182）
 
 `FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED` 預設 OFF，僅接受 `true`／`false`；ON 另需
 `FREEDOM_COMMERCE_CHECKOUT_ENABLED=true`。這不是 Email 授權，沒有外部傳送或新排程。
@@ -186,7 +186,7 @@ Quarantine 停止新通知與到期處理，既有通知與授權讀取仍可用
 同一 predicate 在分頁前過濾種類，亦用於未讀數、提醒、全部標讀與單則標讀的收據重播前授權。
 關閉不刪歷史，下一次既有鈴鐺刷新即反映關閉；重開不回填 OFF 期間的事件。
 撤權不抹除當時有權收到的歷史，也不讓舊通知取得訂單權限。
-Migration180 只擴充既有 CHECK，不新增物件或權限，無須因本變更重跑 runtime grants。
+Migration182 只擴充既有 CHECK，不新增物件或權限，無須因本變更重跑 runtime grants。
 
 目前接上的事件（`events.ts`）：
 
