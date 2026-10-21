@@ -52,8 +52,13 @@ test('appearance HTML escapes announcements and excludes stale featured SKUs wit
   const d={...defaultAppearanceSnapshot().document,announcement:'<script>合成</script>',featured_skus:['P9999','P0001']};
   const appearance=renderAppearance(d,{slug:projection.slug,revision:projection.revision},false);
   const html=storeHtml(projection,'catalog-grid-v1',[],undefined,undefined,appearance);
-  assert.match(html,/&lt;script&gt;合成&lt;\/script&gt;/);assert.doesNotMatch(html,/<script>|shop-cover|P9999/);
+  assert.match(html,/&lt;script&gt;合成&lt;\/script&gt;/);
+  assert.doesNotMatch(html,/<script>/i);
+  assert.doesNotMatch(html,/shop-cover|P9999/);
   assert.equal((html.match(/<article>/g)??[]).length,2);assert.ok(html.indexOf('id="featured-products"')<html.indexOf('id="products"'));
+  const mixedAppearance=renderAppearance({...d,announcement:'<ScRiPt>合成</sCrIpT>'},{slug:projection.slug,revision:projection.revision},false);
+  const mixedHtml=storeHtml(projection,'catalog-grid-v1',[],undefined,undefined,mixedAppearance);
+  assert.match(mixedHtml,/&lt;ScRiPt&gt;合成&lt;\/sCrIpT&gt;/);assert.doesNotMatch(mixedHtml,/<script>/i);
   const blank=storeHtml(projection,'catalog-grid-v1',[],undefined,undefined,{...appearance,announcement:'　 '});
   assert.doesNotMatch(blank,/class="shop-announcement"/);
 });
