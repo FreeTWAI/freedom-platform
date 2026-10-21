@@ -29,7 +29,9 @@
     "guild-open-source",
     "guild-events",
     "community-ar",
-    "commerce-storefront"
+    "commerce-storefront",
+    "agent-commerce-portal",
+    "hosted-checkout"
   ],
   "format": "freedom.module/v1",
   "instructions": [

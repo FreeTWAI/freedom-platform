@@ -184,8 +184,8 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4213,
-      "sha256": "0d695919a26f11c5ec4ea018daed7e5e7ac7da9859343a7c47fb33cb7e9de747"
+      "bytes": 4265,
+      "sha256": "de5a99f7cedef9cf79192d90edac6d1560fbda4e121ba662a425cc3d3c7e12ed"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -17569,8 +17569,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/freedom.module.json",
-      "bytes": 1611,
-      "sha256": "b01c1ace95b60f69caa525097942c5636e67b8f02cd7555654e394df30643242"
+      "bytes": 1779,
+      "sha256": "829d50fcb70ff6a9c5ae1a16c069cbd21055747b4075c9f51a1e07b36972e8c9"
     },
     {
       "path": "modules/agent-commerce/checkout/index.ts",
@@ -18269,8 +18269,8 @@
     },
     {
       "path": "modules/agent-commerce/portal/freedom.module.json",
-      "bytes": 709,
-      "sha256": "1cb1ca6c46b2f10976627a2919adcb0020198712d11375d8cf9fb82821c8ffb8"
+      "bytes": 805,
+      "sha256": "f96ea297abac11002ae2ecb0839fd83b4be3d965ec2be18973265a5f4e6b40ed"
     },
     {
       "path": "modules/agent-commerce/providers/README.md",
