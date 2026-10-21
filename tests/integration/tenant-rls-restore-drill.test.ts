@@ -565,7 +565,7 @@ const EXPECTED: Record<string, number> = {
   tenant_module_permissions: 0, commerce_resource_tenants: 4, commerce_order_quotes: 2, commerce_hosted_supply_offers: 2,
   // Both restored tenants have real primary/secondary bytes and every gallery table.
   commerce_product_groups:4,commerce_product_group_members:4,commerce_publication_variants:2,commerce_product_gallery_photos:2,commerce_publication_galleries:2,commerce_publication_gallery_refs:4,
-  commerce_product_photo_targets: 2, commerce_publication_photo_refs: 2, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0, commerce_hosted_offer_photos: 0,
+  commerce_product_photo_targets: 4, commerce_publication_photo_refs: 2, commerce_distribution_photo_copies: 0, commerce_distribution_photo_targets: 0, commerce_hosted_offer_photos: 0,
   commerce_storefront_seller_drafts: 2, commerce_storefront_policy_drafts: 8, commerce_storefront_seller_versions: 2, commerce_storefront_policy_versions: 8, commerce_publication_seller_policies: 2, commerce_publication_policy_refs: 8,
   commerce_storefront_appearance_drafts: 0, commerce_storefront_appearance_targets: 0, commerce_publication_appearances: 0, commerce_publication_appearance_refs: 0,
   tenant_work_results: 2, tenant_work_result_targets: 2, tenant_capacity_policies: 3,

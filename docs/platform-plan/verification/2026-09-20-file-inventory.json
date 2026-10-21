@@ -18724,8 +18724,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/variants/Editor.tsx",
-      "bytes": 17862,
-      "sha256": "65747213d37210ceb2479ee2a85cb287b2a7d212e69c2270064b50b02c0a79d3"
+      "bytes": 18947,
+      "sha256": "00002e2f2a73988313c47043e9fda131bfb3b396324e3eab417b823a71fdc70f"
     },
     {
       "path": "modules/agent-commerce/storefront/variants/buyer.ts",
@@ -18739,13 +18739,13 @@
     },
     {
       "path": "modules/agent-commerce/storefront/variants/commands.ts",
-      "bytes": 13033,
-      "sha256": "4f9f6be975ad1457b913cef9fbc2c354c08ef7f4089b3499cfda4cbd1857a328"
+      "bytes": 14593,
+      "sha256": "861fb19eaacd3033c39de1c43082fd7871777d9081a9594eb8b72a1265a028cf"
     },
     {
       "path": "modules/agent-commerce/storefront/variants/design.md",
-      "bytes": 4859,
-      "sha256": "ee8250c3892b82f61c45e9b88bb6bcc04c09b6b3d0a1cf246fa61e9ef7ca4786"
+      "bytes": 5023,
+      "sha256": "6ec45b44608f45ffccae19ad271a620fa32e09a48e7260f94d3ad8aa65c63344"
     },
     {
       "path": "modules/agent-commerce/storefront/variants/editor-state.ts",
@@ -22999,8 +22999,8 @@
     },
     {
       "path": "tests/e2e/hosted-store-fixture.ts",
-      "bytes": 8554,
-      "sha256": "a82d48999a610f6de9814c57e89499899e186c6a0d747dff83f595d20794cc03"
+      "bytes": 8755,
+      "sha256": "8b4b7dcebc254bfea0cbcb2425e9d88b0397c0985a7fddf5775fe36fc60deb58"
     },
     {
       "path": "tests/e2e/hosted-store-gallery-off.spec.ts",
@@ -23454,8 +23454,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart-fixture.ts",
-      "bytes": 18824,
-      "sha256": "b2c1bed0b60a416d43534c1ae169e900d49c6fb37d292cd73f1c0750ecbe2ce5"
+      "bytes": 19032,
+      "sha256": "f83d541f7549530710f72f7f78728e3fb47070938fa53e371c88a96d99d43c7e"
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
@@ -23720,7 +23720,7 @@
     {
       "path": "tests/integration/tenant-rls-restore-drill.test.ts",
       "bytes": 91899,
-      "sha256": "6e0b7d40d8aa9ea3069da7fa75a4079be081fdaad9e8394f277b9b20c7d22d9f"
+      "sha256": "8164c34fa4863b123855c0cb1264fa8121712f76d2c42a0b4d039aa0f5f8b1d0"
     },
     {
       "path": "tests/integration/helpers/media-restore-fixtures.ts",
@@ -25914,8 +25914,8 @@
     },
     {
       "path": "tests/runtime/storefront-variants.test.ts",
-      "bytes": 27846,
-      "sha256": "da78880fabc3d370bb6774cc8abf47344e6dd1f215d6f005b02ee1bb48b7824f"
+      "bytes": 29948,
+      "sha256": "5267963cf251c2c8fadccc636eebd391884c037b81116b9d314ae321ca3721e4"
     },
     {
       "path": "tests/runtime/supplier-console-queries.test.ts",
@@ -26039,8 +26039,8 @@
     },
     {
       "path": "tests/runtime/tenant-rls-retarget.test.ts",
-      "bytes": 76033,
-      "sha256": "515a77013e02a62d4c463d79de0a569342d8973118400a5ef3b3598dc5e22e85"
+      "bytes": 77764,
+      "sha256": "20fff2e5e9724062de2fbee6c6de317499d138f325d6b3c81cd513e0b2700cd2"
     },
     {
       "path": "tests/runtime/tenant-rls-runtime-role.test.ts",

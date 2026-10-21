@@ -1,3 +1,4 @@
+import {collaborationGitHubFixture} from '../../packages/testing/github-collaboration.js';
 import {Problem} from '../../packages/shared/problem.js';
 import {StoreAdmissionViewSchema} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import { randomUUID } from 'node:crypto';
@@ -107,6 +108,7 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
       }}:{}),
       guildLaunchpadEnabled: true,
       storeVariantsEnabled:controls.storeVariantsEnabled===true,
+      ...(controls.storeVariantsEnabled?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
       supplierConsoleEnabled,
       ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
