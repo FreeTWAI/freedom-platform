@@ -1,5 +1,17 @@
 # Closed storefront product photos
 
+Opt-in [offer evaluation photos](../agent-commerce/hosted/distribution.md#opt-in-evaluation-photos-2026-10-20)
+reuse this purpose without granting seller publication rights. Provisional
+migration 174 adds append-only `commerce_hosted_offer_photos` references with
+ready identity/object FKs, copied metadata and the fence trigger. Every history
+row retains the supplier object for the offer's lifetime. Backup capture already
+includes all registered objects; any future product-photo GC must count these
+references as well as targets, publications and distribution copies. No existing
+GC function, policy or trigger is changed or enabled. Seller bytes keep their
+own tenant context and recheck the current offer/share around verified object I/O;
+only offered versions expose evaluation photos, including to prior adopters;
+the supplier preview uses its own product-photo route's pinned offer/seq query.
+
 This source profile is disabled by default. Migration 141 adds the purpose and
 its `domain_media_storage_policy` row with `mode=legacy`, persistence false, and
 no revision or retained-byte limit. Host admission also requires a separate,

@@ -1,3 +1,5 @@
+import {setupCartFixtureStore} from './storefront-cart-fixture.js';
+import {apiLogin} from './hosted-order-fixture.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './member-feature-fixture.js';
@@ -282,7 +284,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     // Step 10: A inspects Reservations & Orders, Products & Stock, and Overview. (AT-22, AT-31)
     await nav.getByRole('link', {name: '預留與訂單', exact: true}).click();
     await expect(a.getByRole('heading', {level: 1, name: '預留與訂單', exact: true})).toBeVisible();
-    await expect(activeView.getByText('預留最多 30 分鐘，尚未付款或安排出貨；供貨金額不是請款或營收。', {exact: true})).toBeVisible();
+    await expect(activeView.getByText('本頁只顯示 30 分鐘供貨預留，不包含付款後的履約單。預留尚未付款或安排出貨；供貨金額不是請款或營收。', {exact: true})).toBeVisible();
     await expect(activeView.locator('.sc-read-status').filter({hasText: '資料時間'})).toBeVisible();
     const orderItem = activeView.locator('.sc-list > li').filter({hasText: orderId});
     await expect(orderItem).toContainText(bStoreName);
@@ -444,4 +446,67 @@ test('SC-E2E-02 retail owner sees the same console with 已開零售 and 前往�
   await expect(page.locator('.hosted-store')).toBeVisible();
   await expect(page.locator('.supplier-console')).toHaveCount(0);
   await expect(page.locator('.hosted-store-product').filter({hasText: retailProductTitle})).toBeVisible();
+});
+
+test('merchant stock shows real paid allocations and held units without losing healthy products',async({browser,e2eAuthPool},info)=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{realAdmission:true}),context=await browser.newContext({baseURL:store.origin});
+ try {
+  await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
+  await apiLogin(context,store.origin,store.seller.email);
+  await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成付款與庫存驗證'});
+  const order=async(quantity:number)=>{
+   const response=await context.request.post(`/api/v1/public/stores/${store.slug}/checkouts`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:{publication_revision:store.revision,lines:[{sku:store.products[0].sku,quantity}],contact:{name:'合成庫存買家',email:'stock-buyer@example.test',phone:'0900000000'},delivery:{method:'meetup',name:'合成庫存買家',mobile:'0900000000'},invoice:null,consents:[]}});
+   expect(response.status(),await response.text()).toBe(201);const checkout=await response.json();
+   const placed=await context.request.post(`/api/v1/public/stores/${store.slug}/checkouts/${checkout.checkout_ref}/orders`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:{terms_sha256:checkout.terms_sha256,client_order_id:randomUUID(),payment_method:'bank_transfer'}});
+   expect(placed.status(),await placed.text()).toBe(201);return (await placed.json()).order;
+  };
+  const paid=await order(2),date=(await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') AS d")).rows[0].d;
+  await store.sellerPost(`${store.root}/checkout-orders/${paid.order_ref}/offline-payments`,{amount_minor:paid.total_minor,received_on:date},200,'1');
+  await order(1);
+  const page=await context.newPage(),hash=`#stores/${store.tenant}/${store.instance}/supply/products`;
+  await page.goto('/'+hash);
+  const root=page.locator('.supplier-console'),row=root.locator('tbody tr').filter({hasText:store.products[0].title});
+  await expect(row.locator('.merchant-inventory-values')).toHaveText('5／3／2');
+  await expect(row.locator('.merchant-inventory-breakdown')).toContainText('預留中 1');await expect(row).toContainText('已付款待出貨 2');
+  const capture=async(prefix:string)=>{for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(root.locator('.merchant-inventory-definition:visible')).toHaveCount(1);
+   expect(await root.locator('.merchant-inventory-values').first().evaluate(el=>getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+   await page.screenshot({path:info.outputPath(`${prefix}-${width}.png`),fullPage:true});
+  }};
+  await capture('stock-supplier-list');
+  await row.locator(`[data-sc-item="${store.products[0].product_id}"]`).click();
+  const stock=root.locator('.sc-section').filter({has:page.getByRole('heading',{name:'庫存',exact:true})});
+  await expect(stock).toContainText('庫存 5／已占用 3／可用 2');await capture('stock-supplier-detail');
+  await page.route('**/supplier-console/products',async route=>{
+   const response=await route.fetch(),data=await response.json();data.items[0].inventory={state:'inconsistent',code:'reservation_inconsistent'};
+   await route.fulfill({response,json:data});
+  });
+  await page.goto('/'+hash);await expect(root).toContainText('庫存紀錄不一致');await expect(row.locator('.merchant-inventory-values')).toHaveText('5／—／—');
+  await expect(root.locator('tbody tr').filter({hasText:store.products[1].title}).locator('.merchant-inventory-values')).toHaveText('8／0／8');
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(root.locator('.merchant-inventory-definition:visible')).toHaveCount(1);
+   await page.screenshot({path:info.outputPath(`stock-supplier-inconsistent-${width}.png`),fullPage:true});
+  }
+  await page.unroute('**/supplier-console/products');await page.goto(`/#stores/${store.tenant}/${store.instance}`);
+  const own=page.locator('.hosted-store-product').filter({has:page.getByRole('heading',{name:store.products[0].title,exact:true})});
+  await expect(own.locator('.merchant-inventory-values')).toHaveText('庫存 5・已占用 3・可售 2');
+  await expect(own.locator('.merchant-inventory-breakdown')).toContainText('預留中 1');await expect(own).toContainText('已付款待出貨 2');
+  await expect(page.getByRole('region',{name:'接單狀態',exact:true})).toContainText('目前已開放接單；商店說明與聯絡方式尚未完成');
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(page.locator('.hosted-store .merchant-inventory-definition')).toHaveCount(1);
+   await page.screenshot({path:info.outputPath(`stock-store-mixed-${width}.png`),fullPage:true});
+  }
+  await page.route('**/storefronts/*/products',async route=>{const response=await route.fetch(),data=await response.json();data.items[0].inventory={state:'inconsistent',code:'reservation_inconsistent'};await route.fulfill({response,json:data});});
+  await page.reload();await expect(own.locator('.merchant-inventory-values')).toHaveText('庫存 5・已占用 —・可售 —');
+  await expect(own.getByRole('button',{name:'重新讀取庫存',exact:true})).toHaveClass(/btn-small/);
+  await expect(page.locator('.hosted-store-product').filter({has:page.getByRole('heading',{name:store.products[1].title,exact:true})}).locator('.merchant-inventory-values')).toHaveText('庫存 8・已占用 0・可售 8');
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await expect(page.locator('.hosted-store .merchant-inventory-definition')).toHaveCount(1);
+   await page.screenshot({path:info.outputPath(`stock-store-inconsistent-${width}.png`),fullPage:true});
+  }
+ } finally {try{await context.close();}finally{await store.close();}}
 });

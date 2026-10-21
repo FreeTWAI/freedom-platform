@@ -234,7 +234,10 @@ export function supplierRun(options:RunOptions,client:CandidateClient,secrets:Se
         const card=area.locator('article.hosted-store-product').filter({has:page.getByRole('heading',{name:e.product_name,exact:true})});await card.waitFor({state:'visible',timeout:20000});
         // Match formatMinor's fixed TWD display without importing portal code into the tool.
         const amount=new Intl.NumberFormat('zh-TW',{style:'currency',currency:'TWD',minimumFractionDigits:2,maximumFractionDigits:2}).format(e.cost_minor/100);
-        for(const text of ['供貨單價 '+amount,'庫存 '+e.stock,e.description])ctx.check('supplier_bookmark_values_match',await card.getByText(text,{exact:true}).count()===1);
+        for(const text of ['供貨單價 '+amount,e.description])ctx.check('supplier_bookmark_values_match',await card.getByText(text,{exact:true}).count()===1);
+        ctx.check('supplier_bookmark_values_match',await card.getByText(new RegExp('^庫存 '+e.stock+'・已占用 0・可售 '+e.stock+'$')).count()===1
+          &&await card.getByText('庫存紀錄不一致',{exact:false}).count()===0
+          &&await card.getByText('庫存明細暫時無法讀取',{exact:false}).count()===0);
       }
       ctx.metric('bookmark',on?'console_page':'old_page');ctx.metric('bookmark_values_matched',true);
     });

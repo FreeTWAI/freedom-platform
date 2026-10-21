@@ -95,7 +95,7 @@ test('owner setup, independent admin admission, safe scope receipt and immediate
   await page.getByRole('button',{name:'編輯面交取貨設定',exact:true}).click();const delivery=page.getByRole('form',{name:'面交取貨設定',exact:true});
   await delivery.getByLabel('提供面交取貨',{exact:true}).check();await delivery.getByLabel('面交地區與時段',{exact:true}).fill('請先約定面交時間。');await delivery.getByRole('button',{name:'儲存面交取貨設定',exact:true}).click();await expect(delivery).toHaveCount(0);
   await page.goto('/'+overview);for(const key of ['payment','delivery'])await expect(row(key).getByText('完成',{exact:true})).toBeVisible();
-  await expect(row('admission').getByText('等待平台',{exact:true})).toBeVisible();await expect(readiness).toContainText('目前尚未開放接單。');
+  await expect(row('admission').getByText('等待平台',{exact:true})).toBeVisible();await expect(readiness).toContainText('開店設定已備妥，等待平台確認後才能接受結帳訂單。');
   await buyer.goto(`/shops/${slug}/products/${product.sku}`);await expect(buyer.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
   await screenshots(page,'.seller-console',width=>info.outputPath(`overview-light-${width}.png`));
   const sellerContrast=await badgeContrast(page,'.seller-console');
@@ -104,7 +104,7 @@ test('owner setup, independent admin admission, safe scope receipt and immediate
   await card.getByRole('button',{name:'准入',exact:true}).click();await expect(card).toContainText('准入後，只要其他條件都成立，這間店就能接受新訂單。');await card.getByLabel('操作理由',{exact:true}).fill('合成範圍核對與獨立管理員確認');await card.getByRole('button',{name:'確認准入',exact:true}).click();await expect(card.getByText('准入：有效',{exact:true})).toBeVisible();
   const admitted=(await e2eAuthPool.query('SELECT admission_id FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2 AND revoked_at IS NULL',[tenant,instance])).rows;expect(admitted).toHaveLength(1);
   expect((await e2eAuthPool.query("SELECT 1 FROM platform_admin_audit WHERE target_type='commerce_store_admission' AND target_ref=$1",[admitted[0].admission_id])).rowCount).toBe(1);
-  await page.getByRole('button',{name:/更新資料\s*：開店準備/}).click();await expect(readiness).toContainText('目前已開放接單：買家可以在你的商店加入購物車並下單。');await buyer.reload();await expect(buyer.getByRole('button',{name:'加入購物車',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/更新資料\s*：開店準備/}).click();await expect(readiness).toContainText('目前已開放接單；買家可依商店設定結帳。');await buyer.reload();await expect(buyer.getByRole('button',{name:'加入購物車',exact:true})).toBeVisible();
   await expect(admin.getByText('收據含租戶與商店名稱、准入與撤銷理由、識別碼、版本與設定狀態；不含聯絡資料、會員信箱、銀行帳號／戶名或憑證狀態。這是內部管理紀錄，請勿公開分享。',{exact:true})).toBeVisible();
   const downloaded=admin.waitForEvent('download');await admin.getByRole('button',{name:'下載範圍收據（JSON）',exact:true}).click();const download=await downloaded;expect(download.suggestedFilename()).toMatch(/^commerce-scope-sandbox-\d{8}T\d{6}Z\.json$/);await download.saveAs(info.outputPath('scope-receipt.json'));
   const stream=await download.createReadStream();expect(stream).not.toBeNull();let json='';for await(const chunk of stream!)json+=chunk.toString();const receipt=JSON.parse(json);

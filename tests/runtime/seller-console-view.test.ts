@@ -1,3 +1,5 @@
+import {storeOrderStatus} from '../../modules/agent-commerce/seller-console/ui/view';
+import {StoreReadinessSchema,type StoreReadiness} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {words,money,amountToMinor,setupNext} from '../../modules/agent-commerce/seller-console/ui/view.js';
@@ -23,4 +25,43 @@ test('offline setting field problems reach the seller form without changing othe
  for(const expected of [fields,undefined,undefined,undefined,[{path:'old.consumer',code:'required'}]])await assert.rejects(client.put('/settings',{}, {suppressConsole:true}),(cause:unknown)=>{
   assert.ok(cause instanceof ApiError);assert.deepEqual(cause.errors,expected);assert.doesNotMatch(errorText(cause,true),/account or password/);return true;
  });
+});
+
+test('merchant banner uses readiness facts across the complete checkout truth table',()=>{
+ const ready:StoreReadiness=StoreReadinessSchema.parse({accepting_orders:true,methods:{payment:['bank_transfer'],delivery:['meetup']},items:[
+  {key:'storefront',state:'done',revision:'1'}, {key:'products',state:'done',published_count:1,sellable_count:1,own_stock_count:1},
+  {key:'store_information',state:'done'},{key:'release',state:'done',module_release_ref:'storefront@1.1.0'},
+  {key:'payment',state:'done',version:'1'},{key:'delivery',state:'done',version:'1'},
+  {key:'admission',state:'done'},{key:'platform',state:'done'},
+ ]});
+ const changed=(key:string,state:string,accepting=false)=>StoreReadinessSchema.parse({...ready,accepting_orders:accepting,items:ready.items.map(i=>i.key===key?{...i,state}:i)});
+ assert.equal(storeOrderStatus({readiness:ready}).text,'目前已開放接單；買家可依商店設定結帳。');
+ for(const reservationOpen of [true,false,undefined]) {
+  assert.deepEqual(storeOrderStatus({readiness:ready,reservationOpen}),storeOrderStatus({readiness:ready}));
+  for(const consoleEnabled of [true,false])assert.equal(storeOrderStatus({checkoutEnabled:false,consoleEnabled,reservationOpen,readiness:ready,status:403}).text,
+   reservationOpen?'已開放 30 分鐘庫存預留；付款與出貨尚未啟用。':'店鋪／商品展示已就緒，交易尚未啟用');
+ }
+ assert.equal(storeOrderStatus({consoleEnabled:false,readiness:ready}).text,'平台已開放結帳；這個環境未提供開店準備，暫時無法確認這間商店是否接單。');
+ assert.equal(storeOrderStatus({loading:true}).text,'正在確認這間商店的接單狀態…');
+ for(const status of [403,404,409,500,undefined]) {
+  const failed=storeOrderStatus({status});assert.equal(failed.text,'暫時無法確認這間商店是否接單，請重新讀取開店準備。');assert.equal(failed.retry,status!==403);
+ }
+ assert.equal(storeOrderStatus({readiness:changed('platform','paused')}).text,'平台目前暫停新結帳訂單；已成立的訂單仍可查看與處理。');
+ assert.equal(storeOrderStatus({readiness:changed('admission','revoked')}).text,'這間商店目前已暫停接受新結帳訂單；已成立的訂單仍可查看與處理。');
+ assert.equal(storeOrderStatus({readiness:changed('admission','not_admitted')}).text,'開店設定已備妥，等待平台確認後才能接受結帳訂單。');
+ for(const [key,state,label] of [['storefront','missing','發布商店'],['products','missing','可售商品'],['release','upgrade_required','商店版本'],['payment','missing','付款方式'],['payment','not_offered','付款方式'],['delivery','missing','交付方式']] as const) {
+  const result=storeOrderStatus({readiness:changed(key,state)});assert.equal(result.review,true);assert.match(result.text,new RegExp('待完成：'+label));
+  if(state==='not_offered')assert.match(result.text,/付款方式目前平台尚未開放/);
+ }
+ for(const [key,phrase] of [['products','目前沒有可售商品'],['delivery','交付方式尚未完成']] as const) {
+  const result=storeOrderStatus({readiness:changed(key,'missing',true)});assert.equal(result.review,true);assert.equal(result.text,`結帳入口已開放；${phrase}，買家目前無法完成下單。`);
+ }
+ const both=changed('products','missing',true);both.items=both.items.map(i=>i.key==='delivery'?{...i,state:'missing'}:i);
+ assert.match(storeOrderStatus({readiness:both}).text,/目前沒有可售商品、交付方式尚未完成/);
+ const wait=changed('payment','missing');wait.items=wait.items.map(i=>i.key==='admission'?{...i,state:'not_admitted'}:i);
+ assert.match(storeOrderStatus({readiness:wait}).text,/平台開放確認待完成/);
+ assert.equal(storeOrderStatus({readiness:changed('store_information','missing',true)}).text,'目前已開放接單；商店說明與聯絡方式尚未完成，請檢查開店準備。');
+ for(const [key,state] of [['release','upgrade_required'],['payment','missing'],['admission','not_admitted']] as const)
+  assert.equal(storeOrderStatus({readiness:changed(key,state,true)}).text,'目前尚未開放結帳接單，請檢查開店準備。');
+ assert.equal(storeOrderStatus({readiness:{...ready,accepting_orders:false}}).text,'目前尚未開放結帳接單，請檢查開店準備。');
 });

@@ -1,3 +1,6 @@
+import {freezeCheckout,placeCheckoutOrder,applyConfirmedPayment} from '../../modules/agent-commerce/checkout/index.js';
+import {ports} from './hosted-checkout-harness.js';
+import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transaction.js';
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -15,6 +18,7 @@ const product={title:'供貨茶杯',description:'經授權的商品介紹',cost_
 const terms={cost_minor:400,shipping_minor:50,shipping_terms:'確認後三天出貨',return_terms:'瑕疵請聯絡供貨方'};
 type Store={owner:Session;tenantId:string;instanceId:string;root:string};
 let h:RegistryHarness,runtime:Pool,app:ReturnType<typeof createApp>,closed:ReturnType<typeof createApp>;
+let inconsistentItem:string|undefined;
 const statements:{text:string;values:any[]}[]=[],role=`supplier_queries_${process.pid}_${Date.now()}`;
 const ok=(reply:Reply,status=200)=>{assert.equal(reply.status,status,JSON.stringify(reply.data));return reply.data;};
 const get=(s:Store,path:string,session=s.owner,target=app)=>h.call('GET',s.root+path,session,undefined,{},target);
@@ -36,8 +40,8 @@ async function open(name:string,guild=supplierGuild,owner?:Session):Promise<Stor
 async function supplier(name=catalog.name,owner?:Session) {
   const s=await open(name,supplierGuild,owner);ok(await send(s,'/supply-profile',{...catalog,name}),201);return s;
 }
-async function retailer(name='零售 B') {
-  const s=await open(name,retailGuild);ok(await send(s,'/setup',{name,slug:`retail-${randomUUID().slice(0,12)}`,currency:'TWD'}),201);return s;
+async function retailer(name='零售 B',owner?:Session) {
+  const s=await open(name,retailGuild,owner);ok(await send(s,'/setup',{name,slug:`retail-${randomUUID().slice(0,12)}`,currency:'TWD'}),201);return s;
 }
 async function supplyProduct(s:Store,input=product) {
   const made=ok(await send(s,'/supply-products',input),201);
@@ -96,7 +100,14 @@ before(async()=>{
     client.query=function(this:typeof client,...args:any[]) {
       const first=args[0],text=typeof first==='string'?first:first?.text;
       if(text?.includes('/* supplier-console:'))statements.push({text,values:args[1]??first?.values});
-      return (native as Function).apply(this,args);
+      const result=(native as Function).apply(this,args);
+      if(inconsistentItem&&text?.includes('/* supplier-console:'))return Promise.resolve(result).then(value=>{
+        // Read-output fault injection only: no trigger/RLS bypass or committed corruption.
+        for(const row of value.rows)for(const item of [...(row.items??[]),...(row.products??[]),...(row.product?[row.product]:[])])
+          if(item.item_id===inconsistentItem)item.held+=1;
+        return value;
+      });
+      return result;
     } as typeof client.query;
   });
   app=createApp(runtime,h.origin,'local',{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,supplierConsoleEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
@@ -372,7 +383,7 @@ test('SC-API-23 summary uses overview definitions, write capability and no reser
   assert.equal(summary.todos.outdated_offers,overview.todos.items.filter((r:any)=>r.kind==='offer_outdated').length);
   assert.match(statements[0].text,/\/\* supplier-console:summary \*\//);
   assert.doesNotMatch(statements[0].text,/commerce_(?:orders|order_lines|order_quotes)/);
-  assert.deepEqual(Object.keys(summary).sort(),['as_of','instance_id','profile','tenant_id','todos']);
+  assert.deepEqual(Object.keys(summary).sort(),['as_of','instance_id','inventory_inconsistent_count','profile','tenant_id','todos']);
   assert.doesNotMatch(JSON.stringify(summary),/reservation|buyer|quote|supply_total/);
   const operator=(await h.person('摘要操作員')).session,viewer=(await h.person('摘要唯讀者')).session;
   await invite(a,operator,['store:read','store:write']);await invite(a,viewer,['store:read'],'viewer');
@@ -403,3 +414,146 @@ test('SC-API-24 signed cursor positions must use exact keys, microseconds and UU
     const reply=await consoleGet(a,'/reservations?cursor='+encodeURIComponent(cursor));ok(reply,422);assert.equal(reply.data.code,'invalid_cursor');
   }
 });
+
+test('merchant stock stays scoped and item-local on inconsistency; 200-product and detail plans remain indexed',async t=>{
+ const a=await retailer('合成庫存商店'),foreign=await retailer('另一事業');
+ const first=ok(await send(a,'/products',{title:'合成庫存商品',price_minor:100,stock:100}),201);
+ const profile=await profileRow(a),seed=randomUUID();
+ // Bounded set-based own-product fixture, with all ordinary DB guards enabled.
+ await h.pool.query(`INSERT INTO commerce_items(item_id,shop_id,sku,title,description,price_minor,stock,photo_url,reserved,shipping_minor,shipping_terms,return_terms)
+   SELECT overlay(overlay(md5($2||n::text) placing '4' from 13) placing '8' from 17)::uuid,i.shop_id,'P'||lpad(n::text,4,'0'),'合成庫存商品 '||n,i.description,i.price_minor,100,NULL,0,i.shipping_minor,i.shipping_terms,i.return_terms
+   FROM commerce_items i CROSS JOIN generate_series(2,200) n WHERE i.item_id=$1`,[first.product_id,seed]);
+ await h.pool.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot,own_retail_enabled)
+   SELECT overlay(overlay(md5($2||'/selection/'||n::text) placing '4' from 13) placing '8' from 17)::uuid,l.shop_id,overlay(overlay(md5($2||n::text) placing '4' from 13) placing '8' from 17)::uuid,l.retail_price_minor,l.sale_terms,
+     l.snapshot||jsonb_build_object('sku','P'||lpad(n::text,4,'0')),true FROM commerce_selections l CROSS JOIN generate_series(2,200) n WHERE l.item_id=$1 AND l.shop_id=$3`,[first.product_id,seed,profile.storefront_shop_id]);
+ await publish(a);await admit(a);
+ const held=await reserve(a,[{sku:first.sku,quantity:3}]);
+ const paid=await isolatedTransaction(runtime,async q=>{
+  const c=await freezeCheckout(q,profile,{publication_revision:'1',lines:Array.from({length:20},(_,n)=>({sku:'P'+String(n+1).padStart(4,'0'),quantity:5})),contact:{name:'合成買家',email:'synthetic-stock@example.test',phone:'0000000000'},delivery:{method:'synthetic',address:'合成地址'},invoice:null,consents:[],idempotencyKey:randomUUID()},ports);
+  const o=await placeCheckoutOrder(q,profile,{checkoutId:c.checkout_id,termsSha256:c.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:null,environment:'sandbox'},ports);
+  await applyConfirmedPayment(q,{orderId:o.order_id,paymentRef:randomUUID(),amountMinor:10000,currency:'TWD',simulated:false});
+  return o;
+ });
+ await stockAllocationHistory(paid.order_id,20);
+ // Retained released rows exercise the partial hold index; unrelated live rows
+ // exercise isolation. Use the existing immutable history fixture, in one batch.
+ const source=await reserve(a,[{sku:'P0002',quantity:1}]);
+ await stockHistoryCopies(source,10,true);
+ const other=ok(await send(foreign,'/products',{title:'不能洩漏的庫存商品',price_minor:100,stock:10000}),201);await publish(foreign);await admit(foreign);
+ await stockHistoryCopies(await reserve(foreign,[{sku:other.sku,quantity:1}]),10,false);
+ for(const table of ['commerce_items','commerce_inventory_reservations','commerce_inventory_allocations'])await h.pool.query('ANALYZE '+table);
+ const expected={state:'ready',stock:100,reserved:8,available:92,held:3,allocated:5};
+ const page=await checkSnapshot(a,'/products');assert.equal(page.items.length,200);assert.deepEqual(page.items[0].inventory,expected);
+ const principal=(await h.pool.query('SELECT principal_id FROM principals WHERE user_ref=$1',[a.owner.user.user_id])).rows[0].principal_id;
+ for(const path of ['/products','/products/'+first.product_id]) {
+  await checkSnapshot(a,path);const snapshot=statements[0];
+  await isolatedTransaction(runtime,async q=>{
+   await q.query("SELECT set_config('freedom.tenant_id',$1,true),set_config('freedom.principal_id',$2,true)",[a.tenantId,principal]);
+   const roles=(await q.query('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0];assert.equal(roles.rolsuper,false);assert.equal(roles.rolbypassrls,false);
+   const explained=(await q.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+snapshot.text,snapshot.values)).rows[0]['QUERY PLAN'][0];
+   t.diagnostic('merchant-stock-plan '+JSON.stringify({path:path==='/products'?'list-200':'detail',role:'NONOWNER/NOBYPASSRLS',plan:explained}));
+   const nodes:any[]=[];const walk=(node:any)=>{nodes.push(node);for(const child of node.Plans??[])walk(child);};walk(explained.Plan);
+   const heldIndex=nodes.find(n=>n['Index Name']==='commerce_inventory_held_item');assert(heldIndex,'held reads must use item partial index');
+   assert.equal(nodes.some(n=>['commerce_inventory_reservations','commerce_inventory_allocations'].includes(n['Relation Name'])&&n['Node Type']==='Seq Scan'&&n['Actual Loops']>1),false);
+   const blocks=explained.Plan['Shared Hit Blocks']+explained.Plan['Shared Read Blocks'];assert(blocks<100000,'bounded list/detail buffers: '+blocks);
+  });
+ }
+ const reportPath='/report?from=2026-01-01&to=2026-12-31';
+ const csvPath=reportPath.replace('/report?','/report.csv?');
+ const readyCsv=await consoleGet(a,csvPath);ok(readyCsv);
+ const readyLine=(await readyCsv.response.text()).split('\r\n').find(line=>line.startsWith('"'+first.product_id+'",'));
+ assert.equal(readyLine?.split(',').slice(6,9).join(','),'"100","8","92"');assert(readyLine?.endsWith('"3","5","正常"'));
+ try {
+  inconsistentItem=first.product_id;
+  const bad=await checkSnapshot(a,'/products');assert.deepEqual(bad.items[0].inventory,{state:'inconsistent',code:'reservation_inconsistent'});assert.equal(bad.items[1].inventory.state,'ready');
+  assert.deepEqual((await checkSnapshot(a,'/products/'+first.product_id)).product.inventory,bad.items[0].inventory);
+  for(const path of ['/overview','/summary',reportPath])assert.equal((await checkSnapshot(a,path)).inventory_inconsistent_count,1,path);
+  const csv=await consoleGet(a,reportPath.replace('/report?','/report.csv?'));ok(csv);const body=await csv.response.text();
+  assert(body.includes('庫存紀錄不一致'));assert(body.includes('暫時無法確認'));assert(!body.includes(other.product_id));
+  const badLine=body.split('\r\n').find(line=>line.startsWith('"'+first.product_id+'",'));assert.equal(badLine?.split(',').slice(5,9).join(','),'"","100","",""');assert(badLine?.endsWith('"","","庫存紀錄不一致"'));
+  for(const path of ['/products','/products/'+first.product_id]) {
+   const denied=await consoleGet(a,path,foreign.owner);ok(denied,404);assert(!JSON.stringify(denied.data).includes(first.product_id));
+  }
+ } finally {inconsistentItem=undefined;}
+ assert.deepEqual((await checkSnapshot(a,'/products')).items[0].inventory,expected);
+ const sameOwner=await retailer('同一會員的另一事業',a.owner);
+ assert.deepEqual((await checkSnapshot(sameOwner,'/products')).items,[]);
+ const wrongScope=await consoleGet(sameOwner,'/products/'+first.product_id);ok(wrongScope,404);assert(!JSON.stringify(wrongScope.data).includes(first.product_id));
+ assert.equal((await h.pool.query('SELECT reservation_state FROM commerce_orders WHERE order_id=$1',[held.order_id])).rows[0].reservation_state,'reserved');
+});
+
+async function stockHistoryCopies(source:any,count:number,terminal:boolean) {
+  const createdAt=Array(count).fill(source.created_at);
+  const q=await h.pool.connect(),seed=randomUUID();
+  const ids=`WITH ids AS (SELECT md5($2::text||n::text||'/order')::uuid AS order_id,
+    md5($2::text||n::text||'/quote')::uuid AS quote_id,md5($2::text||n::text||'/client')::uuid AS client_id,
+    ($4::timestamptz[])[n] AS created_at FROM generate_series(1,$3::int) n)`;
+  const args=[source.order_id,seed,createdAt.length,createdAt];
+  try {
+    await q.query('BEGIN');
+    await q.query(`${ids} INSERT INTO commerce_order_quotes(quote_id,tenant_id,instance_id,public_shop_id,buyer_principal_id,publication_id,
+        terms,bindings,terms_sha256,quoted_at,expires_at,quote_profile)
+      SELECT ids.quote_id,old.tenant_id,old.instance_id,old.public_shop_id,old.buyer_principal_id,old.publication_id,
+        old.terms||jsonb_build_object('quote_id',ids.quote_id::text,
+          'quoted_at',to_char(ids.created_at-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'expires_at',to_char(ids.created_at+interval '4 minutes','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+        old.bindings,old.terms_sha256,ids.created_at-interval '1 minute',ids.created_at+interval '4 minutes',old.quote_profile
+      FROM ids CROSS JOIN commerce_orders o JOIN commerce_order_quotes old ON old.quote_id=o.quote_id WHERE o.order_id=$1`,args);
+    await q.query(`${ids} INSERT INTO commerce_orders(order_id,public_shop_id,external_id,request_sha256,currency,total_minor,created_at,expires_at,
+        order_profile,quote_id,buyer_principal_id,client_order_id,reservation_state,reservation_version)
+      SELECT ids.order_id,o.public_shop_id,'historical-'||ids.order_id::text,o.request_sha256,o.currency,o.total_minor,ids.created_at,
+        ids.created_at+interval '30 minutes',o.order_profile,ids.quote_id,o.buyer_principal_id,ids.client_id,'reserved',1
+      FROM ids CROSS JOIN commerce_orders o WHERE o.order_id=$1`,args);
+    await q.query(`${ids} INSERT INTO commerce_order_lines(order_id,selection_id,transfer_id,item_id,quantity,snapshot,acceptance_id,listing_sha256,order_profile,supplier_shop_id,hosted_offer_id)
+      SELECT ids.order_id,l.selection_id,l.transfer_id,l.item_id,l.quantity,l.snapshot,l.acceptance_id,l.listing_sha256,l.order_profile,l.supplier_shop_id,l.hosted_offer_id
+      FROM ids CROSS JOIN commerce_order_lines l WHERE l.order_id=$1`,args);
+    if(terminal)await q.query(`${ids} UPDATE commerce_orders o SET reservation_state='cancelled',reservation_version=2,
+      closed_at=o.created_at+interval '1 minute',close_reason='buyer_cancelled' FROM ids WHERE o.order_id=ids.order_id AND $1::uuid IS NOT NULL`,args);
+    await q.query(`${ids} INSERT INTO commerce_inventory_reservations(order_id,item_id,supplier_shop_id,quantity,state,created_at,expires_at,released_at)
+      SELECT o.order_id,l.item_id,i.shop_id,sum(l.quantity)::integer,
+        CASE WHEN o.reservation_state='reserved' THEN 'held' ELSE 'released' END,o.created_at,o.expires_at,o.closed_at
+      FROM ids JOIN commerce_orders o ON o.order_id=ids.order_id JOIN commerce_order_lines l ON l.order_id=o.order_id JOIN commerce_items i ON i.item_id=l.item_id
+      WHERE $1::uuid IS NOT NULL GROUP BY o.order_id,l.item_id,i.shop_id`,args);
+    if(!terminal)await q.query(`${ids} UPDATE commerce_items i SET reserved=reserved+x.quantity FROM (
+      SELECT l.item_id,sum(l.quantity)::int AS quantity FROM ids JOIN commerce_order_lines l ON l.order_id=ids.order_id
+      WHERE $1::uuid IS NOT NULL GROUP BY l.item_id) x WHERE i.item_id=x.item_id`,args);
+    await q.query('COMMIT');
+  }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
+}
+
+/** Set-based retained checkout history; ordinary FK, immutable and deferred
+ * ledger guards stay enabled. Each copied allocation has a matching converted
+ * hold and either a complete release or shipment/restock (net balance zero). */
+async function stockAllocationHistory(source:string,count:number) {
+ const q=await h.pool.connect();
+ try {
+  await q.query('BEGIN');
+  await q.query(`CREATE TEMP TABLE stock_history_ids ON COMMIT DROP AS SELECT n,gen_random_uuid() AS order_id,
+   gen_random_uuid() AS client_id,gen_random_uuid() AS hold_id,gen_random_uuid() AS allocation_id,
+   gen_random_uuid() AS application_id,gen_random_uuid() AS payment_ref FROM generate_series(1,$1::int) n`,[count]);
+  await q.query(`INSERT INTO commerce_orders SELECT (jsonb_populate_record(NULL::commerce_orders,to_jsonb(o)||
+   jsonb_build_object('order_id',h.order_id,'client_order_id',h.client_id,'external_id','chk:'||c.checkout_id::text||':'||h.client_id::text))).*
+   FROM stock_history_ids h CROSS JOIN commerce_orders o JOIN commerce_checkout_orders c ON c.order_id=o.order_id WHERE o.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_checkout_orders SELECT (jsonb_populate_record(NULL::commerce_checkout_orders,to_jsonb(c)||
+   jsonb_build_object('order_id',h.order_id,'display_number',left(c.display_number,7)||(CASE WHEN substr(c.display_number,8,1)='0' THEN '1' ELSE '0' END)||lpad(h.n::text,5,'0'),'version',1))).*
+   FROM stock_history_ids h CROSS JOIN commerce_checkout_orders c WHERE c.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_order_lines SELECT (jsonb_populate_record(NULL::commerce_order_lines,to_jsonb(l)||
+   jsonb_build_object('order_id',h.order_id))).* FROM stock_history_ids h CROSS JOIN commerce_order_lines l WHERE l.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_inventory_reservations SELECT (jsonb_populate_record(NULL::commerce_inventory_reservations,to_jsonb(r)||
+   jsonb_build_object('reservation_id',md5(h.hold_id::text||r.item_id::text)::uuid,'order_id',h.order_id))).* FROM stock_history_ids h CROSS JOIN commerce_inventory_reservations r WHERE r.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_checkout_payment_applications SELECT (jsonb_populate_record(NULL::commerce_checkout_payment_applications,to_jsonb(p)||
+   jsonb_build_object('application_id',h.application_id,'order_id',h.order_id,'payment_ref',h.payment_ref))).*
+   FROM stock_history_ids h CROSS JOIN commerce_checkout_payment_applications p WHERE p.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_inventory_allocations SELECT (jsonb_populate_record(NULL::commerce_inventory_allocations,to_jsonb(a)||
+   jsonb_build_object('allocation_id',md5(h.allocation_id::text||a.item_id::text)::uuid,'order_id',h.order_id,'source_reservation_id',md5(h.hold_id::text||a.item_id::text)::uuid,'payment_application_id',h.application_id,
+    'shipped_quantity',CASE WHEN h.n%2=0 THEN a.quantity ELSE 0 END,'released_quantity',CASE WHEN h.n%2=1 THEN a.quantity ELSE 0 END))).*
+   FROM stock_history_ids h CROSS JOIN commerce_inventory_allocations a WHERE a.order_id=$1`,[source]);
+  await q.query(`INSERT INTO commerce_inventory_movements(kind,item_id,order_id,allocation_id,source_ref,quantity,delta_stock,delta_reserved)
+   SELECT 'convert',a.item_id,h.order_id,md5(h.allocation_id::text||a.item_id::text)::uuid,md5(h.hold_id::text||a.item_id::text)::uuid,a.quantity,0,0 FROM stock_history_ids h CROSS JOIN commerce_inventory_allocations a WHERE a.order_id=$1
+   UNION ALL SELECT CASE WHEN h.n%2=0 THEN 'ship' ELSE 'allocation_release' END,a.item_id,h.order_id,md5(h.allocation_id::text||a.item_id::text)::uuid,gen_random_uuid(),a.quantity,
+    CASE WHEN h.n%2=0 THEN -a.quantity ELSE 0 END,-a.quantity FROM stock_history_ids h CROSS JOIN commerce_inventory_allocations a WHERE a.order_id=$1
+   UNION ALL SELECT 'restock',a.item_id,h.order_id,md5(h.allocation_id::text||a.item_id::text)::uuid,gen_random_uuid(),a.quantity,a.quantity,0
+    FROM stock_history_ids h CROSS JOIN commerce_inventory_allocations a WHERE a.order_id=$1 AND h.n%2=0`,[source]);
+  await q.query('COMMIT');
+ } catch(error){await q.query('ROLLBACK');throw error;} finally {q.release();}
+}

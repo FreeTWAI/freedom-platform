@@ -1,7 +1,7 @@
 import {SupplyCatalogReceiptSchema,SupplyProductReceiptSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {SupplyMaterialReceiptSchema,SupplyProfileReceiptSchema} from '../../../../contracts/guild-launchpad/v1/supplier-console';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
-import {SupplyOfferSchema,DistributionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
+import {SupplyOfferSchema,SupplyOfferPhotoStateSchema,DistributionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
 import {ReservationSettingSchema} from '../../../../contracts/guild-launchpad/v1/hosted-shared-order';
 import {ApiError} from '../../../../apps/portal-web/src/api';
 import type {ConsoleScope} from '../ui/route';
@@ -20,6 +20,8 @@ export const ATTEMPT_KINDS={
  'product.update':rule(SupplyProductReceiptSchema,'product_id',['products','overview','product']),
  'terms.update':rule(SupplyTermsSchema,'product_id',['products','overview','product','offers','requests']),
  'offer.publish':rule(SupplyOfferSchema,'product_id',['products','overview','product','offers','requests','partners']),
+ 'offer.photo.share':rule(SupplyOfferPhotoStateSchema,null,['products','product']),
+ 'offer.photo.stop':rule(SupplyOfferPhotoStateSchema,null,['products','product']),
  'offer.withdraw':rule(SupplyOfferSchema,'offer_id',['products','overview','product','offers','requests','partners']),
  'request.decide':rule(DistributionSchema,'selection_id',['request','products','overview','product','offers','requests','partners','partner']),
  'reservation.toggle':rule(ReservationSettingSchema,null,['profile','owner','overview','reservations']),
