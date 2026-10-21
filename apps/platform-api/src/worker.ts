@@ -106,6 +106,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED?: string;
   FREEDOM_STORE_APPEARANCE_ENABLED?: string;
   FREEDOM_STORE_POLICIES_ENABLED?: string;
+  FREEDOM_STORE_VARIANTS_ENABLED?: string;
   FREEDOM_STORE_GALLERY_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTOS_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED?: string;
@@ -216,6 +217,8 @@ export function readWorkerConfig(env: WorkerEnv): WorkerConfig {
   if(env.FREEDOM_STORE_GALLERY_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store gallery requires guild launchpad.');
   if(env.FREEDOM_STORE_POLICIES_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_POLICIES_ENABLED))throw new ReadinessError('Store policies flag must be true or false.');
   if(env.FREEDOM_STORE_POLICIES_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store policies requires guild launchpad.');
+  if(env.FREEDOM_STORE_VARIANTS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_VARIANTS_ENABLED))throw new ReadinessError('Store variants flag must be true or false.');
+  if(env.FREEDOM_STORE_VARIANTS_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store variants requires guild launchpad.');
   if(env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true'&&(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'||env.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true'||env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED!=='true'))throw new ReadinessError('Supply offer photos require guild launchpad, supplier console and hosted store photos.');
   if(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED==='true'&&(env.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true'||['get','put','head','delete'].some(method=>typeof (env.MEDIA as unknown as Record<string,unknown>|undefined)?.[method]!=='function')))throw new ReadinessError('Supply material media requires supplier console and MEDIA.');
   if(env.FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED==='true'&&(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED!=='true'||typeof env.IMAGES?.info!=='function'||typeof env.IMAGES?.input!=='function'))throw new ReadinessError('Supply material uploads require installed media and IMAGES.');
@@ -335,6 +338,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     supplyOfferPhotosEnabled:env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true',
     storeAppearanceEnabled:env.FREEDOM_STORE_APPEARANCE_ENABLED==='true',
     storePoliciesEnabled:env.FREEDOM_STORE_POLICIES_ENABLED==='true',
+    storeVariantsEnabled:env.FREEDOM_STORE_VARIANTS_ENABLED==='true',
     storeGalleryEnabled:env.FREEDOM_STORE_GALLERY_ENABLED==='true',
     tenantListCursors: createTenantListCursorCodec(env.FREEDOM_TENANT_CURSOR_SIGNING_KEY, { environment: config.freedomEnv, origin: config.origin }),
     communityDiscoveryEnabled: env.FREEDOM_COMMUNITY_DISCOVERY_ENABLED === 'true',
