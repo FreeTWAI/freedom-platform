@@ -2249,8 +2249,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/AdminStoreAdmissions.tsx",
-      "bytes": 10125,
-      "sha256": "0b98a25f1ccd42a314960f0591fe70af9df2783a7995df3b9574f371ac7fb9a7"
+      "bytes": 10269,
+      "sha256": "24f84d600be901e7f9749be60898ecca0b101ab0dc3fd2a903c1f58681d2a89a"
     },
     {
       "path": "apps/portal-web/src/modules/AgentShops.css",
@@ -13740,7 +13740,7 @@
     {
       "path": "deploy/cloudflare/sql/20-runtime-grants.psql",
       "bytes": 30442,
-      "sha256": "c9a060f8a94244980b245ec0a2c259f3f652d66d8cb9ac43918b1dd9a5a32123"
+      "sha256": "009c89c9295f28ff36a3fae3b0ab91b1a6fb0bfd67500b73937352c5f00a45ba"
     },
     {
       "path": "deploy/cloudflare/sql/30-verify-readonly.psql",
@@ -22744,8 +22744,8 @@
     },
     {
       "path": "tests/e2e/commerce-store-readiness.spec.ts",
-      "bytes": 13937,
-      "sha256": "342bdf3e54663d09baa1d5ba8b3213bb4157ff8277c8eb9c1034a2965e31d764"
+      "bytes": 14217,
+      "sha256": "7e81f64850a0090f25aaac6a414f65fd06744ff5422d747df74fd716fa5c7b5b"
     },
     {
       "path": "tests/e2e/community-ar.spec.ts",
@@ -25859,8 +25859,8 @@
     },
     {
       "path": "tests/runtime/storefront-gallery-sql.test.ts",
-      "bytes": 16796,
-      "sha256": "5daeb42867c78d2932ff131cc091ea9c81fab2c6b669081f80fb1db8ba9aebd7"
+      "bytes": 17977,
+      "sha256": "5f6aae1fbc949b88670b347dbeb2ae0e51a8a5f062c97eadc05c8d70a4161f90"
     },
     {
       "path": "tests/runtime/storefront-order-pages.test.ts",
