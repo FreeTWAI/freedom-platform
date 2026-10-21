@@ -18743,6 +18743,11 @@
       "sha256": "4f9f6be975ad1457b913cef9fbc2c354c08ef7f4089b3499cfda4cbd1857a328"
     },
     {
+      "path": "modules/agent-commerce/storefront/variants/design.md",
+      "bytes": 4859,
+      "sha256": "ee8250c3892b82f61c45e9b88bb6bcc04c09b6b3d0a1cf246fa61e9ef7ca4786"
+    },
+    {
       "path": "modules/agent-commerce/storefront/variants/editor-state.ts",
       "bytes": 743,
       "sha256": "f12b5a8ea2fbab287588d5082865a82f94eaa6862303817f352267592dd3fa2f"
