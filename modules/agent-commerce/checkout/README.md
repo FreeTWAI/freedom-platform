@@ -141,7 +141,11 @@ and let commerce continue. Every rejected database query is classified at its
 origin, including connection errors without SQLSTATE; database and savepoint
 errors propagate and roll back the entire domain transaction and receipt/work
 change. Successful notices commit atomically with it. There is no independent
-commit, external delivery or retry loop. OFF installs no port and issues no
+commit, external delivery or retry inside that savepoint. Notification-enabled
+offline buyer placement and cancellation may repeat the whole isolated
+transaction once after `40P01`, rechecking authority and recipients. Prechecks
+and attempt budgets outside it run only once. Card/OFF, seller commands and
+scheduled expiry keep their existing error handling. OFF installs no port and issues no
 notification SQL. The frozen publication supplies only store name/slug and the
 order supplies its display number and immutable buyer principal; the email-based
 customer/member label is not a notification identity.

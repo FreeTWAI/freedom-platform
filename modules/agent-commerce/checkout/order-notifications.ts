@@ -17,7 +17,9 @@ export interface OrderNotificationOptions {orderNotifications?:OrderNotification
 const kinds={placed:'commerce_order_placed',buyer_cancelled:'commerce_order_buyer_cancelled',payment_confirmed:'commerce_order_payment_confirmed',
   handed_over:'commerce_order_handed_over',seller_cancelled:'commerce_order_seller_cancelled',payment_expired:'commerce_order_payment_expired'} as const;
 
-/** One bounded statement snapshot. No recipient row locks after commerce locks. */
+/** One bounded snapshot without explicit recipient locks. The later notice INSERT
+ * takes users FOR KEY SHARE through its FK, after commerce locks. Buyer offline
+ * commands can retry their whole transaction once if that produces 40P01. */
 export const SELLER_ORDER_NOTIFICATION_RECIPIENTS_SQL=`WITH eligible AS MATERIALIZED (
   SELECT u.user_id AS recipient_ref, t.community_id,
     CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END AS priority,

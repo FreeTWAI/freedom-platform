@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
-import type {PoolClient,QueryResult} from 'pg';
+import type {Pool,PoolClient,QueryResult} from 'pg';
 import {checkoutHarness,type CheckoutHarness} from './hosted-checkout-harness.js';
 import {canonicalJSON,freezeCheckout,type CheckoutPorts} from '../../modules/agent-commerce/checkout/terms.js';
 import {placeCheckoutOrder,cancelUnpaidOrder} from '../../modules/agent-commerce/checkout/orders.js';
@@ -17,6 +17,7 @@ import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
 import {syntheticShippingPort} from '../../scripts/synthetic-shipping-quote.js';
 import {Problem} from '../../packages/shared/problem.js';
 import type {Actor} from '../../modules/identity-membership/service.js';
+import {applyOwnerAccountStatus} from '../../modules/tenant-workspaces/security-path.js';
 
 let x:CheckoutHarness,s:Awaited<ReturnType<CheckoutHarness['store']>>,buyer:Awaited<ReturnType<CheckoutHarness['h']['person']>>;
 let owner:Actor,buyerPrincipal:string,ownerPrincipal:string,community:string,foreignCommunity:string;
@@ -87,6 +88,87 @@ test('real member placement, concurrent retry and buyer cancellation use one ato
   const date=(await x.h.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
   await completeMeetup(x.runtime,owner,s.tenantId,s.instanceId,guest.order_id,{amount_minor:guest.terms.total_minor,completed_on:date},randomUUID(),guest.version,{orderNotifications:port});
   assert.deepEqual(await notices(guest.order_id),[]);
+});
+
+test('offline buyer transactions retry one real recipient-key deadlock without repeating prechecks or budgets',async()=>{
+  // A second owner keeps the store active when the contending owner deactivates.
+  const other=await x.h.person('合成第二店主'),otherPrincipal=(await x.tx(q=>mapPersonPrincipal(q,other.id))).principal_id;
+  await x.h.pool.query("INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at) VALUES($1,$2,'owner','active',clock_timestamp())",[s.tenantId,otherPrincipal]);
+  const access={network:'198.51.100.85',sessionToken:token(buyer.session.cookie),expectedBuyer:`member:${buyer.id}` as const};
+  const opened=await createPublicCheckout(x.runtime,s.slug,x.input(s.product.sku,1),randomUUID(),access,options());
+  const browser={...access,deviceToken:token(opened.cookie)},input={terms_sha256:opened.value.terms_sha256,client_order_id:randomUUID(),payment_method:'bank_transfer' as const};
+  async function cycle<T>(event:'placed'|'buyer_cancelled',run:(pool:Pool,opt:HostedCheckoutOptions)=>Promise<T>){
+    const holder=await x.h.pool.connect();let command:Promise<{value?:T;error?:unknown}>|undefined;
+    const statements:{text:string;values:unknown[]|undefined}[]=[],codes:string[]=[],orderIds:string[]=[];let emits=0,insertPid!:(pid:number)=>void;
+    const inserting=new Promise<number>(resolve=>{insertPid=resolve;});
+    const traced=new Proxy(x.runtime,{get(target,key){
+      if(key==='connect')return async()=>intercept(await target.connect(),async(text,values,next)=>{
+        statements.push({text,values});try{return await next();}catch(error){codes.push(String((error as {code?:string}).code));throw error;}
+      });
+      const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+    }});
+    const opt={...options(),orderNotifications:{async emit(q:PoolClient,facts:Parameters<OrderNotificationPort['emit']>[1]){
+      emits++;orderIds.push(facts.orderId);await port.emit(intercept(q,async(text,values,next)=>{
+        if(text.includes('INSERT INTO member_notifications')&&values?.[1]===s.owner.user.user_id){
+          insertPid((await q.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+        }
+        return next();
+      }),facts);
+    }}};
+    try{
+      await holder.query('BEGIN');const holderPid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const deadlockTimeout=(await holder.query('SHOW deadlock_timeout')).rows[0].deadlock_timeout;
+      await holder.query('SELECT user_id FROM users WHERE user_id=$1 FOR UPDATE',[s.owner.user.user_id]);
+      command=run(traced,opt).then(value=>({value}),error=>({error}));
+      const pid=await Promise.race([inserting,command.then(outcome=>{throw outcome.error??new Error('command completed without the recipient INSERT');})]),deadline=Date.now()+15000;let blocked=false;
+      while(Date.now()<deadline){
+        const row=(await x.runtime.query('SELECT $2::int=ANY(pg_blocking_pids($1)) AS blocked FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=\'Lock\'',[pid,holderPid])).rows[0];
+        if(row?.blocked){blocked=true;break;}
+      }
+      assert.equal(blocked,true,'notification INSERT must be waiting on the held recipient key');
+      // The notification backend began waiting first, so its default deadlock
+      // timer detects this cycle before the owner's later tenant-lock wait.
+      await holder.query('SELECT tenant_id FROM tenants WHERE tenant_id=$1 FOR UPDATE',[s.tenantId]);
+      await holder.query('UPDATE users SET active=false WHERE user_id=$1',[s.owner.user.user_id]);
+      await applyOwnerAccountStatus(holder,s.owner.user.user_id,false);
+      await holder.query('COMMIT');
+      const outcome=await command;assert.equal(outcome.error,undefined,'buyer transaction must recover from its 40P01');
+      assert.equal(emits,2);assert.deepEqual(codes,['40P01']);
+      const delivered=(await x.runtime.query('SELECT recipient_ref FROM member_notifications WHERE source_key=ANY($1::text[])',[orderIds.map(id=>`commerce-order/v1/${id}/${event}`)])).rows;
+      assert.deepEqual(delivered,[{recipient_ref:other.id}],'the rolled-back attempt must leave no partial notice set');
+      assert.equal(statements.filter(s=>s.text==='SET TRANSACTION READ ONLY').length,event==='placed'?1:0);
+      for(const bucket of event==='placed'?['placementNetwork','placementStore']:['handoffNetwork']){
+        assert.equal(statements.filter(s=>s.text.startsWith('INSERT INTO auth_rate_limits')&&String(s.values?.[0]).startsWith(`commerce:${bucket}:`)).length,1);
+      }
+      console.info('order_notice_deadlock_trace',{event,recipient_key_wait:true,sqlstate:codes[0],attempts:emits,deadlock_timeout:deadlockTimeout});
+      return outcome.value!;
+    }finally{
+      await holder.query('ROLLBACK');holder.release();await command;
+    }
+  }
+  try{
+    const result=await cycle('placed',(pool,opt)=>placePublicOrder(pool,s.slug,opened.value.checkout_ref,input,browser,opt));
+    const id=result.value.order.order_ref;
+    assert.equal((await x.h.pool.query('SELECT active FROM users WHERE user_id=$1',[s.owner.user.user_id])).rows[0].active,false);
+    assert.deepEqual((await notices(id,'placed')).map(n=>n.recipient_ref),[other.id]);
+    await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[s.owner.user.user_id]);
+    await cycle('buyer_cancelled',(pool,opt)=>cancelPublicOrder(pool,s.slug,id,browser,opt));
+    assert.equal((await x.h.pool.query('SELECT active FROM users WHERE user_id=$1',[s.owner.user.user_id])).rows[0].active,false);
+    assert.deepEqual((await notices(id,'buyer_cancelled')).map(n=>n.recipient_ref),[other.id]);
+    assert.equal((await notices(id)).length,2);
+    await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[s.owner.user.user_id]);
+    const next=await createPublicCheckout(x.runtime,s.slug,x.input(s.product.sku,1),randomUUID(),access,options());let attempts=0;
+    const failing={...options(),orderNotifications:{emit:(q:PoolClient,facts:Parameters<OrderNotificationPort['emit']>[1])=>port.emit(intercept(q,async(text,_values,run)=>{
+      if(text.startsWith('SELECT co.tenant_id')){attempts++;throw Object.assign(new Error('synthetic_deadlock'),{code:'40P01'});}return run();
+    }),facts)}};
+    const clientOrderId=randomUUID();
+    await assert.rejects(placePublicOrder(x.runtime,s.slug,next.value.checkout_ref,{...input,terms_sha256:next.value.terms_sha256,client_order_id:clientOrderId},{...access,deviceToken:token(next.cookie)},failing),error=>(error as {code?:string}).code==='40P01');
+    assert.equal(attempts,2,'a second deadlock must propagate, without another automatic attempt');
+    assert.equal((await x.h.pool.query('SELECT 1 FROM commerce_orders WHERE client_order_id=$1',[clientOrderId])).rowCount,0);
+  }finally{
+    await x.h.pool.query('UPDATE users SET active=true WHERE user_id=$1',[s.owner.user.user_id]);
+    await x.h.pool.query("UPDATE tenant_memberships SET status='revoked',revoked_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[s.tenantId,otherPrincipal]);
+  }
 });
 
 type Person={id:string;pid:string;email:string;n:number};
