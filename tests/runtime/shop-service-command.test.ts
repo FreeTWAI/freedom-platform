@@ -114,13 +114,14 @@ test('native legacy and purpose-bound shop gateways preserve credential bytes, c
  try{
   if(!server.listening)await once(server,'listening');const address=server.address();assert(address&&typeof address!=='string');
   const at=`http://127.0.0.1:${address.port}`;
-  for(const version of ['legacy','v2'] as const){
+  for(const version of ['legacy','legacy-v2-prefix','v2'] as const){
    const f=await fixture();runtime=createApp(pool,at,'local',{shopKeyPolicy:'legacy-compatible'});
    if(version==='v2'){
     const issued=await fetch(at+`/api/v1/commerce/shops/${f.shop}/key`,{method:'POST',headers:{Cookie:'freedom_local_session='+f.session,'X-CSRF-Token':'synthetic',Origin:at,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:'{}'});
     assert.equal(issued.status,200);assert.match((await issued.json()).token,/^fw_shop_v2_/);
    }
-   const token=(version==='v2'?'fw_shop_v2_':'fw_shop_')+'AbC_dE-f0123456789'.repeat(3).slice(0,43);
+   const token=version==='legacy-v2-prefix'?'fw_shop_'+'v2_'+'A'.repeat(40):
+    (version==='v2'?'fw_shop_v2_':'fw_shop_')+'AbC_dE-f0123456789'.repeat(3).slice(0,43);
    await pool.query('UPDATE commerce_shop_keys SET token_hash=$1 WHERE shop_id=$2 AND revoked_at IS NULL',[tokenHash(token),f.shop]);
    const key=randomUUID(),send=(cancelled:boolean,headers:Record<string,string>,requestKey=key)=>fetch(at+(cancelled?`/shop-api/v1/orders/${f.order}/cancel`:'/shop-api/v1/connection'),{
     method:cancelled?'POST':'GET',headers:{...headers,...(cancelled?{'Content-Type':'application/json','Idempotency-Key':requestKey}:{})},...(cancelled?{body:'{}'}:{})});
@@ -138,9 +139,11 @@ test('native legacy and purpose-bound shop gateways preserve credential bytes, c
    for(const cancelled of [false,true])assert.equal((await send(cancelled,{Cookie:'freedom_local_session='+f.session})).status,401);
    assert.equal((await send(true,{Authorization:'Bearer '+token,Origin:'https://foreign.invalid'})).status,403);
    runtime=createApp(pool,at,'local',{shopKeyPolicy:'purpose-bound-only'});
-   for(const cancelled of [false,true])assert.equal((await send(cancelled,{Authorization:'bEaReR   '+token})).status,version==='legacy'?401:200);
+   for(const scheme of ['Bearer ','bearer ','bEaReR ','BEARER   ','bEaReR   '])
+    for(const cancelled of [false,true])assert.equal((await send(cancelled,{Authorization:scheme+token})).status,version==='v2'?200:401);
    runtime=createApp(pool,at,'local');
-   for(const cancelled of [false,true])assert.equal((await send(cancelled,{Authorization:'bearer '+token})).status,503);
+   for(const scheme of ['Bearer ','bearer ','bEaReR ','BEARER   '])
+    for(const cancelled of [false,true])assert.equal((await send(cancelled,{Authorization:scheme+token})).status,503);
    assert.deepEqual(await state(f),expected);
   }
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}

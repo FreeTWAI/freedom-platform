@@ -43,7 +43,8 @@ export async function lockShopService(q:PoolClient,authorization:string|undefine
  requireShopHost(host);
  const match=authorization?.match(/^[Bb][Ee][Aa][Rr][Ee][Rr] +(fw_shop_(?:v2_)?[A-Za-z0-9_-]{43})$/);
  if(!match)invalid();
- const credential=match![1],version=credential.startsWith('fw_shop_v2_')?'v2':'legacy';
+ // The anchored match has length 51 for legacy, including suffixes starting v2_.
+ const credential=match![1],version=credential.length===54?'v2':'legacy';
  const hash=createHash('sha256').update(credential).digest('hex');
  const owner=(await q.query("SELECT s.owner_id,s.community_id FROM commerce_shop_keys k JOIN commerce_shops s USING(shop_id) WHERE s.origin='imported' AND k.token_hash=$1",[hash])).rows[0];
  if(!owner)invalid();
