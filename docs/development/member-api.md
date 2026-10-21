@@ -894,9 +894,10 @@ cancel a committed registration or recall a provider-accepted email.
 
 ## Event calendar, reminders and waitlists (#256)
 
-The candidate uses migration `153_event_participation.sql`. Apply it **before
-switching source, even with the feature off**: existing RSVP capacity and guest
-acknowledgement paths also use its columns. The new routes and UI require
+The candidate uses migrations `153_event_participation.sql` and
+`173_guest_invitation_credit.sql`. Apply both **before switching source, even
+with the feature off**: existing RSVP capacity and guest acknowledgement paths
+also use their columns. The new routes and UI require
 `FREEDOM_EVENT_PARTICIPATION_ENABLED=true` (default off); disabled routes return
 404 before authentication. Worker enablement requires a usable `EMAIL.send`
 binding. This is not deployment, sender authorization or trusted CI evidence.
@@ -971,6 +972,69 @@ than event start. Decline/expiry advances the queue. Capacity cannot fall below
 confirmed/live pending occupancy; excess newest unaccepted offers return to
 their original queue positions. Genuine transitions retain factual history,
 not invented participant actions or attendance.
+
+The original public guest registration endpoint also credits that same normalized
+Email's live invitation when creating or reviving its own RSVP (#767), matching
+the original member RSVP behavior. The public form remains an explicit request:
+only the existing provider-accepted flow confirms Going and marks the offer
+accepted. Another guest's offer, or an expired offer reassigned to the next
+candidate, cannot be consumed; failure does not send participation mail or
+allocate an extra seat.
+This consumed offer is finalized even if optional participation was switched off
+after it was issued, as on the original member RSVP path. The disabled mode
+still creates no new management capability and does not reconcile the queue;
+successful registration cannot later turn its consumed offer into an expiry.
+Admission persists the exact credited `invitation_id` on the RSVP alongside its
+separate, freshly generated `registration_attempt_id`. Confirmation and explicit
+provider retries retain that pair; an ordinary registration stores no credit.
+Neither email equality nor the finalizer's current offer deadline establishes
+credit. Reconciliation preserves only that exact invitation while its current
+attempt has a live ten-minute pending hold. A provider rejection rolls back
+confirmation, not the admission's durable identity. Renewing an expired/cancelled
+hold generates a new attempt even if the same offer remains live, fencing a late
+confirmation from the old attempt; replacement invitations cannot inherit credit.
+Participation OFF plus an expired, unswept offer can still admit an ordinary
+registration when capacity allows, but does not accept that historical offer;
+subsequent reconciliation records its expiry.
+Runtime regressions exercise these transitions over loopback HTTP and PostgreSQL
+with a synthetic sender. Expired-offer fixtures move both invitation timestamps
+into the past, preserving `invited_at < expires_at` so database constraints remain
+active while testing an unswept, genuinely expired offer.
+The nullable column is necessary because transient request state disappears on
+provider failure and email/hold correlation cannot prove actual invitation use.
+Existing rows are not backfilled by inference. Cutover must stop old writers and
+drain their ten-minute pending holds before installing the new writer; do not
+roll back to a writer that ignores exact credit. Schema173's release capability
+floor applies even with participation OFF. No deployment or flag change is implied.
+An expired hold grants no extension and allows the next candidate to advance.
+While the event is still published and not started, disabling its waitlist
+cancels unconsumed queue entries and offers, not a guest's admitted live hold.
+Invitation workers recheck that policy both when claiming and before handoff;
+retaining the hold must not dispatch a new offer while the waitlist is disabled.
+If policy alone blocks the final handoff, the worker returns only that exact
+current, still-live invitation claim from `unknown` to `pending`, before calling
+the sender. Re-enabling can then deliver it once, including after a rejected
+public-registration provider call left the admitted hold alive. Expired, closed,
+ineligible or replaced claims are not reset. A possibly-sent `unknown` remains
+fenced; a policy round trip is not permission to replay it.
+Capacity reductions retract the newest unconsumed invitations, skipping admitted
+holds already counted as seats instead of clearing their original invitation or
+subtracting that same occupied seat again. Started or cancelled events still
+cancel outstanding offers even when a pending hold exists.
+This does not extend the private invitation-acceptance deadline: a late
+`accept` still returns `409 invitation_unavailable`, even with a live hold.
+
+Local PostgreSQL 18 smoke exercised the production Worker `fetch` and `scheduled`
+handlers in Node 24 with native request pools, a timing-only claim/handoff barrier,
+real organizer policy PATCHes and synthetic `EMAIL.send`. Before this repair,
+public-provider rejection plus disable/re-enable stranded the live offer at
+`unknown` with zero invitation sends. Afterward it became `pending` while disabled,
+then `provider_accepted` on re-enable, with exactly one invitation send and no
+duplicate on the next sweep. The original invitation and one occupied seat stayed
+intact. An accepted send followed by a real database bookkeeping failure stayed
+`unknown` through disable/re-enable and another sweep, without replay. No disabled
+invitation sends or external mail occurred; both owned schemas were removed.
+This is local adapter/source evidence, not a deployed Worker or workerd result.
 
 A new acceptance checks PostgreSQL's current clock after reconciliation and
 eligibility reads, then again after the RSVP, queue/journal and success receipt

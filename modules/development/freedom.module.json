@@ -43,7 +43,7 @@
     "docs/design/skill-book-art-manifest.json",
     "docs/design/skill-illustration-manifest.json",
     "docs/development/repository-guidance-index.json",
-    "migrations/173_member_shared_skill_books.sql",
+    "migrations/174_member_shared_skill_books.sql",
     "tests/e2e/skill-sharing.spec.ts",
     "tests/runtime/member-shared-skill-books.test.ts",
     "tests/runtime/skill-book-upstreams.test.ts"

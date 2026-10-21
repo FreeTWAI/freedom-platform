@@ -62,7 +62,7 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 
 本分支的 #256 提供依目前活動權限下載的私人 ICS、自願開始提醒與 FIFO 候補。候補不自動報名；主辦者必須逐場明確設定正整數回覆分鐘數，截止不晚於開始時間，邀請仍須本人接受。名額計算包含已確認報名、短期訪客保留與有效邀請，降低容量時把較新的未接受邀請退回原排序。依本次產品決定，會員以 member ID、訪客以正規化 Email 各自去重，不憑自填 Email 推定兩者是同一人，也不宣稱真人身分驗證。只有已報名者可另行訂閱提醒；取消報名／活動停止尚未送出的提醒，寄件服務受理不代表送達，站內紀錄與報名都不代表出席。
 
-`FREEDOM_EVENT_PARTICIPATION_ENABLED=true` 才開放 #256 入口，預設關閉；**即使 flag 關閉，換入本版 source 前仍須套用 migration 153**，既有報名流程也使用新欄位。Worker 啟用時需要可用的 `EMAIL.send`；既有每十分鐘排程做有界輪巡，不保證分鐘級提醒或補位精度，Node 入口不自動排程。ICS 使用固定 UID、UTC 與版本序號，但不是公開訂閱連結，也不自動更新已匯入的副本。私人管理憑證只由 Email 連結 fragment 交給限定 API header，不保存至瀏覽器 storage 或匯出到 ICS。實作、命令與狀態邊界見 [會員 API](./docs/development/member-api.md#event-calendar-reminders-and-waitlists-256)。這是預設關閉的 source candidate；本機隔離資料庫／瀏覽器與獨立 ICS parser 驗證不表示正式寄送、Apple／Google Calendar 實際匯入、部署或啟用已完成。
+`FREEDOM_EVENT_PARTICIPATION_ENABLED=true` 才開放 #256 入口，預設關閉；**即使 flag 關閉，換入本版 source 前仍須套用 migrations 153、173**，既有報名流程也使用新欄位。173 將實際抵扣的候補邀請與獨立報名 attempt 持久綁定；切換前須停止舊 writer 並排空其十分鐘 pending hold，不憑 Email 回填邀請身分，也不能回退忽略此綁定的 writer。Worker 啟用時需要可用的 `EMAIL.send`；既有每十分鐘排程做有界輪巡，不保證分鐘級提醒或補位精度，Node 入口不自動排程。ICS 使用固定 UID、UTC 與版本序號，但不是公開訂閱連結，也不自動更新已匯入的副本。私人管理憑證只由 Email 連結 fragment 交給限定 API header，不保存至瀏覽器 storage 或匯出到 ICS。實作、命令與狀態邊界見 [會員 API](./docs/development/member-api.md#event-calendar-reminders-and-waitlists-256)。這是預設關閉的 source candidate；本機隔離資料庫／瀏覽器與獨立 ICS parser 驗證不表示正式寄送、Apple／Google Calendar 實際匯入、部署或啟用已完成。
 
 本分支的 #257 是活動精華／成果連結的 **source candidate**：在原活動集錦儲存自己的摘要草稿，明確選擇閱讀範圍與發布同意後，連結目前可閱讀的社群作品、技能書及真正的小隊成果；三者有詳細入口與返回原活動的連結。小隊成果由目前隊主本人撰寫、儲存私人草稿並明確發布，不把名冊、私人 Result、自填署名或 Going 回覆當成成果、出席、驗收或 XP。來源撤下或權限變更會停止顯示整份相依摘要、媒體與反向連結，不會退回成未綁定的公開照片。
 
