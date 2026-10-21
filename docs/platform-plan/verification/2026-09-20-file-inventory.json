@@ -3744,8 +3744,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/offline-order.tsx",
-      "bytes": 4560,
-      "sha256": "3b1c4110f345c23391bd1684a67c282b3ee3cb549254c910564ed886d8b6214e"
+      "bytes": 4596,
+      "sha256": "8bfe1d492fd1de8c30f7a64ad4b0d9428bf6f7c29da3bb42260641c2a62684d2"
     },
     {
       "path": "apps/portal-web/src/storefront/payment-view.ts",
@@ -15649,8 +15649,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-11-offline-payment.md",
-      "bytes": 24944,
-      "sha256": "36bcfbaba7a97167c2eaca482a1952ffb9aa3bc15c4f15b57175cfe1fdb640cc"
+      "bytes": 25001,
+      "sha256": "c57d0c992d8358c7f3b08bb4c5af3d8047e79b429a98310825217c807ac1f6a0"
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
@@ -24534,8 +24534,8 @@
     },
     {
       "path": "tests/runtime/hosted-order-navigation.test.ts",
-      "bytes": 5008,
-      "sha256": "bec85b9658703cf3c3635a09e71a8c4b12d9c671a81b39dcd3cec3791d4e1bca"
+      "bytes": 8160,
+      "sha256": "fb0fe62422cfea071f3906b52f1355ee3b66a0e9e1d988d5a9494a771a102ec7"
     },
     {
       "path": "tests/runtime/hosted-order-ui.test.ts",

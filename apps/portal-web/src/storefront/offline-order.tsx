@@ -35,7 +35,7 @@ export function OfflineOrder({order, disabled, onCancel, onRefresh, readOnly=fal
           <div className="shop-order-row"><dt>戶名</dt><dd>{bank.account_name}</dd></div>
         </dl>
         {bank.note && <p className="shop-preserve-lines">{bank.note}</p>}
-        <p>店家確認收款後，這裡會更新。</p>
+        <p>店家確認收款後，按「更新訂單狀態」即可看到最新狀態。</p>
         <div className="shop-order-actions">
           <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={() => void copy(bank.account_number, '帳號')}>複製帳號</button>
           <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={() => void copy((bank.amount_minor / 100).toFixed(2), '金額')}>複製金額</button>
