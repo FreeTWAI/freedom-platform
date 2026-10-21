@@ -229,3 +229,29 @@ test('SC-E2E-32 keyboard reaches navigation, dialogs, saves and errors with focu
   await info.attach('keyboard-writes-and-read-errors',{body:JSON.stringify({writes,failures,publishFocus,stockFocus}),contentType:'application/json'});
  }finally{await Promise.allSettled([context.close()]);await withdrawSupplierOffers(e2eAuthPool,[member.id]);}
 });
+
+for(const width of [1280,390])test(`new supplier product validates price before sending and names refresh sources (${width}px)`,async({page,e2eAuthPool},info)=>{
+ await page.setViewportSize({width,height:844});
+ const member=await person(e2eAuthPool);await login(page,member.email);
+ const store=await catalogue(page,randomUUID().slice(0,6),'本機表單驗收');
+ await go(page,store,'/products/new');
+ const form=active(page).getByRole('form',{name:'新增商品',exact:true});
+ const price=form.getByLabel('供貨單價',{exact:true}),submit=form.getByRole('button',{name:'新增商品',exact:true});
+ await form.getByLabel('商品名稱',{exact:true}).fill('本機私人測試商品');
+ let writes=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/supply-products'))writes++;});
+ for(const value of ['', '0','-1','0.001','abc','900719925474099.99']){
+  await price.fill(value);await expect(price).toHaveAttribute('aria-invalid','true');await expect(submit).toBeDisabled();
+  // Enter and programmatic submission must not bypass the same form guard.
+  await price.press('Enter');await form.evaluate(el=>el.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ }
+ await price.fill('0');await expect(price).toHaveAccessibleDescription('金額須大於 0');
+ expect(writes).toBe(0);
+ await expect(active(page).getByRole('button',{name:/^更新資料\s*：商品清單$/})).toBeVisible();
+ await expect(active(page).getByRole('button',{name:/^更新資料\s*：共用商品容量$/})).toBeVisible();
+ await expect(active(page).getByText('商品清單與容量分別更新；共用容量包含供貨商品與商店選品。')).toBeVisible();
+ await page.screenshot({path:info.outputPath(`supplier-price-${width}.png`),fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await price.fill('0.01');await expect(submit).toBeEnabled();await expect(price).toHaveAttribute('aria-invalid','false');
+ const sent=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/supply-products'));
+ await submit.click();const response=await sent;expect(response.status()).toBe(201);expect(response.request().postDataJSON().cost_minor).toBe(1);expect(writes).toBe(1);
+});
