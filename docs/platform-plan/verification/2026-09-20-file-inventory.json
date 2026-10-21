@@ -22954,8 +22954,8 @@
     },
     {
       "path": "tests/e2e/hosted-supply-offer.spec.ts",
-      "bytes": 23255,
-      "sha256": "be6ac0e430d8865bdf3d83276f9d1885aaca342841b4fdda2836f4a9ac097634"
+      "bytes": 23282,
+      "sha256": "199b8527c2e18cd21b3ede90a4f49c828586652a3d60f16024a01c58bfb6dfaf"
     },
     {
       "path": "tests/e2e/hosted-supply-terms.spec.ts",
