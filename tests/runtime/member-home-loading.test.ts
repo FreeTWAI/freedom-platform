@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {PortalClient} from '../../apps/portal-web/src/api.js';
 import {
   createHomeReadCycle, observeHomeReturns, loadHomeNextSteps,
   type HomeReadClient, type HomeTaskAction,
@@ -15,11 +16,11 @@ const paths = ['/guilds/directory', '/me/skill-books', '/task-board/preview', '/
 type Book = {book_id: string; title: string};
 function reads() {
   const pending = new Map(paths.map(path => [path, deferred<unknown>()]));
-  const calls: {path: string; signal: AbortSignal; background: boolean}[] = [];
+  const calls: {path: string; signal: AbortSignal; background?: boolean}[] = [];
   let generation = 1;
   const client: HomeReadClient = {
     get sessionGeneration() { return generation; },
-    get<T>(path: string, options: {signal: AbortSignal; background: boolean}) {
+    get<T>(path: string, options: {signal: AbortSignal; background?: boolean}) {
       calls.push({path, ...options});
       const operation = pending.get(path);
       assert.ok(operation, `unexpected read: ${path}`);
@@ -30,8 +31,9 @@ function reads() {
   const books: (Book | null)[] = [];
   const tasks: (HomeTaskAction | null)[] = [];
   const bookReady = deferred<void>(), taskReady = deferred<void>();
-  const start = () => loadHomeNextSteps<Book>({
+  const start = (preserveOnFailure = false) => loadHomeNextSteps<Book>({
     client, guildKey: 'guild-one', signal: controller.signal,
+    preserveOnFailure,
     onBook: value => { books.push(value); bookReady.resolve(); },
     onTask: value => { tasks.push(value); taskReady.resolve(); },
   });
@@ -172,10 +174,10 @@ test('burst of visible/focus/online events starts one actual read', () => {
   stop(); cycle.cancel();
 });
 
-test('all suggestion reads start together as cancellable background reads', async () => {
+test('all suggestion reads start together with cancellation and normal client diagnostics', async () => {
   const run = reads(), done = run.start();
   assert.deepEqual(run.calls.map(call => call.path), paths);
-  assert.ok(run.calls.every(call => call.background && call.signal === run.controller.signal));
+  assert.ok(run.calls.every(call => !call.background && call.signal === run.controller.signal));
   run.finish(); await done;
 });
 
@@ -312,4 +314,52 @@ test('a fresh same-guild cycle re-reads work instead of retaining a completed cl
   next.resolve(paths[2], {items: []});
   next.finish(); await nextDone;
   assert.deepEqual(next.tasks, ['showcase']);
+});
+
+for (const path of paths.slice(0, 2)) {
+  test(`automatic ${path} failure preserves the previous book without blocking work`, async () => {
+    const run = reads(), done = run.start(true);
+    run.reject(path);
+    allowBook(run);
+    run.resolve(paths[3], {now: [{id: 'unfinished'}]});
+    run.finish(); await done;
+    assert.deepEqual(run.books, []);
+    assert.deepEqual(run.tasks, ['resume']);
+  });
+}
+
+for (const path of paths.slice(2)) {
+  test(`automatic ${path} failure preserves the previous task instead of guessing`, async () => {
+    const run = reads(), done = run.start(true);
+    run.reject(path);
+    allowBook(run);
+    run.resolve(paths[2], {items: []});
+    run.resolve(paths[3], {now: []});
+    run.finish(); await done;
+    assert.deepEqual(run.books, [book]);
+    assert.deepEqual(run.tasks, []);
+  });
+}
+
+test('successful automatic reads still remove a revoked grant and completed work', async () => {
+  const run = reads(), done = run.start(true);
+  run.resolve(paths[0], {items: [{guild_key: 'guild-one', skill_books: [book]}]});
+  run.resolve(paths[1], {items: []});
+  run.resolve(paths[2], {items: []});
+  run.resolve(paths[3], {now: []});
+  await done;
+  assert.deepEqual(run.books, [null]);
+  assert.deepEqual(run.tasks, ['showcase']);
+});
+
+test('automatic suggestion failures still reach PortalClient error reporting', async t => {
+  const fetcher = t.mock.method(globalThis, 'fetch', async () => Response.json({}, {status: 503}));
+  const client = new PortalClient();
+  const reported = t.mock.method(client, 'reportError', () => {});
+  await loadHomeNextSteps<Book>({client, guildKey: 'guild-one', signal: new AbortController().signal,
+    preserveOnFailure: true, onBook: () => assert.fail('unknown book must not replace the previous value'),
+    onTask: () => assert.fail('unknown task must not replace the previous value')});
+  assert.equal(fetcher.mock.callCount(), 4);
+  assert.deepEqual(reported.mock.calls.map(call => call.arguments),
+    paths.map(path => [`GET ${path}`, 'http_503', 503]));
 });

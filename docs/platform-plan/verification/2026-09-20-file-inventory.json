@@ -2689,8 +2689,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 15641,
-      "sha256": "f8137b51fa292b84ebe4357b9ebfdd20419a8fa24d497b7823007da5632271b4"
+      "bytes": 17208,
+      "sha256": "4bbc87e33f6d380947dd3a39d80da1ed288d4350f8e898d316e83a244a9d6dfa"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -3181,6 +3181,11 @@
       "path": "apps/portal-web/src/modules/member-device-client.ts",
       "bytes": 5060,
       "sha256": "90fbf4eb9831468e4d09114b75b6ac1f3408cd2f39bf679cce19700edcc23edb"
+    },
+    {
+      "path": "apps/portal-web/src/modules/member-home-loading.ts",
+      "bytes": 6659,
+      "sha256": "1fe737aa71212ae632bc34ba7fc6bfc422610af465fdea8c1ea3d1430a282479"
     },
     {
       "path": "apps/portal-web/src/modules/member-inbox.ts",
@@ -19584,8 +19589,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 2527,
-      "sha256": "40ba190aa184204930d4d1688b7e1219bd30a45da833c825004f391f2c26a1d1"
+      "bytes": 2679,
+      "sha256": "32a1d3191cc484a1416c0e6fd1434ec7a54b5bf0ee356cfa51f8c5fb5ca18f46"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -22663,6 +22668,11 @@
       "sha256": "b5f3e366b380d8d17aeeec090f60809a4c8df46811f1e5b3a2f4a86359aa4004"
     },
     {
+      "path": "tests/e2e/member-home-loading.spec.ts",
+      "bytes": 14302,
+      "sha256": "1abd263c84d62b6237be2ebe53241cce85c78158754ba0dbbe300f021427581c"
+    },
+    {
       "path": "tests/e2e/member-home-next-step.spec.ts",
       "bytes": 19925,
       "sha256": "bfa27e020ee9f4c75b58144887cadf7fa085be220781851c7854e72324b6343d"
@@ -24531,6 +24541,11 @@
       "path": "tests/runtime/member-experience.test.ts",
       "bytes": 39666,
       "sha256": "05a1ffa4ed996256a23c2b03081c4d2f85d70e13f01dcce9972eb9a1856393aa"
+    },
+    {
+      "path": "tests/runtime/member-home-loading.test.ts",
+      "bytes": 14358,
+      "sha256": "1c57c0e6986123a1907b537842e8f3040b36b63000b822a5bbd31cf3b7bff376"
     },
     {
       "path": "tests/runtime/member-model-http-adversarial.test.ts",

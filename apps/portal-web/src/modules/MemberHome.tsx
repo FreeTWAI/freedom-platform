@@ -31,7 +31,9 @@ const taskActions = {
 type HomeOnboarding = { entry_mode?: string; assessment_completed?: boolean };
 type HomeScope = ReturnType<typeof createHomeReadCycle>;
 type HomeValue<T> = {scope: HomeScope; value: T};
-type HomeMember = HomeValue<MemberCardData>;
+type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
+type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
+type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
 export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
@@ -43,8 +45,8 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const [labelValue, setLabelValue] = useState<HomeValue<Record<string, string>> | null>(null);
   const [onboardingValue, setOnboardingValue] = useState<HomeValue<HomeOnboarding | null> | null>(null);
   const [loadState, setLoadState] = useState<{scope: HomeScope; loading: boolean; error: string | null} | null>(null);
-  const [bookValue, setBookValue] = useState<{source: HomeMember; value: IntroBook | null} | null>(null);
-  const [taskValue, setTaskValue] = useState<{source: HomeMember; value: keyof typeof taskActions | null} | null>(null);
+  const [bookValue, setBookValue] = useState<HomeGuildValue<IntroBook | null> | null>(null);
+  const [taskValue, setTaskValue] = useState<HomeGuildValue<keyof typeof taskActions | null> | null>(null);
   // Hide the old session's view synchronously, before effect cleanup can run.
   const currentMember = memberValue?.scope === scope ? memberValue : null;
   const member = currentMember?.value ?? null;
@@ -52,8 +54,12 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const onboarding = onboardingValue?.scope === scope ? onboardingValue.value : null;
   const loading = loadState?.scope === scope ? loadState.loading : true;
   const loadError = loadState?.scope === scope ? loadState.error : null;
-  const guideBook = bookValue?.source === currentMember ? bookValue?.value ?? null : null;
-  const taskAction = taskValue?.source === currentMember ? taskValue?.value ?? null : null;
+  const guildKey = member?.primary_guild?.guild_key ?? null;
+  // Same-session, same-guild refreshes keep mounted dialogs and focused actions.
+  // Returning to a previous guild creates a new lifetime, never a cached view.
+  const guildScope = useMemo<HomeGuildScope>(() => ({scope, guildKey}), [scope, guildKey]);
+  const guideBook = bookValue?.guildScope === guildScope ? bookValue.value : null;
+  const taskAction = taskValue?.guildScope === guildScope ? taskValue.value : null;
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const focusFrame = useRef<number | null>(null);
@@ -64,12 +70,13 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
     focusFrame.current = null;
     setLoadState(previous => ({scope, loading: true, error: previous?.scope === scope ? previous.error : null}));
-    const options = {signal: ticket.signal, background: reason === 'automatic'};
+    // Automatic reads retain normal client diagnostics; only home UI errors are quiet.
+    const options = {signal: ticket.signal};
     void client.get<MemberCardData>(`/members/${session.user.user_id}`, options).then(data => {
       if (!ticket.isCurrent()) return;
       const priorFocus = document.activeElement;
       const retrying = reason === 'manual' && alertRef.current?.contains(priorFocus);
-      setMemberValue({scope, value: data});
+      setMemberValue({scope, value: data, reason});
       setLoadState({scope, loading: false, error: null});
       ticket.complete(true);
       if (retrying) focusFrame.current = requestAnimationFrame(() => {
@@ -86,8 +93,9 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     }).catch((error: unknown) => {
       if (!ticket.isCurrent()) return;
       ticket.complete(false);
-      setLoadState({scope, loading: false,
-        error: `名片暫時無法載入。${error instanceof Error ? error.message : ''}`});
+      setLoadState(previous => ({scope, loading: false,
+        error: reason === 'automatic' ? (previous?.scope === scope ? previous.error : null)
+          : `名片暫時無法載入。${error instanceof Error ? error.message : ''}`}));
     });
     // Shared label metadata has no cancellation API; fence its late replies instead.
     if (withLabels) void loadLabels(client).then(data => {
@@ -96,7 +104,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     void client.get<HomeOnboarding>('/me/onboarding', options).then(data => {
       if (ticket.isCurrent()) setOnboardingValue({scope, value: data});
     }).catch(() => {
-      if (ticket.isCurrent()) setOnboardingValue({scope, value: null});
+      if (ticket.isCurrent() && reason !== 'automatic') setOnboardingValue({scope, value: null});
     });
   }, [client, session.user.user_id, scope]);
 
@@ -115,7 +123,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   useEffect(() => observeHomeReturns({page: document, window,
     visible: () => document.visibilityState === 'visible',
     online: () => navigator.onLine !== false,
-  }, () => load(false, 'automatic')), [load]);
+  }, () => load(labels === null, 'automatic')), [load, labels]);
 
   const retry = () => { if (!loading) load(labels === null, 'manual'); };
 
@@ -126,17 +134,16 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const primaryGuild = member?.primary_guild ?? null;
   const internPrimary = Boolean(primaryGuild && member?.member_tiers?.some(tier => tier.guild_key === primaryGuild.guild_key && tier.member_tier === 'intern'));
   useEffect(() => {
-    const source = currentMember;
-    const key = source?.value.primary_guild?.guild_key;
-    if (!source || !key) return;
+    if (!currentMember || !guildScope.guildKey) return;
     const controller = new AbortController();
-    void loadHomeNextSteps<IntroBook>({client, guildKey: key, signal: controller.signal,
-      onBook: value => setBookValue({source, value}),
-      onTask: value => setTaskValue({source, value}),
+    void loadHomeNextSteps<IntroBook>({client, guildKey: guildScope.guildKey, signal: controller.signal,
+      preserveOnFailure: currentMember.reason === 'automatic',
+      onBook: value => setBookValue({guildScope, value}),
+      onTask: value => setTaskValue({guildScope, value}),
     });
     return () => { controller.abort(); };
     // Each confirmed card refresh also refreshes work/grants, even in the same guild.
-  }, [client, currentMember]);
+  }, [client, currentMember, guildScope]);
 
   const nextStep = useMemo<{ message: string; label: string; action: 'guilds' | 'skills' } | null>(() => {
     if (!member) return null;

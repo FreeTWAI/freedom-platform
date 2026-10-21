@@ -76,7 +76,7 @@ export function observeHomeReturns(
 
 export interface HomeReadClient {
   readonly sessionGeneration: number;
-  get<T>(path: string, options: {signal: AbortSignal; background: boolean}): Promise<T>;
+  get<T>(path: string, options: {signal: AbortSignal}): Promise<T>;
 }
 
 type BookReference = {book_id?: string; id?: string};
@@ -106,15 +106,17 @@ export async function loadHomeNextSteps<Book extends BookReference>(options: {
   client: HomeReadClient;
   guildKey: string;
   signal: AbortSignal;
+  /** Keep the last same-guild projection when an automatic read is unknown. */
+  preserveOnFailure?: boolean;
   onBook: (book: Book | null) => void;
   onTask: (action: HomeTaskAction | null) => void;
 }): Promise<void> {
-  const {client, guildKey, signal, onBook, onTask} = options;
+  const {client, guildKey, signal, preserveOnFailure = false, onBook, onTask} = options;
   if (signal.aborted) return;
   const generation = client.sessionGeneration;
   const current = () => !signal.aborted && generation === client.sessionGeneration;
   const read = async (path: string): Promise<Outcome> => {
-    try { return {ok: true, value: await client.get<unknown>(path, {signal, background: true})}; }
+    try { return {ok: true, value: await client.get<unknown>(path, {signal})}; }
     catch { return {ok: false}; }
   };
   const directory = read('/guilds/directory');
@@ -129,7 +131,7 @@ export async function loadHomeNextSteps<Book extends BookReference>(options: {
     const owned = permissions.ok ? list(permissions.value, 'items') : null;
     const guild = guilds?.map(object).find(item => item?.guild_key === guildKey);
     const books = list(guild, 'skill_books');
-    if (!books || !owned) { onBook(null); return; }
+    if (!books || !owned) { if (!preserveOnFailure) onBook(null); return; }
     const unlocked = new Set(owned.map(bookId).filter((id): id is string => id !== null));
     const book = books.find(item => {
       const id = bookId(item);
@@ -144,6 +146,7 @@ export async function loadHomeNextSteps<Book extends BookReference>(options: {
   const publishTask = () => {
     if (!current() || taskPublished || dashboardResult === undefined) return;
     const work = dashboardResult.ok ? list(dashboardResult.value, 'now') : null;
+    if (!work && preserveOnFailure) return;
     if (work && work.length > 0) {
       taskPublished = true;
       onTask('resume');
@@ -151,6 +154,7 @@ export async function loadHomeNextSteps<Book extends BookReference>(options: {
     }
     if (boardResult === undefined) return;
     const tasks = boardResult.ok ? list(boardResult.value, 'items') : null;
+    if (!tasks && preserveOnFailure) return;
     taskPublished = true;
     onTask(tasks ? (tasks.length > 0 ? 'tasks' : 'showcase') : null);
   };
