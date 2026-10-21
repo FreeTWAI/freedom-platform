@@ -25824,8 +25824,8 @@
     },
     {
       "path": "tests/runtime/storefront-appearance-contracts.test.ts",
-      "bytes": 7683,
-      "sha256": "06877f135fea7eb8e6301ffa6732432a071788c9301785c369199e3170e3ab5b"
+      "bytes": 8072,
+      "sha256": "d788939d839e88e47e7a703bf15c04ce490a05f00e91fc94477b89c2976bdc59"
     },
     {
       "path": "tests/runtime/storefront-appearance-contrast.test.ts",
@@ -25894,8 +25894,8 @@
     },
     {
       "path": "tests/runtime/storefront-policies-commands.test.ts",
-      "bytes": 13948,
-      "sha256": "304d5e4d9840d6cf1c057a133e51e30aabe374a38ebb3e0bce168b008dba6438"
+      "bytes": 13995,
+      "sha256": "bb6e4751e0a925beb73e089496a4482ed6a5df2ed746a96ef1a9c8e83b437596"
     },
     {
       "path": "tests/runtime/storefront-policies-publication.test.ts",
@@ -25904,8 +25904,8 @@
     },
     {
       "path": "tests/runtime/storefront-policies-render.test.ts",
-      "bytes": 14065,
-      "sha256": "840059a1f3f243b8cac43aa7fd9c1dd33f2ed168ff802aab8b457253a2bc0a05"
+      "bytes": 14842,
+      "sha256": "61b389dd5b2bd4fd8b226d9213cdb18425bd1454ddfd98bb36893d9ea088d6c4"
     },
     {
       "path": "tests/runtime/storefront-policies-sql.test.ts",
