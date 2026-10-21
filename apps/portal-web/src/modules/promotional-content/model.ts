@@ -34,7 +34,7 @@ function text(input: unknown, field: PromoField): string {
 export function parsePromoDocument(input: unknown): PromoDocument {
   const value = record(input, ['schemaVersion', 'ratio', 'accent', 'pages']);
   if (value.schemaVersion !== PROMO_SCHEMA_VERSION
-    || !Object.hasOwn(PROMO_RATIOS, value.ratio as string)
+    || typeof value.ratio !== 'string' || !Object.hasOwn(PROMO_RATIOS, value.ratio)
     || typeof value.accent !== 'string' || !/^#[a-fA-F0-9]{6}$/.test(value.accent)
     || !Array.isArray(value.pages) || !value.pages.length || value.pages.length > PROMO_LIMITS.pages) {
     throw new PromoError('document');
