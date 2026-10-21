@@ -6,6 +6,7 @@ import {createHostedStorePhotoHarness,type HostedStorePhotoHarness} from '../hel
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {CategoryPageSchema,PublicationCategoriesDocumentSchema} from '../../contracts/guild-launchpad/v1/storefront-categories.js';
 import {ProductGroupPageSchema,type ProductGroupDraft} from '../../contracts/guild-launchpad/v1/storefront-variants.js';
+import {categoryCommand} from '../../modules/agent-commerce/storefront/categories/commands.js';
 import {categoriesSnapshot} from '../../modules/agent-commerce/storefront/categories/model.js';
 let f:HostedStorePhotoHarness,s:Awaited<ReturnType<HostedStorePhotoHarness['openStore']>>,foreign:typeof s,app:ReturnType<HostedStorePhotoHarness['application']>,off:typeof app,skuOnly:typeof app;
 const base={registrationCommunityId:DEMO_COMMUNITY};
@@ -113,4 +114,16 @@ test('CATEGORIES-05 OFF makes no category reads/routes, and corrupt sidecars fai
  await f.h.pool.query(`REVOKE SELECT ON commerce_storefront_categories,commerce_storefront_category_members,commerce_publication_categories FROM ${f.role}`);
  assert.equal((await publicPage('',off)).status,200);const site=await off.request(f.h.origin+'/api/v1/site');assert.equal((await site.json() as any).store_categories_enabled,false);
  const legacy=(await publicPage('?category=malformed',off));assert.equal(legacy.status,200);assert.doesNotMatch(await legacy.text(),/shop-categories|商品分類/);
+});
+
+test('CATEGORIES-06 database category conflicts map to approved errors without masking other failures',async t=>{
+ const actor={user_id:randomUUID(),community_id:DEMO_COMMUNITY,email:'synthetic@example.invalid',display_name:'合成會員',profession_membership_ref:'synthetic',session_hash:'synthetic-session',csrf_token:'synthetic-csrf'};
+ const cases=[
+  [Object.assign(new Error('duplicate key'),{code:'23505',constraint:'storefront_category_name'}),'category_name_taken','已有同名分類，請使用其他名稱。'],
+  [Object.assign(new Error('Category limit'),{code:'23514',constraint:'storefront_category_limit'}),'category_limit','每間商店最多 30 個分類。'],
+  [Object.assign(new Error('Category group no longer resolves'),{code:'23514'}),'category_groups_changed','商品組已更新，請重新讀取後再指定分類。'],
+ ] as const;
+ const invoke=(error:Error)=>categoryCommand(new Proxy(f.h.pool,{get(target,key){return key==='connect'?async()=>{throw error;}:Reflect.get(target,key);}}),actor,randomUUID(),randomUUID(),'create',null,{name:'合成分類'},randomUUID(),'1');
+ for(const [error,code,message] of cases)await t.test(code,async()=>{await assert.rejects(invoke(error),{status:409,code,message});});
+ for(const error of [Object.assign(new Error('unrelated check'),{code:'23514'}),Object.assign(new Error('Category group no longer resolves'),{code:'23505'}),Object.assign(new Error('other unique constraint'),{code:'23505',constraint:'other_unique'})])await assert.rejects(invoke(error),received=>received===error);
 });

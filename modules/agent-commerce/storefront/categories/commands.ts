@@ -79,5 +79,10 @@ export async function categoryCommand(pool:Pool,actor:Actor,t:string,i:string,op
    ack=CategoryCommandAckSchema.parse({profile:STOREFRONT_CATEGORIES_PROFILE,operation:receipt.operation,category_id:receipt.categoryId,completed_version:receipt.completedVersion,changed:receipt.changed,current:await categoryDraft(q,p,options)});
    await authorize(q,context);await assertCurrentSessionClock(q,actor);return receipt as Awaited<ReturnType<typeof execute>>;
   }));return ack;
- }catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);const x=e as {code?:string;constraint?:string};if(x.code==='23505'&&x.constraint==='storefront_category_name')categoryCheck(false,'category_name_taken',409);throw e;}
+ }catch(e){if(e instanceof Problem&&e.code==='tenant_not_found')throw new Problem(404,'not_found',STORE_MISSING);const x=e as {code?:string;constraint?:string;message?:string};
+  if(x.code==='23505'&&x.constraint==='storefront_category_name')categoryCheck(false,'category_name_taken',409);
+  if(x.code==='23514'&&x.constraint==='storefront_category_limit')categoryCheck(false,'category_limit',409);
+  // Migration 181's deferred member validator raises this exact message without a constraint name.
+  if(x.code==='23514'&&x.message==='Category group no longer resolves')categoryCheck(false,'category_groups_changed',409);
+  throw e;}
 }
