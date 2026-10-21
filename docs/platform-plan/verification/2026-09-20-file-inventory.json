@@ -184,8 +184,8 @@
     },
     {
       "path": "apps/freedom.module.json",
-      "bytes": 4265,
-      "sha256": "de5a99f7cedef9cf79192d90edac6d1560fbda4e121ba662a425cc3d3c7e12ed"
+      "bytes": 4186,
+      "sha256": "45bba9498b219c048d49cedc4fa1f7ea8888fa024bce0418afb2b901c5be293c"
     },
     {
       "path": "apps/credential-broker/README.md",
@@ -1884,8 +1884,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 67408,
-      "sha256": "f320378071b7f94d9be7d485c51fe25e6e6821b47441343636fac3e622308414"
+      "bytes": 67433,
+      "sha256": "9a5ced816768e82214f2b22c2ead02ce1b0b310b05335e7b7dcb57c43d05fd2a"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -3714,8 +3714,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/cart-store.ts",
-      "bytes": 4638,
-      "sha256": "5a58ad03d0a984f3a1f55ca22e8d2b0a1c8491f4bc140337932fff00309a1261"
+      "bytes": 4668,
+      "sha256": "a6d7a2fd767df58c8e258a86bd77f867879e2941a5865d113a554d34373d1514"
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
@@ -3754,8 +3754,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/return-path.ts",
-      "bytes": 3562,
-      "sha256": "dec27157abb17b105090113ff9383efaff4c3731dd8363db0da27c71b0b6e43b"
+      "bytes": 560,
+      "sha256": "083e0d990794e09cf1580f85cae19ebe52287f90d4ccf444cda177fe7eee433c"
     },
     {
       "path": "apps/private-ai-authority/README.md",
@@ -17543,6 +17543,11 @@
       "sha256": "056c1bda67108ad20e732cf4641b59e294214ad901cec0082aa3982e1bce677f"
     },
     {
+      "path": "modules/agent-commerce/storefront-return.ts",
+      "bytes": 3498,
+      "sha256": "b99e3897c384f62a2780253209c681a344e107603d180da345d2668942ba64f7"
+    },
+    {
       "path": "modules/agent-commerce/checkout/README.md",
       "bytes": 37558,
       "sha256": "354aac1c06c7e81f9ff454b584179a0097e4428eea507793400758b056ed0b7b"
@@ -18284,8 +18289,8 @@
     },
     {
       "path": "modules/agent-commerce/portal/freedom.module.json",
-      "bytes": 805,
-      "sha256": "f96ea297abac11002ae2ecb0839fd83b4be3d965ec2be18973265a5f4e6b40ed"
+      "bytes": 709,
+      "sha256": "1cb1ca6c46b2f10976627a2919adcb0020198712d11375d8cf9fb82821c8ffb8"
     },
     {
       "path": "modules/agent-commerce/providers/README.md",
