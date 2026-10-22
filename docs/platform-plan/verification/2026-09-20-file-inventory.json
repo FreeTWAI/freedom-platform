@@ -2159,8 +2159,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 60587,
-      "sha256": "3cc22d6c91feb08cf80a385d03073031e8ac8d1c2fea0ae386595bab42d01e7a"
+      "bytes": 60567,
+      "sha256": "6494638936b646584ca12524a3528f0c585e800bf4372d91bf35f6277276c556"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -3349,8 +3349,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/QuickStart.tsx",
-      "bytes": 6376,
-      "sha256": "481ea21633352bf4f2061e4cbd4c7041bbfbc41abd407aa2dffd1fa5468bda75"
+      "bytes": 9906,
+      "sha256": "453e9caaee15bb7e85a6b631ef5608200bddc06a81cf01add4eec4c7da289000"
     },
     {
       "path": "apps/portal-web/src/modules/SettingsMenu.tsx",
@@ -3529,8 +3529,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/WelcomePreview.tsx",
-      "bytes": 6688,
-      "sha256": "c6e9f3659f190fae87846e5888f892d25e9387fc9c6a4e5dbf99d1038bf4da0a"
+      "bytes": 9885,
+      "sha256": "06d97cd584461c7a0d81fc54108e18dcbf7520084ae0a96bb421164b6aa07da3"
     },
     {
       "path": "apps/portal-web/src/modules/WorkSharing.css",
@@ -3796,6 +3796,11 @@
       "path": "apps/portal-web/src/modules/work-ui-capabilities.ts",
       "bytes": 709,
       "sha256": "4791e67f44b448f0fdf6d12e6bf7c35274ff189f56d871659af1e85976ba0ef5"
+    },
+    {
+      "path": "apps/portal-web/src/modules/auth/PasswordField.tsx",
+      "bytes": 2059,
+      "sha256": "0be85f7a0cd838bd23ec5b89a5106a7b3b2323b0706858213caf707b581c7984"
     },
     {
       "path": "apps/portal-web/src/modules/community-ar/Editor.tsx",
@@ -15008,6 +15013,11 @@
       "sha256": "3e2e03a39c069a25dcade3b854635bcf1e42ee8c70b5f530c9e8c3b15a66be59"
     },
     {
+      "path": "docs/development/registration-first-use.md",
+      "bytes": 3108,
+      "sha256": "751e17b80e2e305b5b1b5c25b47a80331c19adf1f4cc6a44e5912fa30f3fc856"
+    },
+    {
       "path": "docs/development/repo-maintainer-acceptance.md",
       "bytes": 10850,
       "sha256": "63d14e7b9ea0232669257ff8fead55310231fb2fc54aeb408666b225c649df23"
@@ -22774,8 +22784,8 @@
     },
     {
       "path": "packages/shared/freedom.module.json",
-      "bytes": 2946,
-      "sha256": "21bb514ac9715961261faf017ff71480371d224232ad9c0a27008f194460eb57"
+      "bytes": 3160,
+      "sha256": "f4b235db873996b3d2b292c3b946ebb584071dc64b10d1af75e3baccca3dc1f3"
     },
     {
       "path": "packages/shared/github-leaderboard.ts",
@@ -23499,8 +23509,8 @@
     },
     {
       "path": "tests/e2e/audit-shell.spec.ts",
-      "bytes": 21282,
-      "sha256": "ef3664d8d9af46e2d9617fac73ddc0e260e9700786ed3f5af823a8ceb9c6f28a"
+      "bytes": 22178,
+      "sha256": "4eb66884247976f7b5e3f39586b2caabaadffad84be9f5dc392c61994164352d"
     },
     {
       "path": "tests/e2e/audit-skills.spec.ts",
@@ -24136,6 +24146,11 @@
       "path": "tests/e2e/quick-join.ts",
       "bytes": 999,
       "sha256": "b976c88d2d52ce4c9ac016a344bdf05354443201ad1affba6939396a626cf725"
+    },
+    {
+      "path": "tests/e2e/registration-first-use.spec.ts",
+      "bytes": 13694,
+      "sha256": "79a18316fff75d159ade8252bfad498b1a24c16edd1dd77623eecc3a699734c6"
     },
     {
       "path": "tests/e2e/repo-author-claims.spec.ts",

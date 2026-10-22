@@ -3,6 +3,9 @@
   "module_id": "shared",
   "owner_role": "foundation",
   "owned_paths": [
+    "apps/portal-web/src/modules/auth/PasswordField.tsx",
+    "tests/e2e/registration-first-use.spec.ts",
+    "docs/development/registration-first-use.md",
     "packages/shared/community-discovery.ts",
     "packages/shared/github-leaderboard.ts",
     "packages/shared/guild-topics.ts",
@@ -40,6 +43,7 @@
     "apps/portal-web/src/modules/authoring-drafts.ts"
   ],
   "public_exports": [
+    "apps/portal-web/src/modules/auth/PasswordField.tsx",
     "packages/shared/community-discovery.ts",
     "packages/shared/github-leaderboard.ts",
     "packages/shared/guild-topics.ts",
