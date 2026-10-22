@@ -54,7 +54,6 @@
     "wrangler.jsonc",
     "apps/platform-api/src/generated/runtime-text.ts",
     "apps/portal-web/src/App.tsx",
-    "apps/portal-web/src/AppInstall.css",
     "apps/portal-web/src/Navigation.tsx",
     "apps/portal-web/src/ShareLauncher.tsx",
     "apps/portal-web/src/WorkshopIcon.tsx",
