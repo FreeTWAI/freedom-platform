@@ -56,12 +56,10 @@ export async function openFeatureSearch(page:Page){
 export async function navigate(page: Page, name: string) {
   await expect(page.locator('.shell')).toBeVisible();
   if (name === '我的訊息') {
-    const bubble=page.locator('.floating-messages');
-    if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
+    await openChat(page);
     return;
   }
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  await closeChat(page);
   if (['我的名片', '待辦清單'].includes(name)) {
     const settings = page.getByRole('button', { name: '設定', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
@@ -114,8 +112,7 @@ export async function signOut(page: Page) {
 
 /** Notification history is owned by the bell, separately from chats. */
 export async function openNotifications(page:Page){
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.count()&&await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  await closeChat(page);
   const bell=page.locator('.notification-bell-trigger');
   if(await bell.getAttribute('aria-expanded')!=='true')await bell.click();
   const all=page.getByRole('button',{name:'查看所有通知',exact:true});
@@ -124,10 +121,16 @@ export async function openNotifications(page:Page){
 export async function openChat(page:Page){
   const bubble=page.locator('.floating-messages');
   if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
+  await expect(page.locator('#floating-message-panel')).toBeVisible();
 }
 export async function closeChat(page:Page){
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  const panel=page.locator('#floating-message-panel');
+  if(await panel.isVisible()){
+    // The phone launcher is hidden while its modal is open. Its own collapse
+    // button remains reachable; wait for the panel to close before another action.
+    await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();
+    await expect(panel).toBeHidden();
+  }
 }
 
 /** Select one complete guild workspace through the visible desktop or phone navigation. */
