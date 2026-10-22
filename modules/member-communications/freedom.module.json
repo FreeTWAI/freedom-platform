@@ -86,7 +86,8 @@
     "apps/portal-web/src/modules/ChatWorkspace.tsx",
     "apps/portal-web/src/modules/ChatSearch.tsx",
     "tests/runtime/chat-content.test.ts",
-    "migrations/182_commerce_order_notifications.sql"
+    "migrations/182_commerce_order_notifications.sql",
+    "modules/member-communications/**"
   ],
   "owner_role": "foundation",
   "public_exports": [

@@ -253,6 +253,7 @@ export class PortalClient {
   }
 
   private async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
+    if (options.signal?.aborted) throw new ApiError({message:'已取消',code:'aborted',status:0,network:true})
     // Requests can outlive logout/re-login. Their auth failures belong only to
     // the session that dispatched them, never a later member session.
     const requestCsrfToken = this.csrfToken
@@ -300,9 +301,16 @@ export class PortalClient {
     }
 
     const controller = new AbortController()
-    const onCallerAbort = () => controller.abort()
+    // The caller's wait ends on cancellation even if fetch/body ignores abort.
+    // A cancelled write is still an unknown outcome, never a rollback or ACK.
+    let rejectCancelled!: (cause: ApiError) => void
+    const cancelled = new Promise<never>((_, reject) => { rejectCancelled = reject })
+    const onCallerAbort = () => {
+      rejectCancelled(new ApiError({message:'已取消',code:'aborted',status:0,network:true}))
+      controller.abort()
+    }
     if (options.signal) {
-      if (options.signal.aborted) controller.abort()
+      if (options.signal.aborted) onCallerAbort()
       else options.signal.addEventListener('abort', onCallerAbort, { once: true })
     }
     const currentAuthResponse = () => this.authGeneration === requestAuthGeneration && this.csrfToken === requestCsrfToken && !controller.signal.aborted
@@ -319,6 +327,7 @@ export class PortalClient {
       }, this.options.timeoutMs ?? 20_000)
     })
     const operation = async () => {
+      if (controller.signal.aborted) throw new ApiError({message:'已取消',code:'aborted',status:0,network:true})
       response = await accessAwareFetch(`${API_BASE}${path}`, {
         method, headers, credentials: 'same-origin', signal: controller.signal,
         ...(options.keepalive === true ? {keepalive: true} : {}),
@@ -375,7 +384,7 @@ export class PortalClient {
       }
       return payload as T
     }
-    try { return await Promise.race([operation(), timeout]) }
+    try { return await Promise.race([operation(), timeout, cancelled]) }
     catch (cause) {
       if (options.signal?.aborted) {
         throw new ApiError({ message: '已取消', code: 'aborted', status: 0, network: true })

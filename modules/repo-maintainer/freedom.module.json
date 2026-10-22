@@ -1,0 +1,57 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "repo-maintainer",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/repo-maintainer/**",
+    "apps/platform-api/src/routes/repo-maintainer.ts",
+    "apps/platform-api/src/maintainer-worker.ts",
+    "apps/portal-web/src/modules/GuildReviews.tsx",
+    "apps/portal-web/src/modules/review-center-shared.tsx",
+    "apps/portal-web/src/modules/review-handoff.tsx",
+    "tests/runtime/repo-maintainer-admin.test.ts",
+    "tests/runtime/repo-maintainer-policy.test.ts",
+    "tests/runtime/repo-maintainer-claims.test.ts",
+    "tests/runtime/repo-maintainer-guild.test.ts",
+    "tests/runtime/repo-maintainer-sync.test.ts",
+    "tests/runtime/repo-maintainer-handoff.test.ts",
+    "tests/runtime/repo-maintainer-webhook.test.ts",
+    "docs/development/repo-maintainer.md",
+    "docs/development/repo-maintainer-acceptance.md"
+  ],
+  "public_exports": [
+    "modules/repo-maintainer/service.ts",
+    "modules/repo-maintainer/guild-reviews.ts",
+    "modules/repo-maintainer/policy.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "community",
+    "member-card",
+    "platform-admin-portal",
+    "portal-shell",
+    "positioning",
+    "shared",
+    "skill-submissions"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/repo-maintainer/README.md",
+    "docs/development/repo-maintainer.md",
+    "docs/development/platform-admin-api.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

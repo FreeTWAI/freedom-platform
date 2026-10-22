@@ -22,7 +22,10 @@
   "owned_paths": [
     "modules/client-connections/service.ts",
     "apps/platform-api/src/routes/client-connections.ts",
-    "tests/runtime/client-connections.test.ts"
+    "tests/runtime/client-connections.test.ts",
+    "packages/client-connections/**",
+    "packages/sdk/member-workspace.mjs",
+    "apps/portal-web/src/modules/ClientConnections.tsx"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"
