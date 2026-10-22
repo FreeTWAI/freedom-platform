@@ -19,6 +19,7 @@ const methodNames = {immediate_card: '信用卡', bank_transfer: '銀行匯款',
 const deliveryNames = DELIVERY_NAMES;
 const unavailable = {member_required: '登入會員後才能選擇匯款或面交', meetup_required: '面交付款只能搭配面交取貨', payment_profile_unavailable: '這個付款方式目前無法使用'};
 const fieldNames: Record<string, string> = {'delivery.name': '收件人姓名', 'delivery.mobile': '收件人手機', 'delivery.postal_code': '郵遞區號', 'delivery.address': '收件地址', 'delivery.method': '取貨方式'};
+const deliveryFieldTargets:Record<string,string>={'delivery.name':'checkout-name','delivery.mobile':'checkout-mobile','delivery.postal_code':'checkout-postal','delivery.address':'checkout-address'};
 const intentKey = (slug: string) => `freedom.shop.order-intent.v1:${slug}`;
 function readIntent(slug: string): Intent | null {
   try {
@@ -152,6 +153,11 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   // A confirmed tab stays editable during a background read. Failed reads
   // remain blocked until a successful check; actions still await that check.
   const identityBlocked = enhanced && (Boolean(identityError) || !buyer?.identity);
+  useEffect(() => {
+    if (busy || identityBlocked || freezeUnknown) return;
+    const target = Object.keys(fieldErrors).map(path => deliveryFieldTargets[path]).find(Boolean);
+    if (target) document.getElementById(target)?.focus();
+  }, [busy, identityBlocked, freezeUnknown, fieldErrors]);
   useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy || enhanced && identityChecking ? 'true' : 'false');}, [busy, quoteBusy, container, enhanced, identityChecking]);
   useEffect(() => {document.title = `結帳｜${name}｜自由工坊`;}, [name]);
   useEffect(() => {
@@ -213,9 +219,6 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         if (problem.success && problem.data.fields) {
           const copy:Record<string,string>={required:'請填寫此欄位。',format:'請檢查此欄位的格式。',too_long:'此欄位內容太長。',unknown_postal_code:'請填寫可辨識的臺灣郵遞區號。'};
           setFieldErrors(Object.fromEntries(problem.data.fields.map(field => [field.path, method==='self_ship' ? copy[field.code]??'請檢查此欄位的格式。' : `${fieldNames[field.path] ?? '收件資料'}${field.code === 'required' ? '為必填' : '格式不符'}，請修正後再試。`])));
-          const targets:Record<string,string>={'delivery.name':'checkout-name','delivery.mobile':'checkout-mobile','delivery.postal_code':'checkout-postal','delivery.address':'checkout-address'};
-          const target=problem.data.fields.map(field=>targets[field.path]).find(Boolean);
-          if(target)requestAnimationFrame(()=>document.getElementById(target)?.focus());
         }
         const definitive = response.status >= 400 && response.status < 500 && CheckoutErrorSchema.safeParse(data).success;
         setFreezeUnknown(!definitive);

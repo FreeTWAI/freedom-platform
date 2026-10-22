@@ -4114,8 +4114,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 31431,
-      "sha256": "01053991fe04f25be9f62b405dd27cb8139c4230cc1ebd0aef023c754ed0120a"
+      "bytes": 31549,
+      "sha256": "0529e2d9934be89b03242b5e227b61c5d7221cb337e3a9903c51e16f8a6219e4"
     },
     {
       "path": "apps/portal-web/src/storefront/delivery-copy.ts",
