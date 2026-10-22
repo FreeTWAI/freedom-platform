@@ -5,6 +5,7 @@ import {test, expect, type Browser, type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
+import {convertV1, type ConfigView} from '../../contracts/guild-launchpad/v2/config.js';
 
 const music = 'guild_music_mv';
 const space = 'guild_event_space';
@@ -66,11 +67,32 @@ async function tallEnough(page: Page) {
   expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
 }
 
+type ClipboardWindow = Window & {guildCopies: {value: string; active: boolean; resolve: () => void; reject: (error: Error) => void}[]};
+async function holdGuildClipboard(page: Page) {
+  // Controlled browser capability: no OS clipboard or external social post.
+  await page.addInitScript(() => {
+    const host = window as unknown as ClipboardWindow;
+    host.guildCopies = [];
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {
+      writeText: (value: string) => new Promise<void>((resolve, reject) => host.guildCopies.push({value, active: navigator.userActivation.isActive, resolve, reject})),
+    }});
+  });
+}
+async function finishGuildCopy(page: Page, index: number, denied = false) {
+  await page.evaluate(({index, denied}) => {
+    const copy = (window as unknown as ClipboardWindow).guildCopies[index];
+    if (denied) copy.reject(new DOMException('blocked', 'NotAllowedError'));
+    else copy.resolve();
+  }, {index, denied});
+}
+
 test('a visitor can read a guild launchpad without a session', async ({browser, baseURL}) => {
   test.setTimeout(120_000);
   const context = await browser.newContext({baseURL, viewport: {width: 360, height: 800}});
   await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
   const page = await context.newPage();
+  const privateReads: string[] = [];
+  page.on('request', request => {if (new URL(request.url()).pathname.startsWith('/api/v1/guilds/')) privateReads.push(request.url());});
   let releaseChunk: () => void = () => undefined;
   const chunkReleased = new Promise<void>(resolve => { releaseChunk = resolve; });
   await page.route(/\/assets\/GuildLaunchpadPage-[^/]+\.js$/, async route => {
@@ -87,6 +109,15 @@ test('a visitor can read a guild launchpad without a session', async ({browser, 
     await expect(page.getByRole('heading', {level: 1, name: payload.guild.name})).toBeVisible();
     await expect(page.getByText(mission, {exact: true}).first()).toBeVisible();
     await expect(page.getByRole('button', {name: '會員登入', exact: true})).toBeVisible();
+    const readBooks = page.getByRole('button', {name: '查看公會技能書', exact: true});
+    await readBooks.focus();
+    await readBooks.press('Enter');
+    await expect(page.getByRole('heading', {level: 2, name: '技能書', exact: true})).toBeFocused();
+    const source = page.getByRole('link', {name: /查看原始專案/}).first();
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute('href', /^https:\/\//);
+    await expect(source).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(privateReads).toEqual([]);
     await openGuildSection(page, '我的工作');
     const myWork = page.locator('.guild-launchpad-block').filter({has: page.getByRole('heading', {level: 2, name: '我的工作', exact: true})});
     await expect(myWork.locator('p').filter({hasText: /^登入並加入公會後，可以在這裡看到自己的工作。$/})).toBeVisible();
@@ -106,6 +137,169 @@ test('a visitor can read a guild launchpad without a session', async ({browser, 
     await expect(page.getByRole('button', {name: '儲存草稿', exact: true})).toHaveCount(0);
     await noOverflow(page);
   } finally { releaseChunk(); await context.close(); }
+});
+
+test('public guild sharing copies a clean permalink and stays usable across themes and widths', async ({browser, baseURL}, testInfo) => {
+  const context = await browser.newContext({baseURL, viewport: {width: 390, height: 844}});
+  await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
+  const page = await context.newPage();
+  await holdGuildClipboard(page);
+  try {
+    await page.goto(`/?utm_source=fixture&private_hint=do-not-share#guilds/${music}`);
+    await page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await expect(page.getByRole('button', {name: '複製中…', exact: true})).toBeDisabled();
+    expect(await page.evaluate(() => (window as unknown as ClipboardWindow).guildCopies.map(({value, active}) => ({value, active})))).toEqual([
+      {value: `${new URL(baseURL!).origin}/#guilds/${music}`, active: true},
+    ]);
+    await finishGuildCopy(page, 0);
+    await expect(page.getByRole('status').filter({hasText: '已複製公會連結'})).toBeVisible();
+    await page.getByRole('button', {name: '查看公會技能書', exact: true}).click();
+    for (const theme of ['light', 'dark', 'versefolk']) {
+      await page.evaluate(value => {document.documentElement.dataset.theme = value; document.documentElement.dataset.experienceProfile = value; window.dispatchEvent(new Event('freedom-theme-changed'));}, theme);
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({width, height: 900});
+        await noOverflow(page);
+        const targets = await page.locator('.guild-launchpad-entry :is(button,a):visible, .guild-launchpad-book a:visible').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+        expect(targets.length).toBeGreaterThan(0);
+        expect(Math.min(...targets)).toBeGreaterThanOrEqual(44);
+        if (width !== 390) await page.screenshot({path: testInfo.outputPath(`public-guild-${theme}-${width}.png`), fullPage: true, animations: 'disabled'});
+      }
+    }
+  } finally {await context.close();}
+});
+
+test('a denied guild copy exposes a selected manual permalink without a false success', async ({browser, baseURL}) => {
+  const context = await browser.newContext({baseURL, viewport: {width: 320, height: 800}});
+  await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
+  const page = await context.newPage();
+  await holdGuildClipboard(page);
+  try {
+    await page.goto(`/?private_hint=do-not-share#guilds/${music}`);
+    await page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await finishGuildCopy(page, 0, true);
+    const field = page.getByRole('textbox', {name: '公會公開連結', exact: true});
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue(`${new URL(baseURL!).origin}/#guilds/${music}`);
+    expect(await field.evaluate(element => {const input = element as HTMLInputElement; return [input.selectionStart, input.selectionEnd];})).toEqual([0, `${new URL(baseURL!).origin}/#guilds/${music}`.length]);
+    await expect(page.getByText('已複製公會連結', {exact: true})).toHaveCount(0);
+    await expect(page.getByRole('status').filter({hasText: '無法自動複製'})).toBeVisible();
+    await noOverflow(page);
+    // Missing clipboard support has the same usable fallback, including on retry.
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, value: undefined}));
+    await page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await expect(field).toBeFocused();
+  } finally {await context.close();}
+});
+
+for (const denied of [false, true]) test(`a late clipboard ${denied ? 'failure' : 'success'} cannot reappear after a public guild change`, async ({browser, baseURL}) => {
+  const context = await browser.newContext({baseURL});
+  await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
+  const page = await context.newPage();
+  await holdGuildClipboard(page);
+  try {
+    const next = await (await page.request.get(`/api/v1/public/guilds/${space}/launchpad`)).json();
+    await page.goto(`/#guilds/${music}`);
+    await page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await page.evaluate(key => {window.location.hash = `guilds/${key}`;}, space);
+    await expect(page.getByRole('heading', {level: 1, name: next.guild.name, exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '複製公會連結', exact: true})).toBeEnabled();
+    await finishGuildCopy(page, 0, denied);
+    await expect(page.getByRole('textbox', {name: '公會公開連結', exact: true})).toHaveCount(0);
+    await expect(page.getByText(/無法自動複製|已複製公會連結/)).toHaveCount(0);
+    await page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    expect(await page.evaluate(() => (window as unknown as ClipboardWindow).guildCopies[1].value)).toBe(`${new URL(baseURL!).origin}/#guilds/${space}`);
+    await finishGuildCopy(page, 1);
+    await expect(page.getByText('已複製公會連結', {exact: true})).toBeVisible();
+  } finally {await context.close();}
+});
+
+test('public guild shortcuts follow published contact settings and respect disabled resource blocks', async ({browser, baseURL, e2eAuthPool}) => {
+  test.setTimeout(180_000);
+  const fixture = await seed(e2eAuthPool);
+  const leader = await login(browser, baseURL!, fixture.email);
+  const context = await browser.newContext({baseURL, viewport: {width: 390, height: 844}});
+  await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
+  const visitor = await context.newPage();
+  const path = `/api/v1/guilds/${edited}/launchpad-config`;
+  const auth = await (await leader.page.request.get('/api/v1/session')).json();
+  async function command(suffix: string, data: unknown, version: string) {
+    const response = await leader.page.request.post(path + suffix, {data, headers: {
+      Origin: new URL(baseURL!).origin, 'X-CSRF-Token': auth.csrf_token,
+      'Idempotency-Key': randomUUID(), 'If-Match': `"${version}"`,
+    }});
+    expect(response.ok()).toBe(true);
+    return await response.json() as ConfigView;
+  }
+  let original: ConfigView | undefined;
+  let originalPublished: ConfigView['body'] | undefined;
+  try {
+    original = await (await leader.page.request.get(path)).json() as ConfigView;
+    // The authenticated member read exposes the complete published config;
+    // the public projection intentionally filters recommendations/extensions.
+    const publishedBefore = await (await leader.page.request.get(`/api/v1/guilds/${edited}/launchpad`)).json() as {config: ConfigView};
+    originalPublished = structuredClone(publishedBefore.config.body);
+    const body = original.body.schema_version === 'guild-launchpad.config/v1' ? convertV1(original.body) : structuredClone(original.body);
+    body.support = {kind: 'guild_public_contact', public_url: 'https://community.example.test/join'};
+    for (const block of body.blocks) if (['skill_books', 'support'].includes(block.kind)) block.enabled = true;
+    let draft = await command('/drafts', {body}, original.pointer_version);
+    let published = await command(`/${draft.config_id}/publish`, {expected_body_sha256: draft.body_sha256}, draft.pointer_version);
+    await visitor.goto(`/#guilds/${edited}`);
+    const contact = visitor.getByRole('link', {name: /聯絡這個公會/});
+    await expect(contact).toHaveAttribute('href', 'https://community.example.test/join');
+    await expect(contact).toContainText('community.example.test · 另開分頁');
+    await expect(contact).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(visitor.getByRole('button', {name: '查看公會技能書', exact: true})).toBeVisible();
+    body.support.public_url = 'https://draft.example.test/not-published';
+    draft = await command('/drafts', {body}, published.pointer_version);
+    await visitor.reload();
+    await expect(contact).toHaveAttribute('href', 'https://community.example.test/join');
+    await expect(visitor.locator('body')).not.toContainText('draft.example.test');
+    await expect(visitor.locator('a[href*="draft.example.test"]')).toHaveCount(0);
+    // Publishing a platform help URL must not describe it as a guild contact.
+    body.support = {kind: 'platform_help', public_url: 'https://help.example.test/platform'};
+    draft = await command('/drafts', {body}, draft.pointer_version);
+    published = await command(`/${draft.config_id}/publish`, {expected_body_sha256: draft.body_sha256}, draft.pointer_version);
+    await visitor.reload();
+    await expect(visitor.getByRole('button', {name: '複製公會連結', exact: true})).toBeVisible();
+    await expect(contact).toHaveCount(0);
+    body.support = {kind: 'guild_public_contact', public_url: 'https://hidden.example.test/contact'};
+    for (const block of body.blocks) if (['skill_books', 'support'].includes(block.kind)) block.enabled = false;
+    draft = await command('/drafts', {body}, published.pointer_version);
+    await command(`/${draft.config_id}/publish`, {expected_body_sha256: draft.body_sha256}, draft.pointer_version);
+    await visitor.reload();
+    await expect(visitor.getByRole('button', {name: '複製公會連結', exact: true})).toBeVisible();
+    await expect(visitor.getByRole('button', {name: '查看公會技能書', exact: true})).toHaveCount(0);
+    await expect(contact).toHaveCount(0);
+    await expect(visitor.locator('body')).not.toContainText('hidden.example.test');
+    await expect(visitor.locator('a[href*="hidden.example.test"]')).toHaveCount(0);
+    await noOverflow(visitor);
+  } finally {
+    try {
+      // Restore both visible bodies through normal versioned commands;
+      // immutable history remains in this disposable schema. A later published
+      // revision does not remove earlier drafts, so also restore the editor.
+      // Never publish a pre-existing member draft during cleanup.
+      if (original && originalPublished) {
+        const latest = await (await leader.page.request.get(path)).json() as ConfigView;
+        const restoredDraft = await command('/drafts', {body: originalPublished}, latest.pointer_version);
+        const restored = await command(`/${restoredDraft.config_id}/publish`, {expected_body_sha256: restoredDraft.body_sha256}, restoredDraft.pointer_version);
+        await command('/drafts', {body: original.body}, restored.pointer_version);
+      }
+    } finally {await context.close(); await leader.context.close(); await cleanup(e2eAuthPool, fixture.userId, fixture.previousOfficer);}
+  }
+});
+
+test('an unavailable public guild never offers a successful public entry', async ({browser, baseURL}) => {
+  const context = await browser.newContext({baseURL});
+  await context.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
+  const page = await context.newPage();
+  await page.route(`**/api/v1/public/guilds/${music}/launchpad`, route => route.fulfill({status: 503, json: {code: 'service_unavailable', detail: '公會資料暫時無法讀取。'}}));
+  try {
+    await page.goto(`/#guilds/${music}`);
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('region', {name: '公會公開入口', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('button', {name: '會員登入', exact: true})).toBeVisible();
+  } finally {await context.close();}
 });
 
 test('a late response from guild A never renders inside guild B', async ({browser, baseURL, e2eAuthPool}) => {
@@ -143,7 +337,9 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
   const session = await login(browser, baseURL!, fixture.email);
   const first = `使命甲 ${randomUUID().slice(0, 8)}`;
   const second = `使命乙 ${randomUUID().slice(0, 8)}`;
+  await holdGuildClipboard(session.page);
   try {
+    await session.page.reload();
     await navigate(session.page, '職業公會');
     await session.page.setViewportSize({width: 360, height: 800});
     const card = session.page.getByRole('article', {name: fixture.editedName, exact: true});
@@ -175,6 +371,16 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await expect(session.page.getByText('blocks.')).toHaveCount(0);
     await session.page.locator('#launchpad-support-url').fill('');
     await session.page.locator('#launchpad-mission').fill(first);
+    // Sharing works while signed in and leaves the active editor/draft intact.
+    await session.page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await finishGuildCopy(session.page, 0, true);
+    await expect(session.page.getByRole('textbox', {name: '公會公開連結', exact: true})).toHaveValue(`${new URL(baseURL!).origin}/#guilds/${edited}`);
+    await expect(session.page.locator('#launchpad-mission')).toBeVisible();
+    await expect(session.page.locator('#launchpad-mission')).toHaveValue(first);
+    await session.page.getByRole('button', {name: '複製公會連結', exact: true}).click();
+    await finishGuildCopy(session.page, 1);
+    await expect(session.page.getByText('已複製公會連結', {exact: true})).toBeVisible();
+    await expect(session.page.locator('#launchpad-mission')).toHaveValue(first);
     const moveAnnouncements = session.page.getByRole('button', {name: '上移公告', exact: true});
     for (let step = 0; step < 7; step += 1) {
       if (await session.page.locator('.guild-launchpad-content > section > h2').first().innerText() === '公告') break;
