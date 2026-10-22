@@ -22,6 +22,8 @@ import {
   type MerchantProductView as ProductView, type StoreView,
 } from '../../../../contracts/guild-launchpad/v1/storefront';
 import {StoreAppearanceSchema, type StoreAppearance, type StoreTemplate} from '../../../../contracts/guild-launchpad/v1/storefront-presentation';
+import {StorePublicationReviewSchema, type StorePublicationReview} from '../../../../contracts/guild-launchpad/v1/storefront-publication';
+import {StoreSetup} from './StoreSetup';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
 import {HostedDistribution} from './HostedDistribution';
 import {SupplyOfferSchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
@@ -58,6 +60,7 @@ const NEXT: Record<string, string> = {
   storefront_already_set_up: '請重新載入商店，繼續編輯資料。',
   storefront_not_set_up: '請先完成商店設定。',
   storefront_has_no_products: '請先新增至少一件商品。',
+  storefront_publication_changed: '請確認更新後的商品與店面內容，再按一次上架。',
   storefront_product_limit: '請編輯或移除現有商品後再新增。',
   storefront_product_in_use: '請保留這件商品，並聯絡業務空間擁有者。',
   storefront_unavailable: '請聯絡業務空間擁有者恢復使用。',
@@ -95,9 +98,11 @@ export function HostedStore({client, enabled, appearanceEnabled=false,policiesEn
   if (retained?.supplier) return <HostedSupplierOrders key={`${userId}:${client.sessionGeneration}:${retained.tenantId}:${retained.instanceId}`} client={client} route={retained}/>;
   if (retained) return <HostedSellerOrders key={`${userId}:${client.sessionGeneration}:${retained.tenantId}:${retained.instanceId}`} client={client} route={retained} registerLeave={registerLeave} commerceConsoleEnabled={commerceConsoleEnabled}/>;
   if (!enabled) return <p className="banner" role="status">目前不開放商店設定。若要查看或取消既有預留，請開啟你保存的店主管理連結；登入後會重新確認目前權限。</p>;
+  if (locationHash === '#stores/setup') return <StoreSetup client={client} userId={userId} registerLeave={registerLeave}/>;
+  if (locationHash === '#stores/supply/setup') return <StoreSetup client={client} userId={userId} registerLeave={registerLeave} purpose="supply"/>;
   if (consoleRoute && locationHash.split('?')[0].split('/')[3] === 'supply') return <HostedSupplyCatalog supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${consoleRoute.tenantId}:${consoleRoute.instanceId}`} client={client} tenantId={consoleRoute.tenantId} instanceId={consoleRoute.instanceId} registerLeave={registerLeave}/>;
   const path = locationHash.replace(/^#/, '').split('/');
-  if (path.length === 1 && path[0] === 'stores') return <StoreList key={userId} client={client}/>;
+  if (path.length === 1 && path[0] === 'stores') return <StoreList key={`${userId}:${client.sessionGeneration}`} client={client}/>;
   if (path.length === 2 && path[0] === 'stores' && path[1] === 'supply') return <SupplyCatalogList key={`${userId}:${client.sessionGeneration}`} client={client}/>;
   if (path.length === 4 && path[0] === 'stores' && path[3] === 'supply' && OpaqueId.safeParse(path[1]).success && OpaqueId.safeParse(path[2]).success) return <HostedSupplyCatalog supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} key={`${userId}:${client.sessionGeneration}:${path[1]}:${path[2]}`} client={client} tenantId={path[1]} instanceId={path[2]} registerLeave={registerLeave}/>;
   const offerId = path.length===5&&path[3]==='supply-offers'&&OpaqueId.safeParse(path[4]).success?path[4]:undefined;
@@ -113,8 +118,9 @@ function MissingStore() { return <div className="hosted-store stack"><BackLink/>
 function StoreList({client}: {client: PortalClient}) {
   const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client);
   return <div className="hosted-store stack" data-share-entry="stores" tabIndex={-1}>
+    <div className="actions"><a className="btn btn-primary" href="#stores/setup">建立我的商店</a><a className="btn btn-ghost" href="#stores/supply/setup">開始供貨設定</a></div>
     {error ? <><p role="alert">暫時無法讀取你的商店。</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></> : !data ? <p role="status">正在確認你的商店…</p> : <>
-      {data.items.length === 0 && !data.next_cursor && <><p>你還沒有商店。</p><div className="actions"><a className="btn btn-ghost" href="#guilds/guild_commerce_sales">前往電商與銷售公會建立</a><a className="btn btn-ghost" href="#guilds/guild_product_quality_supply">前往商品品質與供應公會設定供貨</a></div></>}
+      {data.items.length === 0 && !data.next_cursor && <p>你還沒有商店。從這裡開始，就能接續完成開店設定。</p>}
       {data.items.map(item => <article className="card stack" key={item.instance_id}>
         <h2>{item.name ?? '尚未完成設定的商店'}</h2><p>業務空間：{item.tenant_display_name}</p><p>{stateWord(item)}</p>
         <div className="actions"><a className="btn btn-primary" href={`#stores/${item.tenant_id}/${item.instance_id}`}>進入我的商店</a>
@@ -144,6 +150,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     setPhotoBlocks(old=>old[id]===blocking?old:{...old,[id]:blocking});markDirty(id==='appearance'?'appearance':id==='policies'?'policies':'photo/'+id,dirty);
   }
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [publicationReview, setPublicationReview] = useState<StorePublicationReview | null>(null);
   const [appearance, setAppearance] = useState<StoreAppearance | null>(null);
   const [policiesDraft,setPoliciesDraft]=useState<SellerPoliciesDraft|null>(null),[policiesError,setPoliciesError]=useState(false);
   const [appearanceDraft,setAppearanceDraft]=useState<StorefrontAppearanceDraft|null>(null),[appearanceError,setAppearanceError]=useState(false);
@@ -155,7 +162,9 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState<Attempt | null>(null);
   const [dirtyForms, setDirtyForms] = useState<Record<string, boolean>>({});
+  const dirtyFormsRef = useRef<Record<string, boolean>>({});
   const hasDraft = Object.values(dirtyForms).some(Boolean);
+  const hasFormDraft = Object.entries(dirtyForms).some(([id,dirty])=>dirty&&!id.startsWith('photo/'));
   const dirty = hasDraft || busy || retry !== null || photoBlocking;
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
   const controller = useRef(new AbortController());
@@ -200,36 +209,39 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     void load();
     return () => {controller.current.abort(); readGeneration.current++; window.removeEventListener('beforeunload', unloading);};
   }, [client, root]);
-  async function load() {
+  async function load(options?: {throwOnError?: boolean}) {
     const signal = controller.current.signal; const ticket = ++readGeneration.current;
     const current = () => !signal.aborted && readGeneration.current === ticket;
-    setLoading(true);
+    setLoading(true); setPublicationReview(null);
     try {
       const next = StoreViewSchema.parse(await client.get(root, {signal}));
       let photos:ProductMediaView[]=[],galleryDrafts:ProductGalleryDraft[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
-      let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null;
+      let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null, review: StorePublicationReview | null = null;
       let branding:StorefrontAppearanceDraft|null=null,brandingError=false,legal:SellerPoliciesDraft|null=null,legalError=false;
       if (next.setup_state === 'ready') {
         const results = await Promise.all([client.get(root + '/products', {signal}), client.get(root + '/preview', {signal}), client.get(root + '/appearance', {signal}), photosEnabled ? client.get(root+'/product-media',{signal}) : Promise.resolve(null),
           appearanceEnabled?client.get(root+'/appearance-settings',{signal}).then(value=>StorefrontAppearanceDraftSchema.parse(value)).catch(()=>{brandingError=true;return null;}):Promise.resolve(null),
           policiesEnabled?client.get(root+'/seller-policies',{signal}).then(value=>SellerPoliciesDraftSchema.parse(value)).catch(()=>{legalError=true;return null;}):Promise.resolve(null),
-          galleryEnabled?client.get(root+'/product-galleries',{signal}).then(value=>ProductGalleriesSchema.parse(value)):Promise.resolve(null)]);
+          galleryEnabled?client.get(root+'/product-galleries',{signal}).then(value=>ProductGalleriesSchema.parse(value)):Promise.resolve(null),
+          next.capabilities.includes('store:publish')?client.get(root+'/publication-review',{signal}):Promise.resolve(null)]);
         items = ProductPageSchema.parse(results[0]).items; draft = StorePreviewSchema.parse(results[1]); presentation = StoreAppearanceSchema.parse(results[2]);
         if(photosEnabled)photos=ProductMediaPageSchema.parse(results[3]).items;
         if(appearanceEnabled)branding=results[4] as StorefrontAppearanceDraft|null;
         if(policiesEnabled)legal=results[5] as SellerPoliciesDraft|null;
         if(galleryEnabled)galleryDrafts=(results[6] as z.infer<typeof ProductGalleriesSchema>).items;
+        if(results[7] !== null)review=StorePublicationReviewSchema.parse(results[7]);
         try {setting=ReservationSettingSchema.parse(await client.get(root+'/reservation-setting',{signal}));}
         catch(cause) {if(!(cause instanceof ApiError && [403,404].includes(cause.status))) throw cause;}
       }
       if (!current()) return;
       if(legal||next.setup_state!=='ready')setPoliciesDraft(legal);setPoliciesError(legalError);
       if(branding||next.setup_state!=='ready')setAppearanceDraft(branding);setAppearanceError(brandingError);
-      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setError('');
+      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setPublicationReview(review); setError('');
     } catch (cause) {
       if (!current()) return;
       if (cause instanceof ApiError && cause.status === 404 && !Object.values(photoBlockRef.current).some(Boolean)) setMissing(true);
       else setError(errorText(cause));
+      if(options?.throwOnError) throw cause;
     } finally {if (current()) setLoading(false);}
   }
   useEffect(() => {if(!appearanceEnabled)markDirty('appearance', templateChoice !== null && templateChoice !== appearance?.template_id);}, [appearanceEnabled,templateChoice, appearance?.template_id]);
@@ -238,7 +250,10 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     manualField.current?.focus();
     manualField.current?.select();
   }, [manualUrl]);
-  function markDirty(id: string, value: boolean) {setDirtyForms(old => old[id] === value ? old : {...old, [id]: value});}
+  function markDirty(id: string, value: boolean) {
+    dirtyFormsRef.current={...dirtyFormsRef.current,[id]:value};
+    setDirtyForms(old => old[id] === value ? old : {...old, [id]: value});
+  }
   function announce(text: string) {setStatus(text); requestAnimationFrame(() => statusLine.current?.focus());}
   async function copyLink(url: string) {
     const result = await copyAction.run('copy', () => {setManualUrl(null); setCopyFeedback(null); return navigator.clipboard.writeText(url);});
@@ -262,7 +277,9 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
       if (cause instanceof ApiError && cause.network) {setRetry(attempt); setError('尚未確認原操作的結果，請按「重試」確認。'); return;}
       held.current = null;
       if (cause instanceof ApiError && cause.status === 404 && attempt.targetMissingIsStore!==false) {setMissing(true); return;}
-      if (cause instanceof ApiError && cause.status === 412) {
+      if (cause instanceof ApiError && attempt.path.endsWith('/publish-reviewed') && (cause.status === 412 || cause.code === 'storefront_publication_changed')) {
+        await load(); announce('商品或店面內容已更新，已重新載入。請確認後再按一次上架。');
+      } else if (cause instanceof ApiError && cause.status === 412) {
         setEditing(null); setSupplyEditing(null); markDirty('edit', false); markDirty('supply', false); await load();
         announce(attempt.path.endsWith('/appearance') ? '商店資料剛剛被更新，已重新載入。你的版型選擇仍保留，請確認後再儲存。' : attempt.product ? '這件商品剛剛被更新，已重新載入。' : '商店資料剛剛被更新，已重新載入。');
       } else if (cause instanceof ApiError && cause.code === 'storefront_already_set_up') {
@@ -274,7 +291,14 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   }
   function command(attempt: Omit<Attempt, 'key'>) {return send({...attempt, key: crypto.randomUUID()});}
   const can = (key: string) => view?.writable === true && view.capabilities.includes(key);
-  const locked = busy || retry !== null || photoBlocking;
+  const locked = busy || retry !== null || photoBlocking || loading;
+  const publishDisabled = locked || hasDraft || !publicationReview?.preview.projection.products.length || !can('store:publish');
+  function publishSaved() {
+    // Use the review already shown on screen; never fetch a new digest and publish it silently.
+    if (publishDisabled || !publicationReview || busyRef.current || held.current || Object.values(dirtyFormsRef.current).some(Boolean) || Object.values(photoBlockRef.current).some(Boolean)) return;
+    void command({method:'post',path:root+'/publish-reviewed',body:{review_digest:publicationReview.review_digest},version:publicationReview.store_version,
+      schema:StoreViewSchema,notice:`已上架 ${publicationReview.preview.projection.products.length} 件商品，公開頁已更新。`,success:()=>{}});
+  }
   const draftArea=(id:string):typeof area=>id==='settings'||id==='policies'?'settings':id==='appearance'?'publish':id.startsWith('distribution/')?'cooperation':'products';
   const otherDraft=Object.entries(dirtyForms).find(([id,dirty])=>dirty&&draftArea(id)!==area);
   const areaLocked=locked||!!otherDraft;
@@ -308,12 +332,24 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
           onToggle={() => void command({method:'patch',path:root+'/reservation-setting',body:{reservation_enabled:!reservationSetting.reservation_enabled},
             version:reservationSetting.version,schema:ReservationSettingSchema,notice:reservationSetting.reservation_enabled?'已停止接受新預留。既有預留仍可查看與取消。':'已開放 30 分鐘預留。',success:()=>{}})}/>}
         <section id="store-products-panel" hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
+          {can('store:publish') && <div className="hosted-store-publication stack">
+            <h4>商品上架</h4>
+            <p>先儲存商品資料{photosEnabled && photoUploadsEnabled && !galleryEnabled ? '，選圖後會自動儲存照片' : ''}，確認內容後即可一鍵上架。</p>
+            {publicationReview && <PublicationReview review={publicationReview}/>}
+            <div className="actions"><button type="button" className="btn btn-primary" disabled={publishDisabled || (publication?.state==='published' && !publicationReview?.preview.dirty)} onClick={publishSaved}>
+              {busy && held.current?.path.endsWith('/publish-reviewed') ? '正在上架…' : publication?.state==='published' && publicationReview && !publicationReview.preview.dirty ? '商品已全部上架' : '一鍵上架商品'}
+            </button>{publicPath && <a href={publicPath} target="_blank" rel="noopener">查看公開商店</a>}</div>
+            {hasDraft ? <p className="field-hint">還有未儲存或尚未確認的內容，請先完成儲存或取消變更。</p>
+              : photoBlocking ? <p className="field-hint">照片正在儲存或等待確認，完成後就能上架。</p>
+              : loading ? <p className="field-hint">正在確認可上架內容…</p>
+              : publicationReview && !publicationReview.preview.projection.products.length ? <p className="field-hint">請先新增並儲存至少一件零售商品，或接受合作選品。</p> : null}
+          </div>}
           <p>{view.product_count}／{view.product_limit} 件商品</p>
           {galleryEnabled&&<p className="field-hint">自有商品每件最多 8 張照片。供貨合作商品的公開頁沿用你選用的公開素材照片，沒有時不顯示照片；供應商分享的照片只供私人評估。</p>}
           {!!products.length&&<ProductSearch value={query} onChange={setQuery} count={products.filter(product=>productMatches(product,query)).length} total={products.length} disabled={locked||hasDraft}/>}
           {!!products.length&&!products.some(product=>productMatches(product,query))&&<p>沒有符合的商品，清除搜尋即可查看全部。</p>}
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更；發布更新後才能複製商品連結。</p>}
-          {!products.length && <p>{view.product_count ? '這間店目前使用合作選品；下方可管理供貨合作。' : '還沒有商品。新增第一件商品後就能發布。'}</p>}
+          {!products.length && <p>{publicationReview?.preview.projection.products.length ? '這間店目前使用合作選品；可前往供貨合作管理。' : '還沒有自有零售商品。填寫下方資料，先儲存第一件商品。'}</p>}
           {!supplyEditing&&<InventoryDefinition/>}<div className="hosted-store-products">{products.map(product => <article className="hosted-store-product stack" key={product.product_id} hidden={!productMatches(product,query)}>
             {supplyEditing === product.product_id && can('store:write') ? <HostedSupplyTerms key={product.version} client={client} path={root + '/products/' + product.product_id + '/supply-terms'} title={product.title} description={product.description} supplierName={store.name} busy={areaLocked} onPublish={can('store:publish') ? version => command({method: 'post', path: root + '/products/' + product.product_id + '/supply-offer', body: {}, version, schema: SupplyOfferSchema, notice: '已公開供貨版本，店主可申請選用。', success: () => {setSupplyEditing(null); markDirty('supply', false);}}) : undefined} onDirty={value => markDirty('supply', value)} onCancel={() => {if (leaveOk()) {setSupplyEditing(null); markDirty('supply', false);}}} onSave={(body, version, success) => command({method: 'patch', path: root + '/products/' + product.product_id + '/supply-terms', body, version, schema: SupplyTermsSchema, product: true, notice: '已儲存供貨條件。可直接確認並公開這一版。', success: () => {success(); markDirty('supply', false);}})}/>
               : editing === product.product_id && can('store:write') ? <ProductForm key={product.version} product={product} currency={store.currency} busy={areaLocked} onDirty={value => markDirty('edit', value)} onCancel={() => {if (leaveOk()) {setEditing(null); markDirty('edit', false);}}} onSave={(body, success) => command({method: 'patch', path: root + '/products/' + product.product_id, body, version: product.version, schema: ProductViewSchema, product: true, notice: '已儲存。', success: value => {success(value); setEditing(null); markDirty('edit', false);}})}/>
@@ -326,12 +362,12 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
             {copyFeedback && copyFeedback.url === productCopyUrl(product.sku) && <p className="field-hint" role="status">{copyFeedback.message}</p>}
             {manualUrl !== null && manualUrl === productCopyUrl(product.sku) && <ManualCopy url={manualUrl} fieldRef={manualField}/>}
             {galleryEnabled?<HostedStoreGallery client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} gallery={galleries.find(item=>item.product_id===product.product_id)}
-              writable={can('store:write')} locked={loading||areaLocked||(photoBlocking&&!photoBlocks[product.product_id])} onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={load}/>:photosEnabled&&<HostedStorePhoto client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} media={media.find(item=>item.product_id===product.product_id)}
-              writable={can('store:write')} uploadsEnabled={photoUploadsEnabled} locked={areaLocked||(photoBlocking&&!photoBlocks[product.product_id])}
-              onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={load}/>}
+              writable={can('store:write')} locked={loading||areaLocked||(photoBlocking&&!photoBlocks[product.product_id])} onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={load}/>:photosEnabled&&<>{hasFormDraft&&<p className="field-hint">請先儲存或取消正在編輯的資料，再選擇商品照片。</p>}<HostedStorePhoto client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} product={product} media={media.find(item=>item.product_id===product.product_id)}
+              writable={can('store:write')} uploadsEnabled={photoUploadsEnabled} locked={areaLocked||hasFormDraft||(photoBlocking&&!photoBlocks[product.product_id])}
+              onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={()=>load({throwOnError:true})}/></>}
           </article>)}</div>
           {can('store:write') && (view.product_count >= view.product_limit ? <p>已達 {view.product_limit} 件商品上限。</p>
-            : <ProductForm currency={store.currency} busy={areaLocked} primary={!products.length} onDirty={value => markDirty('add', value)} onSave={(body, success) => command({method: 'post', path: root + '/products', body, schema: ProductViewSchema, notice: '已新增商品。', success})}/>)}
+            : <ProductForm currency={store.currency} busy={areaLocked} primary={!products.length} onDirty={value => markDirty('add', value)} onSave={(body, success) => command({method: 'post', path: root + '/products', body, schema: ProductViewSchema, notice: photosEnabled && photoUploadsEnabled && !galleryEnabled ? '已新增商品。草稿已儲存，可選圖自動儲存照片，再按「一鍵上架商品」。' : '已新增商品。草稿已儲存，確認後可按「一鍵上架商品」。', success})}/>)}
         </section>
         <div id="store-cooperation-panel" className="hosted-supply-panel" hidden={area!=='cooperation'}>{view.capabilities.includes('store:write') ? <HostedDistribution supplyOfferPhotosEnabled={supplyOfferPhotosEnabled} client={client} root={root} refresh={distributionRefresh} busy={areaLocked} writable={can('store:write')} onDirty={(id,value)=>markDirty('distribution/'+id,value)} onCommand={command} onReload={() => leaveOk() ? load() : Promise.resolve()}/>
           : <p>你沒有供貨合作的管理權限，仍可查看商品與店面資料。</p>}
@@ -356,8 +392,9 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
           </>}
           {preview && <div className="actions"><a href={`/api/v1${root}/preview-page`} target="_blank" rel="noopener">預覽已儲存的展示頁</a></div>}
           {dirtyForms.appearance && <p className="field-hint">{appearanceEnabled?'請先儲存店面外觀，再開啟預覽；公開頁會保留目前發布的版本。':'請先儲存版型，再開啟預覽；公開頁會保留目前發布的版本。'}</p>}
+          {can('store:publish') && publicationReview && <PublicationReview review={publicationReview}/>}
           {can('store:publish') && <div className="actions">
-            {(publication?.state !== 'published' || preview?.dirty) && <button type="button" className={preview?.projection.products.length ? 'btn btn-primary' : 'btn btn-ghost'} disabled={areaLocked || hasDraft || !preview?.projection.products.length} onClick={() => void command({method: 'post', path: root + '/publish', body: {}, version: view.version!, schema: StoreViewSchema, notice: '已發布展示頁。', success: () => {}})}>{publication?.state === 'published' ? '發布更新' : '發布展示頁'}</button>}
+            {(publication?.state !== 'published' || preview?.dirty) && <button type="button" className={publicationReview?.preview.projection.products.length ? 'btn btn-primary' : 'btn btn-ghost'} disabled={publishDisabled} onClick={publishSaved}>{publication?.state === 'published' ? '發布更新' : '發布展示頁'}</button>}
             {publication?.state === 'published' && <button type="button" className="btn btn-ghost" disabled={areaLocked || hasDraft} onClick={() => {if (window.confirm(`停止公開後，/shops/${store.slug} 會顯示找不到這間商店。`)) void command({method: 'post', path: root + '/unpublish', body: {}, version: view.version!, schema: StoreViewSchema, notice: '已停止公開。', success: () => {}});}}>停止公開</button>}
           </div>}
           {can('store:publish') && hasDraft && <p className="field-hint">還有尚未儲存的內容。請先儲存商店資料與商品，再發布或停止公開。</p>}
@@ -382,6 +419,23 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   </div>;
 }
 const currencyLabel = (currency: string) => currency === 'TWD' ? '新臺幣 TWD' : '美元 USD';
+
+function PublicationReview({review}:{review:StorePublicationReview}) {
+  const projection=review.preview.projection;
+
+  return <div className="hosted-store-publication-review">
+    <p>本次會公開全部 {projection.products.length} 件商品、{review.photo_count} 張已儲存照片，以及店面更新。</p>
+    <details><summary>查看本次上架內容</summary>
+      <dl className="detail-list"><div><dt>商店</dt><dd>{projection.name}</dd></div><div><dt>品牌</dt><dd>{projection.brand || '未填寫'}</dd></div>
+        <div><dt>網址</dt><dd>/shops/{projection.slug}</dd></div><div><dt>商店介紹</dt><dd>{projection.description || '未填寫'}</dd></div>
+        <div><dt>版型</dt><dd>{review.template_id==='catalog-grid-v1'?'格狀目錄':'直列目錄'}</dd></div>
+        {([['appearance_changed','店面外觀'],['policies_changed','賣方資訊與商店政策'],['gallery_changed','商品圖組']] as const).map(([key,label])=>review[key]===undefined?null:<div key={key}><dt>{label}</dt><dd>{review[key]?'有尚未發布的變更':'與上次發布相同'}</dd></div>)}</dl>
+      <ul>{projection.products.map(product=>{const photos=review.photos.filter(item=>item.sku===product.sku);return <li key={product.sku}><strong>{product.title}</strong> · {formatMinor(product.price_minor,projection.currency)}
+        {photos.map(({photo},index)=><img key={photo.read_path} src={photo.read_path} alt={`${product.title} 本次上架照片${review.gallery_changed===undefined?'':` ${index+1}`}`} width={photo.width} height={photo.height}/>)}
+        {product.description && <p>{product.description}</p>}</li>;})}</ul>
+    </details>
+  </div>;
+}
 
 function SettingsForm({client, root, store, busy, onMissing, onDirty, onSave}: {
   client: PortalClient; root: string; store?: NonNullable<StoreView['store']>; busy: boolean; onMissing: () => void; onDirty: (dirty: boolean) => void;
@@ -464,7 +518,7 @@ function ProductForm({product, currency, busy, primary, onDirty, onSave, onCance
     } catch (cause) {setError(cause instanceof Error ? cause.message : '有欄位格式不符，請檢查後再送出。');}
   }
   return <form className="hosted-store-form stack" aria-label={product ? `編輯${product.title}` : '新增商品'} onSubmit={event => void submit(event)}>
-    {!product && <h4>新增商品</h4>}
+    {!product && <><h4>新增商品</h4><p className="field-hint">先儲存草稿，再加入照片與確認上架。新增商品不會立即公開。</p></>}
     <fieldset disabled={busy} className="hosted-store-fields stack"><legend className="sr-only">{product ? '編輯商品' : '新增商品'}</legend>
       <label className="field">商品名稱<input required maxLength={ProductInputSchema.shape.title.maxLength!} value={fields.title} onChange={event => change('title', event.target.value)}/></label>
       <label className="field">價格（{currencyLabel(currency)}）<input required inputMode="decimal" value={fields.price} onChange={event => change('price', event.target.value)}/></label>

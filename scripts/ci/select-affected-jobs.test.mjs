@@ -1201,6 +1201,8 @@ function handoffDescriptors() {
       dependencies:['agent-commerce', 'hosted-distribution', 'asset-lifecycle'], tests:['runtime.full', 'e2e.harness']}),
     moduleDescriptor('guild-supply', ['modules/guild-supply/**'], {dependencies:['supplier-console'], tests:['runtime.guild-blocks']}),
     moduleDescriptor('application-composition', ['apps/platform-api/**'], {dependencies:['guild-supply'], tests:['runtime.full']}),
+    moduleDescriptor('commerce-publication', ['modules/agent-commerce/publication/**'], {
+      dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}),
   ];
 }
 function handoffInput(paths = HANDOFF_DOCS_PATHS, extra = {}) {
@@ -1229,6 +1231,16 @@ test('five exact informational handoffs retain governance consumers, including b
   assert.equal(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
     {baseline:actual.descriptors, candidate:actual.descriptors})).profile, 'informational_handoff_docs');
   assert.equal(pull([edited(HANDOFF_DOCS_PATHS[0])]).mode, 'full', 'path-only selector cannot establish integration proof');
+});
+
+test('supplier handoff refuses an unknown reverse consumer even without additional test obligations', () => {
+  const baseline = handoffDescriptors(), expanded = structuredClone(baseline), path = HANDOFF_DOCS_PATHS[1];
+  expanded.push(moduleDescriptor('unknown-supplier-consumer', ['modules/unknown-supplier-consumer/**'], {
+    dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}));
+  assert.deepEqual(selectImpact({baseline:expanded, candidate:expanded, changedPaths:[path]}).tests,
+    selectImpact({baseline, candidate:baseline, changedPaths:[path]}).tests);
+  assert.deepEqual(decideHandoffDocsProfile(handoffInput([path], {baseline:expanded, candidate:expanded})),
+    {profile:'full', reason:'handoff_impact_unproven'});
 });
 
 test('handoff profile refuses unproven events, receipt JSON, controls and non-content changes', () => {
