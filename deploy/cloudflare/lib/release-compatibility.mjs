@@ -214,6 +214,8 @@ const FOUNDATION_NAMES = [
   '183_storefront_categories.sql',
   // Author opt-in records only; recognition does not publish posts or grant release authority.
   '184_public_social_posts.sql',
+  // Isolated journal tables; recognition grants no publisher, key or publication authority.
+  '185_community_journal.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
