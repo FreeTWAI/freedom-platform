@@ -1,3 +1,4 @@
+import {writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import type {Locator} from '@playwright/test';
@@ -72,6 +73,10 @@ test('supplier preparation uses current reads and opens existing supply pages wi
  await expect(active(page).getByRole('alert')).toContainText('未更新');
  await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toHaveCount(0);
  await expect(guide.getByRole('link',{name:'管理商品與供貨條件',exact:true})).toBeVisible();
+ await expect(guide.locator('[data-stage="offer"] .badge')).toHaveText('暫時無法確認');
+ await expect(guide.locator('[data-stage="requests"] .badge')).toHaveText('暫時無法確認');
+ await expect(guide.locator('.sc-preparation-status')).toContainText('暫時無法確認');
+ await expect(guide.locator('.btn-primary')).toHaveCount(0);
  fail=false;
  await active(page).getByRole('button',{name:'重試',exact:true}).click();
  await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toBeVisible();
@@ -81,12 +86,14 @@ test('supplier preparation uses current reads and opens existing supply pages wi
  await active(page).getByRole('button',{name:'更新資料',exact:true}).click();
  await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toHaveCount(0);
  await expect(guide.locator('details')).not.toHaveAttribute('open','');
+ await expect(guide.locator('[data-stage="offer"]')).toHaveAttribute('aria-current','step');
+ await expect(guide.getByRole('link',{name:'選擇要公開的商品',exact:true})).toHaveAttribute('href','#'+store.hash+'/supply/products?state=not_offered');
  await guide.locator('summary').click();
- for(const width of [1440,390,320]){
+ for(const width of [1440,768,390,320]){
   await page.setViewportSize({width,height:900});
   await page.evaluate(()=>window.scrollTo(0,0));
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  await page.screenshot({path:info.outputPath(`supplier-preparation-${width}.png`),fullPage:true});
+  await captureProgressEvidence(page,info,consoleArea(page),'supplier-preparation',width);
  }
  const writes:string[]=[];
  page.on('request',request=>{if(request.url().includes('/api/v1'+store.root)&&!['GET','HEAD'].includes(request.method()))writes.push(request.method()+' '+new URL(request.url()).pathname);});
@@ -223,9 +230,33 @@ test('SC-E2E-32 keyboard reaches navigation, dialogs, saves and errors with focu
   await consoleArea(page).getByRole('link',{name:'切換事業',exact:true}).focus();await tabTo(page,navigation(page,'營運概覽'));await page.keyboard.press('Enter');await expect(heading(page,'營運概覽')).toBeFocused();await page.reload();await expect(active(page).locator('.sc-metrics')).toBeVisible();await accessibleControls(page);
   const productsPath='**/api/v1'+s.root+'/supplier-console/products';let failures=0;
   await page.route(productsPath,async route=>{if(route.request().method()!=='GET')return route.continue();failures++;await route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({type:'urn:freedom:problem:service_unavailable',title:'service_unavailable',status:503,code:'service_unavailable',detail:'合成測試：商品清單暫時無法讀取。'})});});
+  // The overview now loads owned products too; fail that initial read to keep this a cold-read keyboard recovery check.
+  await page.reload();await expect(active(page).locator('.sc-metrics')).toBeVisible();
   await consoleArea(page).getByRole('link',{name:'切換事業',exact:true}).focus();await tabTo(page,navigation(page,'商品與庫存'));await page.keyboard.press('Enter');await expect(heading(page,'商品與庫存')).toBeFocused();await expect(active(page).getByRole('alert')).toHaveText(/^暫時無法讀取商品清單/);await expect(active(page).getByRole('table')).toHaveCount(0);await expect(countLine(page)).toHaveCount(0);expect(failures).toBeGreaterThan(0);await accessibleControls(page);
   await page.unroute(productsPath);const retry=active(page).getByRole('button',{name:'重試',exact:true});await heading(page,'商品與庫存').focus();await tabTo(page,retry);await page.keyboard.press('Enter');await expect(countLine(page)).toHaveText('共 2 件（完整清單）');await expect(productLinks(page)).toHaveCount(2);await accessibleControls(page);
   await page.setViewportSize({width:390,height:900});const mobileNav=consoleArea(page).getByRole('combobox',{name:'營運中心頁面',exact:true});await mobileNav.focus();await mobileNav.selectOption({label:'設定與資料'});await expect(heading(page,'設定與資料')).toBeFocused();await accessibleControls(page);
   await info.attach('keyboard-writes-and-read-errors',{body:JSON.stringify({writes,failures,publishFocus,stockFocus}),contentType:'application/json'});
  }finally{await Promise.allSettled([context.close()]);await withdrawSupplierOffers(e2eAuthPool,[member.id]);}
 });
+
+async function captureProgressEvidence(page:Page,info:{outputPath:(...parts:string[])=>string},view:Locator,prefix:string,width:number,theme:'light'|'dark'='light'){
+ await page.setViewportSize({width,height:900});
+ await page.evaluate(value=>{document.documentElement.dataset.theme=value;document.documentElement.dataset.experienceProfile=value;window.scrollTo(0,0);},theme);
+ await page.mouse.move(0,0);
+ await expect.poll(()=>page.locator('.btn:visible').evaluateAll(buttons=>buttons.every(button=>button.getAnimations().every(animation=>!(animation instanceof CSSTransition)||animation.playState!=='running')))).toBe(true);
+ const measurements=await page.evaluate(()=>{
+  const visible=(el:Element)=>el.getClientRects().length>0;
+  const button=(el:Element)=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return {text:el.textContent?.trim(),x:r.x,y:r.y,width:r.width,height:r.height,parentWidth:el.parentElement!.getBoundingClientRect().width,primary:el.classList.contains('btn-primary'),color:s.color,background:s.backgroundColor,border:s.borderColor};};
+  const token=(name:string)=>{const probe=document.createElement('span');probe.style.color=`var(${name})`;document.body.append(probe);const value=getComputedStyle(probe).color;probe.remove();return value;};
+  const badges=Array.from(document.querySelectorAll('.supplier-readiness .readiness-state')).filter(visible).map(el=>{const state=el.getAttribute('data-state'),s=getComputedStyle(el);return {state,text:el.textContent,color:s.color,background:s.backgroundColor,border:s.borderColor,expectedColor:token(state==='done'||state==='current'?'--ink':'--muted'),expectedBackground:token(state==='done'?'--green-soft':state==='current'?'--info-bg':'--bg-elev')};});
+  return {buttons:Array.from(document.querySelectorAll('.btn')).filter(visible).map(button),badges,overflow:document.documentElement.scrollWidth>innerWidth,theme:document.documentElement.dataset.theme,width:innerWidth};
+ });
+ expect(measurements.overflow).toBe(false);
+ for(const badge of measurements.badges){expect(badge.color).toBe(badge.expectedColor);expect(badge.background).toBe(badge.expectedBackground);}
+ const affected=await view.locator('.btn:visible').evaluateAll(buttons=>buttons.map(button=>{const r=button.getBoundingClientRect();return {text:button.textContent?.trim(),width:r.width,height:r.height,parentWidth:button.parentElement!.getBoundingClientRect().width,primary:button.classList.contains('btn-primary')};}));
+ expect(affected.filter(button=>button.primary).length).toBeLessThanOrEqual(1);
+ for(const button of affected){expect(button.height,button.text).toBeGreaterThanOrEqual(43.9);expect(button.width,button.text).toBeLessThanOrEqual(button.parentWidth+.5);}
+ const stem=`${prefix}-${theme}-${width}`;
+ await page.screenshot({path:info.outputPath(stem+'.png'),fullPage:true});
+ await writeFile(info.outputPath(stem+'.json'),JSON.stringify({...measurements,affected},null,2));
+}

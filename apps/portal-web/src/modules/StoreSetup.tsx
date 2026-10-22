@@ -138,7 +138,7 @@ function SupplySetupResume({client, canLeave, restoring, primary, children}: {cl
   const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client, 'supply');
   const [expanded, setExpanded] = useState(false);
   const unfinished = data?.items.filter(item => item.setup_state === 'setup_required') ?? [];
-  const showFlow = restoring || expanded || Boolean(data && data.items.length === 0 && !data.next_cursor);
+  const showFlow = restoring || expanded || Boolean(data && unfinished.length === 0);
   if (error && !restoring && !expanded) return <><p role="alert">暫時無法確認既有商品庫，請重試後再繼續。</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試</button></div></>;
   if (!data && !restoring && !expanded) return <p role="status">正在確認既有商品庫…</p>;
   return <>

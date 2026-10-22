@@ -1,3 +1,5 @@
+import {writeFile} from 'node:fs/promises';
+import type {Locator} from '@playwright/test';
 import {setupCartFixtureStore} from './storefront-cart-fixture.js';
 import {apiLogin} from './hosted-order-fixture.js';
 import {randomUUID} from 'node:crypto';
@@ -510,4 +512,168 @@ test('merchant stock shows real paid allocations and held units without losing h
    await page.screenshot({path:info.outputPath(`stock-store-inconsistent-${width}.png`),fullPage:true});
   }
  } finally {try{await context.close();}finally{await store.close();}}
+});
+
+async function captureProgressEvidence(page:Page,info:{outputPath:(...parts:string[])=>string},view:Locator,prefix:string,width:number,theme:'light'|'dark'='light'){
+ await page.setViewportSize({width,height:900});
+ await page.evaluate(value=>{document.documentElement.dataset.theme=value;document.documentElement.dataset.experienceProfile=value;window.scrollTo(0,0);},theme);
+ await page.mouse.move(0,0);
+ await expect.poll(()=>page.locator('.btn:visible').evaluateAll(buttons=>buttons.every(button=>button.getAnimations().every(animation=>!(animation instanceof CSSTransition)||animation.playState!=='running')))).toBe(true);
+ const measurements=await page.evaluate(()=>{
+  const visible=(el:Element)=>el.getClientRects().length>0;
+  const button=(el:Element)=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return {text:el.textContent?.trim(),x:r.x,y:r.y,width:r.width,height:r.height,parentWidth:el.parentElement!.getBoundingClientRect().width,primary:el.classList.contains('btn-primary'),color:s.color,background:s.backgroundColor,border:s.borderColor};};
+  const token=(name:string)=>{const probe=document.createElement('span');probe.style.color=`var(${name})`;document.body.append(probe);const value=getComputedStyle(probe).color;probe.remove();return value;};
+  const badges=Array.from(document.querySelectorAll('.supplier-readiness .readiness-state')).filter(visible).map(el=>{const state=el.getAttribute('data-state'),s=getComputedStyle(el);return {state,text:el.textContent,color:s.color,background:s.backgroundColor,border:s.borderColor,expectedColor:token(state==='done'||state==='current'?'--ink':'--muted'),expectedBackground:token(state==='done'?'--green-soft':state==='current'?'--info-bg':'--bg-elev')};});
+  return {buttons:Array.from(document.querySelectorAll('.btn')).filter(visible).map(button),badges,overflow:document.documentElement.scrollWidth>innerWidth,theme:document.documentElement.dataset.theme,width:innerWidth};
+ });
+ expect(measurements.overflow).toBe(false);
+ for(const badge of measurements.badges){expect(badge.color).toBe(badge.expectedColor);expect(badge.background).toBe(badge.expectedBackground);}
+ const affected=await view.locator('.btn:visible').evaluateAll(buttons=>buttons.map(button=>{const r=button.getBoundingClientRect();return {text:button.textContent?.trim(),width:r.width,height:r.height,parentWidth:button.parentElement!.getBoundingClientRect().width,primary:button.classList.contains('btn-primary')};}));
+ expect(affected.filter(button=>button.primary).length).toBeLessThanOrEqual(1);
+ for(const button of affected){expect(button.height,button.text).toBeGreaterThanOrEqual(43.9);expect(button.width,button.text).toBeLessThanOrEqual(button.parentWidth+.5);}
+ const stem=`${prefix}-${theme}-${width}`;
+ await page.screenshot({path:info.outputPath(stem+'.png'),fullPage:true});
+ await writeFile(info.outputPath(stem+'.json'),JSON.stringify({...measurements,affected},null,2));
+}
+
+
+const progressActive=(page:Page)=>page.locator('.sc-content > [data-sc-active="true"]');
+const progressGuide=(page:Page)=>progressActive(page).getByRole('region',{name:'供貨準備',exact:true});
+async function progressOverview(page:Page){
+ await page.getByRole('navigation',{name:'營運中心',exact:true}).getByRole('link',{name:'營運概覽',exact:true}).click();
+ await expect(progressGuide(page)).toBeVisible();
+}
+async function startSupplyJourney(page:Page){
+ await open(page,`guilds/${supplierGuild}`);
+ await page.getByRole('region',{name:'主要動作',exact:true}).getByRole('button',{name:'開始供貨設定',exact:true}).click();
+ await expect(page).toHaveURL(/#stores\/supply\/setup$/);
+ return page.getByRole('region',{name:'啟動應用',exact:true});
+}
+async function confirmSupplyJourney(page:Page,flow:Locator){
+ await flow.getByRole('button',{name:'確認供貨空間',exact:true}).click();
+ await flow.getByRole('button',{name:'確認建立供貨空間',exact:true}).click();
+ await flow.getByRole('button',{name:'繼續供貨設定',exact:true}).click();
+ await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
+}
+async function assertSupplyBoundary(page:Page){
+ const guide=progressGuide(page);
+ await expect(guide).toContainText('由合作店家的商店接單與收款');
+ await expect(guide).not.toContainText(/已開放(?:接單|結帳|付款)|可接受買家訂單/);
+}
+
+test('job progress: blank intern setup saves privately then explicitly publishes an offer',async({page,e2eAuthPool},info)=>{
+ const member=await supplyPerson(e2eAuthPool),suffix=randomUUID().slice(0,6),title=`合成供貨茶杯 ${suffix}`;
+ const writes:string[]=[];
+ try{
+  await login(page,member.email);
+  page.on('request',request=>{if(!['GET','HEAD'].includes(request.method()))writes.push(request.method()+' '+new URL(request.url()).pathname);});
+  const flow=await startSupplyJourney(page);
+  await flow.getByLabel('業務空間名稱',{exact:true}).fill(`合成供貨空間 ${suffix}`);
+  await flow.getByRole('button',{name:'建立業務空間',exact:true}).click();
+  await confirmSupplyJourney(page,flow);
+  const consoleRoot=page.locator('.supplier-console'),form=page.getByRole('form',{name:'建立供貨商品庫',exact:true});
+  await expect(consoleRoot.locator('[data-stage="catalog"]')).toHaveAttribute('aria-current','step');
+  await expect(form.getByRole('combobox',{name:'幣別',exact:true})).toHaveAccessibleDescription('建立後不可變更。供貨單價、運費與合作售價都使用這個幣別，只有相同幣別的店家能選用，不會自動換匯。選錯時需在另一個業務空間重建，既有商品不會搬移。');
+  for(const width of [390,768,1440])await captureProgressEvidence(page,info,consoleRoot,'job-progress-setup',width);
+  await form.getByLabel('商品庫名稱',{exact:true}).fill(`合成商品庫 ${suffix}`);
+  await form.getByRole('button',{name:'建立供貨商品庫',exact:true}).click();
+  const guide=progressGuide(page);
+  await expect(guide.locator('[data-stage="product"]')).toHaveAttribute('aria-current','step');
+  await expect(guide.locator('.btn-primary')).toHaveText('新增商品');
+  await expect(guide.locator('.sc-preparation-status')).toContainText('0 件自有商品');
+  await expect(guide.locator('.sc-preparation-status')).toContainText('尚未公開');await assertSupplyBoundary(page);
+  for(const width of [390,768,1440])await captureProgressEvidence(page,info,consoleRoot,'job-progress-empty',width);
+  for(const width of [390,1440])await captureProgressEvidence(page,info,consoleRoot,'job-progress-empty',width,'dark');
+  await page.evaluate(()=>{document.documentElement.dataset.theme='light';document.documentElement.dataset.experienceProfile='light';});
+  await guide.getByRole('link',{name:'新增商品',exact:true}).click();
+  const productForm=page.getByRole('form',{name:'新增商品',exact:true});
+  await productForm.getByLabel('商品名稱',{exact:true}).fill(title);
+  await productForm.getByLabel('供貨單價',{exact:true}).fill('150');
+  await productForm.getByLabel('庫存',{exact:true}).fill('10');
+  await productForm.getByRole('button',{name:'新增商品',exact:true}).click();
+  await expect(progressActive(page).getByRole('heading',{level:2,name:`商品詳情：${title}`,exact:true})).toBeVisible();
+  await progressOverview(page);
+  await expect(guide.locator('[data-stage="product"]')).toHaveAttribute('data-state','done');
+  await expect(guide.locator('[data-stage="offer"]')).toHaveAttribute('aria-current','step');
+  await expect(guide.locator('.btn-primary')).toHaveText('選擇要公開的商品');
+  await expect(guide.locator('.sc-preparation-status')).toContainText('1 件自有商品');
+  await expect(guide.locator('.sc-preparation-status')).toContainText('尚未公開');await assertSupplyBoundary(page);
+  for(const width of [390,768,1440])await captureProgressEvidence(page,info,consoleRoot,'job-progress-private',width);
+  await guide.getByRole('link',{name:'選擇要公開的商品',exact:true}).click();
+  await expect(page).toHaveURL(/\/supply\/products\?state=not_offered$/);
+  await progressActive(page).getByRole('link',{name:new RegExp('^'+title)}).click();
+  const terms=page.getByRole('form',{name:'儲存供貨條件',exact:true});
+  await terms.getByLabel('每件運費',{exact:true}).fill('20');
+  await terms.getByRole('textbox',{name:'出貨條件',exact:true}).fill('合成確認後三天內寄出');
+  await terms.getByRole('textbox',{name:'退貨條件',exact:true}).fill('合成瑕疵退換');
+  await terms.getByRole('button',{name:'儲存供貨條件',exact:true}).click();
+  await expect(consoleRoot.locator('.sc-announcement')).toHaveText('已保存：儲存供貨條件。');
+  expect(writes.filter(path=>path.endsWith('/supply-offer'))).toEqual([]);
+  await progressActive(page).getByRole('button',{name:'公開供貨版本',exact:true}).click();
+  await page.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();
+  await expect(consoleRoot.locator('.sc-announcement')).toHaveText('已保存：公開供貨版本。');
+  await progressOverview(page);
+  await expect(guide.locator('[data-stage="offer"]')).toHaveAttribute('data-state','done');
+  await expect(guide.locator('details')).not.toHaveAttribute('open','');
+  await expect(guide.locator('.btn-primary')).toHaveCount(0);
+  const height=(await guide.boundingBox())!.height;expect(height).toBeLessThan(240);
+  await writeFile(info.outputPath('job-progress-steady.json'),JSON.stringify({height,writes},null,2));
+  await guide.locator('summary').click();
+  const publicStatus=guide.getByText('公開供貨',{exact:true}).locator('..');
+  await expect(publicStatus).toContainText('1 件');await assertSupplyBoundary(page);
+  await expect(guide.locator('[data-stage="requests"]')).toHaveAttribute('data-state','optional');
+  expect(writes.filter(path=>/\/(?:reservation-setting|orders|payments)(?:\/|$)/.test(path))).toEqual([]);
+  expect(writes.filter(path=>path==='POST /api/v1/tenants')).toHaveLength(1);
+  expect(writes.filter(path=>path.endsWith('/application-installations'))).toHaveLength(1);
+ }finally{
+  await e2eAuthPool.query(`UPDATE commerce_hosted_supply_offers o SET state='withdrawn',version=o.version+1
+   FROM commerce_storefront_profiles p JOIN commerce_shops s ON s.shop_id=p.supply_shop_id
+   WHERE o.instance_id=p.instance_id AND o.tenant_id=p.tenant_id AND s.owner_id=$1 AND o.state='offered'`,[member.id]);
+ }
+});
+
+async function progressApiIds(page:Page,path:string,key:string){
+ const ids:string[]=[],seen=new Set<string>();let cursor:string|null=null;
+ for(let n=0;n<10;n++){
+  const response=await page.request.get('/api/v1'+path+(cursor?'&cursor='+encodeURIComponent(cursor):''));expect(response.status()).toBe(200);
+  const body:{items:Record<string,string>[];next_cursor:string|null}=await response.json();ids.push(...body.items.map(item=>item[key]));cursor=body.next_cursor;
+  if(!cursor)return ids.sort();expect(seen.has(cursor)).toBe(false);seen.add(cursor);
+ }
+ throw Error('Synthetic fixture unexpectedly exceeded the bounded directory read');
+}
+
+test('job progress: existing business space resumes the same unfinished instance without creation',async({page,e2eAuthPool},info)=>{
+ const member=await supplyPerson(e2eAuthPool);await login(page,member.email);
+ const name=`合成既有空間 ${randomUUID().slice(0,6)}`;
+ const space=await post(page,'/tenants',{display_name:name},201);
+ const tenantPath='/tenants?limit=100',installationPath=`/tenants/${space.tenant.tenant_id}/application-installations?application_key=hosted-store&workspace_id=${space.workspace.workspace_id}`;
+ const beforeTenants=await progressApiIds(page,tenantPath,'tenant_id');expect(await progressApiIds(page,installationPath,'installation_id')).toEqual([]);
+ const flow=await startSupplyJourney(page);await expect(flow).toContainText('目前業務空間：'+name);
+ await confirmSupplyJourney(page,flow);
+ const hash=new URL(page.url()).hash;
+ await expect(page.getByRole('form',{name:'建立供貨商品庫',exact:true})).toBeVisible();
+ const tenants=await progressApiIds(page,tenantPath,'tenant_id'),installations=await progressApiIds(page,installationPath,'installation_id');
+ expect(tenants).toEqual(beforeTenants);expect(tenants).toHaveLength(1);expect(installations).toHaveLength(1);
+ const posts:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/'))posts.push(new URL(request.url()).pathname);});
+ await page.getByRole('link',{name:'返回公會',exact:true}).click();
+ const card=page.getByRole('region',{name:'主要動作',exact:true});
+ await expect(card.getByRole('button',{name:'繼續設定商品庫',exact:true})).toHaveClass(/btn-primary/);
+ await expect(card).toContainText(name);await expect(card).toContainText('商品庫資料待設定');
+ for(const width of [390,1440])await captureProgressEvidence(page,info,card,'job-progress-guild-resume',width);
+ await card.getByRole('button',{name:'繼續設定商品庫',exact:true}).click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ await page.getByRole('link',{name:'切換事業',exact:true}).click();
+ const listResume=page.getByRole('link',{name:'繼續設定商品庫',exact:true});await expect(listResume).toHaveAttribute('href',hash);await listResume.click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ await page.getByRole('link',{name:'返回公會',exact:true}).click();await card.getByRole('button',{name:'開始供貨設定',exact:true}).click();
+ const setup=page.getByRole('region',{name:'開始供貨設定',exact:true}),resume=setup.getByRole('region',{name:'繼續未完成的商品庫',exact:true});
+ await expect(resume.getByRole('link',{name:'繼續設定商品庫',exact:true})).toHaveAttribute('href',hash);
+ await expect(setup.getByRole('region',{name:'啟動應用',exact:true})).toHaveCount(0);
+ await expect(setup.getByRole('button',{name:'建立另一個商品庫',exact:true})).toHaveClass(/btn-ghost/);
+ for(const width of [390,1440])await captureProgressEvidence(page,info,setup,'job-progress-store-resume',width);
+ await captureProgressEvidence(page,info,setup,'job-progress-store-resume',390,'dark');
+ await page.reload();await expect(resume).toBeVisible();
+ await resume.getByRole('link',{name:'繼續設定商品庫',exact:true}).click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ await expect(page.getByRole('form',{name:'建立供貨商品庫',exact:true})).toBeVisible();
+ expect(await progressApiIds(page,tenantPath,'tenant_id')).toEqual(tenants);
+ expect(await progressApiIds(page,installationPath,'installation_id')).toEqual(installations);
+ expect(posts).toEqual([]);await writeFile(info.outputPath('job-progress-resume-ids.json'),JSON.stringify({tenants,installations,posts},null,2));
 });
