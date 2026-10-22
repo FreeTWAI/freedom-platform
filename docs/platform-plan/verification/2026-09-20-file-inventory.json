@@ -4124,8 +4124,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/format.ts",
-      "bytes": 155,
-      "sha256": "4ad87025bc6a9edf999146eb156fbfb6b3504ebef322ddd108f4921e42f75429"
+      "bytes": 317,
+      "sha256": "a07671b7de1f6667d3db540fb0847291027d8064ff286f952aa53372573e0c82"
     },
     {
       "path": "apps/portal-web/src/storefront/gallery.ts",
@@ -4134,13 +4134,18 @@
     },
     {
       "path": "apps/portal-web/src/storefront/main.tsx",
-      "bytes": 103800,
-      "sha256": "43840a21c09bc6de569ed762c031d64a67f2e84dc6e146e37e5a9d5352101254"
+      "bytes": 103881,
+      "sha256": "fea71938db87470803f1aeea6361b06728c08bbe3b85c2d3537a0893680086a1"
+    },
+    {
+      "path": "apps/portal-web/src/storefront/meetup-card.tsx",
+      "bytes": 1009,
+      "sha256": "7b53d5ad2b5bedb5dc5c0010e9dfb28e78fdf1b6db954fb9dd3672ca069e6317"
     },
     {
       "path": "apps/portal-web/src/storefront/offline-order.tsx",
-      "bytes": 4596,
-      "sha256": "8bfe1d492fd1de8c30f7a64ad4b0d9428bf6f7c29da3bb42260641c2a62684d2"
+      "bytes": 4403,
+      "sha256": "4530333d739e4f18665f6cc87fc188e413e000b3dcb842178f8744a05255515b"
     },
     {
       "path": "apps/portal-web/src/storefront/payment-view.ts",
@@ -13544,13 +13549,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.schema.json",
-      "bytes": 108957,
-      "sha256": "b40ac389a8cfab6511175eb14527182b1a07941fb19be1a395928d7c25a7c584"
+      "bytes": 110591,
+      "sha256": "53f37dcbd50fed7fedf786d54e16ca28085d54f799ed363db7dec60346662402"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.ts",
-      "bytes": 18905,
-      "sha256": "3dc041467622773933a4351d20d56beebb85754bcf80aeeb7ac978e6f66922a4"
+      "bytes": 19487,
+      "sha256": "5a4c4e926d72bf65c82932350a1da3569e8c28849a14122db3bd02f3a3baab08"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-commerce-setup.schema.json",
@@ -13599,8 +13604,8 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-seller-checkout.ts",
-      "bytes": 10608,
-      "sha256": "a5d8d8ccd98729b91c75fc59a663327d7c433584eaa2654e2e501e6a9f6c8ec4"
+      "bytes": 10356,
+      "sha256": "330ff0e632f464fb97d1ca0c921eeb1e1f231838db3569c06c9b2111c411d312"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-shared-order.schema.json",
@@ -16054,8 +16059,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-      "bytes": 33352,
-      "sha256": "f0c65d045f943ea2967b708d23cc1cc4e99e8079a11e8f28959b8c7f71bd8b70"
+      "bytes": 33410,
+      "sha256": "a4ca298ec7fe001b745010980d3b8deb50868dcdef949eec67aac6a1cea6a44e"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
@@ -16104,8 +16109,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-11-offline-payment.md",
-      "bytes": 25001,
-      "sha256": "c57d0c992d8358c7f3b08bb4c5af3d8047e79b429a98310825217c807ac1f6a0"
+      "bytes": 25572,
+      "sha256": "76a9191fde161bd2a61eeccb0727fe6692740de38c3998104676fec97f4de6fe"
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
@@ -18139,8 +18144,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/public-order.ts",
-      "bytes": 3615,
-      "sha256": "e1affae1739b67820b3b821626fb9b50e6627f054f9e10147a545e2f51983826"
+      "bytes": 3880,
+      "sha256": "1be24a9fc6ae15b68a37d23397fd81300f1acded9b82c8b3a70f93fa69cd32c7"
     },
     {
       "path": "modules/agent-commerce/checkout/seller-command.ts",
@@ -19154,8 +19159,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 25818,
-      "sha256": "ec214bfaa12eed2f073501d2147e5d240affb2188f90a731cad2c0ec55723e0b"
+      "bytes": 26273,
+      "sha256": "7e46815576a81d935ccd2be6d43324723863552764253858a262eca3f502d93b"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -24279,8 +24284,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 113871,
-      "sha256": "e6dee5afe6123fd44f0fbc67bef3fe4edc6aae83fd5f2644ef8e6466381b1ddf"
+      "bytes": 117738,
+      "sha256": "8b8d54640834d1a0496b98e31695d2dc80aef38f26e3936320f3850011d783c4"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -25419,13 +25424,13 @@
     },
     {
       "path": "tests/runtime/hosted-offline-confirm.test.ts",
-      "bytes": 51788,
-      "sha256": "28cb567803baac64fd0fd9e19fb8f0809df150862f5b43ade2e7fc777bdddbd4"
+      "bytes": 54684,
+      "sha256": "cbd9a30289f972bdd7ef93e581db031dcc4f113f10cb8ad9f105f14a5e698c4a"
     },
     {
       "path": "tests/runtime/hosted-offline-contracts.test.ts",
-      "bytes": 19484,
-      "sha256": "2a02e5d61e75af1709f487f93c03eb7d9755975bd435a951668db0a00d90dbeb"
+      "bytes": 22245,
+      "sha256": "e1cb723e515c5b346907dc4b87cda7872eebfca67ea6cf5a7dc42dccbf80494a"
     },
     {
       "path": "tests/runtime/hosted-offline-expiry.test.ts",
@@ -26774,8 +26779,8 @@
     },
     {
       "path": "tests/runtime/storefront-order-pages.test.ts",
-      "bytes": 12836,
-      "sha256": "12cff65e873d1738f570c86af505a38ff97d9ab45805482c5ca4465a1aa7d104"
+      "bytes": 16664,
+      "sha256": "6c6d670059f05135acc1a89d142b0f749b18288057c499515e8c5f57647e1de1"
     },
     {
       "path": "tests/runtime/storefront-payment-pages.test.ts",
