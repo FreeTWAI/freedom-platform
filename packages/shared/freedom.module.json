@@ -33,7 +33,14 @@
     "tests/runtime/tenant-cursor-fixture.ts",
     "packages/shared/squad-kinds.ts",
     "apps/portal-web/src/modules/shared.tsx",
-    "packages/shared/html.ts"
+    "packages/shared/html.ts",
+    "packages/shared/skill-acquisition.ts",
+    "apps/portal-web/src/format.ts",
+    "apps/portal-web/src/modules/BrandIcon.tsx",
+    "apps/portal-web/src/modules/ModuleBanner.tsx",
+    "apps/portal-web/src/modules/ExpeditionDesign.css",
+    "apps/portal-web/src/modules/ModuleDiscovery.css",
+    "apps/portal-web/src/modules/authoring-drafts.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/auth/PasswordField.tsx",
@@ -59,7 +66,8 @@
     "packages/shared/member-blocking.ts",
     "packages/shared/tenant-list-cursor.ts",
     "apps/portal-web/src/modules/shared.tsx",
-    "packages/shared/html.ts"
+    "packages/shared/html.ts",
+    "packages/shared/skill-acquisition.ts"
   ],
   "dependencies": [],
   "contract_families": [],

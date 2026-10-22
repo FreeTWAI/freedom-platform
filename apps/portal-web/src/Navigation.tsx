@@ -4,19 +4,8 @@ import type { TabId } from './types';
 import {useLanguage} from './language';
 import type {InterfaceMessage} from './interface-messages';
 
-export const TAB_TITLES: Record<TabId, string> = {
-  ar:'AR 圖案互動',
-  'community-search': '搜尋社群內容',
-  'my-content': '我的內容',
-  'private-ai': '私人工作與 AI', home: '會員首頁', positioning: '我的定位', guilds: '職業公會', skills: '技能書架',
-  friends: '我的好友', members: '工坊夥伴', account: '我的名片', cocreation: '一起開發', squads: '小隊集合',
-  opensource: '開源投稿', workbench: '我的工作', showcase: '作品與需求', engagement: '合作紀錄',
-  supplier: '我有東西要賣', retail: '我可以賣東西', marketing: '行銷工作室',
-  'guild-workspace': '公會管理', business: '業務空間', stores: '我的商店', reservations: '我的訂單', community: '自由工坊社群',
-  todos: '待辦清單', messages: '我的訊息', events: '社群活動', tasks: '社群任務',
-  social: '社群分享', services: '社員服務', promotion: '推廣排行榜',
-  highlights: '活動集錦',
-};
+import { TAB_TITLES } from './features/metadata';
+export { TAB_TITLES } from './features/metadata';
 
 const primary: TabId[] = ['home', 'my-content', 'guilds', 'skills'];
 const keywords:Partial<Record<TabId,string>>={ar:'相機 圖案 掃描 衣服 海報 名片',messages:'聊天室 對話 私訊',members:'人才 找夥伴 媒合',skills:'學習 資源 免費',tasks:'任務 貢獻 參與','private-ai':'私人 AI 草稿 模型 執行',workbench:'工作 任務',showcase:'作品 分享 展示 需求 找人',opensource:'投稿 提交 上傳 GitHub 開源 工具 技能',supplier:'商品 商店 供應商',retail:'電商 販售 商店',account:'個人資料 設定 暱稱',friends:'朋友 好友 私訊',business:'業務 工作區 邀請',reservations:'預留 訂單 查詢 取消',stores:'商店 開店 店鋪 商品 上架 發布'};

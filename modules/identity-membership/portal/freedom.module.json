@@ -1,0 +1,48 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "member-profile-ui",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/identity-membership/portal/**",
+    "apps/portal-web/src/modules/CapabilityTree.tsx",
+    "apps/portal-web/src/modules/MemberConnections.css",
+    "apps/portal-web/src/modules/MemberPresence.tsx",
+    "apps/portal-web/src/modules/MemberPresence.css",
+    "apps/portal-web/src/modules/MemberRecommendations.tsx",
+    "apps/portal-web/src/modules/MemberSocialLinks.tsx",
+    "apps/portal-web/src/modules/MemberSocialLinks.css",
+    "apps/portal-web/src/modules/MemberSettings.css"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/modules/CapabilityTree.tsx",
+    "apps/portal-web/src/modules/MemberPresence.tsx",
+    "apps/portal-web/src/modules/MemberRecommendations.tsx",
+    "apps/portal-web/src/modules/MemberSocialLinks.tsx"
+  ],
+  "dependencies": [
+    "assets",
+    "member-card",
+    "shared",
+    "portal-shell"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/identity-membership/portal/README.md",
+    "docs/development/member-connections.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.member-card",
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

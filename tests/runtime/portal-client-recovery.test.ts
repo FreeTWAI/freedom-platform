@@ -360,3 +360,67 @@ test('portal client preserves signed bigint string CAS and stable keys across me
     { version: '"9223372036854775807"', key: 'same-member-request', body: '{}' },
   ]);
 });
+
+
+// Use microtask completion rather than wall-clock timings; a cancelled request
+// must not wait for the unchanged 20-second deadline or a stalled response body.
+async function flushCancellation() { for(let i=0;i<20;i++) await Promise.resolve(); }
+test('cancelled pre-dispatch reads never send HTTP or create foreground activity',async t=>{
+  const fetcher=t.mock.method(globalThis,'fetch',async()=>Response.json({unused:true}));
+  const controller=new AbortController();controller.abort();let notifications=0;
+  const unsubscribe=requestActivity.subscribe(()=>{notifications++;});
+  try{
+    await assert.rejects(new PortalClient().get('/unused',{signal:controller.signal}),
+      (cause:unknown)=>cause instanceof ApiError&&cause.code==='aborted'&&cause.network&&!cause.timedOut);
+    assert.equal(fetcher.mock.callCount(),0);assert.equal(notifications,0);
+  }finally{unsubscribe();}
+});
+for(const phase of ['headers','body'] as const){
+  test(`cancelled ${phase} waits release foreground activity without waiting for timeout`,async t=>{
+    t.mock.timers.enable({apis:['setTimeout']});
+    let signal:AbortSignal|null|undefined,bodyStarted=false;
+    const fetcher=t.mock.method(globalThis,'fetch',async(_input:unknown,init?:RequestInit)=>{
+      signal=init?.signal;
+      if(phase==='headers')return new Promise<Response>(()=>{});
+      const response=Response.json({unused:true});
+      response.text=()=>{bodyStarted=true;return new Promise<string>(()=>{});};return response;
+    });
+    const controller=new AbortController(),client=new PortalClient();
+    let outcome:unknown='pending';
+    const done=client.get('/cancelled',{signal:controller.signal}).then(()=>{outcome='unexpected success';},cause=>{outcome=cause;});
+    await flushCancellation();if(phase==='body')assert.equal(bodyStarted,true);
+    assert.equal(requestActivity.snapshot().pending,1);controller.abort();await flushCancellation();
+    const immediate=outcome,activity=requestActivity.snapshot();
+    t.mock.timers.tick(20_000);await done; // Clean up the old-code negative reproduction too.
+    assert.ok(immediate instanceof ApiError);assert.equal(immediate.code,'aborted');assert.equal(immediate.timedOut,false);
+    assert.deepEqual(activity,{pending:0,mutations:0});assert.equal(signal?.aborted,true);
+    assert.equal(fetcher.mock.callCount(),1,'no automatic retry or error-report HTTP');
+  });
+}
+test('cancelled late authentication replies cannot sign out the current account',async t=>{
+  let resolve!:(response:Response)=>void;
+  t.mock.method(globalThis,'fetch',()=>new Promise<Response>(yes=>{resolve=yes;}));
+  const client=new PortalClient();client.csrfToken='synthetic-current';let expired=0;client.onUnauthorized=()=>{expired++;};
+  const controller=new AbortController();const done=client.get('/private',{signal:controller.signal}).catch(cause=>cause);
+  controller.abort();await flushCancellation();resolve(Response.json({code:'unauthorized'},{status:401}));
+  assert.ok((await done) instanceof ApiError);await flushCancellation();
+  assert.equal(expired,0);assert.equal(client.csrfToken,'synthetic-current');
+});
+test('cancelled writes remain unknown and are neither retried nor acknowledged',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const fetcher=t.mock.method(globalThis,'fetch',()=>new Promise<Response>(()=>{}));
+  const client=new PortalClient();client.csrfToken='synthetic-current';const controller=new AbortController();
+  let outcome:unknown='pending';const done=client.post('/unchanged',{}, {signal:controller.signal,idempotencyKey:'original-key'})
+    .then(()=>{outcome='unexpected success';},cause=>{outcome=cause;});
+  controller.abort();await flushCancellation();const immediate=outcome;t.mock.timers.tick(20_000);await done;
+  assert.ok(immediate instanceof ApiError);assert.equal(immediate.network,true);assert.equal(immediate.code,'aborted');
+  assert.equal(fetcher.mock.callCount(),1);assert.deepEqual(requestActivity.snapshot(),{pending:0,mutations:0});
+});
+test('a completed request detaches its caller abort listener',async t=>{
+  const controller=new AbortController();const add=t.mock.method(controller.signal,'addEventListener');
+  const remove=t.mock.method(controller.signal,'removeEventListener');
+  t.mock.method(globalThis,'fetch',async()=>Response.json({ok:true}));
+  await new PortalClient().get('/done',{signal:controller.signal});controller.abort();
+  assert.equal(add.mock.callCount(),1);assert.equal(remove.mock.callCount(),1);
+  assert.deepEqual(requestActivity.snapshot(),{pending:0,mutations:0});
+});

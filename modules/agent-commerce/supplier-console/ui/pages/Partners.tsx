@@ -4,13 +4,16 @@ import {supplierConsoleHref} from '../route';
 import {partnerLabel,selectionState,reservationState} from '../view';
 import {formatMinor,formatIsoLocal} from '../../../../../apps/portal-web/src/format';
 import {ReadStatus,useListRestore} from './Shared';
+import {ListSearch} from '../ListSearch';
+import {productMatches} from '../../../hosted-ui/CommerceTools';
 import {ReservationTotals,ReservationDetailLink} from './Reservations';
 export function Truncated({c}:{c:ConsoleController}){return <p>只顯示部分，完整數量見營運概覽。<a href={supplierConsoleHref(c.scope,'overview')}>營運概覽</a> · <a href={supplierConsoleHref(c.scope,'products')}>依商品查看</a> · <a href={supplierConsoleHref(c.scope,'partners')}>依店家查看</a></p>;}
 export function Partners({c}:{c:ConsoleController}){
- const r=c.slot<SupplierPartners>('partners'),d=r.data,pos=c.position('partners'),restore=useListRestore(c,'partners',r),items=d?.items.filter(p=>p.name.includes(pos.search)||p.partner_id.includes(pos.search))??[];
+ const r=c.slot<SupplierPartners>('partners'),d=r.data,pos=c.position('partners'),restore=useListRestore(c,'partners',r),items=d?.items.filter(p=>productMatches({title:p.name,sku:p.partner_id,description:''},pos.search))??[];
  return <section className="stack"><h2 tabIndex={-1} ref={restore.heading}>合作店家</h2><ReadStatus c={c} name="partners" label="合作店家"/>{d&&<>
- <label className="field">搜尋合作店家<input type="search" value={pos.search} onChange={e=>c.remember('partners',{search:e.target.value})}/></label>{d.truncated&&<Truncated c={c}/>}
- {!items.length&&<p>{pos.search?'沒有符合的合作店家。':'目前沒有合作店家。'}</p>}<ul className="sc-list">{items.map(p=><li className="sc-row" key={p.partner_id}><div><a data-sc-item={p.partner_id} href={supplierConsoleHref(c.scope,'partner',{id:p.partner_id})} onClick={()=>restore.open(p.partner_id)}>{partnerLabel(p,d.items)}</a><p>商品數 {p.products}</p><p>待確認 {p.cooperation.awaiting}／可售 {p.cooperation.sellable}／需修改 {p.cooperation.changes_requested}／停用 {p.cooperation.inactive}</p></div></li>)}</ul>
+ <ListSearch label="搜尋合作店家" hint="店家名稱或店家 ID" value={pos.search} onChange={search=>c.remember('partners',{search,lastId:null,scroll:0})}
+  count={items.length} total={d.items.length} truncated={d.truncated} stale={r.state!=='ready'}/>{d.truncated&&<Truncated c={c}/>}
+ {!items.length&&<p>{pos.search.trim()?'已載入的合作店家沒有符合搜尋條件，請清除搜尋或調整關鍵字。':'已載入的資料中沒有合作店家。'}</p>}<ul className="sc-list">{items.map(p=><li className="sc-row" key={p.partner_id}><div><a data-sc-item={p.partner_id} href={supplierConsoleHref(c.scope,'partner',{id:p.partner_id})} onClick={()=>restore.open(p.partner_id)}>{partnerLabel(p,d.items)}</a><p>商品數 {p.products}</p><p>待確認 {p.cooperation.awaiting}／可售 {p.cooperation.sellable}／需修改 {p.cooperation.changes_requested}／停用 {p.cooperation.inactive}</p></div></li>)}</ul>
  </>}</section>;
 }
 export function Partner({c}:{c:ConsoleController}){

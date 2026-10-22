@@ -46,8 +46,12 @@ fixed route modules and mount each exactly once with
 Missing/aliased/conditional mounts, changed import source/prefix, literal shadow
 endpoints, early root return/throw, wrong final receiver, and root receiver
 mutation/unknown escapes are detected. All receiver delegates, including the
-four pre-existing public/member promotion/service helpers, remain **uncovered**
-escapes. No helper-name exemption certifies their implementation. The aggregate's other routes, delegated helpers,
+four pre-existing public/member promotion/service helpers, the guide-release
+helper, and eleven explicit feature registrar calls, remain **uncovered**
+escapes. These sixteen escapes are recorded rather than approved. The direct
+private-work mount stays in the host between the work list and action registrars
+so the fixed profile still checks its original registration. No helper-name
+exemption certifies a registrar's implementation. The aggregate's other routes, delegated helpers,
 dynamic loops, middleware and runtime entrypoints remain **uncovered**.
 
 Extracted registrations are raw syntax facts labelled

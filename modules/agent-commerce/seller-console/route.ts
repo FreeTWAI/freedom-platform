@@ -1,9 +1,10 @@
+import {SELLER_ORDER_FILTER_KEYS,SELLER_PAYMENT_METHODS,type SellerQuery} from './order-filters';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives';
 export type SellerScope={tenantId:string;instanceId:string};
 export type SellerPage='overview'|'orders'|'order'|'reservations'|'payments'|'case'|'settings'|'settings-payments';
-export type SellerQuery={lifecycle?:'open'|'cancelled'|'closed';needs_action?:'true';display_number?:string;state?:'open'|'closed'};
+export {displayNumberPattern} from './order-filters';
+export type {SellerQuery} from './order-filters';
 export type SellerConsoleRoute=SellerScope & {page:SellerPage;titleKey:`sellerConsole.${SellerPage}`;id?:string;query:SellerQuery};
-export const displayNumberPattern=/^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\s\S])/;
 function parts(hash:string){const [path,query='']=hash.split('?');return {p:path.split('/'),q:new URLSearchParams(query)};}
 function scope(p:string[]):SellerScope|null{return p[0]==='#stores'&&OpaqueId.safeParse(p[1]).success&&OpaqueId.safeParse(p[2]).success?{tenantId:p[1],instanceId:p[2]}:null;}
 export function parseSellerConsoleRoute(hash:string):SellerConsoleRoute|null {
@@ -18,6 +19,9 @@ export function parseSellerConsoleRoute(hash:string):SellerConsoleRoute|null {
  if(page==='orders'){
   const lifecycle=q.get('lifecycle');if(['open','cancelled','closed'].includes(lifecycle??''))query.lifecycle=lifecycle as SellerQuery['lifecycle'];
   if(q.get('needs_action')==='true')query.needs_action='true';
+  if(q.get('awaiting_offline_payment')==='true')query.awaiting_offline_payment='true';
+  const payment=q.get('payment_method');
+  if(payment&&Object.hasOwn(SELLER_PAYMENT_METHODS,payment))query.payment_method=payment as SellerQuery['payment_method'];
   // Keep an invalid known filter visible so the form can explain it without issuing a read.
   if(q.has('display_number'))query.display_number=q.get('display_number')!;
  }
@@ -28,7 +32,7 @@ export function sellerRootHref(s:SellerScope){return `#stores/${OpaqueId.parse(s
 export function sellerConsoleHref(s:SellerScope,page:SellerPage,options:{id?:string;query?:SellerQuery}={}){
  const suffix=page==='order'?`orders/${OpaqueId.parse(options.id)}`:page==='case'?`payments/${OpaqueId.parse(options.id)}`:page==='reservations'?'orders/reservations':page==='settings-payments'?'settings/payments':page;
  const query=new URLSearchParams();
- if(page==='orders')for(const key of ['lifecycle','needs_action','display_number'] as const){const v=options.query?.[key];if(v)query.set(key,v);}
+ if(page==='orders')for(const key of SELLER_ORDER_FILTER_KEYS){const v=options.query?.[key];if(v)query.set(key,v);}
  if(page==='payments'&&options.query?.state)query.set('state',options.query.state);
  return `${sellerRootHref(s)}/${suffix}${query.size?'?'+query:''}`;
 }

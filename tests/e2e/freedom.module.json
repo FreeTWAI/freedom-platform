@@ -6,7 +6,8 @@
     "command-core",
     "execution-runs",
     "local-demo-data",
-    "public-guide-assets"
+    "public-guide-assets",
+    "platform-admin-portal"
   ],
   "format": "freedom.module/v1",
   "instructions": [
@@ -48,7 +49,10 @@
     "tests/e2e/member-feature-fixture.ts",
     "tests/e2e/event-banner.spec.ts",
     "packages/testing/github-collaboration.ts",
-    "scripts/ci/pinned-guild-preview.config.mjs"
+    "scripts/ci/pinned-guild-preview.config.mjs",
+    "packages/testing/e2e-admin.ts",
+    "packages/testing/e2e-auth-isolation.ts",
+    "packages/testing/e2e-origin.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [

@@ -72,3 +72,12 @@ test('member-authored usage remains readable plain text; absent instructions and
  assert.ok(!html.includes('<img src=x'));assert.match(html,/<dt>收錄授權<\/dt><dd>尚未確認<\/dd>/);
  assert.ok(submittedSkillHtml({...skill,use_notes:'',demo_url:null}).includes('使用步驟尚待補充'));
 });
+
+test('published member skills receive the same optional signup without hiding their use notes',()=>{
+ const html=submittedSkillHtml(skill,'17');
+ assert.ok(html.indexOf('先讀 README，再用測試素材執行。')<html.indexOf('id="join-workshop"'));
+ assert.ok(html.includes('免費加入，探索更多資源'));assert.ok(html.includes('不用註冊就能閱讀'));
+ assert.ok(html.includes('return_to='+encodeURIComponent(skill.public_path)+'&amp;skill_intro=17'));
+ assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
+ assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
+});
