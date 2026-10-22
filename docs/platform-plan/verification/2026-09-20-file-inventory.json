@@ -24014,8 +24014,8 @@
     },
     {
       "path": "tests/e2e/supplier-console-search.spec.ts",
-      "bytes": 5857,
-      "sha256": "49f0bef3ecd9074cb572de960979a336efac6058d5deff1a4b5945fb9d924017"
+      "bytes": 6170,
+      "sha256": "2826c183e2448135f1ca8f105bb98f5ae6c4f445d1df1a9ee63445ea832c365f"
     },
     {
       "path": "tests/e2e/supplier-console-visual.spec.ts",

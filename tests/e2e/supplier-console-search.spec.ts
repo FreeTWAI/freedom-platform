@@ -24,6 +24,9 @@ test('supplier local searches handle width, case, IME, partial lists and clear f
   const offer=await post(a,supply.root+`/products/${product.product_id}/supply-offer`,{},200,terms.version);
   await post(b,store.root+'/setup',{name:'Tea Shop 茶店',slug:'search-'+randomUUID().slice(0,8),currency:'TWD'},201);
   const proposal=await post(b,store.root+'/distribution-selections',{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:1100},201);
+  // Commit owner access on overview before its route effect can reread the partners list.
+  await a.evaluate(hash=>{window.location.hash=hash+'/supply';},supply.hash);
+  await expect(a.getByRole('navigation',{name:'營運中心',exact:true}).getByRole('link',{name:'預留與訂單',exact:true})).toBeVisible();
   // Use real authorized rows. Marking the read as partial exercises truthful, loaded-only feedback.
   await a.route('**/supplier-console/partners',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),truncated:true}});});
   await a.evaluate(hash=>{window.location.hash=hash+'/supply/partners';},supply.hash);
