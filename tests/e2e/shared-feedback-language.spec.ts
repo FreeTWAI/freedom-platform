@@ -148,3 +148,92 @@ test('a failed deferred page keeps its failure and translated recovery controls 
   await expect(page.locator('.floating-message-panel')).toBeHidden();
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();expect(assets).toBe(1);
 });
+
+
+for (const [index, language] of languages.entries()) {
+  test(`${language.id}: feature search recovers from no results and keeps keyboard focus`, async ({browser}) => {
+    const context=await browser.newContext({locale:language.locale,viewport:{width:1280,height:844}});
+    try {
+      const page=await context.newPage();await login(page,language);
+      const mobile=page.locator('.mobile-menu-toggle');
+      if(await mobile.isVisible())await mobile.click();
+      const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+      await trigger.click();
+      const search=menu.locator('input[type=search]');await expect(search).toBeFocused();
+      const status=menu.getByRole('status');await expect(status).toHaveCount(1);await expect(status).toBeEmpty();
+      await search.fill('zz-no-feature-93275');
+      await expect(status).toBeVisible();
+      const results=['功能搜尋結果','Feature search results','機能の検索結果','기능 검색 결과','Resultados de funciones'];
+      await expect(status).toContainText(results[index]);
+      await expect(status).toContainText('0');
+      await expect(status).not.toContainText('沒有符合的功能');
+      await search.dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229});
+      await expect(search).toHaveValue('zz-no-feature-93275');
+      await expect(trigger).toHaveAttribute('aria-expanded','true');
+      await search.press('Escape');await expect(search).toHaveValue('');
+      await expect(status).toHaveCount(1);await expect(status).toBeEmpty();
+      await expect(search).toBeFocused();await expect(trigger).toHaveAttribute('aria-expanded','true');
+      await search.press('Escape');await expect(trigger).toHaveAttribute('aria-expanded','false');
+      await expect(trigger).toBeFocused();
+      await trigger.press('Enter');await expect(search).toBeFocused();await expect(search).toHaveValue('');
+      await search.fill('zz-no-feature-93275');
+      const panel=(await menu.locator('.nav-more-content').boundingBox())!;expect(panel).not.toBeNull();
+      const heading=page.getByRole('heading',{name:language.home,level:1,exact:true});
+      const title=(await heading.boundingBox())!;expect(title).not.toBeNull();
+      // Click the heading's uncovered left portion, outside the panel's horizontal bounds.
+      expect(title.x).toBeLessThan(panel.x);
+      await heading.click({position:{x:Math.min(title.width,panel.x-title.x)/2,y:title.height/2}});
+      await expect(trigger).toHaveAttribute('aria-expanded','false');
+      await trigger.click();await expect(search).toHaveValue('');
+    } finally {await context.close();}
+  });
+}
+
+test('Safari Escape with keyCode 229 alone keeps the feature query and menu open',async({page})=>{
+  await page.setViewportSize({width:1280,height:844});await login(page);
+  const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+  await trigger.click();
+  const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
+  await search.fill('zz-no-feature-93275');
+  await search.dispatchEvent('keydown',{key:'Escape',keyCode:229,isComposing:false});
+  await expect(search).toHaveValue('zz-no-feature-93275');
+  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(search).toBeFocused();
+  // The empty-query branch must also ignore Safari's composition key code.
+  await search.fill('');
+  await search.dispatchEvent('keydown',{key:'Escape',keyCode:229,isComposing:false});
+  await expect(search).toHaveValue('');
+  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(search).toBeFocused();
+});
+
+test('390px feature search consumes two Escapes before the phone menu closes',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await login(page);
+  const toggle=page.locator('.mobile-menu-toggle');await toggle.click();
+  const nav=page.locator('#workspace-navigation');await expect(nav).toBeVisible();
+  const menu=nav.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+  await trigger.click();
+  const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
+  await search.fill('zz-no-feature-93275');
+  await search.press('Escape');await expect(search).toHaveValue('');await expect(search).toBeFocused();
+  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(toggle).toHaveAttribute('aria-expanded','true');
+  await search.press('Escape');await expect(trigger).toHaveAttribute('aria-expanded','false');await expect(trigger).toBeFocused();
+  await expect(toggle).toHaveAttribute('aria-expanded','true');await expect(nav).toBeVisible();
+  await trigger.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await expect(nav).toBeHidden();await expect(toggle).toBeFocused();
+});
+
+test('failed lazy import recovers by loading a new document after the network returns',async({page})=>{
+  await login(page);
+  const asset=/\/assets\/MemberMessages-[^/]+\.js$/;
+  let failed=0;await page.route(asset,route=>{failed++;return route.abort();});
+  await openChat(page);
+  const alert=page.getByRole('alert').filter({hasText:languages[0].failed});
+  await expect(alert).toBeVisible();expect(failed).toBe(1);
+  await page.unroute(asset);
+  const documentLoaded=page.waitForEvent('load');
+  await alert.getByRole('button',{name:languages[0].reload,exact:true}).click();
+  await documentLoaded;
+  await expect(page.getByRole('heading',{name:languages[0].home,level:1,exact:true})).toBeVisible();
+  await openChat(page);
+  await expect(page.getByRole('tab',{name:/^私人訊息/})).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:languages[0].failed})).toHaveCount(0);
+});
