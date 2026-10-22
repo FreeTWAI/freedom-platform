@@ -5,6 +5,7 @@ import {lockAppearanceRead,draftAppearanceSnapshot,publishedAppearanceDigest,ins
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { PublicStoreProjectionSchema, StorePreviewSchema, type PublicStoreProjection } from '../../../contracts/guild-launchpad/v1/storefront.js';
+import { STOREFRONT_PUBLICATION_PROFILE, StorePublicationReviewSchema, type ReviewedPublicationInput, type StorePublicationReview } from '../../../contracts/guild-launchpad/v1/storefront-publication.js';
 import { checkVersion, digest } from '../../../packages/db/index.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { Actor } from '../../identity-membership/service.js';
@@ -37,16 +38,66 @@ async function buildProjection(q: PoolClient, p: Profile, items: readonly PhotoP
     products: items.map(({product: { sku, title, description, price_minor }}) => ({ sku, title, description, price_minor })),
     revision: await nextRevision(q, p), published_at: now.toISOString(), transaction_state: 'not_enabled' });
 }
+async function draftPublicationDimensions(q: PoolClient, p: Profile, items: readonly PhotoProduct[], options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions) {
+  return {
+    appearance: options.enabled === true ? await draftAppearanceSnapshot(q, p) : undefined,
+    policies: policiesOptions.enabled === true ? await draftLegalSnapshot(q, p) : undefined,
+    gallery: galleryOptions.enabled === true ? await draftGalleryData(q, p, items) : undefined,
+  };
+}
+type PublicationDimensions = Awaited<ReturnType<typeof draftPublicationDimensions>>;
+async function publicationChanges(q: PoolClient, p: Profile, dimensions: PublicationDimensions) {
+  const {appearance, policies, gallery} = dimensions;
+  return {
+    ...(appearance ? {appearance_changed: appearance.sha256 !== await publishedAppearanceDigest(q, p)} : {}),
+    ...(policies ? {policies_changed: policies.sha256 !== await publishedLegalDigest(q, p)} : {}),
+    ...(gallery ? {gallery_changed: gallery.sha256 !== await publishedGalleryDigest(q, p)} : {}),
+  };
+}
+function publicationDirty(p: Profile, projection: PublicStoreProjection, mediaSha256: string, changes: Awaited<ReturnType<typeof publicationChanges>>) {
+  return Object.values(changes).some(Boolean) || projectionDigest(projection) !== p.projection_sha256
+    || p.template_id !== p.published_template_id || mediaSha256 !== p.media_sha256;
+}
+function publicationReviewDigest(p: Profile, projection: PublicStoreProjection, mediaSha256: string, dimensions: PublicationDimensions) {
+  return digest({ profile: STOREFRONT_PUBLICATION_PROFILE, tenant_id: p.tenant_id, instance_id: p.instance_id,
+    projection_sha256: projectionDigest(projection), template_id: p.template_id, media_sha256: mediaSha256,
+    ...(dimensions.appearance ? {appearance_sha256: dimensions.appearance.sha256} : {}),
+    ...(dimensions.policies ? {policies_sha256: dimensions.policies.sha256} : {}),
+    ...(dimensions.gallery ? {gallery_sha256: dimensions.gallery.sha256} : {}) });
+}
+/** Review only saved, publishable content. Product/photo edits have their own versions. */
+export async function reviewStorePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
+  return storeRead(pool, actor, tenantId, instanceId, 'store:publish', async q => {
+    if (options.enabled === true || policiesOptions.enabled === true || galleryOptions.enabled === true) await lockAppearanceRead(q, tenantId, instanceId);
+    const p = await profile(q, tenantId, instanceId); retailReady(p);
+    const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
+    let projection = await buildProjection(q, p, items);
+    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
+    const changes = await publicationChanges(q, p, dimensions);
+    const dirty = publicationDirty(p, projection, media.sha256, changes);
+    const reviewDigest = publicationReviewDigest(p, projection, media.sha256, dimensions);
+    if (!dirty && p.projection) projection = publicProjection(p.projection);
+    const photos = items.flatMap<StorePublicationReview['photos'][number]>(item => {
+      if (dimensions.gallery && !('distributionPhotoVersion' in item)) {
+        return privateGalleryView(p, item, dimensions.gallery.byId.get(item.product.product_id)!, galleryOptions).photos
+          .map(photo => ({sku: item.product.sku, photo}));
+      }
+      const photo = privatePhotoView(p, item).photo;
+      return photo ? [{sku: item.product.sku, photo}] : [];
+    });
+    return StorePublicationReviewSchema.parse({ profile: STOREFRONT_PUBLICATION_PROFILE, store_version: p.version,
+      preview: { projection, dirty, current_revision: p.revision }, template_id: p.template_id,
+      photo_count: photos.length, photos, review_digest: reviewDigest, ...changes });
+  });
+}
 export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
     if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     let projection = await buildProjection(q, p, items);
-    const appearanceDirty=options.enabled===true&&(await draftAppearanceSnapshot(q,p)).sha256!==await publishedAppearanceDigest(q,p);
-    const policiesDirty=policiesOptions.enabled===true&&(await draftLegalSnapshot(q,p)).sha256!==await publishedLegalDigest(q,p);
-    const galleryDirty=galleryOptions.enabled===true&&(await draftGalleryData(q,p,items)).sha256!==await publishedGalleryDigest(q,p);
-    const dirty = galleryDirty || policiesDirty || appearanceDirty || projectionDigest(projection) !== p.projection_sha256 || p.template_id !== p.published_template_id || draftMediaSnapshot(items).sha256 !== p.media_sha256;
+    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
+    const dirty = publicationDirty(p, projection, draftMediaSnapshot(items).sha256, await publicationChanges(q, p, dimensions));
     if (!dirty && p.projection) projection = publicProjection(p.projection);
     return StorePreviewSchema.parse({ projection, dirty, current_revision: p.revision });
   });
@@ -62,9 +113,15 @@ export async function previewStorePage(pool: Pool, actor: Actor, tenantId: strin
     return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance, policies,galleryOptions.enabled===true?`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`:undefined);
   });
 }
-export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {}) {
-  const operation = unpublish ? 'storefront.unpublish' : 'storefront.publish';
-  return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, {}, key, expected, async (q, context, inst) => {
+export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, unpublish, options, policiesOptions, galleryOptions);
+}
+export async function publishReviewedStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, input: ReviewedPublicationInput, key: string, expected: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, false, options, policiesOptions, galleryOptions, input);
+}
+async function changePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish: boolean, options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions, review?: ReviewedPublicationInput) {
+  const operation = unpublish ? 'storefront.unpublish' : review ? 'storefront.publish-reviewed' : 'storefront.publish';
+  return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, review ?? {}, key, expected, async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
     if (unpublish) {
       if (!p.current_publication_id) return storeView(q, context, inst);
@@ -73,15 +130,16 @@ export async function publishStore(pool: Pool, actor: Actor, tenantId: string, i
     } else {
       const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
       const projection = await buildProjection(q, p, items);
+      const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
+      const {appearance, policies, gallery} = dimensions;
+      // Compare under the same instance/community/profile locks, using exactly
+      // the rowset saved below. Do not run this check on a committed receipt replay.
+      if (review) requireCondition(review.review_digest === publicationReviewDigest(p, projection, media.sha256, dimensions),
+        409, 'storefront_publication_changed', '商品、照片或店面內容已更新，請重新確認後再上架。');
       requireCondition(projection.products.length > 0, 409, 'storefront_has_no_products', '請先新增至少一項商品再公開。');
       const hash = projectionDigest(projection);
-      const appearance=options.enabled===true?await draftAppearanceSnapshot(q,p):undefined;
-      const policies=policiesOptions.enabled===true?await draftLegalSnapshot(q,p):undefined;
-      const gallery=galleryOptions.enabled===true?await draftGalleryData(q,p,items):undefined;
-      const galleryUnchanged=!gallery||gallery.sha256===await publishedGalleryDigest(q,p);
-      const policiesUnchanged=!policies||policies.sha256===await publishedLegalDigest(q,p);
-      const appearanceUnchanged=!appearance||appearance.sha256===await publishedAppearanceDigest(q,p);
-      if (p.current_publication_id && p.projection_sha256 === hash && p.template_id === p.published_template_id && p.media_sha256 === media.sha256 && appearanceUnchanged && policiesUnchanged && galleryUnchanged) return storeView(q, context, inst);
+      const changes = await publicationChanges(q, p, dimensions);
+      if (p.current_publication_id && !publicationDirty(p, projection, media.sha256, changes)) return storeView(q, context, inst);
       const id = randomUUID();
       await q.query(`INSERT INTO commerce_storefront_publications(publication_id,instance_id,tenant_id,revision,slug,projection,projection_sha256,published_by_principal_id,published_at,template_id,media_sha256)
         SELECT $1,m.instance_id,m.tenant_id,$4,$5,$6,$7,$8,$9,$11,$12 FROM commerce_resource_tenants m

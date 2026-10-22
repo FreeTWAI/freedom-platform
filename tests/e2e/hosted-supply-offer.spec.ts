@@ -207,7 +207,7 @@ test('structured references are optional information throughout supplier editing
   const colours=await active.locator('.badge').evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el).backgroundColor}));
   console.log('Structured terms badge colours',colours);expect(colours.text).not.toBe(colours.background);
   await b.reload();await expect(detail).toContainText(SELLABLE_LABEL);await detail.getByRole('link',{name:'返回供貨合作',exact:true}).click();await storeArea(b,'店面與發布');
-  await b.getByRole('button',{name:'發布展示頁',exact:true}).click();await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已發布展示頁');
+  await b.getByRole('button',{name:'發布展示頁',exact:true}).click();await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已上架 1 件商品，公開頁已更新。');
   for(const path of ['/api/v1/public/stores/'+slug,'/shops/'+slug]){const response=await b.request.get(path);expect(response.status()).toBe(200);const text=await response.text();for(const key of ['msrp_minor','minimum_order_quantity','lead_time_days','供應商建議售價','最低訂量','交期'])expect(text).not.toContain(key);}
   await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);await editor.getByLabel('交期（天）',{exact:true}).fill('');
   const cleared=a.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname.endsWith('/supply-terms'));
