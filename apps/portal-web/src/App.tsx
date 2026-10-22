@@ -1,3 +1,4 @@
+import {PasswordField} from './modules/auth/PasswordField';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
 import {sellerOrdersRoute} from './modules/hosted-seller-order-state'
@@ -530,6 +531,7 @@ function LoginView({
               ref={emailInput}
               name="email"
               type="email"
+              inputMode="email" autoCapitalize="none" spellCheck={false}
               autoComplete="username"
               required
               value={email}
@@ -537,23 +539,15 @@ function LoginView({
               disabled={pending}
             />
           </label>}
-          {activeMode!=='request-reset'&&<label className="field">
-            <span className="field-label">{t(activeMode==='confirm-reset'?'auth.newPassword':'auth.password')}</span>
-            <input
-              name="password"
-              type="password"
-              autoComplete={activeMode==='register'||activeMode==='confirm-reset'?'new-password':'current-password'}
-              minLength={activeMode==='register'||activeMode==='confirm-reset'?12:undefined}
-              maxLength={128}
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={pending}
-            />
-          </label>}
+          {activeMode!=='request-reset'&&<PasswordField key={activeMode}
+            label={t(activeMode==='confirm-reset'?'auth.newPassword':'auth.password')}
+            value={password} onChange={setPassword} disabled={pending} language={language}
+            autoComplete={activeMode==='register'||activeMode==='confirm-reset'?'new-password':'current-password'}
+            minLength={activeMode==='register'||activeMode==='confirm-reset'?12:undefined}
+            hint={activeMode==='register'||activeMode==='confirm-reset'?t('auth.passwordHint'):undefined}/>}
           {activeMode==='login'&&totpRequired&&<label className="field"><span className="field-label">{t('auth.totpCode')}</span><input ref={codeInput} name="code" type="text" autoComplete="one-time-code" autoCapitalize="none" spellCheck={false} required maxLength={64} value={loginCode} onChange={event=>setLoginCode(event.target.value)} disabled={pending} aria-describedby="login-totp-hint"/><span id="login-totp-hint" className="field-hint">{t('auth.totpHint')}</span></label>}
           {activeMode==='confirm-reset'&&<label className="field">{t('auth.confirmPassword')}<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} disabled={pending}/></label>}
-          {activeMode==='register'&&<><label className="field"><span className="field-label" id="register-nickname-label">{t('auth.nickname')}</span><input name="nickname" maxLength={60} autoComplete="nickname" aria-labelledby="register-nickname-label" aria-describedby="register-nickname-hint" placeholder={t('auth.optionalName')} value={nickname} onChange={event=>setNickname(event.target.value)} disabled={pending}/><span className="field-hint" id="register-nickname-hint">{t('auth.nicknameHint')}</span></label><p className="field-hint">{t('auth.passwordHint')} {t(site?.password_recovery_enabled?'auth.recoveryAvailable':'auth.recoveryUnavailable')}</p></>}
+          {activeMode==='register'&&<><label className="field"><span className="field-label" id="register-nickname-label">{t('auth.nickname')}</span><input name="nickname" maxLength={60} autoComplete="nickname" aria-labelledby="register-nickname-label" aria-describedby="register-nickname-hint" placeholder={t('auth.optionalName')} value={nickname} onChange={event=>setNickname(event.target.value)} disabled={pending}/><span className="field-hint" id="register-nickname-hint">{t('auth.nicknameHint')}</span></label><p className="field-hint">{t(site?.password_recovery_enabled?'auth.recoveryAvailable':'auth.recoveryUnavailable')}</p></>}
           {activeMode==='request-reset'&&<p className="field-hint">{t('auth.resetHint')}</p>}
           <button className="btn btn-primary" type="submit" disabled={pending} aria-busy={pending}>
             {t(pending?'auth.pending':activeMode==='register'?'auth.createExplore':activeMode==='request-reset'?'auth.sendReset':activeMode==='confirm-reset'?'auth.savePassword':'auth.login')}

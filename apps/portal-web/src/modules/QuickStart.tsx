@@ -7,14 +7,17 @@ import type {GuildTopic} from '../../../../packages/shared/guild-topics';
 import {GuildQuestionFields} from './GuildQuestions';
 import {useLanguage} from '../language';
 import {SkillBookStarGate} from './SkillBookCover';
-export function QuickStart({client,onCompleted}:{client:PortalClient;onCompleted:()=>void}){
+type QuickDirectory={items:GuildSummary[];loading:boolean;error:string;reload:()=>void};
+export function QuickStart({client,onCompleted,directory}:{client:PortalClient;onCompleted:()=>void;directory?:QuickDirectory}){
   const {language,t}=useLanguage();
-  const [guilds,setGuilds]=useState<GuildSummary[]>([]),[primary,setPrimary]=useState(''),[query,setQuery]=useState(''),[topic,setTopic]=useState<GuildTopic|''>('');
+  const [localGuilds,setGuilds]=useState<GuildSummary[]>([]),[primary,setPrimary]=useState(''),[query,setQuery]=useState(''),[topic,setTopic]=useState<GuildTopic|''>('');
   const [step,setStep]=useState<1|2>(1),[answersByGuild,setAnswersByGuild]=useState<Record<string,Record<string,string>>>({});
-  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(''),[recovering,setRecovering]=useState(false);
+  const [localLoading,setLoading]=useState(true),[localError,setLoadError]=useState(''),[recovering,setRecovering]=useState(false);
   const generation=useRef(0),heading=useRef<HTMLHeadingElement>(null),skipFocus=useRef(true),{mutate,busy,error}=useModuleMutation(client);
+  const guilds=directory?.items??localGuilds,loading=directory?.loading??localLoading,loadError=localError||directory?.error||'';
+  const supplied=directory!==undefined;
   async function load(){const sequence=++generation.current;setLoading(true);setLoadError('');try{const data=await client.get<{items:GuildSummary[]}>('/guilds/directory');if(sequence===generation.current)setGuilds(data.items);}catch(cause){if(sequence===generation.current)setLoadError(cause instanceof Error?cause.message:'公會暫時無法載入。');}finally{if(sequence===generation.current)setLoading(false);}}
-  useEffect(()=>{void load();return()=>{generation.current++;};},[client]);
+  useEffect(()=>{if(!supplied)void load();return()=>{generation.current++;};},[client,supplied]);
   useEffect(()=>{if(skipFocus.current){skipFocus.current=false;return;}heading.current?.focus();},[step]);
   const selected=guilds.find(guild=>guild.guild_key===primary),questions=selected?.entry_questions?.questions??[],answers=answersByGuild[primary]??{};
   const ready=questions.length>0&&questions.every(question=>answers[question.id]);
@@ -27,7 +30,7 @@ export function QuickStart({client,onCompleted}:{client:PortalClient;onCompleted
       <GuildTopicFilter value={topic} onChange={setTopic}/>
       <div className="actions quick-join-actions"><button type="button" className="btn btn-primary" disabled={!selected||!questions.length||loading||busy||recovering} onClick={()=>setStep(2)}>{t(selected&&questions.length?'quick.nextCount':'quick.next',{count:questions.length})}</button>{selected&&<span className="field-hint">{t('quick.selected',{name:selected.name})}</span>}</div>
       {loading&&<p role="status">{t('quick.loading')}</p>}
-      {loadError&&<div className="banner banner-error" role="alert"><p>{language==='zh-Hant'?loadError:t('error.generic')}</p><button type="button" className="btn btn-ghost" disabled={loading||busy} onClick={()=>void load()}>{t('quick.reload')}</button></div>}
+      {loadError&&<div className="banner banner-error" role="alert"><p>{language==='zh-Hant'?loadError:t('error.generic')}</p><button type="button" className="btn btn-ghost" disabled={loading||busy} onClick={()=>{setLoadError('');if(directory)directory.reload();else void load();}}>{t('quick.reload')}</button></div>}
       {!loading&&!loadError&&<><p className="field-hint">{t('quick.count',{count:visible.length,total:guilds.length})}</p><fieldset className="quick-guild-options" disabled={busy||recovering}><legend>{t('quick.choose')}</legend>{visible.map(guild=><label className={`quick-guild-option${primary===guild.guild_key?' is-selected':''}`} key={guild.guild_key}>
         <input type="radio" name="quick-primary" value={guild.guild_key} checked={primary===guild.guild_key} onChange={()=>setPrimary(guild.guild_key)}/><span><strong lang="zh-Hant">{guild.name}</strong><span className="quick-guild-purpose multiline-text" lang="zh-Hant">{guild.purpose}</span><GuildTags tags={guild.tags}/><span className="field-hint">{t('quick.books',{count:guild.skill_books.length})}</span></span>
       </label>)}</fieldset>{!visible.length&&<p>{t('quick.noGuilds')}</p>}</>}
