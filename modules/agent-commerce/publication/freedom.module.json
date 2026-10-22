@@ -1,0 +1,22 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "commerce-publication",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/agent-commerce/publication/**",
+    "contracts/guild-launchpad/v1/storefront-publication.ts",
+    "contracts/guild-launchpad/v1/storefront-publication.schema.json"
+  ],
+  "public_exports": [],
+  "dependencies": ["agent-commerce", "supplier-console", "commerce-storefront"],
+  "contract_families": ["common"],
+  "client_profiles": ["member"],
+  "instructions": [
+    "modules/agent-commerce/README.md",
+    "packages/resource-scopes/README.md",
+    "docs/platform-plan/execution/unified-foundation/02-principal-command.md"
+  ],
+  "invariants": ["current-authority-before-replay", "single-transaction-effects", "legacy-domain-replay-compatibility"],
+  "tests": ["runtime.full", "e2e.harness"],
+  "surfaces": []
+}

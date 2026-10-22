@@ -18,7 +18,8 @@ import { EmptyStoreInputSchema, StoreSetupInputSchema, StoreUpdateInputSchema, P
 import { MyStoresQuerySchema, MyStoresLegacyProjectionSchema } from '../../../../contracts/guild-launchpad/v1/storefront-pagination.js';
 import { listMyStores, setupStore, updateStore, storeRead, storeView, slugAvailability } from '../../../../modules/agent-commerce/hosted/store.js';
 import { listProducts, addProduct, updateProduct, removeProduct } from '../../../../modules/agent-commerce/hosted/products.js';
-import { previewStore, previewStorePage, publishStore } from '../../../../modules/agent-commerce/hosted/publish.js';
+import { previewStore, previewStorePage, publishStore, reviewStorePublication, publishReviewedStore } from '../../../../modules/agent-commerce/hosted/publish.js';
+import { ReviewedPublicationInputSchema } from '../../../../contracts/guild-launchpad/v1/storefront-publication.js';
 import { StoreAppearanceInputSchema } from '../../../../contracts/guild-launchpad/v1/storefront-presentation.js';
 import { readStoreAppearance, updateStoreAppearance } from '../../../../modules/agent-commerce/hosted/presentation.js';
 import { SupplyTermsInputSchema } from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms.js';
@@ -113,6 +114,16 @@ export function createHostedStoreRoutes(pool: Pool, admissionEnabled = false, of
     etag(c, view.version); return c.json(view);
   });
   app.get(root + '/preview', async c => { EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c); return c.json(await previewStore(pool, c.get('actor'), t, i, appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions)); });
+  app.get(root + '/publication-review', async c => {
+    EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
+    const review = await reviewStorePublication(pool, c.get('actor'), t, i, appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions); etag(c, review.store_version); return c.json(review);
+  });
+  app.post(root + '/publish-reviewed', async c => {
+    EmptyStoreInputSchema.parse(singleQuery(c)); const h = commandHeaders(c, true);
+    const body = ReviewedPublicationInputSchema.parse(await c.req.json()); const [t, i] = ids(c);
+    const view = await publishReviewedStore(pool, c.get('actor'), t, i, body, h.key, h.expected!, appearanceOptions,policiesOptions,galleryOptions,variantsOptions,categoriesOptions);
+    if (view.version) etag(c, view.version); return c.json(view);
+  });
   app.get(root + '/appearance', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t, i] = ids(c);
     const view = await readStoreAppearance(pool, c.get('actor'), t, i); etag(c, view.version); return c.json(view);

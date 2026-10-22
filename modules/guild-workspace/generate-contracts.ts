@@ -30,6 +30,7 @@ import {
 
 import * as storefront from '../../contracts/guild-launchpad/v1/storefront.js';
 import * as presentation from '../../contracts/guild-launchpad/v1/storefront-presentation.js';
+import * as publication from '../../contracts/guild-launchpad/v1/storefront-publication.js';
 import * as appearance from '../../contracts/guild-launchpad/v1/storefront-appearance.js';
 import * as hostedMedia from '../../contracts/guild-launchpad/v1/hosted-store-media.js';
 import * as sharedOrder from '../../contracts/guild-launchpad/v1/hosted-shared-order.js';
@@ -294,6 +295,10 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
   ['storefront-presentation', 'Additive saved store presentation. Existing storefront/v1 content, releases and capabilities remain unchanged.', [
     ['appearance-input', presentation.StoreAppearanceInputSchema, 'input', []],
     ['appearance', presentation.StoreAppearanceSchema, 'output', ['current_same_instance_store_capability', 'profile_version_cas']],
+  ]],
+  ['storefront-publication', 'Explicit publication of reviewed, saved storefront content. The original storefront/v1 contract and capabilities remain unchanged.', [
+    ['publication-review', publication.StorePublicationReviewSchema, 'output', ['current_same_instance_store_publish', 'public_content_template_and_enabled_dimension_digests', 'review_photo_count_and_bounded_product_photos', 'same_rowset_versioned_private_photos']],
+    ['reviewed-publication-input', publication.ReviewedPublicationInputSchema, 'input', ['current_same_instance_store_publish', 'profile_version_cas', 'same_transaction_review_digest', 'original_request_idempotency']],
   ]],
   ['hosted-shared-order', 'Explicit same-database shared supplier stock reservations. Original direct profile and financial exclusions remain intact; admission defaults OFF.', [
     ['shared-quote', sharedOrder.SharedQuoteSchema, 'output', ['unique_skus', 'line_and_merchandise_totals', 'five_minute_quote', 'current_exact_supply_consent']],

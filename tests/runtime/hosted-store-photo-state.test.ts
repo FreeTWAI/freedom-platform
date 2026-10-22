@@ -35,6 +35,98 @@ test('PHOTO-STATE-08 an old photo response cannot log out a newer member session
   await assert.rejects(request,(e:unknown)=>e instanceof ApiError&&e.network);
   assert.equal(client.csrfToken,'synthetic-new');assert.equal(notified,0);
 });
+test('PHOTO-STATE-10 a session change while reading the photo ACK keeps the original result unknown',async t=>{
+  const client=new PortalClient();client.csrfToken='synthetic-old';
+  let reply!:(payload:unknown)=>void,reading!:()=>void;
+  const bodyStarted=new Promise<void>(resolve=>{reading=resolve;});
+  const response=Response.json(ack);
+  t.mock.method(response,'json',()=>{reading();return new Promise(resolve=>{reply=resolve;});});
+  t.mock.method(globalThis,'fetch',async()=>response);
+  const request=sendProductPhoto(client,attempt);await bodyStarted;client.csrfToken='synthetic-new';reply(ack);
+  await assert.rejects(request,(e:unknown)=>e instanceof ApiError&&e.network);
+  assert.equal(client.csrfToken,'synthetic-new');
+});
+
+test('PHOTO-UI-01 selection saves automatically; a failed refresh never repeats the write and a late member response stays isolated', {timeout:60_000}, async()=>{
+  const component=fileURLToPath(new URL('../../apps/portal-web/src/modules/HostedStorePhoto.tsx',import.meta.url));
+  const apiModule=fileURLToPath(new URL('../../apps/portal-web/src/api.ts',import.meta.url));
+  const image=await sharp({create:{width:12,height:8,channels:3,background:'#365b77'}}).png().toBuffer();
+  const base=join(process.cwd(),'.rd');await mkdir(base,{recursive:true});
+  const dir=await mkdtemp(join(base,'photo-autosave-'));
+  let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined,release:(()=>void)|undefined;
+  try{
+    const entry=join(dir,'harness.tsx'),bundle=join(dir,'harness.js');
+    await writeFile(entry,`import {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {HostedStorePhoto} from ${JSON.stringify(component)};
+import {PortalClient} from ${JSON.stringify(apiModule)};
+const client=new PortalClient();client.csrfToken='member-a-session';
+let reads=0,failRead=true,version='7';
+window.photoStates=[];
+function Screen(){
+ const [member,setMember]=useState('member-a'),[tick,setTick]=useState(0);
+ window.switchPhotoMember=(next)=>{client.csrfToken=next+'-'+crypto.randomUUID();setMember(next);};
+ window.photoReads=()=>reads;
+ return <HostedStorePhoto client={client} userId={member} tenantId=${JSON.stringify(tenantId)} instanceId=${JSON.stringify(instanceId)}
+ product={{product_id:${JSON.stringify(productId)},title:'合成商品照片',version}} writable uploadsEnabled locked={false}
+ onState={(dirty,blocking)=>{window.photoStates.push({member,dirty,blocking});}}
+ onSaved={async()=>{reads++;if(failRead){failRead=false;throw new Error('synthetic read failed');}version=String(BigInt(version)+1n);setTick(tick+1);}}/>;
+}
+createRoot(document.getElementById('root')).render(<Screen/>);`);
+    await esbuild.build({entryPoints:[entry],bundle:true,format:'iife',platform:'browser',outfile:bundle,jsx:'automatic',nodePaths:[fileURLToPath(new URL('../../node_modules',import.meta.url))],define:{'process.env.NODE_ENV':'"development"'}});
+    const script=await readFile(bundle,'utf8');
+    const requests:Array<{key:string;expected:string;bytes:string}>=[];
+    let gate=Promise.resolve();
+    browser=await chromium.launch(process.env.CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.CHROMIUM_EXECUTABLE_PATH}:{});
+    const page=await browser.newPage();page.setDefaultTimeout(5_000);
+    const path=`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/products/${productId}/photo`;
+    await page.route('**/*',async route=>{
+      const request=route.request(),url=new URL(request.url());
+      if(url.pathname==='/harness')return route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><div id="root"></div><script src="/harness.js"></script></body></html>'});
+      if(url.pathname==='/harness.js')return route.fulfill({contentType:'text/javascript',body:script});
+      if(url.pathname==='/favicon.ico')return route.fulfill({status:204,body:''});
+      assert.equal(url.pathname,path);assert.equal(request.method(),'POST');
+      const expected=request.headers()['if-match'];requests.push({key:request.headers()['idempotency-key'],expected,bytes:request.postDataBuffer()!.toString('base64')});
+      const waiting=gate;await waiting;
+      const completed=String(BigInt(JSON.parse(expected))+1n);
+      await route.fulfill({contentType:'application/json',body:JSON.stringify({...ack,completed_version:completed,current:{...ack.current,version:completed}})});
+    });
+    await page.goto('http://127.0.0.1/harness');
+    gate=new Promise(resolve=>{release=resolve;});
+    await page.getByLabel('商品照片',{exact:true}).setInputFiles({name:'automatic.png',mimeType:'image/png',buffer:image});
+    await page.waitForFunction(()=>document.body.innerText.includes('正在上傳並儲存商品照片'));
+    assert.equal(await page.getByLabel('商品照片',{exact:true}).isDisabled(),true);
+    assert.equal(await page.getByRole('button',{name:'儲存照片',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>((window as any).photoStates as Array<{blocking:boolean}>).at(-1)?.blocking),true);
+    release!();release=undefined;gate=Promise.resolve();
+    const refresh=page.getByRole('button',{name:'重新讀取已儲存照片',exact:true});await refresh.waitFor({state:'visible'});
+    assert.equal(requests.length,1);assert.equal(requests[0].bytes,image.toString('base64'));
+    assert.equal(await page.getByRole('button',{name:'重試原照片操作',exact:true}).count(),0);
+    await refresh.click();await refresh.waitFor({state:'hidden'});
+    assert.match(await page.getByRole('status').innerText(),/已儲存照片變更/);
+    assert.equal(requests.length,1);assert.equal(await page.evaluate(()=>(window as any).photoReads()),2);
+    assert.deepEqual(await page.evaluate(()=>(window as any).photoStates.at(-1)),{member:'member-a',dirty:false,blocking:false});
+
+    gate=new Promise(resolve=>{release=resolve;});
+    await page.getByLabel('商品照片',{exact:true}).setInputFiles({name:'old-member.png',mimeType:'image/png',buffer:image});
+    await page.waitForFunction(()=>document.body.innerText.includes('正在上傳並儲存商品照片'));
+    await page.evaluate(()=>(window as any).switchPhotoMember('member-b'));
+    await page.waitForFunction(()=>!(document.body.innerText.includes('old-member.png')));
+    const lateResponse=page.waitForResponse(response=>new URL(response.url()).pathname===path);
+    release!();release=undefined;gate=Promise.resolve();
+    await lateResponse;
+    assert.equal(await page.evaluate(()=>(window as any).photoReads()),2);
+    assert.equal(await page.getByRole('button',{name:'重試原照片操作',exact:true}).count(),0);
+    await page.evaluate(()=>(window as any).switchPhotoMember('member-a'));
+    const retry=page.getByRole('button',{name:'重試原照片操作',exact:true});await retry.waitFor({state:'visible'});
+    assert.match(await page.locator('body').innerText(),/old-member.png/);assert.equal(requests.length,2);
+    await retry.click();await retry.waitFor({state:'hidden'});
+    // The retry button disappears on send, before its response or readback.
+    await page.getByRole('status').filter({hasText:'已儲存照片變更'}).waitFor({state:'visible'});
+    assert.equal(requests.length,3);assert.deepEqual(requests[2],requests[1]);
+    assert.equal(await page.evaluate(()=>(window as any).photoReads()),3);
+  }finally{release?.();try{await browser?.close();}finally{await rm(dir,{recursive:true,force:true});}}
+});
 test('PHOTO-STATE-01 unknown remains sticky across later known errors and refuses a new key/version',()=>{
   const unknown=retainedPhotoFailure(attempt,true),later=retainedPhotoFailure(unknown,false);
   assert.equal(later.hadUnknown,true);assert.equal(later.file,file);assert.equal(later.key,attempt.key);assert.equal(later.expected,'7');

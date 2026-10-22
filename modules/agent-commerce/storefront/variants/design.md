@@ -87,3 +87,18 @@ default. Gallery-only group updates retain all 177 routing/version checks and
 skip unrelated catalog validation. The next actual catalog change detaches the
 retained tuples before validating and attaching the current members. This keeps
 legacy photo editing usable after a rollback without relaxing catalog writes.
+
+## Reviewed publication
+
+The saved variants snapshot participates in `publicationChanges`,
+`publicationDirty` and the reviewed digest as `variants_sha256`. The private
+review includes `variants_changed` only with the variants flag ON. Both publish
+commands freeze the same checked dimensions object; a later group/member/default
+change requires a fresh visible review and explicit publish. OFF omits both new
+fields and preserves the original publication review bytes/digest inputs.
+
+Review photos follow the frozen group's `gallery_sku`, once per shared gallery;
+other members' retained photos are not presented as buyer-visible images. The
+review still lists all v1 SKUs; it does not add a variant picker to that list.
+The owner editor keeps publication blocked for local drafts and pending/unknown
+commands, and its saved callback reloads the publication review.

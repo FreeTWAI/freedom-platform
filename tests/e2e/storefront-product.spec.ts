@@ -157,3 +157,71 @@ test('VARIANTS-E2E editor recovers the original command and SKU links work with 
   await noJs.getByRole('link',{name:/^顏色：黑/}).click();await expect(noJs).toHaveURL(store.origin+'/shops/'+store.slug+'/products/'+store.products[1].sku);await expect(noJs.locator('#shop-add-to-cart')).toHaveAttribute('data-sku',store.products[1].sku);await expect(noJs).toHaveTitle('經典 T 恤（黑／L）｜山邊小店｜自由工坊');
  }finally{await owner.close();await buyer.close();await plain.close();await store.close();}
 });
+
+test('reviewed one-click publication keeps variants and categories, blocks editor drafts and refreshes their saved review', async ({browser,e2eAuthPool}) => {
+  const {setupCartFixtureStore} = await import('./storefront-cart-fixture.js');
+  const {randomUUID} = await import('node:crypto');
+  const store = await setupCartFixtureStore(e2eAuthPool,browser,false,false,{storeVariantsEnabled:true,storeCategoriesEnabled:true});
+  const owner = await browser.newContext({baseURL:store.origin}), buyer = await browser.newContext({baseURL:store.origin});
+  let releaseSave = () => {};
+  try {
+    const axis = {key:randomUUID(),name:'顏色',values:[{key:randomUUID(),name:'白'},{key:randomUUID(),name:'黑'}]};
+    await store.sellerPut(store.root+'/product-groups/'+store.products[0].sku, {
+      title:'共用規格商品',description:'合成上架驗收',axes:[axis],default_product_id:store.products[0].product_id,order:0,
+      members:store.products.slice(0,2).map((product,index)=>({product_id:product.product_id,product_version:product.version,value_keys:[axis.values[index].key]})),
+    },'1');
+    await apiLogin(owner,store.origin,store.seller.email);
+    const page = await owner.newPage();
+    await page.goto('/#stores/'+store.tenant+'/'+store.instance);
+    const listing = page.locator('.hosted-store-publication'), publish = listing.getByRole('button',{name:'一鍵上架商品',exact:true});
+    const variants = page.locator('.store-variants-editor'), categories = page.locator('.store-categories-editor');
+    await expect(publish).toBeEnabled();
+    await expect(variants.getByLabel('商品組名稱',{exact:true})).toHaveValue('共用規格商品');
+    const original = await store.sellerGet(store.root+'/publication-review');
+    await variants.getByLabel('商品組名稱',{exact:true}).fill('上架規格商品');
+    await expect(publish).toBeDisabled();
+    const variantReview = page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1'+store.root+'/publication-review');
+    await variants.getByRole('button',{name:'儲存規格',exact:true}).click();
+    const afterVariant = await (await variantReview).json();
+    expect(afterVariant.review_digest).not.toBe(original.review_digest);
+    expect(afterVariant.variants_changed).toBe(true);
+    await expect(publish).toBeEnabled();
+    await categories.getByLabel('分類名稱',{exact:true}).fill('精選規格');
+    await expect(publish).toBeDisabled();
+    await categories.getByRole('button',{name:'新增分類',exact:true}).click();
+    await expect(categories.getByRole('status')).toContainText('已新增分類');
+    await expect(categories.getByRole('checkbox',{name:'上架規格商品 · 2 個規格',exact:true})).toBeEnabled();
+    await categories.getByRole('checkbox',{name:'上架規格商品 · 2 個規格',exact:true}).check();
+    await expect(publish).toBeDisabled();
+    let started!:()=>void;
+    const saving = new Promise<void>(resolve=>{started=resolve;}), gate = new Promise<void>(resolve=>{releaseSave=resolve;});
+    await page.route('**/api/v1'+store.root+'/categories/*/groups', async route=>{started();await gate;await route.continue();});
+    const categoryReview = page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1'+store.root+'/publication-review');
+    await categories.getByRole('button',{name:'儲存分類商品',exact:true}).click();
+    await saving;
+    await expect(publish).toBeDisabled();
+    releaseSave();
+    const afterCategory = await (await categoryReview).json();
+    expect(afterCategory.review_digest).not.toBe(afterVariant.review_digest);
+    expect(afterCategory.categories_changed).toBe(true);
+    await expect(publish).toBeEnabled();
+    await listing.getByText('查看本次上架內容',{exact:true}).click();
+    for (const label of ['規格','商品分類']) await expect(listing.locator('dl div').filter({hasText:label})).toContainText('有尚未發布的變更');
+    const publication = page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1'+store.root+'/publish-reviewed');
+    await publish.click();
+    const published = await publication;
+    expect(published.status()).toBe(200);
+    expect(published.request().postDataJSON()).toEqual({review_digest:afterCategory.review_digest});
+    await expect(listing.getByRole('button',{name:'商品已全部上架',exact:true})).toBeDisabled();
+    const publicPage = await buyer.newPage();
+    await publicPage.goto('/shops/'+store.slug);
+    const nav = publicPage.getByRole('navigation',{name:'商品分類',exact:true});
+    await expect(nav.getByRole('link',{name:'精選規格',exact:true})).toBeVisible();
+    await nav.getByRole('link',{name:'精選規格',exact:true}).click();
+    await publicPage.getByRole('link',{name:'查看商品：上架規格商品',exact:true}).click();
+    await expect(publicPage.getByRole('link',{name:/^顏色：白/})).toBeVisible();
+    await publicPage.getByRole('link',{name:/^顏色：黑/}).click();
+    await expect(publicPage).toHaveURL(store.origin+'/shops/'+store.slug+'/products/'+store.products[1].sku);
+    await expect(publicPage.locator('#shop-variant-status')).toContainText('黑');
+  } finally {releaseSave();await owner.close();await buyer.close();await store.close();}
+});

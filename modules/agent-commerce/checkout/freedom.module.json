@@ -28,7 +28,8 @@
     "tests/runtime/member-checkout-orders.test.ts",
     "modules/agent-commerce/checkout/order-notifications.ts",
     "modules/agent-commerce/checkout/notification-action.ts",
-    "tests/runtime/commerce-order-notifications.test.ts"
+    "tests/runtime/commerce-order-notifications.test.ts",
+    "modules/member-communications/freedom.module.json"
   ],
   "public_exports": [
     "modules/agent-commerce/checkout/index.ts"

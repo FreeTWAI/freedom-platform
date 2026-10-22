@@ -107,6 +107,25 @@ OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既�
 
 `FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF。依 appearance／policies 的 site 慣例，`GET /api/v1/site` **永遠輸出** `store_gallery_enabled`；OFF 時為 false，這是 OFF site JSON 唯一新增欄位。OFF 不查五張 gallery 表、不掛新照片／namespace 路由，原單張編輯器、店面／商品／購物車／結帳／訂單／About／政策 HTML、公開 stores JSON、既有 media JSON 與單張照片路徑保持原行為與 bytes。新的多段 media 路徑與未知尾段保留 host 原 SPA fallback；`shops.css` 與既有 storefront script entry 不變。關閉旗標不刪圖組，舊 binary 仍可讀寫主照片。舊版移除主照片後留下的 secondary rows 只顯示保留通知與「設為主照片／移除」，GET 或發布不自動修復。
 
+### Reviewed publication integration (local source candidate)
+
+`GET …/publication-review` and `POST …/publish-reviewed` cover all five optional
+dimensions: appearance, policies, gallery, variants and categories. The strict
+`freedom.hosted-store-publication/v1` response adds optional boolean
+`variants_changed` and `categories_changed`; the digest includes the matching
+`variants_sha256` and `categories_sha256` only with those flags ON. All flags OFF
+retain #943's exact field set and digest encoding. The pinned storefront/v1
+contract is unchanged.
+
+The locked digest check and both publication routes use the same saved snapshots
+and insert the existing immutable sidecars. A category/variant edit after review
+requires a new visible review and another explicit click; unchanged content does
+not create another revision. Categories use the same variants-enabled catalog as
+preview. Review photos show only each group's selected shared `gallery_sku`;
+nonselected members' retained photos are omitted. The owner editors block publish
+for unsaved/pending commands and reload the review after saving. This integration
+changes no migration, flag default, checkout or activation requirement.
+
 ### 2.3 開放結帳的條件（C2）
 
 店家設定 `checkout_enabled` 只有在下列都成立時才能打開，任何一項之後失效，新的 checkout 立即停止（已成立的訂單不受影響）：

@@ -355,8 +355,14 @@ The manager, private preview and publish share the effective catalog and categor
 snapshot. Publication freezes covered SKUs, so later flag changes do not consult
 today's draft to interpret a published category. Missing old sidecars yield an
 empty category list; malformed or digest/coverage-invalid rows fail closed.
-Category rename, order and membership participate in dirty/dedupe; timestamps and
-row versions do not. A normalized no-op changes no profile/category version.
+Category rename, order and membership participate in dirty/dedupe and the reviewed
+publication digest (`categories_sha256`); timestamps and row versions do not.
+`publication-review` includes `categories_changed` only with categories ON. Both
+plain and reviewed publish freeze the same category snapshot after the locked
+digest check, using the current variants option to resolve group membership.
+A co-owner edit after review returns 409 without publication or receipt writes.
+The 商品分類 editor blocks publication for unsaved or pending commands and
+reloads the review after saving. See [category design](categories/design.md). A normalized no-op changes no profile/category version.
 
 Buyers follow ordinary no-JS links at `/shops/:slug?category=<uuid>#products`.
 Selected categories preserve membership order, show each effective frozen group

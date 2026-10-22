@@ -245,7 +245,7 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
     const publishBtnB = pageB.getByRole('button', {name: '發布展示頁', exact: true});
     await expect(publishBtnB).toBeEnabled();
     await publishBtnB.click();
-    await expect(pageB.locator('.hosted-store > [role="status"]')).toContainText('已發布展示頁');
+    await expect(pageB.locator('.hosted-store > [role="status"]')).toContainText('已上架 1 件商品，公開頁已更新。');
 
     const pubResB = await pageB.request.get(`/api/v1/public/stores/shop-b-${suffix}`);
     expect(pubResB.status()).toBe(200);
