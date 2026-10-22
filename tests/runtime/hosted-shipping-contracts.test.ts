@@ -9,8 +9,8 @@ import {SERVICE_KEYS,DELIVERY_METHODS} from '../../modules/agent-commerce/fulfil
 test('shipping literals and fixed delivery labels match the rules in preference order',()=>{
   assert.deepEqual(wire.LogisticsServiceKeySchema.options,SERVICE_KEYS);
   assert.deepEqual(wire.LogisticsDeliveryMethodSchema.options,DELIVERY_METHODS);
-  assert.deepEqual(wire.DeliveryMethodSchema.options,[...DELIVERY_METHODS,'meetup']);
-  assert.deepEqual(Object.keys(wire.DELIVERY_METHOD_LABELS),[...DELIVERY_METHODS,'meetup']);
+  assert.deepEqual(wire.DeliveryMethodSchema.options,[...DELIVERY_METHODS,'meetup','self_ship']);
+  assert.deepEqual(Object.keys(wire.DELIVERY_METHOD_LABELS),[...DELIVERY_METHODS,'meetup','self_ship']);
   assert.equal(wire.DELIVERY_METHOD_LABELS.meetup,'面交取貨');
 });
 test('shipping bundle goldens agree with strict Zod shapes and JSON Schema',()=>{
@@ -60,10 +60,27 @@ test('shipping contracts enforce bounds, money granularity, paths and liability 
   assert(wire.ShippingProfileInputSchema.safeParse(meetup('  面交  ')).success);
   assert.equal(wire.MeetupDeliveryOptionSchema.parse({method:'meetup',note:'  面交  '}).note,'面交');
   for(const note of ['', ' ', 'a'.repeat(201), '😀'.repeat(201), '有\t字元', '有\u0000字元', '\ud800'])assert(!wire.ShippingProfileInputSchema.safeParse(meetup(note)).success,JSON.stringify(note));
-  assert(!wire.ShippingProfileInputSchema.safeParse({...meetup('面交'),delivery_options:[...Array(6)].map(()=>({method:'home',fee_per_parcel_minor:100,free_over_minor:null,outlying:{kind:'excluded'}}))}).success);
+  assert(!wire.ShippingProfileInputSchema.safeParse({...meetup('面交'),delivery_options:[...Array(7)].map(()=>({method:'home',fee_per_parcel_minor:100,free_over_minor:null,outlying:{kind:'excluded'}}))}).success);
   assert(wire.CheckoutDeliveryInputSchema.safeParse({method:'cvs:FAMIC2C',name:'合成',mobile:'0912345678'}).success);
   assert(!wire.CheckoutDeliveryInputSchema.safeParse({method:'cvs:FAMIC2C',name:'合成',mobile:'0912345678',store_id:'123'}).success);
   assert(wire.CartDeliveryInputSchema.safeParse({method:'meetup'}).success);
   assert(!wire.CartDeliveryInputSchema.safeParse({method:'meetup',note:'面交'}).success);
   for(const fee of [-100,1,101,1000100])assert(!wire.DropShipFeeSchema.safeParse({service_key:SERVICE_KEYS[0],fee_per_parcel_minor:fee}).success);
+});
+
+
+test('manual profile and recipient vectors agree with generated JSON Schemas without an ECPay account',()=>{
+  const bundle=JSON.parse(readFileSync('contracts/guild-launchpad/v1/hosted-shipping.schema.json','utf8'));
+  const profile={schema:'freedom.shipping-profile/v1',working_days:[1,2,3,4,5],services:[],delivery_options:[{method:'self_ship',fee_per_order_minor:0,handling_days:2,note:null}],drop_ship:null};
+  const delivery={method:'self_ship',name:'合成收件人',mobile:'0912345678',postal_code:'100',address:'合成路1號'};
+  const cases=[{name:'shipping-profile-input',value:profile,valid:true},{name:'checkout-delivery-input',value:delivery,valid:true},{name:'cart-delivery-input',value:{method:'self_ship',postal_code:'100'},valid:true},
+    ...[1,-100,1_000_100].map(fee=>({name:'shipping-profile-input',value:{...profile,delivery_options:[{...profile.delivery_options[0],fee_per_order_minor:fee}]},valid:false})),
+    {name:'checkout-delivery-input',value:{...delivery,store_id:'forbidden'},valid:false}];
+  for(const c of cases){const schema=c.name==='shipping-profile-input'?wire.ShippingProfileInputSchema:c.name==='checkout-delivery-input'?wire.CheckoutDeliveryInputSchema:wire.CartDeliveryInputSchema;assert.equal(schema.safeParse(c.value).success,c.valid);}
+  const result=spawnSync('python3',['-c',`import json,sys
+from jsonschema import Draft202012Validator
+x=json.load(sys.stdin)
+for c in x['cases']:
+ assert Draft202012Validator(x['bundle']['$defs'][c['name']]).is_valid(c['value']) == c['valid'], c['name']`],{input:JSON.stringify({bundle,cases}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
 });

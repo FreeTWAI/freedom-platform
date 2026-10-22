@@ -9,6 +9,8 @@ import {currentShippingProfile,type ShippingDocument} from '../settings/profile.
 import type {DeliveryMethod} from '../rules/index.js';
 import {parseCartDelivery,parseCheckoutDelivery} from './delivery-input.js';
 import {frozenFromPlan,optionResults,planFor,quoteLines,quotePlan,sellerProfile,unavailableFromPlan,unsupported,versionsBySku} from './ecpay.js';
+import {selfShipQuote} from './self-ship.js';
+import {validateHomeRecipient} from '../rules/recipient.js';
 import {meetupLines,meetupQuote} from './meetup.js';
 
 const cartResult=z.object({delivery_options:CartQuoteResponseSchema.shape.delivery_options,shipping:CartQuoteResponseSchema.shape.shipping}).strict();
@@ -26,17 +28,17 @@ function unavailable(lines:readonly {sku:string;reason:'fulfilment_not_agreed'|'
   throw new CheckoutDeliveryProblem(422,'shipping_unavailable','部分商品無法用這個方式配送。',undefined,lines);
 }
 function logisticsOptions(options:ShippingDocument['delivery_options']):LogisticsOption[] {
-  return options.filter((option):option is LogisticsOption=>option.method!=='meetup');
+  return options.filter((option):option is LogisticsOption=>option.method!=='meetup'&&option.method!=='self_ship');
 }
 function meetupOption(options:ShippingDocument['delivery_options']):MeetupOption|undefined {
   return options.find((option):option is MeetupOption=>option.method==='meetup');
 }
-async function loadSeller(q:PoolClient,store:StoreProfile,environment:ShippingEnvironment) {
+async function loadSeller(q:PoolClient,store:StoreProfile,environment:ShippingEnvironment,selfShipEnabled:boolean) {
   const current=await currentShippingProfile(q,store.instance_id);
   if(!current||current.document.delivery_options.length===0)return null;
   const availability=await logisticsAvailability(q,{instanceId:store.instance_id,environment});
   const active=new Set(availability.logistics.filter(row=>row.state==='active').map(row=>row.service_key));
-  return {version:current.version,document:current.document,services:current.document.services.filter(service=>active.has(service.service_key))};
+  return {version:current.version,document:{...current.document,delivery_options:current.document.delivery_options.filter(option=>option.method!=='self_ship'||selfShipEnabled)},services:current.document.services.filter(service=>active.has(service.service_key))};
 }
 function shippingView(raw:unknown,lines:readonly ShippingQuoteLine[]) {
   return validateShippingQuote(raw,lines);
@@ -46,9 +48,9 @@ function cartOption(method:ShippingMethodRef,available:boolean,total:number|null
 }
 
 /** SQL-local hosted shipping quotes. Supplied lines stay `not_agreed` until agreements exist. */
-export function createShippingQuotePort({environment}:{environment:ShippingEnvironment}):ShippingQuotePort {
+export function createShippingQuotePort({environment,selfShipEnabled=false}:{environment:ShippingEnvironment;selfShipEnabled?:boolean}):ShippingQuotePort {
   async function prepared(q:PoolClient,store:StoreProfile,input:ShippingQuoteInput) {
-    const seller=await loadSeller(q,store,environment);
+    const seller=await loadSeller(q,store,environment,selfShipEnabled);
     if(!seller)return null;
     const attributes=await currentItemShippingAttributes(q,input.lines.map(line=>line.item_id));
     const lines=quoteLines(input.lines,attributes);
@@ -57,6 +59,13 @@ export function createShippingQuotePort({environment}:{environment:ShippingEnvir
     return {seller,attributes,lines,profile,options,versions:versionsBySku(input.lines,attributes)};
   }
   function build(loaded:NonNullable<Awaited<ReturnType<typeof prepared>>>,input:ShippingQuoteInput,method:ShippingMethodRef,outlying:boolean) {
+    if(method==='self_ship') {
+      const option=loaded.seller.document.delivery_options.find(option=>option.method==='self_ship');
+      if(!option)return {kind:'unavailable' as const,lines:unsupported(input.lines)};
+      const result=selfShipQuote({lines:input.lines,sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,fee:option.fee_per_order_minor,handlingDays:option.handling_days,note:option.note,outlying});
+      if(result.kind==='unavailable')return result;
+      return {kind:'quoted' as const,shipping:shippingView({delivery_profile_version:loaded.seller.version,destination_state:'complete',groups:[result.group]},input.lines)};
+    }
     if(method==='meetup') {
       const note=meetupOption(loaded.seller.document.delivery_options)?.note;
       if(!note)return {kind:'unavailable' as const,lines:unsupported(input.lines)};
@@ -74,6 +83,10 @@ export function createShippingQuotePort({environment}:{environment:ShippingEnvir
   function deliveryOptions(loaded:NonNullable<Awaited<ReturnType<typeof prepared>>>,input:ShippingQuoteInput) {
     const planned=optionResults(planFor({sellerShopId:loaded.profile.shop_id,profile:loaded.profile,options:loaded.options,lines:loaded.lines,merchandiseNetMinor:input.merchandise_net_minor,outlying:false}));
     return loaded.seller.document.delivery_options.map(option=>{
+      if(option.method==='self_ship') {
+        const result=selfShipQuote({lines:input.lines,sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,fee:option.fee_per_order_minor,handlingDays:option.handling_days,note:option.note,outlying:false});
+        return cartOption('self_ship',result.kind!=='unavailable',option.fee_per_order_minor,1,null,{kind:'excluded'},option.note,result.kind==='unavailable'?result.lines:[]);
+      }
       if(option.method==='meetup') {
         const meetup=meetupQuote({lines:meetupLines(input.lines),sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,note:option.note});
         const lines=meetup.kind==='unavailable'?meetup.lines:[];
@@ -89,6 +102,15 @@ export function createShippingQuotePort({environment}:{environment:ShippingEnvir
     });
   }
   return {
+    normalizeDelivery(raw) {
+      if(raw.method!=='self_ship')return raw;
+      const parsed=parseCheckoutDelivery(raw);
+      if(!parsed.ok)invalidDelivery(parsed.fields);
+      const recipient=validateHomeRecipient(raw);
+      if(!recipient.ok)invalidDelivery(recipient.errors.map(error=>({path:`delivery.${error.field}`,code:error.code})));
+      const {name,mobile,postal_code,address}=recipient.recipient;
+      return {method:'self_ship',name,mobile,postal_code,address};
+    },
     async quote(q,store,input) {
       const loaded=await prepared(q,store,input);
       if(!loaded)notConfigured();
