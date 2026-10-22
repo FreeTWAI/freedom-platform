@@ -362,7 +362,8 @@ plain and reviewed publish freeze the same category snapshot after the locked
 digest check, using the current variants option to resolve group membership.
 A co-owner edit after review returns 409 without publication or receipt writes.
 The 商品分類 editor blocks publication for unsaved or pending commands and
-reloads the review after saving. See [category design](categories/design.md). A normalized no-op changes no profile/category version.
+reloads the review after saving. A normalized no-op changes no profile/category version.
+See [category design](categories/design.md).
 
 Buyers follow ordinary no-JS links at `/shops/:slug?category=<uuid>#products`.
 Selected categories preserve membership order, show each effective frozen group

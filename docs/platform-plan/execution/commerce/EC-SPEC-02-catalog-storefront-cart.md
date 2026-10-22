@@ -107,24 +107,7 @@ OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既�
 
 `FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF。依 appearance／policies 的 site 慣例，`GET /api/v1/site` **永遠輸出** `store_gallery_enabled`；OFF 時為 false，這是 OFF site JSON 唯一新增欄位。OFF 不查五張 gallery 表、不掛新照片／namespace 路由，原單張編輯器、店面／商品／購物車／結帳／訂單／About／政策 HTML、公開 stores JSON、既有 media JSON 與單張照片路徑保持原行為與 bytes。新的多段 media 路徑與未知尾段保留 host 原 SPA fallback；`shops.css` 與既有 storefront script entry 不變。關閉旗標不刪圖組，舊 binary 仍可讀寫主照片。舊版移除主照片後留下的 secondary rows 只顯示保留通知與「設為主照片／移除」，GET 或發布不自動修復。
 
-### Reviewed publication integration (local source candidate)
-
-`GET …/publication-review` and `POST …/publish-reviewed` cover all five optional
-dimensions: appearance, policies, gallery, variants and categories. The strict
-`freedom.hosted-store-publication/v1` response adds optional boolean
-`variants_changed` and `categories_changed`; the digest includes the matching
-`variants_sha256` and `categories_sha256` only with those flags ON. All flags OFF
-retain #943's exact field set and digest encoding. The pinned storefront/v1
-contract is unchanged.
-
-The locked digest check and both publication routes use the same saved snapshots
-and insert the existing immutable sidecars. A category/variant edit after review
-requires a new visible review and another explicit click; unchanged content does
-not create another revision. Categories use the same variants-enabled catalog as
-preview. Review photos show only each group's selected shared `gallery_sku`;
-nonselected members' retained photos are omitted. The owner editors block publish
-for unsaved/pending commands and reload the review after saving. This integration
-changes no migration, flag default, checkout or activation requirement.
+**2026-10-22 上架審閱整合（#943；無 migration，未部署）**：`GET …/publication-review` 與 `POST …/publish-reviewed` 納入外觀、賣方資訊與商店政策、商品圖組、規格及商品分類五項選用維度。嚴格的 `freedom.hosted-store-publication/v1` 回應僅在各自旗標 ON 時加入選用布林欄位 `variants_changed`／`categories_changed`，摘要也僅在對應旗標 ON 時加入 `variants_sha256`／`categories_sha256`；全部旗標 OFF 時，#943 的欄位、摘要與編碼保持不變，固定的 `storefront/v1` 契約亦不變。既有 instance／community／profile 交易鎖內的摘要核對與 `/publish`、`/publish-reviewed` 兩條發布路徑共用同一份已儲存快照，並凍結既有不可變 sidecars；分類依與預覽相同的規格開關解析商品組。審閱後任一內容變更都須重新顯示審閱並由店主再次點擊；已發布內容未變時不新增 revision。審閱照片依各商品組選定的共用 `gallery_sku` 只列一次，不列買家頁不會使用的其他成員保留照片。店主編輯器在未儲存或命令待確認時阻擋發布，儲存後重新載入審閱。本整合不新增 migration，也不改旗標預設值、結帳或啟用條件。
 
 ### 2.3 開放結帳的條件（C2）
 

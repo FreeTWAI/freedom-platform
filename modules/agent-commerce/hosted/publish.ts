@@ -134,7 +134,6 @@ export async function publishReviewedStore(pool: Pool, actor: Actor, tenantId: s
 async function changePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish: boolean, options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions, variantsOptions: VariantsOptions, categoriesOptions: CategoriesOptions, review?: ReviewedPublicationInput) {
   const operation = unpublish ? 'storefront.unpublish' : review ? 'storefront.publish-reviewed' : 'storefront.publish';
   return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, review ?? {}, key, expected, async (q, context, inst) => {
-    if (options.enabled === true || policiesOptions.enabled === true || galleryOptions.enabled === true || variantsOptions.enabled === true || categoriesOptions.enabled === true) await lockAppearanceRead(q, tenantId, instanceId);
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
     if (unpublish) {
       if (!p.current_publication_id) return storeView(q, context, inst);
