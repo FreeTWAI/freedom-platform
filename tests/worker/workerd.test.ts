@@ -125,8 +125,13 @@ test('workerd: strict host, JSON 404 for machine paths, assets with security hea
 });
 
 async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit) => Promise<Response>) {
-  const security = await fetch('/');
-  const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
+  const security = await fetch('/guilds');
+  const homePolicy = (await fetch('/')).headers.get('content-security-policy')!;
+  const basePolicy = security.headers.get('content-security-policy')!;
+  const frameDirectives = (policy: string) => policy.split(';').map(part => part.trim()).filter(part => part.startsWith('frame-src '));
+  assert.deepEqual(frameDirectives(basePolicy), []);
+  assert.deepEqual(frameDirectives(homePolicy), ['frame-src https://freetwai.evitina.tw']);
+  const securityHeaders = ['x-content-type-options', 'referrer-policy'];
   assert.equal(security.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(security.headers.get('referrer-policy'), 'no-referrer');
   assert.match(security.headers.get('content-security-policy') ?? '', /default-src 'self'/);
@@ -136,12 +141,14 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
       assert.equal(response.status, 200, path);
       assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable', path);
       for (const name of securityHeaders) assert.equal(response.headers.get(name), security.headers.get(name), `${path}: ${name}`);
+      assert.equal(response.headers.get('content-security-policy'), path === '/' ? homePolicy : basePolicy, `${path}: content-security-policy`);
       if (method === 'HEAD') assert.equal(await response.text(), '');
     }
     for (const path of ['/', '/guilds', '/assets/skill-social.js', '/outside-AbCdEf12.js', '/assets/short-AbCd.js', '/assets/page-AbCdEf12.html', '/assets/x-AbCdEf12.js', '/api/unknown', '/api/v1/health']) {
       const response = await fetch(path, { method });
       assert.equal(response.headers.get('cache-control'), 'no-store', path);
       for (const name of securityHeaders) assert.equal(response.headers.get(name), security.headers.get(name), `${path}: ${name}`);
+      assert.equal(response.headers.get('content-security-policy'), path === '/' ? homePolicy : basePolicy, `${path}: content-security-policy`);
       if (path === '/assets/x-AbCdEf12.js' && method === 'GET') assert.equal(await response.text(), SHELL, 'missing ASSETS 404 must fall through to the uncached shell');
     }
   }
