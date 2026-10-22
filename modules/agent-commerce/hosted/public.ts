@@ -1,3 +1,8 @@
+import {publicationCategories,type CategoriesOptions} from '../storefront/categories/model.js';
+import {publicationVariants,type VariantsOptions} from '../storefront/variants/model.js';
+import {publicationGallery,type GalleryOptions} from '../storefront/gallery/model.js';
+import {renderPublicationLegal,type PoliciesOptions} from '../storefront/policies/model.js';
+import {publicationAppearance,renderAppearance,type AppearanceOptions} from './appearance.js';
 import type { Pool, PoolClient } from 'pg';
 import { isolatedTransaction, bindTenantContext } from '../../../packages/resource-scopes/tenant-transaction.js';
 import { publicProjection } from './publish.js';
@@ -7,15 +12,15 @@ import { publicationPhotos } from './photo-projection.js';
 import { projectPublicStoreMedia } from './media.js';
 
 /** The only unbound reader. It reads immutable projection bytes, then proves current RLS liveness. */
-export async function readPublicStorePage(pool: Pool, rawSlug: string) {
+export async function readPublicStorePage(pool: Pool, rawSlug: string, options:AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
   return isolatedTransaction(pool, async q => {
     await q.query('SET TRANSACTION READ ONLY');
-    return resolvePublicStorePage(q,rawSlug);
+    return resolvePublicStorePage(q,rawSlug,options,policiesOptions,galleryOptions,variantsOptions,categoriesOptions);
   });
 }
 
 /** Shared liveness proof, in the command's own transaction. */
-export async function resolvePublicStorePage(q:PoolClient,rawSlug:string) {
+export async function resolvePublicStorePage(q:PoolClient,rawSlug:string,options:AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
     const slug = rawSlug.toLowerCase();
     if (!SLUG_PATTERN.test(slug)) return null;
     const row = (await q.query<{ tenant_id: string; instance_id: string; storefront_shop_id: string; supply_shop_id: string; publication_id: string; media_sha256:string; projection: unknown; template_id: unknown }>(`SELECT p.tenant_id,p.instance_id,p.storefront_shop_id,p.supply_shop_id,pub.publication_id,pub.media_sha256,pub.projection,pub.template_id
@@ -41,7 +46,13 @@ export async function resolvePublicStorePage(q:PoolClient,rawSlug:string) {
     const projection = publicProjection(row.projection);
     const {photos,snapshot} = await publicationPhotos(q,row.publication_id,row.tenant_id,row.instance_id);
     const media = projectPublicStoreMedia(projection,snapshot.manifest,row.media_sha256);
-    return { projection, template_id:StoreTemplateSchema.parse(row.template_id), media,
+    const appearance=options.enabled===true?renderAppearance((await publicationAppearance(q,row.publication_id,row.tenant_id,row.instance_id)).document,
+      {slug:projection.slug,revision:projection.revision},options.mediaInstalled===true):undefined;
+    const policies=policiesOptions.enabled===true?await renderPublicationLegal(q,row.publication_id,row.tenant_id,row.instance_id):undefined;
+    const gallery=galleryOptions.enabled===true?await publicationGallery(q,row.publication_id,row.tenant_id,row.instance_id,projection.products,photos):undefined;
+    const variants=variantsOptions.enabled===true?await publicationVariants(q,row.publication_id,row.tenant_id,row.instance_id,projection.products):undefined;
+    const categories=categoriesOptions.enabled===true?await publicationCategories(q,row.publication_id,row.tenant_id,row.instance_id,projection.products):undefined;
+    return { projection, appearance, policies, gallery, variants,categories,storefrontShopId:row.storefront_shop_id, template_id:StoreTemplateSchema.parse(row.template_id), media,
       publicationId:row.publication_id,tenantId:row.tenant_id,instanceId:row.instance_id,scopeId:scope.scope_id,
       mediaSha256:snapshot.sha256, photos };
 }

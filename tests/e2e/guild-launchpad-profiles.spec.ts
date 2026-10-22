@@ -84,6 +84,7 @@ test('guild navigation separates working, resources and management without dupli
     if (profile.key === commerce || profile.key === supplier) {
       await expect(primary(page).getByRole('heading', {level: 2})).toHaveText(profile.title);
       await expect(primary(page).getByRole('button', {name: profile.key === supplier ? '開始供貨設定' : '建立我的商店', exact: true})).toBeEnabled();
+      await expect(primary(page).getByRole('button')).toHaveCount(1);
       await expect(page.locator('.my-work')).toBeHidden();
     } else {
       await expect(primary(page)).toHaveCount(0);
@@ -101,6 +102,14 @@ test('guild navigation separates working, resources and management without dupli
       WHERE community_id=$1 AND user_id=$2 AND guild_key=$3`, [DEMO_COMMUNITY, member.id, key]);
     await open(page, key);
     const current = key === talent ? page.locator('.guild-launchpad-content > section:visible') : primary(page);
+    // Under the cohort rule, supplier and commerce guild interns may start their own supply and retail setup.
+    if (key === supplier || key === commerce) {
+      await expect(current.getByRole('heading', {level: 2})).toHaveText(key === supplier ? '商品與供貨' : '線上商店');
+      await expect(current.getByRole('button', {name: key === supplier ? '開始供貨設定' : '建立我的商店', exact: true})).toBeEnabled();
+      await expect(current.getByRole('button')).toHaveCount(1);
+      await expect(current).not.toContainText('你是這個公會的實習成員');
+      continue;
+    }
     await expect(current).toContainText('你是這個公會的實習成員');
     await expect(current.getByRole('button')).toHaveCount(0);
   }
@@ -111,7 +120,7 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   const member = await person(e2eAuthPool);
   await login(page, member.email);
   await page.goto('/#stores');
-  await expect(page.getByRole('link', {name: '前往商品品質與供應公會設定供貨', exact: true})).toHaveAttribute('href', `#guilds/${supplier}`);
+  await expect(page.getByRole('link', {name: '開始供貨設定', exact: true})).toHaveAttribute('href', '#stores/supply/setup');
   await open(page, supplier);
   await expect(primary(page)).toContainText('已有商店可直接沿用');
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
@@ -151,6 +160,49 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   expect(await (await page.request.get('/api/v1/me/stores?pagination=cursor')).json()).toEqual(before);
   await open(page, commerce);
   await expect(primary(page).getByRole('button', {name: '進入我的商店', exact: true})).toBeVisible();
+});
+
+test('a late cooperation summary keeps the supply terms button under the pointer', async ({page, e2eAuthPool}) => {
+  const member = await person(e2eAuthPool);
+  await login(page, member.email);
+  const store = await launchStore(page, '延遲供貨摘要工作室');
+  await post(page, store.root + '/supply-profile', {name: '延遲供貨摘要商品庫', currency: 'TWD'}, 201);
+  await post(page, store.root + '/supply-products', {title: '摘要載入測試商品', cost_minor: 35000, stock: 10}, 201);
+  let release!: () => void, entered!: () => void, completed!: () => void;
+  const held = new Promise<void>(resolve => {release = resolve;});
+  const requested = new Promise<void>(resolve => {entered = resolve;});
+  const finished = new Promise<void>(resolve => {completed = resolve;});
+  let intercepted = false;
+  await page.route('**/api/v1' + store.root + '/supply-requests', async route => {
+    intercepted = true;
+    try {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      entered();
+      await held;
+      await route.fulfill({response});
+    } finally {completed();}
+  });
+  try {
+    await page.evaluate(hash => {window.location.hash = hash;}, store.hash + '/supply');
+    await requested;
+    const product = page.locator('.hosted-store-product').filter({hasText: '摘要載入測試商品'});
+    const terms = product.getByRole('button', {name: '供貨條件', exact: true});
+    await expect(terms).toBeEnabled();
+    // Hold the pointer still while the delayed summary finishes, as in a
+    // real click whose down/up events straddle the response.
+    await terms.hover();
+    await page.mouse.down();
+    release();
+    await expect(product.getByText('供貨版本：尚未公開', {exact: true})).toBeVisible();
+    await page.mouse.up();
+    await expect(page.getByRole('form', {name: '摘要載入測試商品供貨條件', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '公開供貨版本', exact: true})).toBeVisible();
+  } finally {
+    release();
+    await page.mouse.up();
+    if (intercepted) await finished;
+  }
 });
 
 test('supplier-only member publishes supply without a slug, retail page or commerce membership', async ({page, e2eAuthPool}) => {

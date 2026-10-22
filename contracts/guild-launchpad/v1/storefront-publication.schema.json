@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freetwai.com/contracts/guild-launchpad/v1/storefront-publication",
+  "description": "Explicit publication of reviewed, saved storefront content. The original storefront/v1 contract and capabilities remain unchanged.",
+  "$defs": {
+    "publication-review": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-publication/v1"
+        },
+        "store_version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "preview": {
+          "type": "object",
+          "properties": {
+            "projection": {
+              "type": "object",
+              "properties": {
+                "slug": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9-]{1,38}[a-zA-Z0-9]$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "brand": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 2000,
+                  "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                },
+                "currency": {
+                  "type": "string",
+                  "enum": [
+                    "TWD",
+                    "USD"
+                  ]
+                },
+                "products": {
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sku": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 2000,
+                        "pattern": "^[^\\u0000-\\u0009\\u000b-\\u001f\\u007f]*$"
+                      },
+                      "price_minor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000000
+                      }
+                    },
+                    "required": [
+                      "sku",
+                      "title",
+                      "description",
+                      "price_minor"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "revision": {
+                  "type": "string",
+                  "maxLength": 19,
+                  "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                "published_at": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+                },
+                "transaction_state": {
+                  "type": "string",
+                  "const": "not_enabled"
+                }
+              },
+              "required": [
+                "slug",
+                "name",
+                "brand",
+                "description",
+                "currency",
+                "products",
+                "revision",
+                "published_at",
+                "transaction_state"
+              ],
+              "additionalProperties": false
+            },
+            "dirty": {
+              "type": "boolean"
+            },
+            "current_revision": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 19,
+                  "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "projection",
+            "dirty",
+            "current_revision"
+          ],
+          "additionalProperties": false
+        },
+        "template_id": {
+          "type": "string",
+          "enum": [
+            "catalog-grid-v1",
+            "catalog-list-v1"
+          ]
+        },
+        "appearance_changed": {
+          "type": "boolean"
+        },
+        "policies_changed": {
+          "type": "boolean"
+        },
+        "gallery_changed": {
+          "type": "boolean"
+        },
+        "variants_changed": {
+          "type": "boolean"
+        },
+        "categories_changed": {
+          "type": "boolean"
+        },
+        "photo_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1600
+        },
+        "photos": {
+          "maxItems": 1600,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sku": {
+                "type": "string"
+              },
+              "photo": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "content_type": {
+                            "type": "string",
+                            "const": "image/webp"
+                          },
+                          "byte_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1048576
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "read_path": {
+                            "type": "string",
+                            "maxLength": 220,
+                            "pattern": "^\\/api\\/v1\\/tenants\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/storefronts\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/products\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/photo\\/([1-9][0-9]{0,18})$(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "content_type",
+                          "byte_size",
+                          "width",
+                          "height",
+                          "read_path"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "content_type": {
+                            "type": "string",
+                            "const": "image/webp"
+                          },
+                          "byte_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1048576
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1920
+                          },
+                          "read_path": {
+                            "type": "string",
+                            "maxLength": 230,
+                            "pattern": "^\\/api\\/v1\\/tenants\\/[0-9a-f-]{36}\\/storefronts\\/[0-9a-f-]{36}\\/distribution-photos\\/[0-9a-f-]{36}\\/photo\\/[1-9][0-9]{0,18}$(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "content_type",
+                          "byte_size",
+                          "width",
+                          "height",
+                          "read_path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "content_type": {
+                        "type": "string",
+                        "const": "image/webp"
+                      },
+                      "byte_size": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1048576
+                      },
+                      "width": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1920
+                      },
+                      "height": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1920
+                      },
+                      "photo_key": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "main"
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8
+                      },
+                      "alt_text": {
+                        "type": "string"
+                      },
+                      "read_path": {
+                        "type": "string",
+                        "maxLength": 310,
+                        "pattern": "^\\/api\\/v1\\/tenants\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/storefronts\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/products\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/gallery\\/photos\\/(main|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/([1-9][0-9]{0,18})$(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "content_type",
+                      "byte_size",
+                      "width",
+                      "height",
+                      "photo_key",
+                      "position",
+                      "alt_text",
+                      "read_path"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "sku",
+              "photo"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "review_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "profile",
+        "store_version",
+        "preview",
+        "template_id",
+        "photo_count",
+        "photos",
+        "review_digest"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_same_instance_store_publish, public_content_template_and_enabled_dimension_digests, review_photo_count_and_bounded_product_photos, same_rowset_versioned_private_photos."
+    },
+    "reviewed-publication-input": {
+      "type": "object",
+      "properties": {
+        "review_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "review_digest"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_same_instance_store_publish, profile_version_cas, same_transaction_review_digest, original_request_idempotency."
+    }
+  }
+}

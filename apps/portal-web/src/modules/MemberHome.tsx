@@ -13,7 +13,13 @@ import {MemberRecommendations} from './MemberRecommendations';
 import {SkillBookIntro, type IntroBook} from './SkillBookIntro';
 import {openMemberChat} from './chat-entry';
 import {SocialZone} from './SocialZone';
+import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
+import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, resolveHomeJournalUrl, type HomeRefreshReason} from './member-home-loading';
+
+// Leave unset until the separate service's public projection is ready and approved.
+const journalEnv = (import.meta as ImportMeta & {env?: Record<string, string | undefined>}).env;
+const journalUrl = resolveHomeJournalUrl(journalEnv?.VITE_COMMUNITY_JOURNAL_URL);
 
 const shortcuts: { id: TabId; title: string }[] = [
   { id: 'messages', title: '開始聊天' },
@@ -28,31 +34,60 @@ const taskActions = {
 } satisfies Record<string, { tab: TabId; label: string; hint: string | null }>;
 
 type HomeOnboarding = { entry_mode?: string; assessment_completed?: boolean };
+type HomeScope = ReturnType<typeof createHomeReadCycle>;
+type HomeValue<T> = {scope: HomeScope; value: T};
+type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
+type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
+type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
-export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
-  const [member, setMember] = useState<MemberCardData | null>(null);
-  const [labels, setLabels] = useState<Record<string, string> | null>(null);
-  const [onboarding, setOnboarding] = useState<HomeOnboarding | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [guideBook, setGuideBook] = useState<IntroBook | null>(null);
-  const [taskAction, setTaskAction] = useState<keyof typeof taskActions | null>(null);
-  // Only the newest request of a mounted page may change the card; late or superseded replies are dropped.
-  const request = useRef(0);
+  const sessionGeneration = client.sessionGeneration;
+  const scope = useMemo(() => createHomeReadCycle(() => client.sessionGeneration),
+    [client, session.user.user_id, sessionGeneration]);
+  const [memberValue, setMemberValue] = useState<HomeMember | null>(null);
+  const [labelValue, setLabelValue] = useState<HomeValue<Record<string, string>> | null>(null);
+  const [onboardingValue, setOnboardingValue] = useState<HomeValue<HomeOnboarding | null> | null>(null);
+  const [loadState, setLoadState] = useState<{scope: HomeScope; loading: boolean; error: string | null} | null>(null);
+  const [bookValue, setBookValue] = useState<HomeGuildValue<IntroBook | null> | null>(null);
+  const [taskValue, setTaskValue] = useState<HomeGuildValue<keyof typeof taskActions | null> | null>(null);
+  // Hide the old session's view synchronously, before effect cleanup can run.
+  const currentMember = memberValue?.scope === scope ? memberValue : null;
+  const member = currentMember?.value ?? null;
+  const labels = labelValue?.scope === scope ? labelValue.value : null;
+  const onboarding = onboardingValue?.scope === scope ? onboardingValue.value : null;
+  const loading = loadState?.scope === scope ? loadState.loading : true;
+  const loadError = loadState?.scope === scope ? loadState.error : null;
+  const guildKey = member?.primary_guild?.guild_key ?? null;
+  // Same-session, same-guild refreshes keep mounted dialogs and focused actions.
+  // Returning to a previous guild creates a new lifetime, never a cached view.
+  const guildScope = useMemo<HomeGuildScope>(() => ({scope, guildKey}), [scope, guildKey]);
+  const guideBook = bookValue?.guildScope === guildScope ? bookValue.value : null;
+  const taskAction = taskValue?.guildScope === guildScope ? taskValue.value : null;
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusFrame = useRef<number | null>(null);
 
-  const load = useCallback((withLabels: boolean) => {
-    const current = ++request.current;
-    setLoading(true);
-    void client.get<MemberCardData>(`/members/${session.user.user_id}`).then(data => {
-      if (current !== request.current) return;
-      const retrying = alertRef.current?.contains(document.activeElement);
-      setMember(data); setLoadError(null); setLoading(false);
-      if (retrying) requestAnimationFrame(() => {
-        // Retry recovery must reveal both the member card and its optional outer guide.
+  const load = useCallback((withLabels: boolean, reason: HomeRefreshReason = 'manual') => {
+    const ticket = scope.begin(reason);
+    if (!ticket) return;
+    if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = null;
+    setLoadState(previous => ({scope, loading: true, error: previous?.scope === scope ? previous.error : null}));
+    // Automatic reads retain normal client diagnostics; only home UI errors are quiet.
+    const options = {signal: ticket.signal};
+    void client.get<MemberCardData>(`/members/${session.user.user_id}`, options).then(data => {
+      if (!ticket.isCurrent()) return;
+      const priorFocus = document.activeElement;
+      const retrying = reason === 'manual' && alertRef.current?.contains(priorFocus);
+      setMemberValue({scope, value: data, reason});
+      setLoadState({scope, loading: false, error: null});
+      ticket.complete(true);
+      if (retrying) focusFrame.current = requestAnimationFrame(() => {
+        focusFrame.current = null;
+        if (!ticket.isCurrent() || (document.activeElement !== document.body && document.activeElement !== priorFocus)) return;
+        // Retry recovery reveals the summary, but background refresh never moves focus.
         let disclosure = summary.current?.closest('details');
         while (disclosure) {
           disclosure.open = true;
@@ -61,24 +96,41 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
         summary.current?.focus();
       });
     }).catch((error: unknown) => {
-      if (current !== request.current) return;
-      setLoadError(`名片暫時無法載入。${error instanceof Error ? error.message : ''}`); setLoading(false);
+      if (!ticket.isCurrent()) return;
+      ticket.complete(false);
+      setLoadState(previous => ({scope, loading: false,
+        error: reason === 'automatic' ? (previous?.scope === scope ? previous.error : null)
+          : `名片暫時無法載入。${error instanceof Error ? error.message : ''}`}));
     });
-    // Labels only decorate featured skills; without them the saved names or ids still show.
-    if (withLabels) void loadLabels(client).then(data => { if (current === request.current) setLabels(data); }).catch(() => {});
-    void client.get<HomeOnboarding>('/me/onboarding').then(data => {
-      if (current === request.current) setOnboarding(data);
-    }).catch(() => { if (current === request.current) setOnboarding(null); });
-  }, [client, session.user.user_id]);
+    // Shared label metadata has no cancellation API; fence its late replies instead.
+    if (withLabels) void loadLabels(client).then(data => {
+      if (ticket.isCurrent()) setLabelValue({scope, value: data});
+    }).catch(() => {});
+    void client.get<HomeOnboarding>('/me/onboarding', options).then(data => {
+      if (ticket.isCurrent()) setOnboardingValue({scope, value: data});
+    }).catch(() => {
+      if (ticket.isCurrent() && reason !== 'automatic') setOnboardingValue({scope, value: null});
+    });
+  }, [client, session.user.user_id, scope]);
 
   useEffect(() => {
-    setMember(null); setLabels(null); setOnboarding(null); setLoadError(null);
-    load(true);
-    return () => { request.current++; };
-  }, [load]);
+    setMemberValue(null); setLabelValue(null); setOnboardingValue(null);
+    setBookValue(null); setTaskValue(null);
+    load(true, 'initial');
+    return () => {
+      scope.cancel();
+      if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+      focusFrame.current = null;
+    };
+  }, [load, scope]);
 
-  // One request at a time and only on an explicit click; the button keeps focus while it waits.
-  const retry = () => { if (!loading) load(labels === null); };
+  // No interval or hidden-tab polling; return events share the same freshness gate.
+  useEffect(() => observeHomeReturns({page: document, window,
+    visible: () => document.visibilityState === 'visible',
+    online: () => navigator.onLine !== false,
+  }, () => load(labels === null, 'automatic')), [load, labels]);
+
+  const retry = () => { if (!loading) load(labels === null, 'manual'); };
 
   const showAssessment = onboarding?.entry_mode === 'quick' && onboarding.assessment_completed !== true;
   const nickname = member?.nickname ?? session.user.display_name;
@@ -87,39 +139,16 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
   const primaryGuild = member?.primary_guild ?? null;
   const internPrimary = Boolean(primaryGuild && member?.member_tiers?.some(tier => tier.guild_key === primaryGuild.guild_key && tier.member_tier === 'intern'));
   useEffect(() => {
-    const key = primaryGuild?.guild_key;
-    if (!key) { setGuideBook(null); setTaskAction(null); return; }
-    let active = true;
-    setGuideBook(null); setTaskAction(null);
-    // These reads only refine the buttons. A failure leaves the sentence and the shelf button in place.
-    void Promise.allSettled([
-      client.get<{ items: { guild_key: string; skill_books: IntroBook[] }[] }>('/guilds/directory'),
-      client.get<{ items: { book_id?: string; id?: string }[] }>('/me/skill-books'),
-      client.get<{ items: unknown[] }>('/task-board/preview'),
-      client.get<{ now: unknown[] }>('/dashboard'),
-    ]).then(results => {
-      if (!active) return;
-      const [directory, grants, tasks, work] = results;
-      const directoryItems = directory.status === 'fulfilled' && Array.isArray(directory.value.items) ? directory.value.items : null;
-      const grantItems = grants.status === 'fulfilled' && Array.isArray(grants.value.items) ? grants.value.items : null;
-      if (directoryItems && grantItems) {
-        const guild = directoryItems.find(item => item.guild_key === key);
-        const unlocked = new Set(grantItems.flatMap(item => {
-          const id = item.book_id ?? item.id;
-          return id ? [id] : [];
-        }));
-        setGuideBook(guild?.skill_books?.find(item => {
-          const id = item.book_id ?? item.id;
-          return Boolean(id && unlocked.has(id));
-        }) ?? null);
-      } else setGuideBook(null);
-      const taskItems = tasks.status === 'fulfilled' && Array.isArray(tasks.value.items) ? tasks.value.items : null;
-      // A claim I have not finished outranks the open board; a failed dashboard read falls back to the board.
-      const unfinished = work.status === 'fulfilled' && Array.isArray(work.value.now) && work.value.now.length > 0;
-      setTaskAction(unfinished ? 'resume' : taskItems ? (taskItems.length > 0 ? 'tasks' : 'showcase') : null);
+    if (!currentMember || !guildScope.guildKey) return;
+    const controller = new AbortController();
+    void loadHomeNextSteps<IntroBook>({client, guildKey: guildScope.guildKey, signal: controller.signal,
+      preserveOnFailure: currentMember.reason === 'automatic',
+      onBook: value => setBookValue({guildScope, value}),
+      onTask: value => setTaskValue({guildScope, value}),
     });
-    return () => { active = false; };
-  }, [client, primaryGuild?.guild_key]);
+    return () => { controller.abort(); };
+    // Each confirmed card refresh also refreshes work/grants, even in the same guild.
+  }, [client, currentMember, guildScope]);
 
   const nextStep = useMemo<{ message: string; label: string; action: 'guilds' | 'skills' } | null>(() => {
     if (!member) return null;
@@ -147,7 +176,29 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <details className="home-participation-disclosure" open={wide}>
+    <summary>一起學、一起做</summary>
+    <HomeParticipation key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
+    </details>
+    {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
+      <div className="home-next-copy">
+      <h2 className="home-next-eyebrow">公會與學習</h2>
+      <p id="home-next-step-description">{nextStep.message}</p>
+      {internPrimary && <p className="field-hint guild-intern-notice" role="status">你是這個公會的實習成員：可以閱讀公會內容、在公會聊天室聊天。想發布或編輯，可以在聊天室跟會長打聲招呼，會長能把你設為正式成員。</p>}
+      {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
+      {primaryGuild ? <div className="home-next-actions">
+        {guideBook
+          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
+          : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
+        <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
+        {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
+      </div> : <div className="home-next-actions"><button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.(nextStep.action)}>{nextStep.label}</button></div>}
+      {primaryGuild && <FirstParticipation client={client} session={session} onNavigate={onNavigate} primaryGuild={primaryGuild} firstParticipationEnabled={firstParticipationEnabled}/>}
+      </div>
+      <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
+    </section>}
+
+    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
     <div className="home-support">
@@ -168,23 +219,14 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
         <button type="button" onClick={() => onNavigate?.('events')}><strong>社群活動</strong><span>查看、提交與管理活動</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
       </section>
     </nav>
-    {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
-      <div className="home-next-copy">
-      <h2 className="home-next-eyebrow">公會與學習</h2>
-      <p id="home-next-step-description">{nextStep.message}</p>
-      {internPrimary && <p className="field-hint guild-intern-notice" role="status">你是這個公會的實習成員：可以閱讀公會內容、在公會聊天室聊天。想發布或編輯，可以在聊天室跟會長打聲招呼，會長能把你設為正式成員。</p>}
-      {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
-      {primaryGuild ? <div className="home-next-actions">
-        {guideBook
-          ? <SkillBookIntro book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
-          : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
-        <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
-        {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
-      </div> : <div className="home-next-actions"><button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.(nextStep.action)}>{nextStep.label}</button></div>}
-      {primaryGuild && <FirstParticipation client={client} session={session} onNavigate={onNavigate} primaryGuild={primaryGuild} firstParticipationEnabled={firstParticipationEnabled}/>}
-      </div>
-      <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
-    </section>}
+
+    <section className="home-journal-entry" aria-label="共創日誌">
+      <h2>共創日誌</h2>
+      <p>閱讀工坊討論整理、開發進展與決策。</p>
+      {journalUrl
+        ? <a className="btn btn-ghost" href={journalUrl} target="_blank" rel="noopener noreferrer">閱讀共創誌<span className="sr-only">（另開分頁）</span></a>
+        : <p role="status">日誌尚未公開</p>}
+    </section>
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">
       {shortcuts.map(entry => <button key={entry.id} type="button" className="home-shortcut" onClick={() => onNavigate?.(entry.id)}>

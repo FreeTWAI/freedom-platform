@@ -6,7 +6,57 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=d39370a17d1d1d6af2507acd9ee7b592ff221a21 release.staging=d39370a17d1d1d6af2507acd9ee7b592ff221a21 flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=171 applied_migration.staging=171 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=184 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至 2026-10-20 22:28 UTC，兩環境都已部署 `cf7e518b`／schema172，發布供貨／零售公會首次設定資格（#916）、會員服務恢復（#903）、供貨條件按鈕位置（#922）及 Short 鍵盤焦點（#926）修正。27個旗標維持，沒有 migration；四組成功 before／after 備份還原與清理通過，dispatcher `0a478a84` 已綁定兩環境，原 timers 已恢復。詳見[供貨／零售公會發布收據](../unified-foundation/rollout-commerce-cohorts-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Staging after 首次 capture 失敗、清理通過，原因未知；第二次使用同一 adapter與新的 IO gate通過後才綁定。Production smoke通過14項，其中 `priorFailedAttempt` 為前輪 Short歷史紀錄；兩個 admin路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。依 Ted指示無 staging acceptance window；會員 UX、真實手機／Safari與新 dispatcher自然排程仍未驗。`as_of=2026-10-12`、M1／完整計畫與真人成果未接受狀態維持。
+
+本機候選另外包含店面外觀的 migration175（堆疊於173／174）、賣方資訊與政策的 migration176（堆疊於175）與商品圖組的 migration177（堆疊於176），所有新旗標預設 OFF；
+這只是 repository 上限，不代表 staging／production 已套用175–177，或已啟用店面外觀、賣方資訊與政策頁、商品圖組。
+本機候選另含會員結帳訂單索引 migration180（堆疊於179），只增加原買家跨店查詢的部分索引；
+這不代表 staging／production 已套用180，也不啟用 checkout、寄信或收款。
+本機規格候選另含 migration181，延伸177的 lazy gallery groups 並凍結 variants sidecar；
+`FREEDOM_STORE_VARIANTS_ENABLED` 預設關閉，且需要 guild launchpad。這不代表已部署或啟用交易。
+本機候選另含 migration182，僅擴充既有站內通知的訂單種類與導覽 tab 檢查，保留歷史與原冪等鍵；
+`FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED` 預設關閉，且需要 checkout。這不代表已部署、啟用通知或授權交易 Email。
+目前部署與已套用 schema 仍以以下具日期的 operator 觀察為準。
+
+### 2026-10-20 07:16 歷史發布
+
+以下原文保留 `3a6e2506` 當時觀察；最新部署以上方22:28收據為準。
+
+截至 2026-10-20 07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，Short 對所有人開啟；Supplier／Commerce console 保持 ON，checkout／email 保持 OFF。四組成功 before／after 備份還原與清理通過，dispatcher `562f005a` 已綁定兩環境，原 timer 已恢復；新 dispatcher 自然排程尚未觀察。依 Ted 指示無 staging acceptance window，會員 UX、真實手機與 Safari 未驗。詳見[Short 發布收據](../unified-foundation/rollout-short-videos-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Production 公開唯讀 smoke 第二次通過14項，首次6項後遇 Access redirect 的失敗保留；兩個 admin 路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。Production 首次 before 備份截斷、第二次成功綁定，以及兩項經審查的 kit 修正均另列收據。`as_of=2026-10-12`、M1／完整計畫、真人三項成果與公會作者自主交付的未接受狀態維持。
+
+### 2026-10-20 賣方資訊與政策分支候選
+
+本工作分支在 appearance follow-up `1b2c5dc1` 上另有 schema176（暫定）六表 sidecar，
+`FREEDOM_STORE_POLICIES_ENABLED`／`store_policies_enabled` 預設 OFF。
+只包含 C1 自行填寫、草稿、發布凍結與 About／政策公開頁；不更動 readiness 八項、准入、
+付款、出貨、訂單或供貨能力。旗標 OFF 連未知資訊路徑的 host SPA fallback 也保持原樣。
+這是 repository 候選上限，沒有正式部署、旗標、秘密或真人驗收聲明；以下收據保持原日期。
+
+### 2026-10-19 23:06 歷史發布
+
+以下原文保留 `240cf677` 當時觀察；最新部署以上方10月20日收據為準。
+
+截至 2026-10-19 23:06:51.019348 UTC，staging 與 production 都已部署 `240cf677`／schema172，商店公開說明與獨立 Seller console 啟用邊界已發布。兩環境限定驗收、發布後備份還原與清理通過，dispatcher 已綁定本次來源，原 timer 已恢復；checkout／email 仍 OFF，新 operator 自然排程尚未觀察。發布前沿用原 `10ad8d2d` 已完成備份，不改寫其來源與日期。詳見[商店會員流程發布收據](../unified-foundation/rollout-merchant-readiness-2026-10-19.json)及[現況快照](../unified-foundation/current-state.json)。
+
+公會局部 CI 已合併並驗證；這次 Worker 發布不代表兩位非核心公會作者已自行交付。`as_of=2026-10-12` 及 M1／完整計畫未接受的狀態維持。Staging 合成店面驗收僅涵蓋初始390／1440視窗，先前三次跨 resize失敗保留，尚未確定原生瀏覽器或自動化原因；production 僅公開唯讀檢查。真人三項成果、店主付款／交付設定與獨立准入仍待完成，不把部署或合成驗收當成真人成功。
+
+### 2026-10-19 21:51 歷史發布
+
+以下原文保留 `10ad8d2d` 當時觀察；最新部署以上方23:06 UTC收據為準。
+
+截至 2026-10-19 21:51:02.819573 UTC，staging 與 production 已完成 `10ad8d2d`／schema172 發布，Supplier／Commerce console 已開啟，checkout／email 仍 OFF。Staging 的自有合成會員在桌面與手機完成供應商／商店後台及公開頁面限定驗收；production 只做公開唯讀檢查，未執行真人會員登入或訂單交易。兩環境發布前後備份均完成隔離資料庫＋物件還原與清理；dispatcher 已綁定 `10ad8d2d`，兩個原 timer 已恢復 active／enabled，尚未觀察新 operator 的自然排程。失敗驗收與修正後通過的證據分開保留，詳見[三項成果發布收據](../unified-foundation/rollout-three-outcomes-2026-10-19.json)與[現況快照](../unified-foundation/current-state.json)。
+
+`as_of=2026-10-12` 仍是公會功能、flag 與政策列的原觀察日期；本次發布不代表 M1／完整計畫或真人易用性已接受。店主實際付款／交付設定、准入及真人會員旅程仍待完成；兩位非核心公會作者自主交付也未驗收。較新 main `240cf677` 不包含在這份 `10ad8d2d` 發布收據中，其他歷史未完成項保留原狀態，不新增為這輪三項成果的發布前置。
+
+### 2026-10-17 歷史發布
+
+以下原文保留當時觀察；最新具日期的部署狀態以上方為準。
 
 截至 2026-10-17 16:42:32.826 UTC，staging 與 production 已部署買家流程版本 `d39370a1`，schema171／170 筆 canonical ledger。#863 的 schema168–170 與 #875 買家流程已依序發布；本輪兩環境部署前後四組資料庫＋物件備份完成遠端讀回、完整隔離還原、保留 floor 與清理。Staging 完成自有合成會員的限定 session／browser 驗收；production 只做公開唯讀驗收，未執行會員登入或 GitHub OAuth。新 daily operator 已安裝，兩個原 timer 已恢復；新 operator 的自然排程尚未觀察。Commerce console／checkout／email仍 OFF，原失敗與後續處置分開保留。詳見[本輪部署收據](../unified-foundation/rollout-commerce-buyer-2026-10-17.json)與[現況快照](../unified-foundation/current-state.json)。
 
@@ -157,3 +207,8 @@ M0 是本次規格/追蹤草案（#153 已合併）。M1 全公會可用公版�
 - 2026-10-05 撰寫時，最新部署/治理敘述引用既有 [foundation handoff](../unified-foundation/handoff-2026-10-04.md)，不是本輪 live 查驗；之後的部署狀態見[目前狀態](#目前狀態)。該 ledger 的 168 項要求及[原平台驗收](../acceptance-matrix.md)完整保留，不能被這 60 項取代
 
 [文件驗證紀錄](verification.md)區分本次靜態檢查與未来產品案例；執行 `python3 docs/platform-plan/execution/guild-launchpad/validate-spec-pack.py` 只驗追蹤、文件結構，以及[目前狀態](#目前狀態)的 `glp-status` 行是否與現況快照一致，絕不將 T-ID 改為通過。這是手動指令；CI 只透過 contracts pytest 的 `docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py` 執行其中的 `glp-status` 檢查。
+
+Categories local candidate (2026-10-21): migration183_storefront_categories.sql,
+independent default-OFF FREEDOM_STORE_CATEGORIES_ENABLED (launchpad required).
+Status was regenerated with validate-spec-pack.py --write-status; repo_max_migration
+is the source candidate frontier, not evidence of deployment or live schema.

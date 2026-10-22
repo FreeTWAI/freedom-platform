@@ -31,8 +31,7 @@ export function LegacyLaunchpadPrimary({primary, config, guildKey, memberTier, i
         {guildKey === 'guild_talent_direction' && memberTier === 'full' && <p className="field-hint">在下方選擇可使用的工作空間，再建立新方向卡或繼續原卡；尚未完成設定時，依下方提示完成設定。</p>}
         {memberTier === 'intern' ? <p className="field-hint">{INTERN_HINT}</p>
           : <div className="actions"><button type="button" className="btn btn-primary" onClick={focusWork}>{guildKey === 'guild_talent_direction' ? '前往方向卡' : '前往我的工作'}</button></div>}
-      </> : primary.application_key === 'hosted-store' ? memberTier === 'intern' ? <p className="field-hint">{INTERN_HINT}</p>
-        : <MyStoreAction client={client} purpose={supplyPrimary ? 'supply' : undefined} canStart={startable(primary)} reasons={primary.eligibility.reason_codes.filter(code => code !== 'tenant_manage_required' || !startable(primary)).map(code => REASONS[code])}
+      </> : primary.application_key === 'hosted-store' ? <MyStoreAction client={client} purpose={supplyPrimary ? 'supply' : undefined} canStart={startable(primary)} reasons={primary.eligibility.reason_codes.filter(code => code !== 'tenant_manage_required' || !startable(primary)).map(code => REASONS[code])}
           onCreate={() => {if (canLeave()) setLaunchRequest({application_key: primary.application_key, release_ref: primary.release_ref, nonce: (launchRequest?.nonce ?? 0) + 1});}}
           onEnter={path => {if (canNavigate()) window.location.hash = path;}}/> : <>
         {primary.eligibility.tenant_action !== 'denied' && <div className="actions"><button type="button" className="btn btn-primary" disabled={!primary.eligibility.can_launch} onClick={() => setLaunchRequest({application_key: primary.application_key, release_ref: primary.release_ref, nonce: (launchRequest?.nonce ?? 0) + 1})}>{primary.eligibility.tenant_action === 'continue' ? '繼續使用' : '啟動'}{primary.display_name}</button></div>}

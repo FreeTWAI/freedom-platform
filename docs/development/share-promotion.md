@@ -19,9 +19,13 @@
 
 會員 session cookie 是 `SameSite=Strict`。從 LINE、Facebook 或其他網站點進來時，瀏覽器不會帶 cookie，直接 302 無法分辨是不是本人在點自己的連結。連結預覽機器人也不該計分。
 
-所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session，然後才前往目標。
+所以 `GET /go/:code` 先回同一來源的小頁。頁面上的 `/go.js` 再用 same-origin 請求回報點擊，這次才帶得上 session。計數請求使用 `keepalive`，站內目標立即接續開啟，無須等回報成功或逾時；回報失敗不阻擋閱讀。不可改成直接 302，否則會失去本人排除所需的同源 cookie。
 
-未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址 302 回首頁。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
+只有 `social_post` 的目標是外部網站；其他類型使用伺服器組出的站內路徑。外部分享頁顯示原貼文標題、目的地域名與路徑，以及目的地的帳號、費用、資料處理責任，訪客按「前往原文」才離站，沒有倒數或自動跳轉。網址取自目前有效貼文並沿用既有 HTTPS 正規化與外站規則；一般頁面的外連不增加確認步驟。沒有 JavaScript 時，頁面與主要連結仍可使用。
+
+外部分享的既有分數仍代表這條分享頁的有效訪問，不代表訪客按了外連、採用了產品或完成交易；去重、機器人排除與隱私規則不變。
+
+未知、已撤銷，或目標已不能分享（貼文刪除或隱藏、活動取消／退回／未公開、技能書不存在、名片未公開或 generation 已換）時，這個網址回傳共用的 404 頁與返回首頁入口，不顯示原標題、目的地、個人分享碼、OG 預覽或計數程式。除了技能書的 `intro`（1–999），其他 query 都忽略，避免開放式重導。
 
 中繼頁含 `noindex,nofollow`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`，以及網站既有的 CSP。不放 inline script 或 style。OG 圖網址使用 runtime 的公開來源。`og:type` 是 `website`。`og:url` 是這條個人連結本身（公開來源 + `/go/<code>`）；技能書只有在 `intro` 有效（1–999）時才附上 `?intro=N`。它不是目標網址，否則 Facebook 會把分享收成目標頁、跳過個人連結。
 
@@ -106,7 +110,20 @@ HTML 的備用 `title` 只定位一次開始標籤、一次 `>` 與一次結束�
 這避免最多 1 MiB 的重複未結束標籤造成平方時間的同步解析；不宣稱
 AbortController 能中斷同步 JavaScript。OG 優先、entity 解碼、清理與長度上限不變。
 
+HTML 預覽在解析標題與圖片網址前，依 HTTP `Content-Type` 的明確 `charset`
+用 runtime 的標準 `TextDecoder` 解碼（#734），包含 Windows-1252 與 Big5。
+參數名稱／encoding label 不分大小寫，接受 MIME 雙引號；參數依序解析，
+其他參數引號內的 `charset=` 不會被誤認，未閉合引號或其他 malformed
+參數整份採 UTF-8 fallback。沒有宣告、label 無效或 runtime 不支援時保留既有 UTF-8
+best-effort；不讀 HTML meta charset，也不下載外部解碼器。oEmbed JSON 仍固定
+UTF-8，圖片保持原始 bytes 交既有正規化；抓取限制仍按實際 bytes 計算。
+
 預覽抓取（`modules/community/link-preview.ts`）由 runtime 注入。YouTube 取影片 id（`watch?v=`、`youtu.be`、`/shorts/`、`/live/`、`/embed/`），再抓 `i.ytimg.com` 的 `hqdefault.jpg`，標題可選 oEmbed。其他平台讀 `og:image`、`og:image:secure_url` 或 `twitter:image`。限制是：`redirect:manual`、最多 3 次重導、每一跳都重跑網址規則、全程 6 秒、HTML 最多 1 MiB、圖片最多 5 MiB。回應只要聲明 `image/*` 就收下；格式以檔案簽名判斷，不採用對方的 Content-Type。GIF、動畫 PNG、動畫 WebP、簽名不符或超過 5 MiB 時捨棄縮圖、保留標題。靜態 png／jpeg／webp 正規化成 640×360 的 WebP（`social_thumbnail`）。處理器失敗就沒有縮圖，不讓貼文失敗。上傳的縮圖仍要聲明類型與簽名一致，且在 512 KiB 以下。User-Agent 固定為 `FreedomWorkshopPreview/1.0 (+https://freetwai.com)`。測試與 e2e 使用假的 fetcher，不連外網。
+
+HTML metadata 接受合法的無引號、單引號及雙引號屬性值；引號內的 `>` 不會提早
+結束 `meta` 標籤（#730）。OG 標題仍經既有 entity 解碼、去角括號、空白整理及
+120 字上限；相對圖片 URL 仍須通過同一份網址與外連政策。這是純文字解析，
+不執行 HTML／script，不改 charset 支援、抓取上限、重新導向或 thumbnail profile。
 
 Production runtime 必須提供受限的 preview transport；缺少 transport 時只建立無預覽貼文，不回退到一般 `fetch`。6 秒期限包括 DNS、TLS、headers 與 body 讀取，頁面、重導及縮圖都走相同邊界：
 
@@ -114,13 +131,18 @@ Production runtime 必須提供受限的 preview transport；缺少 transport �
 - Workers（`apps/platform-api/src/worker-preview-fetch.ts`）不宣稱 DNS pinning：[原生 `https.request`](https://developers.cloudflare.com/workers/runtime-apis/nodejs/https/) 仍是 fetch 包裝。改採維護者選定的可信 DNS namespace allowlist：`youtube.com`、`youtu.be`、`instagram.com`、`facebook.com`、`fb.watch`、`threads.net`、`threads.com`、`tiktok.com`、`x.com`、`twitter.com`（各自可加 `www.`）；資產只允許 `ytimg.com`、`fbcdn.net`、`cdninstagram.com`、`tiktokcdn.com`、`twimg.com` 及其子網域。每一跳與縮圖 URL 都重新檢查，不自動跟隨重導。
 - 其他 HTTPS 連結在 Workers 仍可分享，但不抓取標題或縮圖，作者可自填標題與上傳縮圖。這是明確的相容性取捨，不是 SSRF 已在正式環境可利用的證明；allowlist 信任列出的第三方 DNS 管理者，不保護第三方自身遭入侵。
 
+原生 Worker 的 `tests/worker/social-preview-assets.test.ts` 與既有 runtime
+social-preview 測試同屬 `modules/assets/freedom.module.json` 的 `asset-lifecycle`；
+精確路徑保留 `runtime.full`、baseline／candidate union 與未知路徑 fallback，
+不增加 composition 容量、不擴大 wildcard，也不把這個 ownership 當成 transport 驗證。
+
 ## API
 
 會員路由沿用 session、CSRF、Origin，並須已完成加入（選定主要公會）。點擊與公開縮圖在 session middleware 之前。
 
 | 方法與路徑 | 誰 | 用途 |
 | --- | --- | --- |
-| `GET /go/:code` | 公開 | 中繼頁，或 302 回首頁 |
+| `GET /go/:code` | 公開 | 站內接續／外部目的地頁，或不揭露舊內容的 404 |
 | `POST /api/v1/promotion/clicks` | 公開 | `{code}`，永遠 `{ok:true}` |
 | `POST /api/v1/promotion/links` | 會員 | 取得或建立個人連結 |
 | `GET /api/v1/promotion/links/mine?period=` | 會員 | 自己的連結、各期間分數與 `available`；只讀 |
@@ -203,7 +225,25 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
 
 標題 1–80 字、簡介 1–160 字、說明最多 2000 字、價格與地區各最多 60 字。聯絡方式 1–3 個，名稱 1–20 字。網址必須是 https，沒有帳密、非預設埠、本機或 IP 主機，並用 `normalizeShareUrl` 正規化後儲存。表單送出前跑同一份檢查。
 
+選填 `price_text`／`area_text` 僅接受字串或原本的省略／null 語意（#776）；
+空字串或 trim 後空白仍表示清空。數字、布林、陣列與物件回
+`422 validation_failed`，不把錯誤輸入靜默當成 null，不改服務版本、收據或原值。
+拒絕不占用 command key；修正為合法文字後可沿同一 key 重試。
+
 建立、修改、暫停、恢復與刪除只有主人能做。修改、暫停、恢復、刪除、封面與隱藏都要 `If-Match` 的 `aggregate_version`，並用 Idempotency-Key。刪除是軟刪除（`state=deleted`），同時刪掉封面。暫停只給主人在「我的服務」看見；公開頁與 `/go/` 都回到找不到。平台管理員可隱藏；公會長不行。隱藏後各處都看不到，`/go/` 回到首頁。擁有者停用或是驗收測試帳號時，其他人與公開頁都看不到，主人仍可在會員介面看見自己的有效服務。
+
+會員介面的管理員「隱藏」先顯示後果與「確定隱藏／取消」；此時不送請求，
+取消也不寫入。只有按「確定隱藏」才呼叫原有 hide API。確認會說明主人也
+無法查看或編輯、分享連結失效，且目前沒有復原操作；沒有新增 unhide 或擴權。
+確認狀態同時綁定服務、`hide`／`delete` 及「我的服務列／公開卡片」來源，避免
+重複呈現的同一服務互相展開或取消後回到另一個控制點。觸發按鈕保持掛載，
+以 `aria-expanded`／`aria-controls` 關聯確認區；警告同時是確認區與確認按鈕的
+可存取說明。鍵盤取消後焦點回到原來源的觸發按鈕，不送寫入。
+`member-services.spec.ts` 以真實管理員 session 與隔離 PostgreSQL 驗證自己／
+他人的服務：鍵盤取消後仍公開且版本不變，確認後才隱藏、只寫一次，等待實際
+列表移除後重新登入核對主人／管理員清單與公開頁 404。公開頁既有最長 60 秒
+快取政策不變；原生 HTTP 與 browser `cache: 'no-store'` 讀回不沿用瀏覽器舊快取，
+不能把仍在有效期的舊 200 視為隱藏提交失敗。
 
 封面輸入是 JPEG、PNG 或 WebP，最多 4 MiB，簽名與動畫檢查與其他上傳相同。輸出是 `service_cover`，`cover` 成 1200×675 的 WebP，最多 512 KiB。上傳是帶 Idempotency-Key 與 If-Match 的二進位 PUT。會員看封面走 `GET /api/v1/member-services/:id/cover`（暫停的服務主人仍看得到）；公開封面是 `GET /api/v1/public/member-services/:id/cover`。
 
@@ -282,9 +322,61 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
   base64url 標記，原樣放進下一次 `cursor`，最後一頁為 `null`。時間取 PostgreSQL
   精確 UTC 微秒字串，不經 JavaScript Date 截成毫秒，避免同毫秒的按讚者重複或游標停滯；
   完全同時的按讚以 user ID 穩定排序。這不改可見性條件、每頁上限或顯示日期。
-- 每張貼文的「分享」直接將 `/?social-post=<uuid>#social` 交給系統分享選單；沒有系統分享或操作失敗時，提供可複製／手動選取的貼文連結。取消系統分享不自動複製、不開發文器、不建立多平台工作或上傳照片。分享資料不自動夾帶原生正文或私人附圖。外部連結貼文另以「推廣原文」保留既有 `/go/` 計分入口。
+- 每張貼文的「分享」先開啟貼文連結對話框，由本人按「系統分享」或「複製貼文連結」；原生系統分享在該次點擊內直接呼叫，保留 user activation。未開放公開閱讀時仍提供 `/?social-post=<uuid>#social` 會員連結；原作者明確開放後改用 `/posts/<uuid>`。取消系統分享不自動複製、不開發文器、不建立多平台工作或上傳照片，也不自動開放公開閱讀。外部連結貼文另以「推廣原文」保留既有 `/go/` 計分入口。
 - 收件者登入後，以 `GET /social-posts?post_id=` 直接取得那篇有效貼文並聚焦，不再為定位舊貼文逐頁讀取，也不受近期頁數上限限制。這是同社群的既有會員讀面；匿名仍 401、跨社群／隱藏／刪除／不存在均不回內容，結尾 session clock 檢查不變。「回到動態牆」移除指定貼文參數並恢復一般動態。通知入口也共用精確定位。
-- 多平台發文仍從「建立貼文」的獨立 Social Post 入口由本人開啟，沿用平台選擇、轉交／下載與逐平台本人確認。一般貼文分享不會開啟此流程，也不因此公開原生貼文或會員附圖。
+- 多平台發文仍從「建立貼文」的獨立 Social Post 入口由本人開啟，沿用平台選擇、轉交／下載與逐平台本人確認。一般貼文分享不會開啟此流程；對外閱讀須另由原作者確認下列公開設定。
+
+## 單篇貼文免登入閱讀
+
+分享對話框提供作者的「開放免登入閱讀」，先呈現名稱、文字與目前附圖供確認。
+其他會員只能分享目前可公開閱讀的連結，不能替作者開放。歷史貼文與新建貼文
+預設都只在原會員範圍內；migration 不回填任何公開同意。
+
+訪客直接開啟 `/posts/<uuid>` 可讀這一篇完整文字與附圖，不用 JavaScript 也能閱讀。
+頁尾最多三則目前有效的公開文字摘要，每則最多 160 個 Unicode 字元；沒有匿名
+動態列表、游標或任意筆數參數。摘要的「登入繼續閱讀」、看更多、按讚與留言
+入口引導登入。這是單篇分享與有限探索，不是跨裝置閱讀配額；取得另一則作者
+已開放的直接分享網址，仍能讀那一篇。會員動態與留言 API 的原權限保持獨立。
+
+公開投影只包含貼文 ID、原生／連結類型、標題、文字、合法外部原文網址、時間、
+作者顯示名稱及核准附圖。會員 user ID、email、頭像、打卡位置、提及成員 ID、
+留言、按讚／閱讀名單及私人互動數不進公開 HTML、JSON 或 OG。原文純文字中的
+名稱或 @文字屬作者確認的正文，不加會員查詢或個人資料連結。頁面使用工坊原始
+Logo 與三款主題，沒有會員側欄或新手導覽（此頁為公開閱讀，導覽停用）。
+
+`GET/POST /api/v1/social-posts/:id/public-sharing` 只供原作者，沿原 session、
+onboarding、Origin、CSRF、Idempotency-Key、If-Match 與 journal。publication
+版本獨立於文字的 edit revision 及媒體版本；開放時三者均須符合本人確認的內容。
+未知結果保留同一個 key、body 與版本，不能悄悄建立新命令重送。撤回或內容變更後，
+舊成功 receipt 也不能恢復先前的公開狀態。
+
+公開讀面為 `GET /api/v1/public/shared-posts/:id` 及其 `/image`。同一 SQL snapshot
+核對指定公開社群、作者有效／已完成加入／非驗收帳號、有效貼文、明確公開同意、
+文字／媒體版本與附圖 digest；圖片沿 domain media 在 object I/O 前後再驗一次。
+文字修改、圖片更換、刪除、隱藏、作者停用或關閉公開均停止讀取；文字或圖片變更
+後須作者重新開放目前版本。原生貼文原本的會員縮圖與舊公開外部縮圖規則未放寬。
+
+HTML、JSON、圖片均 `no-store`；公開頁 `noindex,nofollow`，撤回使用不含舊標題、
+圖片或 OG 的通用 404。外部分享服務已快取或使用者已下載的副本無法由撤回追回。
+啟用 JavaScript 時，頁面離開會清除內容與 OG、bfcache 返回時重新讀取；分頁重新可見／聚焦時做有界
+重驗，以公開投影的 opaque digest 判斷文字、圖片及延伸摘要變化，沒有背景輪詢。
+
+登入／註冊使用獨立的 `post_return=<uuid>`，成功後回到原公開貼文；新帳號可以
+繼續閱讀，會員討論仍依原加入公會條件開放。暫停註冊時保留登入與閱讀。
+只接受單一 UUID，拒絕重複參數、外部網址、路徑與控制字元；不截走商店或技能書
+的既有 `return_to`。舊 `/?social-post=<uuid>#social` 在匿名時轉往公開閱讀頁；
+若尚未公開，通用頁提供 `/?social-post=<uuid>#account` 會員登入，登入後仍以
+原精確 lookup 開啟同一篇，避免在公開 404 與登入之間循環。
+
+此候選新增 `184_public_social_posts.sql`，換入 source 前須先套用；部署相容性清單
+同步登記 184，不更動舊 migration bytes 或正式旗標，也不執行部署。
+公開入口沿既有 `registrationCommunityId`／`resolvePublicCommunity` 選定單一社群；
+多社群卻沒有有效的公開社群設定時，公開讀面回 404，作者也不能開放。部署前須核對
+既有公開社群設定，明確同意不能讓貼文跨社群公開。
+號碼須在合併前再次核對最新 main。
+測試入口是 `public-social-posts.test.ts`、`public-social-post-page.test.ts` 與
+`public-social-posts.spec.ts`，並保留既有 `social-wall.spec.ts` 舊連結／系統分享回歸。
+實跑結果以該次 PR 為準，文件本身不代表已部署。
 
 新增會員路由：`POST /social-posts/:id/comment-images`、`GET /social-posts/:id/comments/:commentId/image`、`POST /social-posts/:id/comments/:commentId/like`。寫入沿用 session／CSRF／Origin 與 Idempotency-Key。上傳圖片綁定本人與目標貼文，只能附加至一則留言；斷線後沿用原上傳與留言 key。HTTP 二進位上限512 KiB，瀏覽器先縮圖；伺服器完整解碼並正規化為最長1920px、最多1 MiB WebP。格式限定靜態 PNG／JPEG／WebP。
 

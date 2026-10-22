@@ -27,8 +27,10 @@ test('closed errors and the generated hosted checkout bundle cover each JSON req
   const frozenShipping={delivery_profile_version:'1',destination_state:'complete',groups:[{group_ref:'g1',supplier_shop_id:id,method_ref:'home',fulfilment_mode:'self',agreement:null,profile_version:'1',logistics:{service_key:'ecpay.logistics.home.tcat',logistics_sub_type:'TCAT',ship_from_location_id:id,temperature:'ambient',handling_days:1,cutoff_time:'17:00',working_days:[1]},meetup:null,parcels:[{parcel_ref:'g1-p1',lines:[{sku:'P0001',quantity:1}],weight_g:100,declared_value_minor:100}],attribute_versions:[{sku:'P0001',version:'1'}],fee_per_parcel_minor:0,outlying_surcharge_per_parcel_minor:0,amount_minor:0}]};
   const terms={publication_revision:'1',currency:'TWD',items:[item],merchandise_total_minor:100,discount_total_minor:0,discounts:[],shipping:publicShipping,shipping_total_minor:0,tax_state:'not_assessed',total_minor:100,consents:[],payment_methods:['immediate_card'],offline_payment:null};
   const order={order_ref:id,display_number:'280229-ABCDEF',store:{slug:'synthetic-shop',name:'合成商店'},created_at:time,pay_by:time,reservation_expired:false,lifecycle_state:'cancelled',cancel_reason:'paid_cancelled',currency:'TWD',lines:[{...item,options:[]}],merchandise_total_minor:100,discount_total_minor:0,shipping_total_minor:0,total_minor:100,payment_state:'confirmed',payment_method:'immediate_card',payment_grace_until:null,offline_instructions:null,latest_payment_attempt:null,can_resume_payment:false,contact:{name:'測試買家甲😀',email:'buyer@example.test',phone:'0900000000'},delivery:{},invoice:null,redacted:false};
+  const memberSummary={store:order.store,order_ref:id,display_number:order.display_number,created_at:time,total_minor:order.total_minor,currency:order.currency,status:{lifecycle_state:order.lifecycle_state,cancel_reason:order.cancel_reason},order_path:`/shops/${order.store.slug}/orders/${id}`};
   const samples:[string,unknown][]=[
-    ['shipping-method-ref','home'],['delivery-field-error-code','required'],['shipping-unavailable-reason','fulfilment_not_agreed'],['checkout-shipping',frozenShipping],
+    ['member-order-query',{}],['member-order-summary',memberSummary],['member-order-page',{items:[memberSummary],next_cursor:null}],
+    ['buyer-identity-header','guest'],['shipping-method-ref','home'],['delivery-field-error-code','required'],['shipping-unavailable-reason','fulfilment_not_agreed'],['checkout-shipping',frozenShipping],
     ['cart-quote-input',input],['cart-quote',{publication_revision:'1',currency:'TWD',lines:[{...item,options:[],state:'ok'}],merchandise_total_minor:100,discounts:[],delivery_options:[],shipping:{state:'quoted',method:'home',groups:[{group_ref:'g1',amount_minor:0}],total_minor:0},total_minor:100,payment_options:[{method:'immediate_card',available:true,reason:null}]}],
     ['checkout-input',{...input,contact:order.contact,delivery:{}}],['checkout',{checkout_ref:id,terms,terms_sha256:hash,expires_at:time}],
     ['placement-input',{terms_sha256:hash,client_order_id:id}],['placement',{order,payment:null}],['order',order],['redeem-input',{token:'synthetic'}],
@@ -46,7 +48,7 @@ for c in x['cases']:
  Draft202012Validator.check_schema(s)
  assert Draft202012Validator(s,format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),57);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),69);
 });
 test('checkout timestamps require ASCII UTC milliseconds and reject trailing content',()=>{
   const timestamp=c.CheckoutResponseSchema.shape.expires_at;
@@ -63,14 +65,14 @@ test('payment DTOs and JSON Schema share closed states, bearer URLs and strict b
   for(const extra of [{payment_state:'invented'},{latest_payment_attempt:{attempt_ref:id,state:'issued',created_at:time}},{latest_payment_attempt:{attempt_ref:id,state:'ready',created_at:time,account_id:id}},{can_resume_payment:'true'},{trade_no:'SYNTHETIC'},{exceptions:[]}])add('order',{...order,...extra},false,c.PublicOrderSchema);
   add('placement',{order,payment:handoff},true,c.PlaceOrderResponseSchema);add('placement',{order,payment:null},true,c.PlaceOrderResponseSchema);
   for(const value of [handoff,{...handoff,handoff_url:'https://foreign.test'+handoff.handoff_url},{...handoff,handoff_url:handoff.handoff_url+'\n'},{...handoff,handoff_url:handoff.handoff_url+'?x=1'},{...handoff,handoff_url:'/pay/ecpay/'+'A'.repeat(42)},{...handoff,account_ref:'forbidden'},{...handoff,expires_at:'2028-02-29T12:34:56Z'}])add('payment-handoff',value,value===handoff,c.PaymentHandoffResponseSchema);
-  for(const code of ['payment_profile_unavailable','payment_handoff_unavailable','checkout_order_closed','checkout_hold_expired','payment_already_applied','payment_attempts_exhausted','payment_result_pending']){assert(c.CheckoutErrorCodeSchema.safeParse(code).success);add('error',{type:'about:blank',title:code,status:409,code,detail:'合成錯誤'},true,c.CheckoutErrorSchema);}
+  for(const code of ['checkout_identity_changed','payment_profile_unavailable','payment_handoff_unavailable','checkout_order_closed','checkout_hold_expired','payment_already_applied','payment_attempts_exhausted','payment_result_pending']){assert(c.CheckoutErrorCodeSchema.safeParse(code).success);add('error',{type:'about:blank',title:code,status:409,code,detail:'合成錯誤'},true,c.CheckoutErrorSchema);}
   const result=spawnSync('python3',['-c',`import json,sys
 from jsonschema import Draft202012Validator,FormatChecker
 x=json.load(sys.stdin)
 for c in x['cases']:
  assert Draft202012Validator(x['bundle']['$defs'][c['name']],format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c['name']
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),58);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),59);
 });
 
 test('delivery errors and cart options stay pinned to the rules library',()=>{
@@ -95,4 +97,41 @@ test('delivery errors and cart options stay pinned to the rules library',()=>{
 test('buyer query has an empty strict request and the existing order response',()=>{
   assert.equal(c.PaymentQueryResponseSchema,c.PublicOrderSchema);assert(c.PaymentQueryInputSchema.safeParse({}).success);
   for(const value of [{attempt_ref:randomUUID()},{trigger:'buyer'},null])assert(!c.PaymentQueryInputSchema.safeParse(value).success);
+});
+
+test('buyer equality header has identical Zod and JSON Schema conformance without credential or authority selectors',()=>{
+  const bundle=JSON.parse(readFileSync(new URL('../../contracts/guild-launchpad/v1/hosted-checkout.schema.json',import.meta.url),'utf8'));
+  const id='11111111-1111-4111-8111-111111111111';
+  const cases=[...['guest',`member:${id}`].map(value=>({value,valid:true})),...['',null,{},[],{buyer_principal_id:id},'member:invalid','Guest',`member:${id}\n`,`member:${id.toUpperCase().replace('11111111','AAAAAAAA')}`,`member:${id.replace('-4111-','-0111-')}`,`member:${id.replace('-8111-','-7111-')}`,'guest\0'].map(value=>({value,valid:false}))];
+  for(const item of cases)assert.equal(c.CheckoutBuyerIdentitySchema.safeParse(item.value).success,item.valid);
+  const result=spawnSync('python3',['-c',`import json,sys
+from jsonschema import Draft202012Validator
+x=json.load(sys.stdin)
+for c in x['cases']: assert Draft202012Validator(x['schema']).is_valid(c['value']) == c['valid']
+print(len(x['cases']))`],{input:JSON.stringify({schema:bundle.$defs['buyer-identity-header'],cases}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
+});
+
+test('member checkout history has paired strict metadata-only vectors and an explicit path equality rule',()=>{
+  const id='11111111-1111-4111-8111-111111111111';
+  const value={store:{slug:'synthetic-shop',name:'合成商店'},order_ref:id,display_number:'280229-ABCDEF',created_at:'2028-02-29T12:34:56.789Z',total_minor:100,currency:'TWD',status:{lifecycle_state:'open',cancel_reason:null},order_path:`/shops/synthetic-shop/orders/${id}`};
+  const bundle=JSON.parse(readFileSync(new URL('../../contracts/guild-launchpad/v1/hosted-checkout.schema.json',import.meta.url),'utf8'));
+  const cases:{name:string;value:unknown;valid:boolean}[]=[];
+  const add=(name:string,value:unknown,valid:boolean,schema:{safeParse:(v:unknown)=>{success:boolean}})=>{assert.equal(schema.safeParse(value).success,valid,JSON.stringify(value));cases.push({name,value,valid});};
+  for(const query of [{},{limit:1},{limit:20},{cursor:'synthetic-cursor'}])add('member-order-query',query,true,c.MemberOrderQuerySchema);
+  for(const query of [{limit:0},{limit:21},{limit:1.5},{limit:'1'},{cursor:''},{cursor:'a'.repeat(513)},{buyer_principal_id:id},{tenant_id:id},{status:'open'}])add('member-order-query',query,false,c.MemberOrderQuerySchema);
+  add('member-order-summary',value,true,c.MemberOrderSummarySchema);
+  for(const extra of [{address:'forbidden'},{phone:'forbidden'},{bank_details:{}},{buyer_principal_id:id},{total_minor:-1},{currency:'EUR'},{created_at:'2027-02-29T12:34:56.789Z'},{status:{lifecycle_state:'paid',cancel_reason:null}},{store:{...value.store,tenant_id:id}},{order_path:'https://evil.invalid'+value.order_path},{order_path:value.order_path+'?x=1'},{order_path:value.order_path+'#access=synthetic'},{order_path:value.order_path+'\n'}])add('member-order-summary',{...value,...extra},false,c.MemberOrderSummarySchema);
+  add('member-order-page',{items:[value],next_cursor:null},true,c.MemberOrderPageSchema);
+  for(const page of [{items:Array(21).fill(value),next_cursor:null},{items:[],next_cursor:''},{items:[],next_cursor:null,total:1}])add('member-order-page',page,false,c.MemberOrderPageSchema);
+  // Variable equality is deliberately a server/UI refinement, documented in the generated bundle.
+  assert(!c.MemberOrderSummarySchema.safeParse({...value,order_path:value.order_path.replace('synthetic-shop','other-shop')}).success);
+  assert.match(bundle.$defs['member-order-summary'].description,/order_path_matches_store_and_order/);
+  const result=spawnSync('python3',['-c',`import json,sys
+from jsonschema import Draft202012Validator,FormatChecker
+x=json.load(sys.stdin)
+for c in x['cases']:
+ assert Draft202012Validator(x['bundle']['$defs'][c['name']],format_checker=FormatChecker()).is_valid(c['value'])==c['valid'],c
+print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
 });

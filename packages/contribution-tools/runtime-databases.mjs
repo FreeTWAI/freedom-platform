@@ -47,7 +47,7 @@ export function runtimeDropObservation(row, elapsedMs) {
   const count = value => Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 1000) : null;
   return { event: 'runtime_database_cleanup', phase: 'drop_observation',
     result: row ? 'observed' : 'unavailable',
-    elapsed_ms: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(20000, Math.floor(elapsedMs))) : 0,
+    elapsed_ms: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(60000, Math.floor(elapsedMs))) : 0,
     state: pick(row?.state, ['active', 'idle', 'idle in transaction', 'idle in transaction (aborted)', 'disabled']),
     wait_event_type: pick(row?.wait_event_type, ['Activity', 'BufferPin', 'Client', 'Extension', 'IO', 'IPC', 'Lock', 'LWLock', 'Timeout']),
     wait_event: pick(row?.wait_event, ['CheckpointDone', 'CheckpointStart', 'ProcSignalBarrier',
@@ -77,7 +77,7 @@ export function runtimeCleanupDiagnostic(phase, result, error, elapsedMs) {
     : Object.hasOwn(messages, error.message) ? messages[error.message] : 'unclassified';
   return {event: 'runtime_database_cleanup', phase: phases.includes(phase) ? phase : 'unknown',
     result: results.includes(result) ? result : 'unverified', code,
-    elapsed_ms: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(20000, Math.floor(elapsedMs))) : 0};
+    elapsed_ms: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(60000, Math.floor(elapsedMs))) : 0};
 }
 
 // Admission checks are not proof that a database is disposable. Its operator
@@ -128,11 +128,11 @@ export async function createRuntimeDatabases(baseUrl, count, provisionTimeoutMs 
     return ended;
   }
   async function cleanup() {
-    // One absolute 20s budget, inside the suite's unchanged 24s cleanup reserve.
+    // One absolute 60s budget, inside the suite's 64s cleanup reserve.
     // In particular, DROP may wait for a checkpoint; it must not inherit the
     // short metadata-query timeout or gain an unbounded per-database budget.
     const started = performance.now();
-    const deadline = started + 20_000;
+    const deadline = started + 60_000;
     let phase = 'owner_close';
     const writeDiagnostic = value => {
       // Initialize Node's lazy pipe handle before raw writes. Otherwise an inherited

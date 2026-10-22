@@ -13,7 +13,7 @@ test.beforeEach(async({page})=>{
   await page.route('**/api/v1/skill-submissions/published',route=>route.fulfill({json:{items:[]}}));
 });
 // Catalog books no guild designates: they sit on the 社群技能書 shelf and are not granted by joining a guild.
-const communityBookIds=['anti-gambling-trader-tw','web-card-game-skill','ai-avatar-bot','ai-manga-translator','line-persona','hao-studio','ai-sister','multi-ai-desktop','multi-ai-chat','video-to-podcast-toolkit','autovtuber','coding-audit-harness'];
+const communityBookIds=['anti-gambling-trader-tw','web-card-game-skill','ai-avatar-bot','ai-manga-translator','line-persona','hao-studio','ai-sister','multi-ai-desktop','multi-ai-chat','video-to-podcast-toolkit','autovtuber','coding-audit-harness','hrflow','hdsljp-api','usage','photo-border-remover','ga4-lp-analytics','sns-feedback-collect','ultracode-token-optimization','keynote-pptx-doctor','webchat-mcp','gemini-voice-lab','story-bible','human-mode'];
 
 async function openLibrary(page:Page){
   await page.goto('/');
@@ -43,7 +43,7 @@ test('guild skill book introduces a real first deliverable before external readi
   await expect(start).toContainText('Node.js 24');await expect(start.locator('pre')).toContainText('npm run read -- products');
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
   await expect(modal.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',/github\.com\/FreeTWAI\/freedom-supplier-client\/blob\/[a-f0-9]{40}\/README\.md$/);
-  await modal.getByText('作者、授權與收錄來源',{exact:true}).click();await expect(modal).toContainText('來源 GitHub 帳號：FreeTWAI');await expect(modal).toContainText('未明確宣告授權條款');
+  await modal.getByText('作者、授權與收錄來源',{exact:true}).click();await expect(modal).toContainText('來源 GitHub 帳號：FreeTWAI');await expect(modal.getByRole('link',{name:'FreeTWAI',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI');await expect(modal).toContainText('Repo 擁有者帳號，不代表會員身分已核實。');await expect(modal).toContainText('未明確宣告授權條款');
   await page.setViewportSize({width:390,height:844});expect(await modal.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
   await page.screenshot({path:'test-results/skill-book-intro-phone.png'});
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(trigger).toBeFocused();
@@ -55,12 +55,12 @@ test('guild skill book introduces a real first deliverable before external readi
 });
 
 
-test('the guild shelf and 社群技能書 hold all 41 books once each; guild search intersects workshop categories without granting books',async({page})=>{
+test('the guild shelf and 社群技能書 hold all 53 books once each; guild search intersects workshop categories without granting books',async({page})=>{
   const library=await openLibrary(page),cards=library.locator('article.skill-library-book');
   const community=page.locator('.community-skill-library'),communityCards=community.locator('article.skill-library-book');
   const grantedBefore=await (await page.request.get('/api/v1/me/skill-books')).json();
   await expect(library.getByRole('status')).toHaveText('顯示 29 / 29 本技能書');
-  await expect(community.getByRole('status')).toHaveText('顯示 12 / 12 本社群技能書');
+  await expect(community.getByRole('status')).toHaveText('顯示 24 / 24 本社群技能書');
   const catalog=await (await page.request.get('/api/v1/community')).json() as {skill_books:SkillBook[]};
   const shelved=async(cards:Locator)=>(await cards.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-book-id')!))).sort();
   expect(await shelved(communityCards)).toEqual([...communityBookIds].sort());
@@ -68,12 +68,12 @@ test('the guild shelf and 社群技能書 hold all 41 books once each; guild sea
   expect([...await shelved(cards),...await shelved(communityCards)].sort()).toEqual(catalog.skill_books.map(book=>book.id).sort());
   // One badge slot: guild designations above, 社群技能書 below; never both on one book.
   await expect(cards.getByText('社群技能書',{exact:true})).toHaveCount(0);
-  await expect(communityCards.locator('.skill-badge-community')).toHaveCount(12);
+  await expect(communityCards.locator('.skill-badge-community')).toHaveCount(24);
   await expect(communityCards.locator('.skill-badge-official')).toHaveCount(0);
   const illustrations=page.locator('.skill-shelves article.skill-library-book .skill-book-illustration');
-  await expect(illustrations).toHaveCount(41);
+  await expect(illustrations).toHaveCount(53);
   const urls=await illustrations.evaluateAll(images=>images.map(image=>image.getAttribute('src')));
-  expect(new Set(urls).size).toBe(41);
+  expect(new Set(urls).size).toBe(53);
   for(const url of urls){
     expect(url).toMatch(/^\/art\/skills\/[a-z0-9-]+\.webp$/);
     const response=await page.request.get(url!);
@@ -174,7 +174,7 @@ test('book cards credit the original GitHub author and offer direct reading acti
 test('all public book pages and Markdown preserve beginner summaries, covers, original stars and source facts',async({page,request})=>{
   const response=await request.get('/api/v1/development-map');expect(response.status()).toBe(200);
   const map=await response.json() as {skill_books:(SkillBook&{guide_url:string;markdown_url:string})[]};
-  expect(map.skill_books).toHaveLength(41);
+  expect(map.skill_books).toHaveLength(53);
   for(const book of map.skill_books){
     const htmlResponse=await request.get(book.guide_url),markdownResponse=await request.get(book.markdown_url);
     expect(htmlResponse.status(),book.id).toBe(200);expect(markdownResponse.status(),book.id).toBe(200);
@@ -188,7 +188,7 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
     }
     expect(html,book.id).toContain(`src="${book.cover_url}"`);
     expect(html,book.id).toContain('href="/#skills">登入工坊 Star');
-    expect(html.match(/<script[^>]*>/g),book.id).toEqual(['<script src="/development-share.js" defer>','<script src="/assets/skill-social.js" type="module">']);
+    expect(html.match(/<script[^>]*>/gi),book.id).toEqual(['<script src="/development-share.js" defer>','<script src="/assets/skill-social.js" type="module">','<script src="/skill-acquisition.js" defer>']);
     expect(html,book.id).not.toMatch(/<script(?![^>]*src=)[^>]*>/);
   }
   const example=map.skill_books.find(book=>book.id==='social-post')!;
@@ -197,12 +197,12 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
   await expect(page.locator('.public-skill-purpose')).toHaveText(example.guide!.beginner.purpose);
   const details=page.locator('.public-skill-details');
   await expect(details).not.toHaveAttribute('open');
-  await expect(page.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',example.guide!.reading_url);
-  await expect(page.getByRole('link',{name:'開啟原作 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
+  await expect(page.getByRole('link',{name:'閱讀收錄版本說明 ↗',exact:true})).toHaveAttribute('href',example.guide!.reading_url);
+  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',`${example.upstream_url}/fork`);
   await page.locator('.public-collaboration details > summary').click();
   await expect(page.getByRole('link',{name:'查看工坊整合版本',exact:true})).toHaveAttribute('href',example.repository_url);
-  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href',example.upstream_url);
+  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-use-title');
   await expect(page.locator('.public-skill-cover img')).toHaveAttribute('src',example.cover_url!);
   await expect.poll(()=>page.locator('.public-skill-cover img').evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   const star=page.getByRole('link',{name:'登入工坊 Star',exact:true});
@@ -239,9 +239,9 @@ test('the original repository leads member introductions and public skill pages'
   }
   await page.keyboard.press('Escape');
   await page.goto('/development/skills/security-scanner');
-  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href',original);
+  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-use-title');
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href',website);
-  await expect(page.getByRole('link',{name:'開啟原作 ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',original);
 });
 
 test('every bookshelf uses compact illustrated rows with full copy, live counts and expandable secondary metrics',async({page})=>{
@@ -321,7 +321,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await expect(page.getByRole('heading',{name:'公會指定技能書',level:2,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'社群技能書',level:2,exact:true})).toBeVisible();
   const shelf=page.locator('.community-skill-library'),cards=shelf.locator('article.skill-library-book');
-  await expect(shelf.getByRole('status')).toHaveText('顯示 13 / 13 本社群技能書');
+  const shelfTotal=communityBookIds.length+1;await expect(shelf.getByRole('status')).toHaveText(`顯示 ${shelfTotal} / ${shelfTotal} 本社群技能書`);
   // Newest member works lead the shelf, in the same card as the catalog books after them.
   const card=cards.first();await expect(card).toHaveAttribute('data-submission-id',id);
   await expect(card.getByRole('heading',{name:item.title,level:3,exact:true})).toBeVisible();
@@ -358,7 +358,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await share.getByRole('button',{name:'關閉分享預覽',exact:true}).click();
   const search=shelf.getByLabel('搜尋社群技能書',{exact:true});
   await search.fill('綠豆');await expect(cards).toHaveCount(1);await expect(cards.first()).toHaveAttribute('data-book-id','ai-manga-translator');
-  await expect(shelf.getByRole('status')).toHaveText('顯示 1 / 13 本社群技能書');
+  await expect(shelf.getByRole('status')).toHaveText(`顯示 1 / ${shelfTotal} 本社群技能書`);
   await search.fill('沒有這本書');await expect(cards).toHaveCount(0);await expect(shelf.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/community-skill-books.png'});
 });
@@ -398,5 +398,25 @@ test('a 成長與行銷公會 member sees Open SEO Advisor unlocked on the guild
     await e2eAuthPool.query('DELETE FROM transition_journal WHERE actor_ref=$1',[id]);
     for(const table of ['member_skill_book_grants','positioning_profession_memberships','guild_member_preferences','command_receipts','sessions','member_accounts'])await e2eAuthPool.query(`DELETE FROM ${table} WHERE user_id=$1`,[id]);
     await e2eAuthPool.query('DELETE FROM users WHERE user_id=$1',[id]);
+  }
+});
+
+test('member-shared maintainer and curator credits stay accurate on cards, dialogs and public pages',async({page,request})=>{
+  await openLibrary(page);
+  for(const [id,credit,role] of [['usage','ken-kk','維護'],['human-mode','啪哩啪啦','策展']]){
+    const card=page.locator(`.community-skill-library article[data-book-id="${id}"]`);
+    await expect(card).toContainText(`來源標示的${role}：${credit}`);
+    await expect(card).not.toContainText(`作者：${credit}`);
+    await card.getByRole('button',{name:'閱讀技能書',exact:true}).click();
+    const dialog=page.locator('dialog[open]');
+    await expect(dialog).toContainText(`來源標示的${role}：${credit}`);
+    await expect(dialog).not.toContainText(`作者：${credit}`);
+    await dialog.getByText('作者、授權與收錄來源',{exact:true}).click();
+    const owner=id==='usage'?'kieiken':'madeofroc-arch';
+    await expect(dialog.getByRole('link',{name:owner,exact:true})).toHaveAttribute('href',`https://github.com/${owner}`);
+    await expect(dialog).toContainText('Repo 擁有者帳號，不代表會員身分已核實。');
+    await page.keyboard.press('Escape');
+    const response=await request.get(`/development/skills/${id}`);expect(response.status()).toBe(200);
+    const html=await response.text();expect(html).toContain(`${role}：${credit}`);expect(html).not.toContain(`作者：${credit}`);
   }
 });

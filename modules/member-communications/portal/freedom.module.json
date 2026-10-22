@@ -1,0 +1,44 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "member-communications-ui",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/member-communications/portal/**",
+    "apps/portal-web/src/GameConsoleComposer.tsx",
+    "apps/portal-web/src/modules/NotificationBell.css",
+    "apps/portal-web/src/modules/adaptive-chat-poll.ts",
+    "apps/portal-web/src/modules/chat-entry.ts",
+    "apps/portal-web/src/modules/chat-leave-guards.ts",
+    "tests/e2e/chat-leave-guards.spec.ts"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/modules/adaptive-chat-poll.ts",
+    "apps/portal-web/src/modules/chat-entry.ts",
+    "apps/portal-web/src/modules/chat-leave-guards.ts"
+  ],
+  "dependencies": [
+    "member-communications",
+    "portal-shell",
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/member-communications/portal/README.md",
+    "docs/development/member-communications.md",
+    "docs/development/member-settings-messages.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

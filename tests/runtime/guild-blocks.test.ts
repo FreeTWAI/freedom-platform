@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
+import {relative, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -13,7 +15,7 @@ import {parseConfig, convertV1, assertAvailableBlocks, publicSafeConfig} from '.
 // @ts-expect-error Build tooling is a native ESM JavaScript module.
 import {collectGuildBlocks, renderRegistry} from '../../scripts/generate-guild-blocks.mjs';
 // @ts-expect-error Build tooling is a native ESM JavaScript module.
-import {guildPresentationImportsProven} from '../../packages/contribution-tools/guild-presentation-profile.mjs';
+import {guildPresentationDependenciesProven, loadGuildPresentationParsers} from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 
 const descriptor = {module_id: 'sample-guild', owned_paths: ['modules/sample/**'], public_exports: ['modules/sample/Block.tsx'], surfaces: [{surface_id: 'guild-block.sample.v1', kind: 'page', entry: 'modules/sample/Block.tsx', auth_profile: 'member-session', operations: ['sample.read']}]};
 test('reviewed module surfaces produce deterministic bundled imports without a second application manifest', () => {
@@ -226,8 +228,21 @@ test('SupplySummaryView renders expected markup for each state in SSR', () => {
   assert.equal(visitorHtml, '');
 });
 
-test('CatalogBlock source passes guildPresentationImportsProven', () => {
-  const path = 'modules/guild-supply/CatalogBlock.tsx';
-  const source = readFileSync(new URL('../../modules/guild-supply/CatalogBlock.tsx', import.meta.url), 'utf8');
-  assert.equal(guildPresentationImportsProven(path, source), true);
+test('the complete supply module passes the approved dependency check', () => {
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const files = new Map(readdirSync(resolve(root, 'modules/guild-supply'), {recursive: true, withFileTypes: true})
+    .filter(entry => entry.isFile())
+    .map(entry => {
+      const file = resolve(entry.parentPath, entry.name);
+      return [relative(root, file).replaceAll('\\', '/'), readFileSync(file, 'utf8')];
+    }));
+  const parsers = loadGuildPresentationParsers();
+  assert.ok(parsers, 'the installed selector parsers must be available');
+  assert.equal(guildPresentationDependenciesProven({module: 'guild-supply', baseline: files, candidate: files}, parsers), true);
+});
+
+test('supply summary keeps unrelated todos but never reports an unknown stock count as zero',()=>{
+ const tenantId='11111111-1111-4111-8111-111111111111',instanceId='22222222-2222-4222-8222-222222222222';
+ const html=renderToStaticMarkup(createElement(SupplySummaryView,{name:'合成供貨',tenantId,instanceId,state:{kind:'ready',data:{profile:'freedom.supplier-console.summary/v1',tenant_id:tenantId,instance_id:instanceId,as_of:'2026-10-20T00:00:00.000Z',inventory_inconsistent_count:1,todos:{state:'ready',pending_requests:0,outdated_offers:0,out_of_stock_products:0}}}}));
+ assert(!html.includes('目前沒有待辦'));assert(html.includes('缺貨商品 暫時無法確認'));assert(html.includes('有 1 件商品的庫存紀錄不一致'));assert(html.includes('待確認售價申請 0'));
 });

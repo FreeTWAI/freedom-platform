@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { navigate, signOut } from './navigation.js';
+import { navigate, navigateAdmin, openAdminNavigation, signOut } from './navigation.js';
 import { test, expect, type Page } from './fixtures.js';
 
 // Screenshots are audit evidence only; they never replace the assertions below.
@@ -227,18 +227,19 @@ test('admin console fits phone and desktop and never shows an invalid audit time
     await page.screenshot({path:`${evidence}/after-admin-會員操作-${viewport}.png`,fullPage:true});
     await page.locator('.admin-member-row summary').click();
     for (const [tab, heading] of [['會員管理', '會員管理'], ['公會管理', '公會管理'], ['會長與維護者', '技能書維護者'], ['操作紀錄', '操作紀錄']]) {
-      await page.getByRole('button', { name: tab, exact: true }).click();
+      await navigateAdmin(page,tab);
       await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${tab} ${viewport}`).toBe(true);
       await page.screenshot({ path: `${evidence}/after-admin-${tab}-${viewport}.png`, fullPage: true });
     }
     await expect(page.getByText('時間未記錄', { exact: true })).toBeVisible();
     await expect(page.getByText('Invalid Date')).toHaveCount(0);
-    await page.getByRole('button',{name:'會員管理',exact:true}).click();
+    await navigateAdmin(page,'會員管理');
     await expect(page.locator('.admin-member-row')).toHaveCount(1);
     for(const theme of ['light','dark','versefolk'] as const){
       await page.evaluate(value=>{document.documentElement.dataset.theme=value;},theme);
       await page.waitForTimeout(200); // Let the existing color transition settle before checking contrast.
+      await openAdminNavigation(page);
       const ratios=await page.evaluate(()=>{
         const rgb=(value:string)=>(value.match(/[\d.]+/g)??[]).slice(0,3).map(Number);
         const luminance=(value:string)=>rgb(value).map(part=>{const c=part/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((sum,c,index)=>sum+c*[.2126,.7152,.0722][index],0);
@@ -248,6 +249,7 @@ test('admin console fits phone and desktop and never shows an invalid audit time
       });
       expect(Math.min(...ratios),`${theme} ${viewport} admin text contrast`).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({path:`${evidence}/after-admin-${theme}-${viewport}.png`,fullPage:true});
+      if(viewport==='mobile'){await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'開啟管理選單',exact:true})).toBeFocused();}
     }
   }
 });

@@ -8,8 +8,10 @@
     "apps/platform-api/src/routes/hosted-supply-materials.ts",
     "apps/platform-api/src/routes/hosted-supply-material-media.ts",
     "apps/platform-api/src/routes/hosted-distribution-photos.ts",
+    "apps/platform-api/src/routes/hosted-supply-offer-photos.ts",
     "migrations/171_supply_materials.sql",
     "migrations/172_distribution_photos.sql",
+    "migrations/174_supply_offer_photos.sql",
     "contracts/guild-launchpad/v1/supplier-console.ts",
     "contracts/guild-launchpad/v1/supplier-console.schema.json",
     "tests/runtime/supplier-console.test.ts",
@@ -24,6 +26,9 @@
     "tests/runtime/partner-materials-view.test.ts",
     "tests/runtime/distribution-photos.test.ts",
     "tests/runtime/distribution-photos-sql.test.ts",
+    "tests/runtime/hosted-supply-offer-photos.test.ts",
+    "tests/runtime/hosted-supply-catalog-photos.test.ts",
+    "tests/helpers/hosted-supply-offer-photos.ts",
     "tests/runtime/partner-materials-recovery.test.ts",
     "tests/e2e/supplier-console.spec.ts",
     "tests/e2e/supplier-console-cooperation.spec.ts",
@@ -33,7 +38,8 @@
     "tests/e2e/supplier-console-queries.spec.ts",
     "tests/e2e/supplier-console-report.spec.ts",
     "tests/e2e/supplier-console-materials.spec.ts",
-    "docs/platform-plan/execution/supplier-console/**"
+    "docs/platform-plan/execution/supplier-console/**",
+    "tests/e2e/supplier-console-search.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
@@ -160,6 +166,18 @@
         "storefront.distribution-photo.use",
         "storefront.distribution-photo.detach",
         "storefront.distribution-photo.content"
+      ]
+    },
+    {
+      "surface_id": "commerce.supply-offer-photos-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/hosted-supply-offer-photos.ts",
+      "auth_profile": "member-session",
+      "operations": [
+        "storefront.supply-offer.photo.share",
+        "storefront.supply-offer.photo.stop",
+        "storefront.supply-catalog-photos.read",
+        "storefront.supply-offer.photo.read"
       ]
     }
   ]

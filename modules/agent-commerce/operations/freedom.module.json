@@ -12,6 +12,11 @@
     "deploy/cloudflare/test/commerce-wrangler.test.mjs",
     "apps/platform-api/src/routes/commerce-admissions.ts",
     "tests/runtime/commerce-store-admissions.test.ts",
+    "tests/runtime/commerce-store-readiness.test.ts",
+    "packages/testing/commerce-readiness-privacy.ts",
+    "apps/platform-api/src/routes/hosted-store-overview.ts",
+    "apps/portal-web/src/modules/AdminStoreAdmissions.tsx",
+    "apps/portal-web/src/modules/AdminStoreAdmissions.css",
     "tests/runtime/commerce-email-templates.test.ts",
     "tests/runtime/commerce-effect-journal.test.ts",
     "tests/runtime/commerce-email-outbox.test.ts",
@@ -34,5 +39,13 @@
   "tests": [
     "runtime.full"
   ],
-  "surfaces": []
+  "surfaces": [
+    {
+      "surface_id": "commerce.hosted-store-overview-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/hosted-store-overview.ts",
+      "operations": ["store.overview"],
+      "auth_profile": "member-session"
+    }
+  ]
 }

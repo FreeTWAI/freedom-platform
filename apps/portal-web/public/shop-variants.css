@@ -1,0 +1,11 @@
+.shop-variants { margin: 24px 0; min-width: 0; }
+.shop-variant-axis { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.shop-variant-axis legend { font-weight: 700; margin-bottom: 8px; }
+.shop-variant-values { display: flex; flex-wrap: wrap; gap: 8px; }
+.shop-variant-value { min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--card); text-decoration: none; overflow-wrap: anywhere; max-width: 100%; }
+.shop-variant-value.is-selected { border-color: var(--shop-accent, #28674e); box-shadow: inset 0 0 0 1px var(--shop-accent, #28674e); font-weight: 700; }
+.shop-variant-value span { color: var(--muted); font-size: .8rem; font-weight: 400; }
+.shop-variant-value:focus-visible { outline: 3px solid var(--shop-accent, #28674e); outline-offset: 3px; }
+.shop-variant-summary { color: var(--muted); font-size: .9rem; }
+.shop-detail-copy h1, .shop-products h3 { overflow-wrap: anywhere; }
+#shop-variant-status { color: var(--muted); }

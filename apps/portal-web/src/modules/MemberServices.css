@@ -3,6 +3,8 @@
 .service-intro,.service-public-note{color:var(--muted);font-size:.9rem}
 .service-mine{display:grid;gap:.7rem}
 .service-mine h2,.service-form h2{margin:0;font-size:1.05rem}
+.service-form-fields{display:contents;border:0;margin:0;padding:0;min-width:0}
+.service-count{color:var(--muted);font-weight:400;font-size:.9rem;font-variant-numeric:tabular-nums}
 .service-mine-head,.service-form-actions,.service-mine-row{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
 .service-mine-head{justify-content:space-between}
 .service-mine ul{list-style:none;margin:0;padding:0;display:grid;gap:.7rem}
@@ -37,6 +39,8 @@
 .service-points{color:var(--muted);font-size:.85rem}
 .service-facts{color:var(--ink);font-size:.85rem}
 .service-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+.service-actions > [role="group"]:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;min-width:0}
+.service-confirmation-note{flex-basis:100%;margin:0;overflow-wrap:anywhere}
 .service-actions > .skill-share,.service-mine-row > .service-actions > .skill-share{flex:0 1 auto;width:auto}
 .service-actions > .skill-share > .btn{width:auto}
 .service-badge{display:inline-flex;align-items:center;width:fit-content;min-height:1.5rem;padding:.1rem .5rem;border:1px solid transparent;border-radius:999px;font-size:.75rem;font-weight:700}

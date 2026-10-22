@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { Pool } from 'pg';
 import { test, expect, type Browser, type Page } from './fixtures.js';
 import { navigate } from './navigation.js';
@@ -204,4 +205,45 @@ test('SEARCH-004 a long pinned repository label stays inside a 390px work card',
     await e2eAuthPool.query('DELETE FROM oss_projects WHERE project_id=$1', [project]);
     await e2eAuthPool.query('DELETE FROM users WHERE user_id=$1', [owner]);
   }
+});
+
+test('SEARCH-005 only published showcases enter the topic editor and republishing restores saved topics', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), title = `主題作品${randomUUID().slice(0, 8)}`;
+  const logged = await signedIn(browser, baseURL!, member.email);
+  const record = z.object({ showcase_id: z.string().uuid(), aggregate_version: z.coerce.number() });
+  try {
+    const draft = record.parse(await (await post(logged.page, '/me/showcases', { title, description: '合成私人作品' })).json());
+    const editor = logged.page.locator('.community-content-search h3').filter({ hasText: title }).locator('..');
+    const openEditor = async () => {
+      await logged.page.reload();
+      await search(logged.page, title);
+      await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
+    };
+    const transition = async (action: 'publish' | 'withdraw', version: number) => {
+      const session = z.object({ csrf_token: z.string() }).parse(await (await logged.page.request.get('/api/v1/session')).json());
+      const response = await logged.page.request.post(`/api/v1/me/showcases/${draft.showcase_id}/${action}`, {
+        data: action === 'publish' ? { consent_to_share: true } : {},
+        headers: { Origin: new URL(logged.page.url()).origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID(), 'If-Match': `"${version}"` },
+      });
+      expect(response.status(), await response.text()).toBe(200);
+      return record.parse(await response.json());
+    };
+    await openEditor();
+    await expect(editor).toHaveCount(0);
+    const published = await transition('publish', draft.aggregate_version);
+    await openEditor();
+    await expect(editor).toBeVisible();
+    await editor.getByRole('checkbox', { name: '工具資源', exact: true }).check();
+    const saved = logged.page.waitForResponse(response => response.url().endsWith('/api/v1/community-search/topics') && response.request().method() === 'POST');
+    await editor.getByRole('button', { name: '儲存主題', exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    await expect(logged.page.getByText('主題已儲存。', { exact: true })).toBeVisible();
+    const withdrawn = await transition('withdraw', published.aggregate_version);
+    await openEditor();
+    await expect(editor).toHaveCount(0);
+    await transition('publish', withdrawn.aggregate_version);
+    await openEditor();
+    await expect(editor.getByRole('checkbox', { name: '工具資源', exact: true })).toBeChecked();
+    expect((await e2eAuthPool.query("SELECT topics,aggregate_version FROM community_content_topic_sets WHERE content_kind='work' AND content_id=$1", [draft.showcase_id])).rows[0]).toMatchObject({ topics: ['tools'], aggregate_version: '1' });
+  } finally { await logged.context.close(); }
 });

@@ -1,0 +1,1096 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freetwai.com/contracts/guild-launchpad/v1/storefront-policies",
+  "description": "C1 seller and plain text policy drafts with immutable publication references. No checkout consent or gate.",
+  "$defs": {
+    "seller-draft": {
+      "type": "object",
+      "properties": {
+        "business_name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "service_hours": {
+          "type": "string"
+        },
+        "tax_id": {
+          "type": "string"
+        },
+        "responsible_person": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "business_name",
+        "email",
+        "phone",
+        "address",
+        "service_hours",
+        "tax_id",
+        "responsible_person"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: no_account_defaults, business_name_if_any_field."
+    },
+    "policy-draft": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "shipping"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "returns"
+            },
+            "body": {
+              "type": "string"
+            },
+            "window_days": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 7,
+                  "maximum": 3650
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "return_by_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            }
+          },
+          "required": [
+            "kind",
+            "body",
+            "window_days",
+            "return_by_days"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "privacy"
+            },
+            "body": {
+              "type": "string"
+            },
+            "drop_ship_disclosed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "body",
+            "drop_ship_disclosed"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "terms"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: normalized_10000_unicode_code_points, structured_fields_display_only."
+    },
+    "seller-policies-input": {
+      "type": "object",
+      "properties": {
+        "seller": {
+          "type": "object",
+          "properties": {
+            "business_name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "service_hours": {
+              "type": "string"
+            },
+            "tax_id": {
+              "type": "string"
+            },
+            "responsible_person": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "business_name",
+            "email",
+            "phone",
+            "address",
+            "service_hours",
+            "tax_id",
+            "responsible_person"
+          ],
+          "additionalProperties": false
+        },
+        "policies": {
+          "type": "object",
+          "properties": {
+            "shipping": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "shipping"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            },
+            "returns": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "returns"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "window_days": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 7,
+                      "maximum": 3650
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "return_by_days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3650
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "window_days",
+                "return_by_days"
+              ],
+              "additionalProperties": false
+            },
+            "privacy": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "privacy"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "drop_ship_disclosed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "drop_ship_disclosed"
+              ],
+              "additionalProperties": false
+            },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "terms"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "shipping",
+            "returns",
+            "privacy",
+            "terms"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "seller",
+        "policies"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: atomic_section, current_store_manage_profile_cas."
+    },
+    "seller-policies-wire": {
+      "type": "object",
+      "properties": {
+        "seller": {
+          "type": "object",
+          "properties": {
+            "business_name": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "email": {
+              "type": "string",
+              "maxLength": 508
+            },
+            "phone": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "address": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "service_hours": {
+              "type": "string",
+              "maxLength": 600
+            },
+            "tax_id": {
+              "type": "string",
+              "maxLength": 16
+            },
+            "responsible_person": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          "required": [
+            "business_name",
+            "email",
+            "phone",
+            "address",
+            "service_hours",
+            "tax_id",
+            "responsible_person"
+          ],
+          "additionalProperties": false
+        },
+        "policies": {
+          "type": "object",
+          "properties": {
+            "shipping": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "shipping"
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 20000
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            },
+            "returns": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "returns"
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 20000
+                },
+                "window_days": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 7,
+                      "maximum": 3650
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "return_by_days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3650
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "window_days"
+              ],
+              "additionalProperties": false
+            },
+            "privacy": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "privacy"
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 20000
+                },
+                "drop_ship_disclosed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "drop_ship_disclosed"
+              ],
+              "additionalProperties": false
+            },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "terms"
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 20000
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "shipping",
+            "returns",
+            "privacy",
+            "terms"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "seller",
+        "policies"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: serialized_snapshot_under_256_kib."
+    },
+    "seller-policies-draft": {
+      "type": "object",
+      "properties": {
+        "seller": {
+          "type": "object",
+          "properties": {
+            "business_name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "service_hours": {
+              "type": "string"
+            },
+            "tax_id": {
+              "type": "string"
+            },
+            "responsible_person": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "business_name",
+            "email",
+            "phone",
+            "address",
+            "service_hours",
+            "tax_id",
+            "responsible_person"
+          ],
+          "additionalProperties": false
+        },
+        "policies": {
+          "type": "object",
+          "properties": {
+            "shipping": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "shipping"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            },
+            "returns": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "returns"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "window_days": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 7,
+                      "maximum": 3650
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "return_by_days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3650
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "window_days",
+                "return_by_days"
+              ],
+              "additionalProperties": false
+            },
+            "privacy": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "privacy"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "drop_ship_disclosed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "drop_ship_disclosed"
+              ],
+              "additionalProperties": false
+            },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "terms"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "shipping",
+            "returns",
+            "privacy",
+            "terms"
+          ],
+          "additionalProperties": false
+        },
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-policies/v1"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "has_supplied_products": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "seller",
+        "policies",
+        "profile",
+        "version",
+        "dirty",
+        "has_supplied_products"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_store_read."
+    },
+    "seller-policies-command": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-policies/v1"
+        },
+        "completed_version": {
+          "type": "string",
+          "maxLength": 19,
+          "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "current": {
+          "type": "object",
+          "properties": {
+            "seller": {
+              "type": "object",
+              "properties": {
+                "business_name": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                },
+                "service_hours": {
+                  "type": "string"
+                },
+                "tax_id": {
+                  "type": "string"
+                },
+                "responsible_person": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "business_name",
+                "email",
+                "phone",
+                "address",
+                "service_hours",
+                "tax_id",
+                "responsible_person"
+              ],
+              "additionalProperties": false
+            },
+            "policies": {
+              "type": "object",
+              "properties": {
+                "shipping": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "shipping"
+                    },
+                    "body": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "returns": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "returns"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "window_days": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 7,
+                          "maximum": 3650
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "return_by_days": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3650
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "body",
+                    "window_days",
+                    "return_by_days"
+                  ],
+                  "additionalProperties": false
+                },
+                "privacy": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "privacy"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "drop_ship_disclosed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "body",
+                    "drop_ship_disclosed"
+                  ],
+                  "additionalProperties": false
+                },
+                "terms": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "terms"
+                    },
+                    "body": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "shipping",
+                "returns",
+                "privacy",
+                "terms"
+              ],
+              "additionalProperties": false
+            },
+            "profile": {
+              "type": "string",
+              "const": "freedom.hosted-store-policies/v1"
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 19,
+              "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\\s\\S])"
+            },
+            "dirty": {
+              "type": "boolean"
+            },
+            "has_supplied_products": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "seller",
+            "policies",
+            "profile",
+            "version",
+            "dirty",
+            "has_supplied_products"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "profile",
+        "completed_version",
+        "changed",
+        "current"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: completion_metadata_only_receipt, current_store_manage."
+    },
+    "policy-version": {
+      "type": "object",
+      "properties": {
+        "version_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "policy": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "shipping"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "returns"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "window_days": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 7,
+                      "maximum": 3650
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "return_by_days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3650
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "window_days",
+                "return_by_days"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "privacy"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "drop_ship_disclosed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "body",
+                "drop_ship_disclosed"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "terms"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "first_published_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])"
+        },
+        "current": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version_id",
+        "policy",
+        "first_published_at",
+        "current"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: ever_published_same_store, no_private_version_number."
+    },
+    "publication-seller-policies": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "freedom.hosted-store-policies/v1"
+        },
+        "seller": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "version_id": {
+                  "type": "string",
+                  "minLength": 36,
+                  "maxLength": 36,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+                }
+              },
+              "required": [
+                "version_id",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policies": {
+          "type": "object",
+          "properties": {
+            "shipping": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "version_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "version_id",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "returns": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "version_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "version_id",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "privacy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "version_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "version_id",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "terms": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "version_id": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "version_id",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "shipping",
+            "returns",
+            "privacy",
+            "terms"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "profile",
+        "seller",
+        "policies"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: server_only_freeze_refs."
+    }
+  }
+}

@@ -31,6 +31,49 @@ batched orders remain unchanged. This is a read-decision fence, not a guarantee
 through commit or HTTP delivery; machine bearer and anonymous public-shop readers
 retain their separate authority and are not changed by the member boundary.
 
+Remote import previews accept only the existing allowlisted raw GitHub JSON/MD
+locations. The reader uses Fetch `referrerPolicy: 'no-referrer'`, not a literal
+`no-referrer` URL in `referrer`; native Node Fetch must be able to construct the
+request without disclosing the member page as Referer. Redirect refusal,
+credential omission, the 24,000-byte cap and eight-second abort remain unchanged.
+Remote bytes are decoded as strict UTF-8 before parsing: malformed sequences
+(including encoded surrogates and truncated code points) return
+`422 manifest_fetch_failed`, never replacement characters or a preview.
+The raw byte cap includes any BOM; valid code points split across chunks,
+BOM-prefixed sources and intentional U+FFFD remain accepted.
+The native-fetch regressions in [agent-commerce.test.ts](../../tests/runtime/agent-commerce.test.ts)
+substitute only a synthetic loopback upstream and exercise authenticated
+URL preview, confirmation, same-key replay and exact SQL text/digest readback,
+plus malformed wire rejection without import writes or Referer disclosure.
+This does not establish live GitHub availability or Worker/deployed behavior.
+
+Local JSON/MD import sources remain limited to 24,000 UTF-8 bytes. Only
+`POST /api/v1/commerce/preview` permits a 144,014-byte JSON request: the
+`{"content":""}` wrapper adds 14 bytes and each source byte can require at
+most six bytes when JSON-escaped. This transport allowance prevents valid
+escaped results from hitting the ordinary 32 KiB request ceiling; it does
+not increase the decoded source limit or change the manifest schema.
+Both declared lengths and the actual stream are bounded before parsing.
+All existing Origin, session, CSRF, UTF-8/Unicode/NUL and preview rate-limit
+checks remain in place. Other JSON commands keep their existing ceilings.
+
+The shared manifest schema rejects decoded NUL and unpaired UTF-16 surrogates
+in shop text, product text, public sale terms and manifest URLs. This applies
+after the inner JSON block in a JSON/MD result is decoded, so preview cannot
+offer a manifest that the confirmation HTTP text guard must reject. Valid
+Unicode scalar pairs, intentional U+FFFD and literal `\u0000` / `\ud800`
+text remain unchanged; no replacement or Unicode normalization is applied.
+Existing trimming, length, URL and uniqueness rules still apply. The shared
+business `text()` helper and order/payment/shipment schemas are unchanged.
+
+Public-manifest `item_id` and machine-order `selection_id` uniqueness follows
+PostgreSQL UUID identity: uppercase and lowercase spellings of one UUID are
+duplicates and fail schema validation with `422 validation_failed`, before
+an import or reservation write. Single uppercase references and distinct
+UUIDs remain valid. Only comparison keys are case-folded; the parsed input,
+request digests and external order IDs are not rewritten. Product SKUs keep
+their existing case-sensitive uniqueness rule (`TEA` and `tea` are distinct).
+
 The server resolver and schema constraints are documented in [resource-scopes](../../packages/resource-scopes/README.md). After schema 117 and 118, an upgraded issuer creates only purpose-bound v2 keys when the owner explicitly requests issuance. Its existing member receipt/digest stays unchanged and a replay still returns `token: null`. The application must receive an explicit `FREEDOM_SHOP_KEY_POLICY=legacy-compatible` or `purpose-bound-only`; absent configuration yields shop-only 503. The Worker config checker lists this as a required injection without changing deployed vars. `/api/v1/health` reports the actual selected policy and issuer profile, or `unconfigured`/null. A merged source SHA or configured example is not an installed policy observation.
 
 ## Controlled legacy exit
@@ -71,6 +114,8 @@ The isolated [identity](../../tests/runtime/shop-service-identity.test.ts), [com
 
 ### Release 1.1.0 and upgrade
 
+Initial supply eligibility follows active membership in `guild_product_quality_supply`, including interns. Initial retail setup requires active membership in `guild_commerce_sales`, including interns. First supply setup also accepts active commerce interns or full members through the same shared rule. Retail denial is `commerce_guild_member_required`; supplier denial remains `guild_member_required`. The common application checks its purpose-specific rule at catalog/plan/launch, and first profile creation checks the corresponding cohort again after lifecycle locks. A supplier installation alone cannot create a retail profile. Existing business capabilities, stock and orders remain valid under their current tenant/instance authorization after later guild changes; membership never grants another business's data or replaces the separate store admission record.
+
 New stores use `hosted-store@1.1.0` / `storefront@1.1.0`, with the original
 storefront contract bytes and twelve registered capabilities. Existing 1.0.0
 instances retain their four keys until their owner invokes the versioned,
@@ -91,7 +136,44 @@ Ordering is not enabled. Hosted shops remain test mode with `accepting_orders=fa
 
 For stores without order history, delete selections first, then items, then both shops. The profile and its publications cascade from the shops, and resource mappings cascade from each shop. Profile identity/slug and publication immutability triggers only reject updates; order/quote/line foreign keys now retain referenced history; erasure policy remains undecided. Test cleanup uses isolated schema teardown. The migration registers the module/application without a guild offering; a later slice provides the member launch UI and offering. The hosted-store management and anonymous publication routes require the existing guild-launchpad release flag. Exact private buyer order recovery/cancel has a separate member boundary, described below.
 
-Member UI: commerce members enter from the launchpad’s 「建立我的商店」 primary action, the 「我的商店」 tab, or 「設定我的商店」 after the existing launch flow succeeds. `#stores` lists readable stores; `#stores/<tenant_id>/<instance_id>` provides setup, product editing, preview and publication. This UI only calls the existing hosted-store API; ordering remains disabled.
+Member UI: `#stores` lists readable stores and links directly to `#stores/setup`.
+The setup journey explains any missing guild qualification, joins only after an
+explicit member action, and continues the existing tenant/plan/launch flow in the
+same page. `#stores/supply/setup` provides the corresponding supplier journey.
+Neither route changes the primary guild or bypasses membership/capacity checks.
+A pure supply catalog cannot be reused as a retail store; the journey offers a
+separate store space without changing the original catalog or inventory.
+`#stores/<tenant_id>/<instance_id>` retains store settings, product drafts and
+publication.
+
+僅在 gallery 關閉、單張照片編輯器啟用時，選取有效照片會自動儲存草稿；
+gallery 開啟時沿用圖組編輯器的明確儲存操作。結果不明時保留原上傳操作，
+已確認寫入後讀取失敗時，只重試讀取。
+
+啟用的外觀、賣方資訊與商店政策、商品圖組、規格與商品分類都納入同一次上架審閱及交易內摘要核對，
+並以既有快照 helper 凍結；任一內容在審閱後改變，須重新確認。
+審閱以選用的 `variants_changed`／`categories_changed` 等欄位顯示各維度是否變更；
+各旗標 OFF 時省略對應欄位與摘要輸入。規格啟用時，照片依商品組的 `gallery_sku`
+只列一次，不列買家頁不會使用的其他成員照片；圖組啟用時列該共用圖組的全部照片。
+旗標全部關閉時，審閱回應與摘要維持原格式。
+
+The product area can publish all saved, publishable store content in one click.
+The additive `storefront-publication` contract exposes a private
+`GET .../publication-review` under current `store:publish`, including the exact
+public product list, saved template, and versioned private photos from the same
+rowset. `POST .../publish-reviewed` submits that shown digest, profile If-Match
+and original idempotency key. Inside the existing instance/community/profile
+transaction locks, the command compares public text/price, template and media
+and every enabled dimension digest before saving that same rowset. Both plain
+and reviewed publication freeze the variants and categories sidecars from the
+checked dimensions object. Categories resolve group membership with the same
+variants setting as preview and publication. Product/photo changes do not bump the profile
+version, so profile CAS alone is insufficient. A changed review requires another
+explicit click; a committed receipt retry never publishes newer drafts. This is
+whole-store publication, including accepted distribution products and excluding
+supply-only drafts; it is not single-product publication. The pinned storefront
+schema and legacy `{}` publish endpoint remain unchanged. Publication does not
+enable checkout, payments or fulfilment.
 
 `GET /api/v1/me/stores` preserves the immutable legacy `{items,truncated}` response. Clients opt into `{items,next_cursor}` with `?pagination=cursor`; continuation requests must retain that opt-in and forward the opaque cursor unchanged as `?pagination=cursor&cursor=...` to continue through at most 100 tenant memberships per request, including pages with no readable storefront. The cursor uses the existing principal-bound tenant keyset codec; every page rechecks session, memberships and instance capabilities under tenant RLS. The Portal appends pages via 「載入更多商店」 and keeps loaded cards when a continuation fails. The pagination DTO lives in `storefront-pagination.ts`, separate from the immutable `storefront@1.0.0` registry contract pin; no registry release or migration changes.
 
@@ -208,3 +290,16 @@ published links, themes, product photos and social image preparation. The photo
 suite must run with FREEDOM_E2E_STORE_PHOTO_FIXTURE=1, not as a skipped default
 pass. Local Chromium and PostgreSQL 17 results are source evidence; required
 PostgreSQL 18 CI and real phone/production acceptance remain separate.
+
+## Live merchant stock and order-taking state
+
+Private merchant reads distinguish held reservations from remaining paid
+allocations. 已占用 includes both; 可售 and the supplier console's 可用 equal
+`available`. See [inventory observations](hosted/inventory-reservations.md) for
+strict/reporting semantics and [seller console](seller-console/README.md) for the
+shared readiness presentation. Historical display-only/v1 descriptions above
+remain scoped to those increments; checkout availability comes from the existing
+site flags and current store readiness. No migration, capability release, host
+flag change or new payment/shipping command is introduced by this presentation
+change. Drop-ship consent (C2), exposing supplier breakdowns to retailers and
+stability guarantees for CSV consumers require separate product decisions.

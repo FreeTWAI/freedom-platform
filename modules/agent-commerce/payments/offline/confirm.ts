@@ -57,6 +57,7 @@ export async function confirmOfflinePayment(pool:Pool,actor:Actor,tenantId:strin
     const application=await applyConfirmedPaymentHeld(q,{orderId:id,paymentRef:paymentId,amountMinor:body.amount_minor,currency:order.terms.currency,simulated:false},order);
     if(application.outcome==='unallocatable')await openException(q,{tenantId:context.tenant.tenant_id,instanceId:context.profile.instance_id,orderId:id,kind:'paid_unallocatable',subjectKind:'offline_payment',subjectId:paymentId,openedBy:{kind:'person',principalId:context.tenant.principal_id}});
     else requireCondition(application.outcome==='converted'||application.outcome==='allocated',409,'checkout_order_closed','訂單已結束。');
+    await options.orderNotifications?.emit(q,{store,orderId:id,event:'payment_confirmed',actorPrincipalId:context.tenant.principal_id});
     return {id};
   },project(options));
 }
@@ -82,6 +83,7 @@ export async function completeMeetup(pool:Pool,actor:Actor,tenantId:string,insta
     const handoverId=randomUUID();
     await insertHandover(q,context,id,handoverId,paymentId,body.completed_on);
     await recordHandover(q,store,{shipmentRef:handoverId,lines});
+    await options.orderNotifications?.emit(q,{store,orderId:id,event:'handed_over',actorPrincipalId:context.tenant.principal_id});
     return {id};
   },project(options));
 }
@@ -112,6 +114,7 @@ export async function recordMeetupHandover(pool:Pool,actor:Actor,tenantId:string
     const handoverId=randomUUID();
     await insertHandover(q,context,id,handoverId,null,body.completed_on);
     await recordHandover(q,store,{shipmentRef:handoverId,lines});
+    await options.orderNotifications?.emit(q,{store,orderId:id,event:'handed_over',actorPrincipalId:context.tenant.principal_id});
     return {id};
   },project(options));
 }

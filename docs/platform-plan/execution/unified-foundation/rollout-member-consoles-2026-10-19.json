@@ -1,0 +1,557 @@
+{
+  "format": "freedom.member-console-rollout/v1",
+  "status": "deployed_console_enablement_restore_and_operator_passed",
+  "recorded_at": "2026-10-19T18:08:55.016109+00:00",
+  "evidence_cutoff_at": "2026-10-19T18:04:26.744139+00:00",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "authorization": {
+    "deployment": "User explicitly requested the Freedom Platform orchestrator to merge, push and deploy within the three delivery outcomes.",
+    "cohort": "User confirmed supplier and commerce guild members are already consented test members.",
+    "limit": "Cohort consent is separate from human acceptance, per-owner publication/payment/fulfilment choices and actual transaction facts."
+  },
+  "source": {
+    "selected_release": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+    "tree": "1e8d0ad5afe03cb14ff59d953d1a558359bcfb94",
+    "dist_sha256": "1c2b840ac831787ba6ed3de573a829d415ede003780c7a81cc9d115edfbd1827",
+    "dist_file_count": 359,
+    "previous_release": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+    "schema": 172,
+    "migrations_applied": [],
+    "verify_evidence": {
+      "observed_at": "2026-10-19T16:22:01.232164+00:00",
+      "head": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+      "run": 39128835247,
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": 17,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39128835247",
+      "codeql_run": 39128835096,
+      "codeql_conclusion": "success",
+      "source_audit_sha256": "cad0725c8d77074648130a1adf33f3e97593b834205c68ca780605de06eabe5b",
+      "release_binding_sha256": "0ea881b4eb7391003e7fa46c215c1c58ba00f10d8294fb35439ef5102b8931a6"
+    }
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_console_enablement_restore_and_operator_passed",
+      "release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+      "previous_release_sha": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+      "worker_version": "b8d00827-76f8-4a2b-9160-0d54afb10d59",
+      "worker_binding_observed_at": "2026-10-19T18:04:18.481Z",
+      "traffic_percentage": 100,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+        "cache_control_no_store": true
+      },
+      "deployment_receipt_sha256": "c396be0352677104841c1362d43e9f15f4cf543bb9706e5c332f5405e0daa82c",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "schema": {
+        "through_number": 172,
+        "ledger_rows": 171,
+        "last_applied": "172_distribution_photos.sql",
+        "source_digest_drift": 0,
+        "migrations_applied": [],
+        "kind": "authenticated_backup_preflight_ledger",
+        "observed_between": {
+          "start": "2026-10-19T17:09:34.435Z",
+          "end": "2026-10-19T17:09:39.798Z"
+        },
+        "timestamp_basis": "Ledger was read and checked before the timestamped GC observation in the same successful backup preflight; no post-restore live DB query is claimed.",
+        "schema_floor_receipt_sha256": "10c050902d7a23fbd7325489c7954aa6963e9521f5688a9ad3a90a144c786a61",
+        "restored_floor": {
+          "status": "passed",
+          "schema": 172,
+          "restoredLedgerMatches": true,
+          "oldRollbackRejected": true,
+          "quarantineRetained": true,
+          "publicAdmission": false
+        },
+        "restored_floor_receipt_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+        "restored_coordinate_fence": {
+          "status": "not_applicable",
+          "constraints": 0,
+          "receipt_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b"
+        }
+      },
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true"
+      },
+      "flag_changes": {
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": {
+          "before": "false",
+          "after": "true"
+        }
+      },
+      "other_flags_unchanged": true,
+      "backups": {
+        "before": {
+          "set_id": "ce76ffac-3157-4838-ae0c-0765a55bbc98",
+          "created_at": "2026-10-19T16:24:48.611Z",
+          "source_release": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+          "operator_source": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+          "schema": 172,
+          "status": "passed",
+          "restore": "database_and_objects_restored",
+          "remote_readback": "verified",
+          "cleanup_verified": true,
+          "dump": {
+            "sha256": "faf4fb3da4f9bebffbeaf4b502a6fb6cda7c7e3eb00f73c5008f9d2e4045b04c",
+            "byteSize": 3036923
+          },
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "adapter_sha256": "e5809ecb7c22c78647e83cd2499ee6bb89bf49e1c496da0048a0312dad1c3530",
+          "manifest_sha256": "2b21f5c08f9695cb553bb3702726b8984fb0ff530f6f41dca64dadd961c6e0f1",
+          "receipt_sha256": "02f808fa2c91d9adb4b36205859145b9ffc6c1739c7d84e8455f8f286d1b5f5f",
+          "restore_quarantine_required": true,
+          "retention_executed": false,
+          "pitr": false
+        },
+        "after": {
+          "set_id": "4953af88-0190-455f-a004-da0fdf322591",
+          "created_at": "2026-10-19T17:09:34.435Z",
+          "source_release": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+          "operator_source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+          "schema": 172,
+          "status": "passed",
+          "restore": "database_and_objects_restored",
+          "remote_readback": "verified",
+          "cleanup_verified": true,
+          "dump": {
+            "sha256": "552807c2cb0cf792960c620d59c07535d9586db920927a8874d487011a86fa7a",
+            "byteSize": 3051438
+          },
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "adapter_sha256": "b09b86ef7f86c9b283277ccfa9873e4182a4e441c8ccbcb7e3fe69ec000a5476",
+          "manifest_sha256": "c82c7a8765f8efaeef90d028c56b392d2b63324da2a62f8ea97e88f4acf42b4b",
+          "receipt_sha256": "3453578a380281be02c7334c58e3da7cbeac0d90469671c4e5824088333c2c2c",
+          "restore_quarantine_required": true,
+          "retention_executed": false,
+          "pitr": false
+        }
+      },
+      "operator_binding": {
+        "setId": "4953af88-0190-455f-a004-da0fdf322591",
+        "wrapper": "run-after-staging-backup",
+        "wrapperSha256": "a78e5a1cf8ea366d64f9a6f2da0a8f57dcd14b41d7947f739c98b036ec17c1e2",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapterSha256": "b09b86ef7f86c9b283277ccfa9873e4182a4e441c8ccbcb7e3fe69ec000a5476",
+        "pins": "after-staging-runtime-pins.sha256",
+        "pinsSha256": "bf4c4ef5afd49fb86514b715bf965c673f3fdc07f11e48d6f4ee412e63e488cc"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T03:30:11Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "acceptance": {
+        "identity": "owned_synthetic_normal_members",
+        "observed_between": {
+          "start": "2026-10-19T17:00:56.152Z",
+          "end": "2026-10-19T17:01:17.725Z"
+        },
+        "status": "passed",
+        "seller": {
+          "login_verified": true,
+          "scope_verified": true,
+          "desktop_verified": true,
+          "mobile_verified": true,
+          "session_cleanup_verified": true,
+          "blocked_mutations": 0,
+          "transport_errors": 0,
+          "login_language": {
+            "html_lang": "zh-Hant",
+            "browser_language": "zh-TW",
+            "browser_languages": [
+              "zh-TW"
+            ],
+            "stored_preference": null
+          },
+          "order_list_visible": true
+        },
+        "supplier": {
+          "login_verified": true,
+          "scope_verified": true,
+          "desktop_verified": true,
+          "mobile_verified": true,
+          "session_cleanup_verified": true,
+          "blocked_mutations": 0,
+          "transport_errors": 0,
+          "login_language": {
+            "html_lang": "zh-Hant",
+            "browser_language": "zh-TW",
+            "browser_languages": [
+              "zh-TW"
+            ],
+            "stored_preference": null
+          }
+        },
+        "anonymous_seller_api_status": 401,
+        "anonymous_supplier_api_status": 401,
+        "session_cleanup_verified": true,
+        "browser_receipt_sha256": "059f1f0f4bb103add875ec5370b13f21f8cfa51ad2fd0b8a41403747cb54a58c",
+        "fixture_cleanup": {
+          "status": "passed",
+          "observed_at": "2026-10-19T17:03:56.445Z",
+          "cleanup_verified": true,
+          "real_member_permissions_changed": false,
+          "orders_created": 0,
+          "provider_writes": 0,
+          "receipt_sha256": "7e65d0d1ed7c9bad2b9f6172d24f3466827c632f951f60aa0b593b404a72beab"
+        },
+        "temporary_access": {
+          "revoked_at": "2026-10-19T17:05:05.109Z",
+          "policy": "deleted",
+          "token": "deleted",
+          "credential": "removed",
+          "curl_headers": "removed",
+          "receipt_sha256": "94aee42a3d60c795ed1187affb1598b71de37eaa0bb8d40bddcca3db9e0e2ad0"
+        },
+        "human_acceptance": false,
+        "limitation": "Normal login, assigned scope, seller order-list and supplier console desktop/mobile visibility only; no order or member publication/payment choices are exercised."
+      }
+    },
+    "production": {
+      "status": "deployed_console_enablement_restore_and_operator_passed",
+      "release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+      "previous_release_sha": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+      "worker_version": "fe69e1a1-31ca-4006-b0cb-6c45a9a7bbb3",
+      "worker_binding_observed_at": "2026-10-19T18:04:18.481Z",
+      "traffic_percentage": 100,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+        "cache_control_no_store": true
+      },
+      "deployment_receipt_sha256": "b97d3dfa6164b89c9eaa389f4486ef4d74d310221a3126d5659e405336922871",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "schema": {
+        "through_number": 172,
+        "ledger_rows": 171,
+        "last_applied": "172_distribution_photos.sql",
+        "source_digest_drift": 0,
+        "migrations_applied": [],
+        "kind": "authenticated_backup_preflight_ledger",
+        "observed_between": {
+          "start": "2026-10-19T17:51:04.757Z",
+          "end": "2026-10-19T17:51:09.820Z"
+        },
+        "timestamp_basis": "Ledger was read and checked before the timestamped GC observation in the same successful backup preflight; no post-restore live DB query is claimed.",
+        "schema_floor_receipt_sha256": "942d635e405b4fb11897759b3c8449360c47cdd50153f39447f0d26dc7d8a01c",
+        "restored_floor": {
+          "status": "passed",
+          "schema": 172,
+          "restoredLedgerMatches": true,
+          "oldRollbackRejected": true,
+          "quarantineRetained": true,
+          "publicAdmission": false
+        },
+        "restored_floor_receipt_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+        "restored_coordinate_fence": {
+          "status": "verified",
+          "constraints": 10,
+          "receipt_sha256": "1458b12f595915898701fabd48a3766af28e3da404fcbdbc697c9b38f9b1e2d0"
+        }
+      },
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false"
+      },
+      "flag_changes": {
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": {
+          "before": "false",
+          "after": "true"
+        },
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": {
+          "before": "false",
+          "after": "true"
+        }
+      },
+      "other_flags_unchanged": true,
+      "backups": {
+        "before": {
+          "set_id": "d4da89c0-baed-4796-8833-bd5be6fdb4ea",
+          "created_at": "2026-10-19T16:38:27.814Z",
+          "source_release": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+          "operator_source": "855bdfff5fab2e0046d6b3ad401e22d418517738",
+          "schema": 172,
+          "status": "passed",
+          "restore": "database_and_objects_restored",
+          "remote_readback": "verified",
+          "cleanup_verified": true,
+          "dump": {
+            "sha256": "922a444aee70c5895fb7e87e06c0e14feee99dbf68b01b54df7acbdf45eae397",
+            "byteSize": 6689332
+          },
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "adapter_sha256": "9785498f555a23af88d676925fd92aed19b86a65d167eb2ab95ee43386480a73",
+          "manifest_sha256": "2755b5df5c7b1348fdc651afdba350a0b51785518ebae3e1b15147a0d07bd676",
+          "receipt_sha256": "6f2beaf73433db78c926609e8a1184317ad89c797011fe8b49fa13554ca4a1f9",
+          "restore_quarantine_required": true,
+          "retention_executed": false,
+          "pitr": false
+        },
+        "after": {
+          "set_id": "46f64b85-9b3b-4b16-a80d-ffe3957c2207",
+          "created_at": "2026-10-19T17:51:04.757Z",
+          "source_release": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+          "operator_source": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+          "schema": 172,
+          "status": "passed",
+          "restore": "database_and_objects_restored",
+          "remote_readback": "verified",
+          "cleanup_verified": true,
+          "dump": {
+            "sha256": "e73bf22a8715f7f0ad8e499b486fc8f61683b84027d194265678cbd8f8e40e52",
+            "byteSize": 6691298
+          },
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "adapter_sha256": "a38f75dc0d6f3d9abb989f6782ae7821fe8a0064c4aa0fcc25a82a0845816db8",
+          "manifest_sha256": "ec51216efc1dadf5628aeb766a199b731ecfdd9f7677c4e3daca087579711f19",
+          "receipt_sha256": "0f769cfbf7f10791785bf50e4efb41dd1048d716e9774dbc939791088199f975",
+          "restore_quarantine_required": true,
+          "retention_executed": false,
+          "pitr": false
+        }
+      },
+      "operator_binding": {
+        "setId": "46f64b85-9b3b-4b16-a80d-ffe3957c2207",
+        "wrapper": "run-after-production-backup-capture-diagnostic",
+        "wrapperSha256": "d25c9746b5161e30400d9d93efae19417779129968cd9f9ddf8ba9e3639d0043",
+        "adapter": "backup-adapter.after-production.capture-diagnostic.mts",
+        "adapterSha256": "a38f75dc0d6f3d9abb989f6782ae7821fe8a0064c4aa0fcc25a82a0845816db8",
+        "pins": "after-production-capture-diagnostic-runtime-pins.sha256",
+        "pinsSha256": "b79546182fcb88e4e6e25f4f61148852bf3d3b615f92d9e58cef08c71906fad6"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T04:34:11Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "acceptance": {
+        "status": "passed",
+        "release": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+        "startedAt": "2026-10-19T17:29:24.755Z",
+        "memberLogin": false,
+        "ordersCreated": 0,
+        "checks": [
+          "public health exact release and no-store",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products"
+        ],
+        "flags": {
+          "supplier": true,
+          "commerce": true,
+          "checkout": false
+        },
+        "completedAt": "2026-10-19T17:29:28.276Z",
+        "receipt_sha256": "cfbefda08ae08dd683e067c7960f6b1efe99d834eca69ecd98677c0708b2d721",
+        "human_acceptance": false,
+        "limitation": "Read-only anonymous HTTP; same-source staging member UI evidence is separate."
+      }
+    }
+  },
+  "attempts_preserved": [
+    {
+      "kind": "staging_browser_acceptance",
+      "status": "failed",
+      "started_at": "2026-10-19T16:53:37.394Z",
+      "finished_at": "2026-10-19T16:54:12.021Z",
+      "failure_label": "browser_or_transport_error",
+      "receipt_sha256": "ebb1daa1860af3adc382fed362049a4d58dbaffdeb16eaad6e3b3793cbf0fdb6",
+      "limitation": "Original failed result retained; the separately recorded final zh-TW/native-combobox run passed. No production code was changed for these harness corrections."
+    },
+    {
+      "kind": "staging_browser_acceptance",
+      "status": "failed",
+      "started_at": "2026-10-19T16:57:43.543Z",
+      "finished_at": "2026-10-19T16:58:17.084Z",
+      "failure_label": "verify_mobile_layout",
+      "receipt_sha256": "e81d1c063f6faae341abad03926bc1cf79cab2616e34824ddbd8ac0fefcf0c5f",
+      "limitation": "Original failed result retained; the separately recorded final zh-TW/native-combobox run passed. No production code was changed for these harness corrections."
+    },
+    {
+      "kind": "staging_after_backup_initialization",
+      "status": "failed",
+      "code": "daily_backup_installation_or_record_failed",
+      "original_cleanup_verified": false,
+      "set_id": null,
+      "provider_calls": false,
+      "log_sha256": "5669c0c6e754ded8a482e0be22f6fa8d03b0614a582016bc0648c42a403370a0",
+      "resolution": "Failure occurred before adapter import because the private state directory did not exist. Operator created the required mode-0700 state directories, then ran the separately recorded successful set4953af88. The original failure is unchanged."
+    },
+    {
+      "kind": "production_deploy_pre_import",
+      "status": "refused",
+      "log_sha256": "72d5daf7590d16d4a1dbe73e8427246021b2de3a3d3111ff4af9aa19c94e00be",
+      "cause": "Installed-runtime closure detected the sole added file node_modules/.mf/cf.json created by the local Miniflare restore cache.",
+      "resolution": "Moved that exact cache to task state and isolated the four task wrappers cache path; source pins, original adapter and installed-runtime manifest were unchanged. The complete closure was checked again before the separate successful deployment.",
+      "repair_receipt_sha256": "f5b2047deba196a4d16508364ad4c41fc31cba10eb45da8dc3dcc089144ad374",
+      "successful_log_sha256": "1a348a2f8501e8394b9cf08e94a034ce372f407f08f54053504926f840cca648",
+      "local_repair_validation": {
+        "receipt_sha256": "55718815b3a07c0f52cc86f9f376ec11c9f8031e14324ed72ffb5671d39ac04b",
+        "status": "plain-file and actual wrapper-loader local R2 put/read/delete/dispose probes passed; all local probe processes cleaned",
+        "original_inline_probe": "hung then terminated; exact startup cause not proven",
+        "provider_operations": false
+      }
+    },
+    {
+      "kind": "production_after_backup",
+      "set_id": "9fae9f1d-f0e0-4d63-8b10-50c5257880e9",
+      "created_at": "2026-10-19T17:29:31.915Z",
+      "status": "failed",
+      "stage": "capture",
+      "code": "daily_backup_phase_failed",
+      "cleanup_verified": true,
+      "restore": "not_verified",
+      "receipt_sha256": "4c131f6b9a79c7f188a90e8ab0b0e869c54629a41a3a2455da41280068def706",
+      "root_cause": "unresolved",
+      "replacement_set_id": "46f64b85-9b3b-4b16-a80d-ffe3957c2207",
+      "replacement_adapter_sha256": "a38f75dc0d6f3d9abb989f6782ae7821fe8a0064c4aa0fcc25a82a0845816db8",
+      "limitation": "Existing dump bytes did not establish a valid complete capture. The successful replacement uses a separately reviewed diagnostic adapter/wrapper; success does not determine the original failure cause."
+    }
+  ],
+  "daily_operator": {
+    "status": "installed",
+    "source_by_environment": {
+      "staging": "12940c7190dc5304875b76abdd00b8975e40cfd3",
+      "production": "12940c7190dc5304875b76abdd00b8975e40cfd3"
+    },
+    "dispatcher_sha256": "bc9cf6f1f0b512c4f1b02d6a296f09190971d16424264df81e8d19f3ce5532e7",
+    "installed_receipt_sha256": "6540589b733654f0cfabb5a07e8371c46300a620b0e3e91b7f03ecea9c8f80ba",
+    "live_binding_observed_at": "2026-10-19T18:04:18.481Z",
+    "live_binding_receipt_sha256": "5bb988331007e5aad451f9b7665fa71f447bac7397130a72a0323e8a0cc2c45d",
+    "timer_observed_at": "2026-10-19T18:04:26.744139+00:00",
+    "timer_receipt_sha256": "69e9117be2af4eedf7a7bd1a13698ae3382553fed37add3d7a3fff1f5f3f515f",
+    "unit_or_schedule_changed": false,
+    "natural_scheduled_run": "not_observed_for_new_wrapper"
+  },
+  "newer_source_not_deployed": {
+    "main": "9df3b76ed6da9376af29f7ff65c0fcefe0aaab6a",
+    "main_tree": "0d1147d52ae23deaff49b4435074c2fdf76f62df",
+    "main_pr": 902,
+    "main_merged_at": "2026-10-19T17:12:06Z",
+    "main_verify_run": 39292076098,
+    "main_verify_last_reported_status": "in_progress",
+    "superseded_main": "9cc6ca08eccc7123a072562799e24c37f99eefa1",
+    "superseded_verify_run": 39282418124,
+    "superseded_verify": "cancellation_requested; not counted as passing",
+    "integrated_candidate_pr": 910,
+    "integrated_candidate_head": "b6d4ccd71b08f821622a242395554562b30146c7",
+    "integrated_candidate_verify_run": 39297631468,
+    "integrated_candidate_last_reported_status": "detna-vibe-coding approved exact head; CodeQL passed; full Verify still running",
+    "excluded_work": [
+      797,
+      902,
+      901,
+      906,
+      907,
+      908,
+      909,
+      910
+    ],
+    "limitation": "These are dated source/review observations, not runtime or acceptance evidence. This rollout only deploys the selected 12940c71 source."
+  },
+  "historical_evidence_preserved": [
+    "docs/platform-plan/execution/unified-foundation/rollout-commerce-buyer-2026-10-17.json",
+    "docs/platform-plan/execution/unified-foundation/rollout-security-2026-10-14.json"
+  ],
+  "limitations": [
+    "Synthetic normal-member console access/readability checks are not real human usability, adoption or transaction acceptance.",
+    "Production acceptance is public read-only HTTP; no production member login or order was performed.",
+    "Checkout and transactional email remain OFF. No real payment, bank verification, complete supplier fulfilment or full M3/M4 acceptance is claimed.",
+    "Supply-material media/uploads and distribution photos retain their predecessor settings: staging ON and production OFF; this console enablement does not activate those media capabilities.",
+    "The original production capture failure remains unresolved; a separately identified diagnostic adapter completed a new set.",
+    "Manual complete restores, installation and restored timers do not establish natural scheduled execution of the new operator.",
+    "Restored databases remain quarantined. All original 168 Foundation requirements, T-047 current-authority reconciliation, independent Maintainer and second-operator recovery retain their previously unverified scope."
+  ]
+}

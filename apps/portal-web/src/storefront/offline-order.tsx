@@ -4,9 +4,10 @@ import {formatMinor} from '../../../../modules/agent-commerce/hosted/format.js';
 import {formatTaipeiDateTime} from './format.js';
 
 /** Private instructions come exclusively from the authorized order response. */
-export function OfflineOrder({order, disabled, onCancel, onRefresh}: {
+export function OfflineOrder({order, disabled, onCancel, onRefresh, readOnly=false}: {
   order: PublicOrder;
   disabled: boolean;
+  readOnly?: boolean;
   onCancel: () => Promise<void>;
   onRefresh: () => void;
 }) {
@@ -34,7 +35,7 @@ export function OfflineOrder({order, disabled, onCancel, onRefresh}: {
           <div className="shop-order-row"><dt>戶名</dt><dd>{bank.account_name}</dd></div>
         </dl>
         {bank.note && <p className="shop-preserve-lines">{bank.note}</p>}
-        <p>店家確認收款後，這裡會更新。</p>
+        <p>店家確認收款後，按「更新訂單狀態」即可看到最新狀態。</p>
         <div className="shop-order-actions">
           <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={() => void copy(bank.account_number, '帳號')}>複製帳號</button>
           <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={() => void copy((bank.amount_minor / 100).toFixed(2), '金額')}>複製金額</button>
@@ -47,15 +48,15 @@ export function OfflineOrder({order, disabled, onCancel, onRefresh}: {
     {(order.meetup_notes ?? []).map((note, index) => <p className="shop-preserve-lines" key={index}>{note}</p>)}
     {open && unpaid && <div className="shop-order-actions">
       <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={onRefresh}>更新訂單狀態</button>
-      <button className="shop-button shop-button-secondary" type="button" disabled={disabled} ref={cancelTrigger} onClick={() => dialog.current?.showModal()}>取消訂單</button>
+      {!readOnly && <button className="shop-button shop-button-secondary" type="button" disabled={disabled} ref={cancelTrigger} onClick={() => dialog.current?.showModal()}>取消訂單</button>}
     </div>}
-    <dialog className="shop-dialog" ref={dialog} aria-labelledby="shop-cancel-order-title" onClose={() => cancelTrigger.current?.focus()}>
+    {!readOnly && <dialog className="shop-dialog" ref={dialog} aria-labelledby="shop-cancel-order-title" onClose={() => cancelTrigger.current?.focus()}>
       <h2 id="shop-cancel-order-title">要取消這筆訂單嗎？</h2>
       <p>取消後，保留的商品會釋出。如果你已經付款，請先聯絡店家。</p>
       <div className="shop-order-actions">
         <button className="shop-button" type="button" disabled={disabled} onClick={() => {dialog.current?.close(); void onCancel();}}>確認取消訂單</button>
         <button className="shop-button shop-button-secondary" type="button" onClick={() => dialog.current?.close()}>保留訂單</button>
       </div>
-    </dialog>
+    </dialog>}
   </section>;
 }

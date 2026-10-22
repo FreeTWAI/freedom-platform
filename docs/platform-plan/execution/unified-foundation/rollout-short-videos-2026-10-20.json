@@ -1,0 +1,815 @@
+{
+  "format": "freedom.short-videos-rollout/v1",
+  "status": "deployed_public_smoke_restore_and_operator_passed",
+  "recorded_at": "2026-10-20T07:22:11.687138+00:00",
+  "evidence_cutoff_at": "2026-10-20T07:16:13.533259+00:00",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/739",
+  "source": {
+    "selected_release": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+    "tree": "e60589adf048f7cf9fce8b74b4cdbc36276661d0",
+    "parents": [
+      "e0f510c34eb605e5a395b6d239316df677776768",
+      "929d5340d880019ad5e42725ae3b12c104274ae3"
+    ],
+    "merge_pr": 917,
+    "integrated_pr": 897,
+    "author": "TSY3991",
+    "previous_release": "240cf677e892f6f20306089c75c34fa914597960",
+    "dist_sha256": "8d7c97096d14a4b2227c03c94b88e7b612d15bb61eb77d53b7b5f20bb880faa9",
+    "dist_file_count": 359,
+    "schema": 172,
+    "migrations_applied": [],
+    "main_verify": {
+      "run_id": 39376522961,
+      "job_count": 17,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39376522961",
+      "run_receipt_sha256": "1d13d11674f7a32855b75e727a61f3a5c3174f22cb24f5ce7e6f99d4db64b6d8",
+      "jobs_receipt_sha256": "eb12a9bb1686e9d72ac8a45cc4f5d2dbebfcd3f96515b0f778768368c5a9bcb0"
+    },
+    "main_codeql": {
+      "run_id": 39376522955,
+      "job_count": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39376522955",
+      "run_receipt_sha256": "ab1c73c7f708cda9f4114c1852d69c2064f81391fbaaeb1ea285c6073abbdf9e",
+      "jobs_receipt_sha256": "13f023117a17cc481aa300ae2a3c32badca8b431f0aa7f974e11592d5bf93d49"
+    },
+    "preparation": {
+      "source_receive_receipt_sha256": "3ce5b345994ae7689f611dbe43743d4d9ad91f396cf11454741b4b9d56983005",
+      "source_build_receipt_sha256": "41ce06ba8b1d2d9922f74adeeb8712a46660199c592b4c63529997b1017c707f",
+      "archive_verification_sha256": "bf734813265d2a8ef1f72251bacb147b4c85f6b8f525ee766140cac2ad8fa85a",
+      "checkout_verification_sha256": "9a2f76e201c769c01c4acf2639a87f1b6ff5ad50a9906741c7d5723530b4cfc9",
+      "binding_receipt_sha256": "b414256537ac6f3ba1a1d59727cca3b0f27aa912a9867fad34ea2562379fefeb",
+      "limitation": "Source receipt/build at 05:49 was preparation only: Verify was queued and fullCiApproved=false; completed CI is separately evidenced by the main-ci receipts."
+    }
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "release_sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+      "previous_release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+      "worker_version": "d64f3c04-e81f-49a4-bd69-1ed5db52a6bf",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "43cc69e786da1686fb62681506aa47df9b6db670d8a1c2f91b4b56e6667f361e",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true"
+      },
+      "flag_changes": {
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true"
+      },
+      "other_flags_unchanged": true,
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "240cf677e892f6f20306089c75c34fa914597960",
+          "set_id": "de944ddd-7bf5-48c8-a107-f9b85d6fd649",
+          "created_at": "2026-10-20T05:51:04.122Z",
+          "completed_receipt_sha256": "5fbb2bb9e3db72449e336e74a7f01afaaf3b47186b76bb6f5df32405965bd3ad",
+          "pointer_sha256": "2e2076e52bf94e160ab164a736b4082ea700928c7b1385ca57281351bbd991b7",
+          "manifest_sha256": "53561e4c2e04aa69031ddbd8d2a9a2a98d5c752aa3e5c08838c4b5f64bb62018",
+          "dump": {
+            "sha256": "4eba53173d525a9fe7ef8f46d20b9897662053bf1e508daf40802c5ecca44e17",
+            "byteSize": 3093199
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "basis": "Fresh 240cf before-backup captured for this rollout using the existing 240cf operator; the run directory is in the prior kit, retaining the original source/date. This does not reuse an old October 19 set."
+        },
+        "after": {
+          "status": "passed",
+          "source": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+          "set_id": "9bcb6ff8-fdb3-4608-b641-57fa8dc53ef6",
+          "created_at": "2026-10-20T06:44:41.915Z",
+          "completed_receipt_sha256": "368b3d59d6f8c576b923213833431bb55ef125e26bf2168e6f1e0478a71131f3",
+          "pointer_sha256": "26fb59fd83674ab60e4313879cef4ab54fa433108e60c06abb815b6f0510fb3d",
+          "manifest_sha256": "2c93a7394a7cab481bd401d30b7f9bb5e7fef690f71724db9dcef94bc1bd845b",
+          "dump": {
+            "sha256": "5119caa1de07a990cf76051977f26889ac710be217e4db3dd87022b82bf4872c",
+            "byteSize": 3093586
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation."
+        }
+      },
+      "acceptance": {
+        "status": "not_run",
+        "scope": "No staging acceptance window per owner instruction; deployment health/homepage and final Worker binding were checked.",
+        "member_ux_acceptance": "not_run",
+        "human_acceptance": false,
+        "temporary_access_cleanup": "revoked",
+        "access_grant_receipt_sha256": "737bbb66ad8bd3ac300d28c4e67e34d190f4ebf1260cbb7bfcb648c168afc919",
+        "access_revoke_receipt_sha256": "d3a8e6d2ea529284cd846c59dddd69a0f58e1ff1a7db9bb45eb22ec5f9da79df"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "dispatcher_sha256": "562f005a7184065aeb66556a4cf17866fae2180b77ba0542dce098652c06286f",
+        "installed_receipt_sha256": "6c7c2f6b72f9d305c66d71b6484a1fe5e69651f6c777461867e7b4381439b7de",
+        "backup_set_id": "9bcb6ff8-fdb3-4608-b641-57fa8dc53ef6",
+        "completed_receipt_sha256": "368b3d59d6f8c576b923213833431bb55ef125e26bf2168e6f1e0478a71131f3",
+        "wrapper": "run-after-staging-backup",
+        "wrapper_sha256": "c6c9633c49bc54777ae900ee0d7f618a0f43ea224b68a5bb43fe9ddef6ebb59f",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapter_sha256": "2f17fc24f0dd377821cd88bd6e95e54f91a11f489d971f831da9b76b385d2c2e",
+        "runtime_pins_sha256": "f7756c2f00c35d9eb06dd9ffc8ceadf696778de1a8645a5a903a1335a67c52ea"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-21T03:33:09Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-20T07:15:51.207Z",
+      "worker_binding_receipt_sha256": "8896902829d01ab2ebd8a6e8c1baab4ec1eddd15e15191629aa6e597c211951d",
+      "github_deployment": {
+        "at": "2026-10-20T07:16:09.813343+00:00",
+        "environment": "staging-next",
+        "sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "deploymentId": 7193864457,
+        "statusId": 20074960828,
+        "state": "success",
+        "environmentUrl": "https://staging.freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "target": "staging",
+        "pinsSha256": "cf6be8d2d9d1674a3ec8fef39790166f461dacaff8f76805f9ba3237edadd52e",
+        "wrapperSha256": "3666cd132feff6ffd0a2fdce6b9a1a6a526ea8779d958e73ac82523801c1eb93",
+        "planSha256": "5b849f9a2b1ddce527ffe09f540977a02fc53030f5b7fc1c73c7beab87587524",
+        "renderedSha256": "0922841a9c0179ec28cfd3e18650fee05ed5daa0398f1fa136706ccf3ae0f92f",
+        "providerMutations": false
+      }
+    },
+    "production": {
+      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "release_sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+      "previous_release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+      "worker_version": "e14c642a-7a8e-4b55-a818-3126200127f8",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "e478e2853f3fa2cfd2d99a3b4e57e07a3d2b7f24a4e995ea82e7bddfe49607ee",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false"
+      },
+      "flag_changes": {
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true"
+      },
+      "other_flags_unchanged": true,
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "240cf677e892f6f20306089c75c34fa914597960",
+          "set_id": "0416acf8-26ab-4d23-9d69-28aebffe2a7a",
+          "created_at": "2026-10-20T06:20:59.747Z",
+          "completed_receipt_sha256": "98d8a654ccc942897849bbbd87eb56246e5817fa70a91d4bcf59d25db7d22831",
+          "pointer_sha256": "fb286c88b5a0695151062de48c478d44bc1ea45378910c83d65a65ea65aa6363",
+          "manifest_sha256": "64ace92e75dc3776b6f16c5e956657775cb23264bfc9fc1322e259641f950dc0",
+          "dump": {
+            "sha256": "6f2807c36cdf929561600bf02869cd58a54706becf91907d777366816dcda2c6",
+            "byteSize": 6758519
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "49582c9b3a20d1646d5304ffcab472db7831ffd07eedc95f4a8adb60bfb88f46"
+          },
+          "restored_coordinate_fence_sha256": "7b0a983b66c84fb0ba80fa8e76f7dbd8682dfd8b0101edbc6ba4b7428128e283",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "basis": "Fresh 240cf before-backup captured for this rollout using the existing 240cf operator; the run directory is in the prior kit, retaining the original source/date. This does not reuse an old October 19 set."
+        },
+        "after": {
+          "status": "passed",
+          "source": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+          "set_id": "0f1b95a8-ecb8-4b04-bbed-ab51d5b3e923",
+          "created_at": "2026-10-20T07:02:45.356Z",
+          "completed_receipt_sha256": "fc12ba2737fe5da51e036c043fd0b042f207b55dd016a75dccfadaef53798274",
+          "pointer_sha256": "21a8a7799f9ecac2828b644619a6d1b0c1fe80e64ee91a49dfd3e4c51848677c",
+          "manifest_sha256": "bb80bef483f151feb57a5f72c4514e6df1c57c4ddc4df0375917612289deb42b",
+          "dump": {
+            "sha256": "0ae7db16c082d066f01056b449eb879d306636efcdeabfdcdd080aea2905f216",
+            "byteSize": 6778070
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "8d09d6e39231e6f2a1bae28cb8e17912bed10cdeebd02d8fcc6ef3bd165e1cc8"
+          },
+          "restored_coordinate_fence_sha256": "4ffa5541bb0f7ed2e802b5466b01cf9ea6304b09f904b20b1fe8b7540e6e44c3",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation."
+        }
+      },
+      "health_observed_between": {
+        "start": "2026-10-20T07:15:08.215Z",
+        "end": "2026-10-20T07:15:16.755Z"
+      },
+      "acceptance": {
+        "status": "passed",
+        "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
+        "started_at": "2026-10-20T07:15:08.215Z",
+        "completed_at": "2026-10-20T07:15:16.755Z",
+        "receipt_sha256": "7476502d02ead5435c80363dab29ba4aeb1965263e46ea101d3a227abae7e19d",
+        "check_count": 14,
+        "checks": [
+          "public health exact release and no-store",
+          "Short videos enabled for everyone",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "homepage CSP permits only youtube-nocookie frame origin",
+          "Cloudflare Access blocks anonymous /admin before the Worker",
+          "Cloudflare Access blocks anonymous /admin/github/callback before the Worker",
+          "protected CSP excludes Short frames /pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "exact deployed source omits Short frames on admin and payment paths",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products",
+          "share script/styles and merchant styles match exact build; unhashed assets no-store",
+          "anonymous catalog introduction exposes purpose/start/source destination"
+        ],
+        "asset_hashes": {
+          "go.js": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644",
+          "go.css": "050e1c886d4965aea7923a5219248babf65c4e0c708e9bcc944efa9a68e4cca7",
+          "shops.css": "9310dd83687837078bc09782b17845cf680cb64739fb0c3f271a55828d9a932e"
+        },
+        "protectedPaths": {
+          "/admin": "access_redirect_worker_not_reached",
+          "/admin/github/callback": "access_redirect_worker_not_reached",
+          "/pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA": "worker_csp_verified"
+        },
+        "liveAdminWorkerCsp": "not_observed_access_protected",
+        "adminCspSource": "exact_source_function",
+        "priorFailedAttempt": {
+          "path": "production-public-smoke.attempt1-failed.json",
+          "sha256": "18c91e14c555af4846791e0504453b618844c6a4621cc281d81e0e3b7bf54773",
+          "status": "failed"
+        },
+        "member_login": false,
+        "human_acceptance": false,
+        "orders_created": 0,
+        "member_ux_acceptance": "not_run"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "dispatcher_sha256": "562f005a7184065aeb66556a4cf17866fae2180b77ba0542dce098652c06286f",
+        "installed_receipt_sha256": "6c7c2f6b72f9d305c66d71b6484a1fe5e69651f6c777461867e7b4381439b7de",
+        "backup_set_id": "0f1b95a8-ecb8-4b04-bbed-ab51d5b3e923",
+        "completed_receipt_sha256": "fc12ba2737fe5da51e036c043fd0b042f207b55dd016a75dccfadaef53798274",
+        "wrapper": "run-after-production-backup",
+        "wrapper_sha256": "5fca5ac71be66add3576e1ac15641dbbe582ac87a6531936c7bf6348508bfcb4",
+        "adapter": "backup-adapter.after-production.mts",
+        "adapter_sha256": "f11d4ec84b50a353fe438f7b7647d004cedbc25205326f8b26410aef3a63527f",
+        "runtime_pins_sha256": "f7756c2f00c35d9eb06dd9ffc8ceadf696778de1a8645a5a903a1335a67c52ea"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-21T04:32:18Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-20T07:15:51.207Z",
+      "worker_binding_receipt_sha256": "8896902829d01ab2ebd8a6e8c1baab4ec1eddd15e15191629aa6e597c211951d",
+      "github_deployment": {
+        "at": "2026-10-20T07:16:13.533259+00:00",
+        "environment": "next",
+        "sha": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "deploymentId": 7193865453,
+        "statusId": 20074963598,
+        "state": "success",
+        "environmentUrl": "https://freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+        "target": "production",
+        "pinsSha256": "f456c6f099282c908910b91851743d193bb16c5c53c2baabc4b7a70ca8233e7d",
+        "wrapperSha256": "2efcbad52dda4d2fe9c1425df8cabea72896db85c1ca144924377704feb05721",
+        "planSha256": "687c5ec02a8110e090fc5b0d749f74b41f8f7317372cb0f5f0386b238f98dae8",
+        "renderedSha256": "740d9aac52ed2c033f3b512a1270a880ee5157636f484207fa11fce451fdd701",
+        "providerMutations": false
+      }
+    }
+  },
+  "attempts_preserved": [
+    {
+      "environment": "production",
+      "phase": "before-backup",
+      "attempt": 1,
+      "status": "failed",
+      "set_id": "217429d6-6073-4c03-9925-8c83deeae81e",
+      "created_at": "2026-10-20T06:06:31.559Z",
+      "source": "240cf677e892f6f20306089c75c34fa914597960",
+      "manifest_sha256": "4c3c639da9dbbec1499b33e94c3228a3cb782441cddb894f4effc167fcd66282",
+      "dump": {
+        "sha256": "4f321a01283527c477edf30b6edbf7d7580d20ab470a1e1715e075a98753ee35",
+        "byteSize": 6155386
+      },
+      "objects": {
+        "count": 48,
+        "bytes": 629894
+      },
+      "receipt_sha256": "309bdafdee162191d24ed284265369d292fb515e7dc847cb97c28831be733fbd",
+      "log": "before-production-backup.log",
+      "log_sha256": "7ba15aed74d53bf83df9b0ad5481fe663a896ac4851446c29ddb051add13a1a3",
+      "stage": "restore",
+      "restore": "not_verified",
+      "remote_readback": "verified",
+      "cleanup_verified": true,
+      "failure": "pg_restore: error: could not read from input file: end of file",
+      "cause": "docker exec pg_dump exited 0 but the dump was truncated; restore did not pass.",
+      "replacement_set_id": "0416acf8-26ab-4d23-9d69-28aebffe2a7a",
+      "replacement_log": "before-production-backup-attempt2.log"
+    },
+    {
+      "environment": "production",
+      "phase": "public-smoke",
+      "attempt": 1,
+      "status": "failed",
+      "started_at": "2026-10-20T07:00:19.272Z",
+      "completed_at": "2026-10-20T07:00:21.280Z",
+      "receipt_sha256": "18c91e14c555af4846791e0504453b618844c6a4621cc281d81e0e3b7bf54773",
+      "log_sha256": "57b6f16c13594cdc4e2889a39d541aa53dfae709d27de39c1a6f9d69d5f886e3",
+      "passed_check_count": 6,
+      "failure": "unexpected redirect on /admin before the Worker (Cloudflare Access)",
+      "replacement": "production-public-smoke.json; the second attempt passed 14 checks and retained priorFailedAttempt."
+    },
+    {
+      "environment": "staging",
+      "phase": "plan",
+      "status": "refused",
+      "log": "plan-staging.refused-no-outdir.log",
+      "log_sha256": "8227e766974a8643479422187ad4baa8e704877325d465473dcb56a6f3c9f714",
+      "reason": "The deploy out dir did not yet exist; Directory must be a real 0700 directory owned by the current user.",
+      "replacement_log": "plan-staging.log",
+      "replacement_log_sha256": "570e9bba39a19cfad9909a5916cb2f6ad588338648336738507666e84408243b"
+    },
+    {
+      "environment": "production",
+      "phase": "plan",
+      "status": "refused",
+      "log": "plan-production.refused-no-outdir.log",
+      "log_sha256": "8227e766974a8643479422187ad4baa8e704877325d465473dcb56a6f3c9f714",
+      "reason": "The deploy out dir did not yet exist; Directory must be a real 0700 directory owned by the current user.",
+      "replacement_log": "plan-production.log",
+      "replacement_log_sha256": "06668d180594d93a0974b1f3f1c6ac878b796cd7b3a421e224825258b4488a82"
+    }
+  ],
+  "daily_operator": {
+    "status": "both_sources_bound_original_timers_restored",
+    "source_by_environment": {
+      "staging": "3a6e25063e039fee54479d623c82926ffe8ab6ad",
+      "production": "3a6e25063e039fee54479d623c82926ffe8ab6ad"
+    },
+    "dispatcher_sha256": "562f005a7184065aeb66556a4cf17866fae2180b77ba0542dce098652c06286f",
+    "installed_receipt_sha256": "6c7c2f6b72f9d305c66d71b6484a1fe5e69651f6c777461867e7b4381439b7de",
+    "live_binding_observed_at": "2026-10-20T07:15:51.207Z",
+    "live_binding_receipt_sha256": "8896902829d01ab2ebd8a6e8c1baab4ec1eddd15e15191629aa6e597c211951d",
+    "timer_observed_at": "2026-10-20T07:16:03.235370+00:00",
+    "timer_receipt_sha256": "38dc2229d62f020642bdc33833eede4ace932cc2e32ddc8ad3580268cc0ceeee",
+    "unit_or_schedule_changed": false,
+    "service_argv_unchanged": true,
+    "restoration": {
+      "staging": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-21T03:33:09Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "production": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-21T04:32:18Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      }
+    },
+    "natural_scheduled_run": "not_observed",
+    "transitions": [
+      {
+        "stage": "staging",
+        "before": "ef99163dc603f904e0bd509d913a2179b18e7f498b79bf295b3c3602c1b134bb",
+        "after": "73dd8f45cc2952563419a6aedef4c5195c2147e2fccfe53d385a08267f353225",
+        "materialize_receipt_sha256": "71f6db73fcf8248142a1098d1542467aa072da8bd6c9f635c501e4125e8fcd15",
+        "installed_receipt_sha256": "f1be5f5a9e065f582972f2a8f8e0f3d19286d6d5abf1d3a754ea1ba5547cb7a6"
+      },
+      {
+        "stage": "both",
+        "before": "73dd8f45cc2952563419a6aedef4c5195c2147e2fccfe53d385a08267f353225",
+        "after": "562f005a7184065aeb66556a4cf17866fae2180b77ba0542dce098652c06286f",
+        "materialize_receipt_sha256": "59d2fab9022afdcba582818cdd5759e669ce59e08810351d0980206180572bfa",
+        "installed_receipt_sha256": "6c7c2f6b72f9d305c66d71b6484a1fe5e69651f6c777461867e7b4381439b7de"
+      }
+    ]
+  },
+  "historical_evidence_preserved": [
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-2026-10-09.json",
+      "sha256": "229dd95a38a6994b77818ed7e6c1c67642153e9f6130a28fc3683f0df05c7146"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-2026-10-10.json",
+      "sha256": "7b1a808e482d337c96955714fa70ce5a75d797c92bc599c8eeea955fb8fa63aa"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-buyer-2026-10-17.json",
+      "sha256": "8fcceaaa0397572c4cc45ab0630378908174e9d080b9af9ff9f851c05c4f6870"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
+      "sha256": "cea304096119c37d7614a94a3b831acf1fb0c0ab257cefdc3716e5a60cfe99df"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-merchant-readiness-2026-10-19.json",
+      "sha256": "8621955508700e28ce8697d21585b277863f9e683504d2c5281c33a9d66354b5"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r15-2026-10-10.json",
+      "sha256": "d878d75b52023f3fa4286443bb719fac16a8d862992f9f07ae78908b8a7111ec"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r16-2026-10-10.json",
+      "sha256": "ec34b05383fbc65da7ef8f81104daab1fd3eacb77463eab71c234980acea858d"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r17-2026-10-11.json",
+      "sha256": "f7f753d30286292a2ba1792333a5acd535cbbaa6d66f9bcb8405c5aedcd2a28e"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r18-2026-10-11.json",
+      "sha256": "f0dd5edc973b57302bc19b17459e5ffc62b05b2e8ad5c0db30636db898b01098"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r19-2026-10-11.json",
+      "sha256": "9e8944a8e8c3a8d8f5b2940c5963c46d6c690474bf0265304570a352e0151383"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r20-2026-10-12.json",
+      "sha256": "e3ef7985765e99cf70b025a4f146d3bdaf1584eb55b831573a7f15c40e6eaf59"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r21-2026-10-12.json",
+      "sha256": "8dc41ea27eae2dfc397b89a0354f51be187d0fe4d820338a103feb5bf47053a9"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r22-2026-10-12.json",
+      "sha256": "d3694b45bece2edc3c880faf6f8987d2a8afccc102daf46379ee1d9a2503c029"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r23-2026-10-12.json",
+      "sha256": "a4a5ca0b3a4adc4c2886b0c57171d98d95ac15896c07df986cde7b6512eab246"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r24-2026-10-12.json",
+      "sha256": "f351b7e8b2fc06d71aaf5fb2ad5d30208e9f7ecc9a3fe8512ff287bc4d02a745"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-security-2026-10-14.json",
+      "sha256": "91de5a2e52a634a3da870bf01913c91fe3765faf52ce1d42242db4753380c391"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "sha256": "3ebb9bdf353d8dcbfe5e27732ec6218276e8b7fcb48209d5a050b64a128c2235"
+    }
+  ],
+  "limitations": [
+    "Per Ted's dated instruction, Short is enabled for everyone in both environments with no staging acceptance window; member UX acceptance is not_run. Deployment or CI does not establish member acceptance.",
+    "Real phones, Safari and real-user Shorts playback/swipe-up/return-to-tab flows remain unverified; no production member login or orders.",
+    "The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src.",
+    "Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP.",
+    "The first production before-backup failed restore and passed cleanup; only the second successful set was bound, without overwriting the failure. The first public smoke failed on an unexpected redirect after 6 passing checks; after a separate kit correction, the second attempt passed 14 checks.",
+    "Health, Worker binding, backup creation, timers and GitHub Deployments retain their original evidence times; staging deployment health has no separate timestamp, and the final observation time is not substituted.",
+    "Isolated restore is not a fresh live-ledger query; schema 172, material policy and the 10 production coordinate constraints remain retained. Restore remains quarantined; GC/retention/PITR are not enabled.",
+    "Timer restoration and prior service success do not establish natural execution of the new dispatcher; it remains unobserved for this rollout. Outstanding items for the original 168 requirements, T-047, the second operator and the three human outcomes remain unchanged."
+  ],
+  "owner_authorization": {
+    "owner": "Ted",
+    "observed_at": "2026-10-20T04:50:30.325Z",
+    "instruction": "我覺得他那個如果測試都好 就不用在 staging 測成這樣了, 可以直接先上線給大家測了",
+    "consent_basis": "Ted: Short enabled for everyone in both environments; no staging acceptance window",
+    "receipt_sha256": "c2f1f7e37752b5d33249b83faf79518c8eccd0d377c7423c34e093603b579338",
+    "staging_acceptance_required": false,
+    "member_ux_acceptance": "not_run",
+    "limitation": "The intent status preparing is the original authorization preparation state; actual completion is supported by separate deployment, backup, smoke and dispatcher receipts."
+  },
+  "kit_corrections": [
+    {
+      "job": "kit-quiescence",
+      "status": "reviewed_by_orchestrator",
+      "report_sha256": "aff07fd4c61f1e3bfd040658dde63416f232b360bb66b9d42e0ce8e4e97216e4",
+      "before": "Required ExecMainPID == '0' to establish quiescence; systemd retains the exited PID, causing refusal even when no process was running.",
+      "after": "Requires MainPID == '0' and ActiveState == 'inactive'; ExecMainPID is retained for audit.",
+      "verification_limit": "The sandbox user bus rejected live systemd queries in the original codex job; later orchestrator cutover/timer-restored receipts separately observed inactive/MainPID=0."
+    },
+    {
+      "job": "smoke-access",
+      "status": "reviewed_by_orchestrator",
+      "report_sha256": "246451ed1eb0b2e939001519cd8468ca18dadf84eaec11db983fa03198a65876",
+      "before": "Anonymous admin requests used redirect:error and failed on Access 302 after 6 passing checks.",
+      "after": "Both admin paths now strictly check the Access redirect, with a separate exact-source CSP check; the payment path and all other existing assertions remain unchanged.",
+      "diffs": [
+        {
+          "path": "production-public-smoke.mjs.access-fix.diff",
+          "sha256": "d61faf8ceba264847039078e777735ce5d7f9d2ba76fa5f11bd29be38feb30dc"
+        },
+        {
+          "path": "operator-preflight/run-production-public-smoke.access-fix.diff",
+          "sha256": "7bc1f8c9eb681ab985f2b2fecda0c2789fd8b1fe03ba6785a60a63b30e364d95"
+        }
+      ],
+      "liveAdminWorkerCsp": "not_observed_access_protected",
+      "adminCspSource": "exact_source_function"
+    }
+  ],
+  "io_gates": [
+    {
+      "path": "io-check-336fd36b-3513-4e66-9d7e-1083ebd422d1.json",
+      "sha256": "abaa83b544e9f94e7e2c5a0ee01b133fc706e3ca074fb43a7eb27aa176c87eda",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-20T05:50:18.243518+00:00",
+        "end": "2026-10-20T05:50:48.244091+00:00"
+      }
+    },
+    {
+      "path": "io-check-6a0bbc29-70ed-48d4-bbce-eae894cf5e4e.json",
+      "sha256": "a3887ce7ba01f8e7651e30dfd08149fb40c954f180368d4a61d5218c6e3c2c05",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-20T06:05:31.444139+00:00",
+        "end": "2026-10-20T06:06:01.444562+00:00"
+      }
+    },
+    {
+      "path": "io-check-881b8386-b4c9-4084-8758-dcec66bfe1b4.json",
+      "sha256": "1f550f343df142cd2787fcf03f5ac73f86ccf8cc872b55dc3a589da75d924a84",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-20T07:02:02.261169+00:00",
+        "end": "2026-10-20T07:02:32.261507+00:00"
+      }
+    },
+    {
+      "path": "io-check-ecef208e-7f79-441a-bf28-8f584d73d758.json",
+      "sha256": "110b032ea746cb7e2be25a89c51ebcd9a29329fa021e4d8051bd35a283395f8e",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-20T06:20:14.026376+00:00",
+        "end": "2026-10-20T06:20:44.026765+00:00"
+      }
+    },
+    {
+      "path": "io-check-f6ae4966-ce75-48f9-97b8-53117d4b41d9.json",
+      "sha256": "20ae2916e4015dc0c9b17c4fbf26e42217fa801914db5a4521c2351150c928f9",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-20T06:44:00.066713+00:00",
+        "end": "2026-10-20T06:44:30.067135+00:00"
+      }
+    }
+  ],
+  "evidence_directory": "freedom-short-videos-20261020"
+}

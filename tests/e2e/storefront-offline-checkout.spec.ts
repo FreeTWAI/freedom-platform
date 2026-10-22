@@ -1,6 +1,9 @@
 import {randomUUID} from 'node:crypto';
+import {totpCode} from '../../modules/identity-membership/totp.js';
+import {formatTaipeiDateTime} from '../../apps/portal-web/src/storefront/format.js';
 import {test, expect, type BrowserContext, type Page, type Route} from './fixtures.js';
 import {setupCartFixtureStore, assertCartResponsiveLayout} from './storefront-cart-fixture.js';
+import {storeArea} from './hosted-store-fixture.js';
 import {apiLogin, buyerLogin, member, ownedSchema} from './hosted-order-fixture.js';
 import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transaction.js';
 import {CheckoutResponseSchema, PlaceOrderResponseSchema, PublicOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
@@ -11,6 +14,8 @@ import type {Pool} from 'pg';
 import {verifyPassword,taipeiDate,command,expireNextSettingsProof} from './seller-console-fixture.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
+import {SupplyOfferSchema, DistributionSchema} from '../../contracts/guild-launchpad/v1/hosted-distribution.js';
+import {openNotifications} from './navigation.js';
 
 type Store = Awaited<ReturnType<typeof setupCartFixtureStore>>;
 async function openBuyer(db: Pool, context: BrowserContext, store: Store) {
@@ -27,11 +32,52 @@ async function start(page: Page, store: Store) {
   await page.getByLabel('收件人姓名', {exact: true}).fill('合成買家甲');
   await page.getByLabel('收件人手機', {exact: true}).fill('0900123456');
   await page.getByLabel('Email', {exact: true}).fill('offline-buyer@example.test');
+  const meetupQuote = page.waitForResponse(response => {
+    const request = response.request();
+    if (!response.url().endsWith(`/stores/${store.slug}/cart-quotes`) || request.method() !== 'POST') return false;
+    try {return request.postDataJSON()?.delivery?.method === 'meetup';} catch {return false;}
+  });
   await page.getByRole('radio', {name: '面交取貨', exact: true}).check();
+  const response = await meetupQuote;
+  expect(response.ok()).toBe(true);
   await expect(page.getByLabel('收件地址', {exact: true})).toHaveCount(0);
   await expect(page.getByText('請先約定時間，在山邊小店門口面交。', {exact: true})).toBeVisible();
   await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
 }
+
+test('merchant navigation connects the public shop, product, cart and order guidance without exposing bank details', async ({browser, e2eAuthPool}, info) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const page = await context.newPage();
+    const checkFrame = async () => {
+      await expect(page.locator('header.shop-top > .shop-top-store')).toHaveText(store.storeName);
+      await expect(page.locator('header.shop-top img')).toHaveCount(0);
+      await expect(page.locator('footer .shop-logo')).toBeVisible();
+      await expect(page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '訂單查詢', exact: true})).toHaveAttribute('href', `/shops/${store.slug}/order-access`);
+      await expect(page.locator('body')).not.toContainText('000000123456');
+      await expect(page.locator('body')).not.toContainText('合成測試銀行');
+    };
+    await page.goto(`/shops/${store.slug}`);
+    await checkFrame();
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-shop-${width}.png`));
+    await page.getByRole('link', {name: `查看商品：${store.products[0].title}`, exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('button', {name: '加入購物車', exact: true})).toBeVisible();
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-product-${width}.png`));
+    await page.getByRole('button', {name: '加入購物車', exact: true}).click();
+    await page.getByRole('link', {name: '查看購物車', exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('購物車');
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`synthetic-cart-${width}.png`));
+    await page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '訂單查詢', exact: true}).click();
+    await checkFrame();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('找回訂單');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveCount(0);
+    await page.getByRole('navigation', {name: '商店導覽'}).getByRole('link', {name: '商品', exact: true}).click();
+    await expect(page.getByRole('heading', {level: 1})).toHaveText(store.storeName);
+  } finally {await context.close(); await store.close();}
+});
 async function freeze(page: Page, store: Store) {
   const response = page.waitForResponse(r => r.url().endsWith(`/stores/${store.slug}/checkouts`) && r.request().method() === 'POST');
   await page.getByRole('button', {name: '核對訂單', exact: true}).click();
@@ -184,6 +230,8 @@ test('guest sees member requirement and revoked buyer access clears bank instruc
     await expect(page.getByRole('button', {name: '核對訂單', exact: true})).toBeDisabled();
     await openBuyer(e2eAuthPool, context, store);
     await page.getByRole('button', {name: '更新報價', exact: true}).click();
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await fillBuyerContact(page);
     await freeze(page, store);
     const order = await place(page, '銀行匯款');
     await context.clearCookies();
@@ -334,14 +382,18 @@ async function sellerScreens(page:Page,output:(width:number)=>string){
  }
 }
 
-test('ordinary seller UI configures bank/cash meetup, preserves unknown commands, confirms and hands over to a returning buyer',async({browser,e2eAuthPool},info)=>{
+test('with supplier console OFF, a merchant publishes public service information, configures bank/cash meetup and fulfils orders for a returning buyer',async({browser,e2eAuthPool},info)=>{
  test.setTimeout(120000);
- const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false);
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,false,{realAdmission:true,supplierConsoleEnabled:false});
  const seller=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin});
  seller.setDefaultTimeout(15000);buyer.setDefaultTimeout(15000);
  try{
   const sp=await seller.newPage(),bp=await buyer.newPage(),person=await member(e2eAuthPool);
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
+  expect(await (await seller.request.get('/api/v1/site')).json()).toMatchObject({commerce_console_enabled:true,commerce_checkout_enabled:true,supplier_console_enabled:false});
+  const supplierResponse=await seller.request.get(`/api/v1/tenants/${store.tenant}/storefronts/${store.instance}/supplier-console/overview`);
+  expect(supplierResponse.status()).toBe(404);
+  expect((await supplierResponse.json()).code).toBe('not_found');
   const settingsRequests:{key:string;body:string|null;version:string|undefined}[]=[];
   await sp.route('**/offline-payment-settings',async route=>{
    if(route.request().method()!=='PUT'){await route.continue();return;}
@@ -367,8 +419,41 @@ test('ordinary seller UI configures bank/cash meetup, preserves unknown commands
   await buyerLogin(sp,store.seller.email,sellerHash(store,'settings/payments'),store.origin);
   await expect(sp.getByText('000000123456',{exact:true})).toBeVisible();
   await expect(sp.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  // Merchant pages use the real SQL admission port; the independent local admin identity is synthetic.
+  await bp.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
+  await expect(bp.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await expect(bp.locator('body')).not.toContainText('000000123456');
+  const admission=await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成本機有限營業驗收'});
+  expect(admission.environment).toBe('sandbox');
+  // The same merchant can reach the existing publication flow from the seller console.
+  await sp.setViewportSize({width:1280,height:900});
+  await sp.getByRole('link',{name:'商店首頁',exact:true}).click();
+  await storeArea(sp,'商店資料');
+  const description='合成商店，僅供本機操作驗證。\n客服：shop@example.test，由合成店主處理。\n付款與交付：銀行匯款或面交現金，先聯絡約定面交時間。\n取消與售後：請提供訂單編號聯絡店主。';
+  const storeForm=sp.getByRole('form',{name:'商店資料',exact:true});
+  await storeForm.getByRole('textbox',{name:'商店介紹',exact:true}).fill(description);
+  await storeForm.getByRole('button',{name:'儲存商店資料',exact:true}).click();
+  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+  await bp.goto(`/shops/${store.slug}`);
+  await expect(bp.locator('body')).not.toContainText('shop@example.test');
+  await storeArea(sp,'店面與發布');
+  await sp.getByRole('button',{name:'發布更新',exact:true}).click();
+  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 2 版');
+  await bp.setViewportSize({width:390,height:844});
+  for(const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access']){
+   await bp.goto(`/shops/${store.slug}${path}`);
+   await bp.getByRole('navigation',{name:'商店導覽',exact:true}).getByRole('link',{name:'商店說明',exact:true}).click();
+   await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
+   await expect(bp.locator('body')).not.toContainText('000000123456');
+   expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  await bp.screenshot({path:info.outputPath('merchant-public-information-390.png'),fullPage:true});
+  let lastCheckoutInput:unknown;
+  bp.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith(`/stores/${store.slug}/checkouts`))lastCheckoutInput=request.postDataJSON();});
   await buyerLogin(bp,person.email,'',store.origin);
   await start(bp,store);await freeze(bp,store);const bank=await place(bp,'銀行匯款');
+  await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
+  await expect(bp.locator('body')).toContainText('000000123456');
   await sellerOrder(sp,store,bank);
   await expect(sp.getByText('下單時選擇：銀行匯款',{exact:true})).toBeVisible();
   await sellerScreens(sp,width=>info.outputPath(`seller-bank-confirm-form-${width}.png`));
@@ -409,12 +494,20 @@ test('ordinary seller UI configures bank/cash meetup, preserves unknown commands
   await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
   // Existing seller cancellation remains reachable for an unpaid order and releases only its hold.
   await start(bp,store);await freeze(bp,store);const cancelled=await place(bp,'銀行匯款');
+  await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成停止新單，保留既有訂單處理'});
   await sellerOrder(sp,store,cancelled);await sp.getByRole('button',{name:'取消訂單',exact:true}).click();
   await sp.getByRole('dialog',{name:'取消訂單',exact:true}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
   await expect(sp.getByRole('region',{name:'訂單',exact:true})).toContainText('已取消');
   await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
   await expect(bp.getByText(/訂單狀態：已取消/)).toBeVisible();
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
+  await bp.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
+  await expect(bp.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await expect(bp.locator('body')).not.toContainText('000000123456');
+  const refused=await buyer.request.post(`/api/v1/public/stores/${store.slug}/checkouts`,{headers:{Origin:store.origin,'Idempotency-Key':randomUUID()},data:lastCheckoutInput});
+  expect(refused.status()).toBe(409);expect((await refused.json()).code).toBe('checkout_not_enabled');
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM platform_admin_audit WHERE target_type='commerce_store_admission' AND target_ref IN (SELECT admission_id::text FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2)",[store.tenant,store.instance])).rows[0].n).toBe(2);
+  expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM commerce_control_events WHERE instance_id=$1 AND kind LIKE 'store_admission.%'",[store.instance])).rows[0].n).toBe(2);
  }finally{await seller.close();await buyer.close();await store.close();}
 });
 
@@ -554,4 +647,359 @@ for(const outcome of ['committed','never committed','concurrent change'] as cons
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_offline_payment_settings WHERE instance_id=$1',[store.instance])).rows[0].n).toBe(2);
   expect((await e2eAuthPool.query("SELECT count(*)::int AS n FROM scoped_command_receipts WHERE operation='commerce.offline_payment_settings.save' AND idempotency_key=$1",[requests[0].key])).rows[0].n).toBe(outcome==='concurrent change'?0:1);
  }finally{await context.close();await store.close();}
+});
+
+
+async function portalCredentials(page: Page, email: string, password = DEMO_PASSWORD) {
+  await page.getByLabel('電子郵件', {exact: true}).fill(email);
+  await page.getByLabel('密碼', {exact: true}).fill(password);
+  await page.getByRole('button', {name: '登入', exact: true}).click();
+}
+async function fillBuyerContact(page: Page) {
+  await page.getByLabel('收件人姓名', {exact: true}).fill('合成返回買家');
+  await page.getByLabel('收件人手機', {exact: true}).fill('0900123456');
+  await page.getByLabel('Email', {exact: true}).fill('return-buyer@example.test');
+  await page.getByRole('radio', {name: '面交取貨', exact: true}).check();
+  await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+}
+
+test('buyer journey returns a guest after real login, reconfirms identity and finishes bank checkout with frozen instructions', async ({browser, e2eAuthPool}, info) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const person = await member(e2eAuthPool), page = await context.newPage();
+    const writes: string[] = [];
+    page.on('request', request => {if (request.method() === 'POST' && /\/checkouts(?:\/[^/]+\/orders)?$/.test(new URL(request.url()).pathname)) writes.push(request.postData()!);});
+    await start(page, store);
+    const cart = await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug);
+    // Returning to the tab with the same identity preserves typing and does
+    // not spend another cart quote. Hold the real session response so the
+    // assertions cover the entire pending check, then advance the debounce.
+    let quoteRequests = 0;
+    page.on('request', request => {if (request.url().endsWith('/cart-quotes')) quoteRequests++;});
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    for (const event of ['focus', 'visibilitychange'] as const) {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {release = resolve;});
+      const holdSession = async (route: Route) => {await gate; await route.continue();};
+      await page.route('**/api/v1/session', holdSession);
+      const session = page.waitForRequest(request => request.url().endsWith('/api/v1/session'));
+      const response = page.waitForResponse(result => result.url().endsWith('/api/v1/session'));
+      const name = page.getByLabel('收件人姓名', {exact: true});
+      await name.focus();
+      const beforeQuotes = quoteRequests;
+      await page.evaluate(event => {
+        if (event === 'focus') window.dispatchEvent(new Event('focus'));
+        else document.dispatchEvent(new Event('visibilitychange'));
+      }, event);
+      await session;
+      await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'true');
+      await expect(name).toBeEnabled(); await expect(name).toBeFocused();
+      await expect(name).toHaveValue('合成買家甲');
+      await name.fill('合成買家甲');
+      expect(quoteRequests).toBe(beforeQuotes);
+      release(); await response;
+      await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+      await page.clock.runFor(350);
+      await expect(name).toBeFocused(); await expect(name).toBeEnabled();
+      expect(quoteRequests).toBe(beforeQuotes);
+      await page.unroute('**/api/v1/session', holdSession);
+    }
+    await page.clock.resume();
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-guest-checkout-${width}.png`));
+    await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await expect(page.getByText('登入後會返回原本的商店頁面。', {exact: true})).toBeVisible();
+    await portalCredentials(page, person.email);
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    expect(writes).toHaveLength(0);
+    expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cart);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-return-notice-${width}.png`));
+    await fillBuyerContact(page);
+    // A background change must invalidate the quote even though a pending
+    // same-identity read no longer toggles the form's blocked state.
+    const session = await (await context.request.get('/api/v1/session')).json();
+    const logout = await context.request.post('/api/v1/auth/logout', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID()}, data: {}});
+    expect(logout.status()).toBe(200);
+    const guestQuote = page.waitForResponse(response => response.url().endsWith('/cart-quotes') && response.headers()['x-commerce-buyer'] === 'guest');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await guestQuote;
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    await fillBuyerContact(page);
+    await apiLogin(context, store.origin, person.email);
+    const memberQuote = page.waitForResponse(response => response.url().endsWith('/cart-quotes') && response.headers()['x-commerce-buyer'] === `member:${person.id}`);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await memberQuote;
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('');
+    await expect(page.getByLabel('Email', {exact: true})).toHaveValue('');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cart);
+    expect(writes).toHaveLength(0);
+    await fillBuyerContact(page);
+    await freeze(page, store);
+    const order = await place(page, '銀行匯款');
+    expect(writes).toHaveLength(2);
+    await expect(page.getByText('000000123456', {exact: true})).toBeVisible();
+    await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await store.saveOfflineFixture(2);
+    await page.reload();
+    await expect(page.getByText('000000123456', {exact: true})).toBeVisible();
+    await expect(page.getByText('新的面交地點。', {exact: true})).toHaveCount(0);
+    expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toMatch(/000000123456|return-buyer@example.test/);
+    await page.goto('/#reservations');
+    const orders=page.getByRole('region',{name:'訂單',exact:true});
+    await expect(orders.getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',`/shops/${store.slug}/orders/${order.order_ref}`);
+    await orders.getByRole('link',{name:'開啟訂單',exact:true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(page.getByText('000000123456',{exact:true})).toBeVisible();
+    await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await expect(page.getByText('000000654321',{exact:true})).toHaveCount(0);
+  } finally {await context.close(); await store.close();}
+});
+
+test('checkout registration returns before guild choice; unavailable stores keep successful login and registration in the portal', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const page = await context.newPage(), email = `buyer-registration-${randomUUID()}@example.test`;
+    await start(page, store);
+    await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await expect(page.getByText('建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。', {exact: true})).toBeVisible();
+    await page.getByLabel('電子郵件', {exact: true}).fill(email);
+    await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+    await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    const user = (await e2eAuthPool.query('SELECT user_id,onboarding_completed_at FROM users WHERE email=$1', [email])).rows[0];
+    expect(user.onboarding_completed_at).toBeNull();
+    expect((await e2eAuthPool.query('SELECT 1 FROM positioning_profession_memberships WHERE user_id=$1', [user.user_id])).rowCount).toBe(0);
+    await page.goto('/#reservations');
+    await expect(page.getByRole('region',{name:'訂單',exact:true})).toContainText('目前沒有訂單。');
+    await expect(page.getByRole('region',{name:'預留紀錄',exact:true})).toHaveCount(0);
+    expect((await context.request.get('/api/v1/me/orders')).status()).toBe(200);
+    expect((await context.request.get('/api/v1/me/reservations')).status()).toBe(403);
+    await page.getByRole('link',{name:'返回工坊',exact:true}).click();
+    await expect(page).toHaveURL(`${store.origin}/#home`);
+    await expect(page.getByRole('region',{name:'訂單',exact:true})).toHaveCount(0);
+    const version = (await e2eAuthPool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1', [store.instance])).rows[0].version;
+    await store.sellerPost(store.root + '/unpublish', {}, 200, version);
+    const destination = `/?return_to=${encodeURIComponent(`/shops/${store.slug}/checkout`)}`;
+    await context.clearCookies(); await page.goto(destination);
+    const returning = await member(e2eAuthPool);
+    await portalCredentials(page, returning.email);
+    await expect(page.getByText('登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+    await context.clearCookies(); await page.goto(destination);
+    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByLabel('電子郵件', {exact: true}).fill(`buyer-unpublished-${randomUUID()}@example.test`);
+    await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+    await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
+    await expect(page.getByText('帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+  } finally {await context.close(); await store.close();}
+});
+
+test('TOTP and backup login return only with a live session; cross-tab logout and another buyer cannot resume an old intent', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {totpEncryptionKey: Buffer.alloc(32, 0x74).toString('base64')});
+  const context = await browser.newContext({baseURL: store.origin});
+  try {
+    const a = await member(e2eAuthPool), b = await member(e2eAuthPool);
+    const session = await apiLogin(context, store.origin, a.email);
+    const secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+    const counter = Number((await e2eAuthPool.query('SELECT floor(extract(epoch FROM clock_timestamp())/30)::bigint AS counter')).rows[0].counter);
+    const enabled = await context.request.post('/api/v1/me/totp/enable', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID()}, data: {password: DEMO_PASSWORD, secret, code: totpCode(secret, counter)}});
+    expect(enabled.status()).toBe(200);
+    const codes = (await enabled.json()).backup_codes as string[];
+    await context.clearCookies();
+    const page = await context.newPage();
+    await start(page, store); await page.getByRole('link', {name: '登入會員', exact: true}).click();
+    await portalCredentials(page, a.email, DEMO_PASSWORD + '-wrong');
+    await expect(page.getByRole('alert')).toBeVisible(); expect(new URL(page.url()).pathname).toBe('/');
+    await portalCredentials(page, a.email);
+    await expect(page.getByRole('textbox', {name: /^驗證器代碼或備用碼/})).toBeVisible();
+    expect((await context.request.get('/api/v1/session')).status()).toBe(401);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill('invalid-synthetic-code');
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page.getByRole('alert')).toBeVisible(); expect(new URL(page.url()).pathname).toBe('/');
+    const now = Number((await e2eAuthPool.query('SELECT floor(extract(epoch FROM clock_timestamp())/30)::bigint AS counter')).rows[0].counter);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(totpCode(secret, Math.max(counter + 1, now)));
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    const destination = `/?return_to=${encodeURIComponent(`/shops/${store.slug}/checkout`)}`;
+    await context.clearCookies(); await page.goto(destination); await portalCredentials(page, a.email);
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(codes[0]);
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await expect(page).toHaveURL(`${store.origin}/shops/${store.slug}/checkout`);
+    await context.clearCookies(); await page.goto(destination); await portalCredentials(page, a.email);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => {release = resolve;}), ready = new Promise<void>(resolve => {entered = resolve;});
+    await page.route(`**/api/v1/public/stores/${store.slug}`, async route => {entered(); await gate; await route.continue();});
+    await page.getByRole('textbox', {name: /^驗證器代碼或備用碼/}).fill(codes[1]);
+    await page.getByRole('button', {name: '登入', exact: true}).click();
+    await ready;
+    const current = await (await context.request.get('/api/v1/session')).json();
+    const other = await context.newPage();
+    const logout = await other.request.post('/api/v1/auth/logout', {headers: {Origin: store.origin, 'X-CSRF-Token': current.csrf_token, 'Idempotency-Key': randomUUID()}, data: {}});
+    expect(logout.status()).toBe(200); release();
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+    await other.close(); await page.unroute(`**/api/v1/public/stores/${store.slug}`);
+    await apiLogin(context, store.origin, b.email);
+    const oldRef = randomUUID(), oldClient = randomUUID(), posts: string[] = [];
+    await page.evaluate(({slug, owner, ref, client}) => {
+      sessionStorage.setItem(`freedom.shop.order-intent.v2:${slug}`, JSON.stringify({version: 2, slug, buyer: `member:${owner}`, checkoutRef: ref, input: {terms_sha256: 'a'.repeat(64), client_order_id: client, payment_method: 'bank_transfer'}}));
+    }, {slug: store.slug, owner: a.id, ref: oldRef, client: oldClient});
+    page.on('request', request => {if (request.method() === 'POST' && request.url().includes('/checkouts/')) posts.push(request.postData()!);});
+    await page.goto(`/shops/${store.slug}/checkout`);
+    await expect(page.getByText('登入身分已變更，請重新確認', {exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '重試同一筆訂單', exact: true})).toHaveCount(0);
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false'); expect(posts).toHaveLength(0);
+  } finally {await context.close(); await store.close();}
+});
+
+test('delivery reasons name blocked supply items; removing them keeps own items buyable and offers only available alternatives', async ({browser, e2eAuthPool}, info) => {
+  const supplier = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const context = await browser.newContext({baseURL: store.origin});
+  const sellerContext = await browser.newContext({baseURL: store.origin});
+  try {
+    const source = supplier.products[0];
+    const offer = SupplyOfferSchema.parse(await supplier.sellerPost(`${supplier.root}/products/${source.product_id}/supply-offer`, {}, 200, source.version));
+    const selection = DistributionSchema.parse(await store.sellerPost(store.root + '/distribution-selections', {offer_id: offer.offer_id, terms_sha256: offer.terms_sha256, retail_price_minor: 10000}, 201));
+    await supplier.sellerPost(`${supplier.root}/supply-requests/${selection.selection_id}/decision`, {decision: 'accepted', listing_sha256: selection.listing_sha256}, 200, selection.version);
+    const projection = await store.republish(), own = store.products[1];
+    const session = await apiLogin(sellerContext, store.origin, store.seller.email);
+    const profile = await sellerContext.request.put('/api/v1' + store.root + '/shipping-profile', {headers: {Origin: store.origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID(), 'If-Match': '"1"'}, data: {schema: 'freedom.shipping-profile/v1', working_days: [1,2,3,4,5], services: [], delivery_options: [{method: 'meetup', note: '請先約定面交。'}, {method: 'home', fee_per_parcel_minor: 6000, free_over_minor: null, outlying: {kind: 'excluded'}}], drop_ship: null}});
+    expect(profile.status(), await profile.text()).toBe(200);
+    await openBuyer(e2eAuthPool, context, store);
+    const page = await context.newPage();
+    await page.goto(`/shops/${store.slug}`);
+    await page.evaluate(({slug, revision, lines}) => localStorage.setItem('freedom.shop.cart.v1:' + slug, JSON.stringify({revision, lines})), {slug: store.slug, revision: projection.revision, lines: [selection.sku, own.sku].map(sku => {const product = projection.products.find(p => p.sku === sku)!; return {sku, title: product.title, quantity: 1, price_minor: product.price_minor, currency: projection.currency};})});
+    await page.goto(`/shops/${store.slug}/cart`);
+    const suppliedLine = page.locator('.shop-cart-line').filter({hasText: source.title});
+    await expect(suppliedLine).toContainText('目前無法配送');
+    await expect(page.locator('.shop-cart-line').filter({hasText: own.title})).not.toContainText('目前沒有可用的取貨方式。');
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-cart-delivery-note-${width}.png`));
+    await page.getByRole('link', {name: '前往結帳', exact: true}).click();
+    await expect(page.getByRole('region', {name: '以下商品無法使用「面交取貨」：'})).toContainText(source.title + '：目前無法配送');
+    await expect(page.getByText('這些商品目前無法一起配送，請回購物車調整或分開下單。', {exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: /^改用/})).toHaveCount(0);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-delivery-blocked-${width}.png`));
+    await page.getByRole('link', {name: '回購物車調整', exact: true}).click();
+    await page.locator('.shop-cart-line').filter({hasText: source.title}).getByRole('button', {name: /移除/}).click();
+    await expect(page.locator('.shop-cart-line')).toHaveCount(1);
+    await page.getByRole('link', {name: '前往結帳', exact: true}).click();
+    await expect(page.getByRole('button', {name: '改用面交取貨', exact: true})).toBeVisible();
+    await expect(page.getByRole('button', {name: '改用宅配', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('region', {name: '以下商品無法使用「宅配」：'})).toContainText(own.title);
+    await assertCartResponsiveLayout(page, [390,768,1440], width => info.outputPath(`buyer-delivery-alternative-${width}.png`));
+    await page.getByRole('button', {name: '改用面交取貨', exact: true}).click();
+    await fillBuyerContact(page); await freeze(page, store);
+    await expect(page.getByRole('region', {name: '2. 核對商品與配送'})).toContainText(own.title);
+    await expect(page.getByRole('region', {name: '2. 核對商品與配送'})).not.toContainText(source.title);
+  } finally {await context.close(); await sellerContext.close(); await store.close(); await supplier.close();}
+});
+
+test('VARIANTS-E2E each SKU keeps its stock and checkout/order labels survive a published group rename',async({browser,e2eAuthPool},info)=>{
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{storeVariantsEnabled:true}),context=await browser.newContext({baseURL:store.origin});
+ try{
+  const a=await store.sellerPatch(store.root+'/products/'+store.products[0].product_id,{stock:1},store.products[0].version),b=await store.sellerPatch(store.root+'/products/'+store.products[1].product_id,{stock:2},store.products[1].version);
+  const axes=[{key:randomUUID(),name:'顏色',values:[{key:randomUUID(),name:'白'},{key:randomUUID(),name:'黑'}]},{key:randomUUID(),name:'尺寸',values:[{key:randomUUID(),name:'M'}]}];
+  const input={title:'經典 T 恤',description:'合成商品組介紹',axes,members:[{product_id:a.product_id,product_version:a.version,value_keys:[axes[0].values[0].key,axes[1].values[0].key]},{product_id:b.product_id,product_version:b.version,value_keys:[axes[0].values[1].key,axes[1].values[0].key]}],default_product_id:a.product_id,order:0};
+  await store.sellerPut(store.root+'/product-groups/'+a.sku,input,'1');await store.republish();await openBuyer(e2eAuthPool,context,store);
+  const page=await context.newPage();await start(page,store);const checkout=await freeze(page,store);expect(checkout.terms.items[0].title).toBe('經典 T 恤（白／M）');await expect(page.locator('#shop-checkout')).toContainText('經典 T 恤（白／M）');
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-checkout-label-'+width+'.png'),fullPage:true});}
+  const order=await place(page,'面交付款');expect(order.lines[0].title).toBe('經典 T 恤（白／M）');
+  const group=await store.sellerGet(store.root+'/product-groups/'+a.sku);await store.sellerPut(store.root+'/product-groups/'+a.sku,{...input,title:'新版 T 恤'},group.version);await store.republish();
+  await page.reload();await expect(page.locator('#shop-order')).toContainText('經典 T 恤（白／M）');await expect(page.locator('#shop-order')).not.toContainText('新版 T 恤');
+  const seller=await store.sellerGet(store.root+'/checkout-orders/'+order.order_ref);expect(seller.lines[0].title).toBe('經典 T 恤（白／M）');
+  await page.goto('/shops/'+store.slug+'/products/'+a.sku);await expect(page.locator('.shop-availability')).toContainText('此規格已售完');await expect(page.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:/^顏色：黑/}).click();await expect(page.locator('#shop-add-to-cart')).toHaveAttribute('data-title','新版 T 恤（黑／M）');await page.getByRole('button',{name:'加入購物車',exact:true}).click();await page.getByRole('link',{name:'查看購物車',exact:true}).click();await expect(page.locator('#shop-cart')).toContainText('新版 T 恤（黑／M）');await expect(page.locator('#shop-cart')).toHaveAttribute('aria-busy','false');
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('variants-cart-label-'+width+'.png'),fullPage:true});}
+  await page.getByRole('link',{name:'前往結帳',exact:true}).click();await page.getByLabel('收件人姓名',{exact:true}).fill('合成買家乙');await page.getByLabel('收件人手機',{exact:true}).fill('0900123456');await page.getByLabel('Email',{exact:true}).fill('variants-second@example.test');await page.getByRole('radio',{name:'面交取貨',exact:true}).check();await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy','false');await freeze(page,store);const second=await place(page,'面交付款');expect(second.lines[0].title).toBe('新版 T 恤（黑／M）');
+  expect((await e2eAuthPool.query('SELECT item_id,reserved FROM commerce_items WHERE item_id=ANY($1::uuid[]) ORDER BY item_id',[[a.product_id,b.product_id]])).rows.map(row=>row.reserved)).toEqual([1,1]);
+ }finally{await context.close();await store.close();}
+});
+
+test('order bell tells an eligible seller reader about placement and opening it rechecks revoked authority',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{commerceOrderNotificationsEnabled:true});
+  const buyerContext=await browser.newContext({baseURL:store.origin}),readerContext=await browser.newContext({baseURL:store.origin});
+  try{
+    for(const context of [buyerContext,readerContext])await context.route(url=>url.origin!==store.origin,route=>route.abort());
+    const reader=await member(e2eAuthPool),principal=randomUUID();
+    await e2eAuthPool.query('INSERT INTO principals(principal_id,user_ref) VALUES($1,$2)',[principal,reader.id]);
+    await e2eAuthPool.query("INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at) VALUES($1,$2,'operator','active',clock_timestamp())",[store.tenant,principal]);
+    await e2eAuthPool.query(`INSERT INTO tenant_module_permissions(tenant_id,principal_id,instance_id,capabilities,status,granted_by_principal_id)
+      SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[store.tenant,principal,store.instance,store.seller.id]);
+    await apiLogin(readerContext,store.origin,reader.email);
+    const readerPage=await readerContext.newPage();await readerPage.goto('/#home');
+    await expect(readerPage.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    const buyer=await openBuyer(e2eAuthPool,buyerContext,store),buyerPage=await buyerContext.newPage();
+    await start(buyerPage,store);await freeze(buyerPage,store);const order=await place(buyerPage,'銀行匯款');
+    await readerPage.locator('.notification-bell-trigger').click();
+    const panel=readerPage.getByRole('region',{name:'最近通知'}),item=panel.locator('.notification-bell-item').filter({hasText:'新訂單待確認收款'});
+    await expect(item).toBeVisible();await expect(item).toContainText(`「山邊小店」收到訂單 ${order.display_number}，等待銀行匯款；請至訂單頁查看。`);
+    for(const hidden of ['000000123456','合成測試銀行','合成買家甲','offline-buyer@example.test','0900123456','350.00'])await expect(item).not.toContainText(hidden);
+    await expect(readerPage.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
+    const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
+    await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
+    await expect(readerPage).toHaveURL(`${store.origin}/#stores/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
+    await expect(readerPage.locator('.seller-console')).toContainText(order.display_number);
+    await e2eAuthPool.query("UPDATE tenant_module_permissions SET capabilities=ARRAY['store:read'],version=version+1,updated_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[store.tenant,principal]);
+    expect((await readerContext.request.get(`/api/v1${store.root}/checkout-orders/${order.order_ref}`)).status()).toBe(403);
+    const cancelled=buyerPage.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/orders/${order.order_ref}/cancel`));
+    await buyerPage.getByRole('button',{name:'取消訂單',exact:true}).click();
+    await buyerPage.getByRole('dialog',{name:'要取消這筆訂單嗎？'}).getByRole('button',{name:'確認取消訂單',exact:true}).click();
+    expect((await cancelled).status()).toBe(200);
+    const ownerNotices=(await e2eAuthPool.query('SELECT kind FROM member_notifications WHERE recipient_ref=$1 AND source_key=$2',[store.seller.id,`commerce-order/v1/${order.order_ref}/buyer_cancelled`])).rows;
+    expect(ownerNotices).toEqual([{kind:'commerce_order_buyer_cancelled'}]);
+    expect((await e2eAuthPool.query('SELECT 1 FROM member_notifications WHERE recipient_ref=$1 AND source_key=$2',[reader.id,`commerce-order/v1/${order.order_ref}/buyer_cancelled`])).rowCount).toBe(0);
+    const history=await(await readerContext.request.get('/api/v1/me/notifications')).json() as {items:{title:string;body:string}[]};
+    expect(history.items.some(n=>n.title==='新訂單待確認收款'&&n.body.includes(order.display_number))).toBe(true);
+    expect((await e2eAuthPool.query('SELECT 1 FROM member_notifications WHERE recipient_ref=$1 AND source_key LIKE $2',[buyer.id,`commerce-order/v1/${order.order_ref}/%`])).rowCount).toBe(0);
+  }finally{await buyerContext.close();await readerContext.close();await store.close();}
+});
+
+test('buyer order notices open a fresh authorized B07 and the full history keeps its primary order action on phones',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{commerceOrderNotificationsEnabled:true});
+  const context=await browser.newContext({baseURL:store.origin});
+  try{
+    await context.route(url=>url.origin!==store.origin,route=>route.abort());
+    await openBuyer(e2eAuthPool,context,store);const page=await context.newPage();
+    await start(page,store);await freeze(page,store);const order=await place(page,'銀行匯款');
+    await expect(page.getByText('店家確認收款後，按「更新訂單狀態」即可看到最新狀態。',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveClass(/shop-button-secondary/);
+    await assertCartResponsiveLayout(page,[390,768,1440],width=>info.outputPath(`notify-b07-${width}.png`));
+    const date=(await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
+    const paid=SellerCheckoutOrderSchema.parse(await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/offline-payments`,{amount_minor:order.total_minor,received_on:date},200,'1'));
+    await expect(page.getByText('店家已確認收到付款。',{exact:true})).toHaveCount(0);
+    const refreshed=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname.endsWith(`/orders/${order.order_ref}`));
+    await page.getByRole('button',{name:'更新訂單狀態',exact:true}).click();expect((await refreshed).status()).toBe(200);
+    await expect(page.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveCount(0);
+    const portal=await context.newPage();await portal.goto('/#home');await openNotifications(portal);
+    const history=portal.getByRole('region',{name:'最近通知'}),item=history.locator('li[data-notification]').filter({hasText:'店家已確認收款'});
+    await expect(item.getByRole('heading',{name:'店家已確認收款',exact:true})).toBeVisible();
+    const action=item.getByRole('button',{name:'查看我的訂單',exact:true});await expect(action).toHaveClass(/btn-primary/);
+    await portal.setViewportSize({width:390,height:900});const bounds=await action.boundingBox();expect(bounds).not.toBeNull();expect(bounds!.height).toBeGreaterThanOrEqual(44);expect(bounds!.width).toBeLessThan(300);
+    await expect(portal.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    await assertCartResponsiveLayout(portal,[390,768,1440],width=>info.outputPath(`notify-history-${width}.png`));
+    await action.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+    await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/meetup-handover`,{completed_on:date},200,paid.version);
+    await portal.goto('/#home');await portal.locator('.notification-bell-trigger').click();
+    const handover=portal.getByRole('region',{name:'最近通知'}).locator('.notification-bell-item').filter({hasText:'店家已登記交貨'});
+    await expect(handover).toContainText(`「山邊小店」已登記訂單 ${order.display_number} 的面交交貨。`);
+    await handover.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
+    await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+    await expect(portal.getByRole('button',{name:'更新訂單狀態',exact:true})).toHaveCount(0);
+  }finally{await context.close();await store.close();}
 });

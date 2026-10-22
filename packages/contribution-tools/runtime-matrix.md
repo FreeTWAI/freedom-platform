@@ -1,5 +1,53 @@
 # Diagnostic runtime matrix
 
+## 慢速 DROP 的有界等待（2026-10-20）
+
+目前清理使用一個 **60 秒** absolute deadline，suite 預留 **64 秒**；本節取代下方
+歷史紀錄中的 20 秒／24 秒值。每個 DROP 依 `(remaining - 4000) / 剩餘資料庫數`
+公平分配時間，單庫最多約 56 秒，仍留四秒作 fresh reconciliation。Metadata statement
+仍限兩秒；CREATE 的獨立 20 秒 provisioning budget 不變。兩種診斷的 `elapsed_ms`
+上限同步為 60,000，八秒的一次性 observer 及其 200 ms／500 ms 限制不變。
+
+截至本次調查，近約 300 次 Verify 的 16 個失敗 runtime-full jobs 中，有八個清理失敗，
+跨 main／PR 與 partitions 0、1、3、5、6，均在 16.053–16.056 秒出現 DROP
+`unknown_ack/query_read_timeout`。另外 96 個成功 jobs 的總清理時間為
+min 2.317 秒、p50 4.629 秒、p90 10.748 秒、p95 12.732 秒、max 14.323 秒，
+其中十個至少十秒。成功尾端已接近舊 DROP 上限；失敗 DROP 的自然完成時間未知。
+60 秒是給未知尾端留約 3.5 倍舊 DROP 等待的有界選擇，不是測得的安全上界。
+
+[PR #898 的失敗 partition 3](https://github.com/FreeTWAI/freedom-platform/actions/runs/39139517705/job/117711191116)
+通過 758 個測試後，DROP 的 checkpoint 只花 0.052 秒；8.221 秒的 observer 為
+`unavailable`，16.054 秒失去回覆，verifier 終止 cleaner 後在 16.667 秒讀到
+`database_present`。服務 log 的 administrator termination 與仍在執行的 DROP 相符。
+同次較早 checkpoint 的 sync files 為 306,035／159,323；這是大量檔案工作量的證據，
+並非 DROP 當下目錄檔案數的精確盤點。
+
+[PostgreSQL REL_18_STABLE 的 dropdb](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/commands/dbcommands.c)
+先以持久的 in-place update 標記資料庫 invalid，再 transactionally 刪除 catalog row，
+接著依序等待 immediate checkpoint、SMGRRELEASE ProcSignalBarrier，最後
+`remove_dbtablespaces` 呼叫
+[rmtree](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/common/rmtree.c)
+逐檔 unlink／刪目錄並要求同步 commit。取消或終止在 interrupt processing 時生效；
+rmtree 沒有逐檔 `CHECK_FOR_INTERRUPTS`，不能假設 termination ACK 會立即停止刪檔。
+若在 invalid 標記後、commit 前失敗，catalog row 的刪除會回滾，invalid 狀態保留，
+檔案可能已部分或全部移除。因此 backend 消失或 DROP ACK 都不能證明資料庫已刪除。
+大量檔案在 runner filesystem 的移除延遲是合理推論；log 沒有分開量到 barrier／rmtree，
+不能將 unavailable observer 當作進度或根因證明。
+
+八／六分區仍限 1,500 秒：最多 20 秒 provisioning + 約 1,416 秒測試 + 64 秒 reserve。
+reserve 比原本多 40 秒；以 [commerce 計畫](../../docs/platform-plan/execution/commerce/work-plan.md)
+的 1,150.196 秒最長觀察保守估算，扣完 provisioning 仍有約 266 秒測試餘裕；
+該 run 的測試／清理失敗紀錄保留。40 分鐘 Actions job 為 2,400 秒，partition 外仍留 900 秒供
+setup／build／integration／artifact；不保證任意 runner 延遲都能完成。四分區維持
+1,200 秒、本機 full 維持 900 秒，因此扣相同 provisioning 後分別約 1,116／816 秒；
+這些入口也少 40 秒測試時間，並未增加外層 deadline 或擴張 aggregate window。
+
+正向 fresh absence、owner／session／nonce identity、owner／cleaner settlement、
+所有資料庫仍存在即失敗的規則保留，不重試 DROP，不改 service container 或 durability。
+假 transport／clock regression 涵蓋 30 秒 DROP、遺失 ACK、仍存在及超時；它不是原生
+PostgreSQL I/O 重現。改動後的真實資料庫證據只能來自 hosted CI；
+一次綠燈不代表 flake 已消失，需觀察多次自然執行的清理尾端與失敗率。
+
 Eight separate CI hosts can each run one deterministic partition against their own PostgreSQL server (the tools still accept six and four). This does not change the local `runLocalSuite(..., 'runtime.full')` default four-process behavior. Each matrix invocation creates and cleans exactly one fresh nonce database through the existing owned-database helper, runs one test process with `--test-concurrency=1`, and preserves its original process report. Arbitrary files, commands, partition counts or indexes are refused.
 
 ```sh
@@ -9,7 +57,70 @@ node scripts/runtime-aggregate.mjs --partition-count 8 --input-dir .freedom/repo
 
 Use indexes 0 through 7 on separate hosts. Upload each `runtime-partition-N.json` even on failure, then download the eight files into one flat input directory. A fragment has schema `freedom.runtime-partition/v1` and check ID `runtime.partition.N`; it cannot represent a full-suite pass. Both its outer and nested cleanup flags must be true for acceptance. Failed artifacts remain intact and are never overwritten by aggregation.
 
-The producer snapshots the actual Git HEAD and full selected source manifest before execution and again after cleanup, rejecting tracked-tree changes. The manifest contains sorted `{path,source_sha256}` entries for all current full-suite files, including the closed baseline; deterministic partition membership uses the reviewed static scheduling weights in `partitionRuntimeFiles`, assigning estimated longest files first to the least-loaded partition with index tie-breaking. The current weights are per-file minimum serial durations from the file-progress segments of hosted runs 38968059268 and 38960147348 (October 16, the commerce candidates) and 38003118152 (October 9). No run passed: 38968059268 timed out partition 1 and failed partition 5's database cleanup, 38960147348 timed out partition 3 and 38003118152 timed out partitions 1 and 4. Timing observations never turn those results into passes. The parser rejects an incomplete final segment unless the log is named with `--partial-log`; a timed-out segment then contributes only its completed files, never the file in flight, and its counters must still match. Those historical reporters clamped `elapsed_ms` at 1,200,000, below their 1,500-second budget; saturated files have no measured duration. The current strict/partial admission rules below supersede the historical omission behavior. Run 38000643429 is no longer an input: its hosts were about 30% faster than run 38960147348 in aggregate, against 21% for run 38003118152, and a minimum across all three understated the files measured only on October 16.
+## 權重更新，2026-10-21
+
+本次以 run 39674589957（batch #963，`05eee5b2`，attempt 1）及
+39673038442（main `2d8056de`）的 16 份 job logs 重算；各有七個完整
+segment 以 `--log` 輸入，batch partition 1 與 main partition 3 逾時，
+以 `--partial-log` 僅納入已完成檔案。兩次 run 都沒有通過；量測不是通過證據。
+目前 467 個 runtime files 全部在兩次 run 的已完成檔案聯集中有量測，
+無刪除或未量測檔案；per-file minima 合計 9,500.848 秒，整秒權重合計 9,744。
+輸出保留工具產生的 `Partial scheduling estimates` 前綴及 fixture 的 partial 標記，
+因為跨 run 聯集不能取代單次完整、source-bound 的 hosted 證據。
+
+October 16 原始 logs 不在本機，無法重放或重新比較當時主機；因此不保留為本輪輸入，
+也不宣稱已量得它們與今天主機的速度差。沿用下方歷史上排除較快主機的理由，
+避免把舊 host／舊檔案的較低耗時混入目前 minima；今天兩次 run 量測目前檔案與主機。
+舊 fixtures 原樣保留，來源仍可追溯。
+
+對目前 467 檔案使用真正的 `partitionRuntimeFiles(files, 8)`，以本次 fixture
+逐分區加總量測 ms：舊權重為 939.118–1,518.582 秒，新權重為
+1,183.704–1,192.938 秒，最大值低於約 1,430 秒，亦低於扣除最多 20 秒
+provisioning 與 64 秒 cleanup reserve 後的 1,416 秒。這只是排程估算，
+不是主機速度保證；batch 必須在新 candidate 上重跑整個 CI matrix 才能證明通過。
+新 fixture 測試沿用 October 16 的完整聯集、唯一性、排序、spread 與新增未量測檔案
+檢查，八分區上界為 1,210 秒，新增 15 秒檔案的上界為 1,220 秒。
+依 orchestrator 決策，三組歷史上界重新對齊原先說明的窗口，並非依新實算值選上界：
+
+- run 37567098443 四分區由 770 → 870 秒，加檔由 780 → 870 秒；低於 870 秒的
+  cushion 是依早期權重校準，900 秒分區約留 870 秒測試的歷史窗口不變。
+- October 9 六分區由 760 → 870 秒，加檔由 770 → 870 秒，對齊原訊息所指
+  900 秒窗口；四分區由 1,150 → 1,200 秒，對齊原訊息所指 legacy matrix budget。
+- October 16 六／八分區分別由 1,040／780 → 1,210 秒，沿用 October 21 fixture
+  的窗口；加檔仍保留 `bound + 10_000`（由 1,050／790 → 1,220 秒）。舊 1.33×／1.8×
+  餘裕推論針對當時 runs 推導的權重；目前權重已不來自 October 16，因此比照 October 16
+  更新時對 October 9 的處理，只移除這組 `< 10_000` spread assertion。
+
+歷史 fixture 內容及其餘 assertions 全部保留；October 21 的 spread 檢查不變。
+
+從 repo root 重現（原始 logs 另存於 job dir）：
+
+```sh
+node scripts/ci/derive-runtime-weights.mjs --root . \
+  --note "Progress segments of runs 39674589957 (2026-10-21, batch #963 at 05eee5b2; p1 timed out) and 39673038442 (2026-10-21, main 2d8056de; p3 timed out); timed-out partitions add completed files only. No run passed." \
+  --output packages/contribution-tools/runtime-file-weights.mjs \
+  --costs-output packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261021.json \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p0-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p2-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p3-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p4-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p5-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p6-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p7-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p0-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p1-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p2-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p4-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p5-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p6-success.log \
+  --log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p7-success.log \
+  --partial-log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/b963-p1-failure.log \
+  --partial-log /home/thuang/agent-work/cli-jobs-20261020/reweigh-20261021-logs/main-p3-failure.log
+```
+
+## 歷史權重推導，2026-10-16
+
+The producer snapshots the actual Git HEAD and full selected source manifest before execution and again after cleanup, rejecting tracked-tree changes. The manifest contains sorted `{path,source_sha256}` entries for all current full-suite files, including the closed baseline; deterministic partition membership uses the reviewed static scheduling weights in `partitionRuntimeFiles`, assigning estimated longest files first to the least-loaded partition with index tie-breaking. The October 16 weights were per-file minimum serial durations from the file-progress segments of hosted runs 38968059268 and 38960147348 (October 16, the commerce candidates) and 38003118152 (October 9). No run passed: 38968059268 timed out partition 1 and failed partition 5's database cleanup, 38960147348 timed out partition 3 and 38003118152 timed out partitions 1 and 4. Timing observations never turn those results into passes. The parser rejects an incomplete final segment unless the log is named with `--partial-log`; a timed-out segment then contributes only its completed files, never the file in flight, and its counters must still match. Those historical reporters clamped `elapsed_ms` at 1,200,000, below their 1,500-second budget; saturated files have no measured duration. The current strict/partial admission rules below supersede the historical omission behavior. Run 38000643429 is no longer an input: its hosts were about 30% faster than run 38960147348 in aggregate, against 21% for run 38003118152, and a minimum across all three understated the files measured only on October 16.
 
 The October 9 weights covered 320 files. On the October 16 candidate, 411 files were selected and the unmeasured ones kept the 10-second default, including 40 new commerce runtime files; the 39 that completed took about 1,370 seconds together. Partition 3 reached its 1,500-second deadline with 49/69 files completed. The other five passed: partitions 2 and 5 finished their files in about 900 and 970 seconds, partitions 0, 1 and 4 in 1,380–1,525. That first regenerated fixture covered 395 measured files; the other 16 candidate files kept the 10-second default. Their estimated six loads are 1,085–1,090 seconds of per-file minima. Run 38960147348's own durations, with October 9 durations scaled by 1.35 for the 20 files it never completed, give 1,244–1,342 seconds per partition under the new allocation. That assumes `commerce-provider-accounts.test.ts` takes about 40 seconds after its secret scan became one statement per scan; its weight still records the 215 seconds of the measured run. Estimates require a fresh coherent hosted run; they are neither throughput guarantees nor acceptance evidence. No runner, case, file, cleanup, partition deadline or aggregate-window requirement changed.
 
@@ -23,7 +134,7 @@ node scripts/ci/derive-runtime-weights.mjs --root . \
   --log <complete unsaturated partition log> ... --partial-log <explicit historical incomplete or saturated log> ...
 ```
 
-The October 9 command, with the ten complete logs of runs 38000643429 and 38003118152, still reproduces `runtime-hosted-costs-disk-20261009.json` exactly. Historical October 7 and October 9 cost fixtures remain unchanged. Their hotspot, maximum and four-partition bounds still pass with the new weights; the October 9 fixture no longer asserts a 15-second spread, because the weights no longer come from it. The October 16 fixture test checks six and eight partitions against the 1,500-second host budget. At about 1,630 seconds of minima per partition, the full suite no longer fits four 1,200-second partitions, so no four-partition bound is asserted for it. This does not claim that a local four-process full run has acquired the legacy matrix budget.
+The October 9 command, with the ten complete logs of runs 38000643429 and 38003118152, still reproduces `runtime-hosted-costs-disk-20261009.json` exactly. Historical October 7 and October 9 cost fixtures remain unchanged. At the October 16 refresh, their hotspot, maximum and four-partition bounds passed with those weights; the October 9 fixture no longer asserts a 15-second spread, because the weights no longer come from it. The October 16 fixture test checks six and eight partitions against the 1,500-second host budget. At about 1,630 seconds of minima per partition, the full suite no longer fits four 1,200-second partitions, so no four-partition bound is asserted for it. This does not claim that a local four-process full run has acquired the legacy matrix budget.
 
 Each process retains the original sorted file order. Unknown files receive the same default weight and remain mandatory; file counts need not be equal. Producer, aggregate and local full runner import the same candidate implementation, not a separately installed timing registry. New selections change the manifest and must be rerun together. Untracked build output does not imply a tracked source change.
 

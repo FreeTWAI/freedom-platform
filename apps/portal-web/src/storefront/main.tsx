@@ -1,7 +1,11 @@
+import {formatOrderLifecycle} from './format.js';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {OfflineOrder} from './offline-order.js';
 import {bootCheckoutPage} from './checkout-page.js';
+import {cartDeliveryNote} from './delivery-copy.js';
+import {CartQuoteResponseSchema, type CartDeliveryOptionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {storefrontLoginHref} from './return-path.js';
 import type { PublicOrder } from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import { formatMinor } from '../../../../modules/agent-commerce/hosted/format.js';
 import {
@@ -54,26 +58,12 @@ const ERROR_COPY: Record<ErrorKind, string> = {
   failed: '無法取得訂單，請稍後重試。',
 };
 
-const CANCEL_REASON_COPY: Record<NonNullable<PublicOrder['cancel_reason']>, string> = {
-  buyer_cancelled: '你取消了訂單',
-  seller_cancelled: '店家取消了訂單',
-  payment_not_completed: '未在期限內完成付款',
-  paid_cancelled: '店家無法出貨，將退款',
-};
-
 export function parseQuantityInput(raw: string): number | null {
   const trimmed = raw.trim();
   if (!POSITIVE_INT_PATTERN.test(trimmed)) return null;
   const value = Number(trimmed);
   if (!Number.isInteger(value) || value < 1 || value > MAX_LINE_QUANTITY) return null;
   return value;
-}
-
-function formatOrderLifecycle(order: PublicOrder): string {
-  if (order.lifecycle_state === 'open') return '進行中';
-  if (order.lifecycle_state === 'closed') return '已完成';
-  const reason = order.cancel_reason ? CANCEL_REASON_COPY[order.cancel_reason] : undefined;
-  return reason ? `已取消（${reason}）` : '已取消';
 }
 
 async function classifyOrderResponse(response: Response): Promise<OrderResult> {
@@ -248,6 +238,7 @@ interface OrderPageProps {
 type ViewState = 'loading' | 'link_prompt' | 'order' | 'not_found' | 'invalid_link' | 'forgotten';
 
 function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malformedAccessLink, emailEnabled }: OrderPageProps) {
+  const readOnly = container.dataset.retainedOrder === 'true';
   const [view, setView] = useState<ViewState>(malformedAccessLink ? 'invalid_link' : 'loading');
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
@@ -799,6 +790,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         <p role="status">這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。</p>
         {errorBlock}
         <div className="shop-order-actions">
+          {container.dataset.buyerJourney === 'true' && <a href={storefrontLoginHref(`/shops/${activeSlug}/orders/${orderRef}`)}>登入會員</a>}
           <a href={`/shops/${activeSlug}/order-access`}>找回訂單</a>
           <a href={`/shops/${activeSlug}`}>回到「{activeStoreName}」</a>
         </div>
@@ -837,12 +829,12 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
   const offline = order.payment_method !== 'immediate_card';
   const isOpenOrder = order.lifecycle_state === 'open';
   const showActionSection =
-    !offline && isOpenOrder &&
+    !readOnly && !offline && isOpenOrder &&
     (currentPayView === 'ready' ||
       currentPayView === 'expired' ||
       ((currentPayView === 'failed' || currentPayView === 'awaiting') && order.can_resume_payment));
   const paymentSection = orderPaymentSectionCopy(currentPayView);
-  const emailNote = offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
+  const emailNote = readOnly ? '請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。' : offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
   const paymentControlsDisabled = busy || forgetting || paymentBusy || redirecting;
 
   return (
@@ -856,7 +848,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       </div>
       {errorBlock}
 
-      {offline && <OfflineOrder key={order.order_ref} order={order} disabled={paymentControlsDisabled}
+      {offline && <OfflineOrder key={order.order_ref} order={order} readOnly={readOnly} disabled={paymentControlsDisabled}
         onCancel={cancelOfflineOrder} onRefresh={() => void runInitialOrRetryGet()} />}
 
       {showActionSection && (
@@ -929,7 +921,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         <h2 id="shop-order-payment-heading" className="shop-pay-section-heading" ref={paymentHeadingRef} tabIndex={-1}>付款</h2>
         <p className="shop-pay-label">{offline && currentPayView === 'paid' ? '已收款（店家確認）' : paymentSection.label}</p>
         {!offline && paymentSection.description && <p>{paymentSection.description}</p>}
-        {!offline && isOpenOrder && paymentSection.canQueryWhenOpen && (
+        {!readOnly && !offline && isOpenOrder && paymentSection.canQueryWhenOpen && (
           <div className="shop-order-actions">
             <button
               type="button"
@@ -1011,7 +1003,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         )}
       </section>
 
-      <section className="shop-order-section" aria-labelledby="shop-order-browser-heading">
+      {readOnly ? <div className="shop-order-actions"><a href="/#reservations">我的訂單</a></div> : <section className="shop-order-section" aria-labelledby="shop-order-browser-heading">
         <h2 id="shop-order-browser-heading">這個瀏覽器</h2>
         <p>這個瀏覽器會記住你在自由工坊商店的訂單。用的是共用電腦的話，看完後請讓這個瀏覽器忘記訂單。</p>
         <div className="shop-order-actions">
@@ -1060,7 +1052,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
             </button>
           </div>
         </dialog>
-      </section>
+      </section>}
     </>
   );
 }
@@ -1259,9 +1251,11 @@ interface CartQuoteLine {
 
 type CartQuoteShipping =
   | { state: 'quoted'; groups: { group_ref: string; amount_minor: number }[]; total_minor: number }
-  | { state: 'needs_delivery_data' | 'not_configured'; groups: never[]; total_minor: null };
+  | { state: 'needs_delivery_data' | 'not_configured'; groups: never[]; total_minor: null }
+  | Extract<ReturnType<typeof CartQuoteResponseSchema.parse>['shipping'], {state: 'unavailable'}>;
 
 interface CartQuoteResponse {
+  delivery_options?: ReturnType<typeof CartDeliveryOptionSchema.parse>[];
   publication_revision: string;
   currency: CartCurrency;
   lines: CartQuoteLine[];
@@ -1357,7 +1351,7 @@ function isCartQuoteShape(
   return true;
 }
 
-async function postCartQuote(storeSlug: string, cart: StoredCart): Promise<CartQuoteResult> {
+async function postCartQuote(storeSlug: string, cart: StoredCart, enhanced = false): Promise<CartQuoteResult> {
   const requestedLines = cart.lines.map(line => ({
     sku: line.sku,
     quantity: line.quantity,
@@ -1380,6 +1374,11 @@ async function postCartQuote(storeSlug: string, cart: StoredCart): Promise<CartQ
     if (response.status >= 200 && response.status < 300) {
       try {
         const body: unknown = await response.json();
+        if (enhanced) {
+          const parsed = CartQuoteResponseSchema.safeParse(body);
+          if (!parsed.success || parsed.data.lines.length !== requestedLines.length || parsed.data.lines.some((line, index) => line.sku !== requestedLines[index].sku || line.quantity !== requestedLines[index].quantity)) return {kind: 'failed'};
+          return {kind: 'ok', quote: parsed.data};
+        }
         if (!isCartQuoteShape(body, requestedLines)) return { kind: 'failed' };
         return { kind: 'ok', quote: body };
       } catch {
@@ -1425,6 +1424,7 @@ type PendingFocusTarget =
   | null;
 
 function CartPage({ container, storeSlug, storeName }: CartPageProps) {
+  const enhanced = container.dataset.buyerJourney === 'true';
   const [cart, setCart] = useState<StoredCart>(() => readCart(storeSlug));
   const [draftQuantities, setDraftQuantities] = useState<Record<string, string>>({});
   const [matchedQuote, setMatchedQuote] = useState<{ key: string; quote: CartQuoteResponse } | null>(null);
@@ -1490,7 +1490,7 @@ function CartPage({ container, storeSlug, storeName }: CartPageProps) {
     const wasRetry = retryInFlightRef.current;
     retryInFlightRef.current = false;
 
-    const result = await postCartQuote(storeSlug, requestCart);
+    const result = await postCartQuote(storeSlug, requestCart, enhanced);
     if (unmountedRef.current) return;
     inFlightRef.current = false;
 
@@ -1799,6 +1799,7 @@ function CartPage({ container, storeSlug, storeName }: CartPageProps) {
                 {quoteLine?.state === 'unavailable' && quoteLine.title === null && (
                   <p className="shop-cart-line-state">已下架。</p>
                 )}
+                {enhanced && quote && cartDeliveryNote(quote.delivery_options ?? [], line.sku) && <p className="shop-cart-line-state">{cartDeliveryNote(quote.delivery_options ?? [], line.sku)}</p>}
                 <div className="shop-cart-line-controls">
                   {!hideQuantityControls && (
                     <div className="shop-cart-stepper">
@@ -1994,8 +1995,8 @@ function bootOrderPage() {
   if (!STORE_SLUG_PATTERN.test(storeSlug) || !OPAQUE_ID_PATTERN.test(orderRef)) return;
 
   const initialAccess = consumeAccessHash();
-  let accessToken: string | null = initialAccess.kind === 'valid' ? initialAccess.token : null;
-  const malformedAccessLink = initialAccess.kind === 'malformed';
+  let accessToken: string | null = container.dataset.retainedOrder !== 'true' && initialAccess.kind === 'valid' ? initialAccess.token : null;
+  const malformedAccessLink = container.dataset.retainedOrder !== 'true' && initialAccess.kind === 'malformed';
 
   const tokenBox: TokenBox = {
     read: () => accessToken,
@@ -2787,6 +2788,7 @@ function OrderAccessPage({
     <>
       <h1 id="shop-order-access-title" tabIndex={-1}>找回訂單</h1>
       <p>輸入下單時填寫的 Email 與訂單編號（例如 261015-ABCDEF），我們會把一次性查看連結寄到你的信箱。</p>
+      {container.dataset.buyerJourney === 'true' && <div className="shop-order-actions"><a href={storefrontLoginHref(`/shops/${storeSlug}/order-access`)}>登入會員</a></div>}
       <form className="shop-order-section" noValidate onSubmit={event => void handleSubmit(event)}>
         <div className="shop-order-access-field">
           <label className="shop-add-label" htmlFor="shop-order-access-email">Email</label>

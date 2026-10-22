@@ -6,6 +6,8 @@ import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {isNotificationQuietHours,type NotificationPreferences} from '../../modules/member-communications/notification-preferences.js';
+import {notifyMember} from '../../modules/member-communications/notifications.js';
+import {ORDER_NOTIFICATION_KINDS,type NotificationList} from '../../modules/member-communications/types.js';
 
 const url=process.env.TEST_DATABASE_URL;
 if(!url)throw new Error('TEST_DATABASE_URL must name a disposable database');
@@ -15,12 +17,12 @@ const origin='http://127.0.0.1:4310';
 const app=createApp(pool,origin,'local',{notificationPreferencesEnabled:true,communitySearchEnabled:true,communityRelationsEnabled:true,personalContentEnabled:true,now:()=>new Date('2026-10-08T04:00:00Z')});
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);await seedLocal(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
-async function member(index:number){
-  const response=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:DEMO_USERS[index].email,password:DEMO_PASSWORD})});
+async function member(index:number,target=app){
+  const response=await target.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:DEMO_USERS[index].email,password:DEMO_PASSWORD})});
   assert.equal(response.status,200);
   const session=await response.json() as {csrf_token:string};
   const headers={Origin:origin,Cookie:response.headers.get('set-cookie')!.split(';')[0],'X-CSRF-Token':session.csrf_token,'Content-Type':'application/json'};
-  return {request:(path:string,body?:unknown,version?:number,key:string=randomUUID(),method='PATCH')=>app.request(origin+'/api/v1/'+path,body===undefined?{headers}:{method,headers:{...headers,'Idempotency-Key':key,...(version===undefined?{}:{'If-Match':`"${version}"`})},body:JSON.stringify(body)})};
+  return {request:(path:string,body?:unknown,version?:number,key:string=randomUUID(),method='PATCH')=>target.request(origin+'/api/v1/'+path,body===undefined?{headers}:{method,headers:{...headers,'Idempotency-Key':key,...(version===undefined?{}:{'If-Match':`"${version}"`})},body:JSON.stringify(body)})};
 }
 type Member={request:(path:string,body?:unknown,version?:number,key?:string,method?:string)=>Response|Promise<Response>};
 type PreferenceBody=Pick<NotificationPreferences,'categories'|'quiet_hours'|'muted_channel_ids'>;
@@ -162,4 +164,56 @@ test('new squad interactions follow squad modes and post interactions obey quiet
   const summary=await (await owner.request(endpoint+'/summary')).json() as {items:{id:string;title:string}[]};
   assert.equal(summary.items.filter(item=>ids.has(item.id)).length,2);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[[...ids]])).rows[0].n,5);
+});
+
+test('order transactions survive social suppression and the OFF switch filters pages, reminders and read commands before replay',async()=>{
+  const flags={notificationPreferencesEnabled:true,communitySearchEnabled:true,communityRelationsEnabled:true,personalContentEnabled:true,
+    guildLaunchpadEnabled:true,commerceOrderNotificationsEnabled:true,now:()=>new Date('2026-10-08T04:00:00Z')};
+  const settings={checkoutEnabled:true,consoleEnabled:true,quarantine:false,providerProfiles:[]};
+  const onApp=createApp(pool,origin,'local',{...flags,commerceSettings:settings});
+  const on=await member(0,onApp),off=await member(0);
+  const ids:string[]=[],q=await pool.connect();
+  try{
+    await q.query('BEGIN');
+    for(const kind of ORDER_NOTIFICATION_KINDS){
+      const n=await notifyMember(q,{community_id:DEMO_COMMUNITY,recipient_ref:DEMO_USERS[0].user_id,kind,source_key:randomUUID(),
+        title:'合成交易通知',body:'合成商店的訂單狀態',action:{tab:'reservations',resource_id:`notice-shop/${randomUUID()}`}});
+      assert.ok(n);ids.push(n.notification_id);
+    }
+    await q.query("UPDATE member_notifications SET created_at='2031-01-01T00:00:00Z' WHERE notification_id=ANY($1::uuid[])",[ids]);
+    await q.query('COMMIT');
+  }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
+  const legacy=await notices(0,'friend_request',2,'2030-01-01T00:00:00Z');
+  for(const mode of ['off','summary'] as const){
+    const value=body(await preferences(on));value.categories={friends:mode,squads:mode,events:mode,following:mode};
+    value.quiet_hours={enabled:true,time_zone:'Asia/Taipei',start:'11:00',end:'13:00'};value.muted_channel_ids=['world:world'];await save(on,value);
+    const reminders=await(await on.request(endpoint+'/reminders')).json() as NotificationList;
+    assert.deepEqual(reminders.items.filter(item=>ids.includes(item.notification_id)).map(item=>item.kind).sort(),[...ORDER_NOTIFICATION_KINDS].sort());
+    assert.ok(reminders.items.filter(item=>ids.includes(item.notification_id)).every(item=>item.body===''));
+    const summary=await(await on.request(endpoint+'/summary')).json() as {items:{id:string}[]};
+    assert.ok(summary.items.every(item=>!ids.includes(item.id)));
+  }
+  const onPage=await(await on.request('me/notifications?limit=1')).json() as NotificationList;
+  const offPage=await(await off.request('me/notifications?limit=1')).json() as NotificationList;
+  assert.ok(ids.includes(onPage.items[0].notification_id));
+  assert.equal(offPage.items[0].notification_id,[...legacy].sort().reverse()[0]);
+  assert.equal(offPage.next_offset,1);assert.equal(onPage.unread_count-offPage.unread_count,6);
+  const second=await(await off.request('me/notifications?limit=1&offset=1')).json() as NotificationList;
+  assert.equal(second.items[0].notification_id,[...legacy].sort().reverse()[1]);
+  const noCheckout=await member(0,createApp(pool,origin,'local',{...flags,commerceSettings:{...settings,checkoutEnabled:false}}));
+  assert.deepEqual(await(await noCheckout.request('me/notifications?limit=1')).json(),offPage);
+  const quarantined=await member(0,createApp(pool,origin,'local',{...flags,commerceSettings:{...settings,quarantine:true}}));
+  assert.deepEqual(await(await quarantined.request('me/notifications?limit=1')).json(),onPage);
+  const key=randomUUID(),path=`me/notifications/${ids[0]}/read`;
+  assert.equal((await on.request(path,{},undefined,key,'POST')).status,200);
+  assert.equal((await off.request(path,{},undefined,key,'POST')).status,404);
+  const before=(await pool.query('SELECT count(*)::int n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[ids])).rows[0].n;
+  assert.equal(before,5);
+  assert.equal((await off.request('me/inbox/read-all',{scope:'notifications'},undefined,randomUUID(),'POST')).status,200);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[ids])).rows[0].n,5);
+  const offReminders=await(await off.request(endpoint+'/reminders')).json() as NotificationList;
+  assert.equal(offReminders.unread_count,0);assert.ok(offReminders.items.every(item=>!ids.includes(item.notification_id)));
+  const allKey=randomUUID(),all=await on.request('me/inbox/read-all',{scope:'notifications'},undefined,allKey,'POST');
+  assert.equal(all.status,200);assert.equal((await all.clone().json() as {notifications_updated:number}).notifications_updated,5);
+  assert.deepEqual(await(await off.request('me/inbox/read-all',{scope:'notifications'},undefined,allKey,'POST')).json(),await all.json());
 });

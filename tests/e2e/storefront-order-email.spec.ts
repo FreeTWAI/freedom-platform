@@ -90,7 +90,7 @@ test('buyer transactional email E2E: B07 pre/post-payment email note, order_conf
     await b10Page.getByLabel('訂單編號', { exact: true }).fill(p.order.display_number);
     await b10Page.getByRole('button', { name: '寄送查看連結', exact: true }).click();
 
-    await expect(b10Page.getByRole('status')).toHaveText(B10_RESULT_NOTICE);
+    await expect(b10Page.locator('#shop-order-access').getByRole('status')).toHaveText(B10_RESULT_NOTICE);
     await assertResponsiveLayout(b10Page, LAYOUT_WIDTHS, w => info.outputPath(`b10-submitted-${w}.png`));
 
     const accessMails: Array<{ to: string; subject: string; text: string }> = [];

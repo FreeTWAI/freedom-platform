@@ -205,6 +205,22 @@ test('unknown, root, governance, security, shared runtime, test, spec, and confi
   assert.equal(pull([edited('docs/design/mark.png')]).reason, 'not_docs_allowlist');
 });
 
+test('new workflows keep every job selected, including beside docs and generated inventory', () => {
+  for (const path of ['.github/workflows/codeql.yml', '.github/workflows/new-workflow.yml']) {
+    for (const status of ['A', 'M']) {
+      for (const changes of [
+        [edited(path, status)],
+        [edited(path, status), edited('docs/development/notes.md'), edited(GENERATED_INVENTORY_PATH)],
+      ]) {
+        const selection = pull(changes);
+        assert.equal(selection.mode, 'full');
+        assert.equal(selection.reason, 'governance_security_or_shared_runtime');
+        assert.deepEqual(selection.jobs, allResults(true));
+      }
+    }
+  }
+});
+
 test('the generated inventory is metadata only beside an allowlisted document', () => {
   const inventoryOwner = [moduleDescriptor('governance', ['modules/example/**', 'docs/platform-plan/verification/**'])];
   const accompanied = pull([
@@ -1185,6 +1201,8 @@ function handoffDescriptors() {
       dependencies:['agent-commerce', 'hosted-distribution', 'asset-lifecycle'], tests:['runtime.full', 'e2e.harness']}),
     moduleDescriptor('guild-supply', ['modules/guild-supply/**'], {dependencies:['supplier-console'], tests:['runtime.guild-blocks']}),
     moduleDescriptor('application-composition', ['apps/platform-api/**'], {dependencies:['guild-supply'], tests:['runtime.full']}),
+    moduleDescriptor('commerce-publication', ['modules/agent-commerce/publication/**'], {
+      dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}),
   ];
 }
 function handoffInput(paths = HANDOFF_DOCS_PATHS, extra = {}) {
@@ -1208,11 +1226,41 @@ test('five exact informational handoffs retain governance consumers, including b
     [...HANDOFF_DOCS_PATHS, GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[1], GENERATED_INVENTORY_PATH]]) {
     assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'informational_handoff_docs');
   }
-  const actual = loadModuleDescriptors(root, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim());
-  assert.equal(actual.ok, true);
-  assert.equal(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
-    {baseline:actual.descriptors, candidate:actual.descriptors})).profile, 'informational_handoff_docs');
   assert.equal(pull([edited(HANDOFF_DOCS_PATHS[0])]).mode, 'full', 'path-only selector cannot establish integration proof');
+});
+
+test('actual handoff graph retains new reverse consumers and only proven documents keep the narrow lane',()=>{
+  const actual=loadModuleDescriptors(root,execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim());
+  assert.equal(actual.ok,true);
+  for(const path of [HANDOFF_DOCS_PATHS[0],HANDOFF_DOCS_PATHS[2]])
+    assert.equal(decideHandoffDocsProfile(handoffInput([path],
+      {baseline:actual.descriptors,candidate:actual.descriptors})).profile,'informational_handoff_docs',path);
+  const reviewed=handoffDescriptors();
+  for(const [path,consumer,suites] of [
+    [HANDOFF_DOCS_PATHS[1],'platform-api-features',['e2e.harness','runtime.full','runtime.guild-blocks']],
+    [HANDOFF_DOCS_PATHS[3],'contribution-experience',['governance.unit','runtime.full']],
+    [HANDOFF_DOCS_PATHS[4],'contribution-experience',['governance.unit','runtime.full']],
+  ])for(const [baseline,candidate] of [[actual.descriptors,actual.descriptors],[reviewed,actual.descriptors],[actual.descriptors,reviewed]]) {
+    const value=handoffInput([path],{baseline,candidate}),impact=selectImpact({baseline,candidate,changedPaths:[path]});
+    assert.deepEqual(impact.unknown_paths,[],path);
+    assert.ok(impact.module_ids.includes(consumer),path+': '+consumer);
+    assert.deepEqual(impact.tests,suites,path);
+    assert.deepEqual(decideHandoffDocsProfile(value),{profile:'full',reason:'handoff_impact_unproven'},path);
+    const result=decideAffectedJobs(value);
+    assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS],path);
+  }
+  assert.deepEqual(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
+    {baseline:actual.descriptors,candidate:actual.descriptors})),{profile:'full',reason:'handoff_impact_unproven'});
+});
+
+test('supplier handoff refuses an unknown reverse consumer even without additional test obligations', () => {
+  const baseline = handoffDescriptors(), expanded = structuredClone(baseline), path = HANDOFF_DOCS_PATHS[1];
+  expanded.push(moduleDescriptor('unknown-supplier-consumer', ['modules/unknown-supplier-consumer/**'], {
+    dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}));
+  assert.deepEqual(selectImpact({baseline:expanded, candidate:expanded, changedPaths:[path]}).tests,
+    selectImpact({baseline, candidate:baseline, changedPaths:[path]}).tests);
+  assert.deepEqual(decideHandoffDocsProfile(handoffInput([path], {baseline:expanded, candidate:expanded})),
+    {profile:'full', reason:'handoff_impact_unproven'});
 });
 
 test('handoff profile refuses unproven events, receipt JSON, controls and non-content changes', () => {

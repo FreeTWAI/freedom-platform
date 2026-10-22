@@ -104,3 +104,47 @@ policy. Source-integrity, the required aggregate and their failure semantics
 are unchanged. This source proposal does not update the installed workflow pin,
 change GitHub settings or bypass any current PR's checks. Hosted savings require
 a separately reviewed and authorized installed-source upgrade.
+
+## Approved guild module boundaries
+
+The guild profile is now a source candidate for ordinary changes within the two
+approved guild module directories, rather than exact import prefixes in two files.
+Existing preview tests, Markdown, local TS/TSX helpers and plain CSS may accompany
+component edits. New helpers/styles/docs are allowed under existing ownership;
+new preview test files remain full until the fixed runner enumerates them.
+
+Selection still requires the complete, unchanged baseline/candidate descriptor
+graph, approved owners/surfaces/operations and exact reverse-consumer obligations.
+
+PR #896 新增的 `platform-admin-portal` 已納入
+`GUIDE_COMPOSITION_PROFILE.dependencies` 的精確集合。Admin 依賴 development、
+guild-workspace、positioning、shared，沒有依賴 guild-supply 或 guild-open-source；
+只改這兩個公會的展示時，反向影響仍只有被改的葉節點與 application-composition，
+因此保留 `guild-presentation`、`static-worker` 兩個 jobs。Admin 自身的 ownership、
+`runtime.full`／`ui.default` 義務不變；修改 admin 路徑或與公會混改仍選全部七個
+selectable jobs（runtime-full、runtime-aggregate、ui-e2e、static-worker、
+governance-consumers、deploy-preflight、guild-presentation）。若 admin 成為公會葉節點的
+反向消費者，或 composition 相依集合再變動，仍退回 full。維持舊清單會讓目前圖上的
+公會展示修改一律因 `guild_impact_unproven` 選全部七個 jobs；本次明確採用更新清單，
+並以實際圖及 Git integration 測試保護此界線。這不更新已安裝的 workflow pin。
+
+The selector reads every regular source blob in each affected module in both
+immutable Git trees. TypeScript AST imports and exports must resolve locally or
+retain the same baseline external dependency set; product/test dependency sets
+stay separate. Comments, strings and harmless import formatting no longer count
+as imports. Missing/ambiguous local resolution, unknown modules, new external
+or cross-domain dependencies, dynamic/type imports, CommonJS, import.meta,
+CSS imports/URL assets, unknown configuration, AGENTS, rename/delete/mode changes
+and missing/invalid parsers retain full CI. Limits are 256 files per module/revision,
+262144 bytes per file and 2000000 bytes across the two module snapshots.
+
+The selector job installs its own workflow checkout's existing lockfile with
+`npm ci --ignore-scripts --no-audit --no-fund`; it never obtains parsers from the
+candidate checkout. The existing TypeScript 6 compatibility parser and PostCSS
+parse source as data without running candidate code/configuration. The verify
+aggregate remains dependency-free. This is dependency selection, not a security
+sandbox or a claim that all program behavior is statically known. Review,
+source-integrity, CodeQL, fixed guild integration/preview checks and strict
+main protections remain unchanged. This control-plane PR itself requires full CI;
+local regression results do not establish hosted savings or independent guild
+maintainer assignments.

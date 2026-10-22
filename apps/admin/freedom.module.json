@@ -1,0 +1,76 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "platform-admin-portal",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "apps/admin/**",
+    "apps/portal-web/src/modules/AdminPanel.tsx",
+    "apps/portal-web/src/modules/AdminLayout.css",
+    "apps/portal-web/src/modules/AdminPermissions.css",
+    "apps/portal-web/src/modules/AdminCredentials.tsx",
+    "apps/portal-web/src/modules/AdminCredentials.css",
+    "apps/portal-web/src/modules/AdminGuildManagement.tsx",
+    "apps/portal-web/src/modules/AdminGuildManagement.css",
+    "apps/portal-web/src/modules/AdminAuthorClaims.tsx",
+    "apps/portal-web/src/modules/AdminGitHubSetup.tsx",
+    "apps/portal-web/src/modules/AdminReviewCenter.tsx",
+    "apps/portal-web/src/modules/AdminReviewCenter.css",
+    "apps/portal-web/src/modules/admin-client.ts",
+    "tests/e2e/admin.spec.ts",
+    "tests/e2e/admin-guilds.spec.ts",
+    "tests/e2e/admin-credentials.spec.ts",
+    "tests/e2e/admin-review-center.spec.ts",
+    "tests/e2e/audit-operations.spec.ts",
+    "tests/e2e/github-setup.spec.ts",
+    "tests/runtime/admin-access-session.test.ts",
+    "apps/platform-api/src/admin-sync-worker.ts",
+    "modules/platform-admin/**"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/modules/AdminPanel.tsx"
+  ],
+  "dependencies": [
+    "development",
+    "guild-workspace",
+    "positioning",
+    "shared",
+    "command-core",
+    "community",
+    "member-card",
+    "member-communications",
+    "resource-scopes",
+    "tenant-workspaces"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "platform-admin"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "DESIGN.md",
+    "docs/development/platform-admin-api.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts",
+    "source-pr-is-not-deployment"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "platform-admin-portal.workspace",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/AdminPanel.tsx",
+      "operations": [
+        "admin.members.manage",
+        "admin.guilds.review",
+        "admin.credentials.read",
+        "admin.workspace.navigate"
+      ],
+      "auth_profile": "platform-admin"
+    }
+  ]
+}

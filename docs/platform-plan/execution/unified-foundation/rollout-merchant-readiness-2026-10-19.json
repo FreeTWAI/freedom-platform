@@ -1,0 +1,559 @@
+{
+  "format": "freedom.three-outcomes-rollout/v1",
+  "status": "deployed_scoped_acceptance_restore_and_operator_passed",
+  "recorded_at": "2026-10-19T23:09:45.363423+00:00",
+  "evidence_cutoff_at": "2026-10-19T23:06:51.019348+00:00",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "source": {
+    "selected_release": "240cf677e892f6f20306089c75c34fa914597960",
+    "tree": "f3c38a9d59de0777971e6dbdeac11addf0f26692",
+    "previous_release": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+    "dist_sha256": "1d992c30dbf3bbc519dfc781bf6a2daa29565eff458bbc9a5a59929f2632b51f",
+    "schema": 172,
+    "migrations_applied": [],
+    "main_verify": {
+      "run_id": 39326252768,
+      "job_count": 17,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39326252768",
+      "run_receipt_sha256": "b8dccce0bc5b91ffff4c7e9491cd3b1c8cca8746ec317b71ddd4a12219013074",
+      "jobs_receipt_sha256": "2977f9fa3241e8954bc38738ec28611e88d20eea295c116742350371025e59b6"
+    },
+    "main_codeql": {
+      "run_id": 39326246130,
+      "job_count": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39326246130",
+      "run_receipt_sha256": "96491d364180f2865031c19343e9e1c5515b04118591be74b0476b97d9ca24fb",
+      "jobs_receipt_sha256": "2f9944b9bb21b3d6a52a13097b568439d05063c3e99edac12f6f1d12f5451a79"
+    }
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_scoped_acceptance_restore_and_operator_passed",
+      "release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+      "previous_release_sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+      "worker_version": "4014418d-ef00-4df0-8fe3-195c326fbf63",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "8adc61e18278e6e23647fc694adb57f5099d302709859e3f96db48c4b5da2ffb",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+        "cache_control_no_store": true
+      },
+      "health_observed_at": "2026-10-19T22:35:29.894Z",
+      "health_timestamp_basis": "Explicit source-bound health observation in the withdrawn phase; aggregate completion is not a fresh health or Worker-binding query.",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+          "set_id": "768ca8ae-2fdb-4780-b681-1c73a3934be0",
+          "created_at": "2026-10-19T21:21:23.508Z",
+          "completed_receipt_sha256": "1f55a6bc391b16ac8dade3cea5a82b151c71b3da78c9713b560924a0da14143c",
+          "pointer_sha256": "8c6b453a630f422438b05295ae96736a1399feada4d4533cd7fd19592832320c",
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "basis": "Existing completed10ad after-backup is explicitly bound as this240 before-backup; no new capture, new timestamp or second backup operation is claimed."
+        },
+        "after": {
+          "status": "passed",
+          "source": "240cf677e892f6f20306089c75c34fa914597960",
+          "set_id": "884b2e11-5399-485b-9993-61a39e6502e0",
+          "created_at": "2026-10-19T22:37:52.644Z",
+          "completed_receipt_sha256": "1d9c35ff5e2c9a257a22a5c5ff3216fa8629cce7eb47c59060e9dc01866227b3",
+          "pointer_sha256": "fdcb6110078dcea2cbb61bab897bee2ed5595ee7c71709bfefd58ba2f9603d66",
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "limitation": "Isolated restore evidence does not refresh live ledger timestamps; created_at is the backup-set creation time, not restore completion."
+        }
+      },
+      "acceptance": {
+        "status": "passed",
+        "completed_at": "2026-10-19T22:37:45.085Z",
+        "aggregate_receipt_sha256": "5904ddae6bb1046685e77aab9d5881c2f77fd22bda72fa29067052e2fc3e4444",
+        "scope": "Fresh ordinary synthetic member consoles plus anonymous catalog, owned checkout-OFF merchant pages and stored external share/manual navigation/withdrawal. Browser share metrics intercepted; no product adoption or real human acceptance claimed.",
+        "console": {
+          "receipt_sha256": "07d2e8cccf15633b41a7320706371f120668860e9dcb7f42de6f39866f4be7b3",
+          "ordinary_synthetic_members": true,
+          "seller_ui_available": true,
+          "supplier_ui_available": true,
+          "anonymous_seller_api_denied": true,
+          "anonymous_supplier_api_denied": true,
+          "session_cleanup_verified": true
+        },
+        "public_phases": {
+          "catalog": {
+            "status": "passed",
+            "receipt_sha256": "6775437a3524368739177abf293db62facc00d592a03da28468beab80c8e72ba",
+            "started_at": "2026-10-19T22:16:50.620Z",
+            "finished_at": "2026-10-19T22:16:56.465Z"
+          },
+          "published": {
+            "status": "passed",
+            "receipt_sha256": "411dec523e58fb2aa2a2e125833a74d906a7221356bf287062b75cde6e343ddd",
+            "started_at": "2026-10-19T22:34:10.914Z",
+            "finished_at": "2026-10-19T22:34:25.712Z"
+          },
+          "withdrawn": {
+            "status": "passed",
+            "receipt_sha256": "a5e0939e68bc7afa7d9ee101a8d067cec14af0499a55dd3ac1dba6f86af24827",
+            "started_at": "2026-10-19T22:35:29.453Z",
+            "finished_at": "2026-10-19T22:35:34.284Z"
+          }
+        },
+        "merchant_viewports": {
+          "scenario": "fresh_context_before_first_navigation",
+          "initial_widths": [
+            390,
+            1440
+          ],
+          "cross_viewport_resize_verified": false,
+          "known_limitation": "Cross-viewport navigation remains unresolved in the tested automation; no production-breakage claim. Fresh initial390/1440 viewport acceptance is separate."
+        },
+        "cleanup": {
+          "public_fixture_verified": true,
+          "public_receipt_sha256": "7cbda4556e79c64823956b4b7fd4f216e04461fe0595cbdc3d23cc84638fde6e",
+          "ordinary_fixture_verified": true,
+          "ordinary_receipt_sha256": "8cd6d5a29c2616652a9aca72f82a78c2bdccc14a8f99f9a6724b98115f54e3f1",
+          "ordinary_cleanup_at": "2026-10-19T22:37:07.773Z",
+          "temporary_access_revoked_at": "2026-10-19T22:37:21.451Z",
+          "access_receipt_sha256": "7ff33c882870038ae121187b714508f124a1015d6fa254aadd2cd1e133a220c3"
+        },
+        "human_acceptance": false,
+        "orders_created": 0,
+        "external_navigation_intercepted": true,
+        "real_conversion_or_credit_claimed": false
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "240cf677e892f6f20306089c75c34fa914597960",
+        "dispatcher_sha256": "ef99163dc603f904e0bd509d913a2179b18e7f498b79bf295b3c3602c1b134bb",
+        "installed_receipt_sha256": "c0892ab7f0aae6aabb6d098671819ec85bd3c0da828e7eb6fef4e1cbf783ef70",
+        "backup_set_id": "884b2e11-5399-485b-9993-61a39e6502e0",
+        "completed_receipt_sha256": "1d9c35ff5e2c9a257a22a5c5ff3216fa8629cce7eb47c59060e9dc01866227b3",
+        "wrapper": "run-after-staging-backup",
+        "wrapper_sha256": "e858e1a6d5fb8a4b4c5bc62331fb6027545707742baef1ddfcaa36a3876cb761",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapter_sha256": "86c2fdf27b10dce617d213ae326aff4a10ed7a456cc6c400c2245ac54e663049",
+        "runtime_pins_sha256": "09627e39e4a066fbb50d283287b71cc7849f40b946a5147f750d8dc5e0e21fbe"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T03:34:58Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-19T23:06:45.053Z",
+      "worker_binding_receipt_sha256": "1d750f065ef53ba13e2814f79d286a4ccfd5192f17f37bb346385067d5308426"
+    },
+    "production": {
+      "status": "deployed_scoped_acceptance_restore_and_operator_passed",
+      "release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+      "previous_release_sha": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+      "worker_version": "3a33b3f2-1485-4053-b692-475ad12ef60d",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "58ab90e89b1b1067e0d02670c48f57c12dff512b7fa81b1f8ff96ef825cd9b3e",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "240cf677e892f6f20306089c75c34fa914597960",
+        "cache_control_no_store": true
+      },
+      "health_observed_between": {
+        "start": "2026-10-19T22:52:56.441Z",
+        "end": "2026-10-19T22:53:01.406Z"
+      },
+      "health_timestamp_basis": "Production public-smoke receipt checked exact-source health within its recorded window; completion is not a separate health query.",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "10ad8d2d9db105fbc102a24481fda52140182c0f",
+          "set_id": "950f1a12-fd3b-42f5-870d-af7aeb661705",
+          "created_at": "2026-10-19T21:38:21.671Z",
+          "completed_receipt_sha256": "e927d592ef8d325946808b3b13dcdaa6f6bcb8c49776fd6bcda9a3b05ffde0a7",
+          "pointer_sha256": "2bcb34d14cf4ed2455defb6994df0a460c0969ff8679eb28dff21955e82035a3",
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "cleanup_verified": true,
+          "basis": "Existing completed10ad after-backup is explicitly bound as this240 before-backup; no new capture, new timestamp or second backup operation is claimed."
+        },
+        "after": {
+          "status": "passed",
+          "source": "240cf677e892f6f20306089c75c34fa914597960",
+          "set_id": "bb25ff06-4d4b-4a89-9378-67b259816598",
+          "created_at": "2026-10-19T22:53:18.314Z",
+          "completed_receipt_sha256": "abeb6d630ce696b3bba666615e3553e87d2b6a191358f40cb70cd4cc4fced093",
+          "pointer_sha256": "3135f5d9c8b2c5783df66d4e824655fd430bee12a4285d69e7379ee58561a832",
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 48,
+            "bytes": 629894
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "d655c51d1d7e7820377b98632784205b8385c98d52913f0a2808a33f6abcab43"
+          },
+          "restored_coordinate_fence_sha256": "bc2cbacc4e65a5d8d84a0e0bae4a3f6bd462c05ba73c4f870b6947481a32a0e2",
+          "limitation": "Isolated restore evidence does not refresh live ledger timestamps; created_at is the backup-set creation time, not restore completion."
+        }
+      },
+      "acceptance": {
+        "status": "passed",
+        "scope": "Public read-only HTTP, exact built assets and anonymous access checks; no production member login or orders.",
+        "started_at": "2026-10-19T22:52:56.441Z",
+        "completed_at": "2026-10-19T22:53:01.406Z",
+        "receipt_sha256": "724993461b2f2159ac5b8d7f8643e64d1252904d755d34d49a11ceed91c730fd",
+        "checks": [
+          "public health exact release and no-store",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products",
+          "share script/styles and merchant styles match exact build; unhashed assets no-store",
+          "anonymous catalog introduction exposes purpose/start/source destination"
+        ],
+        "asset_hashes": {
+          "go.js": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644",
+          "go.css": "050e1c886d4965aea7923a5219248babf65c4e0c708e9bcc944efa9a68e4cca7",
+          "shops.css": "9310dd83687837078bc09782b17845cf680cb64739fb0c3f271a55828d9a932e"
+        },
+        "member_login": false,
+        "human_acceptance": false,
+        "orders_created": 0
+      },
+      "commerce_readiness": {
+        "format": "freedom.commerce-readiness-observation/v1",
+        "observedAt": "2026-10-19T22:53:10.409Z",
+        "environment": "production",
+        "source": "240cf677e892f6f20306089c75c34fa914597960",
+        "schema": 172,
+        "ledgerExact": true,
+        "remoteWrites": false,
+        "queries": "Exact database/role/schema ledger and aggregate counts in REPEATABLE READ READ ONLY; ROLLBACK",
+        "counts": {
+          "storefront_instances": 1,
+          "active_storefront_instances": 1,
+          "unrevoked_admissions": 0,
+          "offline_payment_setting_stores": 0,
+          "shipping_profile_setting_stores": 0
+        },
+        "limitation": "Counts do not establish merchant settings correctness or independent real-member acceptance.",
+        "receipt_sha256": "34158ec3f2db2326e45fd5e08344f27dfcdb5f1b02d3770268b2dd27cce8d83f"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "240cf677e892f6f20306089c75c34fa914597960",
+        "dispatcher_sha256": "ef99163dc603f904e0bd509d913a2179b18e7f498b79bf295b3c3602c1b134bb",
+        "installed_receipt_sha256": "c0892ab7f0aae6aabb6d098671819ec85bd3c0da828e7eb6fef4e1cbf783ef70",
+        "backup_set_id": "bb25ff06-4d4b-4a89-9378-67b259816598",
+        "completed_receipt_sha256": "abeb6d630ce696b3bba666615e3553e87d2b6a191358f40cb70cd4cc4fced093",
+        "wrapper": "run-after-production-backup",
+        "wrapper_sha256": "3257be8b92071a4b4249cdc317a31e8be0665e598c3aefdb03c71da561405991",
+        "adapter": "backup-adapter.after-production.mts",
+        "adapter_sha256": "ec33e2a961e2185a9a12baacd82520af1bced98b750f0ece6528679c27d137da",
+        "runtime_pins_sha256": "09627e39e4a066fbb50d283287b71cc7849f40b946a5147f750d8dc5e0e21fbe"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T04:32:12Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-19T23:06:45.053Z",
+      "worker_binding_receipt_sha256": "1d750f065ef53ba13e2814f79d286a4ccfd5192f17f37bb346385067d5308426"
+    }
+  },
+  "attempts_preserved": [
+    {
+      "environment": "staging",
+      "phase": "published",
+      "status": "failed",
+      "receipt_sha256": "8800bc6f16ed0c93138ded39a9dccacef5a2d82abb4f538ba1fcbcb68d9ae716",
+      "started_at": "2026-10-19T22:19:12.868Z",
+      "finished_at": "2026-10-19T22:19:46.686Z",
+      "failure": {
+        "phase": "published",
+        "step": "merchant_product_published_description_1440",
+        "classification": "browser_timeout",
+        "code": null
+      },
+      "scope": "Cross-viewport resize/navigation automation; not replaced by fresh-initial-viewport pass."
+    },
+    {
+      "environment": "staging",
+      "phase": "published",
+      "status": "failed",
+      "receipt_sha256": "af0044196ae1e9994fc6628e2758f31cebf5551b8214b0b6912d6a9bb5ed45ba",
+      "started_at": "2026-10-19T22:24:30.433Z",
+      "finished_at": "2026-10-19T22:25:04.513Z",
+      "failure": {
+        "phase": "published",
+        "step": "merchant_product_published_description_1440_click",
+        "classification": "browser_timeout",
+        "code": null
+      },
+      "scope": "Cross-viewport resize/navigation automation; not replaced by fresh-initial-viewport pass."
+    },
+    {
+      "environment": "staging",
+      "phase": "published",
+      "status": "failed",
+      "receipt_sha256": "e78f785f184c485ae6f47f511a3f55b6d69ebbbf6542b05f6798a31024582d87",
+      "started_at": "2026-10-19T22:28:36.110Z",
+      "finished_at": "2026-10-19T22:28:58.742Z",
+      "failure": {
+        "phase": "published",
+        "step": "merchant_store_published_description_1440_viewport",
+        "classification": "browser_or_transport",
+        "code": null
+      },
+      "scope": "Cross-viewport resize/navigation automation; not replaced by fresh-initial-viewport pass."
+    }
+  ],
+  "daily_operator": {
+    "status": "both_sources_bound_original_timers_restored",
+    "source_by_environment": {
+      "staging": "240cf677e892f6f20306089c75c34fa914597960",
+      "production": "240cf677e892f6f20306089c75c34fa914597960"
+    },
+    "dispatcher_sha256": "ef99163dc603f904e0bd509d913a2179b18e7f498b79bf295b3c3602c1b134bb",
+    "installed_receipt_sha256": "c0892ab7f0aae6aabb6d098671819ec85bd3c0da828e7eb6fef4e1cbf783ef70",
+    "live_binding_observed_at": "2026-10-19T23:06:45.053Z",
+    "live_binding_receipt_sha256": "1d750f065ef53ba13e2814f79d286a4ccfd5192f17f37bb346385067d5308426",
+    "timer_observed_at": "2026-10-19T23:06:51.019348+00:00",
+    "timer_receipt_sha256": "317c02b408bbe50c5bba2a5cd1ea7813a30770c25b2a5c0e049058cdda1e22c5",
+    "review_receipt_sha256": "535b1a5afdffe871711c16b727dac45718ccfb9b176221b4ce8ab19ede6ad638",
+    "unit_or_schedule_changed": false,
+    "service_argv_unchanged": true,
+    "restoration": {
+      "staging": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T03:34:58Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "production": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-20T04:32:12Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      }
+    },
+    "natural_scheduled_run": "not_observed"
+  },
+  "historical_evidence_preserved": [
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
+      "sha256": "cea304096119c37d7614a94a3b831acf1fb0c0ab257cefdc3716e5a60cfe99df"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "sha256": "3ebb9bdf353d8dcbfe5e27732ec6218276e8b7fcb48209d5a050b64a128c2235"
+    }
+  ],
+  "limitations": [
+    "This is a sanitized record of actual operator observations. Full source CI, deployment and synthetic/public checks do not establish real-member usability or a transaction.",
+    "Three cross-viewport automation failures remain failed. Bounded local no-JS/smooth-anchor/resize reproduction does not establish a native user-browser defect or a Playwright-only cause. Fresh initial390/1440 acceptance is separate and is not a resize fix.",
+    "The supplier/ecommerce guild cohort consent is already confirmed. Owner public service/contact content, bank/payment and shipping/meetup settings, independent admission and real-member journeys still require their existing owner flows.",
+    "Production readiness observed one active storefront and zero admission, offline-payment or shipping settings. Checkout and transactional email remain OFF; no bank verification, order or complete cross-supplier fulfilment is claimed.",
+    "Before-backup pointers intentionally reuse completed10ad after-sets with their original source/date; this rollout does not claim a new before capture. New240 after-sets have separate evidence.",
+    "Timer restoration does not establish natural execution of the new dispatcher. Historical12940/10ad receipts and original failures remain unchanged.",
+    "The historical168-requirement inventory remains retained; unrelated outstanding work is deferred rather than added as a fourth release gate."
+  ],
+  "accepted_harness_correction": "Published merchant acceptance creates separate contexts at initial390/1440 widths before first navigation. The earlier cross-viewport failures remain failed; this does not verify resize behavior.",
+  "viewport_diagnostic": {
+    "status": "bounded_local_diagnostic_not_product_fix",
+    "report_sha256": "aaeeb4421cdc21a9d0638bef9c6ac397d9feb9923e645927a1c81d308d1c3566",
+    "manifest_sha256": "5a2887ebdec3e1c2366e30bffe8c5b76f86a79b83ca25bd8c32f3b0ab21ddde7",
+    "fresh_pass_evidence_sha256": "0f8eed974f47af6a06b393613d61d84323356cd737b0e4c6b01529744a294a58",
+    "local_cases": 5,
+    "network_or_product_state_modified": false,
+    "findings": [
+      "No-JS smooth-anchor resize reproduction fails both with and without full-page screenshot; screenshot is not necessary.",
+      "JS-enabled, local auto-scroll control and fresh-desktop cases pass.",
+      "10ad already contained smooth-scroll CSS and a products anchor;240 adds the merchant-information anchor and does not introduce the smooth-scroll rule."
+    ],
+    "unproven": [
+      "Native/headful user resize defect",
+      "Playwright-only cause",
+      "Production breakage"
+    ],
+    "cross_viewport_resize_fixed": false,
+    "human_acceptance": false
+  }
+}

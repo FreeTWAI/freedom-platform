@@ -55,6 +55,7 @@
     "modules/member-communications/channel-types.ts",
     "modules/member-communications/content.ts",
     "tests/e2e/message-retraction.spec.ts",
+    "tests/e2e/message-load-older.spec.ts",
     "tests/runtime/direct-message-receipts.test.ts",
     "tests/runtime/member-channels-core.test.ts",
     "tests/runtime/member-communications.test.ts",
@@ -84,14 +85,17 @@
     "tests/e2e/chat-search.spec.ts",
     "apps/portal-web/src/modules/ChatWorkspace.tsx",
     "apps/portal-web/src/modules/ChatSearch.tsx",
-    "tests/runtime/chat-content.test.ts"
+    "tests/runtime/chat-content.test.ts",
+    "migrations/182_commerce_order_notifications.sql",
+    "modules/member-communications/**"
   ],
   "owner_role": "foundation",
   "public_exports": [
     "modules/member-communications/channels.ts",
     "modules/member-communications/service.ts",
     "modules/member-communications/images.ts",
-    "apps/portal-web/src/modules/message-image-client.ts"
+    "apps/portal-web/src/modules/message-image-client.ts",
+    "modules/member-communications/notifications.ts"
   ],
   "surfaces": [
     {

@@ -18,6 +18,8 @@ import { PREVIEW_BOT_MARKERS, isPreviewBot } from '../../packages/shared/promoti
 import { promotionGo, promotionLeaderboardSql, taipeiDate, type PromotionKind } from '../../modules/community/promotion.js';
 import { readPublicCards } from '../../modules/identity-membership/member-sharing.js';
 import type { PreviewFetch } from '../../modules/community/link-preview.js';
+import { createPlatformApp } from '../../apps/platform-api/src/platform-app.js';
+import { workerRuntime, type WorkerEnv } from '../../apps/platform-api/src/worker.js';
 
 const origin = 'http://127.0.0.1:4310';
 const databaseUrl = process.env.TEST_DATABASE_URL ?? LOCAL_DATABASE_URL;
@@ -189,7 +191,7 @@ test('a visitor stops at 20 credited clicks and a network stops at 60', async ()
   assert.equal(await pointsOf(again.code), 60);
 });
 
-test('revoked links, disabled owners and unshareable targets do not score and redirect home', async () => {
+test('revoked links, disabled owners and unshareable targets do not score and return a generic unavailable page', async () => {
   const maker = await signIn();
   const revoked = await platformLink(maker);
   await pool.query('UPDATE promotion_links SET revoked_at=now() WHERE code=$1', [revoked.code]);
@@ -223,9 +225,12 @@ test('revoked links, disabled owners and unshareable targets do not score and re
   assert.equal(await pointsOf(eventLink.data.code), 0);
   for (const code of [revoked.code, disabled.code, postLink.data.code, hiddenLink.data.code, eventLink.data.code, 'short']) {
     const response = await app.request(`${origin}/go/${code}?next=https://evil.example`);
-    assert.equal(response.status, 302, code);
+    assert.equal(response.status, 404, code);
+    const unavailable = await response.text();
+    assert.match(unavailable, /分享連結目前無法開啟/);
+    assert.doesNotMatch(unavailable, /evil.example|og:|data-target|data-code|go\.js/);
     assert.ok(!(response.headers.get('location') ?? '').includes('evil.example'), code);
-    assert.ok((response.headers.get('location') ?? '').endsWith('/'), code);
+    assert.equal(response.headers.get('location'), null, code);
   }
 });
 
@@ -251,6 +256,34 @@ test('clicks store no raw address or user agent, and salts older than three days
   const days = (await pool.query('SELECT click_day::text AS day FROM promotion_click_salts ORDER BY 1')).rows.map(row => row.day);
   assert.deepEqual(days, ['2026-10-02', '2026-10-05']);
   assert.equal((await pool.query('SELECT octet_length(salt)::int AS n FROM promotion_click_salts')).rows.every(row => row.n === 32), true);
+});
+
+for(const grouped of [true,false])test(`real IPv6 promotion budgets preserve distinct visitor credits (grouped=${grouped})`,async()=>{
+  const maker=await signIn(),link=await platformLink(maker),edgeOrigin='https://example.invalid';
+  const runtime={...workerRuntime({} as WorkerEnv,{freedomEnv:'staging',origin:edgeOrigin,release:'a'.repeat(40),trustConnectingIp:true}),now:()=>clock};
+  if(!grouped)delete runtime.rateLimitNetwork;
+  const edge=createPlatformApp(pool,edgeOrigin,'staging',runtime);
+  async function clickFrom(address:string){
+    const request=new Request(edgeOrigin+'/api/v1/promotion/clicks',{method:'POST',headers:{Origin:edgeOrigin,'CF-Connecting-IP':address,'User-Agent':REAL,'Content-Type':'application/json'},body:JSON.stringify({code:link.code})});
+    Object.defineProperty(request,'cf',{value:{colo:'TEST'}});
+    return edge.fetch(request);
+  }
+  for(const address of ['2001:db8::1','2001:db8::2','2001:db8::1']){
+    const response=await clickFrom(address);assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),{ok:true});
+  }
+  assert.equal(await pointsOf(link.code),2,'different full addresses score separately; exact repeat does not');
+  const identities=(await pool.query(`SELECT count(DISTINCT visitor_key)::int AS visitors,count(DISTINCT network_key)::int AS networks
+    FROM promotion_clicks c JOIN promotion_links l USING(link_id) WHERE l.code=$1`,[link.code])).rows[0];
+  assert.deepEqual(identities,{visitors:2,networks:2});
+  const budget=tokenHash(`promotion-click-network/${grouped?'2001:db8:0:0::/64':'2001:db8::1'}`);
+  assert.equal((await pool.query('UPDATE auth_rate_limits SET attempts=299 WHERE bucket=$1',[budget])).rowCount,1);
+  assert.equal((await clickFrom(grouped?'2001:db8::3':'2001:db8::1')).status,200);
+  const before=await pointsOf(link.code),denied=await clickFrom(grouped?'2001:db8::4':'2001:db8::1');
+  assert.equal(denied.status,429);assert.equal((await denied.json() as {code:string}).code,'auth_rate_limited');
+  assert.equal(await pointsOf(link.code),before,'a rejected budget cannot award another credit');
+  assert.equal((await clickFrom(grouped?'2001:db8:0:1::1':'2001:db8::3')).status,200);
+  assert.equal(await pointsOf(link.code),before+1,'an independent budget retains its real visitor credit');
 });
 
 test('the click route rate limit answers 429 and does not reveal a miss', async () => {
@@ -306,6 +339,7 @@ test('the interstitial escapes text, sets open-graph tags and ignores extra quer
   assert.match(home, /property="og:image" content="https:\/\/freetwai\.com\/brand\/freedom-workshop\.webp"/);
   assert.match(home, /property="og:image:width" content="1280"/);
   assert.match(home, /data-target="\/"/);
+  assert.match(home, /data-navigation="internal"/);
   assert.ok(!home.includes('utm_source') && !home.includes('evil'));
   const content = getSkillShareContent('social-post')!;
   const book = await page(`/go/${skill.data.code}?intro=2&evil=1`);
@@ -332,6 +366,11 @@ test('the interstitial escapes text, sets open-graph tags and ignores extra quer
   assert.ok(socialHtml.includes('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;'));
   assert.ok(!socialHtml.includes('<script>alert'));
   assert.match(socialHtml, /自由工坊社群分享的 其他 貼文/);
+  assert.match(socialHtml, /data-navigation="external"/);
+  assert.match(socialHtml, /<bdi>example.com\/escape-me<\/bdi>/);
+  assert.match(socialHtml, /data-go-destination href="https:\/\/example.com\/escape-me" rel="noopener noreferrer">前往 example.com ↗/);
+  assert.match(socialHtml, /帳號、費用與資料處理/);
+  assert.doesNotMatch(socialHtml, /http-equiv="refresh"/);
   const openHtml = await page(`/go/${openLink.data.code}?ref=evil&intro=4`);
   assert.match(openHtml, new RegExp(`data-target="/events/${openId}\\?ref=${shareCode}"`));
   assert.ok(!openHtml.includes('ref=evil'));
@@ -956,7 +995,7 @@ test('social posts normalize urls, classify hosts, paginate and enforce author a
   assert.equal((await app.request(origin + '/api/v1/public/social-posts/' + hideTarget.data.post_id + '/thumbnail')).status, 200);
   assert.equal((await request(`/social-posts/${hideTarget.data.post_id}/hide`, maker, {})).status, 200);
   assert.equal((await app.request(origin + '/api/v1/public/social-posts/' + hideTarget.data.post_id + '/thumbnail')).status, 404);
-  assert.equal((await app.request(origin + '/go/' + hideLink.data.code)).status, 302);
+  assert.equal((await app.request(origin + '/go/' + hideLink.data.code)).status, 404);
   assert.ok(!(await request('/social-posts', maker)).data.items.some((item: { post_id: string }) => item.post_id === hideTarget.data.post_id));
   const removed = await request(`/social-posts/${article.post_id}`, maker, {}, 'DELETE');
   assert.equal(removed.status, 200);
@@ -1119,7 +1158,7 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
   try {
     if (!server.listening) await once(server, 'listening');
     const httpOrigin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    let page = '', format = 'text/html';
+    let page: string | Uint8Array<ArrayBuffer> = '', format = 'text/html';
     httpApp = createApp(pool, httpOrigin, 'local', {
       linkPreviewFetch: async input => String(input).startsWith('https://i.ytimg.com/')
         ? new Response(null, { status: 404 })
@@ -1130,7 +1169,7 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       body: JSON.stringify({ email: DEMO_USERS[0].email, password: DEMO_PASSWORD }),
     });
     assert.equal(login.status, 200);
-    const { csrf_token: csrf } = await login.json() as { csrf_token: string };
+    const { csrf_token: csrf } = z.object({csrf_token: z.string()}).parse(await login.json());
     const headers = {
       Origin: httpOrigin, 'Content-Type': 'application/json',
       Cookie: login.headers.get('set-cookie')!.split(';')[0], 'X-CSRF-Token': csrf,
@@ -1143,7 +1182,12 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       { page: '<title>合法中文 😀</title>', format: 'text/html', url: 'https://raw-title.example/control', title: undefined, expected: '合法中文 😀' },
       { page: JSON.stringify({ title: '<影片> &amp; 😀' }), format: 'application/json', url: 'https://www.youtube.com/watch?v=rawSafe0001', title: undefined, expected: '<影片> &amp; 😀' },
       { page: '<title>保留有效標題</title><meta property="og:image" content="https://raw-title.example/\u0000.png">', format: 'text/html', url: 'https://raw-title.example/image', title: undefined, expected: '保留有效標題' },
+      { page: '<meta property=og:title content=前&#1114112;&#xD800;&#0;後>', format: 'text/html', url: 'https://raw-title.example/numeric', expected: '前���後' },
+      { page: '<meta property=og:title content="工坊 Café">', format: 'text/html; note="unfinished; charset=windows-1252', url: 'https://raw-title.example/unterminated', expected: '工坊 Café' },
+      { page: new Uint8Array(Buffer.from('<meta property=og:title content="Caf\xe9 \x80">', 'latin1')), format: 'text/html; charset=windows-1252', url: 'https://raw-title.example/western', expected: 'Café €' },
+      { page: new Uint8Array(Buffer.concat([Buffer.from('<meta property=og:title content="'), Buffer.from([0xa4,0xa4,0xa4,0xe5]), Buffer.from('">')])), format: 'text/html; charset=Big5', url: 'https://raw-title.example/big5', expected: '中文' },
     ];
+    const postSchema = z.object({post_id: z.uuid(), title: z.string()}).passthrough();
     for (const entry of cases) {
       page = entry.page; format = entry.format;
       const body = JSON.stringify({ url: entry.url, ...(entry.title ? { title: entry.title } : {}) });
@@ -1153,10 +1197,14 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
       });
       const created = await send();
       assert.equal(created.status, 201, await created.clone().text());
-      const post = await created.json() as { post_id: string; title: string };
+      const post = postSchema.parse(await created.json());
       const title = entry.title ?? entry.expected ?? '前\uFFFD後';
       assert.equal(post.title, title);
       assert.deepEqual((await pool.query('SELECT title FROM community_social_posts WHERE post_id=$1', [post.post_id])).rows, [{ title }]);
+      const reread = await fetch(`${httpOrigin}/api/v1/social-posts`, {headers});
+      assert.equal(reread.status, 200);
+      const feed = z.object({items: z.array(postSchema)}).parse(await reread.json());
+      assert.equal(feed.items.find(item => item.post_id === post.post_id)?.title, title);
       const replay = await send();
       assert.equal(replay.status, 201);
       assert.deepEqual(await replay.json(), post);
@@ -1186,8 +1234,9 @@ async function vanishBetweenReads(match: (sql: string) => boolean, pause: string
   try {
     const gone = await app.request(`${origin}/go/${code}`);
     const body = await gone.text();
-    assert.equal(gone.status, 302, body.slice(0, 240));
-    assert.ok((gone.headers.get('location') ?? '').endsWith('/'));
+    assert.equal(gone.status, 404, body.slice(0, 240));
+    assert.equal(gone.headers.get('location'), null);
+    assert.doesNotMatch(body, /og:|data-target|data-code/);
     assert.equal(body.includes('internal_error'), false);
     assert.equal(seen, true);
   } finally {
@@ -1195,7 +1244,7 @@ async function vanishBetweenReads(match: (sql: string) => boolean, pause: string
   }
 }
 
-test('/go falls back home when a service or event disappears between the two reads', async () => {
+test('/go shows no former target when a service or event disappears between the two reads', async () => {
   const maker = await signIn();
   const serviceId = randomUUID();
   await pool.query(`INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
@@ -1305,8 +1354,8 @@ test('a member card link is owner-only, scores a visitor, and dies when the card
   assert.notEqual(rotatedToken, firstToken);
   assert.equal(await promotionGo(pool, created.data.code, undefined, 'https://freetwai.com'), null);
   const home = await app.request(`${origin}/go/${created.data.code}`);
-  assert.equal(home.status, 302);
-  assert.ok((home.headers.get('location') ?? '').endsWith('/'));
+  assert.equal(home.status, 404);
+  assert.equal(home.headers.get('location'), null);
   await click(created.data.code, REAL.replace('128.0.0.0', '128.0.0.9'));
   assert.equal(await pointsOf(created.data.code), 1);
   const afterRotate = await request('/promotion/links/mine', maker);
@@ -1349,4 +1398,25 @@ test('a member card link is owner-only, scores a visitor, and dies when the card
   const rows = (await pool.query(`SELECT coalesce(string_agg(target_key || code, ''), '') AS blob FROM promotion_links WHERE kind='member_card'`)).rows[0].blob as string;
   for (const token of [firstToken, rotatedToken, reopenedToken]) assert.equal(rows.includes(token), false);
   assert.equal((await pool.query(`SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND kind='member_card' AND code=$2 AND revoked_at IS NULL`, [maker.user.user_id, created.data.code])).rows[0].n, 1);
+});
+
+
+test('external destinations come only from the current canonical post, never query parameters or unsafe stored URLs', async () => {
+  const maker = await signIn();
+  const post = await request('/social-posts', maker, { url: 'https://example.com/author/work?version=2', title: '會員核准的作品' });
+  assert.equal(post.status, 201, post.text);
+  const shared = await request('/promotion/links', maker, { kind: 'social_post', target: post.data.post_id });
+  assert.equal(shared.status, 200, shared.text);
+  const live = await app.request(`${origin}/go/${shared.data.code}?url=https://evil.example/&next=https://evil.example/`);
+  assert.equal(live.status, 200);
+  const html = await live.text();
+  assert.match(html, /example.com\/author\/work\?version=2/);
+  assert.doesNotMatch(html, /evil.example/);
+  for (const destination of ['https://127.0.0.1/private', 'https://example.com@evil.example/', 'https://freetwai.com/private', 'https://example.com/work?utm_source=stale']) {
+    await pool.query('UPDATE community_social_posts SET url=$2 WHERE post_id=$1', [post.data.post_id, destination]);
+    const response = await app.request(`${origin}/go/${shared.data.code}`);
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('location'), null);
+    assert.doesNotMatch(await response.text(), /會員核准的作品|og:|data-target|data-code|evil.example/);
+  }
 });

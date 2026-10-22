@@ -1,9 +1,10 @@
+import {publicSkillAcquisition} from '../../../../modules/development/skill-acquisition.js';
 import {Hono} from 'hono';
 import type {Context} from 'hono';
 import {z} from 'zod';
 import type {Pool} from 'pg';
 import type {ObjectStore} from '../../../../packages/asset-storage/index.js';
-import {developmentHtml,LIVE_SITE_ORIGIN,publicSkillShareMarkup,shareIntroNumber} from '../../../../modules/development/service.js';
+import {developmentHtml,LIVE_SITE_ORIGIN,publicSkillShareMarkup,shareIntroNumber,publicSkillIntroduction,publicSkillDestinations} from '../../../../modules/development/service.js';
 import {listPublishedSkillSubmissions,readPublishedSkillSubmission,readPublishedSkillIllustration,readPublishedUpgrade} from '../../../../modules/skill-submissions/public.js';
 import {skillUploadProtocolMarkdown,skillUploadSkillMarkdown} from '../generated/runtime-text.js';
 
@@ -48,16 +49,20 @@ export function submittedSkillAgentMarkdown(skill:Published,publicOrigin=LIVE_PU
 export function submittedSkillHtml(skill:Published,intro?:string,publicOrigin=LIVE_PUBLIC_ORIGIN,discoveryEnabled=false,eventBacklinksHtml=''){
   const selected=shareIntroNumber(intro,skill.share_introductions.length);
   const image=skill.illustration_url;
-  const illustration=image?`<figure class="public-skill-illustration"><img src="${escape(image)}" alt="${escape(skill.title)}功能示意圖" width="1200" height="630"></figure>`:'';
-  // The same entry packaging as a platform skill book: cover, purpose, source, badge, then source-first actions.
+  const illustration=image?`<figure class="public-skill-illustration"><img src="${escape(image)}" alt="${escape(skill.title)}功能示意圖" width="1200" height="630"><figcaption>投稿示意圖；實際效果請依原作說明核對。</figcaption></figure>`:'';
+  const introduction=publicSkillIntroduction({notes:skill.use_notes});
+  const destinations=publicSkillDestinations([{url:skill.repository_url,kind:'source'},...(skill.demo_url?[{url:skill.demo_url,kind:'demo' as const}]:[])]);
+  const relationship={author:'原作者',maintainer:'維護者',contributor:'貢獻者',curator:'整理推薦者'}[skill.relationship];
+  // Only currently published fields reach this template; no inferred install/download actions.
   const body=`<section class="public-skill-entry"><figure class="public-skill-cover"><img src="${escape(skill.cover_url)}" alt="" width="768" height="512"></figure><div>`+
     `<p class="public-skill-purpose">${escape(skill.description)}</p><p>原作：${escape(skill.source.repository_full_name)}</p>`+
     `<div class="public-skill-badges" aria-label="技能書徽章"><span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span></div>`+
-    `<div class="public-skill-actions">${external(skill.repository_url,'開啟專案')}${skill.demo_url?external(skill.demo_url,'開啟展示'):''}<a href="${skill.public_path}/SKILL.md">交給 Agent</a></div></div></section>`+
-    illustration+publicSkillShareMarkup({title:skill.title,path:skill.public_path,introductions:skill.share_introductions,selected,origin:publicOrigin})+
-    `<section><h2>開始使用</h2><pre>${escape(skill.use_notes)}</pre></section>`+
+    `<div class="public-skill-actions"><a href="#skill-use-title">閱讀使用介紹</a><a href="#skill-next-title">查看原作與使用入口</a><a href="#join-workshop">探索更多免費資源</a></div></div></section>`+
+    illustration+introduction+publicSkillAcquisition(skill.public_path,selected)+destinations+
+    `<section class="public-skill-source"><h2>版本與來源</h2><p>原作、自由工坊站內應用與可攜版本是不同交付；本頁介紹投稿者提供的原作，外連不代表已在工坊啟用。</p><dl><dt>來源 Repo</dt><dd>${escape(skill.source.repository_full_name)}</dd><dt>投稿者自述關係</dt><dd>${escape(relationship)}（自行聲明，尚未核實作者身分）</dd><dt>收錄授權</dt><dd>${escape(skill.source.license_spdx==='NOASSERTION'?'尚未確認':skill.source.license_spdx)}</dd><dt>收錄版本</dt><dd><code>${escape(skill.source.commit_sha)}</code></dd><dt>投稿公開日期</dt><dd>${escape(skill.published_at.slice(0,10))}</dd></dl><p>收錄不代表官方採用或額外授權。${skill.source.license_evidence_url?external(skill.source.license_evidence_url,'閱讀來源授權'):''}</p></section>`+
+    publicSkillShareMarkup({title:skill.title,path:skill.public_path,introductions:skill.share_introductions,selected,origin:publicOrigin})+
     `<section><h2>一起開發</h2><p>查看專案任務，認領一項修改並提交 PR。</p><div class="public-skill-actions">${external(skill.repository_url+'/issues','查看任務')}${external(skill.repository_url+'/pulls','查看 PR')}${external(skill.repository_url+'/fork','Fork 專案')}<a href="${skill.public_path}/SKILL.md">讀取協作指令</a></div></section>`+
-    `<details class="public-skill-details"><summary>作者、授權與版本</summary><p>來源：${escape(skill.source.repository_full_name)}</p><p>投稿者與來源的關係為自行聲明，尚未核實作者身分；收錄不代表官方採用。</p><p>授權：${escape(skill.source.license_spdx)}</p><p>收錄版本：<code>${escape(skill.source.commit_sha)}</code></p>${skill.source.license_evidence_url?external(skill.source.license_evidence_url,'閱讀授權'):''}</details>`;
+    `<p><a href="${skill.public_path}/SKILL.md">下載協作指令 SKILL.md</a>（供 Agent 閱讀，非應用程式安裝包）</p>`;
   return developmentHtml(skill.title,body+eventBacklinksHtml,{path:skill.public_path,description:selected?skill.share_introductions[selected-1]:skill.description,share:true,shareQuery:selected?`intro=${selected}`:undefined,image:image?{url:image,width:1200,height:630,alt:`${skill.title}功能示意圖`}:undefined,origin:publicOrigin,discoveryEnabled});
 }
 

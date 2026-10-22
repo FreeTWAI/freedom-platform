@@ -1,3 +1,5 @@
+import type {StoreGalleryAssets} from '../../../modules/assets/storefront-gallery.js';
+import type {StoreAppearanceAssets} from '../../../modules/assets/storefront-appearance.js';
 import type { SupplyMaterialAssets } from '../../../modules/agent-commerce/supplier-console/material-media.js';
 import type {PaymentQueryTransport} from '../../../modules/agent-commerce/payments/query-transport.js';
 import type {EffectJournalPort} from '../../../modules/agent-commerce/operations/journal/journal.js';
@@ -39,6 +41,7 @@ export type PlatformRuntime = {
   commerceJournal?:EffectJournalPort;
   commerceEmailSender?:CommerceEmailSender;
   commerceSettings?:CommerceSettings;
+  commerceOrderNotificationsEnabled?:boolean;
   commerceCredentialKeyring?:CommerceCredentialKeyring|null;
   commerceProviderEnvironment?:'sandbox'|'live';
   commercePorts?:CheckoutPorts & {email?:CommerceEmailOutbox};
@@ -75,6 +78,7 @@ export type PlatformRuntime = {
   /** Explicit AR read/upload port and release setting; both absent by default. */
   arAssetStore?:ObjectStore;
   arEnabled?:boolean;
+  shortVideosEnabled?:boolean;
   /** Explicit installed cover lifecycle/read store; no ambient activation. */
   serviceCoverAssets?: ServiceCoverAssetService;
   serviceCoverAssetStore?: ObjectStore;
@@ -113,9 +117,18 @@ export type PlatformRuntime = {
   /** Supplier console reads, profile update and console-scope photos; default OFF, effective only with guildLaunchpadEnabled. */
   supplierConsoleEnabled?: boolean;
   distributionPhotosEnabled?: boolean;
+  supplyOfferPhotosEnabled?: boolean;
+  /** Additive store branding, independent of media installation; default OFF. */
+  storeAppearanceEnabled?: boolean;
+  storePoliciesEnabled?: boolean;
+  storeCategoriesEnabled?: boolean;
+  storeVariantsEnabled?: boolean;
+  storeGalleryEnabled?: boolean;
+  storeGalleryAssets?: StoreGalleryAssets;
   /** Independent installed read port and new-upload admission; both absent by default. */
   storePhotoAssetStore?: ObjectStore;
   storePhotoAssets?: StorePhotoAssets;
+  storeAppearanceAssets?: StoreAppearanceAssets;
   storePhotoUploadsEnabled?: boolean;
   supplyMaterialAssetStore?: ObjectStore;
   supplyMaterialAssets?: SupplyMaterialAssets;

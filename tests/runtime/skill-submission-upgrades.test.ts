@@ -409,3 +409,18 @@ test('withdrawal removes both upgraded links without resurrecting the original p
   assert.deepEqual((await api('/skill-submissions/published')).data.items,[]);
   assert.equal((await app.request(origin+`/api/v1/me/skill-submissions/${upgrade.submission_id}/illustration`,{headers:{Cookie:owner.cookie}})).status,200,'original owner retains their historical image');
 });
+
+test('all twelve newly cataloged repositories hide member submissions, including two WebChatMCP rows, while direct reads remain available',async t=>{
+  const repos=["tesdano-crypto/HRSystem-OpenSource", "kieiken/hdsljp-api", "kieiken/usage", "kieiken/photo-border-remover", "kieiken/ga4-lp-analytics", "kieiken/sns-feedback-collect", "kieiken/ultracode-token-optimization", "kieiken/keynote-pptx-doctor", "JS-PACKAGE/WebChatMCP.js", "Rumi-3653/gemini-voice-lab", "Rumi-3653/story-bible", "madeofroc-arch/AI-Detox-Center"];
+  mockGitHub(t,Object.fromEntries([...repos,'example/member-visible'].map((repo,i)=>[repo,{id:9800+i}])));
+  const owner=await login();
+  const visible=await publishManual(owner,'https://github.com/example/member-visible','仍可見的作品');
+  const hidden:string[]=[];
+  for(const repo of repos){
+    const published=await publishManual(owner,'https://github.com/'+repo,'新目錄作品');hidden.push(published.submission_id);
+  }
+  const duplicate=await publishManual(owner,'https://github.com/JS-PACKAGE/WebChatMCP.js','同原作第二筆');hidden.push(duplicate.submission_id);
+  assert.equal(hidden.length,13);
+  for(const limit of [1,100])assert.deepEqual((await listPublishedSkillSubmissions(pool,limit)).map(row=>row.submission_id),[visible.submission_id]);
+  for(const id of hidden)assert.equal((await readPublishedSkillSubmission(pool,id))?.submission_id,id);
+});

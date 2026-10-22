@@ -1,3 +1,4 @@
+import {CheckoutOrders,type CheckoutOrdersProps} from '../../../../modules/agent-commerce/checkout/CheckoutOrders.js';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {PublicStoreProjectionSchema, type PublicStoreProjection} from '../../../../contracts/guild-launchpad/v1/storefront';
 import {QuoteInputSchema, ReadinessSchema} from '../../../../contracts/guild-launchpad/v1/hosted-order';
@@ -11,9 +12,16 @@ import './HostedStore.css';
 const TERMS = '僅預留 30 分鐘，尚未付款，不會安排出貨。運費未設定，稅額未評估。';
 const unreadable = () => new ApiError({message: '回應未完整收到，尚未確認原操作結果。', network: true});
 const errorText = (error: unknown) => error instanceof ApiError ? error.message : '暫時無法確認回應，請重試。';
-type Props = {client: PortalClient; locationHash: string; registerLeave: (guard: (() => boolean) | null) => void; replaceLocation: (hash: string) => void};
+type Props = {client: PortalClient; locationHash: string; registerLeave: (guard: (() => boolean) | null) => void; replaceLocation: (hash: string) => void; checkoutOrders?:Omit<CheckoutOrdersProps,'client'>&{readOnly?:boolean}};
 /** Mounted with the member/session key by Workspace; no private browser persistence. */
-export function HostedOrderPage({client, locationHash, registerLeave, replaceLocation}: Props) {
+export function HostedOrderPage(props:Props) {
+  const checkoutOrders=props.locationHash==='#reservations'?props.checkoutOrders:undefined;
+  return <>
+    {checkoutOrders&&<CheckoutOrders key={`${checkoutOrders.userId}:${props.client.sessionGeneration}`} client={props.client} {...checkoutOrders}/>}
+    {!props.checkoutOrders?.readOnly&&<LegacyHostedOrderPage {...props} {...(checkoutOrders?{separateReservations:true}:{})}/>}
+  </>;
+}
+function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLocation, separateReservations}: Props&{separateReservations?:boolean}) {
   const route = buyerRoute(locationHash);
   const [store, setStore] = useState<PublicStoreProjection | null>(null);
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(false);
@@ -151,14 +159,15 @@ export function HostedOrderPage({client, locationHash, registerLeave, replaceLoc
   const locked = busy || unknown;
   const lookupTarget = held.current?.kind === 'submit' ? {kind: 'intent' as const, slug: held.current.slug, intent: held.current.body.client_order_id} : currentRoute.current;
   return <div className="hosted-store stack">
+    {separateReservations&&<h2>預留紀錄</h2>}
     <p role="note" className="banner">{TERMS}</p>
     <p ref={status} tabIndex={-1} role="status">{loading ? '正在確認目前狀態…' : notice}</p>
     {error && <p role="alert" className="banner banner-error">{error}</p>}
     {unknown && <div className="actions"><button className="btn btn-ghost" disabled={busy || loading} onClick={() => held.current && void send(held.current)}>重試原操作</button>
       {held.current?.kind !== 'quote' && <button className="btn btn-ghost" disabled={busy || loading} onClick={() => void load(lookupTarget)}>查詢原預留</button>}</div>}
     {!route ? <p>預留連結格式不正確。</p> : route.kind === 'lookup' ? <>
-      <section className="stack" aria-label="我的訂單"><h2>我的訂單</h2>
-        {page?.items.length === 0 && <p>目前沒有訂單。</p>}
+      <section className="stack" aria-label={separateReservations?'預留紀錄':'我的訂單'}>{!separateReservations&&<h2>我的訂單</h2>}
+        {page?.items.length === 0 && <p>{separateReservations?'目前沒有預留紀錄。':'目前沒有訂單。'}</p>}
         {page?.items.map(item => <article className="hosted-store-product stack" key={item.order_id}>
           <h3>{item.store.name}</h3><p>{item.state === 'reserved' ? '預留中' : item.state === 'cancelled' ? '已取消' : '已到期'} · 商品金額 {formatMinor(item.merchandise_total_minor, item.currency)}（非應付金額）</p>
           <p>預留截止：{formatIsoLocal(item.reservation_expires_at)}</p>

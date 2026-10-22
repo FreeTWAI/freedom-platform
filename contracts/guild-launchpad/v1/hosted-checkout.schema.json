@@ -3,6 +3,21 @@
   "$id": "https://freetwai.com/contracts/guild-launchpad/v1/hosted-checkout",
   "description": "Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.",
   "$defs": {
+    "buyer-identity-header": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "guest"
+        },
+        {
+          "type": "string",
+          "minLength": 43,
+          "maxLength": 43,
+          "pattern": "^member:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])"
+        }
+      ],
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: equality_precondition_not_authority."
+    },
     "shipping-method-ref": {
       "type": "string",
       "enum": [
@@ -2778,6 +2793,253 @@
       "additionalProperties": false,
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: store_and_current_access."
     },
+    "member-order-query": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_member_only."
+    },
+    "member-order-summary": {
+      "type": "object",
+      "properties": {
+        "store": {
+          "type": "object",
+          "properties": {
+            "slug": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9-]{1,38}[a-zA-Z0-9]$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[^\\u0000\\uD800-\\uDFFF]*$(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "slug",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "order_ref": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "display_number": {
+          "type": "string",
+          "pattern": "^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\\s\\S])"
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+        },
+        "total_minor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "TWD",
+            "USD"
+          ]
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "lifecycle_state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "cancelled",
+                "closed"
+              ]
+            },
+            "cancel_reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "buyer_cancelled",
+                    "seller_cancelled",
+                    "payment_not_completed",
+                    "paid_cancelled"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "lifecycle_state",
+            "cancel_reason"
+          ],
+          "additionalProperties": false
+        },
+        "order_path": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^\\/shops\\/[a-z][a-z0-9-]{1,38}[a-z0-9]\\/orders\\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "store",
+        "order_ref",
+        "display_number",
+        "created_at",
+        "total_minor",
+        "currency",
+        "status",
+        "order_path"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: original_buyer_frozen_publication, order_path_matches_store_and_order."
+    },
+    "member-order-page": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "store": {
+                "type": "object",
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9-]{1,38}[a-zA-Z0-9]$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^[^\\u0000\\uD800-\\uDFFF]*$(?![\\s\\S])"
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "order_ref": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "display_number": {
+                "type": "string",
+                "pattern": "^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\\s\\S])"
+              },
+              "created_at": {
+                "type": "string",
+                "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+              },
+              "total_minor": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "currency": {
+                "type": "string",
+                "enum": [
+                  "TWD",
+                  "USD"
+                ]
+              },
+              "status": {
+                "type": "object",
+                "properties": {
+                  "lifecycle_state": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "cancelled",
+                      "closed"
+                    ]
+                  },
+                  "cancel_reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "buyer_cancelled",
+                          "seller_cancelled",
+                          "payment_not_completed",
+                          "paid_cancelled"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "lifecycle_state",
+                  "cancel_reason"
+                ],
+                "additionalProperties": false
+              },
+              "order_path": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^\\/shops\\/[a-z][a-z0-9-]{1,38}[a-z0-9]\\/orders\\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "store",
+              "order_ref",
+              "display_number",
+              "created_at",
+              "total_minor",
+              "currency",
+              "status",
+              "order_path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: current_member_bound_cursor, order_path_matches_store_and_order."
+    },
     "redeem-input": {
       "type": "object",
       "properties": {
@@ -2843,6 +3105,7 @@
             "checkout_store_not_found",
             "checkout_not_found",
             "checkout_order_not_found",
+            "checkout_identity_changed",
             "invalid_idempotency_key",
             "checkout_idempotency_conflict",
             "order_intent_conflict",

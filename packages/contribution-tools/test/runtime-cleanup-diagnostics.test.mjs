@@ -83,7 +83,10 @@ test('cleanup diagnostics cannot disclose arbitrary server, SQL, connection or m
   assert.deepEqual(value,{event:'runtime_database_cleanup',phase:'unknown',result:'unverified',code:'unclassified',elapsed_ms:0});
   assert.equal(JSON.stringify(value).includes(secret),false);
   assert.equal(runtimeCleanupDiagnostic('drop','failed',Error('__proto__'),-10).code,'unclassified');
-  assert.equal(runtimeCleanupDiagnostic('drop','failed',null,30000).elapsed_ms,20000);
+  assert.equal(runtimeCleanupDiagnostic('drop','failed',null,30000).elapsed_ms,30000);
+  assert.equal(runtimeCleanupDiagnostic('drop','failed',null,70000).elapsed_ms,60000);
+  assert.equal(runtimeDropObservation(undefined,30000).elapsed_ms,30000);
+  assert.equal(runtimeDropObservation(undefined,70000).elapsed_ms,60000);
 });
 
 // Run the real cleanup control flow with an in-memory pg transport, in a
@@ -201,7 +204,7 @@ test('test cancellation kills and reaps the transport child', {timeout:10000}, a
 });
 
 // Controlled transport/clock evidence, not a reproduction of PostgreSQL I/O.
-// Run the actual helper with DROP's ACK lost at 16.057s and a nonce-bound
+// Run the actual helper with DROP's ACK lost near the new 56s limit and a nonce-bound
 // cleaner whose termination is delayed beyond pg_terminate_backend's 1s wait.
 const settlementCode = String.raw`
 const assert=require('node:assert/strict'),Module=require('node:module');
@@ -223,7 +226,7 @@ class Client {
   if(text.startsWith('SELECT 1 FROM pg_database'))return {rows:[],rowCount:0};
   if(text.startsWith('CREATE DATABASE')){database=text.match(/^CREATE DATABASE "([^"]+)"/)[1];return {rows:[],rowCount:0};}
   if(text.startsWith('SELECT pg_get_userbyid'))return {rows:[{owner:'review'}],rowCount:1};
-  if(text.startsWith('DROP DATABASE')){now=16057;throw Error('Query read timeout');}
+  if(text.startsWith('DROP DATABASE')){now=56057;throw Error('Query read timeout');}
   if(text.includes('FROM pg_stat_activity WHERE pid=$1')){
    assert.match(text,/usename=\$2 AND application_name=\$3$/);
    assert.equal(values[1],'review');
@@ -231,12 +234,12 @@ class Client {
    assert.equal(values[0],2);assert.equal(values[2],cleanupApplication);
    if(text.startsWith('SELECT pg_terminate_backend')){terminations++;now+=1000;return {rows:[{stopped:false}],rowCount:1};}
    polls++;now+=50;
-   const present=scenario==='never'||now<(scenario==='late'?19500:18700);
+   const present=scenario==='never'||now<(scenario==='late'?59500:58700);
    return {rows:present?[{}]:[],rowCount:present?1:0};
   }
   if(text.startsWith('SELECT datname FROM pg_database')){
    absence++;assert.deepEqual(values,[[database]]);
-   if(scenario==='absence-deadline')now=20001;
+   if(scenario==='absence-deadline')now=60001;
    return {rows:scenario==='present'?[{datname:database}]:[],rowCount:scenario==='present'?1:0};
   }
   return {rows:[],rowCount:0};
@@ -258,8 +261,8 @@ for (const scenario of ['delayed', 'never', 'present', 'late', 'absence-deadline
     assert.equal(result.terminations,1,'poll settlement; never resend termination');
     assert.ok(result.polls>1,JSON.stringify(result));
     assert.equal(result.absence,['never','late'].includes(scenario)?0:1,JSON.stringify(result));
-    assert.ok(result.now <= (scenario==='absence-deadline'?20001:20000),JSON.stringify(result));
-    if(scenario==='delayed')assert.ok(result.now>=18700&&result.now<19000);
+    assert.ok(result.now <= (scenario==='absence-deadline'?60001:60000),JSON.stringify(result));
+    if(scenario==='delayed')assert.ok(result.now>=58700&&result.now<59000);
     assert.doesNotMatch(child.stderr,/fp_suite_|postgresql:|DROP DATABASE/);
   });
 }
@@ -292,5 +295,53 @@ for (const failure of ['connect', 'query', 'hung', 'success']) for (const retain
     assert.match(child.stdout,/observers destroyed=1 observations=/);
     assert.match(child.stderr,/"phase":"drop_observation"/);
     assert.doesNotMatch(child.stderr,/private|fp_suite_|postgresql:|DROP DATABASE/);
+  });
+}
+
+// Advance the transport clock instead of waiting on a real server. Enforce the
+// actual DROP read/statement limits, so the former ~16s budget fails this case.
+for (const scenario of ['slow', 'present', 'lost-ack', 'timeout']) {
+  test(`long DROP ${scenario} stays bounded and requires fresh absence`, () => {
+    const injected = childCode
+      .replace('const oldLoad=Module._load;', `const oldLoad=Module._load;
+        const assert=require('node:assert/strict');
+        let now=0,drops=0,dropTimeout,statementTimeout,dropStatementTimeout;
+        Object.defineProperty(performance,'now',{value:()=>now});`)
+      .replace("const text=typeof q==='string'?q:q.text, values=q.values||[];", `const text=typeof q==='string'?q:q.text, values=q.values||[];
+        if(text.startsWith('SELECT set_config'))statementTimeout=Number(values[0]);
+        if(this.config.application_name.endsWith('_cleanup')||this.config.application_name.endsWith('_verify')){
+          if(!text.startsWith('SELECT set_config')&&!text.startsWith('DROP DATABASE')){
+            assert(statementTimeout<=2000,'metadata statement limit');
+            assert(q.query_timeout<=2050,'metadata read limit includes existing 50ms grace');
+          }
+        }
+        if(text.startsWith('DROP DATABASE')){
+          drops++;dropTimeout=q.query_timeout;dropStatementTimeout=statementTimeout;
+          const delay='${scenario}'==='timeout'?57000:30000;
+          const wait=Math.min(delay,statementTimeout,q.query_timeout);
+          now+=wait;
+          if(wait<delay)throw Error('Query read timeout');
+        }`)
+      .replace("dbs.delete(text.match(/^DROP DATABASE \"([^\"]+)\"/)[1]);", `dbs.delete(text.match(/^DROP DATABASE "([^"]+)"/)[1]);
+        if('${scenario}'==='lost-ack')throw Error('Query read timeout');`)
+      .replace("process.once('message',async()=> {", '(async()=> {')
+      .replace('process.disconnect();', "process.stdout.write(JSON.stringify({drops,dropTimeout,dropStatementTimeout,now})+'\\n');")
+      .replace(/\}\);\s*$/, '})();');
+    const child=spawnSync(process.execPath,['-e',injected,new URL('../runtime-databases.mjs',import.meta.url).href,
+      scenario==='present'?'retain':'drop','normal','run','normal'],
+      {env:verificationEnvironment(),encoding:'utf8',timeout:5000});
+    assert.equal(child.status,0,child.stderr);
+    const verified=['slow','lost-ack'].includes(scenario);
+    assert.match(child.stdout,verified?/cleanup result=true remaining_databases=0/:/cleanup result=false remaining_databases=1/);
+    const timing=JSON.parse(child.stdout.split('\n').find(line=>line.startsWith('{')));
+    assert.equal(timing.drops,1,'never retry DROP');
+    assert.equal(timing.dropStatementTimeout,56000);
+    assert.equal(timing.dropTimeout,56050);
+    assert.equal(timing.now,scenario==='timeout'?56000:30000);
+    const events=child.stderr.trim().split('\n').map(line=>JSON.parse(line));
+    assert(events.some(event=>event.phase==='absence'&&event.result===(verified?'verified_absent':'unverified')
+      &&event.elapsed_ms===timing.now&&(verified||event.code==='database_present')));
+    assert.equal(events.some(event=>event.phase==='drop'&&event.code==='query_read_timeout'),['lost-ack','timeout'].includes(scenario));
+    assert.doesNotMatch(child.stderr,/fp_suite_|postgresql:|DROP DATABASE/);
   });
 }

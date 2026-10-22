@@ -24,7 +24,7 @@ export function collectGuildBlocks(descriptors) {
 
 export function renderRegistry(entries) {
   const imports = entries.map(item => {
-    const path = relative(dirname(generated), item.entry).replace(/\.tsx$/, '');
+    const path = relative(dirname(generated), item.entry).replaceAll('\\', '/').replace(/\.tsx$/, '');
     return `  ${JSON.stringify(item.id)}: () => import(${JSON.stringify(path)}),`;
   });
   return `// Generated from existing freedom.module.json surfaces; do not edit.\nimport type {GuildBlockModule} from './runtime';\n\nexport const guildBlockLoaders: Readonly<Record<string, () => Promise<GuildBlockModule>>> = {\n${imports.join('\n')}\n};\n`;

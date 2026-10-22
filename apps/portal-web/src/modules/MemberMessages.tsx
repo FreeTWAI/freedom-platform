@@ -25,9 +25,10 @@ import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileErr
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
 import {refreshLoadedMessages} from './message-refresh';
+import {isOrderNotificationAction,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
-type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social';
-type NotificationAction={tab:ActionTab;resource_id:string|null};
+type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
+type NotificationAction={tab:Exclude<ActionTab,'stores'|'reservations'>;resource_id:string|null}|OrderNotificationAction;
 type Notice={notification_id:string;kind:string;title:string;body:string;created_at:string;read_at:string|null;action:NotificationAction|null};
 type NoticePage={items:Notice[];unread_count:number;next_offset:number|null};
 type Participant={user_id:string;display_name:string;avatar_url:string|null;last_seen_at:string|null;is_online:boolean};
@@ -42,13 +43,16 @@ type Props={client:PortalClient;session:SessionPayload;messageImagesEnabled?:boo
 
 const PAGE=20,MAX_BODY=2000,LIVE_POLL_MS=1000;
 // Actions map to fixed in-app pages only; a notification can never supply a link.
-const actionLabels:Record<ActionTab,string>={members:'前往工坊夥伴',squads:'前往小隊集合',guilds:'前往職業公會','guild-workspace':'前往公會管理',messages:'開啟私訊',events:'前往活動',social:'查看貼文'};
+const actionLabels:Record<ActionTab,string>={members:'前往工坊夥伴',squads:'前往小隊集合',guilds:'前往職業公會','guild-workspace':'前往公會管理',messages:'開啟私訊',events:'前往活動',social:'查看貼文',stores:'查看店家訂單',reservations:'查看我的訂單'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(cause:unknown,fallback='暫時無法讀取，請稍後重試。')=>cause instanceof Error&&cause.message?cause.message:fallback;
 /** No response, timeout or 5xx: the server may already have applied the write. */
 const unconfirmed=(cause:unknown)=>!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500;
 const merge=<T,>(current:T[],next:T[],id:(value:T)=>string)=>{const seen=new Set(current.map(id));return [...current,...next.filter(value=>!seen.has(id(value)))];};
-const usableAction=(action:NotificationAction|null)=>!action||!Object.hasOwn(actionLabels,action.tab)||(action.tab==='messages'||action.tab==='social')&&!uuid.test(action.resource_id??'')?null:action;
+const usableAction=(action:NotificationAction|null)=>{
+  if(action?.tab==='stores'||action?.tab==='reservations')return isOrderNotificationAction(action)?action:null;
+  return !action||!Object.hasOwn(actionLabels,action.tab)||(action.tab==='messages'||action.tab==='social')&&!uuid.test(action.resource_id??'')?null:action;
+};
 const unreadText=(count:InboxUnread)=>count===undefined?'':count===null?'未讀數未確認':count>0?`${count} 則未讀`:'沒有未讀';
 
 type View='guild'|'squad'|'direct'|'world';
@@ -95,7 +99,7 @@ export function MemberMessages({client,session,messageImagesEnabled=false,member
   </section>;
 }
 
-export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{client:PortalClient;onUnread:(count:InboxUnread)=>void;onNavigate:(id:TabId)=>void;onSocial?:(action:{tab:'social';resource_id:string})=>void;onOpenPeer:(id:string)=>void}){
+export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpenPeer}:{client:PortalClient;onUnread:(count:InboxUnread)=>void;onNavigate:(id:TabId)=>void;onSocial?:(action:{tab:'social';resource_id:string})=>void;onOrder?:(action:OrderNotificationAction)=>void;onOpenPeer:(id:string)=>void}){
   const [items,setItems]=useState<Notice[]>([]),[nextOffset,setNextOffset]=useState<number|null>(null);
   const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading'),[error,setError]=useState('');
   const [more,setMore]=useState<{loading:boolean;error:string}>({loading:false,error:''});
@@ -135,6 +139,7 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{
     try{const page=await client.get<NoticePage>('/me/notifications?limit=1&offset=0');if(alive.current)onUnread(page.unread_count);}catch{if(alive.current)onUnread(null);}
   }
   function go(action:NotificationAction){
+    if(action.tab==='stores'||action.tab==='reservations'){if(isOrderNotificationAction(action))onOrder?.(action);return;}
     if(action.tab==='messages'){onOpenPeer(action.resource_id!);return;}
     if(action.tab==='social'&&onSocial){onSocial({tab:'social',resource_id:action.resource_id!});return;}
     onNavigate(action.tab);
@@ -167,12 +172,13 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{
     {items.length===0?<p className="empty">目前沒有通知。</p>:<ul className="messages-list" aria-label="通知">
       {items.map(item=>{
         const id=item.notification_id,action=usableAction(item.action),problem=itemErrors[id];
+        const orderAction=action?.tab==='stores'||action?.tab==='reservations';
         return <li key={id} className={item.read_at?undefined:'is-unread'} data-notification={id}>
           <h3>{item.title}</h3>
           <p className="messages-body">{item.body}</p>
           <p className="messages-meta">{formatIsoLocal(item.created_at)} · {item.read_at?'已讀':'未讀'}</p>
           <div className="messages-actions">
-            {action&&<button className="btn btn-primary" type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
+            {action&&(!orderAction||onOrder)&&<button className="btn btn-primary" type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
             {!item.read_at&&<button className="btn btn-ghost" type="button" disabled={busy[id]} onClick={()=>void markRead(item)}>{busy[id]?'正在標記…':'標為已讀'}</button>}
           </div>
           {problem&&<div className="banner banner-error" role="alert">{problem.message}<div className="messages-actions">
@@ -254,7 +260,8 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   const [convRefresh,setConvRefresh]=useState({loading:false,error:''}),[threadRefresh,setThreadRefresh]=useState({loading:false,error:''});
   // The in-flight refs record the full read that is still out, so a confirmed write can supersede it.
   const convInFlight=useRef<boolean|null>(null),threadInFlight=useRef<{id:string;quiet:boolean}|null>(null);
-  const olderInFlight=useRef<{id:string;generation:number;refresh:boolean}|null>(null);
+  const olderInFlight=useRef<{id:string;generation:number;refresh:boolean}|null>(null),olderQueued=useRef<{id:string;generation:number}|null>(null);
+  const quietInFlight=useRef(new Map<number,string>());
   const convGeneration=useRef(0),threadGeneration=useRef(0),currentPeer=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null),focusThread=useRef(false),alive=useRef(true);
   const readAttempts=useRef(new Map<string,{through:string;key:string}>()),readLocks=useRef(new Set<string>()),readIssues=useRef(new Map<string,string>());
   const scroll=useRef<HTMLDivElement>(null),stick=useRef(true),anchor=useRef<{height:number;top:number}|null>(null),moreState=useRef(threadMore);
@@ -282,7 +289,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     finally{setRetracting(false);}
   }
   useLayoutEffect(()=>{const node=scroll.current;if(!node)return;if(anchor.current){node.scrollTop=anchor.current.top+node.scrollHeight-anchor.current.height;anchor.current=null;}else if(stick.current){node.scrollTop=node.scrollHeight;setHasNew(false);}},[thread,peer,pending[peer??''],picking,singlePane]);
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;convGeneration.current++;threadGeneration.current++;};},[]);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;olderQueued.current=null;convGeneration.current++;threadGeneration.current++;};},[]);
 
   const loadConversations=useCallback(async(quiet=false)=>{
     listCheckedAt.current=Date.now();
@@ -315,10 +322,13 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     // A read ACK or background refresh must not cancel a member's older-page request.
     const older=olderInFlight.current;
     if(quiet&&older?.id===id&&older.generation===threadGeneration.current){older.refresh=true;return true;}
+    if(!quiet)olderQueued.current=null;
     const current=++threadGeneration.current;threadInFlight.current={id,quiet};
+    if(quiet)quietInFlight.current.set(current,id);
+    const queued=olderQueued.current;if(queued?.id===id)queued.generation=current;
     idlePoll.current=resetChatPoll();
     const receiptVersion=receiptRefresh.current.get(id);
-    setThreadMore(value=>({loading:false,error:quiet?value.error:''}));if(!quiet)setReadError(readIssues.current.get(id)??'');
+    setThreadMore(value=>({loading:quiet&&queued?.id===id,error:quiet?value.error:''}));if(!quiet)setReadError(readIssues.current.get(id)??'');
     if(quiet)setThreadRefresh({loading:true,error:''});else{setThreadStatus('loading');setThreadError('');setThreadRefresh({loading:false,error:''});setThread(null);}
     try{
       const value=await client.get<Thread>(`/me/conversations/${encodeURIComponent(id)}/messages?limit=${PAGE}&offset=0`,{background:quiet});
@@ -349,9 +359,12 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     }catch(cause){
       if(current===threadGeneration.current)threadInFlight.current=null;
       if(current!==threadGeneration.current||currentPeer.current!==id)return;
-      if(cause instanceof ApiError&&(cause.status===403||cause.status===404)){setThread(null);setThreadStatus('error');setThreadError(fail(cause));return;}
+      if(cause instanceof ApiError&&(cause.status===403||cause.status===404)){olderQueued.current=null;setThread(null);setThreadStatus('error');setThreadError(fail(cause));return;}
       if(quiet)setThreadRefresh({loading:false,error:fail(cause)});else{setThreadError(fail(cause));setThreadStatus('error');}
       return false;
+    }finally{
+      quietInFlight.current.delete(current);
+      if(alive.current&&olderQueued.current?.id===id)setThreadMore(value=>({...value}));
     }
   },[client,me]);
   useEffect(()=>{
@@ -383,7 +396,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       announceInboxChange();
     }catch(cause){
       if(!alive.current||generation!==threadGeneration.current||currentPeer.current!==id)return;
-      if(cause instanceof ApiError&&(cause.status===403||cause.status===404)){setThread(null);setThreadStatus('error');setThreadError(fail(cause));onUnread(null);return;}
+      if(cause instanceof ApiError&&(cause.status===403||cause.status===404)){olderQueued.current=null;setThread(null);setThreadStatus('error');setThreadError(fail(cause));onUnread(null);return;}
       retryAt.current=Date.now()+Math.min(60000,2000*2**Math.min(++failures.current,5));setLiveError('新訊息更新暫停，會自動重試。草稿仍保留，也可手動重讀。');
     }finally{polling.current=false;}
   }
@@ -410,8 +423,13 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   }
   useEffect(()=>{if(threadStatus==='ready'&&focusThread.current){focusThread.current=false;heading.current?.focus();}},[threadStatus]);
 
-  async function earlier(){
-    if(threadInFlight.current||!thread||thread.next_offset===null||threadMore.loading||!peer||(olderInFlight.current?.id===peer&&olderInFlight.current.generation===threadGeneration.current))return;
+  async function earlier(queued=false){
+    if(!alive.current||!thread||thread.next_offset===null||threadMore.loading&&!queued||!peer||currentPeer.current!==peer||(olderInFlight.current?.id===peer&&olderInFlight.current.generation===threadGeneration.current))return;
+    const open=threadInFlight.current;
+    if(open||[...quietInFlight.current.values()].includes(peer)){
+      if(!open||open.quiet&&open.id===peer){olderQueued.current={id:peer,generation:threadGeneration.current};moreState.current={loading:true,error:''};setThreadMore(moreState.current);}
+      return;
+    }
     const current=threadGeneration.current,id=peer;
     const request={id,generation:current,refresh:false};olderInFlight.current=request;
     setThreadMore({loading:true,error:''});
@@ -429,6 +447,15 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       if(request.refresh&&alive.current&&current===threadGeneration.current&&currentPeer.current===id)void loadThread(id,true);
     }
   }
+
+  useEffect(()=>{
+    const queued=olderQueued.current;
+    if(!queued||threadInFlight.current||[...quietInFlight.current.values()].includes(queued.id)||!alive.current||queued.generation!==threadGeneration.current||queued.id!==currentPeer.current||queued.id!==peer||threadStatus!=='ready'||!thread)return;
+    // Superseded reads must also settle; the committed thread supplies the refreshed cursor.
+    olderQueued.current=null;
+    if(thread.next_offset===null){moreState.current={loading:false,error:''};setThreadMore(moreState.current);return;}
+    void earlier(true);
+  },[thread,threadRefresh,threadStatus,threadMore,peer]);
 
   async function markRead(through?:string,retry=false){
     if(!snapshot.current.active||!snapshot.current.readingThread||!peer||!thread||readLocks.current.has(peer))return;
@@ -566,7 +593,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
           <div className="messages-actions messages-refresh"><button className="btn btn-ghost" title="重新讀取訊息" aria-label="重新讀取訊息" type="button" aria-disabled={threadRefresh.loading} onClick={()=>{if(!threadRefresh.loading)void loadThread(peer,true);}}>{threadRefresh.loading?'正在讀取訊息…':'重新讀取訊息'}</button></div>
           {threadRefresh.error&&<p className="banner banner-error" role="alert">訊息重新讀取失敗：{threadRefresh.error}</p>}
           <div ref={scroll} className="messages-scroll" role="log" aria-live="polite" aria-relevant="additions" tabIndex={0} aria-label={`與${thread.participant.display_name}的對話紀錄`} onScroll={()=>{if(scroll.current){stick.current=scroll.current.scrollHeight-scroll.current.scrollTop-scroll.current.clientHeight<80;if(stick.current)setHasNew(false);}}}>
-          {thread.next_offset!==null&&<button className="btn btn-ghost" type="button" disabled={threadMore.loading||threadRefresh.loading} onClick={()=>void earlier()}>{threadMore.loading?'正在讀取…':threadMore.error?'重試載入較早訊息':'載入較早訊息'}</button>}
+          {thread.next_offset!==null&&<button className="btn btn-ghost" type="button" disabled={threadMore.loading} onClick={()=>void earlier()}>{threadMore.loading?'正在讀取…':threadMore.error?'重試載入較早訊息':'載入較早訊息'}</button>}
           {threadMore.error&&<p className="banner banner-error" role="alert">較早訊息讀取失敗：{threadMore.error}</p>}
           {thread.items.length===0?<p className="empty">還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="訊息">
             {[...thread.items].reverse().map(message=>{const mine=message.sender_ref!==thread.participant.user_id;return <li key={message.message_id} className={mine?'is-mine':undefined} data-message-id={message.message_id}>

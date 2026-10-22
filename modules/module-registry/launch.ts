@@ -10,7 +10,7 @@ import {
 } from './capacity.js';
 import { journalCommand } from './events.js';
 import { effectDigest, type ModuleProviderMap, type ProvisionEffect } from './providers.js';
-import { assertEntryBindingCompatible, assertFullGuildMember, candidatesFor, moduleDefinition, type StoredChoice } from './plans.js';
+import { assertEntryBindingCompatible, assertApplicationGuildMember, candidatesFor, moduleDefinition, type StoredChoice } from './plans.js';
 import type { Requirement } from './definitions.js';
 import { planStale, mapRegistryError, sameContract } from './validate.js';
 
@@ -50,8 +50,8 @@ async function loadPlan(q: PoolClient, tenantId: string, planId: string): Promis
   return row;
 }
 
-async function assertMember(q: PoolClient, context: TenantScopeContext, userId: string, guildKey: string, lock: boolean) {
-  await assertFullGuildMember(q, context.community_id, userId, guildKey, lock);
+async function assertMember(q: PoolClient, context: TenantScopeContext, userId: string, plan: PlanRow, lock: boolean) {
+  await assertApplicationGuildMember(q, context.community_id, userId, plan.guild_key, plan.application_key, lock);
 }
 
 async function lockReusedInstances(q: PoolClient, tenantId: string, choices: StoredChoice[], versionMismatch: 'plan_stale' | 'version_conflict', unavailable: 'instance_unavailable' | 'not_found') {
@@ -106,7 +106,7 @@ export async function executeLaunch(q: PoolClient, context: TenantScopeContext, 
   if (plan.consumed || expired) throw planStale();
   if (plan.version !== input.expectedPlanVersion) throw planStale();
   if (plan.configuration_digest !== input.configurationDigest) throw planStale();
-  await assertMember(q, context, actorUserId, plan.guild_key, false);
+  await assertMember(q, context, actorUserId, plan, false);
   const definition = await loadOfferedDefinition(q, plan.guild_key, plan.application_key, plan.release_ref, context.community_id);
   await installationFingerprintLock(q, context.tenant_id, plan.workspace_id, plan.application_key);
   const policy = await readCapacityPolicy(q, context.tenant_id);
@@ -130,7 +130,7 @@ export async function executeLaunch(q: PoolClient, context: TenantScopeContext, 
     const workspaceStatus = await lockWorkspace(q, context.tenant_id, plan.workspace_id);
     requireCondition(workspaceStatus, 404, 'not_found', '找不到這個工作區。');
     requireCondition(workspaceStatus === 'active', 409, 'workspace_unavailable', '這個工作區目前無法使用。');
-    await assertMember(q, context, actorUserId, plan.guild_key, true);
+    await assertMember(q, context, actorUserId, plan, true);
     return reuseInstallation(q, context, plan, live, input.operation);
   }
 
@@ -184,7 +184,7 @@ export async function executeLaunch(q: PoolClient, context: TenantScopeContext, 
     const workspaceStatus = await lockWorkspace(q, context.tenant_id, plan.workspace_id);
     requireCondition(workspaceStatus, 404, 'not_found', '找不到這個工作區。');
     requireCondition(workspaceStatus === 'active', 409, 'workspace_unavailable', '這個工作區目前無法使用。');
-    await assertMember(q, context, actorUserId, plan.guild_key, true);
+    await assertMember(q, context, actorUserId, plan, true);
     await assertEntryBindingCompatible(q, context.tenant_id, plan.workspace_id, definition.entry_capability, requirements, choices);
     let ordinal = 0;
     const instanceOf = (requirementKey: string) => {

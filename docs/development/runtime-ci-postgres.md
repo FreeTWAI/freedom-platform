@@ -1,5 +1,19 @@
 # Runtime CI PostgreSQL storage and cleanup
 
+## 目前清理預算（2026-10-20）
+
+清理 absolute deadline 現為 **60 秒**，suite reserve 為 **64 秒**；單庫 DROP 最多約
+56 秒，最後四秒仍供 fresh reconciliation。Metadata statement 保持兩秒，provisioning
+保持獨立 20 秒。以下具日期段落的 20 秒／24 秒清理值屬歷史證據，以本節為準。
+本次不改 PostgreSQL service、fsync、儲存或測試內容；identity／ownership、backend
+settlement 與獨立正向 absence 檢查均保留。
+
+96 次成功清理的 p95 為 12.732 秒、最長 14.323 秒；八次失敗均在約 16 秒失去 DROP
+回覆。PR #898 的 DROP checkpoint 僅 52 ms，後續 barrier／大量檔案刪除耗時仍屬推論。
+完整 log／PostgreSQL 18 原始碼界線、1,500 秒 host／40 分鐘 job 的算式及本機入口影響見
+[清理預算說明](../../packages/contribution-tools/runtime-matrix.md)。改動後的真實資料庫證據
+只能來自 hosted CI；一次綠燈不代表 flake 已消失。
+
 ## 2026-10-09 candidate: identical image through a public cache, disk test data
 
 Hosted Verify runs for #359, #365, #366 and #367 stopped at PostgreSQL image

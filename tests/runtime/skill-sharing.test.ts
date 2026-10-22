@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {runInNewContext} from 'node:vm';
 import {communityCatalog} from '../../modules/community/catalog.js';
 import {getSkillShareContent} from '../../modules/community/skill-share-content.js';
-import {developmentShareJs,pageHtml,publicSkillShareMarkup,shareIntroNumber,skillMarkdown} from '../../modules/development/service.js';
+import {developmentShareJs,pageHtml,publicSkillShareMarkup,publicSkillDestinations,shareIntroNumber,skillMarkdown} from '../../modules/development/service.js';
 
 const id='video-autopilot',base='https://freetwai.com/development/skills/'+id;
 const book=communityCatalog.skill_books.find(value=>value.id===id)!;
@@ -143,4 +143,37 @@ test('late share completion cannot restore status after the preview closes; sync
  const denied=harness(render('2'),{clipboard:{writeText:()=>{throw new Error('denied');}}});
  denied.get('open').click();denied.get('copy').click();await flush();
  assert.equal(denied.get('manual').value,content.introductions[1]+'\n'+base+'?intro=2');assert.equal(denied.get('manual').selected,true);assert.equal(denied.get('copy').disabled,false);
+});
+
+
+test('all catalog introductions show authored usage and source before collaboration, with explicit destinations',()=>{
+ for(const item of communityCatalog.skill_books){
+  const html=render(undefined,item.id),guide=item.guide!;
+  const introduction=html.slice(html.indexOf('<section class="public-skill-introduction"'),html.indexOf('<section class="public-skill-next"'));
+  for(const value of [...guide.audience,guide.status,...guide.features,...guide.prerequisites,...guide.first_steps,guide.first_result])assert.ok(introduction.includes(escape(value)),item.id+': '+value);
+  assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
+  assert.ok(html.includes('到 GitHub 看原始碼 ↗'),item.id);
+  assert.ok(html.includes('<bdi>'+escape(new URL(item.upstream_url).host+new URL(item.upstream_url).pathname)+'</bdi>'),item.id);
+  assert.ok(html.includes('功能示意圖，非實際操作截圖。'),item.id);
+  assert.ok(html.includes('<dt>指南核對版本</dt><dd><code>'+escape(guide.source_commit)),item.id);
+ }
+});
+
+test('destination cards reject executable/credential URLs and display the parsed host, not a claimed label',()=>{
+ for(const url of ['javascript:alert(1)','data:text/html,hello','//example.com/','https://github.com@attacker.example/','not a URL'])assert.equal(publicSkillDestinations([{url,kind:'source'}]),'');
+ const html=publicSkillDestinations([{url:'https://github.com.attacker.example/owner/repo?x=%22%3E#readme',kind:'source'}]);
+ assert.ok(html.includes('查看原作原始碼'));assert.ok(!html.includes('到 GitHub 看原始碼'));
+ assert.ok(html.includes('<bdi>github.com.attacker.example/owner/repo</bdi>'));
+ assert.ok(html.includes('rel="noopener noreferrer"'));assert.ok(!html.includes('http-equiv="refresh"'));
+});
+
+
+test('catalog skill CTA follows readable content and preserves the selected introduction without discovery',()=>{
+ const html=render('7');
+ assert.ok(html.indexOf('id="skill-use-title"')<html.indexOf('id="join-workshop"'));
+ assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('免費加入，探索更多資源'));
+ assert.ok(html.includes('return_to=%2Fdevelopment%2Fskills%2F'+id+'&amp;skill_intro=7'));
+ assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
+ assert.ok(html.includes('href="/#skills">登入工坊 Star'), 'original author-support entry remains available');
+ assert.ok(html.includes('到 GitHub 看原始碼'));assert.equal(meta(html,'og:url'),base+'?intro=7');
 });

@@ -103,10 +103,10 @@ export function supplierRun(options:RunOptions,client:CandidateClient,secrets:Se
     const space=await send(c,'POST','/api/v1/tenants',{json:{display_name:name},idempotency:true});ctx.check('supplier_tenant_created',space.status===201);
     const tenant=space.json()?.tenant?.tenant_id,workspace=space.json()?.workspace?.workspace_id;ctx.check('supplier_launch_identifiers',isId(tenant)&&isId(workspace));
     const plan=await send(c,'POST',`/api/v1/tenants/${tenant}/application-launch-plans`,{json:{guild_key:guild,workspace_id:workspace,application_key:'hosted-store',release_ref:'hosted-store@1.1.0',installation_choice:'create_new',dependencies:[{requirement_key:'storefront',choice:'create',configuration:{}}],configuration:{}},idempotency:true});
-    if(plan.status===403&&['full_membership_required','guild_membership_required','guild_full_membership_required','guild_full_member_required'].includes(plan.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
+    if(plan.status===403&&['guild_member_required','commerce_guild_member_required'].includes(plan.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
     ctx.check('supplier_launch_plan_created',plan.status===201);const p=plan.json();ctx.check('supplier_launch_plan_values',isId(p?.plan_id)&&isVersion(p?.version)&&p?.configuration_digest?.algorithm==='sha256'&&/^[0-9a-f]{64}$/.test(p.configuration_digest.value));
     const install=await send(c,'POST',`/api/v1/tenants/${tenant}/application-installations`,{json:{plan_id:p.plan_id,expected_plan_version:p.version,configuration_digest:p.configuration_digest},idempotency:true});
-    if(install.status===403&&['full_membership_required','guild_membership_required','guild_full_membership_required','guild_full_member_required'].includes(install.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
+    if(install.status===403&&['guild_member_required','commerce_guild_member_required'].includes(install.json()?.code))ctx.skip('synthetic_account_not_store_eligible');
     ctx.check('supplier_installation_succeeded',install.status===200&&install.json()?.state==='succeeded'&&isId(install.json()?.operation_id));
     const view=await read(ctx,c,`/api/v1/tenants/${tenant}/application-installations/by-operation/${install.json().operation_id}`,'supplier_installation_read');
     const instance=view.modules?.find((m:any)=>m.requirement_key==='storefront')?.instance_id;ctx.check('supplier_storefront_present',isId(instance));return {tenant_id:tenant,instance_id:instance};
@@ -234,7 +234,10 @@ export function supplierRun(options:RunOptions,client:CandidateClient,secrets:Se
         const card=area.locator('article.hosted-store-product').filter({has:page.getByRole('heading',{name:e.product_name,exact:true})});await card.waitFor({state:'visible',timeout:20000});
         // Match formatMinor's fixed TWD display without importing portal code into the tool.
         const amount=new Intl.NumberFormat('zh-TW',{style:'currency',currency:'TWD',minimumFractionDigits:2,maximumFractionDigits:2}).format(e.cost_minor/100);
-        for(const text of ['供貨單價 '+amount,'庫存 '+e.stock,e.description])ctx.check('supplier_bookmark_values_match',await card.getByText(text,{exact:true}).count()===1);
+        for(const text of ['供貨單價 '+amount,e.description])ctx.check('supplier_bookmark_values_match',await card.getByText(text,{exact:true}).count()===1);
+        ctx.check('supplier_bookmark_values_match',await card.getByText(new RegExp('^庫存 '+e.stock+'・已占用 0・可售 '+e.stock+'$')).count()===1
+          &&await card.getByText('庫存紀錄不一致',{exact:false}).count()===0
+          &&await card.getByText('庫存明細暫時無法讀取',{exact:false}).count()===0);
       }
       ctx.metric('bookmark',on?'console_page':'old_page');ctx.metric('bookmark_values_matched',true);
     });

@@ -19,9 +19,17 @@ test('console requires launchpad in the same environment, not an inherited decla
   assert.equal(check({vars:{FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'},env:{next:{vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true'}}}}).structural,false);
   assert.equal(check({env:{next:{vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true'}}}}).structural,true);
 });
-test('console requires the supplier console in the same environment, not an inherited declaration',()=>{
-  for(const value of [undefined,'false','TRUE'])assert(check({env:{next:{vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',...(value===undefined?{}:{FREEDOM_SUPPLIER_CONSOLE_ENABLED:value})}}}}).errors.includes('commerce_supplier_console_required'));
-  assert(check({vars:{FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true'},env:{next:{vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'}}}}).errors.includes('commerce_supplier_console_required'));
+test('seller console and offline checkout do not require supplier console in any environment',()=>{
+  for(const supplier of [undefined,'false','true'])for(const checkout of ['false','true']) {
+    const block={vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:checkout,FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:supplier,FREEDOM_COMMERCE_PROVIDER_PROFILES:'offline.bank_transfer.v1,offline.cash_on_meetup.v1'}};
+    for(const config of [block,{env:{next:block}},{vars:{FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true'},env:{next:block}}]) {
+      const result=check(config);
+      assert.equal(result.structural,true);
+      assert.deepEqual(result.errors,[]);
+      assert.equal(result.deployment_ready,false);
+      assert.equal(result.provider_mutations,0);
+    }
+  }
 });
 test('unknown commerce variables and unsafe declarations fail without copying names or values',()=>{
   const secret='synthetic-secret';const result=check({vars:{FREEDOM_COMMERCE_secret:secret}});assert.equal(result.structural,false);assert(!JSON.stringify(result).includes(secret));assert(!JSON.stringify(result).includes('FREEDOM_COMMERCE_secret'));

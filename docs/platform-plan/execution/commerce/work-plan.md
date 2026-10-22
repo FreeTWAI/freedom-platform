@@ -4,6 +4,111 @@
 
 本文件把計畫 §20 的 EC-WP00～11 對到規格、里程碑與實際分支。進度以 commit、測試證據與 PR 為準；「現況」欄只記錄 2026-10-15 的狀態，之後不在這裡追進度。
 
+## 2026-10-20：C1 商品圖組本機候選
+
+在 store-policies 基準 `e17364831414bf4bd9a77eab2adf11945762f3df` 上加入單一 migration
+`177_storefront_product_gallery.sql`（暫定編號）。五張 retained tenant 表、lazy singleton groups 與
+141 唯一主照指標支援自有商品最多八張、選填說明、排序、預覽及第六個發布 dirty 維度。
+公開 v1 projection／media JSON、舊照片 URL、既有 storefront entry 與 shops.css 不擴充。
+`FREEDOM_STORE_GALLERY_ENABLED` 預設 OFF；site 唯一新增 `store_gallery_enabled:false`，
+其餘 OFF 頁面、媒體與 host SPA fallback 保留。沒有部署、真實開關、秘密或容量政策變更。
+
+這不完成整個 C1：變體、分類、供貨商品圖組仍在後續。供貨買家頁只用 D-11 店主副本，
+offer 圖片只供私人評估。舊版移除主照後的保留照片不自動重接，必須明確設主照或移除。
+主照說明依 tuple digest 綁定，舊 binary 的主照替換不繼承舊說明。
+
+驗證維持三個 gallery runtime 檔（SQL、commands、media）；瀏覽器在既有 photo pass 最後追加
+十例，另有兩例 default-mode OFF。還原保留原 17 個物件，再精確加入八個 gallery 物件；
+A／B gallery 圖均非空，tenant RLS sealed drill 另精確包含兩個 Work 與四個照片物件。
+以 exact-base Git blobs 編譯舊 reader／renderer，撤銷五表 SELECT 比較現有 publication。
+詳細行為、命令與驗證入口見 storefront README；本機合成資料不等於部署或真人採用驗收。
+
+## 2026-10-20：C1 賣方資訊與商店政策本機候選
+
+在 appearance follow-up `1b2c5dc12555212840dc5713cc1153b72c31ff05` 上新增單一 migration
+`176_storefront_seller_policies.sql`（暫定編號）。六張新增租戶表保存不可改的賣方／政策版本、
+草稿指標及發布 freeze，沒有修改既有表／函式／projection。`FREEDOM_STORE_POLICIES_ENABLED`
+預設 OFF；本工作沒有部署、真實環境設定或秘密變更，不改寫下方具日期的發布收據。
+
+店主自行填資料，整節以 `store:manage`／profile CAS／冪等鍵儲存；發布仍需 `store:publish`。
+新 digest 為第五 dirty 維度，預覽只讀保存的草稿，匿名頁只讀當前發布及同店曾發布的政策。
+賣方固定責任句取代舊句；無營業名稱或旗標 OFF 時頁尾保持原樣。政策只顯示跳脫純文字，
+產品頁有已發布配送／退換貨連結，舊賣方版本不公開。移除電話／地址後重新發布會撤回公開資料；
+歷史政策正文個資的移除仍待 Ted 決定。每項最多 500 版，滿額以 409 拒絕並原子回滾。
+
+這是 C1 顯示候選；沒有新增結帳啟用條件、買家同意、訂單欄位、AI、供貨規則或 readiness 項目。
+本機驗證與 hosted CI、正式發布、真實手機／Safari、法律內容確認及真人採用分別對帳；
+測試入口與限制見 storefront README，不能由本機合成旅程推定上述未驗項完成。
+
+## 2026-10-20：C1 店面外觀本機候選
+
+在既有商店、結構化供貨條件（schema173）與供貨方案照片（schema174）的堆疊來源上，
+新增單一 migration `175_storefront_appearance.sql`。**175 是本機候選，沒有部署、正式旗標
+或秘密變更**；不改寫下方具日期發布收據，也不把整個 C1 或真人開店旅程列為完成。
+
+`FREEDOM_STORE_APPEARANCE_ENABLED` 預設 OFF。ON 時既有「店面與發布」提供店面外觀：
+八組有文字名稱的主色、明確儲存的封面與方形店標、最多 80 字單行公告及最多八件有序
+自有零售主打。草稿、預覽與發布分開，公開店面及商品／購物車／結帳／訂單殼使用同一
+發布的主色與店標；無封面使用文字首屏，完整封面依原比例限高，工坊原始 Logo 留在頁尾。
+
+兩項規格差異已明列在 EC-SPEC-01 §4.2、EC-SPEC-02 §2／§7：圖片是既有
+`storefront.product-photo` purpose 下的封閉 cover/logo target kinds，保留舊版配額與備份相容；
+全部外觀寫入沿用版型的 `store:manage`，發布仍需 `store:publish`。
+淺色主色的非文字對比由深色邊框達成，OFF 呈現不變。沒有媒體安裝時仍能調整文字與主打。
+
+本機合成驗證涵蓋 SQL/RLS、命令與冪等/CAS、發布凍結、第四 dirty 維度、舊版形狀回退、
+獨立對比計算、官方 PG18／原生 R2 非空還原，以及編輯器與公開頁面旅程。
+新的 fixture ON 瀏覽器案例只追加至既有 `hosted-store-photo.spec.ts`；獨立外觀 spec 只有
+預設模式會通過的 OFF 案例，不修改 pinned runner、passes、shards、timeout 或 runtime 登錄。
+CI、發布、真實手機／Safari、分享平台抓取與真人採用各自仍須對帳；本機成功不代替這些證據。
+分類、變體、政策、賣方揭露、供貨商品主打及新的結帳啟用條件留給後續工作包。
+
+## 2026-10-20：開店準備與商店准入頁
+
+店主可從商店首頁進入「開店準備」，看到發布、可售商品、公開說明、版本、付款、交付、
+平台准入及接單服務的缺項與既有修正入口；具有訂單讀權時另顯示三項訂單概況。
+平台管理員可在「商店准入」讀取社群內所有商店及目前環境的全部有效准入，
+沿原獨立管理員命令准入／撤銷，並直接下載 JSON 實際範圍收據，免去手工編排 API 結果。
+收據列識別碼、版本及設定狀態，不含銀行或聯絡內容；超過 20 頁不產生不完整收據。
+
+這項程式工作補上店主缺項提示與收據產生入口；沒有旗標變更、部署或真人試用。
+它不代替已同意店家的實際設定、同意依據、部署／schema 核對、console／Supplier 曝光對帳及真人旅程，
+也不改變誰能准入、准入獨立性或供貨履約同意。以下具日期的發布現況保持其原時間範圍。
+
+## 2026-10-19：會員交付現況與共同候選
+
+依 [#234 的當日發布對帳](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6262757310)，
+`12940c7190dc5304875b76abdd00b8975e40cfd3`／schema172 已部署 staging 與 production；
+Supplier／Commerce console 兩環境均 ON，checkout／Email 仍 OFF。此收據包含 #886 賣家 UI，
+不包含以下店面及開關分離候選。下方 10 月 17 日的 855／171／172 記錄保留為歷史，
+不再代表最新啟用現況。本工作線未自行變更正式旗標或部署。
+
+[同日已確認的會員測試同意](https://github.com/FreeTWAI/freedom-platform/issues/234#issuecomment-6271852181)
+涵蓋供應商與電商公會會員，不再等待另外招募一批測試者。仍須按 #889 核對實際
+tenant／instance、版本、自有庫存、付款／面交設定及全部未撤銷准入，再完成真人旅程。
+發布收據記錄啟用前 production 有一間公開店面，付款設定、配送設定及准入均為零；
+這是具日期觀察，不推定商家現在已設定完畢，也不代店主填入付款或聯絡資料。
+
+#909 店面主體已隨 [#910](https://github.com/FreeTWAI/freedom-platform/pull/910) 於
+19:31 UTC 合併至 `main@10ad8d2d`。本後續候選保留 `85d080aa` 公開商店說明及
+`a1205e7c` 賣家開關分離的原提交，同步該主線後驗證同一條 UI 旅程：供應商後台關閉時，店主設定匯款／面交，從賣家
+後台進入商店資料並發布服務說明，匿名買家閱讀後下單，店主確認收款及交付，買家重登查詢。
+公開說明與私人銀行資料分開，設定／交付的未知回應保留原命令恢復，取消釋放庫存。
+合成帳號本機結果與真人試用、共同來源的 hosted CI、發布及交易准入分別記錄。
+
+## 2026-10-19：店主說明的交付候選
+
+沿 #889 的有限商店範圍，接續已合併的 [#909](https://github.com/FreeTWAI/freedom-platform/pull/909)
+商家版面：店主在既有「商店資料 → 商店介紹」填寫品牌、願意公開的客服方式、
+交付與售後說明，儲存、預覽並發布後，買家可從商品、購物車、結帳與訂單相關頁的
+「商店說明」讀取同一份發布內容。欄位仍是原本最多 2,000 字的公開介紹，不另建
+聯絡資料庫或推導會員私人聯絡資料；未填寫時明示缺項。這段文字不啟用交易，
+也不改變既有訂單凍結條件。實作邊界見 [storefront 說明](../../../../modules/agent-commerce/storefront/README.md)。
+
+這份後續來源的適用 CI、獨立審查、發布及經同意的店主／買家試用仍須分別記錄；
+#909 已合併不代表這份新增內容也已發布。真人聯絡資料、交付與售後內容由店主確認；不以合成商店或範例 Email 代替。
+以下具日期啟用收據與原 #889 清單繼續適用。
+
 ## 2026-10-17：交付與啟用順序
 
 本節在 #886 合併後的 `main@1ab95391` 對帳既有工作，不取代下方具日期的歷史紀錄或 Foundation 需求證據。
@@ -31,6 +136,8 @@ Staging 的合成帳號 core、S3／D-11 與 ON→OFF→ON 驗收通過；produc
 
 ### 離線試用的實際啟用範圍
 
+2026-10-19 候選補正：賣家與供應商只共用 UI 元件，移除 Commerce console 對 Supplier console 開關的相依。此版本可在 Supplier console OFF 時執行自有庫存離線旅程；不變更店家准入、付款方式或供貨履約同意。實際啟用仍須先核對已部署版本，不能套用到855的歷史收據。
+
 以下五個控制來源在 `main@1ab95391` 與原固定來源 `9a23ea2a5112db6409b90e7835baa3548ee1b2a6` 的 blob 相同；原唯讀核對確認：
 [`createStoreAdmissionPort`](../../../../modules/agent-commerce/operations/admissions.ts) 對離線付款同樣要求
 `tenant_id + instance_id + environment` 的未撤銷准入；`local`／`staging` 對應 `sandbox`，`public` 對應 `live`。
@@ -39,9 +146,9 @@ Staging 的合成帳號 core、S3／D-11 與 ON→OFF→ON 驗收通過；produc
 店主補設定或升級版本不會自行取得准入。紀錄不會自動到期，也不綁單一付款方式；它本身不是店家同意的證明。
 
 [`runtime-settings.ts`](../../../../modules/agent-commerce/operations/runtime-settings.ts) 的 console／checkout 是環境全域旗標：
-checkout ON 需要 console ON，console ON 又需要 Guild Launchpad 與 Supplier console ON。
+checkout ON 需要 console ON，console ON 需要 Guild Launchpad ON；包含上述候選修正的版本不再要求 Supplier console ON，舊版仍須依其實際相依對帳。
 [`platform-app.ts`](../../../../apps/platform-api/src/platform-app.ts) 的付款／面交設定路由只沿既有會員與商店權限，沒有套用上述准入名單；
-其他有權店家也可看到並修改自己的設定，不能宣稱 console 或 Supplier 只向試用店家曝光。
+其他有權店家也可看到並修改自己的設定，不能宣稱 console 只向試用店家曝光；Supplier 另由自己的全域開關決定。
 新訂單仍經准入核對，離線首批可只列 `offline.bank_transfer.v1`／`offline.cash_on_meetup.v1`，不需 provider keyring／journal；
 匯款不自動限制交付方式，僅面交的試用仍須核對既有 shipping profile。
 
@@ -49,7 +156,7 @@ checkout ON 需要 console ON，console ON 又需要 Guild Launchpad 與 Supplie
 記下指定環境的已部署 release／schema、具名 tenant／instance 與同意依據、安裝版本能力、發布／自有庫存、付款及面交設定版本；
 並核對該 provider environment 的**全部未撤銷准入**，包括目前尚未具備設定或版本能力的店家，列明需由獨立 admin 執行的既有准入／撤銷操作。
 不能只列當下已可結帳的店家，因為已准入店家稍後補設定也可能開始接單。收據只需識別碼、版本與設定狀態，不需帳號內容或秘密。
-同一份收據須明列是否接受較廣的 console／Supplier 曝光；若要求連 UI 都只向具名店家開放，現有旗標沒有這項限制，
+同一份收據須明列 console 的全域曝光及 Supplier 的實際開關；若要求連 UI 都只向具名店家開放，現有旗標沒有這項限制，
 public 保持 OFF，改用已隔離環境承接約定試用，或把這個具體缺口交回既有 owner 處理，不另建准入平台。
 
 [`public-commands.ts`](../../../../modules/agent-commerce/checkout/public-commands.ts) 與

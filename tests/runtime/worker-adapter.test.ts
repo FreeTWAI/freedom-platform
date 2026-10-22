@@ -14,6 +14,9 @@ import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/see
 import { tokenHash } from '../../modules/identity-membership/service.js';
 import { createWorkerHandler, cloudflareSourceNetwork, rateLimitNetworkKey, readWorkerConfig, workerRuntime, workerScope, type WorkerEnv } from '../../apps/platform-api/src/worker.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import {readCommerceOrderNotificationsEnabled,readNodeCommerceSettings} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {commerceOrderNotificationsInstalled,hostedCheckoutOptions} from '../../apps/platform-api/src/routes/hosted-checkout.js';
+import {createPlatformApp} from '../../apps/platform-api/src/platform-app.js';
 import { authoredUploadText } from '../../apps/platform-api/src/routes/published-skills.js';
 import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
 import { assertPublicDatabase, assertStagingDatabase } from '../../apps/platform-api/src/readiness.js';
@@ -64,6 +67,75 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv & { ASSETS: ReturnTy
 }
 const stagingEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'staging', APP_ORIGIN: 'https://staging-next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_A, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
 const publicEnv = (o: Partial<WorkerEnv> = {}) => env({ FREEDOM_ENV: 'public', APP_ORIGIN: 'https://next.freetwai.com', FREEDOM_RELEASE_SHA: SHA_B, FREEDOM_DATABASE_NAME: 'freedom_candidate', FREEDOM_REGISTRATION_COMMUNITY_ID: COMMUNITY, FREEDOM_TRUST_CF_CONNECTING_IP: 'true', ...o });
+
+test('appearance flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeAppearanceEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_APPEARANCE_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_APPEARANCE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeAppearanceEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('seller policies flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storePoliciesEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_POLICIES_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_POLICIES_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storePoliciesEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('gallery flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_GALLERY_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeGalleryEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_GALLERY_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_GALLERY_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_GALLERY_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeGalleryEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('offer photo flag parses exact booleans and requires supplier console and product-photo reads',()=>{
+  for(const flag of [undefined,'false']) {
+    const configuration=env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:flag})),{name:'ReadinessError'});
+  const media={get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA'];
+  const configured:Partial<WorkerEnv>={FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',MEDIA:media};
+  const configuration=env(configured);
+  assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).supplyOfferPhotosEnabled,true);
+  for(const key of ['FREEDOM_GUILD_LAUNCHPAD_ENABLED','FREEDOM_SUPPLIER_CONSOLE_ENABLED','FREEDOM_HOSTED_STORE_PHOTOS_ENABLED'] as const)
+    assert.throws(()=>readWorkerConfig(env({...configured,[key]:'false'})),{name:'ReadinessError'});
+});
+
+test('worker mounts the optional catalog photo list with the existing complete offer-photo installation only',async()=>{
+  for(const enabled of [false,true]){
+    let mounted=false;
+    const pool=fakePool(),configuration=env({FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',
+      FREEDOM_HOSTED_STORE_PHOTOS_ENABLED:'true',FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED:String(enabled),
+      MEDIA:{get(){},put(){},head(){},delete(){}} as unknown as WorkerEnv['MEDIA']});
+    const handler=createWorkerHandler({createPool:()=>pool as unknown as Pool,createApp:(...args)=>{
+      const app=createPlatformApp(...args);
+      mounted=app.routes.some(route=>route.method==='GET'&&route.path==='/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos');
+      return app;
+    }});
+    const pending:Promise<unknown>[]=[];
+    const response=await handler.fetch(new Request('http://127.0.0.1:8787/api/v1/site'),configuration,{waitUntil:work=>pending.push(work)});
+    assert.equal(response.status,200);assert.equal(mounted,enabled);
+    assert.equal((await response.json() as {supply_offer_photos_enabled:boolean}).supply_offer_photos_enabled,enabled);
+    await Promise.all(pending);
+  }
+});
 
 test('incomplete outcome enablement fails closed before pools or browser fallback',async()=>{
  const h=harness(),configuration=env({FREEDOM_EVENT_OUTCOMES_ENABLED:'true',FREEDOM_SQUAD_OUTCOMES_ENABLED:'false'});
@@ -628,4 +700,74 @@ test('Worker commerce email requires EMAIL and COMMERCE_JOURNAL before opening a
   assert.equal(dueDepsSeen[1].origin, undefined);
   assert.equal(dueDepsSeen[1].emailSender, undefined);
   assert.ok(dueDepsSeen[1].keyring);
+});
+
+test('variants flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_VARIANTS_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeVariantsEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_VARIANTS_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_VARIANTS_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_VARIANTS_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeVariantsEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
+});
+
+test('order bell installation is default OFF, exact, checkout-dependent and shared by Node and Worker without external bindings',()=>{
+  for(const value of [undefined,'false']){
+    const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:value});
+    assert.equal(readCommerceOrderNotificationsEnabled(raw),false);
+    assert.equal(workerRuntime(raw,readWorkerConfig(raw)).commerceOrderNotificationsEnabled,false);
+    assert.equal(readNodeCommerceSettings(raw).checkoutEnabled,false);
+  }
+  for(const value of ['TRUE','1','',true,false]){
+    const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:value as string});
+    assert.throws(()=>readWorkerConfig(raw),{name:'ReadinessError'});
+    assert.throws(()=>readNodeCommerceSettings(raw),{name:'ReadinessError'});
+  }
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:'true'})),{name:'ReadinessError'});
+  const raw=env({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const config=readWorkerConfig(raw),runtime=workerRuntime(raw,config),settings=readNodeCommerceSettings(raw);
+  assert.equal(runtime.commerceOrderNotificationsEnabled,true);assert.equal(commerceOrderNotificationsInstalled(runtime),true);
+  assert.equal(readCommerceOrderNotificationsEnabled(raw),true);assert.deepEqual(readNodeCommerceSettings(raw),config.commerceSettings);
+  assert.equal(runtime.commerceEmailSender,undefined);assert.equal(runtime.commerceJournal,undefined);assert.equal(runtime.storePhotoAssetStore,undefined);
+  assert.equal(commerceOrderNotificationsInstalled({...runtime,commerceSettings:{...settings,checkoutEnabled:false}}),false);
+  assert.equal(commerceOrderNotificationsInstalled({...runtime,commerceSettings:{...settings,quarantine:true}}),true);
+  assert.equal(typeof hostedCheckoutOptions(config.origin,runtime,config.freedomEnv).orderNotifications?.emit,'function');
+  assert.equal(hostedCheckoutOptions(config.origin,{...runtime,commerceSettings:{...settings,checkoutEnabled:false}},config.freedomEnv).orderNotifications,undefined);
+  assert.equal(hostedCheckoutOptions(config.origin,{...runtime,commerceSettings:{...settings,quarantine:true}},config.freedomEnv).orderNotifications,undefined);
+});
+
+test('scheduled offline expiry receives the order-notice port only when both flags are ON and quarantine stops due work',async()=>{
+  const seen:unknown[]=[];
+  const handler=createWorkerHandler({
+    createPool:()=>({end:async()=>{}} as unknown as Pool),
+    commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),commerceSweep:async()=>0,
+    commerceDueWork:async(_pool,deps)=>{seen.push(deps.orderNotifications);return {claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0};},
+    commerceEmailSweep:async()=>({expired:0,deleted:0}),
+    syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'}),
+    authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),
+  });
+  const run=async(flag:'true'|'false',quarantine=false)=>{
+    const raw=stagingEnv({FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:flag,FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',
+      FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_COMMERCE_QUARANTINE:quarantine?'true':'false',
+      EMAIL:{send:async()=>{assert.fail('order bells must never send email');}}});
+    const pending:Promise<unknown>[]=[];await handler.scheduled({},raw,{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
+  };
+  await run('false');assert.equal(seen.length,1);assert.equal(seen[0],undefined);
+  await run('true');assert.equal(typeof (seen[1] as {emit?:unknown}).emit,'function');
+  await run('true',true);assert.equal(seen.length,2);
+});
+
+test('categories flag is an exact default-OFF boolean requiring only guild launchpad, independent of media',()=>{
+  for(const flag of [undefined,'false']){
+    const configuration=env({FREEDOM_STORE_CATEGORIES_ENABLED:flag});
+    assert.equal(workerRuntime(configuration,readWorkerConfig(configuration)).storeCategoriesEnabled,false);
+  }
+  for(const flag of ['TRUE','1',''])assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_CATEGORIES_ENABLED:flag})),{name:'ReadinessError'});
+  assert.throws(()=>readWorkerConfig(env({FREEDOM_STORE_CATEGORIES_ENABLED:'true'})),{name:'ReadinessError'});
+  const configuration=env({FREEDOM_STORE_CATEGORIES_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});
+  const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeCategoriesEnabled,true);
+  assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
 });

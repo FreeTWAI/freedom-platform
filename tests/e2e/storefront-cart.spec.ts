@@ -29,7 +29,12 @@ test('1. checkout off (main E2E server) serves v1 B01/B03 without scripts or /as
     await page.goto(`/shops/${store.slug}`);
     await expect(page.getByRole('heading', { level: 1, name: store.storeName })).toBeVisible();
     await expect(page.locator('script')).toHaveCount(0);
-    await expect(page.locator('.shop-top')).toContainText('會員的商品與商店');
+    await expect(page.locator('.shop-top > .shop-top-store')).toHaveText(store.storeName);
+    const navigation = page.getByRole('navigation', {name: '商店導覽'});
+    await expect(navigation.getByRole('link', {name: '商品', exact: true})).toHaveAttribute('href', `/shops/${store.slug}#products`);
+    await expect(navigation.getByRole('link', {name: '訂單查詢', exact: true})).toHaveAttribute('href', `/shops/${store.slug}/order-access`);
+    await expect(navigation.getByRole('link', {name: '購物車', exact: true})).toHaveCount(0);
+    await expect(page.locator('footer .shop-logo')).toBeVisible();
     await expect(page.getByRole('link', { name: '登入查看預留狀態', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: '查詢我的預留', exact: true })).toBeVisible();
     expect(assetRequests).toEqual([]);
@@ -71,7 +76,7 @@ test('1. checkout off (main E2E server) serves v1 B01/B03 without scripts or /as
     const quoteResponse = await quoteResponsePromise;
     expect(quoteResponse.status()).toBe(409);
 
-    await expect(page.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await expect(page.getByRole('region', { name: '商品' })).toContainText(p1.title);
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(page.locator('#shop-cart')).not.toContainText('單價');
@@ -682,7 +687,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
       });
     });
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: `回到「${store.storeName}」`, exact: true })).toHaveAttribute(
       'href',
@@ -699,7 +704,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
       });
     });
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('這間商店目前沒有公開。');
+    await expect(page.locator('#shop-cart').getByRole('status')).toHaveText('這間商店目前沒有公開。');
     await expect(page.getByRole('region', { name: '金額明細' })).toHaveCount(0);
     await expect(
       page.locator('#shop-cart').getByRole('link', { name: '返回自由工坊', exact: true }),
@@ -1202,7 +1207,7 @@ test('14. responsive layout and full-page screenshots across 1440, 1280, 768, 39
       { slug: store.slug, revision: store.revision, sku: p1.sku, title: p1.title, priceMinor: p1.price_minor },
     );
     await closedPage.goto(`/shops/${store.slug}/cart`);
-    await expect(closedPage.getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
+    await expect(closedPage.locator('#shop-cart').getByRole('status')).toHaveText('這間店目前沒有開放線上購物。購物車會保留在這個瀏覽器。');
     await assertCartResponsiveLayout(closedPage, RESPONSIVE_WIDTHS, w => info.outputPath(`b04-not-open-${w}.png`));
 
     // 12. B04 error alert (503 commerce_quarantined)
@@ -1269,4 +1274,54 @@ test('14. responsive layout and full-page screenshots across 1440, 1280, 768, 39
       }
     }
   }
+});
+
+test('CATEGORIES-E2E manager recovers an unknown command, publishes ordered categories and serves no-JS links',async({browser,e2eAuthPool},info)=>{
+ const {apiLogin}=await import('./hosted-order-fixture.js');const {writeFile}=await import('node:fs/promises');
+ const store=await setupCartFixtureStore(e2eAuthPool,browser,false,false,{storeCategoriesEnabled:true}),owner=await browser.newContext({baseURL:store.origin}),buyer=await browser.newContext({baseURL:store.origin,javaScriptEnabled:false});
+ let unblockRead=()=>{};
+ try{
+  await apiLogin(owner,store.origin,store.seller.email);const page=await owner.newPage();await page.goto('/#stores/'+store.tenant+'/'+store.instance);const manager=page.locator('.store-categories-editor');await expect(manager.getByText('尚未建立分類。新增分類後，可把商品分組展示。')).toBeVisible();
+  await manager.getByRole('button',{name:'新增分類',exact:true}).click();await expect(manager.getByRole('alert')).toBeFocused();await expect(manager.getByLabel('分類名稱',{exact:true})).toHaveAttribute('aria-invalid','true');await manager.getByRole('link',{name:'分類名稱',exact:true}).click();await expect(manager.getByLabel('分類名稱',{exact:true})).toBeFocused();await manager.getByLabel('分類名稱',{exact:true}).fill('上衣');
+  const requests:{key:string|undefined;version:string|undefined;body:string|null}[]=[],pattern='**/storefronts/'+store.instance+'/categories';page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/categories'))requests.push({key:r.headers()['idempotency-key'],version:r.headers()['if-match'],body:r.postData()});});
+  await page.route(pattern,async route=>{if(route.request().method()==='POST'){await route.fetch();await route.abort('failed');}else await route.continue();});await manager.getByRole('button',{name:'新增分類',exact:true}).click();await expect(manager.getByRole('status')).toContainText('暫時無法確認儲存結果');await expect(manager.getByLabel('分類名稱',{exact:true})).toBeDisabled();await page.unroute(pattern);await manager.getByRole('button',{name:'重試原操作',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已新增分類');expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);
+  for(const p of store.products)await manager.getByRole('checkbox',{name:p.title+' · '+p.sku,exact:true}).check();await manager.getByRole('button',{name:'儲存分類商品',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已儲存分類商品');
+  let releaseRead!:()=>void,queuedRead!:()=>void,deliveredRead!:()=>void;const readGate=new Promise<void>(resolve=>{releaseRead=resolve;unblockRead=resolve;}),readQueued=new Promise<void>(resolve=>queuedRead=resolve),readDelivered=new Promise<void>(resolve=>deliveredRead=resolve);let capturedRead=false;
+  await page.route(pattern,async route=>{if(route.request().method()!=='GET'){await route.continue();return;}const response=await route.fetch(),data=await response.json();const hold=!capturedRead&&data.items.some((c:{name:string})=>c.name==='果醬');if(hold){capturedRead=true;queuedRead();await readGate;}await route.fulfill({response});if(hold)deliveredRead();});
+  await manager.getByLabel('分類名稱',{exact:true}).fill('果醬');await manager.getByRole('button',{name:'新增分類',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已新增分類');await readQueued;const chosenProduct=manager.getByRole('checkbox',{name:store.products[1].title+' · '+store.products[1].sku,exact:true});await chosenProduct.check();releaseRead();await readDelivered;await page.unroute(pattern);await expect(chosenProduct).toBeChecked();await manager.getByRole('button',{name:'儲存分類商品',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已儲存分類商品');
+  await manager.getByRole('button',{name:'上移分類：果醬',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已更新分類順序');await expect(manager.locator('.store-categories-list > li').first()).toContainText('果醬');
+  await expect(manager.getByRole('textbox',{name:'分類名稱：果醬',exact:true})).toHaveValue('果醬');await expect(manager.locator('label[for="category-name-name"]')).toHaveText('分類名稱');
+  // Success is announced before onSaved finishes refreshing the parent store.
+  await expect(manager.getByRole('textbox',{name:'分類名稱：果醬',exact:true})).toBeEnabled();
+  for(const width of [390,768,1440]){
+   await page.setViewportSize({width,height:900});await manager.getByRole('textbox',{name:/^分類名稱：/}).focus();
+   const readLayout=()=>manager.evaluate(root=>{
+    const rect=(selector:string)=>{
+     const element=root.querySelector(selector);
+     if(!element?.getClientRects().length)return null;
+     const {x,y,width,height}=element.getBoundingClientRect();
+     return {x,y,width,height};
+    };
+    return {candidates:rect('.store-category-groups'),ordered:rect('.store-category-order')};
+   });
+   let layout:Awaited<ReturnType<typeof readLayout>>|undefined,previous:string|undefined;
+   // Resize/focus can move the viewport; compare two consecutive atomic samples.
+   await expect.poll(async()=>{
+    layout=await readLayout();const current=JSON.stringify(layout),settled=current===previous;
+    previous=current;return settled;
+   }).toBe(true);
+   const {candidates,ordered}=layout!;expect(candidates).not.toBeNull();expect(ordered).not.toBeNull();if(width>=768)expect(ordered!.x).toBeGreaterThanOrEqual(candidates!.x+candidates!.width);else expect(ordered!.y).toBeGreaterThanOrEqual(candidates!.y+candidates!.height);await page.evaluate(()=>window.scrollTo({top:0,left:0,behavior:'instant'}));expect(await page.evaluate(()=>scrollY)).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);const metrics=await page.locator('.btn').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect(),style=getComputedStyle(b);return {text:b.textContent,width:r.width,height:r.height,fontSize:style.fontSize,color:style.color,background:style.backgroundColor,parent:b.parentElement?.className,category:!!b.closest('.store-categories-editor')};}));expect(metrics.filter(b=>b.category).every(b=>b.height>=44&&b.width<width-32)).toBe(true);await writeFile(info.outputPath('category-buttons-'+width+'.json'),JSON.stringify(metrics,null,2));await page.screenshot({path:info.outputPath('category-manager-'+width+'.png'),fullPage:true});}
+  const detail=await buyer.newPage();await detail.goto('/shops/'+store.slug);await expect(detail.getByRole('navigation',{name:'商品分類'})).toHaveCount(0);for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});await detail.screenshot({path:info.outputPath('category-grid-before-'+width+'.png'),fullPage:true});}
+  await store.republish();await detail.reload();const nav=detail.getByRole('navigation',{name:'商品分類'});await expect(nav.getByRole('link')).toHaveText(['全部商品','果醬','上衣']);const categoryPath=await nav.getByRole('link',{name:'果醬',exact:true}).getAttribute('href');expect(categoryPath).toMatch(/\?category=[0-9a-f-]{36}#products$/);
+  for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('category-grid-all-'+width+'.png'),fullPage:true});}
+  await nav.getByRole('link',{name:'果醬',exact:true}).click();await expect(detail.locator('#products')).toHaveText('果醬');await expect(detail.locator('.shop-catalog li')).toHaveCount(1);await expect(detail.locator('.shop-featured')).toHaveCount(0);await expect(detail.getByRole('link',{name:'查看商品：'+store.products[1].title,exact:true})).toHaveAttribute('href','/shops/'+store.slug+'/products/'+store.products[1].sku);
+  for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});await nav.getByRole('link',{name:'果醬',exact:true}).focus();expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('category-view-'+width+'.png'),fullPage:true});}
+  await manager.getByRole('textbox',{name:/^分類名稱：/}).fill('水果果醬');await manager.getByRole('button',{name:'儲存名稱',exact:true}).click();await expect(manager.getByRole('alert')).toHaveText('商店資料已更新，請重新讀取分類後再儲存。');await expect(manager.getByRole('textbox',{name:/^分類名稱：/})).toHaveValue('水果果醬');page.once('dialog',dialog=>dialog.accept());await manager.getByRole('button',{name:'重新讀取',exact:true}).click();await expect(manager.getByRole('textbox',{name:/^分類名稱：/})).toHaveValue('果醬');await manager.getByRole('textbox',{name:/^分類名稱：/}).fill('水果果醬');await manager.getByRole('button',{name:'儲存名稱',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已儲存分類');await detail.reload();await expect(detail.locator('#products')).toHaveText('果醬');await store.republish();await detail.reload();await expect(detail.locator('#products')).toHaveText('水果果醬');await page.reload();await expect(manager.getByRole('textbox',{name:/^分類名稱：/})).toHaveValue('水果果醬');
+  await manager.getByRole('button',{name:'刪除分類：水果果醬',exact:true}).click();const confirmation=manager.getByRole('alertdialog');await expect(confirmation.getByRole('button',{name:'繼續編輯',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(confirmation).toHaveCount(0);await expect(manager.getByRole('button',{name:'刪除分類：水果果醬',exact:true})).toBeFocused();await manager.getByRole('button',{name:'刪除分類：水果果醬',exact:true}).click();await expect(confirmation).toContainText('商品會保留在全部商品；發布更新後，這個分類的舊連結將無法使用。');for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});const metrics=await page.locator('.btn').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect(),style=getComputedStyle(b);return {text:b.textContent,width:r.width,height:r.height,color:style.color,background:style.backgroundColor,parent:b.parentElement?.className};}));await writeFile(info.outputPath('category-confirm-buttons-'+width+'.json'),JSON.stringify(metrics,null,2));await page.screenshot({path:info.outputPath('category-delete-confirm-'+width+'.png')});}await confirmation.getByRole('button',{name:'刪除分類',exact:true}).focus();await page.keyboard.press('Enter');await expect(manager.getByRole('status')).toContainText('已刪除分類');await expect(manager.getByRole('button',{name:'上衣',exact:true})).toBeFocused();
+  for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await expect(manager.getByRole('button',{name:'上衣',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);const metrics=await page.locator('.btn').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect(),style=getComputedStyle(b);return {text:b.textContent,width:r.width,height:r.height,color:style.color,background:style.backgroundColor,parent:b.parentElement?.className};}));await writeFile(info.outputPath('category-delete-focus-buttons-'+width+'.json'),JSON.stringify(metrics,null,2));await page.evaluate(()=>window.scrollTo({top:0,left:0,behavior:'instant'}));expect(await page.evaluate(()=>scrollY)).toBe(0);const capture=await manager.boundingBox();expect(capture).not.toBeNull();await page.screenshot({path:info.outputPath('category-delete-focus-'+width+'.png'),fullPage:true,clip:capture!});}
+  await detail.reload();await expect(detail.locator('#products')).toHaveText('水果果醬');await store.republish();const gone=await detail.reload();expect(gone!.status()).toBe(404);await expect(detail.getByRole('heading',{level:1})).toHaveText('找不到這個分類');
+  for(const width of [390,768,1440]){await detail.setViewportSize({width,height:900});await detail.getByRole('link',{name:'查看全部商品',exact:true}).focus();expect(await detail.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await detail.screenshot({path:info.outputPath('category-missing-'+width+'.png'),fullPage:true});}
+  const bad=await detail.goto('/shops/'+store.slug+'?category=bad');expect(bad!.status()).toBe(400);await expect(detail.getByText('分類連結格式無效，請查看全部商品。',{exact:true})).toBeVisible();
+  await page.reload();await manager.getByRole('button',{name:'刪除分類：上衣',exact:true}).click();await manager.getByRole('alertdialog').getByRole('button',{name:'刪除分類',exact:true}).click();await expect(manager.getByRole('status')).toContainText('已刪除分類');await expect(manager.getByRole('heading',{name:'商品分類',exact:true})).toBeFocused();
+ }finally{unblockRead();await owner.close();await buyer.close();await store.close();}
 });

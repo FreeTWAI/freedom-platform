@@ -1,5 +1,8 @@
+import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
+import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
 import {runDueCommerceWork,runAfterResponseWork} from '../../../modules/agent-commerce/operations/due-work.js';
+import {createOrderNotifications} from '../../../modules/agent-commerce/checkout/order-notifications.js';
 import {createEcpayQueryTransport,type PaymentQueryTransport} from '../../../modules/agent-commerce/payments/query-transport.js';
 import {applyDeferredPaymentEvents} from '../../../modules/agent-commerce/payments/events.js';
 import {flushControlEvents} from '../../../modules/agent-commerce/operations/journal/journal.js';
@@ -10,7 +13,7 @@ import {createEcpayPaymentGateway} from '../../../modules/agent-commerce/payment
 import {CommerceCredentialKeyring} from '../../../modules/agent-commerce/payments/credentials.js';
 import {createStoreAdmissionPort,providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
 import {createShippingQuotePort} from '../../../modules/agent-commerce/fulfilment/quote/index.js';
-import {readCommerceSettings,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readCommerceOrderNotificationsEnabled,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
 import {sweepCommerceOutboundEmails} from '../../../modules/agent-commerce/operations/notifications/delivery.js';
 import {createWorkerEmailSender} from '../../../modules/agent-commerce/operations/notifications/email-port.js';
 import {commerceEmailOutbox} from '../../../modules/agent-commerce/operations/notifications/outbox.js';
@@ -71,6 +74,7 @@ import { workerPreviewFetch } from './worker-preview-fetch.js';
 export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   COMMERCE_CREDENTIAL_KEYS?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
+  FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED?:string;
   FREEDOM_COMMERCE_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_EMAIL_ENABLED?:string;
   FREEDOM_COMMERCE_QUARANTINE?:string;
@@ -101,6 +105,12 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED?: string;
   FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED?: string;
   FREEDOM_DISTRIBUTION_PHOTOS_ENABLED?: string;
+  FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED?: string;
+  FREEDOM_STORE_APPEARANCE_ENABLED?: string;
+  FREEDOM_STORE_POLICIES_ENABLED?: string;
+  FREEDOM_STORE_CATEGORIES_ENABLED?: string;
+  FREEDOM_STORE_VARIANTS_ENABLED?: string;
+  FREEDOM_STORE_GALLERY_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTOS_ENABLED?: string;
   FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED?: string;
   /** Dedicated secret: canonical base64url encoding of 32 random bytes, unique per environment. */
@@ -111,6 +121,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_COMMUNITY_SEARCH_ENABLED?: string;
   FREEDOM_UNIFIED_SHARING_ENABLED?: string;
   FREEDOM_AR_ENABLED?:string;
+  FREEDOM_SHORT_VIDEOS_ENABLED?:string;
   FREEDOM_COMMUNITY_RELATIONS_ENABLED?: string;
   FREEDOM_PERSONAL_CONTENT_ENABLED?: string;
   FREEDOM_SQUAD_OUTCOMES_ENABLED?: string;
@@ -189,6 +200,7 @@ export function readWorkerConfig(env: WorkerEnv): WorkerConfig {
   if(env.FREEDOM_NOTIFICATION_PREFERENCES_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_NOTIFICATION_PREFERENCES_ENABLED))throw new ReadinessError('FREEDOM_NOTIFICATION_PREFERENCES_ENABLED must be true or false.');
   if(env.FREEDOM_AR_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_AR_ENABLED))throw new ReadinessError('AR flag must be true or false.');
   if(env.FREEDOM_AR_ENABLED==='true'&&!env.MEDIA)throw new ReadinessError('AR requires MEDIA storage.');
+  if(env.FREEDOM_SHORT_VIDEOS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_SHORT_VIDEOS_ENABLED))throw new ReadinessError('Short video flag must be true or false.');
   if(env.FREEDOM_FIRST_PARTICIPATION_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_FIRST_PARTICIPATION_ENABLED))throw new ReadinessError('First participation flag must be true or false.');
   if(env.FREEDOM_FIRST_PARTICIPATION_ENABLED==='true'&&env.FREEDOM_PERSONAL_CONTENT_ENABLED!=='true')throw new ReadinessError('First participation requires personal content.');
   if(env.FREEDOM_PARTICIPATION_METRICS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_PARTICIPATION_METRICS_ENABLED))throw new ReadinessError('Participation metrics flag must be true or false.');
@@ -201,7 +213,18 @@ export function readWorkerConfig(env: WorkerEnv): WorkerConfig {
   for(const flag of [env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED,env.FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED])if(flag!==undefined&&!['true','false'].includes(flag))throw new ReadinessError('Store photo flags must be true or false.');
   if(env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED==='true'&&(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'||['get','put','head','delete'].some(method=>typeof (env.MEDIA as unknown as Record<string,unknown>|undefined)?.[method]!=='function')))throw new ReadinessError('Hosted store photos require guild launchpad and MEDIA.');
   if(env.FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED==='true'&&(env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED!=='true'||typeof env.IMAGES?.info!=='function'||typeof env.IMAGES?.input!=='function'))throw new ReadinessError('Store photo uploads require installed photos and IMAGES.');
-  for(const flag of [env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED,env.FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED,env.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED])if(flag!==undefined&&!['true','false'].includes(flag))throw new ReadinessError('Supply material flags must be true or false.');
+  for(const flag of [env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED,env.FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED,env.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED,env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED])if(flag!==undefined&&!['true','false'].includes(flag))throw new ReadinessError('Supply material flags must be true or false.');
+  if(env.FREEDOM_STORE_APPEARANCE_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_APPEARANCE_ENABLED))throw new ReadinessError('Store appearance flag must be true or false.');
+  if(env.FREEDOM_STORE_APPEARANCE_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store appearance requires guild launchpad.');
+  if(env.FREEDOM_STORE_GALLERY_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_GALLERY_ENABLED))throw new ReadinessError('Store gallery flag must be true or false.');
+  if(env.FREEDOM_STORE_GALLERY_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store gallery requires guild launchpad.');
+  if(env.FREEDOM_STORE_POLICIES_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_POLICIES_ENABLED))throw new ReadinessError('Store policies flag must be true or false.');
+  if(env.FREEDOM_STORE_POLICIES_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store policies requires guild launchpad.');
+  if(env.FREEDOM_STORE_CATEGORIES_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_CATEGORIES_ENABLED))throw new ReadinessError('Store categories flag must be true or false.');
+  if(env.FREEDOM_STORE_VARIANTS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_STORE_VARIANTS_ENABLED))throw new ReadinessError('Store variants flag must be true or false.');
+  if(env.FREEDOM_STORE_CATEGORIES_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store categories requires guild launchpad.');
+  if(env.FREEDOM_STORE_VARIANTS_ENABLED==='true'&&env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')throw new ReadinessError('Store variants requires guild launchpad.');
+  if(env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true'&&(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'||env.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true'||env.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED!=='true'))throw new ReadinessError('Supply offer photos require guild launchpad, supplier console and hosted store photos.');
   if(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED==='true'&&(env.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true'||['get','put','head','delete'].some(method=>typeof (env.MEDIA as unknown as Record<string,unknown>|undefined)?.[method]!=='function')))throw new ReadinessError('Supply material media requires supplier console and MEDIA.');
   if(env.FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED==='true'&&(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED!=='true'||typeof env.IMAGES?.info!=='function'||typeof env.IMAGES?.input!=='function'))throw new ReadinessError('Supply material uploads require installed media and IMAGES.');
   if(env.FREEDOM_EVENT_VIDEO_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_EVENT_VIDEO_ENABLED))throw new ReadinessError('Video installation flag must be true or false.');
@@ -287,6 +310,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
   try { if (env.MEDIA) avatarAssetStore = createR2ObjectStore(env.MEDIA); } catch { /* unavailable, no binding diagnostics */ }
   return {
     avatarAssetStore,
+    shortVideosEnabled:env.FREEDOM_SHORT_VIDEOS_ENABLED==='true',
     arEnabled:env.FREEDOM_AR_ENABLED==='true',arAssetStore:env.FREEDOM_AR_ENABLED==='true'?avatarAssetStore:undefined,
     shopKeyPolicy:env.FREEDOM_SHOP_KEY_POLICY,
     registrationCommunityId: () => community,
@@ -310,12 +334,18 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     linkPreviewFetch: workerPreviewFetch,
     moduleProviders: undefined,
     guildLaunchpadEnabled: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true',
-    commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,
+    commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),
     commerceCredentialKeyring:config.commerceCredentialKeyring,commerceProviderEnvironment:config.commerceProviderEnvironment??providerEnvironment(config.freedomEnv),
     commercePorts:{admission,shipping:createShippingQuotePort({environment}),...cardPorts,...(paymentMethods?{paymentMethods}:{}),...(settings.emailEnabled?{email:commerceEmailOutbox}:{})},
     hostedReservationsEnabled: env.FREEDOM_HOSTED_RESERVATIONS_ENABLED === 'true',
     supplierConsoleEnabled: env.FREEDOM_SUPPLIER_CONSOLE_ENABLED === 'true',
     distributionPhotosEnabled:env.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED==='true',
+    supplyOfferPhotosEnabled:env.FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED==='true',
+    storeAppearanceEnabled:env.FREEDOM_STORE_APPEARANCE_ENABLED==='true',
+    storePoliciesEnabled:env.FREEDOM_STORE_POLICIES_ENABLED==='true',
+    storeCategoriesEnabled:env.FREEDOM_STORE_CATEGORIES_ENABLED==='true',
+    storeVariantsEnabled:env.FREEDOM_STORE_VARIANTS_ENABLED==='true',
+    storeGalleryEnabled:env.FREEDOM_STORE_GALLERY_ENABLED==='true',
     tenantListCursors: createTenantListCursorCodec(env.FREEDOM_TENANT_CURSOR_SIGNING_KEY, { environment: config.freedomEnv, origin: config.origin }),
     communityDiscoveryEnabled: env.FREEDOM_COMMUNITY_DISCOVERY_ENABLED === 'true',
     memberBlockingEnabled: env.FREEDOM_MEMBER_BLOCKING_ENABLED === 'true',
@@ -473,6 +503,8 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           runtime.storePhotoUploadsEnabled=env.FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED==='true';
           // Keep the closed service installed for retained original receipts; admission remains separate.
           runtime.storePhotoAssets=createStorefrontProductPhotoLifecycle(pool,{store:runtime.avatarAssetStore});
+          if(runtime.storeGalleryEnabled===true)runtime.storeGalleryAssets=createStorefrontGalleryLifecycle(pool,{store:runtime.avatarAssetStore});
+          if(runtime.storeAppearanceEnabled===true)runtime.storeAppearanceAssets=createStorefrontAppearanceLifecycle(pool,{store:runtime.avatarAssetStore});
         }
         if(env.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED==='true'&&runtime.avatarAssetStore){
           runtime.supplyMaterialAssetStore=runtime.avatarAssetStore;
@@ -533,7 +565,8 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               }catch{console.error('commerce_email_not_ready');}
               const keyring=env.COMMERCE_CREDENTIAL_KEYS?CommerceCredentialKeyring.parse(env.COMMERCE_CREDENTIAL_KEYS):null;
               const freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);
-              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps});
+              const orderNotifications=createOrderNotifications(readCommerceOrderNotificationsEnabled(env),commerce);
+              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})});
             }catch{console.error('commerce_due_work_failed');}
             try{
               await (deps.commerceEmailSweep??sweepCommerceOutboundEmails)(pool,{limit:500});

@@ -36,6 +36,10 @@
 .app-frame.social-layout .home-feed-title{font-size:.9375rem;font-weight:600;color:var(--muted);margin:0 0 12px}
 .app-frame.social-layout .home-context{display:grid;gap:16px;min-width:0}
 .app-frame.social-layout .home-support{display:grid;gap:16px}
+.app-frame.social-layout .home-journal-entry{display:grid;justify-items:start;gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--radius);min-width:0}
+.app-frame.social-layout .home-journal-entry h2{font-size:1rem;margin:0}
+.app-frame.social-layout .home-journal-entry p{font-size:.875rem;line-height:1.6;margin:0;color:var(--muted);overflow-wrap:anywhere}
+.app-frame.social-layout .home-journal-entry a{min-height:44px;max-width:100%;white-space:normal}
 .app-frame.social-layout .home-next-step{padding:18px;background:var(--bg-elev);border:1px solid var(--line);border-radius:14px}
 .app-frame.social-layout .freedom-home #home-next-step-description{font-size:.9375rem;line-height:1.6}
 .app-frame.social-layout .freedom-home .home-shortcuts{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
@@ -107,7 +111,7 @@
 .app-frame.social-layout .freedom-home .home-layout{grid-template-columns:260px minmax(0,680px);max-width:none;gap:32px}
 .app-frame.social-layout .home-main{grid-column:2;grid-row:1}
 .app-frame.social-layout .home-context{grid-column:1;grid-row:1}
-.app-frame.social-layout .home-guide-disclosure>summary{display:none;cursor:pointer;font-weight:600;min-height:44px;padding:12px 0}
+.app-frame.social-layout :is(.home-guide-disclosure,.home-participation-disclosure)>summary{display:none;cursor:pointer;font-weight:600;min-height:44px;padding:12px 0}
 .app-frame.social-layout .home-context .purpose-role{padding-block:12px}
 .app-frame.social-layout .home-context .purpose-role h3{font-size:.9375rem;margin-bottom:4px}
 .app-frame.social-layout .home-context .purpose-role p{font-size:.875rem;margin-block:0 4px}
@@ -122,8 +126,8 @@
  .app-frame.social-layout .freedom-home .home-layout{grid-template-columns:minmax(0,1fr);max-width:680px;margin-inline:auto;gap:16px}
  .app-frame.social-layout .home-main{grid-column:1;grid-row:1}
  .app-frame.social-layout .home-context{grid-column:1;grid-row:2;padding-top:0;display:block}
- .app-frame.social-layout .home-guide-disclosure>summary{display:flex;align-items:center}
- .app-frame.social-layout .home-guide-disclosure:not([open])>:not(summary){display:none}
+ .app-frame.social-layout :is(.home-guide-disclosure,.home-participation-disclosure)>summary{display:flex;align-items:center}
+ .app-frame.social-layout :is(.home-guide-disclosure,.home-participation-disclosure):not([open])>:not(summary){display:none}
 }
 
 /* Home destinations share one compact hierarchy; artwork belongs to the content. */
@@ -140,3 +144,28 @@
 .app-frame.social-layout .home-destinations button{grid-template-columns:minmax(0,1fr) auto}
 .app-frame.social-layout .home-destinations button strong,.app-frame.social-layout .home-destinations button span{grid-column:1}
 .app-frame.social-layout .home-destinations button .home-destination-arrow{grid-column:2;grid-row:1/3;align-self:center;color:var(--muted)}
+
+/* Participation collapses on phones; real next steps stay open before the feed. */
+.app-frame.social-layout .freedom-home .home-main{display:grid;gap:16px}
+.app-frame.social-layout .home-participation{display:grid;gap:14px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--bg-elev)}
+.app-frame.social-layout .home-participation header{display:grid;gap:4px}
+.app-frame.social-layout .home-participation h2{margin:0;font-size:1.125rem}
+.app-frame.social-layout .home-participation p{margin:0;font-size:.875rem;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+.app-frame.social-layout .home-participation-entries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.app-frame.social-layout .home-participation-entries button{display:grid;grid-template-columns:20px minmax(0,1fr);align-content:start;align-items:center;gap:4px 8px;min-width:0;min-height:76px;padding:10px;text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);cursor:pointer}
+.app-frame.social-layout .home-participation-entries strong{font-size:.9375rem;font-weight:650}
+.app-frame.social-layout .home-participation-entries span{grid-column:1/-1;font-size:.875rem;line-height:1.5;color:var(--muted)}
+.app-frame.social-layout .home-participation-entries button:hover,.app-frame.social-layout .home-participation-entries button:focus-visible{background:var(--green-soft);border-color:var(--green)}
+.app-frame.social-layout .home-return{display:grid;gap:6px;padding-top:8px;border-top:1px solid var(--line);min-width:0}
+.app-frame.social-layout .home-return-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px}
+.app-frame.social-layout .home-return h3{margin:0;font-size:.9375rem}
+.app-frame.social-layout .home-return .btn{min-height:44px;padding:6px 10px;font-size:.875rem;white-space:normal}
+.app-frame.social-layout .home-return-heading .btn{border:0;text-decoration:underline;text-underline-offset:3px}
+.app-frame.social-layout .home-return-actions{display:flex;flex-wrap:wrap;gap:6px}
+.app-frame.social-layout .home-main>.home-next-step{order:0;padding:14px 16px}
+.app-frame.social-layout .home-main .home-next-copy{min-width:0;display:grid;gap:8px}
+.app-frame.social-layout .home-main .home-next-copy>.home-next-eyebrow{margin:0}
+.app-frame.social-layout .freedom-home .home-main #home-next-step-description{margin:0}
+.app-frame.social-layout .home-main .home-next-art{display:none}
+.app-frame.social-layout .home-main .home-next-actions .btn{white-space:normal}
+@media(min-width:1101px){.app-frame.social-layout .home-participation-entries{grid-template-columns:repeat(4,minmax(0,1fr))}}

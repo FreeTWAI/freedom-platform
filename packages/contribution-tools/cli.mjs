@@ -2,6 +2,7 @@ import { buildContext, CONTEXT_LIMITS, writeContextDelivery, readContextDelivery
 import { verifyWorkspace } from './verify.mjs';
 import { writeLocalArtifact, validateArtifactOutputPath } from './local-artifacts.mjs';
 import { VerificationError, safeFailure } from './errors.mjs';
+import { MODULE_COMMANDS, runModuleCommand } from './modules.mjs';
 
 function parseArgs(args) {
   const [command, ...rest] = args;
@@ -30,6 +31,11 @@ function parseArgs(args) {
 
 export async function runFreedomCli(args = process.argv.slice(2), repositoryRoot = process.cwd()) {
   try {
+    if (MODULE_COMMANDS.includes(args[0])) {
+      const result = await runModuleCommand(args, repositoryRoot);
+      console.log(JSON.stringify(result));
+      return result.status === 'failed' ? 1 : 0;
+    }
     const { command, options, report: reportPath, manifestPath, chunkIndex, complete } = parseArgs(args);
     if (manifestPath) {
       const result = await readContextDelivery(repositoryRoot, manifestPath, { chunkIndex, complete });

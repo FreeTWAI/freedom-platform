@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseSellerConsoleRoute as parse,sellerConsoleHref as href,sellerNavigation,sellerSlugFallback as fallback,sellerRootHref,displayNumberPattern,type SellerPage} from '../../modules/agent-commerce/seller-console/route.js';
 import {sellerOrdersRoute} from '../../apps/portal-web/src/modules/hosted-seller-order-state.js';
+import {sellerPageCapability} from '../../modules/agent-commerce/seller-console/route.js';
 const scope={tenantId:'10000000-0000-4000-8000-000000000001',instanceId:'10000000-0000-4000-8000-000000000002'},id='10000000-0000-4000-8000-000000000003',root=sellerRootHref(scope);
+test('overview route and navigation require only store read',()=>{const route=parse(root+'/overview')!;assert.equal(route.page,'overview');assert.equal(route.titleKey,'sellerConsole.overview');assert.equal(sellerPageCapability('overview'),'store:read');assert.deepEqual(parse(href(scope,'overview')),route);assert.deepEqual(sellerNavigation(['store:read']).map(item=>item.key),['overview']);assert.equal(sellerNavigation(['store:read','store:orders:read'])[0].key,'overview');assert.deepEqual(fallback(root+'/overview'),{...scope,orders:false});});
 for(const [path,page] of [['orders','orders'],['orders/'+id,'order'],['orders/reservations','reservations'],['payments','payments'],['payments/'+id,'case'],['settings','settings'],['settings/payments','settings-payments']] as const)test('route '+path,()=>{const r=parse(root+'/'+path)!;assert.equal(r.page,page);assert.equal(r.titleKey,'sellerConsole.'+page);assert.deepEqual(parse(href(scope,page,{id})),r);});
 test('IDs are opaque and paths exact',()=>{for(const value of ['bad','../other','%2F','',id.toUpperCase()+'!']){assert.equal(parse(`#stores/${value}/${scope.instanceId}/orders`),null);assert.equal(parse(`#stores/${scope.tenantId}/${value}/settings`),null);assert.equal(parse(root+'/orders/'+value),null);}for(const path of [root,root+'/orders/'+id+'/more',root+'/settings/other',root+'/supply/products'])assert.equal(parse(path),null);});
 test('known filters round trip; unrelated keys and invalid enum filters are ignored',()=>{const query={lifecycle:'cancelled',needs_action:'true',display_number:'261016-ABCDEF'} as const;assert.deepEqual(parse(href(scope,'orders',{query})+'&secret=ignored')!.query,query);assert.deepEqual(parse(root+'/orders?lifecycle=bad&needs_action=false&state=open&cursor=bad')!.query,{});assert.deepEqual(parse(root+'/payments?state=closed&lifecycle=open')!.query,{state:'closed'});assert.deepEqual(parse(root+'/payments?state=invalid')!.query,{});assert.deepEqual(parse(root+'/settings/payments?state=open')!.query,{});for(const lifecycle of ['open','closed','cancelled'])assert.equal(parse(root+'/orders?lifecycle='+lifecycle)!.query.lifecycle,lifecycle);});
@@ -11,3 +13,17 @@ test('navigation is per capability, without inferring other grants',()=>{assert.
 for(const slug of ['fulfilment','shipments','customers','support','storefront','products','sourcing','promotions','payments','invoices','reports','settings'])test('fallback '+slug+' works independently of console flag',()=>{for(const enabled of [true,false])for(const suffix of ['', '/future/subpage']){const hash=root+'/'+slug+suffix;const dispatched=enabled&&parse(hash);assert.deepEqual(fallback(hash),{...scope,orders:false});if(!dispatched)assert.ok(fallback(hash));}});
 test('order fallback and legacy three-segment/plain-order dispatch',()=>{assert.deepEqual(fallback(root+'/orders/'+id),{...scope,orders:true});assert.deepEqual(fallback(root+'/orders/'+id+'/future/subpage'),{...scope,orders:true});assert.equal(fallback(root+'/orders/bad/future'),null);assert.deepEqual(fallback(root+'/orders/reservations'),{...scope,orders:true});assert.equal(fallback(root),null);assert.equal(fallback(root+'/orders'),null);assert.deepEqual(sellerOrdersRoute(root+'/orders'),scope);assert.equal(sellerOrdersRoute(root),null);for(const slug of ['supply','supply/products','supply-orders','supply/settings'])assert.equal(fallback(root+'/'+slug),null);assert.equal(fallback('#stores/bad/'+scope.instanceId+'/payments'),null);});
 test('href rejects invalid resource IDs',()=>{for(const page of ['order','case'] as SellerPage[])assert.throws(()=>href(scope,page,{id:'bad'}));assert.throws(()=>sellerRootHref({...scope,tenantId:'bad'}));});
+test('existing payment filters round trip through order routes without leaking to other pages',()=>{
+ const query={awaiting_offline_payment:'true',payment_method:'bank_transfer',needs_action:'true',lifecycle:'open',display_number:'261016-ABCDEF'} as const;
+ assert.deepEqual(parse(href(scope,'orders',{query}))!.query,query);
+ for(const method of ['bank_transfer','cash_on_meetup','immediate_card'] as const){
+  assert.equal(parse(href(scope,'orders',{query:{payment_method:method}}))!.query.payment_method,method);
+ }
+ for(const invalid of ['crypto','toString','__proto__','false'])assert.equal(parse(root+'/orders?payment_method='+invalid)!.query.payment_method,undefined);
+ assert.deepEqual(parse(root+'/orders?awaiting_offline_payment=false')!.query,{});
+ for(const page of ['payments','settings','overview'] as const){
+  assert.deepEqual(parse(href(scope,page,{query}))!.query,{});
+ }
+ // A link never silently normalizes an invalid identifier; only form submission may do so.
+ assert.equal(parse(root+'/orders?display_number=261016-abcdef&awaiting_offline_payment=true')!.query.display_number,'261016-abcdef');
+});

@@ -60,6 +60,46 @@ async function focusInside(page:Page){
  await expect.soft(consoleArea(page).locator(':focus'),'A keyboard save must keep focus inside the console').toHaveCount(1);
 }
 
+test('supplier preparation uses current reads and opens existing supply pages without writes',async({page,e2eAuthPool},info)=>{
+ const member=await person(e2eAuthPool);await login(page,member.email);
+ const store=await catalogue(page,randomUUID().slice(0,6));
+ await go(page,store);
+ const guide=active(page).getByRole('region',{name:'供貨準備',exact:true});
+ await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toBeVisible();
+ let fail=true;
+ await page.route('**/api/v1'+store.root+'/supplier-console/overview',route=>fail?route.fulfill({status:503,contentType:'application/problem+json',json:{status:503,title:'合成讀取失敗',code:'unavailable'}}):route.continue());
+ await active(page).getByRole('button',{name:'更新資料',exact:true}).click();
+ await expect(active(page).getByRole('alert')).toContainText('未更新');
+ await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toHaveCount(0);
+ await expect(guide.getByRole('link',{name:'管理商品與供貨條件',exact:true})).toBeVisible();
+ fail=false;
+ await active(page).getByRole('button',{name:'重試',exact:true}).click();
+ await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toBeVisible();
+
+ // Once a product exists, the overview leads back to its existing settings.
+ await createProduct(page,store,'準備流程合成商品');
+ await active(page).getByRole('button',{name:'更新資料',exact:true}).click();
+ await expect(guide.getByRole('link',{name:'新增商品',exact:true})).toHaveCount(0);
+ await expect(guide.locator('details')).not.toHaveAttribute('open','');
+ await guide.locator('summary').click();
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:900});
+  await page.evaluate(()=>window.scrollTo(0,0));
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath(`supplier-preparation-${width}.png`),fullPage:true});
+ }
+ const writes:string[]=[];
+ page.on('request',request=>{if(request.url().includes('/api/v1'+store.root)&&!['GET','HEAD'].includes(request.method()))writes.push(request.method()+' '+new URL(request.url()).pathname);});
+ for(const [label,title] of [['管理行銷素材與授權','行銷素材'],['查看供貨申請','供貨條件與審核'],['查看合作店家','合作店家'],['查看供貨預留','預留與訂單']]){
+  await guide.getByRole('link',{name:label,exact:true}).click();
+  await expect(heading(page,title)).toBeVisible();
+  await consoleArea(page).getByRole('combobox',{name:'營運中心頁面',exact:true}).selectOption({label:'營運概覽'});
+  await expect(guide).toBeVisible();
+  if(await guide.locator('details').getAttribute('open')===null)await guide.locator('summary').click();
+ }
+ expect(writes).toEqual([]);
+});
+
 test('SC-E2E-30 switching business while a read is late shows only the new business (AT-03)',async({browser,baseURL,e2eAuthPool},info)=>{
  test.setTimeout(180_000);
  const suffix=randomUUID().slice(0,6),member=await person(e2eAuthPool),context=await browser.newContext({baseURL});

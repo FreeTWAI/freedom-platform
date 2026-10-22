@@ -1,6 +1,9 @@
+import {CheckoutResponseSchema,PlaceOrderResponseSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures.js';
-import { apiLogin } from './hosted-order-fixture.js';
+import { apiLogin, member } from './hosted-order-fixture.js';
+import {setupCartFixtureStore} from './storefront-cart-fixture.js';
+import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {
   assertResponsiveLayout,
   buildVerifiedError,
@@ -39,7 +42,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     expect(new URL(page.url()).hash).toBe('');
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
-    await expect(page.getByRole('status')).toHaveText(
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText(
       '這個訂單連結只能使用一次。開啟後，這個瀏覽器會記住這筆訂單，之後可以直接查看。',
     );
     expect(recordedRequests.some(req => req.method === 'POST')).toBe(false);
@@ -106,7 +109,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('開啟訂單');
       await page2.getByRole('button', { name: '在這個瀏覽器開啟訂單', exact: true }).click();
       await expect(page2.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page2.getByRole('status')).toHaveText(
+      await expect(page2.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       await expect(page2.getByRole('link', { name: '找回訂單', exact: true })).toHaveAttribute(
@@ -142,7 +145,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
       await page3.goto(`${seeded.orderPath}#access=abc`);
       expect(new URL(page3.url()).hash).toBe('');
       await expect(page3.getByRole('heading', { level: 1 })).toHaveText('這個訂單連結無法使用');
-      await expect(page3.getByRole('status')).toHaveText(
+      await expect(page3.locator('#shop-order').getByRole('status')).toHaveText(
         '連結可能已經用過、超過 7 天，或不屬於這筆訂單。每個訂單連結只能在一個瀏覽器開啟一次。',
       );
       expect(thirdPosts).toEqual([]);
@@ -199,7 +202,7 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     await expect(forgottenHeading).toBeVisible();
     await expect(forgottenHeading).toBeFocused();
     await expect(page).toHaveTitle('訂單｜山邊小店｜自由工坊');
-    await expect(page.getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
+    await expect(page.locator('#shop-order').getByRole('status')).toHaveText('之後在這個瀏覽器打開訂單網址，會顯示找不到訂單。');
     await expect(page.getByRole('link', { name: '回到「山邊小店」', exact: true })).toHaveAttribute(
       'href',
       `/shops/${store.slug}`,
@@ -255,7 +258,7 @@ test('member-owned order opens for the logged-in buyer without a device cookie a
     const strangerPage = await strangerContext.newPage();
     await strangerPage.goto(memberOrder.orderPath);
     await expect(strangerPage.getByRole('heading', { level: 1 })).toHaveText('找不到這筆訂單');
-    await expect(strangerPage.getByRole('status')).toHaveText(
+    await expect(strangerPage.locator('#shop-order').getByRole('status')).toHaveText(
       '這個瀏覽器沒有這筆訂單的查看權限，或訂單不存在。訂單只能在下單時使用的瀏覽器，或以下單時登入的會員帳號查看。',
     );
   } finally {
@@ -696,4 +699,90 @@ test('responsive layout and full-page screenshots across 1440, 1280, 768, 390 an
   } finally {
     await guestContext.close();
   }
+});
+
+test('B10 and valid missing orders return after real login; disabled checkout preserves the old prompts and ignores storefront returns', async ({browser, e2eAuthPool}) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true);
+  const closed = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {checkoutEnabled: false});
+  const context = await browser.newContext({baseURL: store.origin});
+  const offContext = await browser.newContext({baseURL: closed.origin});
+  try {
+    const buyer = await member(e2eAuthPool), page = await context.newPage();
+    const login = async (target: typeof page) => {
+      await target.getByLabel('電子郵件', {exact: true}).fill(buyer.email);
+      await target.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+      await target.getByRole('button', {name: '登入', exact: true}).click();
+    };
+    for (const path of [`/shops/${store.slug}/order-access`, `/shops/${store.slug}/orders/${randomUUID()}`]) {
+      await context.clearCookies(); await page.goto(path);
+      await expect(page.getByRole('link', {name: '登入會員', exact: true})).toHaveAttribute('href', '/?return_to=' + encodeURIComponent(path));
+      await page.getByRole('link', {name: '登入會員', exact: true}).click();
+      await expect(page.getByText('登入後會返回原本的商店頁面。', {exact: true})).toBeVisible();
+      await login(page); await expect(page).toHaveURL(store.origin + path);
+      await expect(page.getByRole('heading', {level: 1})).toHaveText(path.endsWith('order-access') ? '找回訂單' : '找不到這筆訂單');
+    }
+    await page.goto(`/shops/${store.slug}/orders/invalid-uuid`);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('找不到這筆訂單');
+    await expect(page.getByRole('link', {name: '登入會員', exact: true})).toHaveCount(0);
+    const offPage = await offContext.newPage();
+    for (const path of [`/shops/${closed.slug}/order-access`, `/shops/${closed.slug}/orders/${randomUUID()}`]) {
+      await offPage.goto(path);
+      await expect(offPage.getByRole('heading', {level: 1})).toHaveText(path.endsWith('order-access') ? '找回訂單' : '找不到這筆訂單');
+      await expect(offPage.getByRole('link', {name: '登入會員', exact: true})).toHaveCount(0);
+      await expect(offPage.locator('[data-buyer-journey]')).toHaveCount(0);
+    }
+    await offPage.goto('/?return_to=' + encodeURIComponent(`/shops/${closed.slug}/order-access`));
+    await expect(offPage.getByText('登入後會返回原本的商店頁面。', {exact: true})).toHaveCount(0);
+    await login(offPage);
+    await expect(offPage.getByRole('heading', {name: '會員首頁', exact: true})).toBeVisible();
+    expect(new URL(offPage.url()).pathname).toBe('/');
+    await expect(offPage.getByRole('heading', {name: '找回訂單', exact: true})).toHaveCount(0);
+  } finally {await context.close(); await offContext.close(); await store.close(); await closed.close();}
+});
+
+test('retained B07 is a private original-member read after unpublication and admission revocation',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{realAdmission:true});
+  const original=await browser.newContext({baseURL:store.origin}),memberContext=await browser.newContext({baseURL:store.origin}),strangerContext=await browser.newContext({baseURL:store.origin});
+  try {
+    const buyer=await member(e2eAuthPool),stranger=await member(e2eAuthPool);
+    const admission=await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成會員保留訂單驗收'});
+    await apiLogin(original,store.origin,buyer.email);
+    const root=`/api/v1/public/stores/${store.slug}`,headers={Origin:store.origin,'X-Commerce-Buyer':`member:${buyer.id}`};
+    const frozenResponse=await original.request.post(root+'/checkouts',{headers:{...headers,'Idempotency-Key':randomUUID()},data:{publication_revision:store.revision,lines:[{sku:store.products[0].sku,quantity:1}],contact:{name:'合成買家甲',email:'retained-synthetic@example.test',phone:'0000000000'},delivery:{method:'meetup',name:'合成買家甲',mobile:'0900123456'},invoice:null,consents:[]}});
+    expect(frozenResponse.status(),await frozenResponse.text()).toBe(201);const frozen=CheckoutResponseSchema.parse(await frozenResponse.json());
+    const placed=await original.request.post(root+`/checkouts/${frozen.checkout_ref}/orders`,{headers,data:{terms_sha256:frozen.terms_sha256,client_order_id:randomUUID(),payment_method:'bank_transfer'}});
+    expect(placed.status(),await placed.text()).toBe(201);const order=PlaceOrderResponseSchema.parse(await placed.json()).order,path=`/shops/${store.slug}/orders/${order.order_ref}`;
+    await store.updateLongNamesAndRepublish('重新發布後的小店',store.products[0],'重新發布後的商品');await store.saveOfflineFixture(2);
+    const version=(await e2eAuthPool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1',[store.instance])).rows[0].version;
+    await store.sellerPost(store.root+'/unpublish',{},200,version);
+    await apiLogin(memberContext,store.origin,buyer.email);expect((await memberContext.cookies()).some(c=>c.name==='freedom_local_shop')).toBe(false);
+    const page=await memberContext.newPage();await page.goto(path);
+    await expect(page.locator('#shop-order')).toHaveAttribute('data-retained-order','true');
+    await expect(page.getByRole('heading',{level:1})).toHaveText(`訂單 ${order.display_number}`);
+    await expect(page.getByText('000000123456',{exact:true})).toBeVisible();await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await expect(page.getByRole('region',{name:'付款',exact:true})).toContainText('請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。');
+    await expect(page.getByRole('region',{name:'付款',exact:true})).not.toContainText('請用這個瀏覽器回到訂單');
+    await expect(page.locator('header .shop-top-store')).toHaveText('山邊小店');
+    await expect(page.locator('header .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');
+    await expect(page.locator('footer,#shop-information,[data-store-appearance]')).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'取消訂單',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'在這個瀏覽器忘記我的訂單',exact:true})).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('重新發布後的小店');await expect(page.locator('body')).not.toContainText('000000654321');
+    for(const width of [390,768,1440]){
+      await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:info.outputPath(`retained-member-order-${width}.png`),fullPage:true});
+    }
+    const unavailable=await original.request.get(`/shops/${store.slug}`);expect(unavailable.status()).toBe(404);const missing=await unavailable.text();
+    const device=(await original.cookies()).filter(cookie=>cookie.name==='freedom_local_shop');expect(device).toHaveLength(1);
+    await original.clearCookies();await original.addCookies(device);
+    const anonymous=await original.request.get(path);expect(anonymous.status()).toBe(404);expect(await anonymous.text()).toBe(missing);
+    await apiLogin(strangerContext,store.origin,stranger.email);
+    const denied=await strangerContext.request.get(path);expect(denied.status()).toBe(404);expect(await denied.text()).toBe(missing);
+    await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成停止新單，保留原買家查閱'});
+    await page.reload();await expect(page.getByText('000000123456',{exact:true})).toBeVisible();
+    expect((await memberContext.request.get(root)).status()).toBe(404);
+    const response=await memberContext.request.get(path);expect(response.headers()['cache-control']).toBe('private, no-store');expect(response.headers()['x-robots-tag']).toBe('noindex, nofollow');
+    await page.getByRole('link',{name:'我的訂單',exact:true}).click();
+    await expect(page.getByRole('region',{name:'訂單',exact:true}).getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',path);
+  } finally {await original.close();await memberContext.close();await strangerContext.close();await store.close();}
 });

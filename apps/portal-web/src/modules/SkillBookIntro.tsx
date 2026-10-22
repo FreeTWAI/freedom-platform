@@ -1,6 +1,6 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {SkillBookGuide} from '../../../../modules/community/skill-book-guides';
-import { SkillBookCover, SkillBookStar } from './SkillBookCover';
+import { SkillBookCover, SkillBookStar, SkillBookSourceAccount } from './SkillBookCover';
 import {SkillBookBadges} from './SkillBookBadges';
 import {useSkillDiscovery} from './skill-discovery-client';
 import {SkillShare,fetchSkillShareContent,skillSharePath} from './SkillShare';
@@ -24,7 +24,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   const bookId=book.id??book.book_id,discovery=useSkillDiscovery(),summaryOverride=discovery.data?.books.find(item=>item.book_id===bookId)?.summary_override??book.summary_override;
   const guide=book.guide,beginner=guide?.beginner,repository=httpsLink(book.repository_url),upstream=httpsLink(book.upstream_url)||repository;
   const reading=httpsLink(guide?.reading_url)||repository,website=httpsLink(book.introduction_url)||httpsLink(guide?.website_url),fork=upstream?`${upstream.replace(/\/$/,'')}/fork`:null,contribute=httpsLink(guide?.contribution_url);
-  const source=upstream?new URL(upstream):null,account=source?.hostname==='github.com'?source.pathname.split('/').filter(Boolean)[0]:null;
+  const source=upstream?new URL(upstream):null;
   useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();else if(!open&&dialog.current?.open)dialog.current.close();},[open]);
   useEffect(()=>{
     if(!open||!bookId)return;
@@ -46,9 +46,9 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         <div className="skill-intro-cover"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}</div>
         {open&&<SkillBookBadges bookId={bookId} community={community}/>}<p className="skill-intro-purpose multiline-text" id={`${id}-purpose`}>{cooperation?.purpose??summaryOverride??beginner?.purpose??guide?.summary??book.description}</p></div>{open&&<SkillBookCover book={book} className="skill-intro-art"/>}</div>
         {open&&illustration&&illustration.bookId===bookId&&<figure className="skill-intro-illustration"><img src={illustration.url} alt={illustration.alt} width="1200" height="630" decoding="async" onError={()=>setIllustration(null)}/></figure>}
-        {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的作者：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
+        {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的{guide.credit_role??'作者'}：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
         {guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}
-        {open&&bookId&&<AuthorClaimPanel bookId={bookId}/>}
+        {open&&bookId&&<AuthorClaimPanel key={bookId} bookId={bookId}/>}
         <div className="actions skill-intro-primary-actions">{upstream&&<a className="btn btn-primary" href={upstream} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{website&&<a className="btn btn-ghost" href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{reading&&<a className="btn btn-ghost" href={reading} target="_blank" rel="noopener noreferrer">閱讀技能書 ↗</a>}{bookId&&<DevelopmentEntry kind="skill" target={bookId} label="加入共同開發"/>}</div>
         {isStorefrontReading(bookId,upstream)&&<StorefrontBookUsage onNavigate={close}/>}
         {open&&<SkillBookStar book={book}/>}
@@ -59,7 +59,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
           <details className="skill-intro-details"><summary>練習與設定</summary><div className="stack"><section><h3>準備</h3><ul>{guide.prerequisites.map(item=><li key={item}>{item}</li>)}</ul></section><section><h3>練習</h3><ol>{guide.first_steps.map(step=><li key={step}>{step}</li>)}</ol></section>{guide.quickstart&&<section className="stack"><h3>啟動指令</h3><p className="field-hint">{guide.quickstart.context}</p><pre className="skill-intro-command"><code>{guide.quickstart.commands}</code></pre></section>}{(book.id??book.book_id)&&<a href={`/development/skills/${encodeURIComponent((book.id??book.book_id)!)}`} target="_blank" rel="noopener noreferrer">完整指南 ↗</a>}</div></details>
           <details className="skill-intro-details"><summary>功能與使用範圍</summary><div className="stack"><p className="field-hint">以下為原作收錄版本的功能說明，站內應用另依其版本資料。</p><p className="skill-intro-status">{guide.status}</p><p className="muted">{guide.audience.join('、')}</p><ul className="skill-intro-features">{guide.features.map(feature=><li key={feature}>{feature}</li>)}</ul></div></details>
         </>}
-        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><p>{account?`來源 GitHub 帳號：${account}`:'來源資訊請見原作連結。'}</p>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
+        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
       </div>
     </dialog>
   </>;
@@ -72,7 +72,7 @@ export function SkillBookCard({book,className='',access,headingLevel=4,community
   const beginner=book.guide?.beginner,discovery=useSkillDiscovery(),summaryOverride=discovery.data?.books.find(item=>item.book_id===(book.id??book.book_id))?.summary_override??book.summary_override;
   return <article className={`card skill-book skill-book-volume skill-library-book ${className}`} data-book-id={book.id??book.book_id} data-access={access}>
     <div className="skill-library-heading"><SkillBookCover book={book}/><div className="skill-library-copy"><p className="eyebrow skill-library-meta"><span>{beginner?.category??(community?'社群技能書':'公會技能書')}</span>{access&&<span className={`skill-unlock-state ${access}`}>{access==='unlocked'?'✓ 已解鎖':'未解鎖'}</span>}</p><Title className="skill-library-title">{book.title}</Title></div></div>
-    <div className="skill-library-description"><p className="skill-library-purpose multiline-text">{summaryOverride??beginner?.purpose??book.description}</p>{book.guide?.author_name&&<p className="field-hint">來源標示的作者：{book.guide.author_name}</p>}<SkillBookBadges bookId={book.id??book.book_id} community={community}/>{book.license_status==='NOASSERTION'&&<p className="field-hint">授權待確認</p>}</div>
+    <div className="skill-library-description"><p className="skill-library-purpose multiline-text">{summaryOverride??beginner?.purpose??book.description}</p>{book.guide?.author_name&&<p className="field-hint">來源標示的{book.guide.credit_role??'作者'}：{book.guide.author_name}</p>}<SkillBookBadges bookId={book.id??book.book_id} community={community}/>{book.license_status==='NOASSERTION'&&<p className="field-hint">授權待確認</p>}</div>
     <div className="skill-library-actions"><SkillBookIntro book={book} label={access==='locked'?'預覽技能書':'閱讀技能書'} community={community}/><SkillShare bookId={book.id??book.book_id} title={book.title}/></div>
     <SkillBookStar book={book} compact/>
   </article>;

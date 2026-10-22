@@ -18,7 +18,7 @@ import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCT
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
-import { GUILD_PRESENTATION_PROFILE, guildPresentationImportsProven } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
+import { GUILD_PRESENTATION_PROFILE, guildPresentationPath, guildPresentationDependenciesProven, loadGuildPresentationParsers } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 import { runtimeTextSources } from '../generate-runtime-text.mjs';
 
 export const SELECTABLE_JOBS = Object.freeze([
@@ -253,12 +253,13 @@ export function decideHandoffDocsProfile(input) {
       }
     }
     // Preserve known ownership/reverse-consumer obligations before selecting the
-    // fixed documentation check. This does not change general context impact.
+    // fixed documentation check. commerce-publication imports the supplier-console
+    // contract, making it a known consumer. General context impact is unchanged.
     const owned = documents.filter(handoffOwner), supplier = owned.some(path => handoffOwner(path) === 'supplier-console');
     const governance = owned.some(path => handoffOwner(path) === 'governance');
     const impact = selectImpact({baseline: input.baseline, candidate: input.candidate, changedPaths: owned});
     if (impact.unknown_paths.length || !sameSet(impact.module_ids,
-      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition'] : []), ...(governance ? ['governance'] : [])])
+      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition', 'commerce-publication'] : []), ...(governance ? ['governance'] : [])])
       || !sameSet(impact.tests, [...new Set([...(supplier ? ['e2e.harness', 'runtime.full', 'runtime.guild-blocks'] : []),
         ...(governance ? ['governance.unit', 'runtime.full'] : [])])])) throw Error();
     return {profile: HANDOFF_DOCS_REASON, reason: HANDOFF_DOCS_REASON};
@@ -266,9 +267,9 @@ export function decideHandoffDocsProfile(input) {
 }
 
 /** Explain the actual reverse-dependency closure before permitting the guild lane.
- * Descriptor, contract, SDK, registration, test, new-file and unknown changes
- * retain the complete integration path. This first profile only covers edits
- * to the two reviewed presentation entries; it is not arbitrary plugin admission.
+ * Descriptor, contract, SDK, registration and unknown changes retain the full
+ * path. Approved module-local source, CSS, docs and existing preview tests may
+ * evolve together; actual immutable source dependencies are checked below.
  */
 export function decideGuildPresentationProfile(input) {
   const fallback = reason => ({profile: 'full', reason});
@@ -277,11 +278,12 @@ export function decideGuildPresentationProfile(input) {
   if (input.descriptorsProven === false || !input.baseline?.length || !input.candidate?.length) return fallback('descriptors_unproven');
   const paths = [], leaves = [];
   for (const change of input.changes) {
-    if (statusReason(change) || change.status !== 'M') return fallback('guild_change_unproven');
-    if (change.path === GENERATED_INVENTORY_PATH) continue;
-    const leaf = GUILD_PRESENTATION_PROFILE.leaves.find(item => item.entry === change.path);
-    if (!leaf) return fallback('outside_guild_presentation');
-    paths.push(change.path); leaves.push(leaf);
+    if (statusReason(change)) return fallback('guild_change_unproven');
+    if (change.path === GENERATED_INVENTORY_PATH) { if (change.status !== 'M') return fallback('guild_change_unproven'); continue; }
+    const owned = guildPresentationPath(change.path);
+    if (!owned || owned.kind === 'test' && change.status !== 'M') return fallback('outside_guild_presentation');
+    paths.push(change.path);
+    if (!leaves.includes(owned.leaf)) leaves.push(owned.leaf);
   }
   if (!paths.length || new Set(paths).size !== paths.length) return fallback('guild_change_unproven');
   try {
@@ -289,8 +291,9 @@ export function decideGuildPresentationProfile(input) {
     if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) throw Error();
     for (const [id, value] of graphs[0]) if (JSON.stringify(value) !== JSON.stringify(graphs[1].get(id))) throw Error();
     for (const descriptors of [input.baseline, input.candidate]) {
+      if (paths.some(path => RUNTIME_TEXT.has(path) || descriptors.some(item => item.instructions.includes(path)))) throw Error();
       for (const leaf of leaves) {
-        const owners = descriptors.filter(descriptor => owns(descriptor, leaf.entry));
+        const owners = descriptors.filter(descriptor => paths.filter(path => guildPresentationPath(path)?.leaf.module === leaf.module).some(path => owns(descriptor, path)));
         if (owners.length !== 1) throw Error();
         const owner = owners[0];
         if (owner.module_id !== leaf.module || owner.owner_role !== leaf.owner
@@ -548,7 +551,7 @@ function loadTrees(repository, base, head) {
     const headTree = parseLsTreeZ(runGit(repository, ['ls-tree', '-r', '-z', '--end-of-options', head]).toString('utf8'));
     if (!baseTree.ok || !headTree.ok) return null;
     const diff = changesFromTrees(baseTree.files, headTree.files);
-    return {...diff, nonExecutableBlobsProven: diff.changes.every(change =>
+    return {...diff, baseFiles: baseTree.files, candidateFiles: headTree.files, nonExecutableBlobsProven: diff.changes.every(change =>
       [baseTree.files.get(change.path), headTree.files.get(change.path)].every(entry => entry?.type === 'blob' && entry.mode === '100644'))};
   } catch { return null; }
 }
@@ -599,12 +602,24 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
       baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
       nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true });
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {
-      for (const change of diff.changes) {
-        if (change.path === GENERATED_INVENTORY_PATH) continue;
-        for (const revision of [base, candidate]) {
-          const source = runGit(root, ['cat-file', 'blob', `${revision}:${change.path}`]).toString('utf8');
-          if (!guildPresentationImportsProven(change.path, source)) return fallback('guild_source_dependencies_unproven');
+      const modules = new Set(diff.changes.map(change => guildPresentationPath(change.path)?.leaf.module).filter(Boolean));
+      const parsers = loadGuildPresentationParsers();
+      for (const module of modules) {
+        const snapshots = [];
+        let sourceBytes = 0;
+        for (const [revision, tree] of [[base, diff.baseFiles], [candidate, diff.candidateFiles]]) {
+          const files = new Map();
+          for (const [path, entry] of tree) {
+            if (!path.startsWith(`modules/${module}/`)) continue;
+            if (!regularBlob(entry) || entry.mode !== '100644' || files.size >= 256) return fallback('guild_source_dependencies_unproven');
+            const bytes = runGit(root, ['cat-file', 'blob', `${revision}:${path}`]);
+            sourceBytes += bytes.length;
+            if (bytes.length > 262144 || sourceBytes > 2000000) return fallback('guild_source_dependencies_unproven');
+            files.set(path, new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+          }
+          snapshots.push(files);
         }
+        if (!guildPresentationDependenciesProven({module, baseline: snapshots[0], candidate: snapshots[1]}, parsers)) return fallback('guild_source_dependencies_unproven');
       }
     }
     return result;

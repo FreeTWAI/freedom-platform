@@ -40,12 +40,18 @@
     "tests/runtime/media-recovery-bundle.test.ts",
     "tests/integration/media-recovery-handover.test.ts",
     "tests/integration/media-recovery-handover-producer.ts",
-    "tests/integration/tenant-rls-restore-drill.test.ts"
+    "tests/integration/tenant-rls-restore-drill.test.ts",
+    "apps/media-operator-caller/**"
   ],
   "public_exports": [
     "packages/media-migration/inventory.ts"
   ],
-  "dependencies": ["command-core", "asset-storage", "assets", "resource-scopes"],
+  "dependencies": [
+    "command-core",
+    "asset-storage",
+    "assets",
+    "resource-scopes"
+  ],
   "contract_families": [
     "common"
   ],
@@ -68,7 +74,9 @@
       "surface_id": "operations.media-operator-rpc",
       "kind": "native",
       "entry": "apps/media-operator/src/worker.ts",
-      "operations": ["media.operator.execute"],
+      "operations": [
+        "media.operator.execute"
+      ],
       "auth_profile": "private-service-binding-approved-plan"
     },
     {

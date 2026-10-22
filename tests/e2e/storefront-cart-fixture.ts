@@ -1,3 +1,6 @@
+import {collaborationGitHubFixture} from '../../packages/testing/github-collaboration.js';
+import {Problem} from '../../packages/shared/problem.js';
+import {StoreAdmissionViewSchema} from '../../contracts/guild-launchpad/v1/hosted-commerce-setup.js';
 import { randomUUID } from 'node:crypto';
 import {createHash} from 'node:crypto';
 import {canonicalJSON} from '../../modules/agent-commerce/checkout/terms.js';
@@ -11,6 +14,7 @@ import { TENANT_CURSOR_TEST_KEY } from '../runtime/tenant-cursor-fixture.js';
 import { ports } from '../runtime/hosted-checkout-harness.js';
 import { LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { DEMO_COMMUNITY } from '../../packages/testing/seed.js';
+import {e2eAuthorClaimAdminVerifier,E2E_AUTHOR_CLAIM_ADMIN_EMAIL,E2E_AUTHOR_CLAIM_ADMIN_TOKEN} from '../../packages/testing/e2e-admin.js';
 import { e2eSchema } from '../../packages/testing/e2e-auth-isolation.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import { CreateResultSchema } from '../../contracts/guild-launchpad/v1/tenant.js';
@@ -64,7 +68,9 @@ export function assertExactQuoteInput(rawBody: string | null) {
   return parsed as { publication_revision: string; lines: { sku: string; quantity: number }[] };
 }
 
-export async function openCartListener(db: Pool, offline = false) {
+type CartControls = {storeCategoriesEnabled?:boolean;storeAppearanceEnabled?:boolean;commerceOrderNotificationsEnabled?:boolean;storeVariantsEnabled?:boolean;realAdmission?: boolean; supplierConsoleEnabled?: boolean; adminAccess?: boolean; totpEncryptionKey?: string; checkoutEnabled?: boolean};
+export async function openCartListener(db: Pool, offline = false, controls: CartControls = {}) {
+  const supplierConsoleEnabled = controls.supplierConsoleEnabled ?? offline;
   await ownedSchema(db);
   const schema = e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
   const listenerPool = new Pool({
@@ -91,13 +97,26 @@ export async function openCartListener(db: Pool, offline = false) {
       throw Error('Owned loopback listener unavailable.');
     }
     const origin = `http://127.0.0.1:${address.port}`;
+    const accessIdentity=controls.adminAccess?await e2eAuthorClaimAdminVerifier(new Request(origin,{headers:{'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}})):null;
+    const adminToken=randomUUID(),adminCsrf=accessIdentity?.csrfToken??randomUUID(),adminEmail=controls.adminAccess?E2E_AUTHOR_CLAIM_ADMIN_EMAIL:`admission-${randomUUID()}@example.test`;
+    if(controls.realAdmission)await db.query('INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING',[randomUUID(),DEMO_COMMUNITY,adminEmail,'合成本機獨立准入管理員']);
     app = createApp(listenerPool, origin, 'local', {
+      registrationCommunityId: DEMO_COMMUNITY,
+      ...(controls.realAdmission?{adminVerifier:controls.adminAccess?e2eAuthorClaimAdminVerifier:async(request:Request)=>{
+        if(request.headers.get('X-Fixture-Admin')!==adminToken)throw new Problem(403,'admin_required','需要合成管理員。');
+        return {email:adminEmail,subject:'local-browser-admission',csrfToken:adminCsrf};
+      }}:{}),
       guildLaunchpadEnabled: true,
-      supplierConsoleEnabled: offline,
+      commerceOrderNotificationsEnabled:controls.commerceOrderNotificationsEnabled===true,
+      storeVariantsEnabled:controls.storeVariantsEnabled===true,
+      storeCategoriesEnabled:controls.storeCategoriesEnabled===true,storeAppearanceEnabled:controls.storeAppearanceEnabled===true,
+      ...((controls.storeVariantsEnabled||controls.storeCategoriesEnabled)?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),
+      supplierConsoleEnabled,
+      ...(controls.totpEncryptionKey ? {totpEncryptionKey: controls.totpEncryptionKey} : {}),
       tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
-      commerceSettings: { checkoutEnabled: true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
+      commerceSettings: { checkoutEnabled: controls.checkoutEnabled ?? true, consoleEnabled: true, quarantine: false, providerProfiles: offline ? ['offline.bank_transfer.v1', 'offline.cash_on_meetup.v1'] : [] },
       commercePorts: {
-        admission: { allowed: () => true },
+        ...(controls.realAdmission?{}:{admission: { allowed: () => true }}),
         ...(!offline ? {shipping: ports.shipping} : {}),
       },
     });
@@ -105,6 +124,12 @@ export async function openCartListener(db: Pool, offline = false) {
     app.get('*', serveStatic({ path: './apps/portal-web/dist/index.html' }));
     return {
       origin,
+      admission: async(path:string,body:unknown)=>{
+        if(!controls.realAdmission)throw Error('Real admission was not enabled for this fixture.');
+        const response=await fetch(origin+'/admin/api/commerce/store-admissions'+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',...(controls.adminAccess?{'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}:{'X-Fixture-Admin':adminToken}),'X-Admin-CSRF':adminCsrf,'Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+        const raw=await response.json();expect(response.ok,JSON.stringify(raw)).toBe(true);
+        return StoreAdmissionViewSchema.parse(raw);
+      },
       close: async () => {
         try {
           if ('closeAllConnections' in server) server.closeAllConnections();
@@ -125,9 +150,9 @@ export async function openCartListener(db: Pool, offline = false) {
   }
 }
 
-export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline) {
+export async function setupCartFixtureStore(db: Pool, browser: Browser, offline = false, seedOffline = offline, controls: CartControls = {}) {
   await ownedSchema(db);
-  const listener = await openCartListener(db, offline);
+  const listener = await openCartListener(db, offline, controls);
   const seller = await member(db);
   await db.query(
     `INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
@@ -291,7 +316,12 @@ export async function setupCartFixtureStore(db: Pool, browser: Browser, offline 
       soldOutProduct,
       revision: initialProjection.revision,
       saveOfflineFixture,
+      admission: listener.admission,
       sellerPost: post,
+      sellerGet:async(path:string)=>(await sellerContext.request.get('/api/v1'+path)).json(),
+      sellerPut:async(path:string,body:unknown,version:string)=>{const response=await sellerContext.request.put('/api/v1'+path,{data:body,headers:headers(version)});const raw=await response.json();expect(response.status(),JSON.stringify(raw)).toBe(200);return raw;},
+      sellerPatch:patch,
+      republish,
       updatePriceAndRepublish,
       removeProductAndRepublish,
       updateLongNamesAndRepublish,
