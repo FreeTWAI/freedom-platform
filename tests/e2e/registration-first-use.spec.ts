@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
+import {answerGuildQuestions} from './quick-join.js';
 
 async function registration(page:Page){
   await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
@@ -90,4 +91,65 @@ test('a guild directory failure can retry without refetching confirmed resource 
   const before=books;fail=false;await quick.getByRole('button',{name:'重讀公會',exact:true}).click();
   await expect(quick.locator('.quick-guild-option').first()).toBeVisible();
   expect(directories).toBe(2);expect(books).toBe(before);
+});
+
+async function chooseQuickGuild(page:Page){
+  await createAccount(page);
+  const quick=page.getByRole('region',{name:'快速加入公會',exact:true});
+  await quick.locator('input[value="guild_ai_vibe"]').check();
+  await quick.getByRole('button',{name:/下一步：回答 \d+ 個小問題/}).click();
+  await answerGuildQuestions(quick);
+  return quick;
+}
+
+for(const outcome of ['incomplete','failed','malformed'] as const){
+  test(`quick-start recovery stays visible on the question step: ${outcome}`,async({page})=>{
+    await page.setViewportSize({width:390,height:844});
+    const quick=await chooseQuickGuild(page),held=barrier(),started=barrier();let writes=0,reads=0;
+    const answers=await quick.locator('.guild-question input:checked').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
+    await page.route('**/api/v1/me/onboarding/quick-start',route=>{
+      writes++;return route.fulfill({status:503,json:{code:'temporarily_unavailable',detail:'暫時無法完成加入。'}});
+    });
+    await quick.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
+    await expect(quick.getByRole('alert')).toBeVisible();
+    // Install after initial onboarding has loaded; this isolates the recovery GET.
+    await page.route('**/api/v1/me/onboarding',async route=>{
+      reads++;started.release();await held.promise;
+      return outcome==='failed'?route.fulfill({status:503,json:{code:'temporarily_unavailable'}})
+        :route.fulfill({json:outcome==='malformed'?{completed:'unknown'}:{completed:false}});
+    });
+    try{
+      const recover=quick.getByRole('button',{name:'重讀加入狀態',exact:true});
+      await recover.evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+      await started.promise;
+      await expect(quick.getByText('正在確認加入狀態…',{exact:true})).toBeVisible();
+      await expect(recover).toBeDisabled();
+      await expect(quick.getByRole('button',{name:'加入公會，開始參與',exact:true})).toBeDisabled();
+      held.release();
+      await expect(quick.getByText(outcome==='incomplete'
+        ?'尚未完成加入，你的公會選擇與答案仍保留。請按「加入公會，開始參與」繼續。'
+        :'暫時無法確認加入狀態，請再試一次。你的公會選擇與答案仍保留。',{exact:true})).toBeVisible();
+      await expect(recover).toBeEnabled();
+      expect(reads).toBe(1);expect(writes).toBe(1);
+      expect(await quick.locator('.guild-question input:checked').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value))).toEqual(answers);
+      await quick.getByRole('button',{name:'換一個公會',exact:true}).click();
+      await expect(quick.locator('input[value="guild_ai_vibe"]')).toBeChecked();
+      await expect(quick.getByRole('button',{name:'重讀公會',exact:true})).toHaveCount(0);
+    }finally{held.release();}
+  });
+}
+
+test('checking a committed join after a lost reply continues without a second write',async({page})=>{
+  const quick=await chooseQuickGuild(page);let writes=0;
+  await page.route('**/api/v1/me/onboarding/quick-start',async route=>{
+    writes++;
+    const response=await route.fetch();expect(response.ok()).toBe(true);
+    // Commit to the isolated fixture, but lose the response seen by the browser.
+    await route.fulfill({status:503,json:{code:'temporarily_unavailable',detail:'加入結果暫時無法確認。'}});
+  });
+  await quick.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
+  await expect(quick.getByRole('alert')).toBeVisible();
+  await quick.getByRole('button',{name:'重讀加入狀態',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  expect(writes).toBe(1);
 });
