@@ -489,3 +489,23 @@ Migration178 adds nullable `community_event_guest_rsvps.credited_invitation_id`
 without inferring historical credit or backfilling existing RSVPs. Existing
 runtime table-level SELECT/INSERT/UPDATE grants cover the added column; no grant
 expansion is required.
+
+## Checkout contact retention schema186 write floor
+
+`commerce.checkout-contact-retention.v1` is mandatory for every candidate and
+active binary when the planned schema or retained historical floor reaches
+migration186, even when checkout is disabled or quarantine is on. A binary
+without the retention scheduler would leave contacts unredacted, so an
+application-only rollback to it is incompatible. Restoring below186 cannot erase
+the retained floor. Capability-only retained history and enabled/written shapes
+require schema186 and exact independently approved source/artifact/ledger identities.
+
+Migration186 only extends the `commerce_due_work` kind check and adds two partial
+indexes; it creates no new table. The runtime gains only
+`UPDATE(tracking_number, carrier_name, redacted_at)` on `commerce_self_shipments`
+for contact redaction; the other columns retain their existing grants.
+
+Acknowledging the capability grants no deploy, restore, email or payment authority
+and does not open self-ship anywhere. See
+[EC-SPEC-09](../../docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md)
+and [EC-SPEC-10](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md).

@@ -14029,8 +14029,8 @@
     },
     {
       "path": "deploy/cloudflare/release-compatibility.md",
-      "bytes": 34016,
-      "sha256": "65efb43aec13f30584a4a2817eda79f7c333a084b0d47260e846df0caf0e18e2"
+      "bytes": 35221,
+      "sha256": "b953b735d42f54b6df7ee26fc1817693261370f564f574bd79bace380d8d365a"
     },
     {
       "path": "deploy/cloudflare/candidate/README.md",
@@ -14234,53 +14234,53 @@
     },
     {
       "path": "deploy/cloudflare/test/release-agent-connections.test.mjs",
-      "bytes": 5605,
-      "sha256": "d6da2157a91c15043b9295859af9e27e8b53d39956d67150a27688946c0b2e6c"
+      "bytes": 5689,
+      "sha256": "ed76c1521f92eb4ae1c8c2f9e1786b01a88d17ce9d01b62127edc625d40a2dbd"
     },
     {
       "path": "deploy/cloudflare/test/release-bootstrap-session.test.mjs",
-      "bytes": 7668,
-      "sha256": "af25d041cc37ee95b66879f18bfc24fb0a5cc1b3eeb00d9188f1ccb1cd470a5a"
+      "bytes": 7752,
+      "sha256": "a65a62a9fc893c47893fcdf6e56b011d62da7b9d6585095eba64b964f130c982"
     },
     {
       "path": "deploy/cloudflare/test/release-bootstrap-status.test.mjs",
-      "bytes": 6314,
-      "sha256": "6933044caf878faa8b4a252357b8f92076ed85f918da4d33117ea491c0e83ebf"
+      "bytes": 6398,
+      "sha256": "ae60bd0fcf2a3027814c96e8840f91b49506fcc4cc540bbf6037e8c513456784"
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility-adversarial.test.mjs",
-      "bytes": 11794,
-      "sha256": "06b14bd8486b500b50279b593c497dccb2209fea67da71c27a6112fce36a98b5"
+      "bytes": 11920,
+      "sha256": "2aa2f59854d9fc99acae1f23a1aa2ad9411fc5d0998ff45fe9fc8b178b47409c"
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 106908,
-      "sha256": "8886f93117ca2d0e53a72b7e514804e78323d5e51eeb82ec0bd15a37d669a79d"
+      "bytes": 112057,
+      "sha256": "997013c69760c00cd19b743df1663da09877e6b7bfa707293350fc576305a748"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
-      "bytes": 6151,
-      "sha256": "acd78ed38403963eb23bdb799241807d6679c9fda62bf98c0c191e3aad59b830"
+      "bytes": 6235,
+      "sha256": "8fa4d0cd95e5f07e81c7a854a5362922ad6f455a32bc49dd0ee398838cc493fd"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-ingest.test.mjs",
-      "bytes": 7115,
-      "sha256": "27fb649749865e9885683e50c7ff936c2e43ea99dddb49cd70d5d89bbfc17548"
+      "bytes": 7199,
+      "sha256": "780a0f78571581a68cfdcb2e3b642af33957e711d7e9b17c651385f9bfa3bc42"
     },
     {
       "path": "deploy/cloudflare/test/release-device-authorization.test.mjs",
-      "bytes": 6562,
-      "sha256": "89835859fb1e28423dabb5d6ce9cb67e6255744f357f2db204559d9eca0c0aaf"
+      "bytes": 6646,
+      "sha256": "9eed4ea4cb19cdc1722b8c7f167652b2fff68b27578dcf22ee65770ba634bbb7"
     },
     {
       "path": "deploy/cloudflare/test/release-domain-media.test.mjs",
-      "bytes": 9876,
-      "sha256": "573f4bc284489ecae603d2833792a48f1bca60253318e8991db3cb9c7a351a2a"
+      "bytes": 10044,
+      "sha256": "bf4669188eb0fdc3f555f5d27a4a0d8873c8c7cc63d42600fd712db69d3bda12"
     },
     {
       "path": "deploy/cloudflare/test/release-execution-run.test.mjs",
-      "bytes": 8835,
-      "sha256": "6496a99195fd87074cbcd096bd8025c8a355edfd61f3b6c5cae898a7c1c0cb8a"
+      "bytes": 9045,
+      "sha256": "294d47e80fed5372c3cb47ace93ecdd5ba4c45b477aecce75216a5005e7f96bd"
     },
     {
       "path": "deploy/cloudflare/test/release-history-floor-adversarial.test.mjs",
@@ -14289,38 +14289,38 @@
     },
     {
       "path": "deploy/cloudflare/test/release-member-device-management.test.mjs",
-      "bytes": 9957,
-      "sha256": "05fb35147ef60e85561462a03c0e5e492b2bb54007f46eb59c6bf9ed7e6bfa12"
+      "bytes": 10083,
+      "sha256": "976a99758643cde3cb70c4dceb15394a8d94bcb8ae205d7a44a9aa71dde77c4b"
     },
     {
       "path": "deploy/cloudflare/test/release-member-model-settings.test.mjs",
-      "bytes": 7247,
-      "sha256": "667515c753a1fa366f17def6a51851a3a08f3ec4e3e50196350ee6e50d98f676"
+      "bytes": 7373,
+      "sha256": "c1415ecc489d35c51fe17669e0b030de642d65e10e1260db4a75d85e9b0a6bf5"
     },
     {
       "path": "deploy/cloudflare/test/release-member-prerequisites.test.mjs",
-      "bytes": 6594,
-      "sha256": "e9df78aec73b2431928e796a858c6d9a4de2bb83c0d003a3f3f03456e1bf5cff"
+      "bytes": 6678,
+      "sha256": "a6101de667a60342d4fd07cc3f10dddf19c2d3e1a177034c13f9649d02740122"
     },
     {
       "path": "deploy/cloudflare/test/release-model-result.test.mjs",
-      "bytes": 6175,
-      "sha256": "76cbbeeed4f34a4746ff244231bac1d5d71867d45120a738f4e4a81dc6db16e9"
+      "bytes": 6259,
+      "sha256": "c92fb01bcc6ad6594c99a3edc307a11279f3b0fd5a5bd14d374a32c2a518bd27"
     },
     {
       "path": "deploy/cloudflare/test/release-model-step.test.mjs",
-      "bytes": 6109,
-      "sha256": "2dd9d8e1c642300b394958153d18265e6578ecbff2e1646dcc76d81efbf4dd01"
+      "bytes": 6193,
+      "sha256": "7dec276089cdca6a2ddd8f76573dc15ac4d176b0ab049c2a7c39d93fb47f3786"
     },
     {
       "path": "deploy/cloudflare/test/release-runtime-enrollment.test.mjs",
-      "bytes": 5194,
-      "sha256": "e1dee436ad43e2cdd6af3304742320d05ce3175e5857c404b1d9899a3f81898c"
+      "bytes": 5278,
+      "sha256": "bc7660365d4f3c942a8393ffb69cafefaa8b81ba7fb1ab878b40f23421a7070e"
     },
     {
       "path": "deploy/cloudflare/test/release-shared-reservations.test.mjs",
-      "bytes": 11314,
-      "sha256": "3372bbd78fa0708c9af978208cd23bb38ff9ba4029ce9d03c7db68135a431f86"
+      "bytes": 11356,
+      "sha256": "a16fac4256135e794a1defc4aecc7401d7b0e593c826073e6682b774d0ee646d"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -16170,7 +16170,7 @@
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
       "bytes": 39305,
-      "sha256": "489a54c9284dc8f72520d2db9ab2c839c54ca76ce27c0c81461357182e8b8e04"
+      "sha256": "5afebfe2087ba50fec33b33401e5591985e529908f869fb97f73886197d4510c"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
