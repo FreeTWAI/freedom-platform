@@ -2049,8 +2049,8 @@
     },
     {
       "path": "apps/portal-web/src/LazyPage.tsx",
-      "bytes": 1409,
-      "sha256": "ea09cd9119022765cdc3cc6e85b86888039a03ae7092ffd1e606ebe29a727514"
+      "bytes": 1561,
+      "sha256": "9ab08ff8086669fc68f91f1a883476ea218f13c2d336c6538bc2b28a20dfe31f"
     },
     {
       "path": "apps/portal-web/src/LocalAction.css",
@@ -2059,8 +2059,8 @@
     },
     {
       "path": "apps/portal-web/src/Navigation.tsx",
-      "bytes": 7238,
-      "sha256": "26e8ce8d39ede5a05a47a540bfda8280de32a9332f950008a30a406eb66ee4f0"
+      "bytes": 8095,
+      "sha256": "5c963e84463c774f618e64dd6bf0047a5266685e8912c0c1f3f0e124feeb443a"
     },
     {
       "path": "apps/portal-web/src/PageTools.css",
@@ -22799,8 +22799,8 @@
     },
     {
       "path": "tests/e2e/audit-shell.spec.ts",
-      "bytes": 20467,
-      "sha256": "f522dadf74f3d1b3dcbf3d463e723a99d90b060f265d20af4667db38f5dcd410"
+      "bytes": 21282,
+      "sha256": "ef3664d8d9af46e2d9617fac73ddc0e260e9700786ed3f5af823a8ceb9c6f28a"
     },
     {
       "path": "tests/e2e/audit-skills.spec.ts",
@@ -23469,8 +23469,8 @@
     },
     {
       "path": "tests/e2e/shared-feedback-language.spec.ts",
-      "bytes": 12013,
-      "sha256": "ad67ab0e329b48c2c45f033258cd75958db42b4610c194b474ca55d3bd26a2fd"
+      "bytes": 17769,
+      "sha256": "a29b58023b11b3ef1e78909bb3d6c4ac7e167c639e65694028d2fe2265bd0ba7"
     },
     {
       "path": "tests/e2e/sharing-authoring-fixture.ts",
