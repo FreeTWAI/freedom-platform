@@ -9,6 +9,10 @@ export const CheckoutMoneySchema=z.number().int().nonnegative().max(Number.MAX_S
 const money=CheckoutMoneySchema;
 const sha=z.string().regex(/^[a-f0-9]{64}$(?![\s\S])/);
 export const CheckoutTimeSchema=z.string().regex(new RegExp(z.regexes.datetime({precision:3}).source.replace(/\\d/g,'[0-9]')+'(?![\\s\\S])'));
+export function isCheckoutCalendarDate(value:string) {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/.test(value)&&value.slice(0,4)!=='0000'&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+}
+export const CheckoutDateSchema=z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).refine(isCheckoutCalendarDate,'Invalid calendar date.');
 const time=CheckoutTimeSchema;
 const sku=text.min(1).max(32);
 const quantity=z.number().int().min(1).max(99);
@@ -116,6 +120,8 @@ export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.str
   /** Frozen public meetup notes; optional for older order response producers. */
   meetup_notes:z.array(MeetupNoteSchema).max(50).optional(),
   self_ship:SelfShipOrderSchema.optional(),
+  /** Recorded meetup handover; optional for older order response producers. */
+  meetup_handover:z.object({completed_on:CheckoutDateSchema}).strict().nullable().optional(),
   latest_payment_attempt:z.object({attempt_ref:OpaqueId,state:z.enum(['ready','awaiting_result','paid','failed','expired']),created_at:time}).strict().nullable(),can_resume_payment:z.boolean(),contact:contact.nullable(),delivery:object.nullable(),invoice:object.nullable(),redacted:z.boolean(),
 }).strict().refine(v=>v.redacted? v.contact===null&&v.delivery===null&&v.invoice===null:v.contact!==null&&v.delivery!==null,'Invalid redaction projection.')
   .refine(v=>(v.payment_grace_until!==null)===(v.payment_method!=='immediate_card'),'Grace follows the payment method.')

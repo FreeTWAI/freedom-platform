@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {useModuleMutation,type ModulePanelProps} from './shared';
 import {DirectoryMemberRow,loadLabels,type MemberCardData} from './Membership';
 import {announceInboxChange} from './member-inbox';
@@ -6,6 +6,8 @@ import {BlockedMembers,MemberBlockingAction} from './MemberBlocking';
 import {createFriendsDirectory,type FriendsPage,type FriendsScope} from './friends-directory-controller';
 import './MemberConnections.css';
 
+// Removing a friend or declining a request cannot be undone from this page, so both ask first.
+const CONFIRM={remove:{label:'移除好友',confirm:'確定移除',busy:'正在移除…',warning:'移除後對方不會收到通知；之後要重新送出邀請並由對方接受，才能再成為好友。'},decline:{label:'婉拒',confirm:'確定婉拒',busy:'正在婉拒…',warning:'婉拒後對方會收到通知，這則通知無法收回。'}} as const;
 type Props=ModulePanelProps&{onMessage:(id:string)=>void;initialScope?:'accepted'|'incoming';memberBlockingEnabled?:boolean};
 export function FriendsPanel(props:Props){
   // A different member/session never inherits private results or mutation notices.
@@ -25,6 +27,7 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
   const [actionTarget,setActionTarget]=useState<{id:string;action:'accept'|'remove'}|null>(null);
   const [blockingTarget,setBlockingTarget]=useState<string|null>(null),[blockingTargets,setBlockingTargets]=useState<{user_id:string;nickname:string}[]>([]);
   const [visitedBlocked,setVisitedBlocked]=useState(false);
+  const [confirming,setConfirming]=useState<{userId:string;action:keyof typeof CONFIRM}|null>(null),confirmationId=useId();
   const {mutate,busy,error}=useModuleMutation(client);
   const input=useRef<HTMLInputElement>(null),results=useRef<HTMLElement>(null);
   const pageTrigger=useRef<Element|null>(null),focusedRevision=useRef(0);
@@ -52,13 +55,23 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
     if(!directory.isCurrent())return;
     setActionTarget(null);
     if(result!==undefined){
+      setConfirming(null);
       announceInboxChange();
       setNotice(action==='accept'?`已和${member.nickname}成為好友。`:'好友關係或邀請已移除。');
       await directory.refreshAfterMutation();
     }
   }
-  function changeScope(next:FriendsScope){setNotice('');void directory.selectScope(next);}
+  function changeScope(next:FriendsScope){setNotice('');setConfirming(null);void directory.selectScope(next);}
   const pending=(member:MemberCardData,action:'accept'|'remove')=>busy&&actionTarget?.id===member.user_id&&actionTarget.action===action;
+  function confirmable(member:MemberCardData,action:keyof typeof CONFIRM){
+    const id=`${confirmationId}-${member.user_id}-${action}`,open=confirming?.userId===member.user_id&&confirming.action===action,copy=CONFIRM[action];
+    return <><button id={id} type="button" className="btn btn-ghost" disabled={busy} aria-expanded={open} aria-controls={`${id}-confirmation`} aria-describedby={open?`${id}-warning`:undefined} onClick={()=>setConfirming({userId:member.user_id,action})}>{copy.label}</button>
+      <div id={`${id}-confirmation`} hidden={!open} role="group" aria-label={`${copy.label}「${member.nickname}」`} aria-describedby={`${id}-warning`}>
+        <p id={`${id}-warning`} className="field-hint">{copy.warning}</p>
+        <button type="button" className="btn btn-ghost" disabled={busy} aria-describedby={`${id}-warning`} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?copy.busy:copy.confirm}</button>
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>{setConfirming(null);document.getElementById(id)?.focus();}}>取消</button>
+      </div></>;
+  }
   return <section className="module-panel members-panel friends-panel"><div className="actions"><button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('members')}>認識更多工坊夥伴</button></div>
     <div className="friend-scopes" data-guide-anchor="friends:scope" role="group" aria-label="好友名單範圍">{([['accepted','我的好友'],['incoming','收到的邀請'],['outgoing','送出的邀請'],...(memberBlockingEnabled?[['blocked','我的封鎖名單']]:[])] as [FriendsScope,string][]).map(([key,label])=><button type="button" className="btn btn-ghost" key={key} data-guide-anchor={key==='incoming'?'friends:incoming':undefined} aria-pressed={scope===key} disabled={composing} onClick={()=>changeScope(key)}>{label}</button>)}</div>
     {/* Keep visited blocking editors mounted across list switches: an unknown write retains its key. */}
@@ -82,8 +95,8 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
       {view.status==='ready'&&page&&<><p className="field-hint" aria-live="polite">共 {page.total} 位{scope==='accepted'?'好友':'待回覆的夥伴'}</p>
         {!page.items.length&&<p>{view.search?'沒有符合的名字。':scope==='accepted'?'還沒有好友，從工坊夥伴或首頁推薦開始認識彼此。':'目前沒有待回覆的邀請。'}</p>}
         <div className="directory-rows">{page.items.map(member=><DirectoryMemberRow key={member.user_id} member={member} labels={labels} client={client}><div className="directory-friend-actions">
-          {scope==='accepted'?<><button type="button" className="btn btn-ghost" onClick={()=>onMessage(member.user_id)}>私訊使用者</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?'正在移除…':'移除好友'}</button></>
-            :scope==='incoming'?<><button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void act(member,'accept')}>{pending(member,'accept')?'正在接受…':'接受邀請'}</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?'正在婉拒…':'婉拒'}</button></>
+          {scope==='accepted'?<><button type="button" className="btn btn-ghost" onClick={()=>onMessage(member.user_id)}>私訊使用者</button>{confirmable(member,'remove')}</>
+            :scope==='incoming'?<><button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void act(member,'accept')}>{pending(member,'accept')?'正在接受…':'接受邀請'}</button>{confirmable(member,'decline')}</>
             :<button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?'正在取消…':'取消邀請'}</button>}
           {memberBlockingEnabled&&<button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button>}
         </div></DirectoryMemberRow>)}</div>
