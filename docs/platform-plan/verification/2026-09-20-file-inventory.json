@@ -2844,8 +2844,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/GuildLaunchpadApplications.tsx",
-      "bytes": 70203,
-      "sha256": "20fa0e32bb74cfc4ed214e00ab79d5a830eb5abf5f8da88265e8dae59b002231"
+      "bytes": 72725,
+      "sha256": "62f3019209efc08ea70d43c513a96e0f3184224825413df9648f2334a6477186"
     },
     {
       "path": "apps/portal-web/src/modules/GuildLaunchpadMyWork.css",
@@ -23794,8 +23794,8 @@
     },
     {
       "path": "tests/e2e/hosted-store.spec.ts",
-      "bytes": 64178,
-      "sha256": "7721f9eca0c7ef8525ef491f2e8241c09d0c3d22089a58542cb4023879ec8083"
+      "bytes": 64631,
+      "sha256": "16791b5972b940d5f2e07ae2a76129d132aac11cff721bbfeaf94970f11100a8"
     },
     {
       "path": "tests/e2e/hosted-supply-catalog.spec.ts",
@@ -24249,8 +24249,8 @@
     },
     {
       "path": "tests/e2e/store-setup-entry.spec.ts",
-      "bytes": 11109,
-      "sha256": "6a9dd81dadb47fbf53e2c8f643ce7468a2d945808bf5bd5fec1a32be9a0c6e1f"
+      "bytes": 25232,
+      "sha256": "1ff6a07fb021358b0cd9ce2c502e48d25b38d1db61c2e40fff55b0692dc03718"
     },
     {
       "path": "tests/e2e/storefront-cart-fixture.ts",

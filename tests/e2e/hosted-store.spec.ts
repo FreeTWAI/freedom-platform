@@ -185,6 +185,9 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await expect(flow(page).getByText('這個業務空間已有商品資料空間，可以沿用；若要分開管理，請按上方「另開獨立商店」。', {exact: true})).toBeVisible();
   await expect(flow(page)).not.toContainText('新實例不複製既有資料，會使用額外容量。');
   await expect(flow(page).getByRole('radio', {name: /^將共用既有的零售商店（ID 尾碼 /})).toBeVisible();
+  await flow(page).getByRole('button', {name: '產生啟動方案', exact: true}).click();
+  const reuse = flow(page).getByRole('region', {name: '確認啟動方案', exact: true});
+  await expect(reuse.getByRole('listitem').filter({hasText: '將共用既有的商品與規格'})).toHaveText('商店：將共用既有的商品與規格、庫存、訂單、商店設定與公開頁、供貨合作與選品，以及商品照片，不會複製一份。');
   await flow(page).getByRole('button', {name: '取消', exact: true}).click();
   await expect(flow(page)).toHaveCount(0);
   await expect(storeCard.getByRole('button', {name: '啟動應用', exact: true})).toBeFocused();
