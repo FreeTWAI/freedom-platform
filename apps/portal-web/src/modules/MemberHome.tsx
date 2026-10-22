@@ -15,7 +15,11 @@ import {openMemberChat} from './chat-entry';
 import {SocialZone} from './SocialZone';
 import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
-import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, type HomeRefreshReason} from './member-home-loading';
+import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, resolveHomeJournalUrl, type HomeRefreshReason} from './member-home-loading';
+
+// Leave unset until the separate service's public projection is ready and approved.
+const journalEnv = (import.meta as ImportMeta & {env?: Record<string, string | undefined>}).env;
+const journalUrl = resolveHomeJournalUrl(journalEnv?.VITE_COMMUNITY_JOURNAL_URL);
 
 const shortcuts: { id: TabId; title: string }[] = [
   { id: 'messages', title: '開始聊天' },
@@ -215,6 +219,14 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
         <button type="button" onClick={() => onNavigate?.('events')}><strong>社群活動</strong><span>查看、提交與管理活動</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
       </section>
     </nav>
+
+    <section className="home-journal-entry" aria-label="共創日誌">
+      <h2>共創日誌</h2>
+      <p>閱讀工坊討論整理、開發進展與決策。</p>
+      {journalUrl
+        ? <a className="btn btn-ghost" href={journalUrl} target="_blank" rel="noopener noreferrer">閱讀共創誌<span className="sr-only">（另開分頁）</span></a>
+        : <p role="status">日誌尚未公開</p>}
+    </section>
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">
       {shortcuts.map(entry => <button key={entry.id} type="button" className="home-shortcut" onClick={() => onNavigate?.(entry.id)}>

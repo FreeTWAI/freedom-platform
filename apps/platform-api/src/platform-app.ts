@@ -84,6 +84,8 @@ import { publicSquadOutcomeHtml } from '../../../modules/identity-membership/squ
 import { eventOutcomeBacklinksHtml } from '../../../modules/community/event-outcomes-page.js';
 import { CollaborationGitHub } from '../../../modules/co-creation/github.js';
 import { checkSocialThumbnailHeaders, isSocialThumbnailUpload, registerMemberPromotion, registerPublicPromotion } from './routes/promotion.js';
+import { registerPublicSocialPosts, registerMemberPublicSocialPosts } from './routes/public-social-posts.js';
+import { registerPublicSocialPostPage } from './routes/public-social-post-page.js';
 import { SOCIAL_NOTE_REQUEST_BYTES } from '../../../modules/community/social-posts.js';
 import { checkServiceCoverHeaders, isServiceCoverUpload, registerMemberServices, registerPublicMemberServices } from './routes/member-services.js';
 import { recordSearchOperation } from '../../../modules/community/participation-metrics.js';
@@ -466,6 +468,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicMemberCardRoutes(app, featureContext);
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
+  registerPublicSocialPosts(app,pool,runtime);
+  registerPublicSocialPostPage(app,pool,runtime,freedomEnv==='local'||Boolean(runtime.registrationCommunityId()));
   registerPublicMemberServices(app,pool,runtime);
   app.route('/',createEventHighlightPublicRoutes(pool,runtime.publicOrigin,runtime));
   if(runtime.squadOutcomesEnabled===true)app.route('/api/v1/public',createPublicSquadOutcomeRoutes(pool));
@@ -536,6 +540,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime)));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
   registerMemberPromotion(app,pool,runtime);
+  registerMemberPublicSocialPosts(app,pool,runtime);
   registerMemberServices(app,pool,runtime);
   app.route('/api/v1',createEventHighlightMemberRoutes(pool,runtime));
   if(runtime.squadOutcomesEnabled===true)app.route('/api/v1',createSquadOutcomeRoutes(pool));

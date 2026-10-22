@@ -12,13 +12,15 @@ test('sharing an existing post uses one native link handoff and cancelling never
  });
  await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const text=`分享連結不建立發文工作 ${Date.now()}`;
  await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);await expect(post).toBeVisible();
- const attempts:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(url.pathname.includes('SocialCrossPlatformShare-')||request.method()==='POST'&&(url.pathname==='/api/v1/social-posts/notes'||url.pathname==='/api/v1/promotion/links'))attempts.push(url.pathname);});
- const share=post.getByRole('button',{name:'分享貼文連結',exact:true});await share.click();await expect(share).toBeDisabled();
+ const attempts:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(url.pathname.includes('SocialCrossPlatformShare-')||request.method()==='POST'&&(url.pathname==='/api/v1/social-posts/notes'||url.pathname==='/api/v1/promotion/links'||url.pathname.endsWith('/public-sharing')))attempts.push(url.pathname);});
+ const share=post.getByRole('button',{name:'分享貼文連結',exact:true});await share.click();
+ const dialog=page.getByRole('dialog',{name:'分享貼文連結',exact:true}),native=dialog.getByRole('button',{name:'系統分享',exact:true});
+ await native.click();await expect(native).toBeDisabled();
  const first=await page.evaluate(()=>(window as any).postShareControl.calls[0]);expect(first.active).toBe(true);
  const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${postId}#social`});
- await page.evaluate(()=>(window as any).postShareControl.reject(new DOMException('cancelled','AbortError')));await expect(share).toBeEnabled();
- await expect(page.getByRole('dialog',{name:'分享貼文連結'})).toHaveCount(0);expect(await page.evaluate(()=>(window as any).postShareControl.copies)).toBe(0);
- await share.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(share).toBeEnabled();
+ await page.evaluate(()=>(window as any).postShareControl.reject(new DOMException('cancelled','AbortError')));await expect(native).toBeEnabled();
+ await expect(dialog).toBeVisible();expect(await page.evaluate(()=>(window as any).postShareControl.copies)).toBe(0);
+ await native.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(share).toBeEnabled();
  expect(await page.evaluate(()=>(window as any).postShareControl.calls.length)).toBe(2);expect(attempts).toEqual([]);
 });
 
@@ -32,8 +34,13 @@ test('a recipient opens the exact old shared post after login; removed content s
   await e2eAuthPool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,platform,title,note,state)
    SELECT community_id,author_user_id,'note','other',$2,$2,'active' FROM community_social_posts CROSS JOIN generate_series(1,150) WHERE post_id=$1`,[postId,tag]);
   const reads:string[]=[];recipient.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/social-posts')reads.push(request.url());});
-  await recipient.goto(`${e2eOrigin()}/?social-post=${postId}#social`);await expect(recipient.getByRole('button',{name:'登入',exact:true})).toBeVisible();await expect(card(recipient,text)).toHaveCount(0);
-  await recipient.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await recipient.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await recipient.getByRole('button',{name:'登入',exact:true}).click();
+  await recipient.goto(`${e2eOrigin()}/?social-post=${postId}#social`);await expect(recipient).toHaveURL(`${e2eOrigin()}/posts/${postId}`);await expect(card(recipient,text)).toHaveCount(0);
+  await recipient.locator(`a[href="/?social-post=${postId}#account"]`).click();await expect(recipient.getByRole('button',{name:'登入',exact:true})).toBeVisible();
+  await recipient.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await recipient.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
+  const [onboarding]=await Promise.all([
+   recipient.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/v1/me/onboarding'),
+   recipient.getByRole('button',{name:'登入',exact:true}).click(),
+  ]);expect(onboarding.status()).toBe(200);await onboarding.finished();
   const target=card(recipient,text);await expect(target).toBeVisible();await expect(target).toBeFocused();await expect(recipient.locator('.social-card')).toHaveCount(1);
   expect(reads).toHaveLength(1);expect(new URL(reads[0]).searchParams.get('post_id')).toBe(postId);
   await recipient.setViewportSize({width:320,height:844});expect(await recipient.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

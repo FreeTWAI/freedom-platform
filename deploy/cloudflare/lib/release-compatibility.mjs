@@ -212,6 +212,8 @@ const FOUNDATION_NAMES = [
   '181_storefront_product_variants.sql',
   '182_commerce_order_notifications.sql',
   '183_storefront_categories.sql',
+  // Author opt-in records only; recognition does not publish posts or grant release authority.
+  '184_public_social_posts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
