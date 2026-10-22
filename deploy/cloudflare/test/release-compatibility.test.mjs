@@ -1579,3 +1579,17 @@ test('retained public sharing schema184 floor refuses a schema183 observation wi
   assert.deepEqual(f.host.observation.written_shapes,[]);
   assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
 });
+
+
+test('self-ship shape requires an explicitly approved reader and survives intake off',()=>{
+  const f=fixture();f.input.enable_shapes=['commerce.hosted-self-ship.v1'];
+  assert(codes(evaluate(f)).includes('release_capability_missing'));
+  f.host.release_records[0].capabilities.push('commerce.hosted-self-ship.v1');
+  assert.equal(evaluate(f).status,'compatible');
+  f.input.enable_shapes=[];f.host.observation.written_shapes=['commerce.hosted-self-ship.v1'];
+  assert(evaluate(f).required_capabilities.includes('commerce.hosted-self-ship.v1'));
+  f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(x=>x!=='commerce.hosted-self-ship.v1');
+  assert(codes(evaluate(f)).includes('release_capability_missing'));
+  const renamed=fixture();renamed.scan.ledger.at(-1).name='185_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert(codes(evaluate(renamed)).includes('schema_unknown'));
+});

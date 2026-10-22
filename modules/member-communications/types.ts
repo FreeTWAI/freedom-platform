@@ -3,7 +3,7 @@
 
 import type {MessageContent} from './content-types.js';
 export const ORDER_NOTIFICATION_KINDS=[
-  'commerce_order_placed','commerce_order_buyer_cancelled','commerce_order_payment_confirmed',
+  'commerce_order_shipped','commerce_order_placed','commerce_order_buyer_cancelled','commerce_order_payment_confirmed',
   'commerce_order_handed_over','commerce_order_seller_cancelled','commerce_order_payment_expired',
 ] as const;
 export const NOTIFICATION_KINDS=[

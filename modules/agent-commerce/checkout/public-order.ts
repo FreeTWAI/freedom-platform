@@ -1,3 +1,4 @@
+import {selfShipOrderView} from './self-ship-view.js';
 import type {PoolClient} from 'pg';
 import {PublicOrderSchema} from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {confirmedPaymentSQL} from './confirmed-payment.js';
@@ -25,6 +26,7 @@ export async function publicOrder(q:PoolClient,store:{instanceId:string;tenantId
     lines:t.items.map(l=>({sku:l.sku,title:l.title,options:[],quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,total_minor:t.total_minor,
     payment_method:row.payment_method,payment_grace_until:row.payment_grace_until?.toISOString()??null,offline_instructions,
+    ...(t.shipping.groups[0]?.method_ref==='self_ship'?{self_ship:await selfShipOrderView(q,orderId,t)}:{}),
     meetup_notes:[...new Set(t.shipping.groups.flatMap(group=>group.meetup?[group.meetup.note]:[]))],
     ...summary,contact:redacted?null:{name:row.contact_name,email:row.contact_email,phone:row.contact_phone},
     delivery:redacted?null:row.delivery,invoice:redacted?null:row.invoice,redacted});
