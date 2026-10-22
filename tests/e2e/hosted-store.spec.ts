@@ -182,9 +182,9 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   if (await workspace.getAttribute('aria-current') !== 'true') await workspace.click();
   await expect(workspace).toHaveAttribute('aria-current', 'true');
   await expect(flow(page).getByRole('radio', {name: '另建獨立空白的商店', exact: true})).toBeDisabled();
-  await expect(flow(page).getByText('這個業務空間已經有商店，請沿用它。', {exact: true})).toBeVisible();
+  await expect(flow(page).getByText('這個業務空間已有商品資料空間，可以沿用；若要分開管理，請按上方「另開獨立商店」。', {exact: true})).toBeVisible();
   await expect(flow(page)).not.toContainText('新實例不複製既有資料，會使用額外容量。');
-  await expect(flow(page).getByRole('radio', {name: /^將共用既有的商店（ID 尾碼 /})).toBeVisible();
+  await expect(flow(page).getByRole('radio', {name: /^將共用既有的零售商店（ID 尾碼 /})).toBeVisible();
   await flow(page).getByRole('button', {name: '取消', exact: true}).click();
   await expect(flow(page)).toHaveCount(0);
   await expect(storeCard.getByRole('button', {name: '啟動應用', exact: true})).toBeFocused();

@@ -76,7 +76,7 @@ export function ApplicationSkillSources({refs}: {refs: readonly string[]}) {
       const sourceCommit = [guide?.source_commit, book?.source_commit].find(value => typeof value === 'string' && /^[0-9a-f]{40}$/.test(value));
       return <li key={ref}>{book
         ? <>{reading ? <a href={reading} target="_blank" rel="noopener noreferrer">閱讀《{book.title}》原作 ↗</a> : <span>{book.title}（來源閱讀連結尚未提供）</span>}
-          {guide?.author_name && <p className="field-hint">來源標示的作者：{guide.author_name}</p>}
+          {guide?.author_name && <p className="field-hint">來源標示的{guide.credit_role??'作者'}：{guide.author_name}</p>}
           <p className="field-hint">{sourceCommit ? <>閱讀版本 <code>{sourceCommit.slice(0, 12)}</code></> : '閱讀版本未提供'} · {book.license_status === 'NOASSERTION' ? '授權待確認，使用前請見原作說明。' : `來源記錄的授權：${book.license_status || '未提供'}`}</p></>
         : <>{ref} <span className="field-hint">（尚無對應的閱讀指南）</span></>}</li>;
     })}</ul> : <p>此版本尚未登錄技能書參照。</p>}

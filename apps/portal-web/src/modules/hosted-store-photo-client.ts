@@ -36,6 +36,7 @@ async function sendPhotoRequest<T>(client:PortalClient,attempt:Pick<PhotoAttempt
     throw new ApiError({message:'登入已過期，請重新登入。',status:401});
   }
   let payload:unknown;try{payload=await response.json();}catch{throw new ApiError({message:'照片回應未完整收到，請重試原操作。',network:true});}
+  if(client.sessionGeneration!==generation)throw new ApiError({message:'登入狀態已改變，照片操作結果尚未確認。',network:true});
   if(!response.ok){const problem=payload as {detail?:string;code?:string};throw new ApiError({message:typeof problem?.detail==='string'?problem.detail:'照片操作未完成。',status:response.status,code:problem?.code,network:response.status>=500});}
   const ack=acknowledge(payload);
   if(!ack)throw new ApiError({message:'照片回應未完整收到，請重試原操作。',network:true});

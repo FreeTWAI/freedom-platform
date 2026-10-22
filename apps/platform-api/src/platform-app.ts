@@ -38,7 +38,7 @@ import { memberBoundary } from './member-boundary.js';
 import { readSessionCookie, sessionCookieName } from './session-cookie.js';
 import { createWork,claimWork,changeClaim,listWorks,listWorksPage,workListPageQuery,dashboard } from '../../../modules/opportunity-project-work/work.js';
 import { createPrivateWorkRoutes } from './routes/private-work.js';
-import { createShowcase,listShowcases,createOpportunity,listOpportunities,proposeEngagement,listEngagements,changeEngagement } from '../../../modules/opportunity-project-work/business.js';
+import { createShowcase,listShowcases,createOpportunity,listOpportunities,proposeEngagement,listEngagements,readEngagementSummary,changeEngagement } from '../../../modules/opportunity-project-work/business.js';
 import { listOwnShowcases,readOwnShowcase,createShowcaseDraft,updateOwnShowcase,publishOwnShowcase,withdrawOwnShowcase } from '../../../modules/opportunity-project-work/business.js';
 import { listPersonalContent } from '../../../modules/community/personal-content.js';
 import {readFirstParticipation,changeFirstParticipation,listFirstParticipationReception,claimFirstParticipationReception} from '../../../modules/community/first-participation.js';
@@ -743,6 +743,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.post('/api/v1/opportunities',async c=>respond(c,await createOpportunity(pool,await cmd(c)),201));
   app.post('/api/v1/opportunities/:id/engagements',async c=>respond(c,await proposeEngagement(pool,await cmd(c),routeId(c)),201));
   app.get('/api/v1/engagements',async c=>c.json({items:await listEngagements(pool,c.get('actor'))}));
+  app.get('/api/v1/engagements/summary',async c=>{
+    c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
+    return c.json(await readEngagementSummary(pool,c.get('actor')));
+  });
   for(const action of ['agree','deliver','accept','confirm-receipt'] as const) {
     app.post(`/api/v1/engagements/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeEngagement(pool,await cmd(c),routeId(c),action)));
   }

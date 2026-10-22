@@ -76,7 +76,10 @@
     "tests/runtime/contribution-roles.test.ts",
     "tests/e2e/contribution-roles.spec.ts",
     "docs/development/contribution-cooperation.md",
-    "modules/co-creation/service.ts"
+    "modules/co-creation/service.ts",
+    "apps/portal-web/src/modules/task-board-loading.ts",
+    "tests/runtime/task-board-loading.test.ts",
+    "tests/e2e/task-board-loading.spec.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [
@@ -84,7 +87,8 @@
     "modules/opportunity-project-work/private-work.ts",
     "modules/opportunity-project-work/private-commands.ts",
     "modules/opportunity-project-work/contribution-roles.ts",
-    "apps/portal-web/src/modules/ContributionOutcomes.tsx"
+    "apps/portal-web/src/modules/ContributionOutcomes.tsx",
+    "apps/portal-web/src/modules/task-board-loading.ts"
   ],
   "surfaces": [
     {
@@ -104,6 +108,7 @@
       "operations": [
         "work.list",
         "work.list.page",
+        "work.engagement.summary",
         "work.create",
         "work.claim",
         "work.claim.update",
