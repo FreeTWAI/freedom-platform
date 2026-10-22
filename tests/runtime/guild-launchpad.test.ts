@@ -774,7 +774,34 @@ test('an expired active delegation can be granted again and a live one cannot', 
   assert.match(past.expires_at, /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test('an unparsable published config falls back to the previous safe revision', async () => {
+test('latest drafts and revision history remain numeric across revision 9 and 10', async () => {
+  const leader = await signIn();
+  await lead(leader.user.user_id);
+  const body = defaultConfigFor(await catalog(guild));
+  let pointer = '1', latestId = '';
+  for (let revision = 1; revision <= 10; revision += 1) {
+    const saved = await request(`/guilds/${guild}/launchpad-config/drafts`, leader,
+      {body: {...body, mission_override: `草稿第 ${revision} 版`}}, pointer);
+    assert.equal(saved.status, 201, JSON.stringify(saved.data));
+    assert.equal(saved.data.revision, String(revision));
+    pointer = saved.data.pointer_version;
+    latestId = saved.data.config_id;
+  }
+  const latest = await request(`/guilds/${guild}/launchpad-config`, leader);
+  assert.equal(latest.status, 200, JSON.stringify(latest.data));
+  assert.equal(latest.data.config_id, latestId);
+  assert.equal(latest.data.revision, '10');
+  assert.equal(latest.data.pointer_version, pointer);
+  assert.equal(latest.data.body.mission_override, '草稿第 10 版');
+  assert.deepEqual(latest.data.revisions.map((row: {revision: string}) => row.revision),
+    ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1']);
+  const ninth = await request(`/guilds/${guild}/launchpad-config?revision=9`, leader);
+  assert.equal(ninth.status, 200, JSON.stringify(ninth.data));
+  assert.equal(ninth.data.revision, '9');
+  assert.equal(ninth.data.body.mission_override, '草稿第 9 版');
+});
+
+test('an unparsable published config falls back to the newest numeric safe revision', async () => {
   const key = 'guild_security';
   const leader = await signIn(DEMO_USERS[0].email);
   const member = await signIn(DEMO_USERS[1].email);
@@ -782,15 +809,24 @@ test('an unparsable published config falls back to the previous safe revision', 
   await join(member.user.user_id, key);
   const marker = `SAFE_MARKER_${randomUUID()}`;
   const goodBody = {...defaultConfigFor(await catalog(key)), mission_override: marker};
-  const published = await request(`/guilds/${key}/launchpad-config/drafts`, leader, {body: goodBody}, '1');
-  assert.equal(published.status, 201, JSON.stringify(published.data));
-  const live = await request(`/guilds/${key}/launchpad-config/${published.data.config_id}/publish`, leader, {expected_body_sha256: published.data.body_sha256}, published.data.pointer_version);
-  assert.equal(live.status, 200, JSON.stringify(live.data));
+  let live: Awaited<ReturnType<typeof request>> | undefined;
+  let currentPointer = '1';
+  for (let revision = 1; revision <= 10; revision += 1) {
+    const published = await request(`/guilds/${key}/launchpad-config/drafts`, leader,
+      {body: {...goodBody, mission_override: revision === 10 ? marker : `較舊安全版本 ${revision}`}}, currentPointer);
+    assert.equal(published.status, 201, JSON.stringify(published.data));
+    assert.equal(published.data.revision, String(revision));
+    live = await request(`/guilds/${key}/launchpad-config/${published.data.config_id}/publish`, leader,
+      {expected_body_sha256: published.data.body_sha256}, published.data.pointer_version);
+    assert.equal(live.status, 200, JSON.stringify(live.data));
+    currentPointer = live.data.pointer_version;
+  }
+  assert.ok(live);
   const principal = await editorPrincipal(leader.user.user_id);
-  const badId = await insertDraftRow(key, principal, '2', {schema_version: 'nope'});
+  const badId = await insertDraftRow(key, principal, '11', {schema_version: 'nope'});
   await publishStoredDraft(key, badId);
   const pointer = await pointAt(key, badId);
-  const problem = {code: 'config_schema_unsupported', revision: '2'};
+  const problem = {code: 'config_schema_unsupported', revision: '11'};
   const pub = await request(`/public/guilds/${key}/launchpad`);
   const seen = await request(`/guilds/${key}/launchpad`, member);
   assert.equal(pub.status, 200, JSON.stringify(pub.data));
@@ -809,7 +845,7 @@ test('an unparsable published config falls back to the previous safe revision', 
   assert.equal(leaderView.status, 200, JSON.stringify(leaderView.data));
   assert.deepEqual(leaderView.data.config_problem, problem);
   assert.equal(leaderView.data.body.mission_override, marker);
-  const explicit = await request(`/guilds/${key}/launchpad-config?revision=2`, leader);
+  const explicit = await request(`/guilds/${key}/launchpad-config?revision=11`, leader);
   assert.equal(explicit.status, 422, JSON.stringify(explicit.data));
   hasError(explicit.data, 'schema_version_invalid');
 
