@@ -6,7 +6,8 @@
     "apps/portal-web/src/modules/FriendsPanel.tsx",
     "apps/portal-web/src/modules/friends-directory-controller.ts",
     "tests/runtime/friends-directory-controller.test.ts",
-    "tests/e2e/friends-directory-interaction.spec.ts"
+    "tests/e2e/friends-directory-interaction.spec.ts",
+    "tests/e2e/friends-confirm.spec.ts"
   ],
   "public_exports": [],
   "dependencies": ["member-card", "member-communications"],

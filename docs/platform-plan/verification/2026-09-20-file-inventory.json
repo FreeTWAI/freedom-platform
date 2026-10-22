@@ -20994,8 +20994,8 @@
     },
     {
       "path": "modules/identity-membership/friends-directory/freedom.module.json",
-      "bytes": 807,
-      "sha256": "e3660830b23c0a4bb9e0efdc1b914a5855ba5c5c386fec5892a2159ecce1e0ca"
+      "bytes": 848,
+      "sha256": "766f166c0a76e5fe36ba4b34c782dc57fdfdda9c2578e5a141ff97d96dc64fa2"
     },
     {
       "path": "modules/identity-membership/portal/README.md",
@@ -23636,6 +23636,11 @@
       "path": "tests/e2e/freedom.module.json",
       "bytes": 1943,
       "sha256": "511370cfa9d192d6a40d74d36ec4e2510669d73bef8b16cf16340b41eeded5b2"
+    },
+    {
+      "path": "tests/e2e/friends-confirm.spec.ts",
+      "bytes": 6779,
+      "sha256": "bca44bf9ed5cdba4797be881cbaa2f6f6f1533c5c313615a7477fb92ffbbb502"
     },
     {
       "path": "tests/e2e/friends-directory-interaction.spec.ts",
@@ -27371,11 +27376,6 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
-    },
-    {
-      "path": "tests/e2e/friends-confirm.spec.ts",
-      "bytes": 6779,
-      "sha256": "bca44bf9ed5cdba4797be881cbaa2f6f6f1533c5c313615a7477fb92ffbbb502"
     }
   ]
 }
