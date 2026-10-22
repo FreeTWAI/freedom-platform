@@ -404,8 +404,8 @@
     },
     {
       "path": "apps/platform-api/src/platform-app.ts",
-      "bytes": 51087,
-      "sha256": "1d761bc806f99c23aaac9f8fcdcb2f006c461263c77eb05292ddd812cdc288f7"
+      "bytes": 51218,
+      "sha256": "91066183004609a60721e1e7dfae14b1c02dc1c745e002d5513c2c6b43dae4f5"
     },
     {
       "path": "apps/platform-api/src/private-ai-path.ts",
@@ -2244,8 +2244,8 @@
     },
     {
       "path": "apps/portal-web/src/SocialLayout.css",
-      "bytes": 17820,
-      "sha256": "cd689f5ca975a8f3a03ef2d9a34f4e3a18032ae92052e0a959b9b90ef1ba942d"
+      "bytes": 18467,
+      "sha256": "a8e589e3f1a3770624f3a1ea710ac20b937f25a7444466ee72d0a0f7f90e425a"
     },
     {
       "path": "apps/portal-web/src/WorkshopIcon.tsx",
@@ -3084,8 +3084,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 18393,
-      "sha256": "8e43cc43d71d8839cd916db5ac28b61e5830b894caa4f7dc24efdf02abcd8383"
+      "bytes": 19854,
+      "sha256": "a141ab12a6d819d4bec71a30a1743b2f9790d6ca4748aa91a9c7b25aa703cacd"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -3614,8 +3614,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/member-home-loading.ts",
-      "bytes": 7151,
-      "sha256": "3ac166c0d7e39addae46c9b3e2da68768949e875477bd149c51efefca9b4ecce"
+      "bytes": 7184,
+      "sha256": "a431b01e1fcfc34e060ec9c6a9c217143e99dd7f01a025e743c3c362eb551b1a"
     },
     {
       "path": "apps/portal-web/src/modules/member-inbox.ts",
@@ -23889,8 +23889,8 @@
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",
-      "bytes": 32628,
-      "sha256": "80b3c4a81a6080631e480197cf021624951606f15c8ff519f8ee004daba32be2"
+      "bytes": 34794,
+      "sha256": "41938d26d39f6799be0bedb72c14590228eb60e5fc68666b81185599ca7bf793"
     },
     {
       "path": "tests/e2e/member-navigation-hierarchy.spec.ts",
@@ -24139,8 +24139,8 @@
     },
     {
       "path": "tests/e2e/short-videos.spec.ts",
-      "bytes": 9643,
-      "sha256": "c39c83f28d366c0250a3d12cfd0b563b06f52c9c10b429da0ec7513912eb1311"
+      "bytes": 9720,
+      "sha256": "8cdf8ab1ecd3f86983c84ba674209ee2535872b6d6fb64ac57f836bddcbc1061"
     },
     {
       "path": "tests/e2e/showcase-pages.spec.ts",
@@ -25864,8 +25864,8 @@
     },
     {
       "path": "tests/runtime/member-home-loading.test.ts",
-      "bytes": 15188,
-      "sha256": "fbedfb878b643338d69872a162fe504e6bb9e9e5a9c1513b6a7c5fd24663ac15"
+      "bytes": 15250,
+      "sha256": "064069653367c025646373de6fba722b91827837cfaa81cbe237368293804020"
     },
     {
       "path": "tests/runtime/member-model-http-adversarial.test.ts",
@@ -26544,13 +26544,13 @@
     },
     {
       "path": "tests/runtime/short-video-embed.test.ts",
-      "bytes": 5952,
-      "sha256": "a9a885f2e241587547ecefcb8085a2e872eb2a3ecffb851a1220f77d1d1a9e4e"
+      "bytes": 6496,
+      "sha256": "361ce32c261a267807e0322cc51620b814d73a020b0a452e2c398ae628d82d6b"
     },
     {
       "path": "tests/runtime/short-video-flag.test.ts",
-      "bytes": 1451,
-      "sha256": "42032e92e279760118c1ce5d7afb2b55526a42153d80f9adb60756b6300c1931"
+      "bytes": 1464,
+      "sha256": "6b6d6247d7d541cfa10977e29aaec05bdeeed315f4a5a914f214931e940fb4aa"
     },
     {
       "path": "tests/runtime/showcase-drafts.test.ts",

@@ -16,6 +16,6 @@ test('the Worker accepts only true or false for the Short flag, and only true tu
 });
 
 test('the player origin appears in the page policy only for a Worker that enabled the flag',()=>{
-  assert.ok(!platformContentSecurityPolicy('/').includes('frame-src'));
-  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes('frame-src https://www.youtube-nocookie.com;'));
+  assert.ok(!platformContentSecurityPolicy('/').includes('https://www.youtube-nocookie.com'));
+  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes('https://www.youtube-nocookie.com;'));
 });

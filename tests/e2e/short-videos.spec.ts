@@ -123,9 +123,9 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
         expect(size.x + size.width).toBeLessThanOrEqual(width);
       }
     }
-    // The page itself allows no other frame origin.
+    // The homepage permits only the journal and the enabled Short player.
     const csp = (await page.request.get('/')).headers()['content-security-policy'];
-    expect(csp).toContain('frame-src https://www.youtube-nocookie.com;');
+    expect(csp).toContain('frame-src https://freetwai.evitina.tw https://www.youtube-nocookie.com;');
     expect(csp).toContain("frame-ancestors 'none'");
     expect(violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -137,7 +137,7 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
 
 test.describe('Short feed OFF (default)',()=>{
 test.use({memberFeatures:{}});
-test('no Short option, no frame-src and no player when the host did not enable it',async({page,baseURL})=>{
+test('no Short option, no player origin and no player when the host did not enable it',async({page,baseURL})=>{
   await login(page);
   await page.getByRole('button',{name:'動態選項',exact:true}).click();
   const options=page.getByRole('dialog',{name:'動態選項',exact:true});
@@ -145,7 +145,7 @@ test('no Short option, no frame-src and no player when the host did not enable i
   await expect(options.getByRole('button',{name:'Short',exact:true})).toHaveCount(0);
   expect(await (await page.request.get(`${baseURL}/api/v1/site`)).json()).toMatchObject({short_videos_enabled:false});
   const csp=(await page.request.get(`${baseURL}/`)).headers()['content-security-policy']??'';
-  expect(csp).not.toContain('frame-src');
+  expect(csp).not.toContain('https://www.youtube-nocookie.com');
   expect(csp).toContain("frame-ancestors 'none'");
   await expect(page.locator('iframe')).toHaveCount(0);
 });

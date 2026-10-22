@@ -3,7 +3,7 @@ export type HomeRefreshReason = 'initial' | 'manual' | 'automatic';
 export type HomeTaskAction = 'resume' | 'tasks' | 'showcase';
 
 /** The journal stays on its own service; this is a display-only public entry. */
-export function resolveHomeJournalUrl(value: unknown): string | null {
+export function resolveHomeJournalUrl(value: unknown = 'https://freetwai.evitina.tw/'): string | null {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
   try {
     const url = new URL(value.trim());

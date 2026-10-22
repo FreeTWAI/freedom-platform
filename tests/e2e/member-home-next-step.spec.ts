@@ -48,37 +48,67 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   }
 }
 
-for (const width of [1440, 390]) {
-  test(`journal entry preserves a separate read-only destination at ${width}px`, async ({ page, context }) => {
+for (const width of [1440, 390, 320]) {
+  test(`journal iframe keeps reading inside the homepage at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({width, height: 900});
-    const outbound: {authorization: string | undefined; cookie: string | undefined}[] = [];
+    const outbound: {authorization: string | undefined; cookie: string | undefined; referer: string | undefined}[] = [];
     await context.route('https://freetwai.evitina.tw/**', async route => {
       const headers = route.request().headers();
-      outbound.push({authorization: headers.authorization, cookie: headers.cookie});
-      await route.fulfill({contentType: 'text/html', body: '<h1>Synthetic approved journal destination</h1>'});
+      outbound.push({authorization: headers.authorization, cookie: headers.cookie, referer: headers.referer});
+      const article = new URL(route.request().url()).pathname !== '/';
+      await route.fulfill({contentType: 'text/html; charset=utf-8', headers: {'Referrer-Policy': 'no-referrer'}, body: article
+        ? `<h1>測試日誌文章</h1><button onclick="top.location.href='https://escape.invalid/'">嘗試離開主站</button>`
+        : '<h1>合成共創日誌</h1><a href="/journal/2026-10-22">閱讀測試文章</a><script>addEventListener("keydown", e => {if(e.key === "Escape") parent.postMessage("freedom-journal:close", "*")})</script>'});
     });
     await login(page, false);
     await openHomeGuide(page);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
     expect(outbound).toHaveLength(0);
+    await expect(entry.locator('iframe')).toHaveCount(0);
     const url = resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
     if (url) {
-      const homeUrl = page.url();
-      const link = entry.getByRole('link', {name: /^閱讀共創誌\s*（另開分頁）$/});
-      await expect(link).toHaveAttribute('href', url);
-      await expect(link).toHaveAttribute('target', '_blank');
-      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-      const popupPromise = page.waitForEvent('popup');
-      await link.click();
-      const popup = await popupPromise;
-      await expect(popup.getByRole('heading', {name: 'Synthetic approved journal destination'})).toBeVisible();
-      expect(outbound).toEqual([{authorization: undefined, cookie: undefined}]);
-      await popup.close();
+      const homeUrl = page.url(), pageCount = context.pages().length;
+      const trigger = entry.getByRole('button', {name: '閱讀共創誌', exact: true});
+      await trigger.click();
+      const dialog = page.getByRole('dialog', {name: '共創日誌', exact: true});
+      await expect(dialog).toBeVisible();
+      await page.evaluate(() => window.postMessage('freedom-journal:close', location.origin));
+      await expect(dialog).toBeVisible();
+      const iframe = dialog.locator('iframe');
+      await expect(iframe).toHaveAttribute('src', url);
+      await expect(iframe).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+      await expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
+      const content = page.frameLocator('iframe[title="共創日誌內容"]');
+      await expect(content.getByRole('heading', {name: '合成共創日誌'})).toBeVisible();
+      await content.getByRole('link', {name: '閱讀測試文章'}).click();
+      await expect(content.getByRole('heading', {name: '測試日誌文章'})).toBeVisible();
+      await content.getByRole('button', {name: '嘗試離開主站'}).click();
+      await expect(page).toHaveURL(homeUrl);
+      expect(context.pages()).toHaveLength(pageCount);
+      expect(outbound).toEqual([
+        {authorization: undefined, cookie: undefined, referer: undefined},
+        {authorization: undefined, cookie: undefined, referer: undefined},
+      ]);
+      const bounds = await dialog.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await page.screenshot({path: `${shots}/journal-iframe-${width}.png`});
+      await dialog.getByRole('button', {name: '關閉共創日誌'}).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(entry.locator('iframe')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await expect(content.getByRole('heading', {name: '合成共創日誌'})).toBeVisible();
+      await content.getByRole('link', {name: '閱讀測試文章'}).focus();
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+      await expect(trigger).toBeFocused();
       await expect(page).toHaveURL(homeUrl);
     } else {
       await expect(entry.getByRole('status')).toHaveText('日誌尚未公開');
-      await expect(entry.getByRole('link')).toHaveCount(0);
+      await expect(entry.getByRole('button')).toHaveCount(0);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({path: `${shots}/journal-entry-${width}.png`, fullPage: true});

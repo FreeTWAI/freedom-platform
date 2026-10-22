@@ -56,11 +56,18 @@ test('player commands are plain JSON for the YouTube postMessage API',()=>{
 });
 
 test('the player origin is allowed only when the host enabled Short, and never on payment hand-off or admin pages',()=>{
-  assert.ok(!platformContentSecurityPolicy('/').includes('frame-src'));
-  assert.ok(!platformContentSecurityPolicy('/',undefined,undefined,false).includes('frame-src'));
-  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes(`frame-src ${SHORT_VIDEO_EMBED_ORIGIN};`));
+  assert.ok(!platformContentSecurityPolicy('/').includes(SHORT_VIDEO_EMBED_ORIGIN));
+  assert.ok(!platformContentSecurityPolicy('/',undefined,undefined,false).includes(SHORT_VIDEO_EMBED_ORIGIN));
+  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes(`${SHORT_VIDEO_EMBED_ORIGIN};`));
   for(const path of ['/admin','/admin/github/callback'])assert.ok(!platformContentSecurityPolicy(path,undefined,undefined,true).includes('frame-src'));
   assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes("frame-ancestors 'none'"));
+});
+
+test('only the homepage can embed the public journal; payment, admin and other pages retain their policy',()=>{
+  for(const path of ['/','/index.html'])assert.ok(platformContentSecurityPolicy(path).includes('frame-src https://freetwai.evitina.tw;'));
+  for(const path of ['/admin','/admin/github/callback','/pay/ecpay/'+ 'A'.repeat(43),'/development','/store/example']){
+    for(const short of [false,true])assert.ok(!platformContentSecurityPolicy(path,undefined,undefined,short).includes('freetwai.evitina.tw'),path);
+  }
 });
 
 test('a link is classified by its address alone: short, other single video, or neither',()=>{
