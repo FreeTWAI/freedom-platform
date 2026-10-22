@@ -3269,8 +3269,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/TaskBoardPanel.tsx",
-      "bytes": 9527,
-      "sha256": "a79decc93b4b82e0628664d8fcc8af446e57691ca6a1f0e50215e220fe6b06c0"
+      "bytes": 14696,
+      "sha256": "fe00f1f7180f18ec93deb3bcacdedc687cf4dedf1027397f2b94f875d04ec0d0"
     },
     {
       "path": "apps/portal-web/src/modules/TenantSelector.tsx",
@@ -3511,6 +3511,11 @@
       "path": "apps/portal-web/src/modules/store-setup.ts",
       "bytes": 2835,
       "sha256": "20e8e3517645f9895657d55400d4221eaaaff02e645440b6d089db535608b195"
+    },
+    {
+      "path": "apps/portal-web/src/modules/task-board-loading.ts",
+      "bytes": 3792,
+      "sha256": "786d435cbbcfbc7728f2b095a9dd5d679b423b80d96def89a93c91759e8a9133"
     },
     {
       "path": "apps/portal-web/src/modules/tenant-workspaces.css",
@@ -20714,8 +20719,8 @@
     },
     {
       "path": "modules/opportunity-project-work/freedom.module.json",
-      "bytes": 7160,
-      "sha256": "8ce5074bc60f725fa1b653bfeb68e12e2bdae659a9602196b667dbeab6a0b1c0"
+      "bytes": 7366,
+      "sha256": "e106803892f4be158caa112bc88669f23c8bb3a4d3cc98e89239f23a02ca3f22"
     },
     {
       "path": "modules/opportunity-project-work/private-commands.ts",
@@ -23723,6 +23728,11 @@
       "sha256": "d0e16b09a1fc33e06b53a15023102f25de5fb8f9629569454404640137a0d482"
     },
     {
+      "path": "tests/e2e/task-board-loading.spec.ts",
+      "bytes": 13587,
+      "sha256": "d146fe63f893a3fb96fa0ce067e8a6c8ce635d6a6d596d1d3fae8ed041e52934"
+    },
+    {
       "path": "tests/e2e/tenant-member-grants-role-change.spec.ts",
       "bytes": 10936,
       "sha256": "9d2493834a6eeedb13fcf957163dd5c79f91e20bea89136945c1a140bb1b89c6"
@@ -23754,8 +23764,8 @@
     },
     {
       "path": "tests/e2e/work-pagination.spec.ts",
-      "bytes": 5105,
-      "sha256": "e388b197beee29ae05a235aff546949f684fc90f3f2bcc413daf810055fff93e"
+      "bytes": 5375,
+      "sha256": "f4e8d2490d5cc11044f2db4492c76a6157b736d3fa3b62d346a0cdb81e20754c"
     },
     {
       "path": "tests/e2e/workshop-design.spec.ts",
@@ -26171,6 +26181,11 @@
       "path": "tests/runtime/supply-materials.test.ts",
       "bytes": 36476,
       "sha256": "8ed1db0135f049a035f15481e2cd5b53a488b1484662dd3d0125d15581c645d6"
+    },
+    {
+      "path": "tests/runtime/task-board-loading.test.ts",
+      "bytes": 11749,
+      "sha256": "5461c38082670f3a0b473331bc36f00d434941d0eb78d16d2479658b2dca622a"
     },
     {
       "path": "tests/runtime/tenant-authority-policy-grants.test.ts",
