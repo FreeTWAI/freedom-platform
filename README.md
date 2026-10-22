@@ -1,5 +1,7 @@
 # Freedom Platform
 
+想貢獻一個功能？從[模組貢獻指南](docs/development/module-contributions.md)查詢模組、建立骨架與提交 PR。
+
 共同基礎收尾從 [Foundation Complete](docs/platform-plan/execution/unified-foundation/closeout.md) 開始；
 [現況快照](docs/platform-plan/execution/unified-foundation/current-state.json)區分已合併、已部署與實際驗收，
 [原需求證據](docs/platform-plan/execution/unified-foundation/requirement-evidence.json)是逐項狀態的唯一索引。

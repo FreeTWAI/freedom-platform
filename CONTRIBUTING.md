@@ -35,6 +35,11 @@ npm run test:repos
 自願貢獻不保證案源、XP、收益或雇用。若產生付費合作，由當事人另定條款與 Seller 外部收款；平台不代收。秘密、客戶資料、真實交易單據與未授權素材不進公開 Issue／PR。
 <!-- freedom-repository-guide:end -->
 
+## 找模組、建立功能與開 PR
+
+從[模組貢獻指南](docs/development/module-contributions.md)開始：查詢檔案屬於哪個模組、產生新模組骨架、接入頁面或 API，再用既有 CI 驗證。命令從 repository 根目錄執行：`npm run module:list`、`npm run module:new -- --id <module-id> --owner <role>`、`npm run module:check`。
+
+
 ## 寫完之後怎麼發布
 
 一般改善、限定試用與核心／交易變更走不同的發布途徑，共用同一套安全底線；PR 暫時不能發布時，維護者會寫出卡點、下一棒、解除條件與交付方式。詳見[群友貢獻的發布途徑](docs/development/contribution-release-paths.md)。

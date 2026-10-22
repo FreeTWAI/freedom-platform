@@ -1,0 +1,59 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "portal-features",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/portal-features/**",
+    "apps/portal-web/src/features/**",
+    "tests/runtime/portal-feature-registry.test.ts",
+    "apps/portal-web/src/guild-blocks/GuildDirectoryPage.tsx",
+    "apps/portal-web/src/modules/TaskBoardPanel.tsx"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/features/registry.tsx",
+    "apps/portal-web/src/features/types.ts",
+    "apps/portal-web/src/features/metadata.ts",
+    "apps/portal-web/src/features/composition.ts"
+  ],
+  "dependencies": [
+    "agent-commerce",
+    "agent-commerce-portal",
+    "authored-outcomes",
+    "co-creation",
+    "community",
+    "community-ar",
+    "community-discovery",
+    "community-search",
+    "execution-runs",
+    "friends-directory",
+    "member-card",
+    "member-communications",
+    "member-squads",
+    "personal-content",
+    "portal-shell",
+    "positioning",
+    "skill-submissions",
+    "social-feed",
+    "tenant-workspaces",
+    "work"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/portal-features/README.md",
+    "docs/development/module-contributions.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

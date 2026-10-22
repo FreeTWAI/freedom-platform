@@ -29,6 +29,7 @@ export function createTaskRead<T>(generation: () => number) {
     controller: AbortController;
     before: TaskReadSnapshot<T>;
     done: Promise<void>;
+    finish: () => void;
   };
   let active: Operation | null = null;
   const authorized = () => generation() === ownerGeneration;
@@ -39,6 +40,7 @@ export function createTaskRead<T>(generation: () => number) {
   const detach = () => {
     const previous = active;
     active = null; // Invalidate before abort listeners are invoked.
+    previous?.finish(); // Release waiters even when the reader ignores its signal.
     previous?.controller.abort();
     return previous;
   };
@@ -54,10 +56,12 @@ export function createTaskRead<T>(generation: () => number) {
       const previous = detach();
       const before = previous?.before ?? snapshot;
       const retained = options.retain ? before.value : null;
-      const operation: Operation = {key, controller: new AbortController(), before, done: Promise.resolve()};
+      let finish!: () => void, fail!: (cause: unknown) => void;
+      const done = new Promise<void>((resolve,reject) => {finish=resolve;fail=reject;});
+      const operation: Operation = {key, controller: new AbortController(), before, done, finish};
       active = operation;
       const current = () => active === operation && authorized() && !operation.controller.signal.aborted;
-      operation.done = Promise.resolve().then(async () => {
+      void Promise.resolve().then(async () => {
         // A rapid filter change can cancel a scheduled read before any HTTP call.
         if (!current()) return;
         try {
@@ -71,7 +75,7 @@ export function createTaskRead<T>(generation: () => number) {
           publish({key, status: 'error', error,
             value: options.retainOnError && !accessFailure(error) ? retained : null});
         }
-      });
+      }).then(finish,fail);
       publish({key, status: 'loading', value: retained, error: null});
       return operation.done;
     },
