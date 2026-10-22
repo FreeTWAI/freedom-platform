@@ -1,5 +1,5 @@
 import {MerchantInventorySummary,InventoryDefinition,STOCK_HINT} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
-import {useEffect, useRef, useState, type FormEvent} from 'react';
+import {useEffect, useId, useRef, useState, type FormEvent} from 'react';
 import type {z} from 'zod';
 import {SupplyCatalogViewSchema, SupplyCatalogSetupInputSchema, SupplyProductInputSchema, SupplyProductViewSchema, SupplyProductPageSchema, SupplyCatalogReceiptSchema, SupplyProductReceiptSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
@@ -7,6 +7,7 @@ import {SupplyOfferSchema} from '../../../../contracts/guild-launchpad/v1/hosted
 import {ApiError, type PortalClient} from '../api';
 import {formatMinor, parseMajorToMinor} from '../format';
 import {useMyStores} from './MyStoreAction';
+import {SUPPLY_CURRENCY_HINT} from '../../../../modules/agent-commerce/supplier-console/ui/setup-progress';
 import {HostedSupplyTerms} from './HostedSupplyTerms';
 import {HostedDistribution, supplyRequestsWaiting, type SupplyCooperationSnapshot} from './HostedDistribution';
 import {ReservationSettingSchema} from '../../../../contracts/guild-launchpad/v1/hosted-shared-order';
@@ -39,15 +40,16 @@ function waitingNotice(snapshot: SupplyCooperationSnapshot | null) {
 }
 export function SupplyCatalogList({client}: {client: PortalClient}) {
   const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client, 'supply');
+  const items = [...(data?.items ?? [])].sort((a, b) => Number(b.setup_state === 'setup_required') - Number(a.setup_state === 'setup_required'));
   return <div className="hosted-store stack">
     <h2 data-share-entry="supply" tabIndex={-1}>我的供貨商品庫</h2>
     <div className="actions"><a className="btn btn-ghost" href="#guilds/guild_product_quality_supply">前往商品品質與供應公會</a></div>
     {error ? <><p role="alert">暫時無法讀取你的供貨資料。</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></> : !data ? <p role="status">正在確認你的供貨資料…</p> : <>
       {data.items.length === 0 && !data.next_cursor && <p>你還沒有供貨商品庫。請從商品品質與供應公會開始供貨設定。</p>}
-      {data.items.map(item => <article className="card stack" key={item.instance_id}>
+      {items.map((item, index) => <article className="card stack" key={item.instance_id}>
         <h3>{item.name ?? '尚未完成設定的商品庫'}</h3><p>業務空間：{item.tenant_display_name}</p>
-        <p>{item.setup_state === 'setup_required' ? '待設定供貨資料' : '供貨資料已就緒'}</p>
-        <div className="actions"><a className="btn btn-primary" href={`#stores/${item.tenant_id}/${item.instance_id}/supply`}>查看商品與供貨</a></div>
+        <p>{item.setup_state === 'setup_required' ? '商品庫資料待設定' : '商品庫資料已建立'}</p>
+        <div className="actions"><a className={index === 0 ? "btn btn-primary" : "btn btn-ghost btn-small"} href={`#stores/${item.tenant_id}/${item.instance_id}/supply`}>{item.setup_state === 'setup_required' ? '繼續設定商品庫' : '查看商品與供貨'}</a></div>
       </article>)}
       {pageError && <p role="alert">暫時無法載入其餘商品庫，請重試。</p>}
       {data.next_cursor && <div className="actions"><button type="button" className="btn btn-ghost" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '正在載入…' : pageError ? '重試載入其餘商品庫' : '載入更多商品庫'}</button></div>}
@@ -267,6 +269,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
   </div>;
 }
 function SupplySetupForm({busy, onDirty, onSave}: {busy: boolean; onDirty: (value: boolean) => void; onSave: (body: z.infer<typeof SupplyCatalogSetupInputSchema>, success: () => void) => Promise<void>}) {
+  const currencyHintId = useId();
   const [name, setName] = useState(''), [currency, setCurrency] = useState<'TWD' | 'USD'>('TWD'), [description, setDescription] = useState(''), [error, setError] = useState('');
   const dirtyRef = useRef(onDirty); dirtyRef.current = onDirty;
   useEffect(() => {dirtyRef.current(Boolean(name || description || currency !== 'TWD'));}, [name, description, currency]);
@@ -280,7 +283,8 @@ function SupplySetupForm({busy, onDirty, onSave}: {busy: boolean; onDirty: (valu
   return <form className="hosted-store-form stack" aria-label="建立供貨商品庫" onSubmit={event => void submit(event)}>
     <fieldset className="hosted-store-fields stack" disabled={busy}><legend className="sr-only">供貨資料</legend>
       <label className="field">商品庫名稱<input required maxLength={80} value={name} onChange={event => setName(event.target.value)}/></label>
-      <label className="field">供貨幣別<select value={currency} onChange={event => setCurrency(event.target.value as 'TWD' | 'USD')}><option value="TWD">新臺幣 TWD</option><option value="USD">美元 USD</option></select></label>
+      <label className="field">供貨幣別<select aria-describedby={currencyHintId} value={currency} onChange={event => setCurrency(event.target.value as 'TWD' | 'USD')}><option value="TWD">新臺幣 TWD</option><option value="USD">美元 USD</option></select></label>
+      <p id={currencyHintId} className="field-hint">{SUPPLY_CURRENCY_HINT}</p>
       <label className="field">商品庫說明<textarea maxLength={2000} value={description} onChange={event => setDescription(event.target.value)}/></label>
       {error && <p role="alert">{error}</p>}<div className="actions"><button className="btn btn-primary" disabled={busy}>建立供貨商品庫</button></div>
     </fieldset>
