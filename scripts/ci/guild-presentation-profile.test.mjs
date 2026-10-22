@@ -12,17 +12,46 @@ import {isModuleDescriptorPath,selectImpact,owns} from '../../packages/contribut
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const head=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const graph=loadModuleDescriptors(root,head);assert.equal(graph.ok,true);
-const descriptorSources=execFileSync('git',['-C',root,'ls-tree','-r','--name-only','-z',head],{encoding:'utf8'})
+const actualDescriptorSources=execFileSync('git',['-C',root,'ls-tree','-r','--name-only','-z',head],{encoding:'utf8'})
   .split('\0').filter(isModuleDescriptorPath)
   .map(path=>[path,execFileSync('git',['-C',root,'show',`${head}:${path}`])]);
 const supply='modules/guild-supply/CatalogBlock.tsx',opensource='modules/guild-open-source/WorksBlock.tsx';
 const admin='apps/portal-web/src/modules/AdminPanel.tsx';
 const parsers=loadGuildPresentationParsers();assert.ok(parsers);
 const sources=Object.fromEntries([supply,opensource,admin].map(path=>[path,readFileSync(join(root,path),'utf8')]));
-function input(paths=[supply]){return {event:'pull_request',diffComplete:true,descriptorsProven:true,changes:paths.map(path=>({status:'M',path})),baseline:structuredClone(graph.descriptors),candidate:structuredClone(graph.descriptors)};}
+function descriptor(module_id, extra={}) {
+  return {format:'freedom.module/v1',module_id,owner_role:'foundation',owned_paths:[`modules/${module_id}/**`],
+    public_exports:[],dependencies:[],contract_families:[],client_profiles:['member'],instructions:['AGENTS.md'],
+    invariants:['local-only'],tests:['runtime.full'],surfaces:[],...extra};
+}
+// Synthetic admission fixture for the fixed host-reviewed GUIDE_COMPOSITION_PROFILE
+// and GUILD_PRESENTATION_PROFILE. It is independent of the evolving checkout's
+// descriptors: unrelated dependency slots are inert, while both real guild
+// entries, their surfaces and the reviewed composition obligations stay explicit.
+// Current repository ownership and its expanded consumers are tested separately.
+function reviewedDescriptors() {
+  const descriptors=GUILD_PRESENTATION_PROFILE.leaves.map(leaf=>descriptor(leaf.module,{
+    owner_role:leaf.owner,public_exports:[leaf.entry],dependencies:[...leaf.dependencies],tests:['runtime.guild-blocks'],
+    surfaces:[{surface_id:leaf.surface,entry:leaf.entry,kind:'page',auth_profile:'member-session',operations:[...leaf.operations]}],
+  }));
+  descriptors.push(descriptor('platform-admin-portal',{owned_paths:[admin],
+    dependencies:['development','guild-workspace','positioning','shared'],tests:['runtime.full','ui.default']}));
+  descriptors.push(descriptor(GUIDE_COMPOSITION_PROFILE.module,{owned_paths:['apps/portal-web/src/App.tsx'],
+    dependencies:[...GUIDE_COMPOSITION_PROFILE.dependencies],tests:['runtime.full']}));
+  for(const id of new Set(descriptors.flatMap(item=>item.dependencies)))
+    if(!descriptors.some(item=>item.module_id===id))descriptors.push(descriptor(id));
+  return descriptors;
+}
+function reviewedDescriptorSources() {
+  const locations={'application-composition':'apps/freedom.module.json',
+    'platform-admin-portal':'apps/admin/freedom.module.json','guild-presentation':'packages/guild-presentation/freedom.module.json'};
+  return reviewedDescriptors().map(item=>[locations[item.module_id]??`modules/${item.module_id}/freedom.module.json`,JSON.stringify(item)]);
+}
+function input(paths=[supply], descriptors=reviewedDescriptors()) {return {event:'pull_request',diffComplete:true,descriptorsProven:true,
+  changes:paths.map(path=>({status:'M',path})),baseline:structuredClone(descriptors),candidate:structuredClone(descriptors)};}
 const decide=decideGuildPresentationProfile;
-test('actual two-guild graph retains composition obligations and explains exact checks',()=>{
-  const composition = graph.descriptors.find(item => item.module_id === GUIDE_COMPOSITION_PROFILE.module);
+test('reviewed two-guild fixture retains composition obligations and explains exact checks',()=>{
+  const composition = reviewedDescriptors().find(item => item.module_id === GUIDE_COMPOSITION_PROFILE.module);
   assert.deepEqual([...composition.dependencies].sort(), [...GUIDE_COMPOSITION_PROFILE.dependencies].sort());
   assert.ok(composition.dependencies.includes('platform-admin-portal'));
   const supplyLeaf = GUILD_PRESENTATION_PROFILE.leaves.find(item => item.module === 'guild-supply');
@@ -40,16 +69,18 @@ test('actual two-guild graph retains composition obligations and explains exact 
 test('actual admin ownership retains full suites, jobs and browser coverage alone or with guild edits',()=>{
   const owner = graph.descriptors.find(item => item.module_id === 'platform-admin-portal');
   assert.equal(owner.owner_role, 'foundation');
-  assert.deepEqual([...owner.dependencies].sort(), ['development', 'guild-workspace', 'positioning', 'shared']);
+  for(const dependency of ['development','guild-workspace','positioning','shared','command-core','community',
+    'member-card','member-communications','resource-scopes','tenant-workspaces'])assert.ok(owner.dependencies.includes(dependency),dependency);
   assert.deepEqual([...owner.tests].sort(), ['runtime.full', 'ui.default']);
   for(const path of owner.owned_paths.map(path => path.endsWith('/**') ? path.slice(0,-2)+'workspace.tsx' : path)) {
-    assert.deepEqual(graph.descriptors.filter(item => owns(item,path)).map(item => item.module_id), ['platform-admin-portal'], path);
+    assert.ok(graph.descriptors.filter(item => owns(item,path)).some(item=>item.module_id==='platform-admin-portal'),path);
     const impact = selectImpact({baseline:graph.descriptors,candidate:graph.descriptors,changedPaths:[path]});
     assert.deepEqual(impact.unknown_paths, [], path);
-    assert.deepEqual(impact.module_ids, ['application-composition', 'platform-admin-portal'], path);
-    assert.deepEqual(impact.tests, ['runtime.full', 'ui.default'], path);
+    for(const module of ['application-composition','platform-admin-portal','repo-maintainer','portal-features'])
+      assert.ok(impact.module_ids.includes(module),path+': '+module);
+    for(const suite of ['e2e.harness','runtime.full','runtime.member-card','ui.default'])assert.ok(impact.tests.includes(suite),path+': '+suite);
     for(const paths of [[path],[supply,path]]) {
-      const value=input(paths),selection=decideAffectedJobs(value);
+      const value=input(paths,graph.descriptors),selection=decideAffectedJobs(value);
       assert.equal(decide(value).profile, 'full', path);
       assert.equal(decideE2eProfile(value).profile, 'full', path);
       assert.equal(selection.mode, 'full', path);
@@ -95,7 +126,7 @@ test('baseline and candidate union cannot shed obligations or gain an unreviewed
   const missing=input();missing.candidate=missing.candidate.filter(d=>d.module_id!=='guild-presentation');assert.equal(decide(missing).profile,'full');
 });
 
-function integration(t, extra='', changedPath=supply) {
+function integration(t, extra='', changedPath=supply, descriptorSources=reviewedDescriptorSources()) {
   const repository=mkdtempSync(join(tmpdir(),'fp-guild-impact-'));t.after(()=>rmSync(repository,{recursive:true,force:true}));
   const git=(...args)=>execFileSync('git',['-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false','-c','commit.gpgsign=false',...args],{
     cwd:repository,encoding:'utf8',stdio:['ignore','pipe','pipe'],env:{...process.env,GIT_AUTHOR_NAME:'Synthetic Fixture',GIT_COMMITTER_NAME:'Synthetic Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_EMAIL:'fixture@example.invalid'}}).trim();
@@ -113,7 +144,7 @@ function integration(t, extra='', changedPath=supply) {
   return {repository,event:'pull_request',base,head,candidate:git('rev-parse','HEAD')};
 }
 
-test('real clean integration selects the fixed guild lane and aggregate requires every selected result',t=>{
+test('clean synthetic integration with the reviewed graph selects the guild lane and requires every result',t=>{
   const args=integration(t),result=collectRepositoryDecision(args);
   assert.equal(result.mode,'affected');assert.equal(result.reason,'guild_presentation_dependency_closure');
   assert.deepEqual(Object.keys(result.jobs).filter(key=>result.jobs[key]),['static-worker','guild-presentation']);
@@ -130,8 +161,42 @@ test('real clean integration selects the fixed guild lane and aggregate requires
   writeFileSync(join(args.repository,'untracked.ts'),'synthetic');assert.equal(collectRepositoryDecision(args).mode,'full');
 });
 
+test('actual expanded composition keeps guild edits on full jobs and browser coverage',t=>{
+  const composition=graph.descriptors.find(item=>item.module_id===GUIDE_COMPOSITION_PROFILE.module);
+  for(const module of ['portal-features','platform-api-features','portal-shell','platform-host'])
+    assert.ok(composition.dependencies.includes(module),module);
+  assert.notDeepEqual([...composition.dependencies].sort(),[...GUIDE_COMPOSITION_PROFILE.dependencies].sort());
+  for(const paths of [[supply],[opensource],[supply,opensource]]) {
+    const value=input(paths,graph.descriptors),impact=selectImpact({baseline:value.baseline,candidate:value.candidate,changedPaths:paths});
+    assert.deepEqual(impact.unknown_paths,[]);
+    assert.deepEqual(impact.tests,['runtime.full','runtime.guild-blocks']);
+    assert.deepEqual(decide(value),{profile:'full',reason:'guild_impact_unproven'});
+    assert.equal(decideE2eProfile(value).profile,'full');
+    assert.deepEqual(Object.keys(decideAffectedJobs(value).jobs).filter(id=>decideAffectedJobs(value).jobs[id]),[...SELECTABLE_JOBS]);
+  }
+  // Keep the real descriptor locations; moving them would change implicit
+  // ownership and could exceed the unchanged 64-path limit.
+  const result=collectRepositoryDecision(integration(t,'',supply,actualDescriptorSources));
+  assert.equal(result.mode,'full');assert.equal(result.reason,'guild_impact_unproven');
+  assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS]);
+});
+
+test('new guild reverse consumers in either revision preserve additional suites and full fallback',()=>{
+  const reviewed=reviewedDescriptors(),expanded=structuredClone(reviewed);
+  expanded.push(descriptor('additional-guild-consumer',{dependencies:['guild-supply'],tests:['runtime.member-card','ui.default']}));
+  for(const [baseline,candidate] of [[reviewed,expanded],[expanded,reviewed],[expanded,expanded]]) {
+    const value={...input(),baseline,candidate};
+    const impact=selectImpact({baseline,candidate,changedPaths:[supply]});
+    assert.ok(impact.module_ids.includes('additional-guild-consumer'));
+    assert.deepEqual(impact.tests,['runtime.full','runtime.guild-blocks','runtime.member-card','ui.default']);
+    assert.deepEqual(decide(value),{profile:'full',reason:'guild_impact_unproven'});
+    const result=decideAffectedJobs(value);
+    assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS]);
+  }
+});
+
 test('real clean admin integration selects every job',t=>{
-  const result=collectRepositoryDecision(integration(t,'',admin));
+  const result=collectRepositoryDecision(integration(t,'',admin,actualDescriptorSources));
   assert.equal(result.mode,'full');
   assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS]);
 });

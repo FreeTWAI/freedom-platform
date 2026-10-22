@@ -10,7 +10,7 @@ import { verificationEnvironment } from './process-env.mjs';
 import { CONSUMER_LIBRARIES, LEGACY_LIBRARY_PROFILE, consumerLibraryProfile, LIBRARY_LOCK, LIBRARY_PREFIX, sourceGit, verifyConsumerLibraries } from './consumer-libraries.mjs';
 
 export const PORTABLE_TOOL_FILES = [
-  ...['errors', 'io', 'schema', 'formats', 'contracts', 'pin-cli', 'workspace', 'context', 'verify', 'cli',
+  ...['errors', 'io', 'schema', 'formats', 'contracts', 'pin-cli', 'workspace', 'context', 'verify', 'cli', 'modules',
     'local-artifacts', 'process-env', 'repository-identity', 'consumer-libraries', 'test-reporter', 'test-failure-diagnostic', 'suite-runner', 'runtime-file-weights', 'pinned-suites', 'runtime-suites', 'runtime-databases'].map(name => `packages/contribution-tools/${name}.mjs`),
   'governance/README.md',
   ...['release-set', 'contract-pin-v1', 'contract-pin-v2', 'release-proof', 'release-trust', 'module', 'coding-context', 'verifier-report']

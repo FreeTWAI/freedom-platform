@@ -37,7 +37,8 @@
     "packages/skill-upload-client/LICENSE",
     "packages/skill-upload-client/README.md",
     "packages/skill-upload-client/package.json",
-    "packages/skill-upload-client/test/cli.test.mjs"
+    "packages/skill-upload-client/test/cli.test.mjs",
+    "packages/skill-upload-client/**"
   ],
   "public_exports": [
     "modules/skill-submissions/limits.ts",
