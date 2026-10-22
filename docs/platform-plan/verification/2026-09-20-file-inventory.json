@@ -26179,8 +26179,8 @@
     },
     {
       "path": "tests/runtime/notification-preferences.test.ts",
-      "bytes": 20714,
-      "sha256": "e826b7bfd73516d41cd04f599839c35e7fc44c5116d20d0607bdc69188033bda"
+      "bytes": 20756,
+      "sha256": "03db0569e6136f2d651fb8a7b11483ee53227c925745fd0a585e14371b510e5d"
     },
     {
       "path": "tests/runtime/onboarding-diagnostics.test.ts",
