@@ -12,7 +12,7 @@ import { DAG_MIGRATIONS, LEGACY_MIGRATIONS, MIGRATION_V2_GUARD } from '../../../
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const NOW = 1790899200000;
-const CAPABILITIES = ['commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
+const CAPABILITIES = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
 function fixture() {
   const scan = checkMigrations(join(ROOT, 'migrations'), loadManifest().database_defaults.migrations);
   const candidate = { source_sha: 'a'.repeat(40), artifact_sha256: 'b'.repeat(64) };
@@ -297,7 +297,7 @@ for (const source of ['enable_shapes', 'enabled_shapes', 'written_shapes', 'roll
     const f = fixture();
     const container = source === 'enable_shapes' ? f.input : source === 'rollback_floor_shapes' ? f.host : f.host.observation;
     container[source] = ['avatar.asset.v1', 'work.private-human-result.v1'];
-    f.host.release_records[0].capabilities = ['commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
+    f.host.release_records[0].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
     const result = evaluate(f);
     assert.equal(result.status, 'incompatible');
     for (const capability of ['avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1']) {
@@ -364,7 +364,7 @@ test('editorial and scoped-chat migrations preserve host approval and authority 
   assert.deepEqual(f.scan.ledger.filter(row => /^(112|113)_/.test(row.name)).map(row => row.name), ['112_member_card_editorial.sql', '113_chat_stickers_replies.sql']);
   const result = evaluate(f);
   assert.equal(result.status, 'compatible');
-  assert.deepEqual(result.required_capabilities, ['commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1']);
+  assert.deepEqual(result.required_capabilities, ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1']);
   for (const field of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[field], false);
   for (const filename of ['112_member_card_editorial.sql', '113_chat_stickers_replies.sql']) {
     const renamed = fixture();
@@ -591,7 +591,7 @@ test('recovery comparison is exact beyond safe integers and increasing generatio
   assert.deepEqual(codes(evaluate(f)), ['historical_recovery_regression']);
   f.host.target.recovery_generation = f.host.observation.target.recovery_generation = '9007199254740994';
   f.host.rollback_floor.capabilities = ['work.server-policy.v1'];
-  f.host.release_records[0].capabilities = ['commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
+  f.host.release_records[0].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
   assert.ok(evaluate(f).issues.some(i => i.capability === 'work.server-policy.v1'));
   f.host.release_records[0].capabilities.push('work.server-policy.v1');
   assert.equal(evaluate(f).status, 'compatible'); assert.equal(evaluate(f).restore_proof, false);
@@ -1590,6 +1590,12 @@ test('self-ship shape requires an explicitly approved reader and survives intake
   assert(evaluate(f).required_capabilities.includes('commerce.hosted-self-ship.v1'));
   f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(x=>x!=='commerce.hosted-self-ship.v1');
   assert(codes(evaluate(f)).includes('release_capability_missing'));
-  const renamed=fixture();renamed.scan.ledger.at(-1).name='185_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  const renamed=fixture();renamed.scan.ledger.at(-1).name='186_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert(codes(evaluate(renamed)).includes('schema_unknown'));
 });
+
+ test('contact-retention capability is mandatory after schema186 even with intake OFF',()=>{
+  const f=fixture();assert(evaluate(f).required_capabilities.includes('commerce.checkout-contact-retention.v1'));
+  f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(x=>x!=='commerce.checkout-contact-retention.v1');
+  assert(codes(evaluate(f)).includes('release_capability_missing'));
+ });

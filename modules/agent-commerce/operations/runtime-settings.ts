@@ -1,4 +1,4 @@
-import {resolveFreedomEnv,type FreedomEnv} from '../../../apps/platform-api/src/env.js';
+import {resolveFreedomEnv} from '../../../apps/platform-api/src/env.js';
 import {ReadinessError} from '../../../apps/platform-api/src/readiness.js';
 
 export interface CommerceSettings {checkoutEnabled:boolean;consoleEnabled?:boolean;quarantine:boolean;providerProfiles:readonly string[];emailEnabled?:boolean}
@@ -14,18 +14,12 @@ export interface CommerceEnvironment {
   FREEDOM_SUPPLIER_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_PROVIDER_PROFILES?:string;
 }
-/** PR-A refuses public startup until contact retention is installed and verified in PR-C. */
-export function assertSelfShipReadiness(enabled:boolean,environment:FreedomEnv):void {
-  if(enabled&&environment==='public')throw new ReadinessError('self_ship_retention_not_ready');
-}
 export function readCommerceSelfShipEnabled(env:CommerceEnvironment):boolean {
   const value=env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED;
   if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_self_ship_flag_invalid');
   if(value==='true'&&(env.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true'||env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'))throw new ReadinessError('commerce_self_ship_console_required');
   if(value==='true'){
-    let environment:FreedomEnv;
-    try{environment=resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
-    assertSelfShipReadiness(true,environment);
+    try{resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
   }
   return value==='true';
 }

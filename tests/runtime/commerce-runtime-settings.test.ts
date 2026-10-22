@@ -86,18 +86,18 @@ test('checkout requires console even with launchpad enabled',()=>{
 });
 
 
-test('self ship defaults off, is local/staging only in PR-A, and Node/Worker/site agree',async()=>{
+test('self ship defaults off and Node/Worker/site agree after retention installation',async()=>{
   assert.equal(readCommerceSelfShipEnabled({}),false);
   for(const invalid of ['TRUE','',' true','true ','synthetic-secret'])assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:invalid}),{message:'commerce_self_ship_flag_invalid'});
   assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true'}),{message:'commerce_self_ship_console_required'});
-  for(const freedomEnv of ['local','staging'] as const){
+  for(const freedomEnv of ['local','staging','public'] as const){
     const bindings={...env(),FREEDOM_ENV:freedomEnv,FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:freedomEnv==='local'?'http://127.0.0.1:4310':'https://staging.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
     const settings=readNodeCommerceSettings(bindings),config=readWorkerConfig(bindings),worker=workerRuntime(bindings,config);
     assert.equal(worker.commerceSelfShipEnabled,true);assert.equal(settings.checkoutEnabled,false);
     const pool={query(){throw new Error('site must not query SQL');}} as unknown as Pool;
     for(const quarantine of [false,true]){const app=createApp(pool,config.origin,freedomEnv,{guildLaunchpadEnabled:true,commerceSettings:{...settings,quarantine},commerceSelfShipEnabled:true});const site=await (await app.request(config.origin+'/api/v1/site')).json();assert.equal(site.commerce_self_ship_enabled,!quarantine);}
   }
-  const publicBindings={...env(),FREEDOM_ENV:'public',APP_ORIGIN:'https://synthetic.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
-  assert.throws(()=>readNodeCommerceSettings(publicBindings),{message:'self_ship_retention_not_ready'});assert.throws(()=>readWorkerConfig(publicBindings),{message:'self_ship_retention_not_ready'});
-  assert.throws(()=>nodeRuntime('public','https://synthetic.example.test',{commerceSelfShipEnabled:true}),{message:'self_ship_retention_not_ready'});
+  const publicBindings={...env(),FREEDOM_ENV:'public',FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:'https://synthetic.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+  assert.equal(readNodeCommerceSettings(publicBindings).consoleEnabled,true);assert.equal(workerRuntime(publicBindings,readWorkerConfig(publicBindings)).commerceSelfShipEnabled,true);
+  assert.equal(nodeRuntime('public','https://synthetic.example.test',{commerceSelfShipEnabled:true}).commerceSelfShipEnabled,true);
 });

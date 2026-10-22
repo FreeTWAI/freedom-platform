@@ -124,7 +124,7 @@ test('checkout requires console in its own environment',()=>{
 test('self ship requires console and is refused only for the public environment in PR-A',()=>{
   const vars={FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
   for(const FREEDOM_ENV of ['local','staging'])assert.equal(check({vars:{...vars,FREEDOM_ENV}}).structural,true);
-  assert(check({vars:{...vars,FREEDOM_ENV:'public'}}).errors.includes('self_ship_retention_not_ready'));
+  assert.equal(check({vars:{...vars,FREEDOM_ENV:'public'}}).errors.includes('self_ship_retention_not_ready'),false);
   assert(check({vars:{...vars,FREEDOM_COMMERCE_CONSOLE_ENABLED:'false'}}).errors.includes('commerce_self_ship_console_required'));
   assert.equal(check({vars:{...vars,FREEDOM_ENV:'public',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'false'}}).structural,true);
 });

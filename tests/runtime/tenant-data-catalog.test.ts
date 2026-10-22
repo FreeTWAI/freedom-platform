@@ -229,7 +229,7 @@ test('T-021 installed schema matches the frozen tenant data catalog', async () =
     q.release();
   }
   assert.equal(Object.isFrozen(TENANT_DATA_CATALOG), true);
-  assert.deepEqual(TENANT_DATA_CATALOG.datasets.map(dataset => dataset.dataset_key), ['DC-04', 'DC-06', 'DC-08', 'DC-13', 'DC-14']);
+  assert.deepEqual(TENANT_DATA_CATALOG.datasets.map(dataset => dataset.dataset_key), ['DC-04', 'DC-06', 'DC-08','DC-08-PII', 'DC-13', 'DC-14']);
   const flags = (await pool.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
        FROM pg_catalog.pg_class c
@@ -655,4 +655,11 @@ test('hosted payment machine tables retain individual participant-ACL catalog ra
     const flags = (await pool.query(`SELECT relrowsecurity,relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2`, [schema, table])).rows[0];
     assert.deepEqual(flags, {relrowsecurity:false,relforcerowsecurity:false});
   }
+});
+
+test('DC12 bounds only the three contact privacy locations after Ted approval',()=>{
+ const pii=TENANT_DATA_CATALOG.datasets.find(d=>d.dataset_key==='DC-08-PII');assert(pii);
+ assert.deepEqual(pii.physical_locations.map(l=>l.kind==='table'?l.table:'').sort(),['commerce_checkout_contacts','commerce_customers','commerce_self_shipments']);
+ assert.equal(typeof pii.central_retention,'object');if(typeof pii.central_retention==='object'){assert.equal(pii.central_retention.state,'bounded_ec_spec_09_section_3');assert(pii.central_retention.decision_refs.includes('DC12'));}
+ assert.equal((TENANT_DATA_CATALOG.datasets.find(d=>d.dataset_key==='DC-08')!.central_retention as {state:string}).state,'policy_undecided');
 });

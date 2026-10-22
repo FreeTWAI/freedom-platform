@@ -1,3 +1,4 @@
+import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
@@ -411,6 +412,7 @@ export type WorkerDependencies = {
   /** Test seam. Production uses pruneExpiredAuthRecords. */
   authPrune?: typeof pruneExpiredAuthRecords;
   commerceDueWork?:typeof runDueCommerceWork;
+  commerceRetention?:typeof runContactRetentionWork;
   commerceQueryTransport?:PaymentQueryTransport;
   commerceSweep?:typeof sweepDueCheckoutHolds;
   commerceEmailSweep?:typeof sweepCommerceOutboundEmails;
@@ -552,6 +554,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
           }
+          try{await (deps.commerceRetention??runContactRetentionWork)(pool);}catch{console.error('commerce_contact_retention_failed');}
           let commerce:CommerceSettings|undefined;
           try{commerce=readCommerceSettings(env);}catch{console.error('commerce_settings_invalid');}
           if(commerce&&!commerce.quarantine){
