@@ -314,3 +314,8 @@ returned. Cart results are parsed with the cart shipping schema or thrown as
 `shipping_quote_invalid`. A method the seller does not offer is
 `method_unsupported` for every line, before the fulfilment check, so a supplied
 line on an unoffered method is not reported as `fulfilment_not_agreed`.
+
+
+## 店家自行寄送 B（2026-10-22）
+
+`self_ship` 是無外部帳戶的獨立方式；每單定額、一單一包、銀行匯款、自有商品。收件資料只在原 contacts.delivery，正規化後計算摘要。原 `recordHandover` 原子寫 ship movement；同單唯一不可改寫的 `commerce_self_shipments` 只允許一次個資遮蔽。供貨仍 `fulfilment_not_agreed`；出貨不關單。參見 EC-SPEC-05 §2.7、EC-SPEC-09 §3。預設 flag OFF，既有訂單仍可履約；沒有 email、API carrier 呼叫、標籤或貨態同步。PR-A public guard 由完成保留排程的 PR-C 解除；UI 另由 PR-B 提供。
