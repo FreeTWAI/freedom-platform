@@ -1,3 +1,4 @@
+import {storeVariantsOptions} from './hosted-store-variants.js';
 import {previewProductPage} from '../../../../modules/agent-commerce/hosted/publish.js';
 import {storeAppearanceOptions} from './hosted-store-appearance.js';
 import {storePoliciesOptions} from './hosted-store-policies.js';
@@ -21,7 +22,7 @@ export function createHostedStoreGalleryRoutes(pool:Pool,runtime:PlatformRuntime
  const app=new Hono<PlatformEnv>(),root='/tenants/:tenant_id/storefronts/:instance_id',product=root+'/products/:product_id/gallery',options=storeGalleryOptions(runtime);
  for(const path of [root+'/product-galleries',product,product+'/*'])app.use(path,async(c,next)=>{try{await next();}finally{privateCache(c);}});
  app.use(root+'/preview-page/products/:sku',async(c,next)=>{try{await next();}finally{privateCache(c);}});
- app.get(root+'/preview-page/products/:sku',async c=>{EmptyStoreInputSchema.parse(singleQuery(c));const t=OpaqueId.parse(c.req.param('tenant_id')),i=OpaqueId.parse(c.req.param('instance_id'));return c.html(await previewProductPage(pool,c.get('actor'),t,i,c.req.param('sku')!,storeAppearanceOptions(runtime),storePoliciesOptions(runtime),options));});
+ app.get(root+'/preview-page/products/:sku',async c=>{EmptyStoreInputSchema.parse(singleQuery(c));const t=OpaqueId.parse(c.req.param('tenant_id')),i=OpaqueId.parse(c.req.param('instance_id'));return c.html(await previewProductPage(pool,c.get('actor'),t,i,c.req.param('sku')!,storeAppearanceOptions(runtime),storePoliciesOptions(runtime),options,storeVariantsOptions(runtime)));});
  const ids=(c:Context<PlatformEnv>)=>[OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;
  app.get(root+'/product-galleries',async c=>{EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);return c.json(await listProductGalleries(pool,c.get('actor'),t,i,options));});
  app.get(product,async c=>{EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c),id=OpaqueId.parse(c.req.param('product_id'));const view=(await listProductGalleries(pool,c.get('actor'),t,i,options)).items.find(p=>p.product_id===id);requireCondition(view,404,'not_found','找不到這項商品。');etag(c,view.version);return c.json(view);});

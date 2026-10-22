@@ -1,4 +1,5 @@
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
+import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
 import {sellerOrdersRoute} from './modules/hosted-seller-order-state'
 import {buyerRoute} from './modules/hosted-order-state'
@@ -352,6 +353,7 @@ function MemberApp() {
     <GitHubSocialProvider client={client} session={session} starGateEnabled={site?.skill_book_star_gate_enabled===true}>
     {publicReturnNotice && <p className="banner banner-info" role="status">{publicReturnNotice}</p>}
     {publicEventId && site?.community_discovery_enabled ? <PublicEventPage client={client} id={publicEventId} revalidatePublic onLogin={()=>window.location.assign('/#home')}/> : !onboarding ? <div className="centered"><div className="card stack"><h1>自由工坊</h1>{gateError ? <><p role="alert">{gateError}</p><button className="btn btn-primary" onClick={() => void loadOnboarding()}>重新載入定位進度</button></> : <p role="status">正在確認你的定位旅程…</p>}</div></div>
+    : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
       : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(!entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
@@ -697,6 +699,18 @@ function Workspace({
     }
     else window.location.hash = nextHash
   }, [openMessages])
+  function navigateNotification(action:BellAction){
+    const destination=orderNotificationDestination(action)
+    if(destination?.tab==='stores'){selectTab('stores',destination.hash);return}
+    if(destination?.tab==='reservations'){
+      if(pageLeaveGuard.current&&!pageLeaveGuard.current(null))return
+      if(!canEndConsoleSession()||messageLeaveGuard.current&&!messageLeaveGuard.current())return
+      window.location.assign(destination.path);return
+    }
+    if(action.tab==='stores'||action.tab==='reservations')return
+    selectTab(action.tab);setNotificationTarget({...action,sequence:++notificationSequence.current})
+    if(action.tab==='events'&&action.resource_id)window.location.hash=`events/${action.resource_id}`
+  }
   function chooseShare(target:ShareTarget){
     const definition=SHARE_TARGETS[target]
     const destination=target==='post'&&tab==='home'?'home':definition.tab
@@ -847,7 +861,7 @@ function Workspace({
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
           </aside>
-          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={action=>{selectTab(action.tab);setNotificationTarget({...action,sequence:++notificationSequence.current});if(action.tab==='events'&&action.resource_id)window.location.hash=`events/${action.resource_id}`}}/><SettingsMenu current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
+          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
@@ -894,8 +908,8 @@ function Workspace({
             {tab === 'positioning' && <PositioningPanel client={client} session={session} onNavigate={selectTab} />}
             {tab === 'guilds' && <GuildsPanel client={client} session={session} onNavigate={selectTab} site={site} locationHash={locationHash} registerPendingLeave={registerPageLeave} />}
             {tab === 'guild-workspace' && <MemberGuildWorkspace client={client}/>}
-            {tab === 'reservations' && <HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={registerPageLeave} replaceLocation={replaceBuyerLocation} />}
-            {tab === 'stores' && <HostedStore galleryEnabled={site?.store_gallery_enabled===true} policiesEnabled={site?.store_policies_enabled===true} appearanceEnabled={site?.store_appearance_enabled===true} supplyOfferPhotosEnabled={site?.supply_offer_photos_enabled===true} distributionPhotosEnabled={site?.distribution_photos_enabled===true} materialMediaEnabled={site?.supply_material_media_enabled===true} materialUploadsEnabled={site?.supply_material_uploads_enabled===true} checkoutEnabled={site?.commerce_checkout_enabled===true} commerceConsoleEnabled={site?.commerce_console_enabled === true} providerEnvironment={site?.public_mode === true ? 'live' : 'sandbox'} consoleEnabled={site?.supplier_console_enabled === true} client={client} photosEnabled={site?.hosted_store_photos_enabled===true} photoUploadsEnabled={site?.hosted_store_photo_uploads_enabled===true} enabled={site?.guild_launchpad_enabled === true} locationHash={locationHash} userId={session.user.user_id} registerLeave={registerPageLeave} />}
+            {tab === 'reservations' && <HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={registerPageLeave} replaceLocation={replaceBuyerLocation} checkoutOrders={site?.commerce_checkout_enabled===true?{userId:session.user.user_id,csrfToken:session.csrf_token,onSessionExpired}:undefined} />}
+            {tab === 'stores' && <HostedStore categoriesEnabled={site?.store_categories_enabled===true} variantsEnabled={site?.store_variants_enabled===true} galleryEnabled={site?.store_gallery_enabled===true} policiesEnabled={site?.store_policies_enabled===true} appearanceEnabled={site?.store_appearance_enabled===true} supplyOfferPhotosEnabled={site?.supply_offer_photos_enabled===true} distributionPhotosEnabled={site?.distribution_photos_enabled===true} materialMediaEnabled={site?.supply_material_media_enabled===true} materialUploadsEnabled={site?.supply_material_uploads_enabled===true} checkoutEnabled={site?.commerce_checkout_enabled===true} commerceConsoleEnabled={site?.commerce_console_enabled === true} providerEnvironment={site?.public_mode === true ? 'live' : 'sandbox'} consoleEnabled={site?.supplier_console_enabled === true} client={client} photosEnabled={site?.hosted_store_photos_enabled===true} photoUploadsEnabled={site?.hosted_store_photo_uploads_enabled===true} enabled={site?.guild_launchpad_enabled === true} locationHash={locationHash} userId={session.user.user_id} registerLeave={registerPageLeave} />}
             {tab === 'business' && <TenantSettings client={client} session={session} enabled={site ? site.guild_launchpad_enabled === true : null} />}
             {tab === 'supplier' && <SupplierPanel client={client} session={session} onNavigate={selectTab} />}
             {tab === 'retail' && <RetailPanel client={client} session={session} onNavigate={selectTab} />}

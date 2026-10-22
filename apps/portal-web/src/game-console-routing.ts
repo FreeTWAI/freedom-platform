@@ -32,6 +32,12 @@ const NOTIFICATION_CONSOLE_CHANNELS = {
   social_post_liked: 'system',
   squad_join_requested: 'system',
   squad_join_accepted: 'system',
+  commerce_order_placed: 'system',
+  commerce_order_buyer_cancelled: 'system',
+  commerce_order_payment_confirmed: 'system',
+  commerce_order_handed_over: 'system',
+  commerce_order_seller_cancelled: 'system',
+  commerce_order_payment_expired: 'system',
 } as const satisfies Record<NotificationKind, GameConsoleSourceChannel>
 
 export const GITHUB_CONSOLE_KINDS = [

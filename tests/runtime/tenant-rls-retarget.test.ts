@@ -1,4 +1,4 @@
-import {galleryTables,seedGalleryRows} from '../helpers/storefront-gallery.js';
+import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
 import {seedSellerPolicyRows} from '../helpers/storefront-policies.js';
 import {seedAppearanceRows} from '../helpers/storefront-appearance.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
@@ -585,7 +585,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
   'commerce_ship_from_locations', 'commerce_logistics_services',
     'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
     'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
-  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs',
+  'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',...categoryTables,
   'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
     'commerce_storefront_appearance_drafts', 'commerce_storefront_appearance_targets', 'commerce_publication_appearances', 'commerce_publication_appearance_refs',
     'tenant_capacity_policies', 'tenant_module_permissions', 'work_items', 'scoped_command_receipts', 'scoped_transition_journal', 'scoped_outbox',
@@ -651,7 +651,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
   }
   for(const data of hosted) {
     const q=await owner.connect();
-    try { await q.query('BEGIN');await seedAppearanceRows(q,{tenantId:data.tenantId,instanceId:data.instanceId,productId:data.itemId});await seedSellerPolicyRows(q,data);await seedGalleryRows(q,{...data,productId:data.itemId});await q.query('COMMIT'); }
+    try { await q.query('BEGIN');await seedAppearanceRows(q,{tenantId:data.tenantId,instanceId:data.instanceId,productId:data.itemId});await seedSellerPolicyRows(q,data);await seedGalleryRows(q,{...data,productId:data.itemId});await seedVariantsRows(q,{...data,productId:data.itemId});await seedCategoriesRows(q,{...data,productId:data.itemId});await q.query('COMMIT'); }
     catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
   }
   // A/B distribution rows retain an own ready Asset with foreign material
@@ -663,7 +663,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     const shop=(await owner.query('SELECT storefront_shop_id FROM commerce_storefront_profiles WHERE instance_id=$1',[seller.instanceId])).rows[0].storefront_shop_id;
     await owner.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot,hosted_offer_id,hosted_sku)
       VALUES($1,$2,$3,100,'Synthetic distribution',$4,$5,'P0002')`,[randomUUID(),shop,supplier.itemId,{...offer.terms,sku:'P0002',offer_id:offer.offer_id,offer_sha256:offer.terms_sha256},offer.offer_id]);
-    const photo=(await owner.query('SELECT * FROM commerce_product_photo_targets WHERE tenant_id=$1 AND instance_id=$2',[seller.tenantId,seller.instanceId])).rows[0];
+    const photo=(await owner.query('SELECT * FROM commerce_product_photo_targets WHERE tenant_id=$1 AND instance_id=$2 AND product_id=$3',[seller.tenantId,seller.instanceId,seller.itemId])).rows[0];
     const source=(await owner.query('SELECT v.* FROM supply_material_versions v WHERE instance_id=$1',[supplier.instanceId])).rows[0];
     await owner.query(`INSERT INTO commerce_distribution_photo_targets(tenant_id,instance_id,product_id,scope_id) VALUES($1,$2,$3,$4)`,[seller.tenantId,seller.instanceId,supplier.itemId,data.scopeId]);
     await owner.query(`INSERT INTO commerce_distribution_photo_copies(asset_id,tenant_id,instance_id,product_id,scope_id,representation_id,policy_revision,source_material_id,source_version_id,source_content_sha256,source_version_no,source_title,copied_by_principal_id)
@@ -737,15 +737,19 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
       JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum
       WHERE n.nspname=current_schema() AND c.relname=$1 AND i.indisprimary ORDER BY k.ord`, [table])).rows.map(r => r.attname);
     assert.ok(pk.length, `${table} has no primary key`);
-    const aRow = (await owner.query(`SELECT * FROM ${quoted} WHERE ${column}=$1${scopeFilter} ORDER BY ${pk.map(identifier).join(',')} LIMIT 1`, [aKey])).rows[0];
-    const bRow = (await owner.query(`SELECT * FROM ${quoted} WHERE ${column}=$1${scopeFilter} ORDER BY ${pk.map(identifier).join(',')} LIMIT 1`, [bKey])).rows[0];
+    // New variants retain an additional empty photo home. Keep exercising the
+    // original nonempty image identity, with all tenant rows still counted.
+    const representativeOrder=(table==='commerce_product_photo_targets'?'asset_id IS NULL,':'')+pk.map(identifier).join(',');
+    const aRow = (await owner.query(`SELECT * FROM ${quoted} WHERE ${column}=$1${scopeFilter} ORDER BY ${representativeOrder} LIMIT 1`, [aKey])).rows[0];
+    const bRow = (await owner.query(`SELECT * FROM ${quoted} WHERE ${column}=$1${scopeFilter} ORDER BY ${representativeOrder} LIMIT 1`, [bKey])).rows[0];
+    if(table==='commerce_product_photo_targets')assert.ok(aRow?.asset_id&&bRow?.asset_id,'retarget both real retained photo identities');
     if (!aRow || !bRow) {
       assert.ok(DOCUMENTED_UNCOVERED_RLS_TABLES[table], `${table}: missing A/B fixture without documented reason`);
       record.push({ table, mechanism: 'documented_exception', update_covered: false, outcome: 'uncovered', reason: DOCUMENTED_UNCOVERED_RLS_TABLES[table] });
       continue;
     }
-    if ([...galleryTables,'commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
-      const mutable=table==='commerce_product_groups'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');
+    if ([...galleryTables,'commerce_publication_variants',...categoryTables,'commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
+      const mutable=table==='commerce_storefront_categories'||table==='commerce_storefront_category_members'||table==='commerce_product_groups'||table==='commerce_product_group_members'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');
       const policies=(await owner.query<Policy>(`SELECT policyname,cmd,permissive,qual,with_check FROM pg_policies
         WHERE schemaname=current_schema() AND tablename=$1 ORDER BY policyname`,[table])).rows;
       assert.deepEqual(policies,[
@@ -944,4 +948,16 @@ test('T-022 9. An executor bound to A cannot claim or advance B; B can advance i
   assert.ok(applied > 0, 'The B operation was not claimable in its own tenant');
   assert.notDeepEqual(await snapshot(), before, 'The positive control did not advance B');
   await quiet();
+});
+
+test('variant catalog pointer cannot retarget an own member into another tenant group',async()=>{
+ const {A,B}=fixture;
+ const a=(await owner.query('SELECT * FROM commerce_product_group_members WHERE tenant_id=$1 AND catalog_group_id IS NOT NULL ORDER BY selection_id LIMIT 1',[A.tenantId])).rows[0];
+ const b=(await owner.query('SELECT group_id FROM commerce_product_groups WHERE tenant_id=$1 AND catalog_anchor_sku IS NOT NULL ORDER BY group_id LIMIT 1',[B.tenantId])).rows[0];assert.ok(a&&b);
+ await assert.rejects(isolatedTransaction(runtime,async q=>{
+  await bindPrincipalContext(q,A.principalId);await bindTenantContext(q,{tenantId:A.tenantId,tenantScopeId:A.scopeId});
+  assert.equal((await q.query('SELECT 1 FROM commerce_product_groups WHERE group_id=$1',[b.group_id])).rowCount,0);
+  await q.query('UPDATE commerce_product_group_members SET catalog_group_id=$3,membership_version=membership_version+1 WHERE tenant_id=$1 AND selection_id=$2',[A.tenantId,a.selection_id,b.group_id]);
+ }),(e:unknown)=>['23503','23514','42501','P0002'].includes((e as {code:string}).code));
+ assert.equal((await owner.query('SELECT catalog_group_id FROM commerce_product_group_members WHERE tenant_id=$1 AND selection_id=$2',[A.tenantId,a.selection_id])).rows[0].catalog_group_id,a.catalog_group_id);
 });

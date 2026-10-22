@@ -41,6 +41,7 @@ export type PlatformRuntime = {
   commerceJournal?:EffectJournalPort;
   commerceEmailSender?:CommerceEmailSender;
   commerceSettings?:CommerceSettings;
+  commerceOrderNotificationsEnabled?:boolean;
   commerceCredentialKeyring?:CommerceCredentialKeyring|null;
   commerceProviderEnvironment?:'sandbox'|'live';
   commercePorts?:CheckoutPorts & {email?:CommerceEmailOutbox};
@@ -120,6 +121,8 @@ export type PlatformRuntime = {
   /** Additive store branding, independent of media installation; default OFF. */
   storeAppearanceEnabled?: boolean;
   storePoliciesEnabled?: boolean;
+  storeCategoriesEnabled?: boolean;
+  storeVariantsEnabled?: boolean;
   storeGalleryEnabled?: boolean;
   storeGalleryAssets?: StoreGalleryAssets;
   /** Independent installed read port and new-upload admission; both absent by default. */

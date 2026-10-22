@@ -243,3 +243,45 @@ test('offer photo flag defaults off, validates its spelling and needs only produ
   }
   assert.equal(fixture(config=>{config.env.next.vars.FREEDOM_SUPPLY_OFFER_PHOTOS_INVENTED_ENABLED='true';}).structural,false);
 });
+
+test('store variants accepts exact booleans without media but requires guild launchpad',()=>{
+  for(const value of ['TRUE','1','',true]){
+    const report=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED=value;});
+    assert.equal(report.structural,false);assert(report.errors.includes('next:FREEDOM_STORE_VARIANTS_ENABLED:invalid_flag'));
+  }
+  const withoutGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED='true';});
+  assert(withoutGuild.blockers.includes('next:storefront.variants:guild_launchpad_required'));
+  const withGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_VARIANTS_ENABLED='true';config.env.next.vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED='true';});
+  assert.equal(withGuild.structural,true);assert(!withGuild.blockers.includes('next:storefront.variants:guild_launchpad_required'));
+  assert.deepEqual(withGuild.mapping.next.required_capabilities,[]);
+  assert(withGuild.mapping.next.features.every(feature=>feature.declared_enabled===false));
+});
+
+test('order notifications accept exact default-OFF booleans and require checkout without media',()=>{
+  for(const value of ['TRUE','1','',true,false]){
+    const report=fixture(config=>{config.env.next.vars.FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED=value;});
+    assert.equal(report.structural,false);assert(report.errors.includes('next:FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:invalid_flag'));
+  }
+  for(const value of [undefined,'false']){
+    const report=fixture(config=>{if(value!==undefined)config.env.next.vars.FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED=value;});
+    assert.equal(report.structural,true);assert(!report.blockers.includes('next:commerce.order-notifications:checkout_required'));
+  }
+  const missing=fixture(config=>{config.env.next.vars.FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED='true';});
+  assert(missing.blockers.includes('next:commerce.order-notifications:checkout_required'));
+  const on=fixture(config=>{Object.assign(config.env.next.vars,{FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'});});
+  assert.equal(on.structural,true);assert(!on.blockers.includes('next:commerce.order-notifications:checkout_required'));
+  assert.deepEqual(on.mapping.next.required_capabilities,[]);assert(on.mapping.next.features.every(feature=>feature.declared_enabled===false));
+});
+
+test('store categories accepts exact booleans without media but requires guild launchpad',()=>{
+  for(const value of ['TRUE','1','',true]){
+    const report=fixture(config=>{config.env.next.vars.FREEDOM_STORE_CATEGORIES_ENABLED=value;});
+    assert.equal(report.structural,false);assert(report.errors.includes('next:FREEDOM_STORE_CATEGORIES_ENABLED:invalid_flag'));
+  }
+  const withoutGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_CATEGORIES_ENABLED='true';});
+  assert(withoutGuild.blockers.includes('next:storefront.categories:guild_launchpad_required'));
+  const withGuild=fixture(config=>{config.env.next.vars.FREEDOM_STORE_CATEGORIES_ENABLED='true';config.env.next.vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED='true';});
+  assert.equal(withGuild.structural,true);assert(!withGuild.blockers.includes('next:storefront.categories:guild_launchpad_required'));
+  assert.deepEqual(withGuild.mapping.next.required_capabilities,[]);
+  assert(withGuild.mapping.next.features.every(feature=>feature.declared_enabled===false));
+});
