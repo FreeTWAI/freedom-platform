@@ -27,20 +27,34 @@ for(const path of ['https://evil.invalid/','//evil.invalid','/\\evil.invalid','/
     assert.equal(publicSkillPath(path),null);
     assert.equal(skillAccountHref(path,1,true),null);
     assert.equal(skillReadingPath({path,intro:1}),null);
-    assert.equal(skillAcquisitionFromSearch('?return_to='+encodeURIComponent(path)),null);
+    assert.equal(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+encodeURIComponent(path)),null);
   });
 }
 test('duplicates cannot choose one of two return destinations',()=>{
-  assert.equal(skillAcquisitionFromSearch('?return_to='+book+'&return_to='+submission),null);
+  assert.equal(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+book+'&return_to='+submission),null);
   assert.equal(skillAcquisitionFromSearch('?join=1'),null);
+});
+test('only an explicit, single acquisition marker can override the legacy Star member entry',()=>{
+  for(const query of ['', '&skill_intro=7', '&join=1', '&skill_acquisition=0', '&skill_acquisition=',
+    '&skill_acquisition=01', '&skill_acquisition=1&skill_acquisition=1', '&skill_acquisition=1&skill_acquisition=0']){
+    assert.equal(skillAcquisitionFromSearch('?return_to='+encodeURIComponent(book)+query),null);
+  }
+  assert.deepEqual(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+encodeURIComponent(book)),{path:book,intro:null});
+});
+test('acquisition decodes once and rejects duplicate destinations even with its marker',()=>{
+  for(const value of [encodeURIComponent(encodeURIComponent(book)),encodeURIComponent(book+'?x=1'),encodeURIComponent(book+'#x'),
+    encodeURIComponent('/development/skills/../admin'),encodeURIComponent('/development/skills/%2e%2e')]){
+    assert.equal(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+value),null);
+  }
+  assert.equal(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+book+'&return_to='+submission),null);
 });
 test('only an authored introduction number survives; unrelated tracking and secrets are discarded',()=>{
   for(const intro of ['7\n','7\r',' 7','0','01','101','-1','1.5','1e1','<script>','7&token=secret']){
-    assert.deepEqual(skillAcquisitionFromSearch('?return_to='+book+'&skill_intro='+encodeURIComponent(intro)),{path:book,intro:null});
+    assert.deepEqual(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+book+'&skill_intro='+encodeURIComponent(intro)),{path:book,intro:null});
   }
-  assert.deepEqual(skillAcquisitionFromSearch('?return_to='+book+'&skill_intro=7&skill_intro=8'),{path:book,intro:null});
-  assert.equal(skillReadingPath(skillAcquisitionFromSearch('?return_to='+book+'&skill_intro=100&token=secret&ref=someone')!),book+'?intro=100#skill-use-title');
-  assert.equal(skillAccountHref(book,null,true),'/?join=1&return_to=%2Fdevelopment%2Fskills%2Fsocial-post');
+  assert.deepEqual(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+book+'&skill_intro=7&skill_intro=8'),{path:book,intro:null});
+  assert.equal(skillReadingPath(skillAcquisitionFromSearch('?skill_acquisition=1&return_to='+book+'&skill_intro=100&token=secret&ref=someone')!),book+'?intro=100#skill-use-title');
+  assert.equal(skillAccountHref(book,null,true),'/?join=1&skill_acquisition=1&return_to=%2Fdevelopment%2Fskills%2Fsocial-post');
 });
 test('return validation is an anonymous no-store read of the canonical path, not the selected quote',async()=>{
   const calls: [RequestInfo|URL,RequestInit|undefined][]=[];
@@ -84,7 +98,7 @@ test('CTA remains readable, actionable and honest with JavaScript disabled',()=>
   const html=publicSkillAcquisition(book,7);
   assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('依加入資格領取指定技能書'));
   assert.ok(html.includes('外部工具、模型與服務的授權及費用'));assert.ok(html.includes('href="#skill-use-title"'));
-  assert.ok(html.includes('join=1&amp;return_to='));assert.ok(html.includes('&amp;skill_intro=7'));
+  assert.ok(html.includes('join=1&amp;skill_acquisition=1&amp;return_to='));assert.ok(html.includes('&amp;skill_intro=7'));
   assert.ok(html.includes('data-skill-library href="/#skills" hidden'));assert.ok(!html.includes('<form'));
   assert.ok(!html.includes('position:fixed'));assert.match(skillAcquisitionCss,/min-height:44px/);
   assert.equal(publicSkillAcquisition('javascript:alert(1)'), '');

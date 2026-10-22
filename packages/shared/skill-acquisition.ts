@@ -11,7 +11,8 @@ function introduction(value: unknown): number | null {
 }
 export function skillAcquisitionFromSearch(search: string): SkillAcquisitionIntent | null {
   const params = new URLSearchParams(search);
-  if (params.getAll('return_to').length !== 1) return null;
+  // Legacy Star links use return_to alone and retain the member entry.
+  if (params.getAll('skill_acquisition').length !== 1 || params.get('skill_acquisition') !== '1' || params.getAll('return_to').length !== 1) return null;
   const path = publicSkillPath(params.get('return_to'));
   if (!path) return null;
   const intro = params.getAll('skill_intro').length === 1 ? introduction(params.get('skill_intro')) : null;
@@ -27,6 +28,7 @@ export function skillAccountHref(path: string, intro: unknown, register: boolean
   if (!publicSkillPath(path)) return null;
   const params = new URLSearchParams();
   if (register) params.set('join', '1');
+  params.set('skill_acquisition', '1');
   params.set('return_to', path);
   const selected = introduction(intro);
   if (selected !== null) params.set('skill_intro', String(selected));

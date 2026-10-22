@@ -2034,8 +2034,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 69257,
-      "sha256": "cb3e4ddd2aab93f9e49088bbf75aee4ed09f3a8ece1665bea33ae821d5ce8fd6"
+      "bytes": 69573,
+      "sha256": "7e7d8c8a7b9d872db6bd79ac6b9f9970d556d03d03ca21cc640414f89f9ed71f"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -20309,8 +20309,8 @@
     },
     {
       "path": "modules/development/service.ts",
-      "bytes": 49089,
-      "sha256": "f876e7a66656eee0b29a47052e5705832f07cc8407a2114a4aa325f5d577dab5"
+      "bytes": 49153,
+      "sha256": "6fe8a4e4ea649919384cd1044942fa68b2691cac742f1ee39cba7ce79108b65a"
     },
     {
       "path": "modules/development/skill-acquisition.ts",
@@ -22294,8 +22294,8 @@
     },
     {
       "path": "packages/shared/skill-acquisition.ts",
-      "bytes": 3154,
-      "sha256": "0f3fbbe1155884dd24fa090ce1a966918aadb4f31231bd249f1883e9972dc359"
+      "bytes": 3360,
+      "sha256": "808ad70dab7ff30637709113c6ba32c78c5a586ea9837c04143ff8e6654f21e5"
     },
     {
       "path": "packages/shared/squad-kinds.ts",
@@ -23659,8 +23659,8 @@
     },
     {
       "path": "tests/e2e/skill-acquisition.spec.ts",
-      "bytes": 6179,
-      "sha256": "eb39d759f16273fce31405992c97a4a8218d9bcbc74ba938b481581c679f5529"
+      "bytes": 20283,
+      "sha256": "39519aa338f9b3af0fd8bf9db906aef439e09a5139755c0428329f7ea3c15253"
     },
     {
       "path": "tests/e2e/skill-book-library.spec.ts",
@@ -26009,8 +26009,8 @@
     },
     {
       "path": "tests/runtime/skill-acquisition.test.ts",
-      "bytes": 10607,
-      "sha256": "a6439ba34979377071429d4e51d53a8dc0a55cb877c2b81360a75ec4e3caddd1"
+      "bytes": 11852,
+      "sha256": "385a753368758239609a871d4dd23df7e2f8db247053d867c8c7903a200b182c"
     },
     {
       "path": "tests/runtime/skill-book-guides.test.ts",

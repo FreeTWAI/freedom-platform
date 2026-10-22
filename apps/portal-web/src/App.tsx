@@ -419,6 +419,7 @@ function LoginView({
   const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>('login')
   const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
   const [skillReturn] = useState(() => skillAcquisitionFromSearch(window.location.search))
+  const [skillEntryUrl] = useState(() => window.location.href)
   const skillReturnRequest = useRef<AbortController | null>(null)
   const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
   const authEpoch = useRef(0)
@@ -491,9 +492,12 @@ function LoginView({
           ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
           : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
       } else if (skillReturn) {
+        // Same-document Back/Forward can retain this form while changing the entry.
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
         const controller = new AbortController(); skillReturnRequest.current?.abort(); skillReturnRequest.current = controller
         const allowed = await validateSkillReturn(skillReturn, {signal: controller.signal})
         if (epoch !== authEpoch.current || controller.signal.aborted) return
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
         if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
         onLoggedIn(session, t('auth.skillReturnUnavailable'))
       } else if (activeMode === 'register' && discoveryEnabled && returnPath) {
