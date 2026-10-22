@@ -2,6 +2,10 @@
 // All supported languages must have the same keys. Member-authored content is
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
+  'auth.skillReturnHint': ['登入或建立帳號後會返回原本的技能書；你也可以先繼續閱讀。', 'Sign in or create an account to return to this skill book. You can also keep reading first.', 'ログインまたはアカウント作成後に元のスキルブックへ戻ります。先に読み続けることもできます。', '로그인하거나 계정을 만들면 원래 스킬북으로 돌아갑니다. 먼저 계속 읽어도 됩니다.', 'Inicia sesión o crea una cuenta para volver a este recurso. También puedes seguir leyendo primero.'],
+  'auth.skillReturnRead': ['返回技能書繼續閱讀', 'Continue reading the skill book', 'スキルブックに戻って読む', '스킬북 계속 읽기', 'Seguir leyendo el recurso'],
+  'auth.skillReturnUnavailable': ['登入成功。原本的技能書目前無法確認或已停止公開，你仍可繼續探索工坊。', 'You are signed in. The original skill book is unavailable or could not be checked. You can still explore the workshop.', 'ログインしました。元のスキルブックを確認できないか、公開が停止されています。工坊の探索は続けられます。', '로그인했습니다. 원래 스킬북을 확인할 수 없거나 공개가 중단되었습니다. 공방은 계속 둘러볼 수 있습니다.', 'Has iniciado sesión. El recurso original no está disponible o no se pudo comprobar. Puedes seguir explorando el taller.'],
+
   'sellerConsole.orders':["訂單", "Orders", "注文", "주문", "Pedidos"],
   'sellerConsole.overview':["開店準備", "Store readiness", "開店準備", "개점 준비", "Preparación de la tienda"],
   'sellerConsole.order':["訂單詳情", "Order details", "注文詳細", "주문 상세", "Detalles del pedido"],
