@@ -1,3 +1,4 @@
+import {publicSkillAcquisition} from '../../../../modules/development/skill-acquisition.js';
 import {Hono} from 'hono';
 import type {Context} from 'hono';
 import {z} from 'zod';
@@ -56,8 +57,8 @@ export function submittedSkillHtml(skill:Published,intro?:string,publicOrigin=LI
   const body=`<section class="public-skill-entry"><figure class="public-skill-cover"><img src="${escape(skill.cover_url)}" alt="" width="768" height="512"></figure><div>`+
     `<p class="public-skill-purpose">${escape(skill.description)}</p><p>原作：${escape(skill.source.repository_full_name)}</p>`+
     `<div class="public-skill-badges" aria-label="技能書徽章"><span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span></div>`+
-    `<div class="public-skill-actions"><a href="#skill-use-title">閱讀使用介紹</a><a href="#skill-next-title">查看原作與使用入口</a></div></div></section>`+
-    illustration+introduction+destinations+
+    `<div class="public-skill-actions"><a href="#skill-use-title">閱讀使用介紹</a><a href="#skill-next-title">查看原作與使用入口</a><a href="#join-workshop">探索更多免費資源</a></div></div></section>`+
+    illustration+introduction+publicSkillAcquisition(skill.public_path,selected)+destinations+
     `<section class="public-skill-source"><h2>版本與來源</h2><p>原作、自由工坊站內應用與可攜版本是不同交付；本頁介紹投稿者提供的原作，外連不代表已在工坊啟用。</p><dl><dt>來源 Repo</dt><dd>${escape(skill.source.repository_full_name)}</dd><dt>投稿者自述關係</dt><dd>${escape(relationship)}（自行聲明，尚未核實作者身分）</dd><dt>收錄授權</dt><dd>${escape(skill.source.license_spdx==='NOASSERTION'?'尚未確認':skill.source.license_spdx)}</dd><dt>收錄版本</dt><dd><code>${escape(skill.source.commit_sha)}</code></dd><dt>投稿公開日期</dt><dd>${escape(skill.published_at.slice(0,10))}</dd></dl><p>收錄不代表官方採用或額外授權。${skill.source.license_evidence_url?external(skill.source.license_evidence_url,'閱讀來源授權'):''}</p></section>`+
     publicSkillShareMarkup({title:skill.title,path:skill.public_path,introductions:skill.share_introductions,selected,origin:publicOrigin})+
     `<section><h2>一起開發</h2><p>查看專案任務，認領一項修改並提交 PR。</p><div class="public-skill-actions">${external(skill.repository_url+'/issues','查看任務')}${external(skill.repository_url+'/pulls','查看 PR')}${external(skill.repository_url+'/fork','Fork 專案')}<a href="${skill.public_path}/SKILL.md">讀取協作指令</a></div></section>`+
