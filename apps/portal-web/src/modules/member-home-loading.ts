@@ -2,6 +2,17 @@
 export type HomeRefreshReason = 'initial' | 'manual' | 'automatic';
 export type HomeTaskAction = 'resume' | 'tasks' | 'showcase';
 
+/** The journal stays on its own service; this is a display-only public entry. */
+export function resolveHomeJournalUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.origin !== 'https://freetwai.evitina.tw' || url.pathname !== '/'
+      || url.username || url.password || url.search || url.hash) return null;
+    return url.href;
+  } catch { return null; }
+}
+
 export interface HomeReadTicket {
   readonly signal: AbortSignal;
   isCurrent(): boolean;

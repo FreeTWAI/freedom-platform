@@ -48,9 +48,10 @@ test('actual avatar/private routes and real mounts map twelve baseline+candidate
   const report = run();
   assert.equal(report.structural_status, 'unavailable', JSON.stringify(report.issues));
   assert.equal(report.coverage_kind, 'fixed-syntax-only');
-  // Five existing promotion/service/guide delegates plus eleven feature registrar
-  // calls remain explicitly unaudited by this narrow avatar/private-work profile.
-  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 16);
+  // Five existing promotion/service/guide delegates, eleven feature registrar calls
+  // and three public-social delegates remain explicitly unaudited receiver escapes.
+  // This narrow avatar/private-work syntax profile never claims their authorization has been audited.
+  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 19);
   assert.equal(report.status, 'unavailable'); assert.equal(report.registrations.length, 12);
   assert.equal(report.evidence.length, 10); assert.equal(report.behavior_checked, false);
   assert.equal(report.merge_authorized, false); assert.equal(report.execution_authorized, false);
