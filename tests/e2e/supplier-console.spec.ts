@@ -80,23 +80,24 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await expect(primary).toBeVisible();
     await expect(a.getByText('成員身分：實習成員', {exact: true})).toBeVisible();
     await primary.getByRole('button', {name: '開始供貨設定', exact: true}).click();
+    await expect(a).toHaveURL(/#stores\/supply\/setup$/);
     const flow = a.getByRole('region', {name: '啟動應用', exact: true});
     await flow.getByLabel('業務空間名稱', {exact: true}).fill(`山林供應空間 ${suffix}`);
     await flow.getByRole('button', {name: '建立業務空間', exact: true}).click();
-    await flow.getByRole('button', {name: '產生啟動方案', exact: true}).click();
-    await expect(flow.getByRole('heading', {name: '確認啟動方案', exact: true})).toBeVisible();
+    await flow.getByRole('button', {name: '確認供貨空間', exact: true}).click();
+    await expect(flow.getByRole('heading', {name: '確認建立供貨空間', exact: true})).toBeVisible();
     // A definite membership refusal must not leave a launch with an unknown outcome.
     await e2eAuthPool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1 AND guild_key=$2", [supplier.id, supplierGuild]);
     const refusedLaunch = a.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/application-installations'));
-    await flow.getByRole('button', {name: '確認啟動', exact: true}).click();
+    await flow.getByRole('button', {name: '確認建立供貨空間', exact: true}).click();
     const refused = await refusedLaunch;
     expect(refused.status()).toBe(403); expect((await refused.json()).code).toBe('guild_member_required');
-    await expect(flow.getByRole('button', {name: '產生啟動方案', exact: true})).toBeEnabled();
+    await expect(flow.getByRole('button', {name: '確認供貨空間', exact: true})).toBeEnabled();
     await expect(flow.getByRole('region', {name: '啟動進度', exact: true})).toHaveCount(0);
     await e2eAuthPool.query("UPDATE positioning_profession_memberships SET state='active' WHERE user_id=$1 AND guild_key=$2", [supplier.id, supplierGuild]);
-    await flow.getByRole('button', {name: '產生啟動方案', exact: true}).click();
-    await flow.getByRole('button', {name: '確認啟動', exact: true}).click();
-    await flow.getByRole('button', {name: '設定供貨資料', exact: true}).click();
+    await flow.getByRole('button', {name: '確認供貨空間', exact: true}).click();
+    await flow.getByRole('button', {name: '確認建立供貨空間', exact: true}).click();
+    await flow.getByRole('button', {name: '繼續供貨設定', exact: true}).click();
 
     await expect(a).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
     const supplyMatch = new URL(a.url()).hash.match(/^#stores\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/supply$/);

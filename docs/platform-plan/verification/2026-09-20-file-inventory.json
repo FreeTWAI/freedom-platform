@@ -2859,8 +2859,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyCatalog.tsx",
-      "bytes": 28870,
-      "sha256": "4a180fc35a420c18c014aaced7212613a041ab5f1dff71079c33c07301155ebe"
+      "bytes": 29402,
+      "sha256": "3610939b349638c47916d1be85e65ae83f79767c5ac312422aceeeca7423430d"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplyOffer.tsx",
@@ -3059,8 +3059,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MyStoreAction.tsx",
-      "bytes": 5221,
-      "sha256": "bd78f6f96033c01fcc72e87c47d22eae6000968c237afc31395cedcb64ac72b1"
+      "bytes": 5807,
+      "sha256": "422a78fd4f2d1508ed3dd0131c1eb087ab8d94e6f368a13fc46abe9539653cac"
     },
     {
       "path": "apps/portal-web/src/modules/NotificationBell.css",
@@ -3319,8 +3319,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/StoreSetup.tsx",
-      "bytes": 9016,
-      "sha256": "fff6c42c43f40307f40bc9e67ec747a7cc3fc0d66c5a623e9842647f223d2f7d"
+      "bytes": 11585,
+      "sha256": "29802d9d8763e728494add539c02839000455bdf92483c18976c4edf3f96ada9"
     },
     {
       "path": "apps/portal-web/src/modules/TaskBoardPanel.tsx",
@@ -24054,8 +24054,8 @@
     },
     {
       "path": "tests/e2e/supplier-console.spec.ts",
-      "bytes": 37155,
-      "sha256": "d0e16b09a1fc33e06b53a15023102f25de5fb8f9629569454404640137a0d482"
+      "bytes": 37243,
+      "sha256": "e5723d0e48156c5746aa9160adb04556a5f40eff24ce26309227a36d7dc061b5"
     },
     {
       "path": "tests/e2e/task-board-loading.spec.ts",

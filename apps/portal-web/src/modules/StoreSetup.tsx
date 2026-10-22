@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useMyStores} from './MyStoreAction';
 import {ApiError, type PortalClient} from '../api';
 import {LaunchFlow, REASONS, savedStoreLaunch, startable} from './GuildLaunchpadApplications';
 import {GuildJoinReceiptSchema, readStoreSetup, setupGuild, setupListPath, type StoreSetupPurpose} from './store-setup';
@@ -96,11 +97,17 @@ function StoreSetupJourney({client, userId, registerLeave, purpose}: Required<Pr
   const allowNewLaunch = eligible && app?.release_ref === data?.app?.release_ref;
   const canJoin = data && data.guild.membership?.state !== 'active';
   const canResume = Boolean(previous.current && app);
+  const restoring = Boolean(previous.current && !['succeeded', 'failed', 'cancelled'].includes(previous.current.operation?.state ?? ''));
+  const launch = app && (eligible || canResume) ? <>
+    {!eligible && <p className="field-hint">可以查看上次的啟動結果；目前資格不足時不能建立新的商店或商品庫。</p>}
+    <LaunchFlow key={`${app.application_key}:${app.release_ref}`} client={client} guildKey={guildKey} userId={userId} app={app} onClose={back} canLeave={canLeave} registerPendingLeave={registerFlow} restoredRow={previous.current} allowNewLaunch={allowNewLaunch} setupJourney
+      onStore={(tenantId, instanceId) => {if (!canLeave()) return false; leavingForStore.current = true; window.location.hash = `#stores/${tenantId}/${instanceId}${supply ? '/supply' : ''}`; return true;}}/>
+  </> : null;
   return <section className="hosted-store stack" aria-label={supply ? '開始供貨設定' : '開始開店'}>
     <div className="actions"><a className="btn btn-ghost" href={listPath} onClick={event => {if (!canLeave()) event.preventDefault();}}>{supply ? '返回供貨商品庫' : '返回我的商店'}</a></div>
     <h2 ref={heading} tabIndex={-1}>{supply ? '建立供貨商品庫' : '建立我的商店'}</h2>
-    <ol aria-label={supply ? '供貨設定步驟' : '開店步驟'}>
-      <li>{eligible ? '公會資格已確認' : '確認公會資格'}</li>
+    <ol aria-label={supply ? '供貨設定流程概覽' : '開店步驟'}>
+      <li>{supply ? '確認公會資格' : eligible ? '公會資格已確認' : '確認公會資格'}</li>
       <li>建立或選擇自己的業務空間</li>
       <li>{supply ? '填寫商品庫資料與幣別' : '填寫商店資料、網址與幣別'}</li>
       <li>{supply ? '新增商品，再決定是否公開供貨' : '新增商品，確認後上架展示頁'}</li>
@@ -121,11 +128,29 @@ function StoreSetupJourney({client, userId, registerLeave, purpose}: Required<Pr
         {!data.app && <p>目前沒有可用的開店工具版本，請稍後重新確認。</p>}
         {!joining && !joinUnknown && <div className="actions"><button type="button" className="btn btn-ghost" onClick={() => void load()}>重新確認資格</button></div>}
       </section>}
-      {app && (eligible || canResume) && <>
-        {!eligible && <p className="field-hint">可以查看上次的啟動結果；目前資格不足時不能建立新的商店或商品庫。</p>}
-        <LaunchFlow key={`${app.application_key}:${app.release_ref}`} client={client} guildKey={guildKey} userId={userId} app={app} onClose={back} canLeave={canLeave} registerPendingLeave={registerFlow} restoredRow={previous.current} allowNewLaunch={allowNewLaunch} setupJourney
-          onStore={(tenantId, instanceId) => {if (!canLeave()) return false; leavingForStore.current = true; window.location.hash = `#stores/${tenantId}/${instanceId}${supply ? '/supply' : ''}`; return true;}}/>
-      </>}
+      {supply ? <SupplySetupResume client={client} canLeave={canLeave} restoring={restoring} primary={eligible}>{launch}</SupplySetupResume> : launch}
     </>}
   </section>;
+}
+
+
+function SupplySetupResume({client, canLeave, restoring, primary, children}: {client: PortalClient; canLeave: () => boolean; restoring: boolean; primary: boolean; children: ReactNode}) {
+  const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client, 'supply');
+  const [expanded, setExpanded] = useState(false);
+  const unfinished = data?.items.filter(item => item.setup_state === 'setup_required') ?? [];
+  const showFlow = restoring || expanded || Boolean(data && data.items.length === 0 && !data.next_cursor);
+  if (error && !restoring && !expanded) return <><p role="alert">暫時無法確認既有商品庫，請重試後再繼續。</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試</button></div></>;
+  if (!data && !restoring && !expanded) return <p role="status">正在確認既有商品庫…</p>;
+  return <>
+    {unfinished.length > 0 && <section className="stack" aria-label="繼續未完成的商品庫">
+      <h3>繼續未完成的商品庫</h3>
+      {unfinished.map((item, index) => <article className="card stack" key={item.instance_id}>
+        <h4>{item.name ?? '尚未完成設定的商品庫'}</h4><p>業務空間：{item.tenant_display_name}・商品庫資料待設定</p>
+        <div className="actions"><a className={primary && !showFlow && index === 0 ? 'btn btn-primary' : 'btn btn-ghost btn-small'} href={`#stores/${item.tenant_id}/${item.instance_id}/supply`} onClick={event => {if (!canLeave()) event.preventDefault();}}>繼續設定商品庫</a></div>
+      </article>)}
+    </section>}
+    {pageError && <p role="alert">暫時無法載入其餘商品庫，請重試。</p>}
+    {data?.next_cursor && <div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '正在載入…' : pageError ? '重試載入其餘商品庫' : '載入更多商品庫'}</button></div>}
+    {showFlow ? children : children && <div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={() => setExpanded(true)}>建立另一個商品庫</button></div>}
+  </>;
 }
