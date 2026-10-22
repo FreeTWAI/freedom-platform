@@ -48,7 +48,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         {open&&illustration&&illustration.bookId===bookId&&<figure className="skill-intro-illustration"><img src={illustration.url} alt={illustration.alt} width="1200" height="630" decoding="async" onError={()=>setIllustration(null)}/></figure>}
         {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的{guide.credit_role??'作者'}：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
         {guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}
-        {open&&bookId&&<AuthorClaimPanel bookId={bookId}/>}
+        {open&&bookId&&<AuthorClaimPanel key={bookId} bookId={bookId}/>}
         <div className="actions skill-intro-primary-actions">{upstream&&<a className="btn btn-primary" href={upstream} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{website&&<a className="btn btn-ghost" href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{reading&&<a className="btn btn-ghost" href={reading} target="_blank" rel="noopener noreferrer">閱讀技能書 ↗</a>}{bookId&&<DevelopmentEntry kind="skill" target={bookId} label="加入共同開發"/>}</div>
         {isStorefrontReading(bookId,upstream)&&<StorefrontBookUsage onNavigate={close}/>}
         {open&&<SkillBookStar book={book}/>}
