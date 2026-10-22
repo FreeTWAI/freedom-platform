@@ -1594,8 +1594,94 @@ test('self-ship shape requires an explicitly approved reader and survives intake
   assert(codes(evaluate(renamed)).includes('schema_unknown'));
 });
 
- test('contact-retention capability is mandatory after schema186 even with intake OFF',()=>{
-  const f=fixture();assert(evaluate(f).required_capabilities.includes('commerce.checkout-contact-retention.v1'));
-  f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(x=>x!=='commerce.checkout-contact-retention.v1');
-  assert(codes(evaluate(f)).includes('release_capability_missing'));
- });
+test('schema186 recognition requires independently approved exact contact retention ledger bytes', () => {
+  const f = fixtureAt(186), old = prefix(f.scan, 185);
+  assert.equal(f.scan.ledger.at(-1).name, '186_checkout_contact_retention.sql');
+  const result = evaluate(f);
+  assert.equal(result.status, 'compatible');
+  assert.deepEqual(result.required_shapes, []);
+  assert(result.required_capabilities.includes('commerce.checkout-contact-retention.v1'));
+  for (const flag of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[flag], false);
+  f.host.release_records[0].schema_ledger_digests = [old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  f.scan = old;
+  f.host.observation.schema_ledger = old.ledger;
+  f.host.observation.schema_ledger_digest = old.ledger_digest;
+  assert.equal(evaluate(f).status, 'compatible');
+  const changed = fixtureAt(186); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
+  changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed = fixtureAt(186); renamed.scan.ledger.at(-1).name = '186_unreviewed.sql';
+  renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
+  const future = fixtureAt(186); future.scan.ledger.push({ name: '187_unreviewed.sql', sha256: 'e'.repeat(64) });
+  future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
+});
+
+for (const version of ['v2', 'v3']) for (const missing of ['candidate', 'active']) {
+  test(`schema186 ${version} fences the ${missing} retention scheduler even with checkout off`, () => {
+    const f = fixtureAt(186), capability = 'commerce.checkout-contact-retention.v1';
+    if (version === 'v3') {
+      f.host.schema = 'freedom.release-compatibility-host/v3';
+      f.host.migration_profile = { format: DAG_MIGRATIONS,
+        legacy: { format: LEGACY_MIGRATIONS, first: 1, last: 186, known_gaps: [22] },
+        legacy_ledger: structuredClone(f.scan.ledger) };
+    }
+    const active = { source_sha: 'c'.repeat(40), artifact_sha256: 'd'.repeat(64) };
+    f.host.observation.active_releases = [active];
+    f.host.release_records.push({ ...structuredClone(f.host.release_records[0]), ...active });
+    assert.equal(evaluate(f).status, 'compatible');
+    f.host.release_records[missing === 'candidate' ? 0 : 1].capabilities =
+      f.host.release_records[missing === 'candidate' ? 0 : 1].capabilities.filter(c => c !== capability);
+    const result = evaluate(f);
+    assert.equal(result.status, 'incompatible');
+    assert.equal(result.checked_releases, 2);
+    assert.deepEqual(result.required_shapes, []);
+    assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === capability &&
+      i.source_sha === (missing === 'candidate' ? f.input.candidate.source_sha : active.source_sha)));
+  });
+}
+
+test('a schema185 restore and rollback plan cannot erase retained schema186 contact retention', () => {
+  const f = fixtureAt(186), older = prefix(f.scan, 185), capability = 'commerce.checkout-contact-retention.v1';
+  f.host.rollback_floor.schema_ledger = structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest = f.scan.ledger_digest;
+  f.scan = older;
+  f.host.observation.schema_ledger = older.ledger;
+  f.host.observation.schema_ledger_digest = older.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests = [older.ledger_digest];
+  f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.filter(c => c !== capability);
+  const result = evaluate(f);
+  assert.equal(result.status, 'incompatible');
+  assert(codes(result).includes('historical_schema_floor_mismatch'));
+  assert(result.required_capabilities.includes(capability));
+  assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === capability));
+});
+
+for (const source of ['enable_shapes', 'enabled_shapes', 'written_shapes', 'rollback_floor_shapes', 'capability_floor']) {
+  test(`contact retention ${source} cannot be acknowledged on schema185`, () => {
+    const f = fixtureAt(185), shape = 'commerce.checkout-contact-retention.v1';
+    if (source === 'enable_shapes') f.input.enable_shapes = [shape];
+    else if (source === 'rollback_floor_shapes') f.host.rollback_floor_shapes = [shape];
+    else if (source === 'capability_floor') f.host.rollback_floor.capabilities = [shape];
+    else f.host.observation[source] = [shape];
+    const result = evaluate(f);
+    assert.equal(result.status, 'incompatible');
+    assert(result.issues.some(i => i.shape === shape && i.code.endsWith('shape_schema_missing')));
+  });
+}
+
+test('schema185 alone does not require the schema186 contact retention capability', () => {
+  const f = fixtureAt(185), capability = 'commerce.checkout-contact-retention.v1';
+  f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.filter(c => c !== capability);
+  const result = evaluate(f);
+  assert.equal(result.status, 'compatible');
+  assert.equal(result.required_capabilities.includes(capability), false);
+});
+
+test('schema186 rejects a gap before the unknown future migration', () => {
+  const f = fixtureAt(186); f.scan.ledger.at(-1).name = '187_unreviewed.sql';
+  f.scan.ledger_digest = compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)), ['schema_ledger_invalid']);
+});
