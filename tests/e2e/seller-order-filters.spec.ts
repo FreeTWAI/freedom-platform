@@ -28,14 +28,14 @@ test('E05 quick payment filters preserve route intent, IME edits stay local, and
  await form.getByRole('button',{name:'套用篩選',exact:true}).click();
  await expect.poll(()=>queries.some(q=>q.get('display_number')===p.order.display_number)).toBe(true);
  await expect(input).toHaveValue(p.order.display_number);await expect(order).toBeVisible();
- await form.getByLabel('付款方式',{exact:true}).selectOption('bank_transfer');
+ await form.getByRole('combobox',{name:'付款方式',exact:true}).selectOption('bank_transfer');
  await form.getByLabel('只看待確認收款',{exact:true}).check();
  const beforeApply=queries.length;
  await expect(form.getByText('篩選條件已修改，按「套用篩選」後更新清單。',{exact:true})).toBeVisible();
  expect(queries.length).toBe(beforeApply);
  await form.getByRole('button',{name:'套用篩選',exact:true}).click();
  await expect.poll(()=>queries.some(q=>q.get('display_number')===p.order.display_number&&q.get('payment_method')==='bank_transfer'&&q.get('awaiting_offline_payment')==='true')).toBe(true);
- await page.goBack();await expect(form.getByLabel('付款方式',{exact:true})).toHaveValue('');
+ await page.goBack();await expect(form.getByRole('combobox',{name:'付款方式',exact:true})).toHaveValue('');
  await expect(input).toHaveValue(p.order.display_number);
  await form.getByRole('link',{name:'清除篩選',exact:true}).click();
  await expect(input).toHaveValue('');await expect(input).toBeFocused();await expect(order).toBeVisible();
