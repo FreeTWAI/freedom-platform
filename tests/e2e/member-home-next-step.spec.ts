@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import type { MemberCardData } from '../../apps/portal-web/src/modules/Membership.js';
 import { test, expect, type Page } from './fixtures.js';
 import { navigate, openHomeGuide } from './navigation.js';
+import { resolveHomeJournalUrl } from '../../apps/portal-web/src/modules/member-home-loading.js';
 
 const shots = 'test-results/home-next-step';
 mkdirSync(shots, { recursive: true });
@@ -45,6 +46,43 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
     await openHomeGuide(page);
     await page.locator('.home-personal > summary').click();
   }
+}
+
+for (const width of [1440, 390]) {
+  test(`journal entry preserves a separate read-only destination at ${width}px`, async ({ page, context }) => {
+    await page.setViewportSize({width, height: 900});
+    const outbound: {authorization: string | undefined; cookie: string | undefined}[] = [];
+    await context.route('https://freetwai.evitina.tw/**', async route => {
+      const headers = route.request().headers();
+      outbound.push({authorization: headers.authorization, cookie: headers.cookie});
+      await route.fulfill({contentType: 'text/html', body: '<h1>Synthetic approved journal destination</h1>'});
+    });
+    await login(page, false);
+    await openHomeGuide(page);
+    const entry = page.getByRole('region', {name: '共創日誌', exact: true});
+    await expect(entry).toBeVisible();
+    expect(outbound).toHaveLength(0);
+    const url = resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
+    if (url) {
+      const homeUrl = page.url();
+      const link = entry.getByRole('link', {name: /^閱讀共創誌\s*（另開分頁）$/});
+      await expect(link).toHaveAttribute('href', url);
+      await expect(link).toHaveAttribute('target', '_blank');
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      const popupPromise = page.waitForEvent('popup');
+      await link.click();
+      const popup = await popupPromise;
+      await expect(popup.getByRole('heading', {name: 'Synthetic approved journal destination'})).toBeVisible();
+      expect(outbound).toEqual([{authorization: undefined, cookie: undefined}]);
+      await popup.close();
+      await expect(page).toHaveURL(homeUrl);
+    } else {
+      await expect(entry.getByRole('status')).toHaveText('日誌尚未公開');
+      await expect(entry.getByRole('link')).toHaveCount(0);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({path: `${shots}/journal-entry-${width}.png`, fullPage: true});
+  });
 }
 
 function suggestion(page: Page) {

@@ -4,6 +4,7 @@ import {SellerCheckoutOrderPageSchema,SellerCheckoutOrderSchema,SellerOrderConta
 import {ReservationPageSchema} from '../../../../contracts/guild-launchpad/v1/hosted-shared-order';
 import {formatIsoLocal} from '../../../../apps/portal-web/src/format';
 import {displayNumberPattern,sellerConsoleHref,type SellerConsoleRoute,type SellerQuery} from '../route';
+import {OrderFilters} from './OrderFilters';
 import type {Controller} from '../state/controller';
 import {Axis,Confirm,Editor,ReadStatus,useRead} from './Shared';
 import {amountToMinor,money,words} from './view';
@@ -11,16 +12,6 @@ import {OfflineOrderActions} from './OfflineOrderActions';
 const paymentMethod={immediate_card:'信用卡',bank_transfer:'銀行匯款',cash_on_meetup:'面交現金付款'} as const;
 const paymentText=(o:SellerCheckoutOrderSummary)=>o.payment_state==='confirmed'&&o.payment_method!=='immediate_card'?'已收款（店家確認）':words.payment[o.payment_state];
 export function OrderBadges({order:o}:{order:SellerCheckoutOrderSummary}){return <div className="seller-badges"><span className="badge">{paymentText(o)}</span><span className="badge">{words.inventory[o.inventory_state]}</span><span className="badge">{words.lifecycle[o.lifecycle_state]}{o.cancel_reason&&'（'+words.cancel[o.cancel_reason]+'）'}</span>{o.open_exception_count>0&&<span className="badge">需處理 {o.open_exception_count}</span>}{o.environment==='sandbox'&&<span className="badge">測試</span>}</div>;}
-function Filters({route}:{route:SellerConsoleRoute}){
- const [filters,setFilters]=useState<SellerQuery>(route.query),[submitted,setSubmitted]=useState(false),invalid=!!filters.display_number&&!displayNumberPattern.test(filters.display_number);
- return <form className="stack" aria-label="篩選訂單" noValidate onSubmit={e=>{e.preventDefault();setSubmitted(true);if(!invalid)window.location.hash=sellerConsoleHref(route,'orders',{query:filters});}}>
-  {submitted&&invalid&&<p role="alert"><a href="#seller-display-number" onClick={e=>{e.preventDefault();document.getElementById('seller-display-number')?.focus();}}>請修正訂單編號再套用篩選。</a></p>}
-  <div className="seller-filters"><label className="field">狀態<select aria-label="狀態" value={filters.lifecycle??''} onChange={e=>setFilters(old=>({...old,lifecycle:(e.target.value||undefined) as SellerQuery['lifecycle']}))}><option value="">全部</option>{Object.entries(words.lifecycle).map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label>
-   <label className="choice"><input type="checkbox" checked={filters.needs_action==='true'} onChange={e=>setFilters(old=>({...old,needs_action:e.target.checked?'true':undefined}))}/>只看需處理</label>
-   <label className="field" htmlFor="seller-display-number">訂單編號<input aria-label="訂單編號" id="seller-display-number" value={filters.display_number??''} aria-invalid={invalid} aria-describedby={invalid?'seller-display-number-error':undefined} onChange={e=>setFilters(old=>({...old,display_number:e.target.value}))}/>{invalid&&<span className="field-hint" id="seller-display-number-error">格式為六位日期、連字號及六位大寫編號，例如 261016-ABCDEF。</span>}</label></div>
-  <div className="actions"><button className="btn btn-ghost" type="submit">套用篩選</button><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders')} onClick={()=>setFilters({})}>清除篩選</a></div>
- </form>;
-}
 function OrderListPage({c,route,cursor,open}:{c:Controller;route:SellerConsoleRoute;cursor:string;open:(id:string)=>void}){
  const q=new URLSearchParams(route.query);q.set('limit','20');if(cursor)q.set('cursor',cursor);
  const key='orders:'+q,r=useRead(c,key,'/checkout-orders?'+q,SellerCheckoutOrderPageSchema),d=r.data;
@@ -34,7 +25,7 @@ export function Orders({c,route,active}:{c:Controller;route:SellerConsoleRoute;a
  const position=useRef<{id:string;scroll:number}|null>(null),heading=useRef<HTMLHeadingElement>(null),was=useRef(active);
  const valid=!route.query.display_number||displayNumberPattern.test(route.query.display_number),probe=useRead(c,'reservations-probe','/reservations?limit=1',ReservationPageSchema);
  useEffect(()=>{if(active&&!was.current){const p=position.current;requestAnimationFrame(()=>{const link=p?Array.from(document.querySelectorAll<HTMLElement>('[data-seller-order]')).find(el=>el.dataset.sellerOrder===p.id):null;(link??heading.current)?.focus({preventScroll:true});if(p)window.scrollTo(0,p.scroll);});}was.current=active;},[active]);
- return <section className="stack" hidden={!active}><h2 ref={heading} tabIndex={-1}>結帳訂單</h2>{probe.data&&probe.data.items.length>0&&<div className="actions"><a className="btn btn-ghost" href={sellerConsoleHref(route,'reservations')}>舊版預留</a></div>}<Filters key={'filters:'+JSON.stringify(route.query)} route={route}/>{valid&&<OrderListPage key={'list:'+JSON.stringify(route.query)} c={c} route={route} cursor="" open={id=>{position.current={id,scroll:window.scrollY};}}/>}</section>;
+ return <section className="stack" hidden={!active}><h2 ref={heading} tabIndex={-1}>結帳訂單</h2>{probe.data&&probe.data.items.length>0&&<div className="actions"><a className="btn btn-ghost" href={sellerConsoleHref(route,'reservations')}>舊版預留</a></div>}<OrderFilters route={route}/>{valid&&<OrderListPage key={'list:'+JSON.stringify(route.query)} c={c} route={route} cursor="" open={id=>{position.current={id,scroll:window.scrollY};}}/>}</section>;
 }
 function RefundForm({c,order,application}:{c:Controller;order:SellerCheckoutOrder;application:NonNullable<SellerCheckoutOrder['payment_detail']>['applications'][number]}){
  return <div className="stack"><p>{words.application[application.outcome]} · 可登錄 {money(application.refundable_minor,application.currency)}</p><Editor c={c} disabled={c.slot('order:'+order.order_ref).state!=='ready'} name={'refund:'+application.application_ref} label="登錄退款" fields={[{name:'amount',label:'金額（'+application.currency+' 整數）',required:true,pattern:/^[0-9]+$/},{name:'refunded_on',label:'退款日期',type:'date',required:true},{name:'provider_reference',label:'綠界參考編號（選填）',pattern:/^[A-Za-z0-9_-]{1,64}$/}]} onSubmit={(v,clear)=>{

@@ -1,0 +1,79 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "public-social-post-sharing",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/community/public-social-posts.ts",
+    "modules/community/public-social-post-page.ts",
+    "apps/platform-api/src/routes/public-social-posts.ts",
+    "apps/platform-api/src/routes/public-social-post-page.ts",
+    "apps/portal-web/src/modules/public-post-return.ts",
+    "apps/portal-web/public/social-post.css",
+    "apps/portal-web/public/social-post.js",
+    "migrations/184_public_social_posts.sql",
+    "tests/runtime/public-social-posts.test.ts",
+    "tests/runtime/public-social-post-page.test.ts",
+    "tests/e2e/public-social-posts.spec.ts",
+    "tests/runtime/public-social-post-script.test.ts",
+    "tests/runtime/public-social-posts-runtime-role.test.ts"
+  ],
+  "public_exports": [
+    "modules/community/public-social-posts.ts",
+    "modules/community/public-social-post-page.ts"
+  ],
+  "dependencies": [
+    "community",
+    "work",
+    "asset-lifecycle",
+    "skill-submissions",
+    "asset-storage",
+    "social-feed"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member",
+    "public"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "docs/development/share-promotion.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "community.public-social-post",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/public-social-posts.ts",
+      "operations": [
+        "community.public-social-post.read",
+        "community.public-social-post-image.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "community.social-post-publication",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/public-social-posts.ts",
+      "operations": [
+        "community.social-post-publication.read",
+        "community.social-post-publication.update"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "community.public-social-post-page",
+      "kind": "page",
+      "entry": "apps/platform-api/src/routes/public-social-post-page.ts",
+      "operations": [
+        "community.public-social-post-page.view"
+      ],
+      "auth_profile": "public-anonymous-read"
+    }
+  ]
+}

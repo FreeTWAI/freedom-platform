@@ -1,0 +1,66 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "platform-api-features",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/platform-api-features/**",
+    "apps/platform-api/src/features/**",
+    "tests/runtime/platform-feature-registration.test.ts"
+  ],
+  "public_exports": [
+    "apps/platform-api/src/features/authentication.ts",
+    "apps/platform-api/src/features/commerce.ts",
+    "apps/platform-api/src/features/community-search.ts",
+    "apps/platform-api/src/features/context.ts",
+    "apps/platform-api/src/features/member-account.ts",
+    "apps/platform-api/src/features/notification-preferences.ts",
+    "apps/platform-api/src/features/personal-content.ts",
+    "apps/platform-api/src/features/public-event-media.ts",
+    "apps/platform-api/src/features/public-events.ts",
+    "apps/platform-api/src/features/public-member-cards.ts",
+    "apps/platform-api/src/features/work.ts"
+  ],
+  "dependencies": [
+    "agent-commerce",
+    "assets",
+    "command-core",
+    "commerce-fulfilment",
+    "commerce-operations",
+    "commerce-payments",
+    "commerce-store-categories",
+    "commerce-store-variants",
+    "commerce-storefront",
+    "community",
+    "community-search",
+    "event-participation",
+    "hosted-checkout",
+    "member-card",
+    "member-communications",
+    "member-squads",
+    "module-registry",
+    "personal-content",
+    "platform-host",
+    "shared",
+    "supplier-console",
+    "tenant-workspaces",
+    "work"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/platform-api-features/README.md",
+    "docs/development/module-contributions.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": []
+}

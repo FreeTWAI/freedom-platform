@@ -1226,11 +1226,31 @@ test('five exact informational handoffs retain governance consumers, including b
     [...HANDOFF_DOCS_PATHS, GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[1], GENERATED_INVENTORY_PATH]]) {
     assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'informational_handoff_docs');
   }
-  const actual = loadModuleDescriptors(root, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim());
-  assert.equal(actual.ok, true);
-  assert.equal(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
-    {baseline:actual.descriptors, candidate:actual.descriptors})).profile, 'informational_handoff_docs');
   assert.equal(pull([edited(HANDOFF_DOCS_PATHS[0])]).mode, 'full', 'path-only selector cannot establish integration proof');
+});
+
+test('actual handoff graph retains new reverse consumers and only proven documents keep the narrow lane',()=>{
+  const actual=loadModuleDescriptors(root,execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim());
+  assert.equal(actual.ok,true);
+  for(const path of [HANDOFF_DOCS_PATHS[0],HANDOFF_DOCS_PATHS[2]])
+    assert.equal(decideHandoffDocsProfile(handoffInput([path],
+      {baseline:actual.descriptors,candidate:actual.descriptors})).profile,'informational_handoff_docs',path);
+  const reviewed=handoffDescriptors();
+  for(const [path,consumer,suites] of [
+    [HANDOFF_DOCS_PATHS[1],'platform-api-features',['e2e.harness','runtime.full','runtime.guild-blocks']],
+    [HANDOFF_DOCS_PATHS[3],'contribution-experience',['governance.unit','runtime.full']],
+    [HANDOFF_DOCS_PATHS[4],'contribution-experience',['governance.unit','runtime.full']],
+  ])for(const [baseline,candidate] of [[actual.descriptors,actual.descriptors],[reviewed,actual.descriptors],[actual.descriptors,reviewed]]) {
+    const value=handoffInput([path],{baseline,candidate}),impact=selectImpact({baseline,candidate,changedPaths:[path]});
+    assert.deepEqual(impact.unknown_paths,[],path);
+    assert.ok(impact.module_ids.includes(consumer),path+': '+consumer);
+    assert.deepEqual(impact.tests,suites,path);
+    assert.deepEqual(decideHandoffDocsProfile(value),{profile:'full',reason:'handoff_impact_unproven'},path);
+    const result=decideAffectedJobs(value);
+    assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS],path);
+  }
+  assert.deepEqual(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
+    {baseline:actual.descriptors,candidate:actual.descriptors})),{profile:'full',reason:'handoff_impact_unproven'});
 });
 
 test('supplier handoff refuses an unknown reverse consumer even without additional test obligations', () => {

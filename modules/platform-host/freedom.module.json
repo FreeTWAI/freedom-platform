@@ -1,0 +1,48 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "platform-host",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/platform-host/**",
+    "apps/platform-api/src/env.ts",
+    "apps/platform-api/src/module-context.ts",
+    "apps/platform-api/src/onboarding-diagnostics.ts",
+    "apps/platform-api/src/readiness.ts",
+    "apps/platform-api/src/session-cookie.ts",
+    "apps/platform-api/src/static-assets.ts",
+    "apps/platform-api/src/static-assets-node.ts",
+    "tests/runtime/session-cookie-security.test.ts",
+    "tests/runtime/onboarding-diagnostics.test.ts"
+  ],
+  "public_exports": [
+    "apps/platform-api/src/env.ts",
+    "apps/platform-api/src/module-context.ts",
+    "apps/platform-api/src/session-cookie.ts",
+    "apps/platform-api/src/static-assets.ts",
+    "apps/platform-api/src/static-assets-node.ts",
+    "apps/platform-api/src/readiness.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "member-card",
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/platform-host/README.md",
+    "docs/development/member-api.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": []
+}
