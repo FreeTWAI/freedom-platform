@@ -17,11 +17,12 @@ test.setTimeout(90_000);
 test.skip(process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE!=='1','Requires the separately scheduled local photo fixture pass.');
 const photo=(page:Page)=>page.locator('.hosted-store-photo');
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
-async function ready(page:Page,db:Parameters<typeof person>[0]){
+async function ready(page:Page,db:Parameters<typeof person>[0],beforeOpen?:(store:Awaited<ReturnType<typeof launchStore>>)=>void){
   expect((await(await page.request.get('/api/v1/site')).json()).store_gallery_enabled).toBe(false);
   const member=await person(db);await login(page,member.email);const store=await launchStore(page,'照片驗收工作室');
   const slug='photos-'+randomUUID().slice(0,8);await post(page,store.root+'/setup',{name:'照片驗收商店',slug,currency:'TWD'},201);
   const product=ProductViewSchema.parse(await post(page,store.root+'/products',{title:'手作茶杯',price_minor:35000,stock:2},201));
+  beforeOpen?.(store);
   await open(page,store.hash);await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeEnabled();
   return {...store,member,slug,product,path:'/api/v1'+store.root+'/products/'+product.product_id+'/photo'};
 }
@@ -140,7 +141,18 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
 });
 
 test('committed HTTP loss survives actual 401 unmount, other member and same-member manual replay with policy OFF',async({page,e2eAuthPool},info)=>{
-  const s=await ready(page,e2eAuthPool),file=await source('original-unknown.png','#793b52');const requests:ReturnType<typeof signature>[]=[],statuses:number[]=[],acks:unknown[]=[];
+  let slugRead!:ReturnType<Page['waitForResponse']>;const slugRequests:Request[]=[],slugFinished:Request[]=[];
+  const s=await ready(page,e2eAuthPool,store=>{
+    const slugPath='/api/v1'+store.root+'/slug-availability';
+    const matches=(request:Request)=>request.method()==='GET'&&new URL(request.url()).pathname===slugPath;
+    // Initial settings mount starts this debounced read, even with its panel hidden.
+    slugRead=page.waitForResponse(response=>matches(response.request()));
+    page.on('request',request=>{if(matches(request))slugRequests.push(request);});
+    page.on('requestfinished',request=>{if(matches(request))slugFinished.push(request);});
+  }),file=await source('original-unknown.png','#793b52');const requests:ReturnType<typeof signature>[]=[],statuses:number[]=[],acks:unknown[]=[];
+  const slugResponse=await slugRead;expect(slugResponse.status()).toBe(200);await slugResponse.finished();
+  await storeArea(page,'商店資料');await expect(page.locator('#store-settings-panel').getByText('可以使用：/shops/'+s.slug,{exact:true})).toBeVisible();
+  await storeArea(page,'商品');
   await page.route('**'+s.path,async route=>{
     if(route.request().method()!=='POST')return route.continue();requests.push(signature(route.request()));
     const response=await route.fetch();statuses.push(response.status());if(response.ok())acks.push(await response.json());
@@ -149,6 +161,11 @@ test('committed HTTP loss survives actual 401 unmount, other member and same-mem
   await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
   const retry=photo(page).getByRole('button',{name:'重試原照片操作',exact:true});await expect(retry).toBeVisible();expect(statuses).toEqual([200]);
   await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(new RegExp('#'+s.hash+'$'));await expect(photo(page)).toContainText(file.name);
+  // The leave guard restores the hash without remounting settings or starting another read.
+  // Settle every started read before expiry so only the manual photo retry gets 401.
+  await expect(page.locator('#store-settings-panel')).toContainText('可以使用：/shops/'+s.slug);
+  expect(slugRequests).toHaveLength(1);await expect.poll(()=>slugFinished.length).toBe(slugRequests.length);
+  expect(slugFinished).toEqual(slugRequests);
   const expired=await e2eAuthPool.query("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE user_id=$1 AND expires_at>now()",[s.member.id]);expect(expired.rowCount).toBe(1);
   await retry.click();await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(photo(page)).toHaveCount(0);expect(statuses).toEqual([200,401]);
   await e2eAuthPool.query("UPDATE domain_media_storage_policy SET persistence_allowed=false WHERE purpose='storefront.product-photo'");
@@ -3297,8 +3314,11 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
     const active=a.locator('.supplier-console [data-sc-active="true"]');
     await expect(active.getByRole('heading',{name:'商品詳情：'+title,exact:true})).toBeVisible();
     const photo=active.locator('.hosted-store-photo');
-    await photo.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-offer-a.png','#e8a45c'));
-    await photo.getByRole('button',{name:'儲存照片',exact:true}).click();
+    const firstFile=await source('synthetic-offer-a.png','#e8a45c'),chooser=a.waitForEvent('filechooser');
+    const photoPath='/api/v1'+sa.root+'/products/'+product.product_id+'/photo';
+    const firstUpload=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await photo.getByLabel('商品照片',{exact:true}).click();await(await chooser).setFiles(firstFile);
+    expect((await firstUpload).status()).toBe(200);
     await expect(photo.getByRole('status')).toContainText('已儲存照片變更');
     await decoded(photo.locator(':scope > img'));
     await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
@@ -3347,9 +3367,13 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
       await captureOffer(b,detail,info.outputPath(`seller-photo-light-${width}.png`));
       await captureOffer(a,block,info.outputPath(`supplier-photo-light-${width}.png`));
     }
-    await photo.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-offer-b.png','#387362'));
-    await photo.getByRole('button',{name:'儲存替換照片',exact:true}).click();
+    const replacementFile=await source('synthetic-offer-b.png','#387362'),replacementChooser=a.waitForEvent('filechooser');
+    const previousPhoto=await photo.locator(':scope > img').getAttribute('src');expect(previousPhoto).toBeTruthy();
+    const replacementUpload=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await photo.getByLabel('商品照片',{exact:true}).click();await(await replacementChooser).setFiles(replacementFile);
+    expect((await replacementUpload).status()).toBe(200);
     await expect(photo.getByRole('status')).toContainText('已儲存照片變更');
+    await expect(photo.locator(':scope > img')).not.toHaveAttribute('src',previousPhoto!);await decoded(photo.locator(':scope > img'));
     await expect(block).toContainText('已提供的照片不是目前的商品照片');
     await confirm(a,block,'改用目前的商品照片');await expect(block).toContainText('已提供目前的商品照片');
     await b.reload();await decoded(image);expect(await image.getAttribute('src')).not.toBe(firstPath);
@@ -3381,8 +3405,11 @@ test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog an
     await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);
     const active=a.locator('.supplier-console [data-sc-active="true"]'),upload=active.locator('.hosted-store-photo');
     await expect(active.getByRole('heading',{name:'商品詳情：'+title,exact:true})).toBeVisible();
-    await upload.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-catalog-thumb.png','#387362'));
-    await upload.getByRole('button',{name:'儲存照片',exact:true}).click();
+    const file=await source('synthetic-catalog-thumb.png','#387362'),chooser=a.waitForEvent('filechooser');
+    const photoPath='/api/v1'+sa.root+'/products/'+product.product_id+'/photo';
+    const uploadResponse=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await upload.getByLabel('商品照片',{exact:true}).click();await(await chooser).setFiles(file);
+    expect((await uploadResponse).status()).toBe(200);
     await expect(upload.getByRole('status')).toContainText('已儲存照片變更');
     await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
     await a.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();
