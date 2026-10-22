@@ -1,6 +1,6 @@
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const validSlug = (value:string) => value.length <= 64 && slug.test(value);
-export const journalUrl = (date:string, chapter = '') => `/journal/entries/${date}${chapter ? '#' + encodeURIComponent(chapter) : ''}`;
+export const journalUrl = (date:string, chapter = '') => `/journal/entries/${encodeURIComponent(date)}${chapter ? '#' + encodeURIComponent(chapter) : ''}`;
 export const personUrl = (id:string) => `/journal/people/${encodeURIComponent(id)}`;
 
 export function parseRoute(pathname:string):{page:string;date?:string;person?:string} {
