@@ -31,7 +31,7 @@ export function Products({c}:{c:ConsoleController}){
 }
 export function NewProduct({c}:{c:ConsoleController}){
  const r=c.slot<SupplierProducts>('products'),full=c.profile!.product_count>=200;
- return <section className="stack"><h2 tabIndex={-1}>新增商品</h2><ReadStatus c={c} name="products" label="商品清單"/><ReadStatus c={c} name="profile" label="共用商品容量"/><Capacity count={c.profile!.product_count}/>{full&&<p>商品容量已達 200 件。</p>}
- <Editor c={c} name="product:new" title="新增商品" base={{title:'',description:'',cost_minor:'',stock:'0'}} version="" kind="product.create" path="/supply-products" target="new" primary disabled={r.state!=='ready'||full} fields={[{key:'title',required:true},{key:'description',multiline:true},{key:'cost_minor',money:true,required:true},{key:'stock',required:true}]}/>
+ return <section className="stack"><h2 tabIndex={-1}>新增商品</h2><p className="field-hint">商品清單與容量分別更新；共用容量包含供貨商品與商店選品。</p><ReadStatus c={c} name="products" label="商品清單" scopedAction showLabel/><ReadStatus c={c} name="profile" label="共用商品容量" scopedAction showLabel/><Capacity count={c.profile!.product_count}/>{full&&<p>商品容量已達 200 件。</p>}
+ <Editor c={c} name="product:new" title="新增商品" base={{title:'',description:'',cost_minor:'',stock:'0'}} version="" kind="product.create" path="/supply-products" target="new" primary disabled={r.state!=='ready'||full} fields={[{key:'title',required:true},{key:'description',multiline:true},{key:'cost_minor',money:true,positiveMoney:true,required:true},{key:'stock',required:true}]}/>
  </section>;
 }

@@ -42,10 +42,8 @@ export function OfflineOrder({order, disabled, onCancel, onRefresh, readOnly=fal
         </div>
         <p role="status" className={copyStatus ? '' : 'shop-sr-only'}>{copyStatus}</p>
       </> : unpaid && order.payment_method === 'cash_on_meetup' ? <>
-        <p>店家會用你留下的手機或 Email 和你約時間地點。</p>
         <p>請在 {formatTaipeiDateTime(order.pay_by)} 前完成面交付款。</p>
       </> : <p>請聯絡店家確認付款狀態。</p>}
-    {(order.meetup_notes ?? []).map((note, index) => <p className="shop-preserve-lines" key={index}>{note}</p>)}
     {open && unpaid && <div className="shop-order-actions">
       <button className="shop-button shop-button-secondary" type="button" disabled={disabled} onClick={onRefresh}>更新訂單狀態</button>
       {!readOnly && <button className="shop-button shop-button-secondary" type="button" disabled={disabled} ref={cancelTrigger} onClick={() => dialog.current?.showModal()}>取消訂單</button>}
