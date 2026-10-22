@@ -22,11 +22,11 @@ S1 的「素材」是商品照片（含純供貨商品）。給合作店家取�
 
 | 步 | 誰 | 畫面 | API | 預期 | 驗收 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | A | 公會區塊「開始供貨設定」→ `#stores/<t>/<i>/supply` | `GET R/supply-profile` 回 `setup_state=setup_required` → `POST R/supply-profile` | 只顯示設定表單，其餘導覽停用並說明；建立後進入概覽；沒有要求零售網址 | AT-01 |
-| 2 | A | 概覽 | `GET R/supplier-console/overview` | 四項指標為 ready 的 0、待辦為空；供貨準備先給「新增商品」，說明公開供貨、素材另行授權、合作確認及預留的區別 | AT-39 |
-| 3 | A | `…/supply/products/new` | `POST R/supply-products` | 進入商品詳情；所有欄位讀回相同；金額標示「供貨單價」 | AT-05 |
+| 1 | A | 公會「開始供貨設定」→ `#stores/supply/setup`，「確認供貨空間」→「確認建立供貨空間」→「繼續供貨設定」→ `#stores/<t>/<i>/supply` | 既有啟用契約；`GET R/supply-profile` 回 `setup_state=setup_required` → `POST R/supply-profile` | 階段 1 已完成、2 為目前步驟；表單在建立前說明幣別不可更改、供貨單價／運費／合作售價與同幣別選用，選錯需在另一空間重建且不搬移商品。其餘導覽停用；沒有要求零售網址。離開後從公會、商品庫清單或設定入口「繼續設定商品庫」回到同一安裝，不重建 | AT-01 |
+| 2 | A | 概覽「供貨準備」 | `GET R/supplier-console/overview`、`GET R/supplier-console/products` | 階段 1–2 已完成、3 為目前步驟，主要動作「新增商品」；私人儲存 0 件自有商品、公開供貨尚未公開、接受交易由合作店家接單與收款。四項指標為 ready 的 0、待辦為空；既有使用說明保留公開、素材授權、合作及預留的區別 | AT-39 |
+| 3 | A | `…/supply/products/new` | `POST R/supply-products` | 進入商品詳情；所有欄位讀回相同；金額標示「供貨單價」。返回概覽時階段 3 已完成、4 為目前步驟，私人儲存 1 件、尚未公開，主要動作「選擇要公開的商品」 | AT-05 |
 | 4 | A | 商品詳情「照片」 | 照片命令（純供貨商品） | 預覽、上傳、讀回；公開頁不出現 | AT-11 |
-| 5 | A | 商品詳情「供貨條件」→「供貨版本」 | `PATCH …/supply-terms`、`POST …/supply-offer` | 公開後概覽「公開供貨商品」＝1 | AT-05 |
+| 5 | A | 商品詳情「供貨條件」→「供貨版本」 | `PATCH …/supply-terms`、`POST …/supply-offer` | 明確確認公開後概覽「公開供貨商品」＝1；前四階段完成，進度與三個狀態收進預設收合的使用說明，無準備主要動作；選品申請維持選用，不標完成，不自動開交易 | AT-05 |
 | 6 | B | 自己商店的「供貨合作」（既有） | 既有 distribution 命令 | 看到 A 的版本並送出售價 | AT-12 |
 | 7 | A | 概覽待辦 → 審核頁 `…/supply/terms/<selection_id>` | `POST …/supply-requests/:id/decision` | 看到 B 的名稱、售價、凍結條件、價差（標明不是佣金或利潤）；同意後 B 可售 | AT-12、31 |
 | 8 | B／A | B 改價；A 改條件 | 既有命令 | B 改價後回到待確認；A 改條件後商品標「需更新版本」，影響預覽列出 B；重新公開後 B 需重新申請 | AT-13、15 |
@@ -48,7 +48,7 @@ S1 的「素材」是商品照片（含純供貨商品）。給合作店家取�
 | 未確認時點全站導覽 | 擋下並說明；拒絕後留在原頁、原 hash | AT-36 |
 | A 未確認時登出、B 登入 | B 看不到 A 的資料或操作；晚到的讀取被丟棄 | AT-34 |
 | 照片讀檔晚到後換人登入 | 舊檔不填入新身分、不送上傳（沿用 `HostedStorePhoto` 的晚到保護；自動測試 not_run，見 SC-SPEC-05） | AT-35 |
-| 概覽讀取失敗 | 顯示無法取得與重試，不顯示 0 | AT-29 |
+| 概覽讀取失敗 | 顯示無法取得與重試，不顯示 0；依賴該讀取的階段標「暫時無法確認」，無準備主要動作 | AT-29 |
 | A2 被移除權限後送出 | 403，停用寫入並說明；已保存的資料不變 | AT-37 |
 
 ## 測試計畫
@@ -57,7 +57,7 @@ S1 的「素材」是商品照片（含純供貨商品）。給合作店家取�
 | --- | --- | --- |
 | 新讀取、旗標、權限、計數定義、同名店、到期邊界 | `tests/runtime/supplier-console.test.ts` | 隔離 PostgreSQL／HTTP |
 | `PATCH supply-profile`、純供貨照片 | `tests/runtime/supplier-console-writes.test.ts` | 隔離 PostgreSQL／HTTP |
-| 路由、attempt、草稿、412、離開判斷 | `tests/runtime/supplier-console-state.test.ts` | 前端狀態邏輯 |
+| 路由、attempt、草稿、412、離開判斷、供貨進度與讀取狀態矩陣 | `tests/runtime/supplier-console-state.test.ts` | 前端狀態邏輯 |
 | 新 schema 正反例 | `tests/runtime/guild-launchpad-contracts.test.ts` | 契約 |
 | 步驟 1～15 連續一條、舊書籤、新版關閉時回退 | `tests/e2e/supplier-console.spec.ts` | 整合瀏覽器 |
 | 步驟 8～11 的分支（改價、改條件、不同意／撤回、同名店、唯讀成員） | `tests/e2e/supplier-console-cooperation.spec.ts` | 整合瀏覽器 |

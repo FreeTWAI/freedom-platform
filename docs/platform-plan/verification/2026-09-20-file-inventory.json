@@ -16254,8 +16254,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-01-ia-visual.md",
-      "bytes": 10621,
-      "sha256": "9ccd8b2b394b60afa8072a8c71ecf801f86e7d01b9102f76c37291d6755d79a2"
+      "bytes": 11122,
+      "sha256": "19e863927cafde75d3383eda2eccc8b91c639abfee9eefd8f8d8b90b2aea3e1c"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/SC-SPEC-02-shell-session-recovery.md",
@@ -16299,8 +16299,8 @@
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/first-journey.md",
-      "bytes": 7537,
-      "sha256": "666cc49151911dd8bc410130e5a516a83a8e28eeba763b2ffc699a136bc45b93"
+      "bytes": 8539,
+      "sha256": "5b46f2535bc4259f5e79c5ccd084902ccd5e1ee5775f63dbe992c1bdb8266a4b"
     },
     {
       "path": "docs/platform-plan/execution/supplier-console/pages.md",
