@@ -24259,8 +24259,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
-      "bytes": 68373,
-      "sha256": "0c336c81aafb31a3c4a9a2fb9435e5516b23546c9d5639fb1ee4b6ec3b7b17c1"
+      "bytes": 69195,
+      "sha256": "d18e0b2aafbd129d6f40a4ee5b412785f83371fdb96a309cf04820ea442590c5"
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
