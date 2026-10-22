@@ -7,6 +7,7 @@ import {endOfflinePaymentWindow} from '../payments/offline/window.js';
 import type {EffectJournalPort} from './journal/journal.js';
 import {deliverCommerceEmail} from './notifications/delivery.js';
 import type {CommerceEmailOutbox,CommerceEmailSender} from './notifications/email-port.js';
+import type {OrderNotificationOptions} from '../checkout/order-notifications.js';
 export type CommerceDueWorkKind = 'payment_query' | 'payment_window_end' | 'email' | 'offline_payment_window_end';
 /** Scheduling never postpones existing work and never changes its tenant. The
  * caller owns the transaction; this helper performs no external operation. */
@@ -26,7 +27,7 @@ export async function scheduleDueWork(q: PoolClient, input: {
 }
 
 interface ClaimedWork {due_work_id:string;tenant_id:string;kind:string;target_id:string;token:string}
-export interface DueCommerceWorkDependencies {
+export interface DueCommerceWorkDependencies extends OrderNotificationOptions {
   transport?:PaymentQueryDependencies['transport'];
   keyring?:PaymentQueryDependencies['keyring'];
   freedomEnv:PaymentQueryDependencies['freedomEnv'];
@@ -68,7 +69,7 @@ export async function runDueCommerceWork(pool:Pool,deps:DueCommerceWorkDependenc
     handlers.payment_query=row=>queryAttempt(pool,row.target_id,paymentDeps,options.trigger??'schedule',{leaseToken:row.token,tenantId:row.tenant_id});
     handlers.payment_window_end=async row=>{await endPaymentWindow(pool,row.target_id,{now:deps.now,leaseToken:row.token,tenantId:row.tenant_id,signal});return {externalCalls:0};};
   }
-  handlers.offline_payment_window_end=async row=>{await endOfflinePaymentWindow(pool,row.target_id,{now:deps.now,leaseToken:row.token,tenantId:row.tenant_id,signal});return {externalCalls:0};};
+  handlers.offline_payment_window_end=async row=>{await endOfflinePaymentWindow(pool,row.target_id,{now:deps.now,leaseToken:row.token,tenantId:row.tenant_id,signal,orderNotifications:deps.orderNotifications});return {externalCalls:0};};
   if(deps.emailEnabled&&deps.emailSender&&deps.journal&&deps.origin){
     const emailDeps={sender:deps.emailSender,journal:deps.journal,origin:deps.origin,now:deps.now,quarantine:deps.quarantine,signal};
     handlers.email=row=>deliverCommerceEmail(pool,row.target_id,emailDeps,{dueWorkId:row.due_work_id,leaseToken:row.token,tenantId:row.tenant_id});

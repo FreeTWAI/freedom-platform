@@ -38,7 +38,52 @@ stable member user ID (or guest). A new session for the same member can explicit
 retry the original coordinates; a different identity parks them without replay,
 clears private in-memory fields and requotes the retained cart. Legacy v1 intents
 are untrusted. Tab metadata stores no contact, bank, cookie or CSRF values.
-This slice adds no member order list or retained unpublished-store read path.
+The member history companion is described below.
+
+## Member checkout history (2026-10-20 candidate)
+
+Raw checkout flag ON mounts `GET /api/v1/me/orders` behind the real cookie
+boundary, including an onboarding exception for this exact GET only. It needs
+no CSRF token. The read-only transaction reuses `member(..., false)` without
+mapping a person or scope and rechecks the live session, active user and same
+active person principal before returning. Disabled principals are refused;
+an unmapped active member gets an empty page. Guild and seller-tenant membership
+are not conditions of the original buyer's retained order access.
+
+Migration180 adds only the partial buyer/creation/UUID index. Candidate discovery
+is `buyer_principal_id = actual principal AND order_profile = 'hosted_checkout'`,
+ordered newest first, at most 21 candidates for a page of at most 20. Dependent
+exact-key sidecar/publication/provenance lookups export only frozen store name
+and slug, order reference/number, placement time, total/currency, lifecycle and
+canonical order path. Missing retained metadata fails closed as an error.
+There is no customer/contact/bank query, cross-tenant fanout, role change,
+BYPASSRLS, new grant or RLS exception in the list. Existing participant metadata
+exemptions suffice. No list budget is charged; no hold is settled.
+
+`tenantListCursors` signs purpose `buyer-orders`, the actual principal, empty
+store/scope selectors and filter `{"profile":"hosted_checkout","v":1}`. The
+position retains six-digit PostgreSQL microseconds and the UUID; continuation
+uses a strict descending tuple boundary. Another member, v1 list, origin or
+environment cannot reuse it. Missing signing configuration returns
+`tenant_cursor_unavailable`, never a misleading empty page. Query limit defaults
+to 20 in the API/domain so generated input/output schemas remain identical.
+
+When the current public store cannot resolve, only the original active member
+may read retained B07. Metadata proves exact order, buyer, frozen slug and stored
+tenant/instance/shop provenance before the existing explicit order projection
+binds that one tenant and reads private contact/payment instructions. Anonymous,
+stranger, expired or disabled identities retain the opaque missing response.
+The HTML shell authenticates before emitting even the frozen store name; it is
+private/no-store/noindex, uses the original Freedom logo, and replays no historical
+merchant description, products, photos, appearance, policies or footer. Its
+hydrated controls are read-only. Placement, cancellation, payment continuation,
+public store pages/JSON and login-return validation gain no retained-store fallback.
+
+These reads remain allowed in quarantine when the raw checkout flag is ON.
+The existing site field still masks the feature in a freshly loaded quarantined
+portal; it does not become a separate history capability. With the raw flag OFF,
+the list/cache middleware are absent and retained B07 falls back to the same
+missing-store response. No real environment or flag was changed.
 
 ## Inventory and retained facts
 
@@ -86,6 +131,24 @@ Physical/command references take a global advisory lock after the order locks;
 reference comparisons see committed facts even across communities.
 All writes and deferred checks must commit in the caller transaction; on any error
 the caller must roll back the entire transaction.
+
+Order bell notices are the explicit optional exception to that rule. When the
+order-notifications flag and checkout are ON, and commerce is not quarantined,
+the existing notification writer runs inside a notification-only savepoint after
+the domain effect. Invalid frozen metadata, formatting or recipient invariants
+roll back that optional block, emit only `commerce_order_notification_skipped`,
+and let commerce continue. Every rejected database query is classified at its
+origin, including connection errors without SQLSTATE; database and savepoint
+errors propagate and roll back the entire domain transaction and receipt/work
+change. Successful notices commit atomically with it. There is no independent
+commit, external delivery or retry inside that savepoint. Notification-enabled
+offline buyer placement and cancellation may repeat the whole isolated
+transaction once after `40P01`, rechecking authority and recipients. Prechecks
+and attempt budgets outside it run only once. Card/OFF, seller commands and
+scheduled expiry keep their existing error handling. OFF installs no port and issues no
+notification SQL. The frozen publication supplies only store name/slug and the
+order supplies its display number and immutable buyer principal; the email-based
+customer/member label is not a notification identity.
 
 ## Canonical terms
 

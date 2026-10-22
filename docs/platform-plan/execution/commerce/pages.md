@@ -52,6 +52,20 @@
 包括 portal 登入與 `#reservations`；此次編輯的 JS asset bytes 不在 byte identity 範圍內。
 原本可直開的 B05 HTML 維持，API 仍拒絕結帳；v1 預留頁與提示維持既有內容。
 
+2026-10-20 會員訂單清單候選（schema180 部分索引，未部署）：
+
+- **B07／會員「我的訂單」**：`GET /api/v1/me/orders` 僅列原下單會員自己的新結帳訂單，
+  跨店、最新在先、簽名游標每頁最多20筆。凍結店名、編號、時間、總額、與 B07 相同的
+  狀態及「開啟訂單」連結；沒有聯絡或銀行資料。原 `#reservations` 上方新增「訂單」，
+  loading／empty／error＋retry／next-page；v1 區塊保持不變。不新增站內分頁。
+- **未完成入會**：只在精確的 `#reservations` 顯示唯讀清單與「返回工坊」；離開後恢復入會流程。
+- **保留 B07**：未公開商店先驗證原會員，再回傳最小私有頁；只呈現凍結店名／slug、
+  自由工坊原始 Logo 與訂單資料，不重播歷史店面。匿名或其他會員收到原缺店回應。
+  下單、取消、付款續接、公開店面 JSON 與登入返回驗證不取得此例外。
+- **旗標／維護**：原始 checkout 開關 OFF 不掛載新 GET／cache middleware，portal 與缺店回應維持原樣。
+  原始開關 ON 時，列表與保留頁可在 quarantine 唯讀；fresh portal 的 site field 仍依既有規則遮蔽。
+  本機候選不代表正式 schema 已升級，寄信、信用卡付款與 C2 代出貨同意維持範圍外。
+
 ## 賣家頁（E，Seller Console）
 
 | 頁面 | 現況 | 目標操作 | 資料／API | 權限（現有／新能力提議） | 錯誤與空狀態 | 里程碑 |

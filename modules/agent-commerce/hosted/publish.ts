@@ -1,3 +1,5 @@
+import {categoryDraft,draftCategoriesSnapshot,publishedCategoriesDigest,insertPublicationCategories,type CategoriesOptions} from '../storefront/categories/model.js';
+import {draftVariantsData,draftVariantsSnapshot,publishedVariantsDigest,insertPublicationVariants,type VariantsOptions} from '../storefront/variants/model.js';
 import {draftGalleryData,publishedGalleryDigest,insertPublicationGallery,privateGalleryView,type GalleryOptions} from '../storefront/gallery/model.js';
 import {RenderGallerySchema} from '../../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import {draftLegalSnapshot,publishedLegalDigest,insertPublicationLegal,renderDraftLegal,type PoliciesOptions} from '../storefront/policies/model.js';
@@ -38,20 +40,24 @@ async function buildProjection(q: PoolClient, p: Profile, items: readonly PhotoP
     products: items.map(({product: { sku, title, description, price_minor }}) => ({ sku, title, description, price_minor })),
     revision: await nextRevision(q, p), published_at: now.toISOString(), transaction_state: 'not_enabled' });
 }
-async function draftPublicationDimensions(q: PoolClient, p: Profile, items: readonly PhotoProduct[], options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions) {
+async function draftPublicationDimensions(q: PoolClient, p: Profile, items: readonly PhotoProduct[], options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions, variantsOptions: VariantsOptions, categoriesOptions: CategoriesOptions) {
   return {
     appearance: options.enabled === true ? await draftAppearanceSnapshot(q, p) : undefined,
     policies: policiesOptions.enabled === true ? await draftLegalSnapshot(q, p) : undefined,
     gallery: galleryOptions.enabled === true ? await draftGalleryData(q, p, items) : undefined,
+    variants: variantsOptions.enabled === true ? draftVariantsSnapshot((await draftVariantsData(q, p, items)).page) : undefined,
+    categories: categoriesOptions.enabled === true ? draftCategoriesSnapshot(await categoryDraft(q, p, categoriesOptions)) : undefined,
   };
 }
 type PublicationDimensions = Awaited<ReturnType<typeof draftPublicationDimensions>>;
 async function publicationChanges(q: PoolClient, p: Profile, dimensions: PublicationDimensions) {
-  const {appearance, policies, gallery} = dimensions;
+  const {appearance, policies, gallery, variants, categories} = dimensions;
   return {
     ...(appearance ? {appearance_changed: appearance.sha256 !== await publishedAppearanceDigest(q, p)} : {}),
     ...(policies ? {policies_changed: policies.sha256 !== await publishedLegalDigest(q, p)} : {}),
     ...(gallery ? {gallery_changed: gallery.sha256 !== await publishedGalleryDigest(q, p)} : {}),
+    ...(variants ? {variants_changed: variants.sha256 !== await publishedVariantsDigest(q, p)} : {}),
+    ...(categories ? {categories_changed: categories.sha256 !== await publishedCategoriesDigest(q, p)} : {}),
   };
 }
 function publicationDirty(p: Profile, projection: PublicStoreProjection, mediaSha256: string, changes: Awaited<ReturnType<typeof publicationChanges>>) {
@@ -63,21 +69,26 @@ function publicationReviewDigest(p: Profile, projection: PublicStoreProjection, 
     projection_sha256: projectionDigest(projection), template_id: p.template_id, media_sha256: mediaSha256,
     ...(dimensions.appearance ? {appearance_sha256: dimensions.appearance.sha256} : {}),
     ...(dimensions.policies ? {policies_sha256: dimensions.policies.sha256} : {}),
-    ...(dimensions.gallery ? {gallery_sha256: dimensions.gallery.sha256} : {}) });
+    ...(dimensions.gallery ? {gallery_sha256: dimensions.gallery.sha256} : {}),
+    ...(dimensions.variants ? {variants_sha256: dimensions.variants.sha256} : {}),
+    ...(dimensions.categories ? {categories_sha256: dimensions.categories.sha256} : {}) });
 }
 /** Review only saved, publishable content. Product/photo edits have their own versions. */
-export async function reviewStorePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
+export async function reviewStorePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}, variantsOptions: VariantsOptions = {}, categoriesOptions: CategoriesOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:publish', async q => {
-    if (options.enabled === true || policiesOptions.enabled === true || galleryOptions.enabled === true) await lockAppearanceRead(q, tenantId, instanceId);
+    if (options.enabled === true || policiesOptions.enabled === true || galleryOptions.enabled === true || variantsOptions.enabled === true || categoriesOptions.enabled === true) await lockAppearanceRead(q, tenantId, instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
     let projection = await buildProjection(q, p, items);
-    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
+    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions, variantsOptions, categoriesOptions);
     const changes = await publicationChanges(q, p, dimensions);
     const dirty = publicationDirty(p, projection, media.sha256, changes);
     const reviewDigest = publicationReviewDigest(p, projection, media.sha256, dimensions);
     if (!dirty && p.projection) projection = publicProjection(p.projection);
-    const photos = items.flatMap<StorePublicationReview['photos'][number]>(item => {
+    // Variant pages share the selected group's gallery. Show it once, and never
+    // suggest that a nonselected member's own photo will appear on that page.
+    const gallerySkus = dimensions.variants && new Set(dimensions.variants.document.groups.map(group => group.gallery_sku));
+    const photos = items.filter(item => !gallerySkus || gallerySkus.has(item.product.sku)).flatMap<StorePublicationReview['photos'][number]>(item => {
       if (dimensions.gallery && !('distributionPhotoVersion' in item)) {
         return privateGalleryView(p, item, dimensions.gallery.byId.get(item.product.product_id)!, galleryOptions).photos
           .map(photo => ({sku: item.product.sku, photo}));
@@ -90,36 +101,37 @@ export async function reviewStorePublication(pool: Pool, actor: Actor, tenantId:
       photo_count: photos.length, photos, review_digest: reviewDigest, ...changes });
   });
 }
-export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {}) {
+export async function previewStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {}) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
-    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
+    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true||categoriesOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     let projection = await buildProjection(q, p, items);
-    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
+    const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions, variantsOptions, categoriesOptions);
     const dirty = publicationDirty(p, projection, draftMediaSnapshot(items).sha256, await publicationChanges(q, p, dimensions));
     if (!dirty && p.projection) projection = publicProjection(p.projection);
     return StorePreviewSchema.parse({ projection, dirty, current_revision: p.revision });
   });
 }
 /** Private saved-draft preview uses the exact public renderer and its allowlisted projection. */
-export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {}) {
+export async function previewStorePage(pool: Pool, actor: Actor, tenantId: string, instanceId: string, options: AppearanceOptions = {},policiesOptions:PoliciesOptions = {},galleryOptions:GalleryOptions = {},variantsOptions:VariantsOptions = {},categoriesOptions:CategoriesOptions = {},categoryQuery:readonly string[] = []) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
-    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
+    if(options.enabled===true||policiesOptions.enabled===true||galleryOptions.enabled===true||variantsOptions.enabled===true||categoriesOptions.enabled===true)await lockAppearanceRead(q,tenantId,instanceId);
     const p = await profile(q, tenantId, instanceId); retailReady(p);
     const items = await publicationProducts(q, p);
     const appearance=options.enabled===true?renderAppearance((await draftAppearanceSnapshot(q,p)).document,{tenantId,instanceId,version:p.version},options.mediaInstalled===true):undefined;
     const policies=policiesOptions.enabled===true?renderDraftLegal((await draftLegalSnapshot(q,p)).input,`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`):undefined;
-    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance, policies,galleryOptions.enabled===true?`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`:undefined);
+    const catalog=variantsOptions.enabled===true?{document:draftVariantsSnapshot((await draftVariantsData(q,p,items)).page).document}:undefined;
+    return storeHtml(await buildProjection(q, p, items), p.template_id, items.map(item => ({ sku:item.product.sku,photo:privatePhotoView(p,item).photo })), {preview: true}, undefined, appearance, policies,galleryOptions.enabled===true||catalog?`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`:undefined,catalog,categoriesOptions.enabled===true?{document:draftCategoriesSnapshot(await categoryDraft(q,p,categoriesOptions)).document,query:categoryQuery,base:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`}:undefined);
   });
 }
-export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
-  return changePublication(pool, actor, tenantId, instanceId, key, expected, unpublish, options, policiesOptions, galleryOptions);
+export async function publishStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish = false, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}, variantsOptions: VariantsOptions = {}, categoriesOptions: CategoriesOptions = {}) {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, unpublish, options, policiesOptions, galleryOptions, variantsOptions, categoriesOptions);
 }
-export async function publishReviewedStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, input: ReviewedPublicationInput, key: string, expected: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}) {
-  return changePublication(pool, actor, tenantId, instanceId, key, expected, false, options, policiesOptions, galleryOptions, input);
+export async function publishReviewedStore(pool: Pool, actor: Actor, tenantId: string, instanceId: string, input: ReviewedPublicationInput, key: string, expected: string, options: AppearanceOptions = {}, policiesOptions: PoliciesOptions = {}, galleryOptions: GalleryOptions = {}, variantsOptions: VariantsOptions = {}, categoriesOptions: CategoriesOptions = {}) {
+  return changePublication(pool, actor, tenantId, instanceId, key, expected, false, options, policiesOptions, galleryOptions, variantsOptions, categoriesOptions, input);
 }
-async function changePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish: boolean, options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions, review?: ReviewedPublicationInput) {
+async function changePublication(pool: Pool, actor: Actor, tenantId: string, instanceId: string, key: string, expected: string, unpublish: boolean, options: AppearanceOptions, policiesOptions: PoliciesOptions, galleryOptions: GalleryOptions, variantsOptions: VariantsOptions, categoriesOptions: CategoriesOptions, review?: ReviewedPublicationInput) {
   const operation = unpublish ? 'storefront.unpublish' : review ? 'storefront.publish-reviewed' : 'storefront.publish';
   return storeCommand(pool, actor, tenantId, instanceId, 'store:publish', operation, review ?? {}, key, expected, async (q, context, inst) => {
     const p = await profile(q, tenantId, instanceId, true); retailReady(p); checkVersion(p.version, expected);
@@ -130,8 +142,8 @@ async function changePublication(pool: Pool, actor: Actor, tenantId: string, ins
     } else {
       const items = await publicationProducts(q, p), media = draftMediaSnapshot(items);
       const projection = await buildProjection(q, p, items);
-      const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions);
-      const {appearance, policies, gallery} = dimensions;
+      const dimensions = await draftPublicationDimensions(q, p, items, options, policiesOptions, galleryOptions, variantsOptions, categoriesOptions);
+      const {appearance, policies, gallery, variants, categories} = dimensions;
       // Compare under the same instance/community/profile locks, using exactly
       // the rowset saved below. Do not run this check on a committed receipt replay.
       if (review) requireCondition(review.review_digest === publicationReviewDigest(p, projection, media.sha256, dimensions),
@@ -149,6 +161,8 @@ async function changePublication(pool: Pool, actor: Actor, tenantId: string, ins
       if(appearance)await insertPublicationAppearance(q,id,p,appearance);
       if(policies)await insertPublicationLegal(q,id,p,policies);
       if(gallery)await insertPublicationGallery(q,id,p,gallery);
+      if(variants)await insertPublicationVariants(q,id,p,variants);
+      if(categories)await insertPublicationCategories(q,id,p,categories);
       await q.query(`UPDATE commerce_storefront_profiles p SET current_publication_id=$3,first_published_at=COALESCE(p.first_published_at,$4),version=p.version+1,updated_at=clock_timestamp()
         FROM commerce_resource_tenants m WHERE m.resource_id=p.storefront_shop_id AND m.tenant_id=$1 AND m.instance_id=$2 AND p.instance_id=m.instance_id`, [tenantId, instanceId, id, projection.published_at]);
     }
@@ -159,14 +173,16 @@ async function changePublication(pool: Pool, actor: Actor, tenantId: string, ins
 
 /** Gallery-only draft detail. Same store:read, profile snapshot and renderer as
  * the catalog preview; supplied selections retain their existing private image. */
-export async function previewProductPage(pool:Pool,actor:Actor,tenantId:string,instanceId:string,sku:string,options:AppearanceOptions={},policiesOptions:PoliciesOptions={},galleryOptions:GalleryOptions={}){
+export async function previewProductPage(pool:Pool,actor:Actor,tenantId:string,instanceId:string,sku:string,options:AppearanceOptions={},policiesOptions:PoliciesOptions={},galleryOptions:GalleryOptions={},variantsOptions:VariantsOptions={}){
  return storeRead(pool,actor,tenantId,instanceId,'store:read',async q=>{
   await lockAppearanceRead(q,tenantId,instanceId);const p=await profile(q,tenantId,instanceId);retailReady(p);
   const items=await publicationProducts(q,p),item=items.find(p=>p.product.sku===sku);requireCondition(item,404,'not_found','找不到這項商品。');
-  const data=await draftGalleryData(q,p,items),base=`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`;
+  const catalog=variantsOptions.enabled===true?{document:draftVariantsSnapshot((await draftVariantsData(q,p,items)).page).document}:undefined;
+  const gallerySku=catalog?.document.groups.find(g=>g.members.some(m=>m.sku===sku))?.gallery_sku??sku,photoItem=items.find(p=>p.product.sku===gallerySku)!;
+  const data=galleryOptions.enabled===true?await draftGalleryData(q,p,items):undefined,base=`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`;
   const appearance=options.enabled===true?renderAppearance((await draftAppearanceSnapshot(q,p)).document,{tenantId,instanceId,version:p.version},options.mediaInstalled===true):undefined;
   const policies=policiesOptions.enabled===true?renderDraftLegal((await draftLegalSnapshot(q,p)).input,base):undefined;
-  const photos='distributionPhotoVersion' in item?(privatePhotoView(p,item).photo?[{...privatePhotoView(p,item).photo!,position:1,alt_text:''}]:[]):privateGalleryView(p,item,data.byId.get(item.product.product_id)!,galleryOptions).photos.map(({photo_key:_key,...photo})=>photo);
-  return productHtml(await buildProjection(q,p,items),sku,items.map(item=>({sku:item.product.sku,photo:privatePhotoView(p,item).photo})),undefined,undefined,appearance,policies,RenderGallerySchema.parse(galleryOptions.mediaInstalled===true?photos:[]),base)!;
+  const photos='distributionPhotoVersion' in photoItem||!data?(privatePhotoView(p,photoItem).photo?[{...privatePhotoView(p,photoItem).photo!,position:1,alt_text:''}]:[]):privateGalleryView(p,photoItem,data.byId.get(photoItem.product.product_id)!,galleryOptions).photos.map(({photo_key:_key,...photo})=>photo);
+  return productHtml(await buildProjection(q,p,items),sku,items.map(item=>({sku:item.product.sku,photo:privatePhotoView(p,item).photo})),undefined,undefined,appearance,policies,galleryOptions.enabled===true?RenderGallerySchema.parse(galleryOptions.mediaInstalled===true?photos:[]):undefined,base,catalog)!;
  });
 }

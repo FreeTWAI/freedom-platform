@@ -1,3 +1,4 @@
+import {createStorefrontProductPhotoLifecycle} from '../../modules/assets/storefront-product-photo.js';
 import {LIVE_PUBLIC_ORIGIN} from '../../apps/platform-api/src/routes/published-skills.js';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -748,7 +749,7 @@ test('publication review is a private stable snapshot with a strict additive wir
 test('reviewed publication with all dimension flags OFF preserves legacy response bytes, digest and publication', async () => {
   const s = await ready(); await add(s); expect(await publish(s));
   const off = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true,
-    storeAppearanceEnabled: false, storePoliciesEnabled: false, storeGalleryEnabled: false});
+    storeAppearanceEnabled: false, storePoliciesEnabled: false, storeGalleryEnabled: false, storeVariantsEnabled: false, storeCategoriesEnabled: false});
   const path = h.origin + '/api/v1' + s.root + '/publication-review', headers = {Cookie: s.owner.cookie};
   const legacy = await app.request(path, {headers}), explicitOff = await off.request(path, {headers});
   assert.equal(legacy.status, 200); assert.equal(explicitOff.status, 200);
@@ -765,13 +766,15 @@ test('reviewed publication with all dimension flags OFF preserves legacy respons
     {'Idempotency-Key': randomUUID(), 'If-Match': `"${fresh.store_version}"`}, off));
   assert.equal(published.publication.current_revision, '2');
   assert.equal(JSON.parse((await publicPair(settings.slug)).jsonText).products[0].title, '關閉維度後仍可上架');
-  for (const table of ['commerce_publication_appearances','commerce_publication_seller_policies','commerce_publication_galleries']) assert.equal(await h.count(table), 0);
+  for (const table of ['commerce_publication_appearances','commerce_publication_appearance_refs','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_publication_galleries','commerce_publication_gallery_refs','commerce_publication_variants','commerce_publication_categories']) assert.equal(await h.count(table), 0);
 });
 
 const publicationDimensionTables = {
   appearance: ['commerce_publication_appearances','commerce_publication_appearance_refs'],
   policies: ['commerce_publication_seller_policies','commerce_publication_policy_refs'],
   gallery: ['commerce_publication_galleries','commerce_publication_gallery_refs'],
+  variants: ['commerce_publication_variants'],
+  categories: ['commerce_publication_categories'],
 } as const;
 async function frozenDimensionRows(dimension: keyof typeof publicationDimensionTables, publicationId: string) {
   return Promise.all(publicationDimensionTables[dimension].map(async table => (await h.pool.query(
@@ -783,11 +786,14 @@ async function publicationWriteState(s: Store) {
   return {counts: await Promise.all(tables.map(table => h.count(table))),
     profile: (await h.pool.query('SELECT to_jsonb(p) AS row FROM commerce_storefront_profiles p WHERE instance_id=$1', [s.instanceId])).rows};
 }
-for (const dimension of ['appearance','policies','gallery'] as const) test(`reviewed publication with ${dimension} ON rejects a changed draft without writes and freezes exactly the plain publish rows`, async () => {
+for (const dimension of ['appearance','policies','gallery','variants','categories'] as const)
+for (const variantsEnabled of dimension === 'categories' ? [false, true] : [dimension === 'variants'])
+test(`reviewed publication with ${dimension} ON${dimension === 'categories' ? ` and variants ${variantsEnabled ? 'ON' : 'OFF'}` : ''} rejects a changed draft without writes and freezes exactly the plain publish rows`, async () => {
   const s = await ready(); let item = await add(s);
   const store = new FakeObjectStore();
   const target = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true,
     storeAppearanceEnabled: dimension === 'appearance', storePoliciesEnabled: dimension === 'policies', storeGalleryEnabled: dimension === 'gallery',
+    storeVariantsEnabled: variantsEnabled, storeCategoriesEnabled: dimension === 'categories',
     ...(dimension === 'gallery' ? {storePhotoAssetStore: store, storePhotoUploadsEnabled: true,
       storeGalleryAssets: createStorefrontGalleryLifecycle(runtime, {store})} : {})});
   const request = (method: string, suffix: string, body?: unknown, version?: string) => call(method, s.root + suffix, s.owner, body,
@@ -804,7 +810,21 @@ for (const dimension of ['appearance','policies','gallery'] as const) test(`revi
       assert.equal(response.status, 200); galleryVersion = (await response.json() as any).current.version;
     }
   }
+  const configureVariants = async () => {
+    const second = expect(await request('POST', '/products', {...product, title: '第二個規格'}), 201);
+    const axis = {key: randomUUID(), name: '顏色', values: [{key: randomUUID(), name: '白'}, {key: randomUUID(), name: '黑'}]};
+    expect(await request('PUT', '/product-groups/' + item.sku, {
+      title: '審閱商品組', description: '', axes: [axis], default_product_id: item.product_id, order: 0,
+      members: [item, second].map((member, index) => ({product_id: member.product_id, product_version: member.version, value_keys: [axis.values[index].key]})),
+    }, '1'));
+  };
+  if (dimension === 'categories' && variantsEnabled) await configureVariants();
   const old = await review();
+  if (dimension === 'variants') await configureVariants();
+  if (dimension === 'categories') {
+    const created = expect(await request('POST', '/categories', {name: '審閱分類'}, old.store_version), 201);
+    expect(await request('PUT', '/categories/' + created.category_id + '/groups', {group_keys: [item.sku]}, created.current.version));
+  }
   if (dimension === 'appearance') expect(await request('PATCH', '/appearance-settings', {
     template_id: 'catalog-grid-v1', accent_preset: 'ocean', announcement: '重新核對的外觀', featured_product_ids: [item.product_id]}, old.store_version));
   if (dimension === 'policies') {
@@ -814,7 +834,7 @@ for (const dimension of ['appearance','policies','gallery'] as const) test(`revi
   if (dimension === 'gallery') expect(await request('PATCH', '/products/' + item.product_id + '/gallery/photos/main', {alt_text: '重新核對的主照片'}, galleryVersion));
   const fresh = await review(), changedKey = `${dimension}_changed` as const;
   assert.notEqual(fresh.review_digest, old.review_digest); assert.equal(fresh[changedKey], true);
-  for (const other of ['appearance_changed','policies_changed','gallery_changed'] as const) if (other !== changedKey) assert.equal(Object.hasOwn(fresh, other), false);
+  for (const other of ['appearance_changed','policies_changed','gallery_changed','variants_changed','categories_changed'] as const) if (other !== changedKey && !(dimension === 'categories' && variantsEnabled && other === 'variants_changed')) assert.equal(Object.hasOwn(fresh, other), false);
   assert.equal(fresh.preview.dirty, expect(await request('GET', '/preview')).dirty);
   if (dimension === 'gallery') {
     const drafts = expect(await request('GET', '/product-galleries')).items;
@@ -831,7 +851,13 @@ for (const dimension of ['appearance','policies','gallery'] as const) test(`revi
   const published = expect(await publishReview(fresh)); assert.equal(published.publication.current_revision, '1');
   const id = (await h.pool.query('SELECT current_publication_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0].current_publication_id;
   const frozen = await frozenDimensionRows(dimension, id);
-  assert.equal(frozen[0].length, 1); assert.equal(frozen[1].length, dimension === 'gallery' ? 2 : dimension === 'policies' ? 1 : 0);
+  assert.equal(frozen[0].length, 1);
+  if (dimension === 'variants' || dimension === 'categories') {
+    assert.equal(frozen.length, 1, 'These dimensions embed their members in the immutable document and have no separate publication ref table');
+    const document = frozen[0][0].row.document;
+    if (dimension === 'variants') assert.equal(document.groups[0].members.length, 2);
+    else assert.deepEqual(document.categories[0].groups[0].skus, variantsEnabled ? ['P0001', 'P0002'] : ['P0001']);
+  } else assert.equal(frozen[1].length, dimension === 'gallery' ? 2 : dimension === 'policies' ? 1 : 0);
   const unchanged = await review(); assert.equal(unchanged[changedKey], false); assert.equal(unchanged.preview.dirty, false);
   assert.equal(expect(await publishReview(unchanged)).version, published.version);
   assert.equal(expect(await request('POST', '/publish', {}, published.version)).version, published.version);
@@ -841,6 +867,43 @@ for (const dimension of ['appearance','policies','gallery'] as const) test(`revi
   const plain = expect(await request('POST', '/publish', {}, published.version)); assert.equal(plain.publication.current_revision, '2');
   const plainId = (await h.pool.query('SELECT current_publication_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0].current_publication_id;
   assert.deepEqual(await frozenDimensionRows(dimension, plainId), frozen);
+});
+
+for (const galleryEnabled of [false, true]) test(`variant publication review shows only the shared gallery_sku photos with gallery ${galleryEnabled ? 'ON' : 'OFF'}`, async () => {
+  const s = await ready(), first = await add(s), second = await add(s, {...product, title: '另一個照片規格'});
+  const store = new FakeObjectStore();
+  const target = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true, storeVariantsEnabled: true, storeGalleryEnabled: galleryEnabled,
+    storePhotoAssetStore: store, storePhotoUploadsEnabled: true, storePhotoAssets: createStorefrontProductPhotoLifecycle(runtime, {store}),
+    ...(galleryEnabled ? {storeGalleryAssets: createStorefrontGalleryLifecycle(runtime, {store})} : {})});
+  const request = (method: string, suffix: string, body?: unknown, version?: string) => call(method, s.root + suffix, s.owner, body,
+    {'Idempotency-Key': randomUUID(), ...(version ? {'If-Match': `"${version}"`} : {})}, target);
+  await h.pool.query("UPDATE domain_media_storage_policy SET mode='r2_only',persistence_allowed=true,policy_revision='synthetic-variant-review',retained_byte_limit=16777216 WHERE purpose='storefront.product-photo'");
+  for (const item of [first, second]) {
+    const path = '/products/' + item.product_id + (galleryEnabled ? '/gallery/photos/' + randomUUID() : '/photo');
+    const uploaded = await target.request(h.origin + '/api/v1' + s.root + path, {method: 'POST', headers: {
+      Origin: h.origin, Cookie: s.owner.cookie, 'X-CSRF-Token': s.owner.csrf, 'Content-Type': 'image/png',
+      'Idempotency-Key': randomUUID(), 'If-Match': `"${item.version}"`}, body: new Uint8Array(photoSourcePng)});
+    assert.equal(uploaded.status, 200, await uploaded.text());
+  }
+  const items = expect(await request('GET', '/products')).items;
+  const axis = {key: randomUUID(), name: '顏色', values: [{key: randomUUID(), name: '白'}, {key: randomUUID(), name: '黑'}]};
+  expect(await request('PUT', '/product-groups/' + first.sku, {title: '共用照片商品組', description: '', axes: [axis],
+    default_product_id: second.product_id, order: 0,
+    members: items.map((item: any, index: number) => ({product_id: item.product_id, product_version: item.version, value_keys: [axis.values[index].key]})),
+  }, '1'));
+  const review = StorePublicationReviewSchema.parse(expect(await request('GET', '/publication-review')));
+  assert.equal(review.photo_count, 1);
+  assert.equal(review.photos[0].sku, second.sku);
+  assert.ok(review.photos[0].photo.read_path.includes('/products/' + second.product_id + '/'));
+  assert.equal(review.photos.some(({photo}) => photo.read_path.includes('/products/' + first.product_id + '/')), false);
+  expect(await request('POST', '/publish-reviewed', {review_digest: review.review_digest}, review.store_version));
+  for (const item of [first, second]) {
+    const detail = await target.request(h.origin + '/shops/' + settings.slug + '/products/' + item.sku);
+    assert.equal(detail.status, 200);
+    const html = await detail.text();
+    assert.ok(html.includes('/media/1/' + second.sku + (galleryEnabled ? '/1' : '')));
+    assert.equal(html.includes('/media/1/' + first.sku), false);
+  }
 });
 
 test('reviewed publication rejects unseen text and price edits even when the store version is unchanged', async () => {
