@@ -184,8 +184,8 @@ test('mobile rich composer stays reachable with a visual keyboard and preserves 
   // not let Playwright make clipped controls look usable by scrolling a hidden
   // overflow ancestor, or by clicking below the simulated software keyboard.
   const reachable=async(control:Locator)=>{
-    await expect(control).toBeVisible();await expect(control).toBeEnabled();await control.scrollIntoViewIfNeeded();
-    await expect.poll(()=>control.evaluate(node=>{
+    await expect(control).toBeVisible();await expect(control).toBeEnabled();
+    const measure=()=>control.evaluate(node=>{
       const viewport=window.visualViewport!,rect=node.getBoundingClientRect();
       let top=viewport.offsetTop,bottom=top+viewport.height,left=viewport.offsetLeft,right=left+viewport.width;
       const hiddenScrolls:string[]=[];
@@ -202,7 +202,28 @@ test('mobile rich composer stays reachable with a visual keyboard and preserves 
       const hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
       return {inside:rect.width>0&&rect.height>0&&rect.top>=top-1&&rect.bottom<=bottom+1&&rect.left>=left-1&&rect.right<=right+1,
         hit:hit!==null&&node.contains(hit),hiddenScrolls,control:{top:rect.top,bottom:rect.bottom},visible:{top,bottom}};
-    })).toMatchObject({inside:true,hit:true,hiddenScrolls:[]});
+    });
+    // Chromium's Playwright scrolling uses the 844px layout viewport. A real
+    // keyboard leaves only the visual viewport; scroll through the actual
+    // touch-scrollable composer instead of silently treating covered controls
+    // as reachable or making an overflow:hidden ancestor scroll.
+    const composer=panel.locator('.messages-compose');
+    for(let attempt=0;attempt<12;attempt++){
+      const state=await measure();
+      if(state.inside&&state.hit&&state.hiddenScrolls.length===0)return;
+      if(state.hiddenScrolls.length)break;
+      const bounds=await composer.boundingBox();
+      const visible=await page.evaluate(()=>({top:visualViewport!.offsetTop,bottom:visualViewport!.offsetTop+visualViewport!.height}));
+      if(!bounds)break;
+      const top=Math.max(visible.top,bounds.y),bottom=Math.min(visible.bottom,bounds.y+bounds.height);
+      if(bottom-top<12)break;
+      // The 4px left gutter is inside the composer, not the inner sticker grid.
+      const direction=state.control.top<state.visible.top?-1:1;
+      await page.mouse.move(bounds.x+4,(top+bottom)/2);
+      await page.mouse.wheel(0,direction*160);
+      await page.waitForTimeout(45);
+    }
+    await expect(measure()).resolves.toMatchObject({inside:true,hit:true,hiddenScrolls:[]});
   };
   try{
     // Keep the layout viewport fixed; only the browser's visible area shrinks.
