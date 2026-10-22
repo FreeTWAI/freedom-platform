@@ -223,12 +223,16 @@ test('mobile rich composer stays reachable with a visual keyboard and preserves 
       await page.mouse.wheel(0,direction*160);
       await page.waitForTimeout(45);
     }
-    await expect(measure()).resolves.toMatchObject({inside:true,hit:true,hiddenScrolls:[]});
+    await expect(await measure()).toMatchObject({inside:true,hit:true,hiddenScrolls:[]});
   };
   try{
     // Keep the layout viewport fixed; only the browser's visible area shrinks.
     await visualHeight(360);
     expect(await page.evaluate(()=>({width:innerWidth,height:innerHeight,visualHeight:visualViewport!.height}))).toEqual({width:390,height:844,visualHeight:360});
+    // Distinguish a visual-viewport event from an actually resized chat panel.
+    // The fixed panel must end at the keyboard boundary, not at the old 844px layout height.
+    await expect.poll(()=>page.locator('#floating-message-panel').evaluate(node=>
+      Math.round(node.getBoundingClientRect().bottom-(visualViewport!.offsetTop+visualViewport!.height)))).toBe(0);
     const toggle=panel.getByRole('button',{name:'選擇貼圖',exact:true});await reachable(toggle);await toggle.click();
     const picker=panel.getByRole('region',{name:'工坊貼圖',exact:true}),search=picker.getByLabel('搜尋貼圖',{exact:true}),closePicker=picker.getByRole('button',{name:'關閉貼圖',exact:true});
     await expect(picker.locator('.chat-sticker-choice')).toHaveCount(48);await reachable(closePicker);
