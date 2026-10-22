@@ -14029,8 +14029,8 @@
     },
     {
       "path": "deploy/cloudflare/release-compatibility.md",
-      "bytes": 34016,
-      "sha256": "65efb43aec13f30584a4a2817eda79f7c333a084b0d47260e846df0caf0e18e2"
+      "bytes": 34708,
+      "sha256": "b61e1761872226dd3de70487d6907830cdb94d657e8fbe64c5349bed84f11763"
     },
     {
       "path": "deploy/cloudflare/candidate/README.md",
@@ -14254,8 +14254,8 @@
     },
     {
       "path": "deploy/cloudflare/test/release-compatibility.test.mjs",
-      "bytes": 106321,
-      "sha256": "d1df751e9afffb208c545713a78e81668ab5f329099a53a659ea441de4eadc2d"
+      "bytes": 108640,
+      "sha256": "20412e52542e9bd9e9b9d608d7c19dcb096850f1147ade481799d2aee6465c62"
     },
     {
       "path": "deploy/cloudflare/test/release-credential-broker.test.mjs",
