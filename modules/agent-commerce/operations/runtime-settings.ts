@@ -22,7 +22,11 @@ export function readCommerceSelfShipEnabled(env:CommerceEnvironment):boolean {
   const value=env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED;
   if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_self_ship_flag_invalid');
   if(value==='true'&&(env.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true'||env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'))throw new ReadinessError('commerce_self_ship_console_required');
-  assertSelfShipReadiness(value==='true',resolveFreedomEnv(env.FREEDOM_ENV));
+  if(value==='true'){
+    let environment:FreedomEnv;
+    try{environment=resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
+    assertSelfShipReadiness(true,environment);
+  }
   return value==='true';
 }
 export const IMPLEMENTED_PROVIDER_PROFILES=Object.freeze(['ecpay.aio.credit.v1','offline.bank_transfer.v1','offline.cash_on_meetup.v1']);

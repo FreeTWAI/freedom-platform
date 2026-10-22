@@ -179,7 +179,7 @@ test('HTTP shipment action requires CSRF and If-Match, and remains usable with i
   const app=createApp(x.runtime,x.h.origin,'local',{registrationCommunityId:DEMO_COMMUNITY,guildLaunchpadEnabled:true,commerceSettings:settings,commerceSelfShipEnabled:false});
   const route=f.s.root+`/checkout-orders/${f.order.order_id}/self-shipments`,input=await body();
   const missing=await x.h.call('POST',route,f.s.owner,input,{'Idempotency-Key':randomUUID()},app);assert.equal(missing.status,428);
-  const csrf=await x.h.call('POST',route,f.s.owner,input,{'Idempotency-Key':randomUUID(),'If-Match':'"1"','X-CSRF-Token':'invalid'},app);assert.equal(csrf.status,403);
+  const csrf=await app.request(x.h.origin+'/api/v1'+route,{method:'POST',headers:{Origin:x.h.origin,Cookie:f.s.owner.cookie,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"','X-CSRF-Token':'invalid'},body:JSON.stringify(input)});assert.equal(csrf.status,403);
   const sent=await x.h.call('POST',route,f.s.owner,input,{'Idempotency-Key':randomUUID(),'If-Match':'"1"'},app);assert.equal(sent.status,200,JSON.stringify(sent.data));assert.equal(sent.data.self_ship.shipment.tracking_number,input.tracking_number);
   const anonymous=await app.request(x.h.origin+'/api/v1'+route,{method:'POST',headers:{Origin:x.h.origin,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"'},body:JSON.stringify(input)});assert.equal(anonymous.status,401);
 });

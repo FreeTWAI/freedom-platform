@@ -18629,8 +18629,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/runtime-settings.ts",
-      "bytes": 4395,
-      "sha256": "da0ad7df3dad4059d3f556ff7e6331259b5b100fa50fb71ec5d3e207de701899"
+      "bytes": 4534,
+      "sha256": "fbd7c7ef7485ed1ab1378d575ceec62efaeb8183c2eb78b30988a42a06cb7609"
     },
     {
       "path": "modules/agent-commerce/operations/store-readiness.ts",
@@ -25529,8 +25529,8 @@
     },
     {
       "path": "tests/runtime/hosted-self-ship.test.ts",
-      "bytes": 26813,
-      "sha256": "ec74e42066ec8ec5ae34168fd851e3ac32920307eb1efad98de23e79321bd3d7"
+      "bytes": 26937,
+      "sha256": "a6e1017aee01def1fa4a2d8260f423e3440747e9fccaf4e7349016b51ca3386e"
     },
     {
       "path": "tests/runtime/hosted-seller-checkout-orders.test.ts",
