@@ -24574,8 +24574,8 @@
     },
     {
       "path": "tests/integration/tenant-rls-restore-drill.test.ts",
-      "bytes": 93768,
-      "sha256": "99590fed2ce3761e4e725c179372174d0eb8c14aa1c3ba3cb5807709d353a9de"
+      "bytes": 93869,
+      "sha256": "79d4ab7b253d572dc2af8226c79bd6fe3593e2e01c367cf9f12568f2e8eee9bf"
     },
     {
       "path": "tests/integration/helpers/media-restore-fixtures.ts",
@@ -25549,8 +25549,8 @@
     },
     {
       "path": "tests/runtime/hosted-seller-contracts.test.ts",
-      "bytes": 10265,
-      "sha256": "3d71adeb0beeea8d871cb9d5495edf9740019f5abb2029c02b44310fa9e8fdfb"
+      "bytes": 10437,
+      "sha256": "758bc00b47439f0d8c82c2a1f62d9542d95cf2b9251c841bb020da785d2125bc"
     },
     {
       "path": "tests/runtime/hosted-seller-exceptions.test.ts",
@@ -27004,8 +27004,8 @@
     },
     {
       "path": "tests/runtime/tenant-route-matrix.test.ts",
-      "bytes": 145715,
-      "sha256": "01d0dfd13da88479a8a8d5c2467af617e3a49231fca1bf6e9c2f03df034107c7"
+      "bytes": 146044,
+      "sha256": "ce76e71310a5b7d85ac9063438873f4db8f73dc354b3f74f513417a2f57f38fb"
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",
