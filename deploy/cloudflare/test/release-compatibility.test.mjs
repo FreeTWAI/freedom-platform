@@ -1377,3 +1377,169 @@ test('retained product gallery schema177 floor refuses a schema176 observation w
   assert.deepEqual(f.host.observation.written_shapes,[]);
   assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
 });
+
+test('schema180 additive member checkout order index recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(180),old=prefix(f.scan,179);
+  assert.deepEqual(f.scan.ledger.slice(-3).map(row=>row.name),[
+    '178_guest_invitation_credit.sql','179_member_shared_skill_books.sql','180_member_checkout_order_index.sql',
+  ]);
+  assert.equal(f.scan.ledger.at(-1).name,'180_member_checkout_order_index.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(179)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(180);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(180);renamed.scan.ledger.at(-1).name='180_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(180);future.scan.ledger.push({name:'181_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema180 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(180);f.scan.ledger.at(-1).name='181_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained member checkout order index schema180 floor refuses a schema179 observation without adding a written shape',()=>{
+  const f=fixtureAt(180);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,179);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('schema180 order index requires the preceding schema179 skill-book ledger entry',()=>{
+  const f=fixtureAt(180);
+  f.scan.ledger=f.scan.ledger.filter(row=>row.name!=='179_member_shared_skill_books.sql');
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('schema179 rejects a gap before the first commerce migration',()=>{
+  const f=fixtureAt(180);f.scan.ledger.at(-1).name='181_member_checkout_order_index.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained schema179 skill-book history stays recognized alongside a schema180 plan',()=>{
+  const f=fixtureAt(180),retained=prefix(f.scan,179);
+  assert.equal(retained.ledger.at(-1).name,'179_member_shared_skill_books.sql');
+  f.host.rollback_floor.schema_ledger=structuredClone(retained.ledger);
+  f.host.rollback_floor.schema_ledger_digest=retained.ledger_digest;
+  f.host.observation.schema_ledger=retained.ledger;
+  f.host.observation.schema_ledger_digest=retained.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(retained.ledger_digest);
+  const result=evaluate(f);
+  assert.equal(result.status,'compatible');
+  assert.deepEqual(result.required_shapes,[]);
+  assert(result.required_capabilities.includes('community.guest-invitation-credit.v1'));
+  for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
+  const older=prefix(f.scan,178);
+  f.host.observation.schema_ledger=older.ledger;
+  f.host.observation.schema_ledger_digest=older.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(older.ledger_digest);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('schema181 additive product variants recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(181),old=prefix(f.scan,180);
+  assert.equal(f.scan.ledger.at(-1).name,'181_storefront_product_variants.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(180)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(181);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(181);renamed.scan.ledger.at(-1).name='181_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(181);future.scan.ledger.push({name:'182_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema181 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(181);f.scan.ledger.at(-1).name='182_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained product variants schema181 floor refuses a schema180 observation without adding a written shape',()=>{
+  const f=fixtureAt(181);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,180);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('schema182 order notification check extension recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(182),old=prefix(f.scan,181);
+  assert.equal(f.scan.ledger.at(-1).name,'182_commerce_order_notifications.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(181)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(182);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(182);renamed.scan.ledger.at(-1).name='182_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(182);future.scan.ledger.push({name:'183_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema182 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(182);f.scan.ledger.at(-1).name='183_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained order notifications schema182 floor refuses a schema181 observation without adding a written shape',()=>{
+  const f=fixtureAt(182);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,181);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('schema183 additive store categories recognizes exact identity without a new reader floor',()=>{
+  const f=fixtureAt(183),old=prefix(f.scan,182);
+  assert.equal(f.scan.ledger.at(-1).name,'183_storefront_categories.sql');
+  assert.equal(evaluate(f).status,'compatible');
+  assert.deepEqual(evaluate(f).required_capabilities,evaluate(fixtureAt(182)).required_capabilities);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(183);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(183);renamed.scan.ledger.at(-1).name='183_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(183);future.scan.ledger.push({name:'184_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema183 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(183);f.scan.ledger.at(-1).name='184_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained store categories schema183 floor refuses a schema182 observation without adding a written shape',()=>{
+  const f=fixtureAt(183);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,182);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});

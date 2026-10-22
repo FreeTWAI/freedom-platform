@@ -422,7 +422,7 @@ test('guild launchpad contracts regenerate deterministically and match generated
     cwd: root, env: verificationEnvironment(), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /30 v1 guild launchpad schemas, 19 bundles and one v2 assembly schema checked\/generated\./);
+  assert.match(result.stdout, /30 v1 guild launchpad schemas, 21 bundles and one v2 assembly schema checked\/generated\./);
 });
 
 test('generated guild launchpad schemas agree with Zod except listed server-only rules', () => {
@@ -865,6 +865,26 @@ print(len(x['cases']))`;
  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),24);
 });
 
+test('variants bundle keeps scalar text bounds, exact input keys and 200-member structural limits in Zod and JSON Schema',async()=>{
+ const variants=await import('../../contracts/guild-launchpad/v1/storefront-variants.js');
+ const uuid=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const axes=[0,1].map(n=>({key:uuid(n+1),name:n?'尺寸':'顏色',values:Array.from({length:20},(_,k)=>({key:uuid(10+n*20+k),name:'值'.repeat(39)+String.fromCharCode(0x4e00+k)}))}));
+ const input={title:'名'.repeat(37),description:'介'.repeat(2000),axes,members:Array.from({length:200},(_,n)=>({product_id:uuid(100+n),product_version:'1',value_keys:[axes[0].values[Math.floor(n/20)].key,axes[1].values[n%20].key]})),default_product_id:uuid(100),order:0};
+ const cases=[{value:input,valid:true},{value:{...input,title:''},valid:false},{value:{...input,title:'名'.repeat(121)},valid:false},{value:{...input,description:'介'.repeat(2001)},valid:false},{value:{...input,axes:[...axes,axes[0]]},valid:false},{value:{...input,members:[...input.members,input.members[0]]},valid:false},{value:{...input,asset_id:uuid(999)},valid:false},
+  {value:{...input,axes:[{...axes[0],values:[{key:uuid(10),name:'😀'.repeat(40)}]},axes[1]]},valid:true},
+  {value:{...input,axes:[{...axes[0],values:[{key:uuid(10),name:'😀'.repeat(41)}]},axes[1]]},valid:false}];
+ for(const c of cases)assert.equal(variants.ReplaceProductGroupInputSchema.safeParse(c.value).success,c.valid);
+ const schema=JSON.parse(readFileSync(`${root}/contracts/guild-launchpad/v1/storefront-variants.schema.json`,'utf8')).$defs['replace-product-group-input'];
+ const script=`import json,sys
+from jsonschema import Draft202012Validator
+x=json.load(sys.stdin)
+Draft202012Validator.check_schema(x['schema'])
+v=Draft202012Validator(x['schema'])
+for c in x['cases']: assert v.is_valid(c['value']) == c['valid']
+print(len(x['cases']))`;
+ const result=spawnSync(python,['-X','utf8','-c',script],{cwd:root,env:verificationEnvironment(),encoding:'utf8',input:JSON.stringify({schema,cases})});
+ assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
+});
 
 test('publication review keeps OFF fields unchanged and strictly bounds enabled gallery photos', () => {
   const projection = {slug:'synthetic-review',name:'合成店',brand:null,description:'',currency:'TWD',
@@ -872,6 +892,11 @@ test('publication review keeps OFF fields unchanged and strictly bounds enabled 
   const legacy = {profile:'freedom.hosted-store-publication/v1',store_version:'1',preview:{projection,dirty:true,current_revision:null},
     template_id:'catalog-grid-v1',photo_count:0,photos:[],review_digest:'0'.repeat(64)};
   assert.deepEqual(StorePublicationReviewSchema.parse(legacy), legacy);
+  for (const key of ['variants_changed','categories_changed'] as const) {
+    assert.equal(Object.hasOwn(StorePublicationReviewSchema.parse(legacy), key), false);
+    for (const value of [false, true]) assert.deepEqual(StorePublicationReviewSchema.parse({...legacy, [key]: value}), {...legacy, [key]: value});
+    assert.equal(StorePublicationReviewSchema.safeParse({...legacy, [key]: null}).success, false);
+  }
   assert.equal(StorePublicationReviewSchema.safeParse({...legacy,appearance_changed:null}).success, false);
   assert.equal(StorePublicationReviewSchema.safeParse({...legacy,unexpected:true}).success, false);
   const photos = Array.from({length:8}, (_, index) => ({sku:'P0001',photo:{content_type:'image/webp',byte_size:10,width:1,height:1,

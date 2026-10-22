@@ -42,6 +42,12 @@ export function orderPageHtml(
   );
 }
 
+/** Private retained-order shell: no historical merchant presentation or footer. */
+export function retainedOrderPageHtml(store:Pick<StorefrontStoreHeading,'slug'|'name'>,orderRef:string):string {
+  const slug=escapeHtml(store.slug),name=escapeHtml(store.name),ref=escapeHtml(orderRef);
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light"><title>${escapeHtml(`訂單｜${store.name}｜自由工坊`)}</title><link rel="stylesheet" href="/shops.css"><script type="module" src="/assets/storefront.js"></script></head><body><a class="shop-skip-link" href="#main">跳到主要內容</a><header class="shop-top"><a class="shop-platform" href="/" aria-label="自由工坊首頁"><img class="shop-logo" src="/brand/freedom-workshop.webp" alt="自由工坊" width="1280" height="720"></a><span class="shop-top-store">${name}</span></header><main id="main" tabindex="-1"><section class="shop-order" id="shop-order" data-retained-order="true" data-store-slug="${slug}" data-store-name="${name}" data-order-ref="${ref}" data-email-enabled="false" aria-labelledby="shop-order-title" aria-busy="true"><h1 id="shop-order-title">訂單</h1><p role="status">正在讀取訂單…</p><noscript><p>查看訂單需要開啟瀏覽器的 JavaScript。</p></noscript></section></main></body></html>`;
+}
+
 export function orderMissingHtml(store: StorefrontStoreHeading): string {
   const slug = escapeHtml(store.slug);
   const name = escapeHtml(store.name);

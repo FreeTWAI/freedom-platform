@@ -208,6 +208,10 @@ const FOUNDATION_NAMES = [
   '178_guest_invitation_credit.sql',
   // Catalog publication only; no new runtime capability or grants.
   '179_member_shared_skill_books.sql',
+  '180_member_checkout_order_index.sql',
+  '181_storefront_product_variants.sql',
+  '182_commerce_order_notifications.sql',
+  '183_storefront_categories.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

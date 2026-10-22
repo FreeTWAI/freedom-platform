@@ -1,0 +1,33 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "commerce-store-categories",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/agent-commerce/storefront/categories/**",
+    "migrations/183_storefront_categories.sql",
+    "contracts/guild-launchpad/v1/storefront-categories.ts",
+    "contracts/guild-launchpad/v1/storefront-categories.schema.json",
+    "apps/platform-api/src/routes/hosted-store-categories.ts",
+    "apps/portal-web/public/shop-categories.css",
+    "tests/runtime/storefront-categories.test.ts"
+  ],
+  "public_exports": [],
+  "dependencies": [
+    "commerce-storefront",
+    "commerce-store-variants"
+  ],
+  "contract_families": [],
+  "client_profiles": [],
+  "instructions": [
+    "modules/agent-commerce/storefront/README.md",
+    "modules/agent-commerce/storefront/gallery/design.md",
+    "DESIGN.md",
+    "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md"
+  ],
+  "invariants": [],
+  "tests": [
+    "e2e.harness",
+    "runtime.full"
+  ],
+  "surfaces": []
+}

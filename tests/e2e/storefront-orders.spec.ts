@@ -1,3 +1,4 @@
+import {CheckoutResponseSchema,PlaceOrderResponseSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures.js';
 import { apiLogin, member } from './hosted-order-fixture.js';
@@ -737,4 +738,51 @@ test('B10 and valid missing orders return after real login; disabled checkout pr
     expect(new URL(offPage.url()).pathname).toBe('/');
     await expect(offPage.getByRole('heading', {name: '找回訂單', exact: true})).toHaveCount(0);
   } finally {await context.close(); await offContext.close(); await store.close(); await closed.close();}
+});
+
+test('retained B07 is a private original-member read after unpublication and admission revocation',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{realAdmission:true});
+  const original=await browser.newContext({baseURL:store.origin}),memberContext=await browser.newContext({baseURL:store.origin}),strangerContext=await browser.newContext({baseURL:store.origin});
+  try {
+    const buyer=await member(e2eAuthPool),stranger=await member(e2eAuthPool);
+    const admission=await store.admission('',{tenant_id:store.tenant,instance_id:store.instance,reason:'合成會員保留訂單驗收'});
+    await apiLogin(original,store.origin,buyer.email);
+    const root=`/api/v1/public/stores/${store.slug}`,headers={Origin:store.origin,'X-Commerce-Buyer':`member:${buyer.id}`};
+    const frozenResponse=await original.request.post(root+'/checkouts',{headers:{...headers,'Idempotency-Key':randomUUID()},data:{publication_revision:store.revision,lines:[{sku:store.products[0].sku,quantity:1}],contact:{name:'合成買家甲',email:'retained-synthetic@example.test',phone:'0000000000'},delivery:{method:'meetup',name:'合成買家甲',mobile:'0900123456'},invoice:null,consents:[]}});
+    expect(frozenResponse.status(),await frozenResponse.text()).toBe(201);const frozen=CheckoutResponseSchema.parse(await frozenResponse.json());
+    const placed=await original.request.post(root+`/checkouts/${frozen.checkout_ref}/orders`,{headers,data:{terms_sha256:frozen.terms_sha256,client_order_id:randomUUID(),payment_method:'bank_transfer'}});
+    expect(placed.status(),await placed.text()).toBe(201);const order=PlaceOrderResponseSchema.parse(await placed.json()).order,path=`/shops/${store.slug}/orders/${order.order_ref}`;
+    await store.updateLongNamesAndRepublish('重新發布後的小店',store.products[0],'重新發布後的商品');await store.saveOfflineFixture(2);
+    const version=(await e2eAuthPool.query('SELECT version::text FROM commerce_storefront_profiles WHERE instance_id=$1',[store.instance])).rows[0].version;
+    await store.sellerPost(store.root+'/unpublish',{},200,version);
+    await apiLogin(memberContext,store.origin,buyer.email);expect((await memberContext.cookies()).some(c=>c.name==='freedom_local_shop')).toBe(false);
+    const page=await memberContext.newPage();await page.goto(path);
+    await expect(page.locator('#shop-order')).toHaveAttribute('data-retained-order','true');
+    await expect(page.getByRole('heading',{level:1})).toHaveText(`訂單 ${order.display_number}`);
+    await expect(page.getByText('000000123456',{exact:true})).toBeVisible();await expect(page.locator('body')).toContainText(formatTaipeiDateTime(order.pay_by));
+    await expect(page.getByRole('region',{name:'付款',exact:true})).toContainText('請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。');
+    await expect(page.getByRole('region',{name:'付款',exact:true})).not.toContainText('請用這個瀏覽器回到訂單');
+    await expect(page.locator('header .shop-top-store')).toHaveText('山邊小店');
+    await expect(page.locator('header .shop-logo')).toHaveAttribute('src','/brand/freedom-workshop.webp');
+    await expect(page.locator('footer,#shop-information,[data-store-appearance]')).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'取消訂單',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'在這個瀏覽器忘記我的訂單',exact:true})).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('重新發布後的小店');await expect(page.locator('body')).not.toContainText('000000654321');
+    for(const width of [390,768,1440]){
+      await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:info.outputPath(`retained-member-order-${width}.png`),fullPage:true});
+    }
+    const unavailable=await original.request.get(`/shops/${store.slug}`);expect(unavailable.status()).toBe(404);const missing=await unavailable.text();
+    const device=(await original.cookies()).filter(cookie=>cookie.name==='freedom_local_shop');expect(device).toHaveLength(1);
+    await original.clearCookies();await original.addCookies(device);
+    const anonymous=await original.request.get(path);expect(anonymous.status()).toBe(404);expect(await anonymous.text()).toBe(missing);
+    await apiLogin(strangerContext,store.origin,stranger.email);
+    const denied=await strangerContext.request.get(path);expect(denied.status()).toBe(404);expect(await denied.text()).toBe(missing);
+    await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成停止新單，保留原買家查閱'});
+    await page.reload();await expect(page.getByText('000000123456',{exact:true})).toBeVisible();
+    expect((await memberContext.request.get(root)).status()).toBe(404);
+    const response=await memberContext.request.get(path);expect(response.headers()['cache-control']).toBe('private, no-store');expect(response.headers()['x-robots-tag']).toBe('noindex, nofollow');
+    await page.getByRole('link',{name:'我的訂單',exact:true}).click();
+    await expect(page.getByRole('region',{name:'訂單',exact:true}).getByRole('link',{name:'開啟訂單',exact:true})).toHaveAttribute('href',path);
+  } finally {await original.close();await memberContext.close();await strangerContext.close();await store.close();}
 });

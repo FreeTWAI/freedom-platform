@@ -23,8 +23,8 @@ export const MEDIA_WORKER_FEATURES = Object.freeze([
   feature('storefront.product-photo', 'FREEDOM_HOSTED_STORE_PHOTOS_ENABLED', ['media.storefront-product-photo.asset.v1', 'media.server-policy.v1'], false),
   feature('member.message-image', 'FREEDOM_MESSAGE_IMAGE_ENABLED', ['media.message-image.asset.v1', 'media.server-policy.v1']),
 ]);
-const knownFlags = new Set([...MEDIA_WORKER_FEATURES.map(feature => feature.flag).filter(Boolean), 'FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED', 'FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED', 'FREEDOM_DISTRIBUTION_PHOTOS_ENABLED', 'FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED', 'FREEDOM_STORE_APPEARANCE_ENABLED', 'FREEDOM_STORE_POLICIES_ENABLED', 'FREEDOM_STORE_GALLERY_ENABLED']);
-const mediaFlag = /^FREEDOM_.*(?:MEDIA|AVATAR|ASSET|COVER|BANNER|VIDEO|HIGHLIGHT|THUMBNAIL|SKILL_IMAGE|MESSAGE_IMAGE|STORE_PHOTO|SUPPLY_MATERIAL|DISTRIBUTION_PHOTOS|SUPPLY_OFFER_PHOTOS|STORE_APPEARANCE|STORE_POLICIES|STORE_GALLERY).*_ENABLED$/;
+const knownFlags = new Set([...MEDIA_WORKER_FEATURES.map(feature => feature.flag).filter(Boolean), 'FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED', 'FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED', 'FREEDOM_DISTRIBUTION_PHOTOS_ENABLED', 'FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED', 'FREEDOM_STORE_APPEARANCE_ENABLED', 'FREEDOM_STORE_POLICIES_ENABLED', 'FREEDOM_STORE_VARIANTS_ENABLED', 'FREEDOM_STORE_CATEGORIES_ENABLED', 'FREEDOM_STORE_GALLERY_ENABLED', 'FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED']);
+const mediaFlag = /^FREEDOM_.*(?:MEDIA|AVATAR|ASSET|COVER|BANNER|VIDEO|HIGHLIGHT|THUMBNAIL|SKILL_IMAGE|MESSAGE_IMAGE|STORE_PHOTO|SUPPLY_MATERIAL|DISTRIBUTION_PHOTOS|SUPPLY_OFFER_PHOTOS|STORE_APPEARANCE|STORE_POLICIES|STORE_VARIANTS|STORE_CATEGORIES|STORE_GALLERY|COMMERCE_ORDER_NOTIFICATIONS).*_ENABLED$/;
 const environments = ['staging-next', 'next'];
 const remaining = Object.freeze([
   'provider_binding_identity_and_private_bucket', 'hyperdrive_cache_disabled',
@@ -87,7 +87,10 @@ export function checkMediaWranglerConfig(path, manifest) {
     }
     if(vars.FREEDOM_STORE_APPEARANCE_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')blockers.push(`${label}:storefront.appearance:guild_launchpad_required`);
     if(vars.FREEDOM_STORE_GALLERY_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')blockers.push(`${label}:storefront.gallery:guild_launchpad_required`);
+    if(vars.FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED==='true'&&vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED!=='true')blockers.push(`${label}:commerce.order-notifications:checkout_required`);
     if(vars.FREEDOM_STORE_POLICIES_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')blockers.push(`${label}:storefront.policies:guild_launchpad_required`);
+    if(vars.FREEDOM_STORE_VARIANTS_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')blockers.push(`${label}:storefront.variants:guild_launchpad_required`);
+    if(vars.FREEDOM_STORE_CATEGORIES_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')blockers.push(`${label}:storefront.categories:guild_launchpad_required`);
     if(vars.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED==='true') {
       if(vars.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true')blockers.push(`${label}:storefront.distribution-photo:supplier_console_required`);
       if(vars.FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED!=='true'||vars.FREEDOM_HOSTED_STORE_PHOTOS_ENABLED!=='true')blockers.push(`${label}:storefront.distribution-photo:read_installations_required`);

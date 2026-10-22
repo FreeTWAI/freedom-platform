@@ -19,8 +19,9 @@ import {quarantineGate} from './public-commands.js';
 import {lockStore} from './authority.js';
 import {cancelUnpaidOrder,lockCheckoutOrders} from './orders.js';
 import {canonicalJSON,type CheckoutPaymentActions,type CheckoutPaymentPort,type CheckoutPaymentSummary,type CheckoutTerms} from './terms.js';
+import type {OrderNotificationOptions} from './order-notifications.js';
 
-export interface SellerCheckoutReadOptions {settings?:CommerceSettings;payment?:CheckoutPaymentPort;paymentActions?:CheckoutPaymentActions;cursors?:TenantListCursorCodec}
+export interface SellerCheckoutReadOptions extends OrderNotificationOptions {settings?:CommerceSettings;payment?:CheckoutPaymentPort;paymentActions?:CheckoutPaymentActions;cursors?:TenantListCursorCodec}
 const limit=z.string().regex(/^[0-9]+$(?![\s\S])/).transform(Number).pipe(z.number().int().min(1).max(50));
 export const SellerCheckoutOrderQuerySchema=z.object({lifecycle:z.enum(['open','cancelled','closed']).optional(),needs_action:z.literal('true').optional(),
   display_number:z.string().regex(/^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\s\S])/).optional(),payment_method:z.enum(['immediate_card','bank_transfer','cash_on_meetup']).optional(),
@@ -210,7 +211,7 @@ export async function cancelSellerCheckoutOrder(pool:Pool,actor:Actor,tenantId:s
       // Check the version under the same domain locks as cancellation. Its
       // repeated locks are reentrant; a pre-lock version read would race payment.
       await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);checkVersion(order.version,expected);
-      await cancelUnpaidOrder(q,store,id,'seller','seller_cancelled',{payment:options.payment});return {id};
+      await cancelUnpaidOrder(q,store,id,'seller','seller_cancelled',{payment:options.payment,orderNotifications:options.orderNotifications,actorPrincipalId:context.tenant.principal_id});return {id};
     },(q,context,ref)=>projectSellerCheckoutOrder(q,context,ref,options));
 }
 
