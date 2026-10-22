@@ -19169,8 +19169,8 @@
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SellerConsole.css",
-      "bytes": 3492,
-      "sha256": "cb3c36f0072d9b8d7c68c23f1158fa30bb57bdf1159aeee27ac00031d4f01260"
+      "bytes": 3607,
+      "sha256": "51d4523681411a9b5c8be95da2c9c7942d57d0f416dcf2f55b7a4bc4a67b0744"
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SellerConsole.tsx",
@@ -24139,8 +24139,8 @@
     },
     {
       "path": "tests/e2e/seller-console-visual.spec.ts",
-      "bytes": 11774,
-      "sha256": "94ddd9bc4c2e52d5e5b098d143e02a6b97bd108b44024d1b50b262bfaab902ea"
+      "bytes": 11878,
+      "sha256": "cf8739acdb80bb7341a0d9deb0eb5d2394d3ac689a911e08e8aa4867ea4da374"
     },
     {
       "path": "tests/e2e/seller-console.spec.ts",
@@ -24324,8 +24324,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 139028,
-      "sha256": "918fd5aaf9cac1362a81dffc65f3b4dabb947b0916dee5ddf3852baa93ddce5b"
+      "bytes": 140026,
+      "sha256": "1eb8a24aff2dff785b5a4d558a67accdb65bb73815a0e12a3d475ee66b844511"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",

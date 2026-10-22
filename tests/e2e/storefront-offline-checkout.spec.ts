@@ -27,7 +27,7 @@ async function openBuyer(db: Pool, context: BrowserContext, store: Store) {
   await apiLogin(context, store.origin, buyer.email);
   return buyer;
 }
-async function start(page: Page, store: Store) {
+async function start(page: Page, store: Store, note='請先約定時間，在山邊小店門口面交。') {
   await page.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
   await page.getByRole('button', {name: '加入購物車', exact: true}).click();
   await page.getByRole('link', {name: '查看購物車', exact: true}).click();
@@ -44,7 +44,7 @@ async function start(page: Page, store: Store) {
   const response = await meetupQuote;
   expect(response.ok()).toBe(true);
   await expect(page.getByLabel('收件地址', {exact: true})).toHaveCount(0);
-  await expect(page.getByText('請先約定時間，在山邊小店門口面交。', {exact: true})).toBeVisible();
+  await expect(page.getByText(note, {exact: true})).toBeVisible();
   await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
 }
 
@@ -1379,10 +1379,14 @@ async function manualOrder(context:BrowserContext,store:Store,name='合成收件
 async function manualScreens(page:Page,info:import('@playwright/test').TestInfo,name:string,portal=false) {
  const backgrounds:string[]=[];
  for(const [width,theme] of [[390,'light'],[768,'light'],[1440,'light'],[390,'dark']] as const){
-  await page.setViewportSize({width,height:900});await page.emulateMedia({colorScheme:theme});
+  await page.bringToFront();await page.setViewportSize({width,height:900});await page.emulateMedia({colorScheme:theme});
   if(portal)await page.evaluate(t=>{document.documentElement.dataset.experienceProfile=t;document.documentElement.dataset.theme=t;localStorage.setItem('freedom-theme',t);},theme);
   // Let style changes create their transitions, then observe their completion.
-  await page.evaluate(async()=>{await document.fonts.ready;await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));await Promise.all(document.getAnimations().filter(animation=>Number.isFinite(animation.effect?.getComputedTiming().iterations??1)).map(a=>a.finished.catch(()=>undefined)));});
+  await page.evaluate(async()=>{await document.fonts.ready;});
+  await page.evaluate(async()=>{await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
+  const transitions=await page.evaluate(()=>({visibility:document.visibilityState,transitions:document.getAnimations().filter(a=>a instanceof CSSTransition&&a.transitionProperty.endsWith('color')).map(a=>{const effect=a.effect as KeyframeEffect,target=effect.target as Element|null;return {property:(a as CSSTransition).transitionProperty,state:a.playState,pending:a.pending,current:a.currentTime,duration:effect.getComputedTiming().duration,tag:target?.tagName,classes:target?.getAttribute('class'),visible:!!target?.getClientRects().length};})}));
+  const {writeFile:writeTransitions}=await import('node:fs/promises');await writeTransitions(info.outputPath(`selfship-${name}-${theme}-${width}-transitions.json`),JSON.stringify(transitions,null,2)+'\n');
+  await page.waitForFunction(()=>document.getAnimations().filter(animation=>animation instanceof CSSTransition&&animation.transitionProperty.endsWith('color')).every(animation=>animation.playState==='finished'||animation.playState==='idle'));
   const metrics=await page.evaluate((portal:boolean)=>{
    const visible=(e:Element)=>e.getClientRects().length>0;
    return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,body:{color:getComputedStyle(document.body).color,background:getComputedStyle(document.body).backgroundColor},buttons:[...document.querySelectorAll<HTMLElement>('.btn,.shop-button')].filter(visible).map(el=>{const r=el.getBoundingClientRect(),cs=getComputedStyle(el);return {inView:!!el.closest(portal?'.seller-console':'main'),text:el.textContent?.trim(),classes:el.className,x:r.x,y:r.y,width:r.width,height:r.height,color:cs.color,background:cs.backgroundColor,border:cs.borderColor,fontSize:parseFloat(cs.fontSize),parentWidth:el.parentElement!.getBoundingClientRect().width};}),inputs:[...document.querySelectorAll<HTMLInputElement>('input:not([type=radio]):not([type=checkbox]),select,textarea')].filter(visible).map(el=>({fontSize:parseFloat(getComputedStyle(el).fontSize),height:el.getBoundingClientRect().height})),primary:[...document.querySelectorAll('.btn-primary')].filter(el=>visible(el)&&!!el.closest(portal?'[data-seller-active="true"]':'main')).length};
@@ -1441,7 +1445,7 @@ test('SELFSHIP shipment confirmation retries one immutable command and buyer/sel
   // Exercise PR-A's permitted one-way redaction transition with every trigger enabled.
   await isolatedTransaction(e2eAuthPool,async q=>{await q.query("SELECT set_config('app.tenant_id',$1,true)",[store.tenant]);await q.query('UPDATE commerce_checkout_contacts SET contact_name=NULL,contact_email=NULL,contact_phone=NULL,delivery=NULL,invoice=NULL,contact_salt=NULL,redacted_at=clock_timestamp() WHERE contact_id=(SELECT contact_id FROM commerce_checkout_orders WHERE order_id=$1)',[order.order_ref]);await q.query('UPDATE commerce_self_shipments SET tracking_number=NULL,carrier_name=NULL,redacted_at=clock_timestamp() WHERE order_id=$1',[order.order_ref]);});
   await bp.reload();await expect(card.getByText('已出貨',{exact:true})).toBeVisible();await expect(card).toContainText('物流業者：其他');await expect(bp.locator('body')).not.toContainText('SYNTHETIC-123');await expect(bp.locator('body')).not.toContainText('合成私有物流');await expect(bp.getByText('這筆訂單的聯絡資料已依保存期限遮罩。',{exact:true})).toBeVisible();await manualScreens(bp,info,'redacted');
-  await sp.reload();await expect(sp.getByText('已出貨',{exact:true})).toBeVisible();await sp.getByRole('button',{name:'顯示收件資料',exact:true}).click();await expect(sp.getByText('這筆訂單的聯絡資料已依保存期限遮罩。',{exact:true})).toBeVisible();await expect(sp.locator('body')).not.toContainText('SYNTHETIC-123');await expect(sp.locator('body')).not.toContainText('臺北市中正區合成路一號');
+  await sp.reload();await expect(sp.getByRole('region',{name:'自行寄送',exact:true}).getByText('已出貨',{exact:true})).toBeVisible();await sp.getByRole('button',{name:'顯示收件資料',exact:true}).click();await expect(sp.getByText('這筆訂單的聯絡資料已依保存期限遮罩。',{exact:true})).toBeVisible();await expect(sp.locator('body')).not.toContainText('SYNTHETIC-123');await expect(sp.locator('body')).not.toContainText('臺北市中正區合成路一號');
  }finally{await seller.close();await buyer.close();await store.close();}
 });
 
@@ -1455,7 +1459,7 @@ test('SELFSHIP flag-off settings preserve saved option and late recipient reads 
   await sp.getByRole('button',{name:'顯示收件資料',exact:true}).click();await requested;await sp.getByRole('link',{name:'返回訂單',exact:true}).click();await sp.goto(store.origin+'/'+sellerHash(store,'orders/'+b.order_ref));await expect(sp.getByRole('heading',{name:'訂單詳情：'+b.display_number,exact:true})).toBeVisible();release();await sp.getByRole('button',{name:'顯示收件資料',exact:true}).click();await expect(sp.getByText('合成收件人乙',{exact:true})).toBeVisible();await expect(sp.locator('body')).not.toContainText('合成收件人甲');await expect(sp.getByRole('button',{name:'隱藏收件資料',exact:true})).toHaveClass('btn btn-ghost btn-small');await sp.getByRole('button',{name:'隱藏收件資料',exact:true}).click();await expect(sp.getByText('合成收件人乙',{exact:true})).toHaveCount(0);
   await sp.route('**/checkout-orders/'+b.order_ref+'/contact',route=>route.fulfill({status:503,contentType:'application/json',json:{error:'synthetic_contact_read_failure'}}));await sp.getByRole('button',{name:'顯示收件資料',exact:true}).click();await expect(sp.getByText('無法讀取收件資料，請重新確認權限後再試。',{exact:true})).toBeVisible();await expect(sp.locator('body')).not.toContainText('合成收件人乙');
   let unintended=0;sp.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/self-shipments'))unintended++;});await expect(sp.getByRole('button',{name:'登記出貨',exact:true})).toHaveCount(0);expect(unintended).toBe(0);
-  const bp=await buyer.newPage();await start(bp,store);await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await bp.getByLabel('郵遞區號',{exact:true}).fill('100');await bp.getByLabel('收件地址',{exact:true}).fill('不應保留的合成地址');const next=await member(e2eAuthPool);await apiLogin(buyer,store.origin,next.email);await bp.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(bp.getByLabel('收件人姓名',{exact:true})).toHaveValue('');await expect(bp.getByLabel('收件人手機',{exact:true})).toHaveValue('');await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await expect(bp.getByLabel('收件地址',{exact:true})).toHaveValue('');await expect(bp.getByLabel('郵遞區號',{exact:true})).toHaveValue('');
+  const bp=await buyer.newPage();await start(bp,store,'合成唯讀旗標仍保留自行寄送。');await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await bp.getByLabel('郵遞區號',{exact:true}).fill('100');await bp.getByLabel('收件地址',{exact:true}).fill('不應保留的合成地址');const next=await member(e2eAuthPool);await apiLogin(buyer,store.origin,next.email);await bp.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(bp.getByLabel('收件人姓名',{exact:true})).toHaveValue('');await expect(bp.getByLabel('收件人手機',{exact:true})).toHaveValue('');await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await expect(bp.getByLabel('收件地址',{exact:true})).toHaveValue('');await expect(bp.getByLabel('郵遞區號',{exact:true})).toHaveValue('');
 
  }finally{releasePending();await offContext?.close();await off?.close();await seller.close();await buyer.close();await store.close();}
 });

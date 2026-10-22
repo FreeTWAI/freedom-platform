@@ -39,3 +39,6 @@
 
 .seller-console .seller-self-ship textarea { font: inherit; min-height: 44px; max-width: 100%; }
 @media(max-width:720px) { .seller-console .seller-self-ship textarea { font-size: 16px; } }
+
+.seller-console .btn { font-size: max(14px,.9rem); }
+.seller-console .field-hint { font-size: max(14px,.86rem); }
