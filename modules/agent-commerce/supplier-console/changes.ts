@@ -18,6 +18,8 @@ const subjects=[
   ['storefront.product.photo.remove','storefront_product','product'],
   ['storefront.supply-offer.publish','hosted_supply_offer','offer'],
   ['storefront.supply-offer.withdraw','hosted_supply_offer','offer'],
+  ['storefront.supply-offer.photo.share','hosted_supply_offer_photo','offer'],
+  ['storefront.supply-offer.photo.stop','hosted_supply_offer_photo','offer'],
   ['storefront.distribution.decide','hosted_distribution','request'],
 ].map(([operation,aggregate_type,kind])=>({operation,aggregate_type,kind}));
 

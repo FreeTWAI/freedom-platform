@@ -12,8 +12,8 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rolldownOptions: {
-      input: {index:join(appRoot,'index.html'),'skill-social':join(appRoot,'src/skill-social.tsx'),storefront:join(appRoot,'src/storefront/main.tsx')},
-      output: {entryFileNames: chunk=>chunk.name==='skill-social'||chunk.name==='storefront'?`assets/${chunk.name}.js`:'assets/[name]-[hash].js'},
+      input: {index:join(appRoot,'index.html'),'skill-social':join(appRoot,'src/skill-social.tsx'),storefront:join(appRoot,'src/storefront/main.tsx'),'storefront-gallery':join(appRoot,'src/storefront/gallery.ts')},
+      output: {entryFileNames: chunk=>chunk.name==='skill-social'||chunk.name==='storefront'||chunk.name==='storefront-gallery'?`assets/${chunk.name}.js`:'assets/[name]-[hash].js'},
     },
   },
   server: {

@@ -13,7 +13,7 @@ import {updateSupplyProfile} from '../../../../modules/agent-commerce/hosted/sup
 import type {PlatformEnv} from '../module-context.js';
 import {privateCache,singleQuery,commandHeaders,etag} from './tenant-http.js';
 
-export function createHostedSupplierConsoleRoutes(pool:Pool,options:{cursors?:TenantListCursorCodec}={}) {
+export function createHostedSupplierConsoleRoutes(pool:Pool,options:{cursors?:TenantListCursorCodec;offerPhotosEnabled?:boolean}={}) {
   const app=new Hono<PlatformEnv>();
   app.use('*',async(c,next)=>{try{await next();}finally{privateCache(c);}});
   const root='/tenants/:tenant_id/storefronts/:instance_id';
@@ -51,11 +51,11 @@ export function createHostedSupplierConsoleRoutes(pool:Pool,options:{cursors?:Te
   });
   app.get(root+'/supplier-console/products',async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);
-    return c.json(await listSupplierProducts(pool,c.get('actor'),t,i));
+    return c.json(await listSupplierProducts(pool,c.get('actor'),t,i,options.offerPhotosEnabled));
   });
   app.get(root+'/supplier-console/products/:product_id',async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);
-    return c.json(await readSupplierProduct(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id'))));
+    return c.json(await readSupplierProduct(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id')),options.offerPhotosEnabled));
   });
   app.get(root+'/supplier-console/requests/:selection_id',async c=>{
     EmptyStoreInputSchema.parse(singleQuery(c));const [t,i]=ids(c);

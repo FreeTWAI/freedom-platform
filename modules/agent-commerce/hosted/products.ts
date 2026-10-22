@@ -1,6 +1,7 @@
+import {INVENTORY_POSITION_COLUMNS,inventoryPositions} from './inventory.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { ProductInputSchema, ProductUpdateInputSchema, ProductViewSchema, ProductPageSchema, ProductRemovedSchema, type ProductView } from '../../../contracts/guild-launchpad/v1/storefront.js';
+import { ProductInputSchema, ProductUpdateInputSchema, ProductViewSchema, MerchantProductViewSchema, MerchantProductPageSchema, type MerchantProductView, ProductRemovedSchema, type ProductView } from '../../../contracts/guild-launchpad/v1/storefront.js';
 import { checkVersion } from '../../../packages/db/index.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { Actor } from '../../identity-membership/service.js';
@@ -13,8 +14,8 @@ export function productSnapshot(p: Pick<ProductView, 'sku' | 'title' | 'descript
     shipping_minor: 0, shipping_terms: SHIPPING, return_terms: RETURNS };
 }
 /** Product identity is the existing item; its concurrency version is the selection's. */
-export async function products(q: PoolClient, p: Profile, includeSupplyOnly = false): Promise<ProductView[]> {
-  const rows = (await q.query(`SELECT i.item_id AS product_id,i.sku,i.title,i.description,l.retail_price_minor AS price_minor,i.stock,s.currency,l.aggregate_version::text AS version
+export async function products(q: PoolClient, p: Profile, includeSupplyOnly = false, withInventory = false): Promise<MerchantProductView[]> {
+  const rows = (await q.query(`SELECT i.item_id AS product_id,i.sku,i.title,i.description,l.retail_price_minor AS price_minor,i.stock,s.currency,l.aggregate_version::text AS version${withInventory?`,i.reserved,${INVENTORY_POSITION_COLUMNS}`:''}
     FROM commerce_items i JOIN commerce_selections l ON l.item_id=i.item_id
     JOIN commerce_resource_tenants m ON m.resource_kind='shop' AND m.resource_id=i.shop_id AND m.mapping_state='confirmed'
     JOIN commerce_resource_tenants retail ON retail.resource_kind='shop' AND retail.resource_id=l.shop_id AND retail.mapping_state='confirmed' AND retail.tenant_id=m.tenant_id AND retail.instance_id=m.instance_id
@@ -22,12 +23,15 @@ export async function products(q: PoolClient, p: Profile, includeSupplyOnly = fa
     JOIN commerce_shops supply ON supply.shop_id=i.shop_id AND supply.origin='hosted'
     WHERE m.tenant_id=$1 AND m.instance_id=$2 AND i.shop_id=$3 AND l.shop_id=$4 AND ($5::boolean OR l.own_retail_enabled) ORDER BY i.sku LIMIT 201`,
   [p.tenant_id, p.instance_id, p.supply_shop_id, p.storefront_shop_id, includeSupplyOnly])).rows;
-  return rows.map(row => ProductViewSchema.parse({ ...row, price_minor: Number(row.price_minor) }));
+  const inventory=withInventory?await inventoryPositions(q,rows.map(r=>r.product_id),{onInconsistent:'report',
+    rows:rows.map(r=>({...r,item_id:r.product_id}))}):null;
+  return rows.map(({reserved:_reserved,held:_held,allocated:_allocated,...row})=>(withInventory?MerchantProductViewSchema:ProductViewSchema).parse({...row,price_minor:Number(row.price_minor),
+    ...(inventory?{inventory:inventory.get(row.product_id)}:{})}));
 }
 export async function listProducts(pool: Pool, actor: Actor, tenantId: string, instanceId: string) {
   return storeRead(pool, actor, tenantId, instanceId, 'store:read', async q => {
     const p = await profile(q, tenantId, instanceId); retailReady(p);
-    return ProductPageSchema.parse({ items: await products(q, p), limit: 200 });
+    return MerchantProductPageSchema.parse({ items: await products(q, p, false, true), limit: 200 });
   });
 }
 export function addProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, raw: unknown, key: string, supplyOnly: true): Promise<{product_id: string; version: string}>;
@@ -63,7 +67,7 @@ export async function updateProduct(pool: Pool, actor: Actor, tenantId: string, 
     requireCondition(old, 404, 'not_found', '找不到這項商品。'); checkVersion(old.version, expected);
     const next = ProductViewSchema.parse({ ...old, ...input, version: String(BigInt(old.version) + 1n) });
     const stock = (await q.query<{ reserved: number }>('SELECT reserved FROM commerce_items WHERE item_id=$1 FOR UPDATE', [productId])).rows[0];
-    requireCondition(stock && next.stock >= stock.reserved, 409, 'stock_below_reserved', '庫存不能低於已保留的數量。');
+    requireCondition(stock && next.stock >= stock.reserved, 409, 'stock_below_reserved', '庫存不能低於已占用的數量（預留中＋已付款待出貨）。');
     // Retail pricing belongs to the selection. Editing it must not overwrite
     // the supplier's cost on the single inventory item.
     await q.query(`UPDATE commerce_items i SET title=$4,description=$5,stock=$6

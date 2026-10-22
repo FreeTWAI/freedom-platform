@@ -1,3 +1,5 @@
+import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
+import {photoSourcePng} from '../helpers/hosted-store-photo.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -47,7 +49,13 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,distributionPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
+
+const isGalleryPath=(path:string)=>path.includes('/product-galleries')||path.includes('/gallery')||path.includes('/preview-page/products')||/^\/shops\/:slug\/media\/:revision\/:sku\/:n(?:\/\*)?$/.test(path);
+const isPolicyPath=(path:string)=>path.includes('/seller-policies')||path.includes('/preview-page/about')||path.includes('/preview-page/policies')||path==='/shops/:slug/about'||path.startsWith('/shops/:slug/policies')||path==='/shops/*';
+function isOfferOrDistributionPhotoPath(path: string) {
+  return isGalleryPath(path)||isPolicyPath(path) || path.includes('/appearance-settings') || path.includes('/appearance-media') || path.includes('/distribution-photos') || /\/supply-catalog-photos(?:\?|$)|\/supply-(?:offers|catalog)\/[^/]+\/photo\//.test(path);
+}
 
 let created = false;
 let runtimeConnection: { current_user: string; session_user: string; rolsuper: boolean; rolbypassrls: boolean; pg_backend_pid: number };
@@ -78,7 +86,7 @@ async function call(method: string, path: string, session?: Session, body?: stri
   const sent: Record<string, string> = { Origin: origin, ...headers };
   if (session) { sent.Cookie = session.cookie; sent['X-CSRF-Token'] = session.csrf; }
   const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
-  const target=path.includes('/distribution-photos')?distributionApp:app;
+  const target=isOfferOrDistributionPhotoPath(path)?distributionApp:app;
   const response = await target.request(origin + (path.startsWith('/admin/') ? path : '/api/v1' + path), { method, headers: sent, body: payload as any });
   const bytes = new Uint8Array(await response.arrayBuffer());
   const type = response.headers.get('content-type') ?? '';
@@ -209,6 +217,48 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'ALL /shops/*': 'middleware',
+  'GET /shops/:slug/about': 'global',
+  'GET /shops/:slug/policies/:kind': 'global',
+  'GET /shops/:slug/policies/:kind/v/:version_id': 'global',
+  'ALL /shops/:slug/media/:revision/:sku/:n/*': 'middleware',
+  'GET /shops/:slug/media/:revision/:sku/:n': 'global',
+  'HEAD /shops/:slug/media/:revision/:sku/:n': 'global',
+  'GET /shops/:slug/media/:revision/:sku/:n/*': 'global',
+  'HEAD /shops/:slug/media/:revision/:sku/:n/*': 'global',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku': 'tenant',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/*': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/product-galleries': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/reorder': 'tenant',
+  'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/remove': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_id': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/:version': 'tenant',
+  'HEAD /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/:version': 'tenant',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/about': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'tenant',
+  'PUT /api/v1/tenants/:tenant_id/storefronts/:instance_id/seller-policies': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/about': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind': 'tenant',
+
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'middleware',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/*': 'middleware',
+  'ALL /shops/:slug/appearance-media/*': 'middleware',
+  'GET /shops/:slug/appearance-media/:revision/:role': 'global',
+  'HEAD /shops/:slug/appearance-media/:revision/:role': 'global',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'middleware',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos': 'tenant',
+  'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'middleware',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'tenant',
+  'HEAD /api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq': 'tenant',
   // Cache middleware is inventoried separately, never sent as a synthetic ALL request.
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos': 'middleware',
   'ALL /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/*': 'middleware',
@@ -310,6 +360,16 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/publication-review': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/publish-reviewed': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo/remove': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version': 'tenant',
+  'HEAD /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
+  'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-settings': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance': 'tenant',
   'PATCH /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview-page': 'tenant',
@@ -600,13 +660,13 @@ test('T-022 1. Route inventory guard', () => {
   for (const suffix of ['', '/reconcile', '/cancel']) {
     assert.equal(relevantPaths.test(`/api/v1/tenants/:tenant_id/operations/:operation_id${suffix}`), true);
   }
-  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>r.method!=='ALL'&&r.path.includes('/distribution-photos'))];
+  const selectedRoutes = [...app.routes.filter(r => relevantPaths.test(r.path)),...distributionApp.routes.filter(r=>(r.method!=='ALL'||isGalleryPath(r.path)||r.path.includes('/appearance-settings')||r.path.includes('/appearance-media')||isPolicyPath(r.path))&&isOfferOrDistributionPhotoPath(r.path))];
   const counts = Object.values(routeTable).reduce<Record<string, number>>((all, kind) => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 4, tenant: 128, middleware: 17 });
-  assert.equal(selectedRoutes.length, 177);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 13, tenant: 156, middleware: 31 });
+  assert.equal(selectedRoutes.length, 228);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -642,8 +702,13 @@ function assertSameAsRandom(route: string, actor: string, real: Reply, random: R
   }
 }
 
-type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean };
+type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean; contentType?:string };
 const routes: Route[] = [
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share',body:{},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop',body:{},version:'"1"'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq'},
+  {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq'},
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/distribution-photos'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/:product_id/use', body:{material_id:'00000000-0000-4000-8000-000000000001',version_id:'00000000-0000-4000-8000-000000000002'}, version:'"0"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/:product_id/detach', body:{},version:'"0"'},
@@ -771,6 +836,29 @@ const routes: Route[] = [
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/publication-review' },
+  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/publish-reviewed', body: {review_digest: '0'.repeat(64)}, version: '"1"' },
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove',body:{},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo/remove',body:{},version:'"1"'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
+  {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/:role/:version'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/products/:sku'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/product-galleries'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/reorder',body:{photo_keys:['main']},version:'"1"'},
+  {method:'PATCH',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key',body:{alt_text:'合成說明'},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/remove',body:{},version:'"1"'},
+  {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_id',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/:version'},
+  {method:'HEAD',path:'/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/gallery/photos/:photo_key/:version'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/seller-policies'},
+  {method:'PUT',path:'/tenants/:tenant_id/storefronts/:instance_id/seller-policies',body:emptySellerPolicies(),version:'"1"'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/about'},
+  {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/preview-page/policies/:kind'},
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings' },
+  { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance-settings', body: {template_id:'catalog-grid-v1',accent_preset:'ocean',announcement:'合成公告',featured_product_ids:[]}, version:'"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance' },
   { method: 'PATCH', path: '/tenants/:tenant_id/storefronts/:instance_id/appearance', body: { template_id: 'catalog-list-v1' }, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview-page' },
@@ -788,7 +876,7 @@ const isSellerOrderRoute = (path: string) => /\/storefronts\/[^/]+\/(?:orders|re
 type TenantData = Awaited<ReturnType<typeof buildFixture>>['A'];
 function ids(data: TenantData, route: Route): Record<string, string> {
   return { tenant_id: data.tenantId, workspace_id: data.workspaceId, work_id: data.workId, result_id: data.resultId,
-    version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
+    sku:'P0001',photo_key:'main',photo_id:data.workId,kind:'shipping',version_id:randomUUID(),slug:'synthetic-matrix',role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
     principal_id: data.principalId, product_id: data.workId, order_id: data.workId, offer_id: data.workId, selection_id: data.workId,
     location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
     instance_id: data.instanceId, operation_id: data.operationId, plan_id: data.planId,
@@ -837,7 +925,7 @@ async function execute(route: Route, session: Session | undefined, replacements:
       ? `"${data.workVersion}"` : route.version.startsWith(':') ? replacements[route.version.slice(1)] : route.version;
   }
   if (['POST', 'PATCH', 'PUT'].includes(route.method)) headers['Idempotency-Key'] = randomUUID();
-  if (body !== undefined) headers['Content-Type'] = route.isRaw ? 'text/plain' : 'application/json';
+  if (body !== undefined) headers['Content-Type'] = route.contentType ?? (route.isRaw ? 'text/plain' : 'application/json');
   return call(route.method, substitute(route.path, replacements), session,
     body === undefined ? undefined : route.isRaw ? body : JSON.stringify(body), headers);
 }
@@ -883,16 +971,28 @@ test('T-022 3b. Own tenant in path, other tenant resource', async () => {
       assert.equal(invalid.data.code, 'validation_failed');
       scanForLeaks(invalid, `3b invalid service purpose ${route.path}`, fixture.B);
     }
+    if(route.path.includes('/:role')){
+      const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),role:randomUUID()});
+      assert.equal(invalid.status,422,JSON.stringify(describe(invalid)));
+      if(route.method==='HEAD')assert.equal(invalid.bytes.length,0,'HEAD must omit the error body.');
+      else assert.equal(invalid.data.code,'validation_failed');
+      scanForLeaks(invalid,`3b invalid appearance role ${route.path}`,fixture.B);
+    }
+    if(route.path.includes('/:kind')){
+      const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),kind:randomUUID()});
+      assert.equal(invalid.status,404,JSON.stringify(describe(invalid)));assert.equal(Buffer.from(invalid.bytes).toString('utf8'),'404 Not Found');
+      scanForLeaks(invalid,`3b invalid policy kind ${route.path}`,fixture.B);
+    }
     if(route.path.includes('/:service_key')){
       const invalid=await execute(route,fixture.people.P,{...ids(fixture.A,route),service_key:randomUUID()});
       assert.equal(invalid.status,422,JSON.stringify(describe(invalid)));assert.equal(invalid.data.code,'validation_failed');
       scanForLeaks(invalid,`3b invalid logistics service key ${route.path}`,fixture.B);
     }
-    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
+    const positions = [...route.path.matchAll(/:([a-z_]+)/g)].map(m => m[1]).filter(key => key !== 'tenant_id' && key !== 'kind' && key !== 'role' && key !== 'purpose' && key !== 'service_key' && key !== 'action');
     for (const position of positions) {
       for (const name of ['P', 'O'] as const) {
         const realIds = { ...ids(fixture.A, route), [position]: ids(fixture.B, route)[position] };
-        const replies = await pair(route, fixture.people[name], realIds, { ...realIds, [position]: position==='version'?'2':randomUUID() });
+        const replies = await pair(route, fixture.people[name], realIds, { ...realIds, [position]: ['version', 'seq'].includes(position)?'2':randomUUID() });
         assertSameAsRandom(`${route.method} ${route.path} position=${position}`, name, ...replies);
         for (const reply of replies) {
           assert.ok([403, 404, 405].includes(reply.status), JSON.stringify(describe(reply)));
@@ -918,7 +1018,7 @@ test('T-022 3c. P as viewer of B', async () => {
         assert.equal(reply.data.items[0].role, 'viewer');
       } else assert.ok(JSON.stringify(reply.data).includes(fixture.B.tenantId));
     } else if (route.method === 'HEAD') {
-      assert.equal(reply.status, route.path.includes('/distribution-photos/')?404:405, JSON.stringify(describe(reply)));
+      assert.equal(reply.status, isOfferOrDistributionPhotoPath(route.path)?404:405, JSON.stringify(describe(reply)));
     } else if (/\/ownership-transfers\/:id|\/invitations\/:id\/revoke/.test(route.path) || route.method === 'GET' && route.path.endsWith('/ownership-transfers')) {
       assert.equal(reply.status, 404, `${route.method} ${route.path}: ${JSON.stringify(describe(reply))}`);
       const randomIds = Object.fromEntries(Object.entries(realIds).map(([key, value]) =>

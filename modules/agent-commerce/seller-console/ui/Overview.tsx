@@ -1,3 +1,4 @@
+import {storeOrderStatus} from './view';
 import {StoreOverviewSchema,STORE_READINESS_LABELS,STORE_PAYMENT_LABELS,storeReadinessStateLabel,type StoreReadiness} from '../../../../contracts/guild-launchpad/v1/hosted-commerce-setup';
 import {DELIVERY_METHOD_LABELS} from '../../../../contracts/guild-launchpad/v1/hosted-shipping';
 import {sellerConsoleHref,sellerRootHref,type SellerConsoleRoute} from '../route';
@@ -9,16 +10,16 @@ function help(item:StoreReadiness['items'][number]){
  if(item.key==='admission')return item.state==='done'?'平台已確認開放':item.state==='revoked'?'平台已暫停這間店接受新訂單；已成立的訂單照常處理。':'等待平台確認。其他項目完成後，由平台管理員確認開放，不需要另外申請。';
  if(item.key==='platform')return item.state==='done'?'平台接單服務正常。':'平台目前暫停所有商店的新訂單；已成立的訂單照常處理。';
  if(item.key==='storefront')return item.state==='done'?`目前發布第 ${item.revision} 版。`:'完成商店與商品設定後，預覽並發布商店。';
- if(item.key==='products')return item.state==='done'?`已發布 ${item.published_count} 項商品，其中 ${item.sellable_count} 項目前可售。`:'新增自有庫存商品、確認庫存大於 0，並重新發布。';
+ if(item.key==='products')return item.state==='done'?`已發布 ${item.published_count} 項商品，其中 ${item.sellable_count} 項目前可售。`:'新增並發布自有商品，確認可售庫存大於 0；已占用的數量不能再出售。';
  if(item.key==='store_information')return item.state==='done'?'已發布商店介紹。':'在「商店資料」的商店介紹填寫願意公開的客服方式、交付與售後說明，並重新發布。';
  if(item.key==='release')return item.state==='done'?`目前版本：${item.module_release_ref}`:'請在收款設定升級商店版本。';
  if(item.key==='payment')return item.state==='not_offered'?'你設定的付款方式目前平台尚未開放。':item.state==='done'?'已設定可用的付款方式。':'設定銀行匯款或面交付現；也可設定平台提供的信用卡服務。';
  return item.state==='done'?'已設定可用的交付方式。':'請設定交付方式，可以只提供面交取貨。';
 }
-export function Overview({c,route}:{c:Controller;route:SellerConsoleRoute}){
+export function Overview({c,route,checkoutEnabled=false}:{c:Controller;route:SellerConsoleRoute;checkoutEnabled?:boolean}){
  const r=useRead(c,'overview','/overview',StoreOverviewSchema,true,v=>v.tenant_id===route.tenantId&&v.instance_id===route.instanceId),data=r.data;
  return <section className="stack commerce-readiness"><h2 tabIndex={-1}>開店準備</h2><ReadStatus c={c} name="overview" label="開店準備" slot={r}/>{data&&<>
-  <p role="status">{data.accepting_orders?'目前已開放接單：買家可以在你的商店加入購物車並下單。':data.items.some(item=>item.key==='platform'&&item.state==='paused')?'平台目前暫停所有商店的新訂單；已成立的訂單照常處理。':'目前尚未開放接單。完成下列項目後，由平台確認開放。'}</p>
+  <p role="status">{checkoutEnabled?storeOrderStatus({readiness:data}).text:data.accepting_orders?'目前已開放接單：買家可以在你的商店加入購物車並下單。':data.items.some(item=>item.key==='platform'&&item.state==='paused')?'平台目前暫停所有商店的新訂單；已成立的訂單照常處理。':'目前尚未開放接單。完成下列項目後，由平台確認開放。'}</p>
   <Axis title="開店檢查" time={data.checked_at} readState={r.state}><ol className="readiness-list">{data.items.map(item=>{
    const home=['storefront','products','store_information'].includes(item.key),settings=['release','payment','delivery'].includes(item.key);
    return <li key={item.key} data-readiness={item.key} className="readiness-row stack"><div className="readiness-row-head"><h4>{STORE_READINESS_LABELS[item.key]}</h4><span className="badge readiness-state" data-state={item.state}>{storeReadinessStateLabel(item)}</span></div><p>{help(item)}</p>

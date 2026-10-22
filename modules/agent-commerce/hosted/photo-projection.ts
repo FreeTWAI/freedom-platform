@@ -10,7 +10,7 @@ export interface PhotoProduct { product: Omit<ProductView, 'stock'>; photo: Stor
 export function photoMetadata(ref: PublicationPhotoRef) {
   return { content_type: ref.content_type, byte_size: ref.byte_size, width: ref.width, height: ref.height };
 }
-function storedPhoto(row: Record<string, unknown>): StoredProductPhoto {
+export function storedPhoto(row: Record<string, unknown>): StoredProductPhoto {
   requireCondition(typeof row.scope_id === 'string' && typeof row.policy_revision === 'string', 500, 'storefront_photo_invalid', '商品照片資料不完整。');
   return { scopeId: row.scope_id, policyRevision: row.policy_revision, ref: PublicationPhotoRefSchema.parse({
     sku: row.sku, asset_id: row.asset_id, representation_id: row.representation_id, sha256: row.content_sha256,

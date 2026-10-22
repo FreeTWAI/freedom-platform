@@ -308,7 +308,7 @@ Rollback drill (only the lead operates host flags after Ted approves):
 2. Flip the host console flag OFF without changing the origin/database. Run only
    `supplier-recheck --expect-supplier-console off`, using the same A/B files and
    handle. Legacy values must match, console routes must be 404, and the same
-   bookmark must render the old supply catalog with the same business name, selected product name, formatted TWD supply price, stock and description; neither missing-store nor missing-catalog text may appear.
+   bookmark must render the old supply catalog with the same business name, selected product name, formatted TWD supply price and description. The selected product card must contain exactly one `庫存 <stock>・已占用 0・可售 <stock>` line, with both stock and sellable count matching the handle's stock; this confirms no units remain occupied at recheck. Neither `庫存紀錄不一致` nor `庫存明細暫時無法讀取` may appear in that card; neither missing-store nor missing-catalog text may appear on the page.
 3. Flip ON again. Run only `supplier-recheck --expect-supplier-console on` with
    that handle; the console bookmark must show the same product heading, stock, available count, supply unit price, per-item shipping fee and shipping/return terms. Both bookmark modes record `bookmark_values_matched: true` only after those comparisons.
 

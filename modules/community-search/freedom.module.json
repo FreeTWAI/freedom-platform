@@ -17,7 +17,10 @@
     "apps/portal-web/src/modules/SkillDiscovery.tsx",
     "apps/portal-web/src/modules/SkillDiscovery.css",
     "apps/portal-web/src/modules/skill-discovery-client.ts",
-    "tests/runtime/skill-discovery.test.ts"
+    "tests/runtime/skill-discovery.test.ts",
+    "apps/portal-web/src/modules/community-search-controller.ts",
+    "tests/runtime/community-search-controller.test.ts",
+    "tests/e2e/community-search-interaction.spec.ts"
   ],
   "public_exports": [
     "modules/community/content-search.ts"

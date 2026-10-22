@@ -1,3 +1,4 @@
+import {sellerConsoleHref} from '../../../../modules/agent-commerce/seller-console/route';
 import {useEffect, useRef, useState} from 'react';
 import {type ReservationOrder as HostedOrder} from '../../../../contracts/guild-launchpad/v1/hosted-shared-order';
 import {ApiError, type PortalClient} from '../api';
@@ -27,7 +28,7 @@ export function SellerOrdersLink({client, tenantId, instanceId,readinessHref}: S
 }
 
 /** Mounted by exact account/session/store key. No private order data is persisted. */
-export function HostedSellerOrders({client, route, registerLeave}: {client: PortalClient; route: SellerRoute; registerLeave: RegisterLeave}) {
+export function HostedSellerOrders({client, route, registerLeave, commerceConsoleEnabled=false}: {commerceConsoleEnabled?:boolean;client: PortalClient; route: SellerRoute; registerLeave: RegisterLeave}) {
   const root = rootPath(route);
   const [page, setPage] = useState<ReturnType<typeof readSellerPage>>(null);
   const [selected, setSelected] = useState<HostedOrder | null>(null);
@@ -116,7 +117,7 @@ export function HostedSellerOrders({client, route, registerLeave}: {client: Port
   const bookmark = `${window.location.origin}/#stores/${route.tenantId}/${route.instanceId}/orders`;
   return <div className="hosted-store stack">
     <div className="actions"><a className="btn btn-ghost" href={`#stores/${route.tenantId}/${route.instanceId}`}>返回商店後台</a></div>
-    <h2>商店預留訂單</h2><p className="banner" role="note">預留，未付款／未履約。每筆僅預留 30 分鐘；不提供付款、退款或出貨操作。</p>
+    <h2>商店預留訂單</h2>{commerceConsoleEnabled&&<div className="actions"><a className="btn btn-ghost btn-small" href={sellerConsoleHref(route,'orders')}>結帳訂單</a></div>}<p className="banner" role="note">本頁只顯示 30 分鐘預留，不包含結帳訂單。預留尚未付款／未履約；本頁不提供付款、退款或出貨操作。</p>
     <p ref={status} role="status" tabIndex={-1}>{loading ? '正在確認目前預留…' : notice}</p>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {unknown && <div className="actions"><button className="btn btn-ghost" disabled={busy || loading} onClick={() => held.current && void send(held.current)}>重試原取消</button><button className="btn btn-ghost" disabled={busy || loading} onClick={() => held.current && void readCurrent(held.current.order)}>查詢原預留</button></div>}

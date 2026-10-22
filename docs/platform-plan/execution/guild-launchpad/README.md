@@ -6,11 +6,31 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=3a6e25063e039fee54479d623c82926ffe8ab6ad release.staging=3a6e25063e039fee54479d623c82926ffe8ab6ad flag.production=true flag.staging=true repo_max_migration=172 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=179 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至 2026-10-20 22:28 UTC，兩環境都已部署 `cf7e518b`／schema172，發布供貨／零售公會首次設定資格（#916）、會員服務恢復（#903）、供貨條件按鈕位置（#922）及 Short 鍵盤焦點（#926）修正。27個旗標維持，沒有 migration；四組成功 before／after 備份還原與清理通過，dispatcher `0a478a84` 已綁定兩環境，原 timers 已恢復。詳見[供貨／零售公會發布收據](../unified-foundation/rollout-commerce-cohorts-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Staging after 首次 capture 失敗、清理通過，原因未知；第二次使用同一 adapter與新的 IO gate通過後才綁定。Production smoke通過14項，其中 `priorFailedAttempt` 為前輪 Short歷史紀錄；兩個 admin路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。依 Ted指示無 staging acceptance window；會員 UX、真實手機／Safari與新 dispatcher自然排程仍未驗。`as_of=2026-10-12`、M1／完整計畫與真人成果未接受狀態維持。
+
+本機候選另外包含店面外觀的 migration175（堆疊於173／174）、賣方資訊與政策的 migration176（堆疊於175）與商品圖組的 migration177（堆疊於176），所有新旗標預設 OFF；
+這只是 repository 上限，不代表 staging／production 已套用175–177，或已啟用店面外觀、賣方資訊與政策頁、商品圖組。
+目前部署與已套用 schema 仍以以下具日期的 operator 觀察為準。
+
+### 2026-10-20 07:16 歷史發布
+
+以下原文保留 `3a6e2506` 當時觀察；最新部署以上方22:28收據為準。
 
 截至 2026-10-20 07:16 UTC，staging 與 production 都已部署 `3a6e2506`／schema172，Short 對所有人開啟；Supplier／Commerce console 保持 ON，checkout／email 保持 OFF。四組成功 before／after 備份還原與清理通過，dispatcher `562f005a` 已綁定兩環境，原 timer 已恢復；新 dispatcher 自然排程尚未觀察。依 Ted 指示無 staging acceptance window，會員 UX、真實手機與 Safari 未驗。詳見[Short 發布收據](../unified-foundation/rollout-short-videos-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
 
 Production 公開唯讀 smoke 第二次通過14項，首次6項後遇 Access redirect 的失敗保留；兩個 admin 路徑只驗 Access 302與精確來源 CSP，未觀察線上 admin Worker CSP。Production 首次 before 備份截斷、第二次成功綁定，以及兩項經審查的 kit 修正均另列收據。`as_of=2026-10-12`、M1／完整計畫、真人三項成果與公會作者自主交付的未接受狀態維持。
+
+### 2026-10-20 賣方資訊與政策分支候選
+
+本工作分支在 appearance follow-up `1b2c5dc1` 上另有 schema176（暫定）六表 sidecar，
+`FREEDOM_STORE_POLICIES_ENABLED`／`store_policies_enabled` 預設 OFF。
+只包含 C1 自行填寫、草稿、發布凍結與 About／政策公開頁；不更動 readiness 八項、准入、
+付款、出貨、訂單或供貨能力。旗標 OFF 連未知資訊路徑的 host SPA fallback 也保持原樣。
+這是 repository 候選上限，沒有正式部署、旗標、秘密或真人驗收聲明；以下收據保持原日期。
 
 ### 2026-10-19 23:06 歷史發布
 

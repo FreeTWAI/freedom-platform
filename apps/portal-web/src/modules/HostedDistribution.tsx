@@ -1,7 +1,8 @@
 import {SELLABLE_LABEL} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferPresentation';
-import {useEffect,useRef,useState,type FormEvent} from 'react';
+import {useEffect,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import type {z} from 'zod';
-import {DistributionInputSchema,DistributionSchema,DistributionsSchema,SupplyOfferSchema,SupplyOffersSchema,type Distribution,type SupplyOffer} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
+import {DistributionInputSchema,DistributionSchema,DistributionsSchema,SupplyCatalogPhotosSchema,SupplyOfferSchema,SupplyOffersSchema,type Distribution,type SupplyOffer} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
+import {SupplyOfferPhoto} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferPhoto';
 import {ApiError,type PortalClient} from '../api';
 import {formatMinor,parseMajorToMinor} from '../format';
 import {PriceDifference,productMatches} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
@@ -13,7 +14,37 @@ export type SupplyCooperationSnapshot = {ok:true;offers:SupplyOffer[];offersTrun
 export function supplyRequestsWaiting(requests:Distribution[]) {
   return requests.filter(request=>request.state==='awaiting_supply_acceptance'&&request.offer.state==='offered').length;
 }
-export function HostedDistribution({client,root,refresh,busy,writable,onDirty,onCommand,onReload,onCooperation,supplierOnly=false}:{supplierOnly?:boolean;client:PortalClient;root:string;refresh:number;busy:boolean;writable:boolean;onDirty:(key:string,value:boolean)=>void;onCommand:(command:DistributionCommand)=>Promise<void>;onReload:()=>Promise<void>;onCooperation?:(snapshot:SupplyCooperationSnapshot,origin:number)=>void}) {
+type CatalogPhoto=z.infer<typeof SupplyCatalogPhotosSchema>['items'][number]['photo'];
+const photoReadHint='暫時無法載入供貨照片，清單內容不受影響。';
+/** Independent optional projection: no photo failure can reject the text-list read. */
+function useSupplyCatalogPhotos(client:PortalClient,root:string,refresh:number,enabled:boolean) {
+  const generation=client.sessionGeneration,scope=`${root}:${generation}:${refresh}:${enabled}`;
+  const current=useRef(scope);current.current=scope;
+  const [result,setResult]=useState<{scope:string;items:z.infer<typeof SupplyCatalogPhotosSchema>['items'];error:string;failed:string[]}|null>(null);
+  useEffect(()=>{
+    if(!enabled)return;
+    const abort=new AbortController();
+    const valid=()=>!abort.signal.aborted&&current.current===scope&&client.sessionGeneration===generation;
+    void client.get(root+'/supply-catalog-photos',{signal:abort.signal,background:true,skipAuthHandler:true}).then(raw=>{
+      if(!valid())return;
+      const data=SupplyCatalogPhotosSchema.parse(raw);
+      setResult({scope,items:data.items,error:'',failed:[]});
+    }).catch(cause=>{
+      if(valid())setResult({scope,items:[],failed:[],error:cause instanceof ApiError&&cause.status===404?'':photoReadHint});
+    });
+    return()=>abort.abort();
+  },[client,root,scope,generation,enabled]);
+  const visible=enabled&&result?.scope===scope?result:null;
+  return {photos:new Map(visible?.items.filter(item=>!visible.failed.includes(item.photo.read_path)).map(item=>[item.offer_id,item.photo])??[]),error:visible?.error??'',
+    failed:(path:string)=>{if(current.current===scope&&client.sessionGeneration===generation)setResult(old=>old?.scope===scope?{...old,failed:[...old.failed,path]}:old);}};
+}
+function OfferPhotoRow({enabled,photo,title,onUnavailable,children}:{enabled:boolean;photo:CatalogPhoto|undefined;title:string;onUnavailable:(path:string)=>void;children:ReactNode}) {
+  if(!enabled)return <>{children}</>;
+  // Keep the text/form subtree mounted while the optional image arrives or disappears.
+  return <div className={photo?'supply-offer-photo-row':undefined}><SupplyOfferPhoto key={photo?.read_path??'none'} photo={photo??null} title={title} thumbnail onUnavailable={()=>{if(photo)onUnavailable(photo.read_path);}}/><div className="stack">{children}</div></div>;
+}
+export function HostedDistribution({client,root,refresh,busy,writable,onDirty,onCommand,onReload,onCooperation,supplierOnly=false,supplyOfferPhotosEnabled=false}:{supplyOfferPhotosEnabled?:boolean;supplierOnly?:boolean;client:PortalClient;root:string;refresh:number;busy:boolean;writable:boolean;onDirty:(key:string,value:boolean)=>void;onCommand:(command:DistributionCommand)=>Promise<void>;onReload:()=>Promise<void>;onCooperation?:(snapshot:SupplyCooperationSnapshot,origin:number)=>void}) {
+  const photos=useSupplyCatalogPhotos(client,root,refresh,supplyOfferPhotosEnabled&&!supplierOnly);
   const [data,setData]=useState<{offers:SupplyOffer[];offersTruncated:boolean;catalog:SupplyOffer[];selections:Distribution[];requests:Distribution[];requestsTruncated:boolean;truncated:boolean}|null>(null);
   const [error,setError]=useState(''),[editing,setEditing]=useState<string|null>(null);
   const [query,setQuery]=useState('');
@@ -42,11 +73,14 @@ export function HostedDistribution({client,root,refresh,busy,writable,onDirty,on
   const catalog=data?.catalog.filter(o=>!data.selections.some(s=>s.offer.product_id===o.product_id))??[];
   const matches=(o:SupplyOffer)=>productMatches({title:o.terms.title,sku:o.supplier_name,description:o.terms.description},query);
   const command=(value:DistributionCommand)=>onCommand({...value,targetMissingIsStore:false});
+  const hasPhotos=data&&(data.selections.some(r=>photos.photos.has(r.offer.offer_id))||catalog.filter(matches).some(o=>photos.photos.has(o.offer_id)));
   return <section className="stack hosted-distribution" aria-labelledby="store-distribution-title">
     <h3 id="store-distribution-title">供貨合作</h3>
     <p className="field-hint">{supplierOnly ? '公開供貨版本後，同社群且有選品權限的店主可查看商品介紹、供貨價與條件，再提出售價供你確認。這不會建立買家可見的零售展示頁。' : '供應商確認這一版售價後，商品才能加入你的展示頁。跨店預留需雙方開放庫存預留；供貨撤回或條件變更後，買家須重新確認。'}</p>
     <div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void onReload()}>更新供貨狀態</button></div>
     {error&&<p role="alert">{error}</p>}
+    {photos.error&&<p className="field-hint" role="status">{photos.error}</p>}
+    {hasPhotos&&<p className="field-hint">縮圖是供應商提供的評估照片，不屬於供貨條件。</p>}
     {!data?<p>{error ? '請更新供貨狀態後再試一次。' : '正在讀取供貨合作…'}</p>:<>
       <details><summary>我的供貨（{data.offers.length}）</summary>
         {!data.offers.length&&<p>尚未公開供貨版本。請在商品的「供貨條件」確認內容後公開。</p>}
@@ -69,6 +103,7 @@ export function HostedDistribution({client,root,refresh,busy,writable,onDirty,on
       {!supplierOnly && <><details><summary>我的選品（{data.selections.length}）</summary>
         {!data.selections.length&&<p>尚未選用其他商店的商品。</p>}
         {data.selections.map(r=><article className="hosted-distribution-item stack" key={r.selection_id}>
+          <OfferPhotoRow enabled={supplyOfferPhotosEnabled} photo={photos.photos.get(r.offer.offer_id)} title={r.offer.terms.title} onUnavailable={photos.failed}>
           <h4>{r.offer.terms.title}・{r.offer.supplier_name}</h4>
           <p>{r.offer.state==='withdrawn'?'供貨版本已撤回':distributionStateWord[r.state]}・零售價 {formatMinor(r.retail_price_minor,r.offer.terms.currency)}</p>
           {r.decision_note&&<p className="supply-offer-text">供應商回覆：{r.decision_note}</p>}
@@ -77,6 +112,7 @@ export function HostedDistribution({client,root,refresh,busy,writable,onDirty,on
           {r.state!=='revoked'&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||!writable||!!error} onClick={()=>void command(distributionWithdrawal(root,r))}>停止採用</button></div>}
           {r.offer.state==='offered'&&<PriceForm key={r.version} offer={r.offer} selection={r} busy={busy||!writable||!!error} onDirty={v=>onDirty(r.selection_id,v)} onSubmit={body=>command(distributionProposal(root,body,r,()=>onDirty(r.selection_id,false)))}/>}
           {r.offer.state==='withdrawn'&&data.catalog.filter(o=>o.product_id===r.offer.product_id).map(o=><PriceForm key={o.offer_id} offer={o} selection={r} busy={busy||!writable||!!error} onDirty={v=>onDirty(r.selection_id,v)} onSubmit={body=>command(distributionProposal(root,body,r,()=>onDirty(r.selection_id,false)))}/>)}
+          </OfferPhotoRow>
         </article>)}
       </details>
       <details><summary>選用其他商店的商品</summary>
@@ -86,8 +122,10 @@ export function HostedDistribution({client,root,refresh,busy,writable,onDirty,on
         <p className="field-hint" aria-live="polite">找到 {catalog.filter(matches).length}／{catalog.length} 件已載入的供貨商品</p>
         {catalog.length>0&&!catalog.some(matches)&&<p>沒有符合的供貨商品，清除搜尋即可查看全部。</p>}
         {catalog.filter(matches).map(o=><article className="hosted-distribution-item stack" key={o.offer_id}>
-          <h4>{o.terms.title}・{o.supplier_name}</h4><p>{o.terms.description}</p><Terms offer={o}/><div className="actions"><a className="btn btn-ghost" href={detailHref(o.offer_id)}>查看供貨方案</a></div>
+          <OfferPhotoRow enabled={supplyOfferPhotosEnabled} photo={photos.photos.get(o.offer_id)} title={o.terms.title} onUnavailable={photos.failed}>
+          <h4>{o.terms.title}・{o.supplier_name}</h4><p>{o.terms.description}</p><Terms offer={o}/>{(o.terms.msrp_minor!==undefined||o.terms.minimum_order_quantity!==undefined||o.terms.lead_time_days!==undefined)&&<p className="field-hint">供應商參考：{[o.terms.msrp_minor!==undefined?`建議售價 ${formatMinor(o.terms.msrp_minor,o.terms.currency)}`:null,o.terms.minimum_order_quantity!==undefined?`建議最低 ${o.terms.minimum_order_quantity} 件`:null,o.terms.lead_time_days!==undefined?o.terms.lead_time_days===0?'預估當天出貨':`預估 ${o.terms.lead_time_days} 天內出貨`:null].filter(Boolean).join('・')}</p>}<div className="actions"><a className="btn btn-ghost" href={detailHref(o.offer_id)}>查看供貨方案</a></div>
           {editing===o.offer_id?<><PriceForm offer={o} busy={busy||!writable||!!error} onDirty={v=>onDirty(o.offer_id,v)} onSubmit={body=>command(distributionProposal(root,body,undefined,()=>{onDirty(o.offer_id,false);setEditing(null);}))}/><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>{onDirty(o.offer_id,false);setEditing(null);}}>取消選品</button></div></>:<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||!writable||!!error||editing!==null} onClick={()=>setEditing(o.offer_id)}>設定我的售價</button></div>}
+          </OfferPhotoRow>
         </article>)}
       </details>
       </>}
@@ -112,6 +150,7 @@ export function PriceForm({offer,selection,busy,onDirty,onSubmit}:{offer:SupplyO
   }
   return <form className="hosted-store-form stack" aria-label={`${offer.terms.title}選品售價`} onSubmit={e=>void submit(e)}>
     <label className="field">我的零售價（{offer.terms.currency}）<input inputMode="decimal" required value={price} disabled={busy} onChange={e=>setPrice(e.target.value)}/></label>
+    {offer.terms.msrp_minor!==undefined&&<div className="stack"><p className="field-hint">供應商建議售價 {formatMinor(offer.terms.msrp_minor,offer.terms.currency)}（僅供參考，可自行定價）</p><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>setPrice((offer.terms.msrp_minor!/100).toFixed(2))}>填入建議售價</button></div></div>}
     <PriceDifference retail={price} cost={offer.terms.cost_minor} shipping={offer.terms.shipping_minor} currency={offer.terms.currency}/>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button className="btn btn-ghost" disabled={busy||(!!selection&&price===initial&&selection.offer.offer_id===offer.offer_id&&!['revoked','declined'].includes(selection.state))}>送出供貨申請</button></div>

@@ -22,8 +22,10 @@
     "tests/runtime/supply-material-assets.test.ts",
     "migrations/145_social_note_image_creation.sql",
     "tests/runtime/social-preview-assets.test.ts",
+    "tests/worker/social-preview-assets.test.ts",
     "tests/runtime/social-thumbnail-assets.test.ts",
-    "tests/runtime/event-banner-assets.test.ts"
+    "tests/runtime/event-banner-assets.test.ts",
+    "tests/runtime/media-session-recovery.test.ts"
   ],
   "public_exports": [
     "modules/assets/index.ts",

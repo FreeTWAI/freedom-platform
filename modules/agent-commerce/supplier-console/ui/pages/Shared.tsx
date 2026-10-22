@@ -1,4 +1,5 @@
-import {useEffect,useId,useRef,type ReactNode} from 'react';
+import {SupplyReferenceFields} from '../../../hosted-ui/CommerceTools';
+import {Fragment,useEffect,useId,useRef,type ReactNode} from 'react';
 import type {ConsoleController,ReadSlot} from '../../state/useSupplierConsoleController';
 import type {Fields} from '../../state/drafts';
 import type {AttemptKind} from '../../state/attempt';
@@ -21,7 +22,7 @@ export function Editor({c,name,title,base,version,kind,path,target,productId,fie
  const draft=c.drafts[name],values={...base,...draft?.fields},conflict=c.conflicts[name],hintPrefix=useId();
  return <form className="stack" aria-label={title} onSubmit={e=>{e.preventDefault();c.save(kind,title,name,base,version,target,path,productId);}}>
   <fieldset className="hosted-store-fields stack" disabled={c.locked||disabled||!!conflict}><legend className="sr-only">{title}</legend>
-   {fields.map(f=><div key={f.key}><label className="field">{f.label??fieldLabels[f.key]}{f.multiline?<textarea aria-describedby={f.hint?`${hintPrefix}-${f.key}`:undefined} maxLength={f.max??2000} required={f.required} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>:f.options?<select value={String(values[f.key])} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}>{f.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:<input required={f.required} maxLength={f.max??120} inputMode={f.money?'decimal':f.key==='stock'?'numeric':undefined} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>}</label>{f.hint&&<p id={`${hintPrefix}-${f.key}`} className="field-hint">{f.hint}</p>}</div>)}
+   {fields.map(f=><Fragment key={f.key}><div><label className="field">{f.label??fieldLabels[f.key]}{f.multiline?<textarea aria-describedby={f.hint?`${hintPrefix}-${f.key}`:undefined} maxLength={f.max??2000} required={f.required} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>:f.options?<select value={String(values[f.key])} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}>{f.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:<input required={f.required} maxLength={f.max??120} inputMode={f.money?'decimal':f.key==='stock'?'numeric':undefined} value={String(values[f.key]??'')} onChange={e=>c.updateDraft(name,version,base,f.key,e.target.value)}/>}</label>{f.hint&&<p id={`${hintPrefix}-${f.key}`} className="field-hint">{f.hint}</p>}</div>{kind==='terms.update'&&f.key==='shipping_minor'&&<SupplyReferenceFields values={values} cost={String(values.cost_minor)} shipping={String(values.shipping_minor)} currency={c.profile?.catalog?.currency??'TWD'} onChange={(key,value)=>c.updateDraft(name,version,base,key,value)}/>}</Fragment>)}
    {children}
    <div className="actions"><button className={primary?'btn btn-primary':'btn btn-ghost'} disabled={c.locked||disabled||!draft||!!conflict}>{title}</button>{draft&&!conflict&&<button type="button" className="btn btn-ghost" onClick={()=>c.discard(name)}>放棄我的修改</button>}</div>
   </fieldset>
@@ -33,10 +34,10 @@ export function Editor({c,name,title,base,version,kind,path,target,productId,fie
   </div>}
  </form>;
 }
-export function ConfirmAction({label,title,children,disabled,onConfirm}:{label:string;title:string;children:ReactNode;disabled:boolean;onConfirm:()=>void}){
+export function ConfirmAction({label,title,children,disabled,onConfirm,small=false}:{label:string;title:string;children:ReactNode;disabled:boolean;onConfirm:()=>void;small?:boolean}){
  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
  const close=()=>{dialog.current?.close();trigger.current?.focus({preventScroll:true});};
- return <><button ref={trigger} type="button" className="btn btn-ghost" disabled={disabled} aria-haspopup="dialog" onClick={()=>dialog.current?.showModal()}>{label}</button>
+ return <><button ref={trigger} type="button" className={`btn btn-ghost${small?' btn-small':''}`} disabled={disabled} aria-haspopup="dialog" onClick={()=>dialog.current?.showModal()}>{label}</button>
   <dialog ref={dialog} aria-labelledby={id} onCancel={e=>{e.preventDefault();close();}} onClose={()=>trigger.current?.focus({preventScroll:true})}><div className="stack"><h2 id={id}>{title}</h2>{children}<p>這是目前資料的影響預覽，送出時會重新確認權限與版本。</p><div className="actions"><button type="button" autoFocus className="btn btn-ghost" onClick={close}>取消</button><button type="button" className="btn btn-primary" disabled={disabled} onClick={()=>{close();onConfirm();}}>確認{label}</button></div></div></dialog>
  </>;
 }

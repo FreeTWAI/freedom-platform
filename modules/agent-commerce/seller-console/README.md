@@ -45,3 +45,16 @@
 PortalClient 也會將 mutating 5xx 轉成無 problem code 的 network error，因此這些回應會維持不確定狀態、使用原 key 重試；
 無法在不改共用 client error 協議的前提下顯示特定 503 code。E09 導覽依 finance:read，但現行例外讀取 API 另要求 orders:read；
 伺服器的 403 會顯示權限說明。Order DTO 沒有 lifecycle/inventory 最近變更時間，頁面明示讀取時間，不虛構事件時間。
+
+## 商家接單狀態與庫存
+
+商店編輯器與開店準備共用 `ui/view.ts` 的接單狀態 formatter，事實仍來自既有
+`GET .../overview`，不另建准入判斷。入口已開放但商品或交付方式未備妥時，明確
+說明買家尚無法完成下單；撤銷准入與平台暫停優先顯示。商店說明缺漏只作提醒。
+編輯器使用獨立、綁定店鋪與 session 的讀取區塊；更新狀態不會清掉商品或照片草稿。
+403 不提供無效重試，其他讀取失敗可重試。checkout OFF 保留原本兩個橫幅與預留
+設定邏輯，而且不發出這個 readiness 請求。v1 預留頁只描述自身資料；console
+開放時提供小型次要「結帳訂單」連結。
+
+自有商品顯示庫存、已占用、可售，以及預留中與已付款待出貨；預留不是成交。
+庫存編輯下限仍由伺服器的 `stock_below_reserved` 409 決定，沒有新的寫入權限。

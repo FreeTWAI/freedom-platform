@@ -5,7 +5,7 @@ import {requireCondition} from '../../../packages/shared/problem.js';
 import type {Actor} from '../../identity-membership/service.js';
 import {effectiveStoreCapabilities} from '../hosted/capabilities.js';
 import {profile,ready,storeRead} from '../hosted/store.js';
-import {own,offers,selections,cooperation,products,partners,params,productView,partnerView,type Row} from './reads.js';
+import {own,offers,selections,cooperation,products,partners,params,productView,partnerView,attachInventory,inconsistentProducts,type Row} from './reads.js';
 
 // Match hosted/seller-orders.ts authorize, without its command locks or receipt:
 // a manage grant alone cannot admit a caller to line-level reservation data.
@@ -68,6 +68,7 @@ async function reportRead(pool:Pool,actor:Actor,tenantId:string,instanceId:strin
     const end=new Date(Date.parse(query.to+'T00:00:00+08:00')+86400000).toISOString();
     const row=(await q.query(reportSql({owner,detail}),[...params(p),start,end,...(owner?[p.currency]:[])])).rows[0];
     requireCondition(row.products.length<=200,500,'supplier_product_limit','供貨商品數量超出上限。');
+    await attachInventory(q,row.products);
     const items=(row.products as Row[]).map(r=>productView(r,p.currency));
     const counts={total:items.length,offered:items.filter(i=>i.offer!==null).length,not_offered:items.filter(i=>i.offer===null).length,
       outdated:items.filter(i=>i.offer!==null&&!i.offer.matches_current_terms).length,out_of_stock:items.filter(i=>i.available===0).length};
@@ -83,7 +84,7 @@ async function reportRead(pool:Pool,actor:Actor,tenantId:string,instanceId:strin
     const csvRows=integer(items.length+partnerCount+lineCount);
     requireCondition(csvRows<=SUPPLIER_REPORT_MAX_ROWS,409,'report_too_large','這段期間的報表超過 10,000 列，請縮短期間。');
     if(detail)consistent(row.partner_rows.length===partnerCount&&(!owner||row.line_rows.length===lineCount));
-    const report=SupplierReportSchema.parse({profile:'freedom.supplier-console.report/v1',tenant_id:tenantId,instance_id:instanceId,as_of:row.as_of,
+    const report=SupplierReportSchema.parse({profile:'freedom.supplier-console.report/v1',tenant_id:tenantId,instance_id:instanceId,as_of:row.as_of,inventory_inconsistent_count:inconsistentProducts(items),
       business:{name:p.name,currency:p.currency},period:{...query,time_zone:'Asia/Taipei',start,end},products:counts,
       cooperation:{totals:row.cooperation,partner_count:partnerCount,partners:row.partners.map(partnerView)},reservations,csv_rows:csvRows});
     return {report,items,partnerRows:((row.partner_rows??[]) as Row[]).map(partnerView),lineRows:(row.line_rows??[]) as Row[]};
@@ -104,6 +105,7 @@ function csvHeader(r:SupplierReport):(string|number)[][] {
     ['期間（台灣時間，含首尾）',`${r.period.from} 至 ${r.period.to}`],['幣別',r.business.currency],
     ['金額單位',`最小單位 1/100（例如 12345 代表 123.45 ${r.business.currency}）`],
     ['定義','商品與合作是產生時間當下的狀態；預留只計期間內建立、含本供應商行項的預留，狀態以產生時間判斷，已過到期時間但尚未結算的預留算已到期。'],
+    ['定義','已占用包含預留中與已付款待出貨；可用即為可售量，預留不是成交。庫存紀錄不一致時，相關數量留空。'],
     ['說明','預留供貨金額是數量乘以供貨單價，不是營收、請款、付款或佣金。'],
     ['說明','本檔不是完整資料匯出，也不是備份或搬家用的資料包。']];
 }
@@ -112,16 +114,20 @@ export async function readSupplierReportCsv(pool:Pool,actor:Actor,tenantId:strin
   const rows=csvHeader(r),p=r.products,c=r.cooperation.totals;
   if(r.reservations.state==='unavailable')rows.push(['預留','只有業務空間擁有者可以查看預留，本檔不含預留資料。']);
   rows.push([],['摘要'],['項目','數量'],['商品總數',p.total],['公開中',p.offered],['尚未公開',p.not_offered],['需更新版本',p.outdated],
-    ['缺貨',p.out_of_stock],['合作店家',r.cooperation.partner_count],['選品待確認',c.awaiting],['選品可售',c.sellable],['選品需修改',c.changes_requested],['選品停用',c.inactive]);
+    ['缺貨',r.inventory_inconsistent_count?'暫時無法確認':p.out_of_stock],['合作店家',r.cooperation.partner_count],['選品待確認',c.awaiting],['選品可售',c.sellable],['選品需修改',c.changes_requested],['選品停用',c.inactive]);
   if(r.reservations.state==='ready') {
     rows.push([],['預留狀態','預留筆數','行項數','數量','預留供貨金額（1/100）']);
     for(const state of ['reserved','cancelled','expired'] as const) {
       const s=r.reservations[state];rows.push([stateLabels[state],s.reservations,s.lines,s.quantity,s.supply_total_minor]);
     }
   }
-  rows.push([],['商品'],['商品 ID','SKU','商品名稱','供貨狀態','需更新版本','缺貨','庫存','已預留','可用','供貨單價（1/100）','每件運費（1/100）','選品待確認','選品可售','選品需修改','選品停用']);
-  for(const i of items)rows.push([i.product_id,i.sku,i.title,i.offer?'公開中':'尚未公開',i.offer&&!i.offer.matches_current_terms?'是':'否',i.available===0?'是':'否',
-    i.stock,i.reserved,i.available,i.supply_price_minor,i.shipping_minor,i.cooperation.awaiting,i.cooperation.sellable,i.cooperation.changes_requested,i.cooperation.inactive]);
+  rows.push([],['商品'],['商品 ID','SKU','商品名稱','供貨狀態','需更新版本','缺貨','庫存','已占用','可用','供貨單價（1/100）','每件運費（1/100）','選品待確認','選品可售','選品需修改','選品停用','預留中','已付款待出貨','庫存狀態']);
+  for(const i of items) {
+    const inventory=i.inventory,valid=inventory?.state==='ready';
+    rows.push([i.product_id,i.sku,i.title,i.offer?'公開中':'尚未公開',i.offer&&!i.offer.matches_current_terms?'是':'否',valid?(i.available===0?'是':'否'):'',
+      i.stock,valid?i.reserved:'',valid?i.available:'',i.supply_price_minor,i.shipping_minor,i.cooperation.awaiting,i.cooperation.sellable,i.cooperation.changes_requested,i.cooperation.inactive,
+      valid?inventory.held:'',valid?inventory.allocated:'',valid?'正常':'庫存紀錄不一致']);
+  }
   rows.push([],['合作店家'],['合作店家 ID','店家名稱','商品數','選品待確認','選品可售','選品需修改','選品停用']);
   for(const p of partnerRows)rows.push([p.partner_id,p.name,p.products,p.cooperation.awaiting,p.cooperation.sellable,p.cooperation.changes_requested,p.cooperation.inactive]);
   if(r.reservations.state==='ready') {

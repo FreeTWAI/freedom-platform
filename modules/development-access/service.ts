@@ -199,9 +199,10 @@ export class DevelopmentAccess {
     },true,q=>this.assertGrantClock(q,input.actor,grantId));
   }
   async agent(authorization:string|undefined,body:unknown,key:string){
-    requireCondition(authorization&&/^Bearer fpd_[A-Za-z0-9_-]{43}$/.test(authorization),401,'development_key_required','請提供有效的開發憑證。');
+    const match=authorization?.match(/^[Bb][Ee][Aa][Rr][Ee][Rr] +(fpd_[A-Za-z0-9_-]{43})$/);
+    requireCondition(match,401,'development_key_required','請提供有效的開發憑證。');
     proposalInput.parse(body);
-    const stored=(await this.pool.query('SELECT k.key_id,g.user_id,g.community_id,g.capability,g.target_key,g.grant_id FROM development_keys k JOIN development_grants g ON g.grant_id=k.source_grant_id WHERE k.secret_hash=$1',[tokenHash(authorization.slice(7))])).rows[0];
+    const stored=(await this.pool.query('SELECT k.key_id,g.user_id,g.community_id,g.capability,g.target_key,g.grant_id FROM development_keys k JOIN development_grants g ON g.grant_id=k.source_grant_id WHERE k.secret_hash=$1',[tokenHash(match[1])])).rows[0];
     requireCondition(stored,401,'development_key_required','開發憑證無效。');
     const actor={user_id:stored.user_id,community_id:stored.community_id} as Actor;
     return this.member(actor,async(q,beginEffects)=>{

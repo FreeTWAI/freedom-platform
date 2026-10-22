@@ -1,12 +1,10 @@
 import {z} from 'zod';
 import {OpaqueId, Version} from './primitives.js';
 import {IsoTimeSchema} from './tenant.js';
-import {CurrencySchema, ProductInputSchema} from './storefront.js';
-import {SupplyTermsInputSchema} from './hosted-supply-terms.js';
+import {ProductInputSchema} from './storefront.js';
+import {SupplyOfferTermsSchema} from './hosted-supply-terms.js';
+export {SupplyOfferTermsSchema} from './hosted-supply-terms.js';
 
-export const SupplyOfferTermsSchema = SupplyTermsInputSchema.extend({
-  title: ProductInputSchema.shape.title, description: z.string().max(4000), currency: CurrencySchema,
-}).strict();
 // Roles only: the signed snapshot's person/shop identifiers stay on the server.
 export const SupplyArrangementSchema = z.object({
   mode: z.literal('reseller'), seller_of_record: z.literal('seller'), payment_collector: z.literal('seller'),
@@ -37,8 +35,22 @@ export const DistributionSchema = z.object({
 }).strict();
 export const DistributionsSchema = z.object({items: z.array(DistributionSchema).max(200), truncated: z.boolean()}).strict();
 export const SalePathSchema = z.object({available: z.boolean(), reason: z.string().nullable()}).strict();
+export const SupplyOfferPhotoStateSchema = z.object({
+  state: z.enum(['shared', 'not_shared']), seq: Version.nullable(), matches_current_photo: z.boolean(),
+}).strict();
+export const SupplyOfferPhotoSchema = z.object({
+  read_path: z.string().regex(/^\/api\/v1\/tenants\/[0-9a-f-]+\/storefronts\/[0-9a-f-]+\/supply-catalog\/[0-9a-f-]+\/photo\/[1-9][0-9]*$/),
+  seq: Version, width: z.number().int().min(1).max(1920), height: z.number().int().min(1).max(1920),
+}).strict();
+export const SupplyCatalogPhotosSchema = z.object({
+  items: z.array(z.object({offer_id: OpaqueId, photo: SupplyOfferPhotoSchema}).strict()).max(100),
+  truncated: z.boolean(),
+}).strict();
+/** Owner preview on the existing private product-photo route. Both pins are required. */
+export const SupplyOfferPhotoPreviewQuerySchema = z.object({offer_id:OpaqueId,seq:Version}).strict();
 export const SupplyOfferPageSchema = z.object({
   offer: SupplyOfferSchema, published_at: IsoTimeSchema,
+  photo: SupplyOfferPhotoSchema.nullable(),
   supplier: z.object({name: z.string(), public_path: z.string().regex(/^\/shops\/[a-z0-9-]+$/).nullable()}).strict(),
   selection: DistributionSchema.nullable(), decision_note: z.string().max(500).nullable(),
   sale_paths: z.object({display: SalePathSchema, reservation: SalePathSchema, checkout: SalePathSchema}).strict(),

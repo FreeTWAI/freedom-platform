@@ -11,6 +11,14 @@
 .hosted-store-product, .hosted-distribution-item { min-width: 0; border-bottom: 1px solid var(--line); padding-block: 16px; }
 .hosted-store-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; white-space: pre-line; }
 .hosted-store-preview { border-block: 1px solid var(--line); padding-block: 16px; }
+.hosted-store-publication { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--bg-elev); }
+.hosted-store-publication h4, .hosted-store-publication p { margin-block: 0; }
+.hosted-store-publication-review summary { min-height: 44px; cursor: pointer; align-content: center; text-decoration: underline; text-underline-offset: 4px; }
+.hosted-store-publication-review summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.hosted-store-publication-review ul { padding-inline-start: 24px; max-height: 320px; overflow-y: auto; }
+.hosted-store-publication-review li { padding-block: 8px; }
+.hosted-store-publication-review li p { white-space: pre-line; }
+.hosted-store-publication-review img { display: block; width: auto; height: auto; max-width: 100%; max-height: 160px; object-fit: contain; margin-block: 8px; border-radius: var(--radius); }
 .hosted-store [role="status"]:focus { outline: 2px solid var(--focus); outline-offset: 4px; }
 @media (min-width: 768px) { .hosted-store-products { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .hosted-store :is(input, textarea, select), .application-flow input { font-size: 16px; } }
@@ -51,3 +59,14 @@
 .hosted-price-summary dl {margin:0}.hosted-price-summary dl>div {display:flex;gap:12px;justify-content:space-between}
 .hosted-price-summary dd {margin:0;font-weight:600}
 @media (max-width:560px){.hosted-retail-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.hosted-retail-nav .btn{width:100%}}
+
+.merchant-inventory { min-width: 0; overflow-wrap: anywhere; }
+.merchant-inventory p { margin: 0; }
+.merchant-inventory-values { font-variant-numeric: tabular-nums; }
+.merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-variant-numeric: tabular-nums; }
+.merchant-inventory .btn-small { width: auto; min-height: 44px; max-width: 100%; font-size: .875rem; padding: .4rem .75rem; }
+
+.hosted-store .actions > .btn-small { width: auto; flex: none; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; }
+.merchant-order-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
+.merchant-order-status > p { flex-basis: 100%; margin: 0; }
+.merchant-order-status > .btn-small { width: auto; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; white-space: normal; }

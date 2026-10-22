@@ -30,7 +30,7 @@ test('supplier terms persist across login, keep retail separate and show the sha
     await post(`/hosted-stores/${s.slug}/orders`, {quote_id: quote.quote_id, terms_sha256: quote.terms_sha256, client_order_id: randomUUID()});
   } finally {await buyer.close();}
   await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`); await edit(page);
-  await expect(form(page).getByText('庫存 4・已預留 2・可供 2', {exact: true})).toBeVisible();
+  await expect(form(page).getByText('庫存 4・已占用 2・可售 2', {exact: true})).toBeVisible();
   await fill(page);
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({width, height: width === 390 ? 844 : 900});
@@ -82,13 +82,25 @@ test('committed response loss retries the same supplier edit and a stale tab mus
   expect(tuples).toHaveLength(2); expect(tuples[0]).toEqual(tuples[1]);
   expect((await db.query(`SELECT count(*)::int AS n FROM scoped_transition_journal WHERE aggregate_id=$1 AND operation='storefront.supply-terms.update'`, [s.product.product_id])).rows[0].n).toBe(1);
   await page.unroute('**/products/*/supply-terms');
+  let inconsistent=true;
+  await page.route('**/products/*/supply-terms',async route=>{
+    if(route.request().method()!=='GET')return route.continue();
+    const response=await route.fetch(),data=await response.json();
+    if(inconsistent)data.inventory={state:'inconsistent',code:'reservation_inconsistent'};
+    await route.fulfill({response,json:data});
+  });
   await edit(page); await fill(page, '200');
+  await expect(form(page)).toContainText('庫存紀錄不一致');
   // A second real HTTP client changes the same product while this tab is open.
   const session = await (await page.request.get('/api/v1/session')).json();
   const path = '/api/v1' + s.root + '/products/' + s.product.product_id + '/supply-terms';
   const current = SupplyTermsSchema.parse(await (await page.request.get(path)).json());
   const response = await page.request.patch(path, {data: {cost_minor: 19000, shipping_minor: 0, shipping_terms: '隔日出貨', return_terms: '瑕疵換貨'}, headers: {Origin: baseURL!, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID(), 'If-Match': `"${current.version}"`}});
   expect(response.status()).toBe(200);
+  inconsistent=false;
+  await form(page).getByRole('button',{name:'重新讀取庫存',exact:true}).click();
+  await expect(form(page).getByText('庫存 4・已占用 0・可售 4',{exact:true})).toBeVisible();
+  await expect(form(page).getByLabel('供貨單價（TWD）',{exact:true})).toHaveValue('200');
   await form(page).getByRole('button', {name: '儲存供貨條件', exact: true}).click();
   await expect(page.locator('.hosted-store [role="status"]').first()).toContainText('這件商品剛剛被更新');
   await edit(page);

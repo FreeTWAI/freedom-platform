@@ -1,3 +1,7 @@
+import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
+import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
+import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
+import {createHostedSupplyOfferPhotoRoutes,supplyOfferPhotosInstalled} from './routes/hosted-supply-offer-photos.js';
 import {createHostedDistributionPhotoRoutes,distributionPhotosInstalled} from './routes/hosted-distribution-photos.js';
 import {createHostedSupplyMaterialRoutes} from './routes/hosted-supply-materials.js';
 import {createHostedSupplyMaterialMediaRoutes,isSupplyMaterialUpload,checkSupplyMaterialHeaders,supplyMaterialMediaInstalled,supplyMaterialUploadsInstalled} from './routes/hosted-supply-material-media.js';
@@ -34,7 +38,7 @@ import { memberBoundary } from './member-boundary.js';
 import { readSessionCookie, sessionCookieName } from './session-cookie.js';
 import { createWork,claimWork,changeClaim,listWorks,listWorksPage,workListPageQuery,dashboard } from '../../../modules/opportunity-project-work/work.js';
 import { createPrivateWorkRoutes } from './routes/private-work.js';
-import { createShowcase,listShowcases,createOpportunity,listOpportunities,proposeEngagement,listEngagements,changeEngagement } from '../../../modules/opportunity-project-work/business.js';
+import { createShowcase,listShowcases,createOpportunity,listOpportunities,proposeEngagement,listEngagements,readEngagementSummary,changeEngagement } from '../../../modules/opportunity-project-work/business.js';
 import { listOwnShowcases,readOwnShowcase,createShowcaseDraft,updateOwnShowcase,publishOwnShowcase,withdrawOwnShowcase } from '../../../modules/opportunity-project-work/business.js';
 import { listPersonalContent } from '../../../modules/community/personal-content.js';
 import {readFirstParticipation,changeFirstParticipation,listFirstParticipationReception,claimFirstParticipationReception} from '../../../modules/community/first-participation.js';
@@ -281,6 +285,12 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         checkEventVideoUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isSocialThumbnailUpload(c.req.method,c.req.path)) {
         checkSocialThumbnailHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
+      } else if(isStoreAppearanceUpload(c.req.method,c.req.path)) {
+        requireCondition(storeAppearanceInstalled(runtime)&&storePhotosInstalled(runtime),404,'not_found','找不到這個頁面。');
+        checkStoreAppearanceHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
+      } else if(isStoreGalleryUpload(c.req.method,c.req.path)) {
+        requireCondition(storeGalleryInstalled(runtime)&&storePhotosInstalled(runtime),404,'not_found','找不到這個頁面。');
+        checkStorePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isStorePhotoUpload(c.req.method,c.req.path)) {
         requireCondition(runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),404,'not_found','找不到這個頁面。');
         checkStorePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
@@ -306,7 +316,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         // Notes may embed an image; preview wraps up to 24,000 UTF-8 bytes
         // in {"content":""}, with at most six JSON escape bytes per input byte.
         const jsonLimit=c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
-          c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:32768;
+          c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:
+          storePoliciesInstalled(runtime)&&isSellerPoliciesSave(c.req.method,c.req.path)?524288:32768;
         requireCondition(Number(c.req.header('Content-Length')??0)<=jsonLimit,413,'body_too_large','內容過長。');
         if(c.req.raw.body) {
           let size=0;
@@ -374,7 +385,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/',createDevelopmentRoutes(id=>publicSocial.cachedMetrics(id),id=>readSkillEditorial(pool,id),async id=>(await skillDiscovery(pool)).books.find(book=>book.book_id===id),runtime.publicOrigin,id=>publicAuthorClaimForBook(pool,id),runtime.communityDiscoveryEnabled===true,skillEventBacklinks));
   app.get('/api/v1/health',c=>c.json({status:'ok',mode:freedomEnv,version:packageMetadata.version,money_movement_enabled:false,official:false,...runtime.health,shop_key_policy:shopHost.policy??'unconfigured',shop_key_issuer_profile:shopHost.policy?'freedom.shop-service-key/v1':null}));
   app.get('/api/v1/protocol',c=>c.json(protocolMetadata));
-  app.get('/api/v1/site',c=>c.json({brand:'自由工坊',commerce_checkout_enabled:runtime.commerceSettings?.checkoutEnabled===true&&runtime.commerceSettings?.quarantine!==true,commerce_console_enabled:runtime.commerceSettings?.consoleEnabled===true&&runtime.guildLaunchpadEnabled===true,public_mode:freedomEnv==='public',registration_enabled:freedomEnv==='local'||Boolean(runtime.registrationCommunityId()),password_recovery_enabled:Boolean(runtime.passwordEmailSender),demo_accounts_enabled:freedomEnv!=='public',community:communityCatalog,guild_launchpad_enabled:runtime.guildLaunchpadEnabled===true,community_discovery_enabled:runtime.communityDiscoveryEnabled===true,member_blocking_enabled:runtime.memberBlockingEnabled===true,member_reporting_enabled:runtime.memberReportingEnabled===true,community_search_enabled:runtime.communitySearchEnabled===true,unified_sharing_enabled:runtime.unifiedSharingEnabled===true,community_relations_enabled:runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true,personal_content_enabled:runtime.personalContentEnabled===true,ar_enabled:runtime.arEnabled===true&&!!runtime.arAssetStore,short_videos_enabled:runtime.shortVideosEnabled===true,skill_book_star_gate_enabled:runtime.skillBookStarGateEnabled===true,message_images_enabled:messageImagesInstalled(runtime),event_participation_enabled:runtime.eventParticipationEnabled===true,notification_preferences_enabled:runtime.notificationPreferencesEnabled===true,first_participation_enabled:runtime.firstParticipationEnabled===true,squad_outcomes_enabled:runtime.squadOutcomesEnabled===true,event_outcomes_enabled:runtime.eventOutcomesEnabled===true,hosted_store_photos_enabled:runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),hosted_store_photo_uploads_enabled:runtime.guildLaunchpadEnabled===true&&storePhotoUploadsInstalled(runtime),distribution_photos_enabled:distributionPhotosInstalled(runtime),supply_material_media_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime),supply_material_uploads_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialUploadsInstalled(runtime),supplier_console_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true}));
+  app.get('/api/v1/site',c=>c.json({brand:'自由工坊',commerce_checkout_enabled:runtime.commerceSettings?.checkoutEnabled===true&&runtime.commerceSettings?.quarantine!==true,commerce_console_enabled:runtime.commerceSettings?.consoleEnabled===true&&runtime.guildLaunchpadEnabled===true,public_mode:freedomEnv==='public',registration_enabled:freedomEnv==='local'||Boolean(runtime.registrationCommunityId()),password_recovery_enabled:Boolean(runtime.passwordEmailSender),demo_accounts_enabled:freedomEnv!=='public',community:communityCatalog,guild_launchpad_enabled:runtime.guildLaunchpadEnabled===true,community_discovery_enabled:runtime.communityDiscoveryEnabled===true,member_blocking_enabled:runtime.memberBlockingEnabled===true,member_reporting_enabled:runtime.memberReportingEnabled===true,community_search_enabled:runtime.communitySearchEnabled===true,unified_sharing_enabled:runtime.unifiedSharingEnabled===true,community_relations_enabled:runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true,personal_content_enabled:runtime.personalContentEnabled===true,ar_enabled:runtime.arEnabled===true&&!!runtime.arAssetStore,short_videos_enabled:runtime.shortVideosEnabled===true,skill_book_star_gate_enabled:runtime.skillBookStarGateEnabled===true,message_images_enabled:messageImagesInstalled(runtime),event_participation_enabled:runtime.eventParticipationEnabled===true,notification_preferences_enabled:runtime.notificationPreferencesEnabled===true,first_participation_enabled:runtime.firstParticipationEnabled===true,squad_outcomes_enabled:runtime.squadOutcomesEnabled===true,event_outcomes_enabled:runtime.eventOutcomesEnabled===true,hosted_store_photos_enabled:runtime.guildLaunchpadEnabled===true&&storePhotosInstalled(runtime),hosted_store_photo_uploads_enabled:runtime.guildLaunchpadEnabled===true&&storePhotoUploadsInstalled(runtime),distribution_photos_enabled:distributionPhotosInstalled(runtime),supply_offer_photos_enabled:supplyOfferPhotosInstalled(runtime),store_appearance_enabled:storeAppearanceInstalled(runtime),store_policies_enabled:storePoliciesInstalled(runtime),store_gallery_enabled:storeGalleryInstalled(runtime),supply_material_media_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime),supply_material_uploads_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true&&supplyMaterialUploadsInstalled(runtime),supplier_console_enabled:runtime.guildLaunchpadEnabled===true&&runtime.supplierConsoleEnabled===true}));
   app.get('/api/v1/public/community-discovery',async c=>{
     requireCondition(runtime.communityDiscoveryEnabled===true,404,'not_found','找不到公開內容。');
     return c.json(await publicDiscovery(pool,runtime.registrationCommunityId()));
@@ -608,10 +619,13 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   if(runtime.guildLaunchpadEnabled===true)app.route('/',createPublicGuildLaunchpadRoutes(pool));
   if(runtime.guildLaunchpadEnabled===true){
     app.route('/',createPublicModuleRegistryRoutes(pool,origin));
-    app.route('/',createPublicHostedStoreRoutes(pool,runtime.publicOrigin,hostedCheckoutOptions(origin,runtime,freedomEnv)));
+    app.route('/',createPublicHostedStoreRoutes(pool,runtime.publicOrigin,hostedCheckoutOptions(origin,runtime,freedomEnv),{appearance:storeAppearanceOptions(runtime),policies:storePoliciesOptions(runtime),gallery:storeGalleryOptions(runtime)}));
+    if(storeGalleryInstalled(runtime)&&storePhotosInstalled(runtime))app.route('/',createPublicStoreGalleryRoutes(pool,runtime));
+    if(storeAppearanceInstalled(runtime)&&storePhotosInstalled(runtime))app.route('/',createPublicStoreAppearanceMediaRoutes(pool,runtime));
     if(storePhotosInstalled(runtime))app.route('/',createPublicHostedStoreMediaRoutes(pool,runtime));
+    if(storePoliciesInstalled(runtime))app.route('/',createPublicStorePoliciesRoutes(pool,runtime));
   }
-  for (const path of ['/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/:product_id/photo/:version', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/versions/:version_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/partner-materials/:material_id/versions/:version_id/content', '/api/v1/hosted-stores/*', '/api/v1/me/hosted-orders/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders/*']) app.use(path, async (c, next) => {
+  for (const path of ['/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-catalog/:offer_id/photo/:seq', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/:product_id/photo/:version', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-photos/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/supply-materials/:material_id/versions/:version_id/content', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/partner-materials/:material_id/versions/:version_id/content', '/api/v1/hosted-stores/*', '/api/v1/me/hosted-orders/*', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders', '/api/v1/tenants/:tenant_id/storefronts/:instance_id/orders/*']) app.use(path, async (c, next) => {
     try { await next(); } finally { hostedOrderPrivateCache(c); }
   });
   app.route('/',createHostedCheckoutRoutes(pool,origin,runtime,freedomEnv));
@@ -729,6 +743,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.post('/api/v1/opportunities',async c=>respond(c,await createOpportunity(pool,await cmd(c)),201));
   app.post('/api/v1/opportunities/:id/engagements',async c=>respond(c,await proposeEngagement(pool,await cmd(c),routeId(c)),201));
   app.get('/api/v1/engagements',async c=>c.json({items:await listEngagements(pool,c.get('actor'))}));
+  app.get('/api/v1/engagements/summary',async c=>{
+    c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
+    return c.json(await readEngagementSummary(pool,c.get('actor')));
+  });
   for(const action of ['agree','deliver','accept','confirm-receipt'] as const) {
     app.post(`/api/v1/engagements/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeEngagement(pool,await cmd(c),routeId(c),action)));
   }
@@ -763,17 +781,21 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     app.route('/api/v1',createTenantWorkspaceRoutes(pool));
     app.route('/api/v1',createModuleRegistryRoutes(pool,runtime.moduleProviders,runtime.tenantListCursors));
     app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
-    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true));
+    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime),storeGalleryOptions(runtime)));
     app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));
     if(runtime.supplierConsoleEnabled===true) {
-      app.route('/api/v1',createHostedSupplierConsoleRoutes(pool,{cursors:runtime.tenantListCursors}));
+      app.route('/api/v1',createHostedSupplierConsoleRoutes(pool,{cursors:runtime.tenantListCursors,offerPhotosEnabled:supplyOfferPhotosInstalled(runtime)}));
       app.route('/api/v1',createHostedSupplyMaterialRoutes(pool));
     }
+    if(storeAppearanceInstalled(runtime))app.route('/api/v1',createHostedStoreAppearanceRoutes(pool,runtime));
+    if(storePoliciesInstalled(runtime))app.route('/api/v1',createHostedStorePoliciesRoutes(pool,runtime));
+    if(storeGalleryInstalled(runtime))app.route('/api/v1',createHostedStoreGalleryRoutes(pool,runtime));
     if(storePhotosInstalled(runtime))app.route('/api/v1',createHostedStoreMediaRoutes(pool,runtime));
+    if(supplyOfferPhotosInstalled(runtime))app.route('/api/v1',createHostedSupplyOfferPhotoRoutes(pool,runtime));
     if(distributionPhotosInstalled(runtime))app.route('/api/v1',createHostedDistributionPhotoRoutes(pool,runtime));
     if(runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime))app.route('/api/v1',createHostedSupplyMaterialMediaRoutes(pool,runtime));
   }
