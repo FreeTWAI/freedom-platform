@@ -515,6 +515,8 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 
 ### 店家自行寄送切片（2026-10-22 核准）
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。PR-A public 啟動拒絕 `self_ship_retention_not_ready`，local／staging 可測；PR-C 完成保存與還原驗證後才解除。正式開放另待 Ted 核准，沒有本輪 flag 或部署操作。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。PR-A public 啟動 guard `self_ship_retention_not_ready` 在 PR-C 隨保存排程移除；schema 186 強制 `commerce.checkout-contact-retention.v1` 相容能力，關閉 intake 不能移除保存執行器。正式開放另待 Ted 核准，沒有本輪 flag 或部署操作。
 
 新增 retained shape/capability `commerce.hosted-self-ship.v1`，不能只因 intake OFF 就退回不認得 self_ship 的 reader。migration 185 名稱與 ledger 必須精確相符。使用既有 `20-runtime-grants.psql` 的獨立 marker，清掉 stale table/column grants 後僅 SELECT/INSERT；隔離測試執行實際 block 並驗 ACL 與二次套用。通用 `30-verify-readonly.psql` 不在本案修改範圍。此切片只有站內通知，沒有交易 email 模板或排信。
+
+還原的 commerce 個資前置：既有 media ACL lockdown 執行入口於 lockdown 後呼叫 contact retention。先從無 `--after-instance` 開始；`repeat_page` 保留原游標重跑，`next_page` 用回傳 `after_instance` 續跑，最後 `scan_complete` 才完成本輪。期間必須維持 quarantine 並禁止 runtime 流量；此結果只表示該次掃描完成，不是重新開放授權。中斷可由第一頁重跑，任何頁都以原履約／取消時間判定，不重設期限。備份副本窗口與人工個資請求負責人仍待 Ted 決定。

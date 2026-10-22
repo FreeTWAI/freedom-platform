@@ -179,3 +179,5 @@ commerce.hosted-payment.v1 (169) are mandatory for planned or retained schema
 floors; they grant no payment, email, invoice or deployment authority. See
 [EC-SPEC-10](../../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md)
 and [EC-SPEC-09](../../../docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md).
+
+Contact retention (`contact-retention.ts`, migration 186) uses a persistent per-store due-work lease and bounded existing-row discovery. It runs independently of checkout admission and quarantine, never performs external effects and never closes orders. DC12 / EC-SPEC-09 §3 defines the 30/180-day clocks and blockers. Restore lockdown composes the same bounded redaction transaction before runtime exposure; completion never authorizes reopening. The commerce-operations descriptor owns migration 186 because this is the due-work executor and cron lifecycle, not a checkout schema ownership transfer.

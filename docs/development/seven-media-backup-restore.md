@@ -47,3 +47,11 @@ node --import tsx --test --test-concurrency=1 tests/integration/media-recovery-h
 ```
 
 It needs Docker, the local pinned image `postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd`, and a committed clean tree. The pinned hosted `verify` workflow does not run it yet. Adding it there belongs to the separate reviewed workflow (trust-pin) upgrade.
+
+### Commerce 聯絡資料的還原前遮蔽（DC12，2026-10-22）
+
+`media-restore-acl --execute-lockdown` 在既有 ACL lockdown 成功後，自動跑一頁有界聯絡資料遮蔽（每頁最多 200 間店、每店最多 200 contacts 與 customers）。所有 runtime 連線須停止，quarantine 持續有效；這是既有還原隔離流程的前置工作，不能當成開放權限。
+
+從不帶 `--after-instance` 開始。回報 `contactRetention.status=repeat_page` 時重跑同一輸入游標；`next_page` 時加入回傳的 `after_instance`，直到 `scan_complete`。任何錯誤或中斷都保持隔離，可安全從第一頁重跑。保留本輪所有頁的操作證據；只跑任意後段頁不是全資料庫完成證據。工具的 `deploymentReady` 始終為 false，其他還原條件與 Ted 的正式開放核准仍須完成。
+
+遮蔽依原 checkout 到期、履約登記、取消時間；逾期仍有未結事項的列保留，結束後立即符合原期限。contacts 與同單 shipment 參考在同交易清空，不能因備份還原再次向買賣雙方曝光。規則見 EC-SPEC-09 §3。備份副本保存窗口、人工請求操作負責人仍是 Ted 的未決項。

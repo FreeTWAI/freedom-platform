@@ -217,13 +217,13 @@ Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍�
 
 確認付款且完整配置後，具 `store:fulfil` 的成員可 `POST …/checkout-orders/:order_id/self-shipments`，以 session、CSRF、Idempotency-Key 及 sidecar If-Match 登記業者、單號、寄出日期。業者 key 為 `post`／`tcat`／`hct`／`tjoin`／`other`；只有 `other` 可填非空名稱。單號為 1～50 個 ASCII 英數或連字號，僅檢查格式，不驗真實物流編號。寄出日期為確認收款日到今天的台北日期。
 
-伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 只有此資料約束；PR-C 才執行遮蔽。
+伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 提供此資料約束；PR-C 的有界到期工作執行遮蔽。
 
 買家尚未付款顯示等待付款確認，確認後未寄顯示等待出貨、凍結承諾與說明，寄出後顯示已出貨、業者、單號與寄出日。明示「只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。」遮蔽後仍顯示已出貨、carrier key 的固定名稱與寄出日，不再回傳單號或自填業者名稱。出貨只啟動保存期限，**不寫 closed、不表示送達或退款**。
 
 站內通知種類 `commerce_order_shipped` 只含店名、顯示訂單編號與開啟訂單的動作，不含姓名、電話、郵區、地址、業者、單號或寄送說明。沿既有獨立通知 flag，沒有 email template、排信或補寄。
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。PR-A 僅允許 local／staging，public 啟動拒絕 `self_ship_retention_not_ready`；PR-C 完成並驗證遮蔽排程後才移除該 guard。正式開放仍需 Ted 另外核准，不因 guard 移除自動開旗標。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。PR-A 的 public 啟動 guard `self_ship_retention_not_ready` 已在 PR-C 隨遮蔽排程移除；Node、Worker 與 site 使用同一旗標解析。正式開放仍需 Ted 另外核准，不因 guard 移除自動開旗標。
 
 後續 §2.6 可另設 exact-version 同意，凍結供應商的服務、費用、工作天與限期收件投影，才讓供應商自行寄送。不得擴張本表 tenant policy、把完整 contacts 給供應商，或繞過 `not_agreed`。
 
