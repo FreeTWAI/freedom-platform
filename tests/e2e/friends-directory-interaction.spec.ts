@@ -119,6 +119,7 @@ test('removing the last invitation on a later page recovers to a valid page with
   await expect(list(page)).toHaveAttribute('aria-busy','false');await list(page).getByRole('button',{name:'下一頁好友',exact:true}).click();
   await expect(list(page).getByRole('heading',{name:'待回覆朋友',exact:true})).toBeVisible();
   await list(page).getByRole('button',{name:'婉拒',exact:true}).click();
+  await list(page).getByRole('button',{name:'確定婉拒',exact:true}).click();
   await expect(list(page).getByRole('heading',{name:'第一頁朋友',exact:true})).toBeVisible();
   await expect(input).toHaveValue('朋友');expect(new URLSearchParams(reads.at(-1)).get('offset')).toBe('0');
 });
