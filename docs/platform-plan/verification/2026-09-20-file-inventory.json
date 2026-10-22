@@ -15884,13 +15884,23 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
-      "bytes": 3917,
-      "sha256": "573bcfcd22a471a41d76ba8edf44a70e17adc593c265cc7a0e114ebb37aefaa3"
+      "bytes": 4384,
+      "sha256": "f81496fd17ea5ea60a4a47725da49e7ad63a66ae4c982cbbc42bf8a82ecaaf60"
     },
     {
       "path": "docs/platform-plan/execution/commerce/WP-00-baseline.md",
       "bytes": 23994,
       "sha256": "e1e560efce7aa6a46216785988d176bdbb663637d6e5097a8e158d79521d0066"
+    },
+    {
+      "path": "docs/platform-plan/execution/commerce/creator-curation-plan.md",
+      "bytes": 30346,
+      "sha256": "de98cc8ce6dba68f5f8c00acda00d48b56a4749f58eb2fc5a3cad1436c3c9019"
+    },
+    {
+      "path": "docs/platform-plan/execution/commerce/creator-curation-spec.md",
+      "bytes": 50685,
+      "sha256": "5fec831ea74c2d26070626efe5c8d41d610e32056c284933fe60d971f770b2a2"
     },
     {
       "path": "docs/platform-plan/execution/commerce/decisions.md",
@@ -15914,8 +15924,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/pages.md",
-      "bytes": 21889,
-      "sha256": "63cdbb2017668b426b8094d8b2bac6ed07a7f31448ddd974f5798129d27126d1"
+      "bytes": 23249,
+      "sha256": "cc6a3e886108fbf6dc71edbd937a0b53c0fcb601b7dd74a717c6d233bbddf717"
     },
     {
       "path": "docs/platform-plan/execution/commerce/sources.md",

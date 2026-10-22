@@ -2,7 +2,7 @@
 
 依據：《Freedom Commerce 電商商店、交易履約與可攜營業版本專案計畫 v1.0》與同包的 Supplier Console v1.1 物流補充（2026-10-15，來源檔與雜湊見 [sources.md](sources.md)）。程式基準 `efaf314d`（2026-10-15 讀回時的 `origin/main`）。
 
-本目錄是 C0 階段的規格與工作切分，不是進度系統：實作與驗收結果以 PR、commit 與測試證據為準。EC-R01～60、EC-AT01～72、SC-L01～18、SC-LAT01～24 全部仍是 planned／`not_run`。
+本目錄是 C0 階段的規格與工作切分，不是進度系統：實作與驗收結果以 PR、commit 與測試證據為準。EC-R01～60、EC-AT01～72、SC-L01～18、SC-LAT01～24、CC-01～24 全部仍是 planned／`not_run`。
 
 ## 文件
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | [WP-00-baseline.md](WP-00-baseline.md) | 最新差異、可沿用的程式、缺口、來源權利、三種資產的關係 |
 | [sources.md](sources.md) | 規劃包雜湊、上游固定版本、盤點方法與 Agent 盤點的更正紀錄 |
-| [pages.md](pages.md) | B01～B10、E01～E11、SL-01～05 對到操作、API、權限、資料與錯誤 |
+| [pages.md](pages.md) | B01～B10、E01～E11、SL-01～05 對到操作、API、權限、資料與錯誤；另列創作者推薦提案頁 CR-01～05 |
 | [decisions.md](decisions.md) | DC01～DC12 的建議預設、負責人與只阻擋的範圍 |
 | [EC-SPEC-01](EC-SPEC-01-product-visual.md) | 角色、頁面、動線、空／錯誤狀態、手機與可存取性 |
 | [EC-SPEC-02](EC-SPEC-02-catalog-storefront-cart.md) | 商品、店面、購物車、server 定價、guest 顧客 |
@@ -24,6 +24,8 @@
 | [EC-SPEC-10](EC-SPEC-10-release-operations.md) | 能力開關、writer floor、發布順序、回退與試用 |
 | [EC-SPEC-11](EC-SPEC-11-offline-payment.md) | 線下付款：銀行匯款、面交付款與面交取貨，由店家確認收款 |
 | [work-plan.md](work-plan.md) | 工作包、依賴、CLI 分工、共用檔案與 Supplier Console 的接點 |
+| [creator-curation-plan.md](creator-curation-plan.md) | 創作者推薦與社群合作增量：canonical 對齊、固定 main 盤點、待審相依、分階段交付、待 Ted 決定的 CC-D1～20；提案，未實作 |
+| [creator-curation-spec.md](creator-curation-spec.md) | 無須開店的推薦清單、版本化合作與歸因、佣金義務與結算、退出與退款、CC-01～24；planned／not_run |
 
 ## 分工
 
