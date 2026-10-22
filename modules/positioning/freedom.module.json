@@ -13,7 +13,20 @@
     "apps/portal-web/src/modules/QuickStart.tsx",
     "apps/portal-web/src/modules/PositioningPanels.tsx",
     "tests/e2e/guild-alias.spec.ts",
-    "tests/e2e/guild-category-preferences.spec.ts"
+    "tests/e2e/guild-category-preferences.spec.ts",
+    "apps/platform-api/src/routes/positioning.ts",
+    "apps/portal-web/src/modules/GuildFilters.tsx",
+    "apps/portal-web/src/modules/GuildName.tsx",
+    "apps/portal-web/src/modules/GuildName.css",
+    "apps/portal-web/src/modules/GuildLeadership.tsx",
+    "apps/portal-web/src/modules/GuildLeadership.css",
+    "apps/portal-web/src/modules/GuildMembers.tsx",
+    "apps/portal-web/src/modules/GuildMembers.css",
+    "apps/portal-web/src/modules/GuildQuestions.tsx",
+    "apps/portal-web/src/modules/GuildDesign.css",
+    "apps/portal-web/src/modules/GuildWorkspace.tsx",
+    "apps/portal-web/src/modules/GuildWorkspace.css",
+    "apps/portal-web/src/modules/guild-launchpad-route.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-categories.ts",
@@ -22,7 +35,10 @@
   "dependencies": [
     "command-core",
     "guild-workspace",
-    "guild-presentation"
+    "guild-presentation",
+    "assets",
+    "member-card",
+    "shared"
   ],
   "contract_families": [
     "preview"

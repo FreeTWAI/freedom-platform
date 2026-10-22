@@ -76,7 +76,10 @@
     "guide:publish-plan": "node --import tsx scripts/guide-pack-publish-plan.ts",
     "guild:preview": "node scripts/generate-guild-blocks.mjs && vite --config apps/portal-web/guild-preview/vite.config.ts",
     "guild:check": "node scripts/generate-guild-blocks.mjs --check && tsx --test tests/runtime/guild-blocks.test.ts",
-    "guild:test": "node scripts/generate-guild-blocks.mjs --check && vite build --config apps/portal-web/guild-preview/vite.config.ts && playwright test --config packages/guild-presentation/playwright.config.ts"
+    "guild:test": "node scripts/generate-guild-blocks.mjs --check && vite build --config apps/portal-web/guild-preview/vite.config.ts && playwright test --config packages/guild-presentation/playwright.config.ts",
+    "module:list": "node scripts/freedom.mjs modules",
+    "module:new": "node scripts/freedom.mjs module-new",
+    "module:check": "node scripts/freedom.mjs module-check"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",

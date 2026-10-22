@@ -1,0 +1,41 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "private-ai-authority",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/private-ai-authority/**",
+    "apps/private-ai-authority/**",
+    "apps/platform-api/src/worker-private-ai-profile.ts",
+    "tests/runtime/private-ai-preflight.test.ts",
+    "tests/runtime/worker-private-ai-ingest.test.ts",
+    "tests/worker/private-ai-key-correspondence.test.ts"
+  ],
+  "public_exports": [
+    "apps/platform-api/src/worker-private-ai-profile.ts",
+    "apps/private-ai-authority/src/profile.ts"
+  ],
+  "dependencies": [
+    "credential-broker",
+    "execution-decision",
+    "execution-runs",
+    "runtime-registration"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/private-ai-authority/README.md",
+    "docs/development/worker-private-ai-bindings.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": []
+}

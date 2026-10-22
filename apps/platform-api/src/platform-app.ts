@@ -1,119 +1,104 @@
-import {storeCategoriesInstalled,storeCategoriesOptions,createHostedStoreCategoriesRoutes} from './routes/hosted-store-categories.js';
-import {commerceOrderNotificationsInstalled} from './routes/hosted-checkout.js';
-import {storeVariantsInstalled,storeVariantsOptions,isProductGroupReplace,createHostedStoreVariantsRoutes} from './routes/hosted-store-variants.js';
-import {storeGalleryInstalled,storeGalleryOptions,isStoreGalleryUpload,createHostedStoreGalleryRoutes,createPublicStoreGalleryRoutes} from './routes/hosted-store-gallery.js';
-import {storePoliciesInstalled,storePoliciesOptions,isSellerPoliciesSave,createHostedStorePoliciesRoutes,createPublicStorePoliciesRoutes} from './routes/hosted-store-policies.js';
-import {createHostedStoreAppearanceRoutes,createPublicStoreAppearanceMediaRoutes,isStoreAppearanceUpload,checkStoreAppearanceHeaders,storeAppearanceInstalled,storeAppearanceOptions} from './routes/hosted-store-appearance.js';
-import {createHostedSupplyOfferPhotoRoutes,supplyOfferPhotosInstalled} from './routes/hosted-supply-offer-photos.js';
-import {createHostedDistributionPhotoRoutes,distributionPhotosInstalled} from './routes/hosted-distribution-photos.js';
-import {createHostedSupplyMaterialRoutes} from './routes/hosted-supply-materials.js';
-import {createHostedSupplyMaterialMediaRoutes,isSupplyMaterialUpload,checkSupplyMaterialHeaders,supplyMaterialMediaInstalled,supplyMaterialUploadsInstalled} from './routes/hosted-supply-material-media.js';
-import {createHostedShippingRoutes} from './routes/hosted-shipping.js';
-import {createHostedOfflinePaymentRoutes} from './routes/hosted-offline-payments.js';
-import {assertQueryTransportInstallation} from '../../../modules/agent-commerce/payments/query-transport.js';
-import {isCommerceProviderEntry,isCommerceProviderEntryPath} from '../../../modules/agent-commerce/operations/provider-entry-paths.js';
-import {createHostedSellerCheckoutRoutes} from './routes/hosted-seller-checkout.js';
-import {createHostedCommerceSetupRoutes} from './routes/hosted-commerce-setup.js';
-import {assertPaymentGatewayInstallation} from '../../../modules/agent-commerce/payments/gateway.js';
-import {isPaymentHandoffPath} from '../../../modules/agent-commerce/payments/handoff.js';
-import {createHostedPaymentRoutes,hostedPaymentOptions} from './routes/hosted-payments.js';
-import {providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
-import {createHostedCheckoutRoutes,hostedCheckoutOptions,createMemberCheckoutOrderRoutes} from './routes/hosted-checkout.js';
-import {createHostedStoreOverviewRoutes} from './routes/hosted-store-overview.js';
-import {createHostedSupplierConsoleRoutes} from './routes/hosted-supplier-console.js';
-import {isArUpload,checkArUploadHeaders,createPublicArRoutes,createMemberArRoutes} from './routes/community-ar.js';
-import {readWithMemberSession} from '../../../packages/db/member-session.js';
-import {createHostedStoreMediaRoutes,createPublicHostedStoreMediaRoutes,isStorePhotoUpload,checkStorePhotoHeaders,storePhotosInstalled,storePhotoUploadsInstalled} from './routes/hosted-store-media.js';
+import { storeCategoriesInstalled, storeCategoriesOptions } from './routes/hosted-store-categories.js';
+import { commerceOrderNotificationsInstalled } from './routes/hosted-checkout.js';
+import { storeVariantsInstalled, storeVariantsOptions, isProductGroupReplace } from './routes/hosted-store-variants.js';
+import { storeGalleryInstalled, storeGalleryOptions, isStoreGalleryUpload, createPublicStoreGalleryRoutes } from './routes/hosted-store-gallery.js';
+import { storePoliciesInstalled, storePoliciesOptions, isSellerPoliciesSave, createPublicStorePoliciesRoutes } from './routes/hosted-store-policies.js';
+import { createPublicStoreAppearanceMediaRoutes, isStoreAppearanceUpload, checkStoreAppearanceHeaders, storeAppearanceInstalled, storeAppearanceOptions } from './routes/hosted-store-appearance.js';
+import { supplyOfferPhotosInstalled } from './routes/hosted-supply-offer-photos.js';
+import { distributionPhotosInstalled } from './routes/hosted-distribution-photos.js';
+import { isSupplyMaterialUpload, checkSupplyMaterialHeaders, supplyMaterialMediaInstalled, supplyMaterialUploadsInstalled } from './routes/hosted-supply-material-media.js';
+import { assertQueryTransportInstallation } from '../../../modules/agent-commerce/payments/query-transport.js';
+import { isCommerceProviderEntry, isCommerceProviderEntryPath } from '../../../modules/agent-commerce/operations/provider-entry-paths.js';
+import { assertPaymentGatewayInstallation } from '../../../modules/agent-commerce/payments/gateway.js';
+import { isPaymentHandoffPath } from '../../../modules/agent-commerce/payments/handoff.js';
+import { createHostedPaymentRoutes } from './routes/hosted-payments.js';
+import { providerEnvironment } from '../../../modules/agent-commerce/operations/admissions.js';
+import { createHostedCheckoutRoutes, hostedCheckoutOptions, createMemberCheckoutOrderRoutes } from './routes/hosted-checkout.js';
+import { isArUpload, checkArUploadHeaders, createPublicArRoutes, createMemberArRoutes } from './routes/community-ar.js';
+import { readWithMemberSession } from '../../../packages/db/member-session.js';
+import { createPublicHostedStoreMediaRoutes, isStorePhotoUpload, checkStorePhotoHeaders, storePhotosInstalled, storePhotoUploadsInstalled } from './routes/hosted-store-media.js';
 import { createHostedOrderRoutes } from './routes/hosted-orders.js';
-import { privateCache as hostedOrderPrivateCache, singleQuery } from './routes/tenant-http.js';
-import { createHostedStoreRoutes, createPublicHostedStoreRoutes } from './routes/hosted-store.js';
-import {installedPrivateAiResponse} from './private-ai-path.js';
-import {shopServiceHost} from '../../../packages/resource-scopes/shop-service.js';
+import { privateCache as hostedOrderPrivateCache } from './routes/tenant-http.js';
+import { createPublicHostedStoreRoutes } from './routes/hosted-store.js';
+import { installedPrivateAiResponse } from './private-ai-path.js';
+import { shopServiceHost } from '../../../packages/resource-scopes/shop-service.js';
 import { guideAssetResponse, isGuideAssetPath, registerGuideReleaseRoute } from './routes/guide-packs.js';
-import {createAgentCommerceRoutes,createShopMachineRoutes,createPublicShopRoutes} from './routes/agent-commerce.js';
+import { createAgentCommerceRoutes, createShopMachineRoutes, createPublicShopRoutes } from './routes/agent-commerce.js';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { routePath } from 'hono/route';
-import { setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import type { Pool } from 'pg';
-import { authenticate, login, sessionView, SESSION_LIFETIME_SECONDS, type Actor } from '../../../modules/identity-membership/service.js';
+import { authenticate, type Actor } from '../../../modules/identity-membership/service.js';
 import { memberBoundary } from './member-boundary.js';
-import { readSessionCookie, sessionCookieName } from './session-cookie.js';
-import { createWork,claimWork,changeClaim,listWorks,listWorksPage,workListPageQuery,dashboard } from '../../../modules/opportunity-project-work/work.js';
+import { readSessionCookie } from './session-cookie.js';
 import { createPrivateWorkRoutes } from './routes/private-work.js';
-import { createShowcase,listShowcases,createOpportunity,listOpportunities,proposeEngagement,listEngagements,readEngagementSummary,changeEngagement } from '../../../modules/opportunity-project-work/business.js';
-import { listOwnShowcases,readOwnShowcase,createShowcaseDraft,updateOwnShowcase,publishOwnShowcase,withdrawOwnShowcase } from '../../../modules/opportunity-project-work/business.js';
-import { listPersonalContent } from '../../../modules/community/personal-content.js';
-import {readFirstParticipation,changeFirstParticipation,listFirstParticipationReception,claimFirstParticipationReception} from '../../../modules/community/first-participation.js';
-import {readNotificationPreferences,saveNotificationPreferences,readNotificationReminders,readNotificationSummary,readChannelReminderCounts,readFollowingReminders,readEventBulletinReminders} from '../../../modules/member-communications/notification-preferences.js';
-import { Problem,requireCondition } from '../../../packages/shared/problem.js';
+import { Problem, requireCondition } from '../../../packages/shared/problem.js';
 import { AssetStorageError } from '../../../packages/asset-storage/index.js';
 import { DependencySelectionRequired, InstanceSelectionRequired, QuotaExceeded } from '../../../modules/module-registry/problems.js';
-import type { Command } from '../../../packages/db/index.js';
 import { allowedBrowserOrigins, type FreedomEnv } from './env.js';
 import type { PlatformRuntime } from './runtime.js';
-import { requestEmailChange, confirmEmailChange } from '../../../modules/identity-membership/email-change.js';
-import {configureBookStarGate} from '../../../modules/positioning/onboarding.js';
-import {PUBLIC_REVALIDATION_SCRIPT} from '../../../packages/shared/public-revalidation.js';
+import { configureBookStarGate } from '../../../modules/positioning/onboarding.js';
+import { PUBLIC_REVALIDATION_SCRIPT } from '../../../packages/shared/public-revalidation.js';
 import { createPositioningRoutes } from './routes/positioning.js';
 import { listGuildCategories } from '../../../modules/positioning/guild-categories.js';
 import { createCommerceRoutes } from './routes/commerce.js';
 import { createMemberRoutes } from './routes/members.js';
 import { createMemberReportingRoutes } from './routes/member-reporting.js';
 import { checkAvatarUploadHeaders, createAvatarRoutes, isAvatarUpload } from './routes/avatars.js';
-import { authRateLimit,registerMember } from '../../../modules/identity-membership/members.js';
-import { requestPasswordReset,confirmPasswordReset } from '../../../modules/identity-membership/password-recovery.js';
-import { requestEmailVerification,confirmEmailVerification } from '../../../modules/identity-membership/email-verification.js';
-import { enableTotp, disableTotp, totpStatus } from '../../../modules/identity-membership/totp.js';
+import { authRateLimit } from '../../../modules/identity-membership/members.js';
+import { requestEmailVerification } from '../../../modules/identity-membership/email-verification.js';
 import { communityCatalog } from '../../../modules/community/catalog.js';
-import {publicDiscovery,discoveryReadAllowed} from '../../../modules/community/public-discovery.js';
+import { publicDiscovery, discoveryReadAllowed } from '../../../modules/community/public-discovery.js';
 import { createOpenSourceRoutes } from './routes/opensource.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCoCreationRoutes } from './routes/co-creation.js';
 import { createBenefitRoutes } from './routes/benefits.js';
-import {createContributionRoleRoutes} from './routes/contribution-roles.js';
+import { createContributionRoleRoutes } from './routes/contribution-roles.js';
 import { createDevelopmentRoutes } from './routes/development.js';
-import { createPublicClientConnectionRoutes,createClientConnectionRoutes,createClientApiRoutes } from './routes/client-connections.js';
+import { createPublicClientConnectionRoutes, createClientConnectionRoutes, createClientApiRoutes } from './routes/client-connections.js';
 import protocolMetadata from '../../../contracts/preview/v1/metadata.json' with { type: 'json' };
 import packageMetadata from '../../../package.json' with { type: 'json' };
-import {createGitHubMetricsRoutes,createGitHubSocialRoutes,socialLoader,type GitHubSocialOptions} from './routes/github-social.js';
-import {GitHubSocial} from '../../../modules/github-social/service.js';
-import {createDevelopmentAccessRoutes,createDevelopmentAgentRoutes,isAgentDevelopmentPath} from './routes/development-access.js';
-import {createSkillDiscoveryRoutes} from './routes/skill-discovery.js';
-import {createMemberAuthorClaimRoutes, createPublicAuthorClaimRoutes} from './routes/repo-author-claims.js';
-import {publicAuthorClaimForBook} from '../../../modules/community/repo-author-claims.js';
-import {skillDiscovery} from '../../../modules/community/discovery.js';
-import {readSkillEditorial} from '../../../modules/guild-workspace/service.js';
-import {createGuildWorkspaceRoutes} from './routes/guild-workspace.js';
-import {createTenantWorkspaceRoutes} from './routes/tenant-workspaces.js';
-import {createGuildLaunchpadRoutes, createPublicGuildLaunchpadRoutes} from './routes/guild-launchpad.js';
-import {createModuleRegistryRoutes, createPublicModuleRegistryRoutes} from './routes/module-registry.js';
-import {checkTenantResultContentHeaders,createTenantWorkRoutes,isTenantResultContentUpload} from './routes/tenant-work.js';
-import {onboardingDiagnostics} from './onboarding-diagnostics.js';
-import {createSkillSubmissionRoutes,createAgentSkillSubmissionRoutes,isAgentSkillUploadPath} from './routes/skill-submissions.js';
-import {createMaintainerWebhookRoutes,createRepoMaintainerMemberRoutes,isMaintainerWebhookPath} from './routes/repo-maintainer.js';
-import {createPublishedSkillRoutes} from './routes/published-skills.js';
-import {checkMessageImageHeaders,createMemberCommunicationRoutes,isMessageImageUpload,messageImagesInstalled} from './routes/member-communications.js';
-import {PageGitHubReader,PageGitHubEventReader} from '../../../modules/development/page-github.js';
-import {createCommunityEventRoutes,checkEventBannerUploadHeaders,checkEventVideoUploadHeaders,eventVideoResponse,eventAssetVideoResponse,isEventBannerUpload,isEventVideoUpload} from './routes/community-events.js';
-import {checkHighlightPhotoUploadHeaders,checkHighlightPosterUploadHeaders,createEventHighlightMemberRoutes,createEventHighlightPublicRoutes,isHighlightPhotoUpload,isHighlightPosterUpload} from './routes/event-highlights.js';
-import {createSquadOutcomeRoutes,createPublicSquadOutcomeRoutes} from './routes/squad-outcomes.js';
-import {createEventOutcomeRoutes,createPublicEventOutcomeRoutes} from './routes/event-outcomes.js';
-import {publicSquadOutcomeHtml} from '../../../modules/identity-membership/squad-outcomes-page.js';
-import {eventOutcomeBacklinksHtml} from '../../../modules/community/event-outcomes-page.js';
-import {CollaborationGitHub} from '../../../modules/co-creation/github.js';
-import {acceptedWorkFeed,contributionRecords,previewTasks} from '../../../modules/community/task-board.js';
-import {publicEvent,publicEventBanner,publicEventVideo,registerPublicEvent} from '../../../modules/community/events.js';
-import {readGuestEventCalendar} from '../../../modules/community/event-calendar.js';
-import {readGuestEventReminder,saveGuestEventReminder} from '../../../modules/community/event-reminders.js';
-import {mutateGuestEventParticipation,processEventWaitlist,readGuestEventParticipation,requestGuestEventParticipation} from '../../../modules/community/event-waitlist.js';
-import {checkSocialThumbnailHeaders,isSocialThumbnailUpload,registerMemberPromotion,registerPublicPromotion} from './routes/promotion.js';
-import {SOCIAL_NOTE_REQUEST_BYTES} from '../../../modules/community/social-posts.js';
-import {checkServiceCoverHeaders,isServiceCoverUpload,registerMemberServices,registerPublicMemberServices} from './routes/member-services.js';
-import {publicMemberCard,publicMemberAvatar} from '../../../modules/identity-membership/member-sharing.js';
-import {recordSearchOperation,markSearchOpened} from '../../../modules/community/participation-metrics.js';
-import { searchCommunityContent, assignContentTopics, listTaggableContent } from '../../../modules/community/content-search.js';
-import { listCommunityBookmarks,changeCommunityBookmark,listCommunityFollows,changeCommunityFollow,listCommunityFollowUpdates } from '../../../modules/community/content-relations.js';
+import { createGitHubMetricsRoutes, createGitHubSocialRoutes, socialLoader, type GitHubSocialOptions } from './routes/github-social.js';
+import { GitHubSocial } from '../../../modules/github-social/service.js';
+import { createDevelopmentAccessRoutes, createDevelopmentAgentRoutes, isAgentDevelopmentPath } from './routes/development-access.js';
+import { createSkillDiscoveryRoutes } from './routes/skill-discovery.js';
+import { createMemberAuthorClaimRoutes, createPublicAuthorClaimRoutes } from './routes/repo-author-claims.js';
+import { publicAuthorClaimForBook } from '../../../modules/community/repo-author-claims.js';
+import { skillDiscovery } from '../../../modules/community/discovery.js';
+import { readSkillEditorial } from '../../../modules/guild-workspace/service.js';
+import { createGuildWorkspaceRoutes } from './routes/guild-workspace.js';
+import { createGuildLaunchpadRoutes, createPublicGuildLaunchpadRoutes } from './routes/guild-launchpad.js';
+import { createPublicModuleRegistryRoutes } from './routes/module-registry.js';
+import { checkTenantResultContentHeaders, isTenantResultContentUpload } from './routes/tenant-work.js';
+import { onboardingDiagnostics } from './onboarding-diagnostics.js';
+import { createSkillSubmissionRoutes, createAgentSkillSubmissionRoutes, isAgentSkillUploadPath } from './routes/skill-submissions.js';
+import { createMaintainerWebhookRoutes, createRepoMaintainerMemberRoutes, isMaintainerWebhookPath } from './routes/repo-maintainer.js';
+import { createPublishedSkillRoutes } from './routes/published-skills.js';
+import { checkMessageImageHeaders, createMemberCommunicationRoutes, isMessageImageUpload, messageImagesInstalled } from './routes/member-communications.js';
+import { PageGitHubReader, PageGitHubEventReader } from '../../../modules/development/page-github.js';
+import { createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
+import { checkHighlightPhotoUploadHeaders, checkHighlightPosterUploadHeaders, createEventHighlightMemberRoutes, createEventHighlightPublicRoutes, isHighlightPhotoUpload, isHighlightPosterUpload } from './routes/event-highlights.js';
+import { createSquadOutcomeRoutes, createPublicSquadOutcomeRoutes } from './routes/squad-outcomes.js';
+import { createEventOutcomeRoutes, createPublicEventOutcomeRoutes } from './routes/event-outcomes.js';
+import { publicSquadOutcomeHtml } from '../../../modules/identity-membership/squad-outcomes-page.js';
+import { eventOutcomeBacklinksHtml } from '../../../modules/community/event-outcomes-page.js';
+import { CollaborationGitHub } from '../../../modules/co-creation/github.js';
+import { checkSocialThumbnailHeaders, isSocialThumbnailUpload, registerMemberPromotion, registerPublicPromotion } from './routes/promotion.js';
+import { SOCIAL_NOTE_REQUEST_BYTES } from '../../../modules/community/social-posts.js';
+import { checkServiceCoverHeaders, isServiceCoverUpload, registerMemberServices, registerPublicMemberServices } from './routes/member-services.js';
+import { recordSearchOperation } from '../../../modules/community/participation-metrics.js';
+import { searchCommunityContent } from '../../../modules/community/content-search.js';
+
+import { registerMemberSearchRoutes } from './features/community-search.js';
+import { registerPersonalContentRoutes } from './features/personal-content.js';
+import { registerNotificationPreferenceRoutes } from './features/notification-preferences.js';
+import { registerMemberAccountRoutes } from './features/member-account.js';
+import { registerWorkListRoutes, registerWorkRoutes } from './features/work.js';
+import { registerAuthenticationRoutes } from './features/authentication.js';
+import { registerPublicEventParticipationRoutes } from './features/public-events.js';
+import { registerPublicMemberCardRoutes } from './features/public-member-cards.js';
+import { registerPublicEventMediaRoutes } from './features/public-event-media.js';
+import { registerMemberCommerceRoutes } from './features/commerce.js';
 
 const SLOW_REQUEST_THRESHOLD_MS=1000;
 const JSON_UTF8_DECODER=new TextDecoder('utf-8',{fatal:true});
@@ -198,8 +183,6 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       ||setup.hostname===main.hostname||/[?#%\\\x00-\x20\x7f-\uffff]/.test(brokerFormOrigin))throw new Error('invalid_private_ai_browser_policy');
   }
 
-  const secureCookies=freedomEnv!=='local';
-  const COOKIE=sessionCookieName(origin);
   const loadSocial=socialLoader(pool,origin,options.githubSocial,runtime.githubTokenKey,runtime.githubMetricsToken);
   configureBookStarGate(pool,runtime.skillBookStarGateEnabled===true?async(actor,books)=>{
     const social=await loadSocial();
@@ -208,6 +191,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   const publicSocial=new GitHubSocial(pool,undefined,options.githubSocial?.fetcher??fetch,runtime.githubMetricsToken());
   const pageGitHub=new PageGitHubReader(pool);
   const pageGitHubEvents=new PageGitHubEventReader(pool);
+  const featureContext = {pool, origin, freedomEnv, runtime, authNetwork};
   const app=new Hono<{Variables:{actor:Actor}}>();
   app.onError((err,c)=>{
     if(err instanceof z.ZodError) return c.json({type:'about:blank',title:'Validation failed',status:422,code:'validation_failed',detail:err.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; ')},422);
@@ -479,27 +463,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   });
   app.get('/api/v1/community',c=>c.json(communityCatalog));
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createPublicArRoutes(pool,runtime.arAssetStore));
-  app.get('/api/v1/public/member-cards/:token',async c=>{
-    c.header('X-Robots-Tag','noindex, nofollow');
-    return c.json(await publicMemberCard(pool,c.req.param('token')));
-  });
-  app.get('/api/v1/public/member-cards/:token/avatar',async c=>{
-    const bytes=await publicMemberAvatar(pool,c.req.param('token'),runtime.avatarAssetStore);
-    c.header('Content-Type','image/webp');c.header('X-Robots-Tag','noindex, nofollow');
-    c.header('Cache-Control','no-store');c.header('Content-Length',String(bytes.length));
-    return c.body(new Uint8Array(bytes));
-  });
-  app.get('/api/v1/public/events/:id',async c=>{
-    const event=await publicEvent(pool,z.uuid().parse(c.req.param('id')));
-    if(event.visibility==='referral')c.header('X-Robots-Tag','noindex, nofollow');
-    return c.json(event);
-  });
-  app.get('/api/v1/public/events/:id/banner',async c=>{
-    const bytes=await publicEventBanner(pool,z.uuid().parse(c.req.param('id')),runtime.eventBannerAssetStore);
-    c.header('Content-Type','image/webp');c.header('Cache-Control','public, max-age=300');c.header('Cross-Origin-Resource-Policy','same-origin');
-    return c.body(new Uint8Array(bytes));
-  });
-  app.get('/api/v1/public/events/:id/video',async c=>eventAssetVideoResponse(c,pool,z.uuid().parse(c.req.param('id')),runtime.eventVideoAssetStore));
+  registerPublicMemberCardRoutes(app, featureContext);
+  registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicMemberServices(app,pool,runtime);
   app.route('/',createEventHighlightPublicRoutes(pool,runtime.publicOrigin,runtime));
@@ -510,48 +475,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     catch(error){if(error instanceof Problem&&error.status===404)return c.html('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>找不到公開成果｜自由工坊</title></head><body><h1>找不到公開成果</h1><p>這份成果尚未公開、已撤下，或目前不再可閱讀。</p><a href="/">返回自由工坊</a></body></html>',404);throw error;}
   });
   if(runtime.eventOutcomesEnabled===true)app.route('/api/v1/public',createPublicEventOutcomeRoutes(pool));
-  const dispatchGuest=async(eventId:string)=>processEventWaitlist(pool,async(to,subject,body)=>{requireCondition(runtime.eventEmailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');await runtime.eventEmailSender(to,subject,body);},origin,undefined,eventId);
-  if(runtime.eventParticipationEnabled===true){
-    const guestMutation=async(c:Context)=>{
-      const body=await c.req.json(),version=c.req.header('If-Match')??'',key=c.req.header('Idempotency-Key')??'';
-      requireCondition(/^"[1-9][0-9]*"$/.test(version)&&Number.isSafeInteger(Number(version.slice(1,-1))),version?400:428,'version_required','請提供有效的 If-Match 版本。');
-      requireCondition(String(body?.expected_version)===version.slice(1,-1),400,'version_mismatch','內容版本必須與 If-Match 相同。');
-      requireCondition(/^[A-Za-z0-9_-]{8,128}$/.test(key),400,'idempotency_required','請提供有效的 Idempotency-Key。');
-      return {body,key,token:c.req.header('X-Event-Participation-Token')??''};
-    };
-    app.get('/api/v1/public/events/:id/participation',async c=>c.json(await readGuestEventParticipation(pool,z.uuid().parse(c.req.param('id')),c.req.header('X-Event-Participation-Token')??'')));
-    app.get('/api/v1/public/events/:id/calendar',async c=>c.json(await readGuestEventCalendar(pool,z.uuid().parse(c.req.param('id')),c.req.header('X-Event-Participation-Token')??'')));
-    app.get('/api/v1/public/events/:id/reminder',async c=>c.json(await readGuestEventReminder(pool,z.uuid().parse(c.req.param('id')),c.req.header('X-Event-Participation-Token')??'')));
-    app.post('/api/v1/public/events/:id/participation',async c=>{
-      const {body,key,token}=await guestMutation(c),eventId=z.uuid().parse(c.req.param('id'));
-      const result=await mutateGuestEventParticipation(pool,eventId,token,body,key);await dispatchGuest(eventId);return c.json(result);
-    });
-    app.patch('/api/v1/public/events/:id/reminder',async c=>{
-      const {body,key,token}=await guestMutation(c);
-      requireCondition(body.command_id===key,400,'idempotency_mismatch','內容命令識別碼必須與 Idempotency-Key 相同。');
-      return c.json(await saveGuestEventReminder(pool,z.uuid().parse(c.req.param('id')),token,body));
-    });
-    app.post('/api/v1/public/events/:id/participation-request',async c=>{
-      requireCondition(runtime.eventEmailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');
-      const body=await c.req.json(),email=z.email().max(200).parse(body?.email).trim().toLowerCase();
-      await authRateLimit(pool,'event-register-network',authNetwork(c),10,3600);
-      await authRateLimit(pool,'event-register-email',email,3,3600);
-      await authRateLimit(pool,'event-register-global','global',300,3600);
-      return c.json(await requestGuestEventParticipation(pool,z.uuid().parse(c.req.param('id')),body,runtime.eventEmailSender,origin));
-    });
-  }
-  app.post('/api/v1/public/events/:id/register',async c=>{
-    requireCondition(runtime.eventEmailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');
-    const body=await c.req.json();
-    const email=z.email().max(200).parse(body?.email).trim().toLowerCase();
-    await authRateLimit(pool,'event-register-network',authNetwork(c),10,3600);
-    await authRateLimit(pool,'event-register-email',email,3,3600);
-    await authRateLimit(pool,'event-register-global','global',300,3600);
-    const eventId=z.uuid().parse(c.req.param('id'));
-    const result=await registerPublicEvent(pool,eventId,body,runtime.eventEmailSender,origin,runtime.eventParticipationEnabled===true);
-    if(runtime.eventParticipationEnabled===true)await dispatchGuest(eventId);
-    return c.json(result);
-  });
+  registerPublicEventParticipationRoutes(app, featureContext);
   app.get('/api/v1/pages/github-activity',async c=>c.json(await pageGitHub.read(c.req.query('page'),c.req.query('refresh')==='1')));
   app.get('/api/v1/pages/github-events',async c=>c.json(await pageGitHubEvents.read()));
   app.route('/api/v1',createGitHubMetricsRoutes(async()=>publicSocial));
@@ -563,63 +487,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/',createPublicShopRoutes(pool));
   app.route('/agent-api/v1',createAgentSkillSubmissionRoutes(pool,origin,authNetwork,runtime));
   app.route('/development-agent/v1',createDevelopmentAgentRoutes(pool,loadSocial,authNetwork));
-  app.post('/api/v1/auth/register',async c=>{
-    await authRateLimit(pool,'registration-network',authNetwork(c),8);
-    await authRateLimit(pool,'registration-global','global',100,60);
-    const raw=await c.req.json();
-    const result=await registerMember(pool,raw,{communityId:runtime.registrationCommunityId(),allowSingleCommunity:freedomEnv==='local',publicMode:freedomEnv==='public'});
-    const old=readSessionCookie(c.req.header('Cookie'),origin);
-    if(old) {const {tokenHash}=await import('../../../modules/identity-membership/service.js');await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[tokenHash(old)]);}
-    setCookie(c,COOKIE,result.token,{httpOnly:true,sameSite:'Strict',secure:secureCookies,path:'/',maxAge:SESSION_LIFETIME_SECONDS});
-    return c.json(sessionView(result.actor),201);
-  });
-  app.post('/api/v1/auth/login',async c=>{
-    await authRateLimit(pool,'login-network',authNetwork(c),60);
-    await authRateLimit(pool,'login-global','global',240,60);
-    const body=z.object({email:z.email().max(200),password:z.string().min(1).max(200),code:z.string().min(1).max(64).optional()}).strict().parse(await c.req.json());
-    const result=await login(pool,body.email,body.password,body.code,runtime.totpEncryptionKey?.());
-    // Replace any old session on login, so changing accounts never keeps an active old cookie.
-    const old=readSessionCookie(c.req.header('Cookie'),origin);
-    if(old) { const {tokenHash}=await import('../../../modules/identity-membership/service.js');await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[tokenHash(old)]); }
-    setCookie(c,COOKIE,result.token,{httpOnly:true,sameSite:'Strict',secure:secureCookies,path:'/',maxAge:SESSION_LIFETIME_SECONDS});
-    return c.json(sessionView(result.actor));
-  });
-  app.post('/api/v1/auth/reset/request',async c=>{
-    requireCondition(runtime.passwordEmailSender,503,'password_recovery_unavailable','忘記密碼服務尚未設定完成。');
-    const body=z.object({email:z.email().max(200)}).strict().parse(await c.req.json());
-    const email=body.email.trim().toLowerCase();
-    await authRateLimit(pool,'password-reset-network',authNetwork(c),12,3600);
-    await authRateLimit(pool,'password-reset-global','global',500,3600);
-    await authRateLimit(pool,'password-reset-email',email,3,3600);
-    await requestPasswordReset(pool,email,origin,runtime.passwordEmailSender);
-    return c.json({requested:true,message:'若此信箱有可用帳號，且寄送服務正常，重設連結會寄到信箱。'});
-  });
-  app.post('/api/v1/auth/reset/confirm',async c=>{
-    requireCondition(runtime.passwordEmailSender,503,'password_recovery_unavailable','忘記密碼服務尚未設定完成。');
-    await authRateLimit(pool,'password-reset-confirm-network',authNetwork(c),30,3600);
-    await authRateLimit(pool,'password-reset-confirm-global','global',500,3600);
-    const body=z.object({token:z.string().max(100),password:z.string().max(128)}).strict().parse(await c.req.json());
-    const old=readSessionCookie(c.req.header('Cookie'),origin);
-    const result=await confirmPasswordReset(pool,body.token,body.password);
-    if ('totp_required' in result) return c.json(result);
-    // Replace any old session on reset, so changing accounts never keeps an active old cookie.
-    if(old) { const {tokenHash}=await import('../../../modules/identity-membership/service.js');await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[tokenHash(old)]); }
-    setCookie(c,COOKIE,result.token,{httpOnly:true,sameSite:'Strict',secure:secureCookies,path:'/',maxAge:SESSION_LIFETIME_SECONDS});
-    return c.json({reset:result.reset,expires_after_minutes:result.expires_after_minutes,...sessionView(result.actor)});
-  });
-  app.post('/api/v1/auth/email-change/confirm',async c=>{
-    requireCondition(runtime.eventEmailSender,503,'email_change_unavailable','Email 變更郵件服務尚未設定。');
-    await authRateLimit(pool,'email-change-confirm-network',authNetwork(c),30,3600);
-    await authRateLimit(pool,'email-change-confirm-global','global',500,3600);
-    const body=z.object({token:z.string().max(100)}).strict().parse(await c.req.json());
-    return c.json(await confirmEmailChange(pool,body.token,runtime.eventEmailSender));
-  });
-  app.post('/api/v1/auth/email-verification/confirm',async c=>{
-    const body=z.object({token:z.string().max(100)}).strict().parse(await c.req.json());
-    await authRateLimit(pool,'email-verification-confirm-network',authNetwork(c),30,3600);
-    await authRateLimit(pool,'email-verification-confirm-global','global',500,3600);
-    return c.json(await confirmEmailVerification(pool,body.token));
-  });
+  registerAuthenticationRoutes(app, featureContext);
   app.route('/',createMaintainerWebhookRoutes(pool,runtime.maintainerWebhookSecret));
   if(runtime.guildLaunchpadEnabled===true)app.route('/',createPublicGuildLaunchpadRoutes(pool));
   if(runtime.guildLaunchpadEnabled===true){
@@ -655,109 +523,13 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   });
   if(runtime.commerceSettings?.checkoutEnabled===true)app.route('/api/v1',createMemberCheckoutOrderRoutes(pool,origin,runtime.tenantListCursors));
   app.route('/api/v1', createHostedOrderRoutes(pool, { discoveryInstalled: runtime.guildLaunchpadEnabled === true, admissionEnabled: runtime.hostedReservationsEnabled === true, cursors: runtime.tenantListCursors }));
-  const cmd=async(c:any):Promise<Command>=>{
-    const ifMatch=c.req.header('If-Match') as string|undefined;
-    if(ifMatch) requireCondition(/^"[1-9][0-9]*"$/.test(ifMatch),400,'invalid_version','If-Match 須為加引號的整數版本。');
-    return {actor:c.get('actor'),operation:`${c.req.method} ${c.req.path}`,key:c.req.header('Idempotency-Key')??'',body:await c.req.json(),expected:ifMatch?.slice(1,-1)};
-  };
-  const routeId=(c:any,name='id')=>z.uuid().parse(c.req.param(name).split(':')[0]);
-  const respond=(c:any,value:any,status=200)=>{if(value?.aggregate_version)c.header('ETag',`"${value.aggregate_version}"`);return c.json(value,status);};
-  if(runtime.communitySearchEnabled===true){
-    if(runtime.participationMetricsEnabled===true)app.post('/api/v1/community-search/operations/:id/open',async c=>c.json(await markSearchOpened(pool,c.get('actor'),c.req.param('id'),await c.req.json())));
-    app.get('/api/v1/community-search/mine',async c=>c.json(await listTaggableContent(pool,c.get('actor'))));
-    app.post('/api/v1/community-search/topics',async c=>respond(c,await assignContentTopics(pool,await cmd(c))));
-  }
-  if(runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true){
-    app.get('/api/v1/community-relations/bookmarks',async c=>c.json(await listCommunityBookmarks(pool,c.get('actor'),c.req.query())));
-    app.post('/api/v1/community-relations/bookmarks',async c=>respond(c,await changeCommunityBookmark(pool,await cmd(c))));
-    app.get('/api/v1/community-relations/follows',async c=>c.json(await listCommunityFollows(pool,c.get('actor'))));
-    app.post('/api/v1/community-relations/follows',async c=>respond(c,await changeCommunityFollow(pool,await cmd(c))));
-    app.get('/api/v1/community-relations/updates',async c=>c.json(await listCommunityFollowUpdates(pool,c.get('actor'),c.req.query())));
-  }
-  if(runtime.personalContentEnabled===true){
-    app.get('/api/v1/me/content',async c=>c.json(await listPersonalContent(pool,c.get('actor'))));
-    app.get('/api/v1/me/showcases',async c=>c.json({items:await listOwnShowcases(pool,c.get('actor'))}));
-    app.get('/api/v1/me/showcases/:id',async c=>respond(c,await readOwnShowcase(pool,c.get('actor'),routeId(c))));
-    app.post('/api/v1/me/showcases',async c=>respond(c,await createShowcaseDraft(pool,await cmd(c)),201));
-    app.patch('/api/v1/me/showcases/:id',async c=>respond(c,await updateOwnShowcase(pool,await cmd(c),routeId(c))));
-    app.post('/api/v1/me/showcases/:id/publish',async c=>respond(c,await publishOwnShowcase(pool,await cmd(c),routeId(c))));
-    app.post('/api/v1/me/showcases/:id/withdraw',async c=>respond(c,await withdrawOwnShowcase(pool,await cmd(c),routeId(c))));
-  }
-  if(runtime.firstParticipationEnabled===true){
-    app.get('/api/v1/me/first-participation',async c=>respond(c,await readFirstParticipation(pool,c.get('actor'))));
-    app.post('/api/v1/me/first-participation',async c=>respond(c,await changeFirstParticipation(pool,await cmd(c))));
-    app.get('/api/v1/first-participation/reception',async c=>c.json(await listFirstParticipationReception(pool,c.get('actor'),c.req.query())));
-    app.post('/api/v1/first-participation/reception/:userId/claim',async c=>respond(c,await claimFirstParticipationReception(pool,await cmd(c),c.req.param('userId'))));
-    app.post('/api/v1/first-participation/reception/:userId/release',async c=>respond(c,await claimFirstParticipationReception(pool,await cmd(c),c.req.param('userId'),true)));
-  }
-  if(runtime.notificationPreferencesEnabled===true){
-    const followingEnabled=runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true;
-    app.get('/api/v1/me/notification-preferences',async c=>{
-      const preferences=await readNotificationPreferences(pool,c.get('actor'),followingEnabled);
-      c.header('ETag',`"${preferences.version}"`);
-      return c.json(preferences);
-    });
-    app.patch('/api/v1/me/notification-preferences',async c=>{
-      const preferences=await saveNotificationPreferences(pool,await cmd(c),followingEnabled);
-      c.header('ETag',`"${preferences.version}"`);
-      return c.json(preferences);
-    });
-    app.get('/api/v1/me/notification-preferences/reminders',async c=>c.json(await readNotificationReminders(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date(),commerceOrderNotificationsInstalled(runtime))));
-    app.get('/api/v1/me/notification-preferences/summary',async c=>c.json(await readNotificationSummary(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date())));
-    app.get('/api/v1/me/notification-preferences/channel-reminders',async c=>c.json(await readChannelReminderCounts(pool,c.get('actor'),runtime.now?.()??new Date())));
-    app.get('/api/v1/me/notification-preferences/following-reminders',async c=>c.json(await readFollowingReminders(pool,c.get('actor'),followingEnabled,runtime.now?.()??new Date())));
-    app.get('/api/v1/me/notification-preferences/event-reminders',async c=>c.json(await readEventBulletinReminders(pool,c.get('actor'),runtime.now?.()??new Date())));
-  }
-  app.get('/api/v1/session',c=>c.json(sessionView(c.get('actor'))));
-  app.post('/api/v1/me/account/email-change/request',async c=>{
-    requireCondition(runtime.eventEmailSender,503,'email_change_unavailable','Email 變更郵件服務尚未設定。');
-    const actor=c.get('actor');
-    await authRateLimit(pool,'email-change-user',actor.user_id,5,3600);
-    await authRateLimit(pool,'email-change-network',authNetwork(c),20,3600);
-    return c.json(await requestEmailChange(pool,actor,await c.req.json(),origin,runtime.eventEmailSender));
-  });
-  app.get('/api/v1/me/totp',async c=>c.json(await totpStatus(pool,c.get('actor'))));
-  app.post('/api/v1/me/totp/enable',async c=>c.json(await enableTotp(pool,await cmd(c),runtime.totpEncryptionKey?.())));
-  app.post('/api/v1/me/totp/disable',async c=>c.json(await disableTotp(pool,await cmd(c),runtime.totpEncryptionKey?.())));
-  app.post('/api/v1/me/client-errors',async c=>{
-    const body=z.object({action:z.string().regex(/^(GET|POST|PUT|PATCH|DELETE|UI) \/[a-zA-Z0-9_/:.#-]*$/).max(120),error_code:z.string().regex(/^[a-zA-Z0-9_:-]{1,80}$/),http_status:z.number().int().min(0).max(599).optional()}).strict().parse(await c.req.json());
-    const actor=c.get('actor');
-    const recent=await pool.query('SELECT count(*)::int AS n FROM member_client_errors WHERE user_id=$1 AND created_at>clock_timestamp()-interval \'1 minute\'',[actor.user_id]);
-    requireCondition(recent.rows[0].n<20,429,'error_log_rate_limited','錯誤回報過於頻繁。');
-    await pool.query('INSERT INTO member_client_errors(community_id,user_id,action,error_code,http_status) VALUES($1,$2,$3,$4,$5)',[actor.community_id,actor.user_id,body.action,body.error_code,body.http_status??null]);
-    return c.json({recorded:true},201);
-  });
-  app.post('/api/v1/auth/logout',async c=>{await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[c.get('actor').session_hash]);deleteCookie(c,COOKIE,{path:'/',secure:secureCookies,httpOnly:true,sameSite:'Strict'});return c.json({logged_out:true});});
-  app.get('/api/v1/work-items',async c=>c.json({items:await listWorks(pool,c.get('actor'))}));
-  app.get('/api/v1/work-items/page',async c=>{
-    const query=workListPageQuery.parse(singleQuery(c));
-    return c.json(await listWorksPage(pool,c.get('actor'),query));
-  });
+  registerMemberSearchRoutes(app, featureContext);
+  registerPersonalContentRoutes(app, featureContext);
+  registerNotificationPreferenceRoutes(app, featureContext);
+  registerMemberAccountRoutes(app, featureContext);
+  registerWorkListRoutes(app, featureContext);
   app.route('/api/v1',createPrivateWorkRoutes(pool));
-  app.post('/api/v1/work-items',async c=>respond(c,await createWork(pool,await cmd(c)),201));
-  // Action suffix is part of the constrained segment; validate its UUID separately.
-  app.post('/api/v1/work-items/:id{[0-9a-f-]+:claim}',async c=>respond(c,await claimWork(pool,await cmd(c),routeId(c)),201));
-  for(const action of ['start','submit','begin-review','decide'] as const) {
-    app.post(`/api/v1/work-claims/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeClaim(pool,await cmd(c),routeId(c),action)));
-  }
-  app.get('/api/v1/dashboard',async c=>c.json(await dashboard(pool,c.get('actor'))));
-  app.get('/api/v1/task-board/preview',async c=>c.json({items:await previewTasks(pool,c.get('actor'))}));
-  app.get('/api/v1/me/contribution-records',async c=>c.json(await contributionRecords(pool,c.get('actor'),c.req.query())));
-  app.get('/api/v1/community/accepted-work',async c=>c.json({items:await acceptedWorkFeed(pool,c.get('actor'))}));
-  app.get('/api/v1/showcases',async c=>c.json(await listShowcases(pool,c.get('actor'),c.req.query())));
-  app.post('/api/v1/showcases',async c=>respond(c,await createShowcase(pool,await cmd(c)),201));
-  app.get('/api/v1/opportunities',async c=>c.json({items:await listOpportunities(pool,c.get('actor'))}));
-  app.post('/api/v1/opportunities',async c=>respond(c,await createOpportunity(pool,await cmd(c)),201));
-  app.post('/api/v1/opportunities/:id/engagements',async c=>respond(c,await proposeEngagement(pool,await cmd(c),routeId(c)),201));
-  app.get('/api/v1/engagements',async c=>c.json({items:await listEngagements(pool,c.get('actor'))}));
-  app.get('/api/v1/engagements/summary',async c=>{
-    c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
-    return c.json(await readEngagementSummary(pool,c.get('actor')));
-  });
-  for(const action of ['agree','deliver','accept','confirm-receipt'] as const) {
-    app.post(`/api/v1/engagements/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeEngagement(pool,await cmd(c),routeId(c),action)));
-  }
-  app.post('/api/v1/engagements/:id/receipts',async c=>respond(c,await changeEngagement(pool,await cmd(c),routeId(c),'receipt'),201));
+  registerWorkRoutes(app, featureContext);
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createMemberArRoutes(pool,runtime.arAssetStore));
   app.route('/api/v1',createMemberRoutes(pool));
   if(runtime.memberReportingEnabled===true)app.route('/api/v1',createMemberReportingRoutes(pool,runtime.messageImageAssetStore));
@@ -784,30 +556,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createCoCreationRoutes(pool,options.coCreationGitHub));
   app.route('/api/v1',createBenefitRoutes(pool));
   app.route('/api/v1',createContributionRoleRoutes(pool));
-  if(runtime.guildLaunchpadEnabled===true){
-    app.route('/api/v1',createTenantWorkspaceRoutes(pool));
-    app.route('/api/v1',createModuleRegistryRoutes(pool,runtime.moduleProviders,runtime.tenantListCursors));
-    app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
-    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime),storeGalleryOptions(runtime),storeVariantsOptions(runtime),storeCategoriesOptions(runtime)));
-    app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,orderNotifications:hostedCheckoutOptions(origin,runtime,freedomEnv).orderNotifications,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));
-    if(runtime.supplierConsoleEnabled===true) {
-      app.route('/api/v1',createHostedSupplierConsoleRoutes(pool,{cursors:runtime.tenantListCursors,offerPhotosEnabled:supplyOfferPhotosInstalled(runtime)}));
-      app.route('/api/v1',createHostedSupplyMaterialRoutes(pool));
-    }
-    if(storeAppearanceInstalled(runtime))app.route('/api/v1',createHostedStoreAppearanceRoutes(pool,runtime));
-    if(storePoliciesInstalled(runtime))app.route('/api/v1',createHostedStorePoliciesRoutes(pool,runtime));
-    if(storeGalleryInstalled(runtime))app.route('/api/v1',createHostedStoreGalleryRoutes(pool,runtime));
-    if(storeVariantsInstalled(runtime))app.route('/api/v1',createHostedStoreVariantsRoutes(pool,runtime));
-    if(storeCategoriesInstalled(runtime))app.route('/api/v1',createHostedStoreCategoriesRoutes(pool,runtime));
-    if(storePhotosInstalled(runtime))app.route('/api/v1',createHostedStoreMediaRoutes(pool,runtime));
-    if(supplyOfferPhotosInstalled(runtime))app.route('/api/v1',createHostedSupplyOfferPhotoRoutes(pool,runtime));
-    if(distributionPhotosInstalled(runtime))app.route('/api/v1',createHostedDistributionPhotoRoutes(pool,runtime));
-    if(runtime.supplierConsoleEnabled===true&&supplyMaterialMediaInstalled(runtime))app.route('/api/v1',createHostedSupplyMaterialMediaRoutes(pool,runtime));
-  }
+  registerMemberCommerceRoutes(app, featureContext);
   // Unknown machine paths answer JSON 404 before any host serves the browser shell.
   for(const prefix of ['/api/*','/client-api/*','/agent-api/*','/development-agent/*','/shop-api/*'])app.all(prefix,c=>c.json({type:'about:blank',title:'Not found',status:404,code:'not_found',detail:'此版本尚未提供這個 API。'},404));
   return app;

@@ -1,0 +1,32 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "contribution-experience",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/contribution-experience/**",
+    "docs/development/module-contributions.md",
+    ".github/pull_request_template.md"
+  ],
+  "public_exports": [],
+  "dependencies": [
+    "governance"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/contribution-experience/README.md",
+    "docs/development/module-contributions.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "governance.unit"
+  ],
+  "surfaces": []
+}
