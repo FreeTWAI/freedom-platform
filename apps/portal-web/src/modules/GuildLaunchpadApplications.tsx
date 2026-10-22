@@ -288,6 +288,7 @@ const STATE: Record<RegistryOperation['state'], string> = {
 const WARNING: Record<string, string> = {
   reuse_existing_data: '將共用既有資料，不會複製一份。', creates_empty_instance: '將建立獨立空白資料，使用額外容量。',
 };
+const STOREFRONT_REUSE_WARNING = '將共用既有的商品與規格、庫存、訂單、商店設定與公開頁、供貨合作與選品，以及商品照片，不會複製一份。';
 const DIMENSION: Record<string, string> = {
   module_instances: '模組實例數', 'module_instances.work': '人工工作實例數', 'module_instances.storefront': '商店實例數', concurrent_provisions: '同時配置數',
   retained_bytes: '保存位元組', work_items: '工作數',
@@ -348,13 +349,23 @@ const NEXT: Record<string, string> = {
   onboarding_required: '請先選擇主要公會，再返回查看原操作。',
 };
 function joinWords(left: string, right: string) { return left ? `${left}${/[。！？；）」]$/.test(left) ? '' : ' '}${right}` : right; }
-function problemText(error: unknown, actionHeld = false) {
+const HOSTED_STORE_NEXT: Record<'retail' | 'supply', Record<string, string>> = {
+  retail: {
+    installation_selection_required: '請沿用這個工作區的現有安裝；要另外開店，請按「另開獨立商店」建立新的業務空間。',
+    workspace_binding_conflict: '這個工作區已綁定其他實例；要另外開店，請按「另開獨立商店」建立新的業務空間。',
+  },
+  supply: {
+    installation_selection_required: '請沿用這個工作區的現有安裝；要分開管理，請按「建立另一個獨立商品庫」建立新的業務空間。',
+    workspace_binding_conflict: '這個工作區已綁定其他實例；要分開管理，請按「建立另一個獨立商品庫」建立新的業務空間。',
+  },
+};
+function problemText(error: unknown, actionHeld = false, nextSteps = NEXT) {
   if (!(error instanceof ApiError)) return '回應未能確認，請查看原操作。';
   if (error.network) return actionHeld ? joinWords(error.message, '原操作識別碼已保留。') : error.message;
   let detail = error.detail ?? error.message;
   const dimension = error.code === 'quota_exceeded' ? Object.keys(DIMENSION).find(key => detail.includes(`（${key}）`) || detail.includes(`(${key})`)) : undefined;
   if (dimension) detail = joinWords(detail.replace(`（${dimension}）`, '').replace(`(${dimension})`, '').trimEnd(), `容量維度：${DIMENSION[dimension]}。`);
-  return joinWords(detail, NEXT[error.code ?? ''] ?? '請保留操作識別碼並聯絡支援。');
+  return joinWords(detail, nextSteps[error.code ?? ''] ?? '請保留操作識別碼並聯絡支援。');
 }
 function terminal(operation: RegistryOperation | null) { return operation && ['succeeded', 'failed', 'cancelled'].includes(operation.state); }
 function dependencyWords(choice: Dependency, word: (key: string, instanceId?: string) => string = moduleWord) {
@@ -370,6 +381,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
   const supply = guildKey === 'guild_product_quality_supply' && app.application_key === 'hosted-store';
   const displayName = supply ? '商品與供貨' : app.display_name;
   const hostedStore = app.application_key === 'hosted-store';
+  const nextSteps = hostedStore ? {...NEXT, ...HOSTED_STORE_NEXT[supply ? 'supply' : 'retail']} : NEXT;
   const [storefrontLabels, setStorefrontLabels] = useState<Record<string, string>>({});
   const [retailBlocked, setRetailBlocked] = useState<Set<string>>(new Set());
   const retailBlockedRef = useRef(new Set<string>());
@@ -472,7 +484,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       }
       const next = managed.find(row => row.tenant_id === stored.tenant_id) ?? managed[0];
       if (next) await selectTenant(next.tenant_id, next.tenant_id === stored.tenant_id ? stored.workspace_id : null);
-    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error)); } }
+    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error, false, nextSteps)); } }
   }
   async function createSpace() {
     if (busyRef.current || !allowNewLaunch) return;
@@ -494,7 +506,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
     } catch (error) {
       if (!call.live()) return;
       setTenantError(error instanceof ApiError && error.status === 429 ? joinWords(error.detail ?? error.message, '請改用現有的業務空間。')
-        : error instanceof ApiError && error.code === 'validation_failed' ? '業務空間名稱格式不符，請檢查後再送出。' : problemText(error));
+        : error instanceof ApiError && error.code === 'validation_failed' ? '業務空間名稱格式不符，請檢查後再送出。' : problemText(error, false, nextSteps));
       setTenantRetry(error instanceof ApiError && error.network);
       if (!(error instanceof ApiError && error.network)) tenantAttempt.current = null;
     } finally { if (call.live()) { busyRef.current = false; setBusy(false); } }
@@ -515,7 +527,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       setWorkspaces(list); setWorkspacesLoaded(true);
       const next = list.find(item => item.workspace_id === preferred) ?? list[0];
       if (next) await selectWorkspace(id, next.workspace_id);
-    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error)); } }
+    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error, false, nextSteps)); } }
   }
   function clearPrivate() {
     setPollingStopped(false); setCanForget(false);
@@ -568,7 +580,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       if (selected) setChoices(linkedChoices(selected, found));
       else if (!keep || installationChoice !== nextInstallation) setChoices(defaultChoices(found));
       setReady(true);
-    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error)); } }
+    } catch (error) { if (call.live()) { setReadFailed(true); setProblem(problemText(error, false, nextSteps)); } }
   }
   function linkedChoices(item: InstallationView, found: Record<string, InstanceView[]>) {
     const result: Record<string, Dependency> = {};
@@ -609,7 +621,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       attempt.current = null;
     } catch (error) {
       if (!call.live()) return;
-      setProblem(problemText(error, true));
+      setProblem(problemText(error, true, nextSteps));
       if (next.kind !== 'plan') operationError(error);
       if (error instanceof ApiError && error.network) { setRetry(next); return; }
       // PortalClient reports this bug through the existing client-error path.
@@ -624,7 +636,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
         setChoices(old => Object.fromEntries(Object.entries(old).filter(([, choice]) => choice.choice !== 'reuse' || !unusableRef.current.has(choice.instance_id))));
         setChangedKind('plan'); setChanged(NEXT.instance_unavailable); setPlan(null);
       } else if (error instanceof ApiError && (error.status === 412 || ['plan_stale','instance_changed','installation_selection_required','storefront_exists','dependency_selection_required'].includes(error.code ?? ''))) {
-        if (next.kind === 'plan') { setPlan(null); setChangedKind('plan'); setChanged(NEXT[error.code ?? ''] ?? NEXT.version_conflict); await candidates(true); }
+        if (next.kind === 'plan') { setPlan(null); setChangedKind('plan'); setChanged(nextSteps[error.code ?? ''] ?? nextSteps.version_conflict); await candidates(true); }
         else if (pendingRef.current) { setChangedKind('operation'); setChanged('操作狀態已更新，已重新載入。'); await progress(pendingRef.current); }
       }
     } finally { if (call.live()) { busyRef.current = false; setBusy(false); } }
@@ -655,7 +667,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       const next = {...held, operation}; remember(next); await showInstallation(next, call);
     } catch (error) {
       if (!call.live()) return;
-      setProblem(problemText(error, true)); operationError(error);
+      setProblem(problemText(error, true, nextSteps)); operationError(error);
       if (error instanceof ApiError && !error.network && DECLINED_LAUNCH.has(error.code ?? '')) {
         storeLaunch(userId, guildKey, held, true); pendingRef.current = null; setPending(null); setPlan(null);
         setChangedKind('plan');
@@ -670,7 +682,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
     try {
       const result = InstallationViewSchema.parse(await client.get(`/tenants/${held.tenant_id}/application-installations/by-operation/${held.operation.operation_id}`, {signal: call.signal}));
       if (call.live()) setInstallation(result);
-    } catch (error) { if (call.live()) setProblem(problemText(error)); }
+    } catch (error) { if (call.live()) setProblem(problemText(error, false, nextSteps)); }
   }
   async function progress(held = pendingRef.current) {
     if (!held) return;
@@ -681,7 +693,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       if (!call.live()) return;
       setPollingStopped(false); setCanForget(false);
       const next = {...held, operation: result}; remember(next); await showInstallation(next, call);
-    } catch (error) { if (call.live()) { operationError(error, true); setProblem(problemText(error, true)); } }
+    } catch (error) { if (call.live()) { operationError(error, true); setProblem(problemText(error, true, nextSteps)); } }
   }
   useEffect(() => {
     if (!pending?.operation || !['requested','running'].includes(pending.operation.state)) return;
@@ -700,8 +712,9 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       body: kind === 'cancel' ? {reason: 'member_cancelled'} : {}, ifMatch: held.operation.version, kind});
   }
   const selectedInstallation = installations.find(item => item.installation_id === installationChoice);
+  const blockedSupplyInstallation = hostedStore && !supply && installations.length === 1 && installations[0].modules.some(link => link.requirement_key === 'storefront' && retailBlocked.has(link.instance_id));
   const createDisabled = busy || Boolean(retry) || Boolean(selectedInstallation);
-  const installationValid = installations.length === 0 ? installationChoice === 'create_new' : Boolean(selectedInstallation);
+  const installationValid = !blockedSupplyInstallation && (installations.length === 0 ? installationChoice === 'create_new' : Boolean(selectedInstallation));
   const decided = app.module_requirements.every(item => {
     const choice = choices[item.requirement_key];
     return choice && (!selectedInstallation || (choice.choice === 'reuse' && selectedInstallation.modules.some(link => link.requirement_key === item.requirement_key && link.instance_id === choice.instance_id))) && (choice.choice === 'create' ? !(hostedStore && item.requirement_key === 'storefront' && instances.storefront?.length) : instances[item.requirement_key]?.some(row => row.instance_id === choice.instance_id && row.version === choice.expected_version && !unusable.has(row.instance_id) && !retailBlocked.has(row.instance_id)));
@@ -723,7 +736,7 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
     {!setupJourney && <p>{app.release_ref}</p>}
     {!tenantsLoaded && !readFailed && <p role="status">正在載入業務空間…</p>}
     {tenantsLoaded && tenants.some(launchable) && !creatingSpace && <fieldset className="fieldset"><legend>業務空間</legend><div className="application-actions">
-      {tenants.filter(launchable).map(item => <button type="button" key={item.tenant_id} className={item.tenant_id === tenantId ? 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.tenant_id === tenantId ? 'true' : undefined} onClick={() => { if (item.tenant_id !== tenantId) void selectTenant(item.tenant_id); }}>{item.display_name}・{roleLabel(item.my_membership.role)}</button>)}
+      {tenants.filter(launchable).map(item => <button type="button" key={item.tenant_id} className={item.tenant_id === tenantId ? hostedStore ? 'btn btn-module' : 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.tenant_id === tenantId ? 'true' : undefined} onClick={() => { if (item.tenant_id !== tenantId) void selectTenant(item.tenant_id); }}>{item.display_name}・{roleLabel(item.my_membership.role)}</button>)}
     </div>{tenants.some(item => !launchable(item)) && <p className="field-hint">只列出你擁有或管理、目前可使用的業務空間。</p>}
       {hostedStore && <div className="application-actions"><button ref={newSpaceButton} type="button" className="btn btn-ghost" disabled={!allowNewLaunch || busy || Boolean(retry) || Boolean(pending && !terminal(operation))} onClick={() => {if (canLeaveCreate()) setCreatingSpace(true);}}>{supply ? '建立另一個獨立商品庫' : '另開獨立商店'}</button></div>}
     </fieldset>}
@@ -733,32 +746,33 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
       <p className="field-hint" id="launch-space-hint">應用的資料會保存在這個業務空間；之後可以在業務空間頁邀請夥伴。</p>
       <p id="launch-space-error" role="alert">{tenantError}</p>
       <div className="application-actions"><button className="btn btn-primary" disabled={busy || tenantRetry}>建立業務空間</button>{tenantRetry && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void createSpace()}>重試</button>}{creatingSpace && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => {if (canLeaveCreate()) setCreatingSpace(false);}}>返回原業務空間</button>}</div>
-    </form><div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>建立或選擇業務空間</a></div></div>}
+    </form>{!creatingSpace && <div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>建立或選擇業務空間</a></div>}</div>}
     {problem && <p role="alert" className="banner banner-error">{problem}</p>}
     {changed && <div role="status"><p>{changed}</p>{changedKind === 'plan' && <ul>{Object.entries(instances).flatMap(([key, rows]) => rows.map(row => <li key={`${key}:${row.instance_id}`}>{word(key)}：ID 尾碼 {row.instance_id.slice(-6)}，最新版本 {row.version}，{INSTANCE_STATUS_WORDS[row.status]}</li>))}</ul>}</div>}
     {retry && <div className="application-actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void runAction(retry)}>重試</button></div>}
     {readFailed && <div className="application-actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setProblem(''); setReadFailed(false); if (!tenantsLoaded || !tenantId) void loadTenants(); else if (!workspaceId) void selectTenant(tenantId); else void candidates(true); }}>重新載入清單</button></div>}
-    {canManage && !creatingSpace && workspacesLoaded && workspaces.length > 0 && (!setupJourney || workspaces.length > 1) && <fieldset className="fieldset"><legend>工作區</legend><div className="application-actions">{workspaces.map(item => <button type="button" key={item.workspace_id} className={item.workspace_id === workspaceId ? 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.workspace_id === workspaceId ? 'true' : undefined} onClick={() => { if (item.workspace_id !== workspaceId) void selectWorkspace(tenantId, item.workspace_id); }}>{item.name}</button>)}</div></fieldset>}
+    {canManage && !creatingSpace && workspacesLoaded && workspaces.length > 0 && (!setupJourney || workspaces.length > 1) && <fieldset className="fieldset"><legend>工作區</legend><div className="application-actions">{workspaces.map(item => <button type="button" key={item.workspace_id} className={item.workspace_id === workspaceId ? hostedStore ? 'btn btn-module' : 'btn btn-primary' : 'btn btn-ghost'} aria-current={item.workspace_id === workspaceId ? 'true' : undefined} onClick={() => { if (item.workspace_id !== workspaceId) void selectWorkspace(tenantId, item.workspace_id); }}>{item.name}</button>)}</div></fieldset>}
     {canManage && !creatingSpace && !workspacesLoaded && !readFailed && <p role="status">正在載入工作區…</p>}
     {canManage && !creatingSpace && workspacesLoaded && workspaces.length === 0 && <div><p>這個業務空間還沒有可用的工作區，請先到業務空間頁建立。</p><div className="application-actions"><a className="btn btn-ghost" href="#business" onClick={event => { if (!canLeave()) event.preventDefault(); }}>前往業務空間</a></div></div>}
     {canManage && !creatingSpace && allowNewLaunch && workspace && !pending && !plan && <>
       {!ready && <p role="status">正在載入可用實例…</p>}
       {ready && <>
         {installations.length > 0 && <fieldset className="fieldset"><legend>安裝選擇</legend>
-          {installations.map(item => <label key={item.installation_id} className="application-choice"><input type="radio" name="installation" checked={installationChoice === item.installation_id} disabled={busy || Boolean(retry)} onChange={() => { setInstallationChoice(item.installation_id); setChoices(linkedChoices(item, instances)); }}/><span>沿用這個安裝（{item.release_ref}，ID 尾碼 {item.installation_id.slice(-6)}，版本 {item.version}，{INSTANCE_STATUS_WORDS[item.status]}）</span></label>)}
-          <div className="application-actions"><button type="button" className="btn btn-ghost" disabled>另建新的安裝</button></div><p className="field-hint">每個工作區只能有一個這個應用的安裝；要另建新的安裝，請選擇另一個工作區。</p>
+          {blockedSupplyInstallation ? <p>這個安裝已連結純供貨商品庫，會保持不變（{installations[0].release_ref}，ID 尾碼 {installations[0].installation_id.slice(-6)}，版本 {installations[0].version}，{INSTANCE_STATUS_WORDS[installations[0].status]}）。</p> : installations.map(item => <label key={item.installation_id} className="application-choice"><input type="radio" name="installation" checked={installationChoice === item.installation_id} disabled={busy || Boolean(retry)} onChange={() => { setInstallationChoice(item.installation_id); setChoices(linkedChoices(item, instances)); }}/><span>沿用這個安裝（{item.release_ref}，ID 尾碼 {item.installation_id.slice(-6)}，版本 {item.version}，{INSTANCE_STATUS_WORDS[item.status]}）</span></label>)}
+          {!hostedStore && <div className="application-actions"><button type="button" className="btn btn-ghost" disabled>另建新的安裝</button></div>}
+          {!blockedSupplyInstallation && <p className="field-hint">{hostedStore ? supply ? '每個業務空間只能有一個商品庫。要分開管理，請按「建立另一個獨立商品庫」建立新的業務空間。' : '每個業務空間只能有一間商店。要另外開店，請按「另開獨立商店」建立新的業務空間。' : '每個工作區只能有一個這個應用的安裝；要另建新的安裝，請選擇另一個工作區。'}</p>}
         </fieldset>}
         {app.module_requirements.map(requirement => {
           const storeExists = app.application_key === 'hosted-store' && Boolean(instances[requirement.requirement_key]?.length);
           return <fieldset className="fieldset" key={requirement.requirement_key}><legend>{word(requirement.module_key)}（{requirement.required ? '必要' : '選用'}）</legend>
           {requirement.allow_reuse && (instances[requirement.requirement_key] ?? []).map(row => <label key={row.instance_id} className="application-choice"><input type="radio" name={`dependency-${requirement.requirement_key}`} disabled={busy || Boolean(retry) || unusable.has(row.instance_id) || retailBlocked.has(row.instance_id) || Boolean(selectedInstallation && !selectedInstallation.modules.some(link => link.requirement_key === requirement.requirement_key && link.instance_id === row.instance_id))} checked={choices[requirement.requirement_key]?.choice === 'reuse' && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).instance_id === row.instance_id && (choices[requirement.requirement_key] as Extract<Dependency, {choice: 'reuse'}>).expected_version === row.version} onChange={() => setChoices(old => ({...old, [requirement.requirement_key]: {requirement_key: requirement.requirement_key, choice: 'reuse', instance_id: row.instance_id, expected_version: row.version}}))}/><span>{retailBlocked.has(row.instance_id) ? '保留既有的' : '將共用既有的'}{word(requirement.module_key, row.instance_id)}（ID 尾碼 {row.instance_id.slice(-6)}，版本 {row.version}，{INSTANCE_STATUS_WORDS[row.status]}）{retailBlocked.has(row.instance_id) ? '（純供貨商品庫不能用於零售開店）' : unusable.has(row.instance_id) && '（目前無法共用）'}</span></label>)}
           <label className="application-choice"><input type="radio" name={`dependency-${requirement.requirement_key}`} disabled={createDisabled || storeExists} checked={choices[requirement.requirement_key]?.choice === 'create'} onChange={() => setChoices(old => ({...old, [requirement.requirement_key]: {requirement_key: requirement.requirement_key, choice: 'create', configuration: {}}}))}/><span>另建獨立空白的{word(requirement.module_key)}</span></label>
-          {selectedInstallation && (() => {
+          {selectedInstallation && !blockedSupplyInstallation && (() => {
             const link = selectedInstallation.modules.find(item => item.requirement_key === requirement.requirement_key);
             const available = link && instances[requirement.requirement_key]?.some(row => row.instance_id === link.instance_id && !unusable.has(row.instance_id) && !retailBlocked.has(row.instance_id));
-            return <p className="field-hint">{link && retailBlocked.has(link.instance_id) ? '這個工具連結的是純供貨商品庫，請保留它並另開獨立商店。' : available ? `沿用這個安裝時，會繼續共用它連結的${word(requirement.module_key, link.instance_id)}（ID 尾碼 ${link.instance_id.slice(-6)}）。` : `這個安裝連結的${word(requirement.module_key)}目前無法使用（ID 尾碼 ${link?.instance_id.slice(-6) ?? '未知'}），請選擇另一個工作區。`}</p>;
+            return <p className="field-hint">{available ? `沿用這個安裝時，會繼續共用它連結的${word(requirement.module_key, link.instance_id)}（ID 尾碼 ${link.instance_id.slice(-6)}）。` : `這個安裝連結的${word(requirement.module_key)}目前無法使用（ID 尾碼 ${link?.instance_id.slice(-6) ?? '未知'}），${hostedStore ? supply ? '請按上方「建立另一個獨立商品庫」建立新的業務空間。' : '請按上方「另開獨立商店」建立新的業務空間。' : '請選擇另一個工作區。'}`}</p>;
           })()}
-          {storeExists ? <p className="field-hint">{supply ? '這個業務空間已有商品庫，請沿用它管理供貨。' : Object.values(storefrontLabels).includes('純供貨商品庫') ? '這個業務空間目前有純供貨商品庫，不能直接轉為零售商店。原商品、庫存與供貨合作會保留；請按上方「另開獨立商店」，在新的空間設定零售。' : '這個業務空間已有商品資料空間，可以沿用；若要分開管理，請按上方「另開獨立商店」。'}</p> : !createDisabled && <p className="field-hint">新實例不複製既有資料，會使用額外容量。</p>}
+          {storeExists ? <p className="field-hint">{supply ? '這個業務空間已有商品庫，請沿用它管理供貨。' : Object.values(storefrontLabels).includes('純供貨商品庫') ? '這個業務空間目前有純供貨商品庫，不能直接轉為零售商店。每個業務空間只能有一間商店；請按上方「另開獨立商店」，建立新的業務空間設定零售。原商品、庫存與供貨合作會維持不變。' : '這個業務空間已有商品資料空間，可以沿用；若要分開管理，請按上方「另開獨立商店」。'}</p> : !createDisabled && <p className="field-hint">新實例不複製既有資料，會使用額外容量。</p>}
         </fieldset>;})}
         <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy || Boolean(attempt.current) || !installationValid || !decided} onClick={() => void makePlan()}>{setupJourney ? supply ? '確認供貨空間' : '確認開店空間' : '產生啟動方案'}</button></div>
       </>}
@@ -770,14 +784,14 @@ export function LaunchFlow({client, guildKey, userId, app, onClose, onWork, onSt
         <ul>{plan.choices.map(choice => <li key={choice.requirement_key}>{choice.choice === 'create' ? '建立新的' : '沿用現有的'}{word(choice.requirement_key, choice.choice === 'reuse' ? choice.instance_id : undefined)}</li>)}</ul>
         <details><summary>檢視工具與容量設定</summary>{planDetails}</details>
       </> : planDetails}
-      <ul>{plan.warnings.map((item, index) => <li key={index}>{item.requirement_key && `${word(item.requirement_key)}：`}{WARNING[item.code] ?? `${item.code}：請在確認前核對這個提醒。`}</li>)}</ul>
+      <ul>{plan.warnings.map((item, index) => <li key={index}>{item.requirement_key && `${word(item.requirement_key)}：`}{hostedStore && item.code === 'reuse_existing_data' && plan.choices.some(choice => choice.requirement_key === 'storefront' && choice.choice === 'reuse' && item.requirement_key === choice.requirement_key) ? STOREFRONT_REUSE_WARNING : WARNING[item.code] ?? `${item.code}：請在確認前核對這個提醒。`}</li>)}</ul>
       <p>有效期限：<time dateTime={plan.expires_at}>{formatIsoLocal(plan.expires_at)}</time></p>
       <div className="application-actions"><button type="button" className="btn btn-primary application-primary" disabled={busy || !allowNewLaunch} onClick={() => void confirm()}>{setupJourney ? setupConfirmation : '確認啟動'}</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setPlan(null)}>修改選擇</button></div>
     </section>}
     {pending && tenant && workspace && !creatingSpace && <section className="stack" aria-label="啟動進度">
       <p aria-live="polite">{tenant?.display_name}／{workspace?.name} · {operation ? STATE[operation.state] : '結果未確認'}</p>
       {operation && (setupJourney ? <details><summary>查看操作詳情</summary><p>操作識別碼：<code>{operation.operation_id}</code> · 版本 {operation.version}</p></details> : <p>操作識別碼：<code>{operation.operation_id}</code> · 版本 {operation.version}</p>)}
-      {operation?.problem && <p role="alert">{joinWords(operation.problem.detail, NEXT[operation.problem.code] ?? '請保留操作識別碼並聯絡支援。')}</p>}
+      {operation?.problem && <p role="alert">{joinWords(operation.problem.detail, nextSteps[operation.problem.code] ?? '請保留操作識別碼並聯絡支援。')}</p>}
       {!terminal(operation) && <div className="application-actions">
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void progress()}>查看進度</button>
         <button type="button" className="btn btn-ghost" disabled={busy || !operation || Boolean(attempt.current)} onClick={() => void control('reconcile')}>核對原操作</button>
