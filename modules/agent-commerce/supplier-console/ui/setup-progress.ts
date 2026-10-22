@@ -4,6 +4,11 @@ import type {ReservationSettingSchema} from '../../../../contracts/guild-launchp
 import type {z} from 'zod';
 import type {ReadSlot} from '../state/useSupplierConsoleController';
 
+/** A partial directory is not evidence of absence. Once opened, a flow survives later reads. */
+export function supplySetupFlowVisible({started,restoring,data}:{started:boolean;restoring:boolean;data:{items:readonly {setup_state:'ready'|'setup_required'}[];next_cursor:string|null}|null}):boolean {
+ return started||restoring||Boolean(data&&data.next_cursor===null&&!data.items.some(item=>item.setup_state==='setup_required'));
+}
+
 export const SUPPLY_CURRENCY_HINT='建立後不可變更。供貨單價、運費與合作售價都使用這個幣別，只有相同幣別的店家能選用，不會自動換匯。選錯時需在另一個業務空間重建，既有商品不會搬移。';
 export const SUPPLY_STAGE_LABELS={done:'已完成',current:'目前步驟',todo:'尚待完成',optional:'選用',unknown:'暫時無法確認'} as const;
 const titles={tools:'建立業務空間並啟用供貨工具',catalog:'填寫商品庫資料與幣別',product:'新增第一件商品',offer:'設定供貨條件並公開第一個供貨版本',requests:'確認店家的選品申請'} as const;

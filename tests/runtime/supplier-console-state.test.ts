@@ -30,7 +30,7 @@ import {SupplierReportSchema,type SupplierReport} from '../../contracts/guild-la
 import {PortalClient,ApiError} from '../../apps/portal-web/src/api';
 import type {SupplierProduct} from '../../contracts/guild-launchpad/v1/supplier-console';
 import type {Distribution} from '../../contracts/guild-launchpad/v1/hosted-distribution';
-import {supplySetupProgress,SUPPLY_CURRENCY_HINT} from '../../modules/agent-commerce/supplier-console/ui/setup-progress';
+import {supplySetupProgress,supplySetupFlowVisible,SUPPLY_CURRENCY_HINT} from '../../modules/agent-commerce/supplier-console/ui/setup-progress';
 import {GettingStarted} from '../../modules/agent-commerce/supplier-console/ui/pages/GettingStarted';
 import {Setup} from '../../modules/agent-commerce/supplier-console/ui/pages/Settings';
 const t='11111111-1111-4111-8111-111111111111',i='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444';
@@ -751,4 +751,32 @@ test('SC-UI-progress is deterministic and does not mutate frozen independent rea
  const input=progressInput(1,0,2);freeze(input);const before=JSON.stringify(input);
  assert.deepEqual(supplySetupProgress(input),supplySetupProgress(input));assert.equal(JSON.stringify(input),before);
  assert.deepEqual(supplySetupProgress(input).stages.map(stage=>stage.key),['tools','catalog','product','offer','requests']);
+});
+
+const supplyResumePage=(states:('ready'|'setup_required')[],next_cursor:string|null=null)=>({items:states.map(setup_state=>({setup_state})),next_cursor});
+for(const [label,data,started,restoring,visible] of [
+ ['initial read pending',null,false,false,false],
+ ['complete empty',supplyResumePage([]),false,false,true],
+ ['complete ready only',supplyResumePage(['ready']),false,false,true],
+ ['complete unfinished',supplyResumePage(['setup_required']),false,false,false],
+ ['partial empty',supplyResumePage([],'next'),false,false,false],
+ ['partial ready only',supplyResumePage(['ready'],'next'),false,false,false],
+ ['partial unfinished',supplyResumePage(['setup_required'],'next'),false,false,false],
+ ['explicit start',supplyResumePage([],'next'),true,false,true],
+ ['restoring without directory',null,false,true,true],
+ ['restoring partial directory',supplyResumePage(['setup_required'],'next'),false,true,true],
+ ['started and later unfinished',supplyResumePage(['setup_required']),true,false,true],
+ ['started and failed later page retains cursor',supplyResumePage(['ready'],'next'),true,false,true],
+ ['started and directory retry cleared data',null,true,false,true],
+] as const)test(`SC-UI-resume flow visibility: ${label}`,()=>{
+ assert.equal(supplySetupFlowVisible({data,started,restoring}),visible);
+});
+
+for(const openedBy of ['complete scan','explicit start','restoring'] as const)test(`SC-UI-resume ${openedBy} remains open through later pages and errors`,()=>{
+ let started=supplySetupFlowVisible({started:openedBy==='explicit start',restoring:openedBy==='restoring',data:openedBy==='complete scan'?supplyResumePage([]):supplyResumePage([],'next')});
+ assert.equal(started,true);
+ for(const data of [supplyResumePage(['ready'],'next'),supplyResumePage(['ready'],'next'),supplyResumePage(['ready','setup_required']),null,supplyResumePage(['setup_required']),supplyResumePage(['ready'])]){
+  // A failed load-more retains the accumulated page and cursor; a full retry may clear it.
+  started=supplySetupFlowVisible({started,restoring:false,data});assert.equal(started,true);
+ }
 });

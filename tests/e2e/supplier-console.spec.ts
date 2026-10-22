@@ -677,3 +677,79 @@ test('job progress: existing business space resumes the same unfinished instance
  expect(await progressApiIds(page,installationPath,'installation_id')).toEqual(installations);
  expect(posts).toEqual([]);await writeFile(info.outputPath('job-progress-resume-ids.json'),JSON.stringify({tenants,installations,posts},null,2));
 });
+
+const supplyDirectoryRoute='**/api/v1/me/supply-catalogs?pagination=cursor*';
+const partialCatalogHint='商品庫清單尚未載入完畢，後續可能有未完成設定的商品庫。';
+function directoryCatalog(ready:boolean){
+ return {tenant_id:randomUUID(),tenant_display_name:'合成分頁業務空間',instance_id:randomUUID(),setup_state:ready?'ready' as const:'setup_required' as const,name:ready?'合成已建商品庫':null,slug:null,publication_state:'never_published' as const,public_path:null,version:ready?'1':null};
+}
+function recordDirectoryWrites(page:Page){
+ const writes:string[]=[];page.on('request',request=>{if(!['GET','HEAD'].includes(request.method())&&new URL(request.url()).pathname.startsWith('/api/v1/'))writes.push(request.method()+' '+new URL(request.url()).pathname);});return writes;
+}
+// A synthetic 503 reports client-error telemetry; it must not cause a business command.
+const directoryCommands=(writes:string[])=>writes.filter(write=>write!=='POST /api/v1/me/client-errors');
+for(const scenario of [{ready:true,retry:false,label:'ready first page reveals an unfinished catalog'},{ready:false,retry:true,label:'empty first page recovers a later-page failure'}])test('job progress pagination: '+scenario.label,async({page,e2eAuthPool},info)=>{
+ const member=await supplyPerson(e2eAuthPool);await login(page,member.email);
+ const unfinished=directoryCatalog(false),first=scenario.ready?[directoryCatalog(true)]:[],writes=recordDirectoryWrites(page);let reads=0;
+ await page.route(supplyDirectoryRoute,route=>{
+  if(!new URL(route.request().url()).searchParams.has('cursor'))return route.fulfill({json:{items:first,next_cursor:'synthetic-page-2'}});
+  reads++;return scenario.retry&&reads===1?route.fulfill({status:503,json:{status:503,title:'合成後頁讀取失敗',code:'unavailable'}}):route.fulfill({json:{items:[unfinished],next_cursor:null}});
+ });
+ // A fresh document gives this case its own hook and flow lifetime.
+ await page.goto('/#stores/supply/setup');
+ const setup=page.getByRole('region',{name:'開始供貨設定',exact:true}),flow=setup.getByRole('region',{name:'啟動應用',exact:true});
+ const create=setup.getByRole('button',{name:scenario.ready?'建立另一個商品庫':'建立新的商品庫',exact:true});
+ await expect(setup.getByText(partialCatalogHint,{exact:true})).toBeVisible();await expect(flow).toHaveCount(0);
+ await expect(create).toHaveClass('btn btn-ghost btn-small');await expect(setup.locator('.btn-primary')).toHaveCount(0);
+ await expect(setup.getByRole('button',{name:'載入更多商品庫',exact:true})).toHaveClass('btn btn-ghost btn-small');
+ if(!scenario.ready){
+  for(const width of [390,768,1440])await captureProgressEvidence(page,info,setup,'pagination-partial',width);
+  await captureProgressEvidence(page,info,setup,'pagination-partial',390,'dark');
+ }
+ await setup.getByRole('button',{name:'載入更多商品庫',exact:true}).click();
+ if(scenario.retry){
+  await expect(setup.getByRole('alert')).toHaveText('暫時無法載入其餘商品庫，請重試。');await expect(flow).toHaveCount(0);
+  await expect(create).toBeVisible();await expect(setup.locator('.btn-primary')).toHaveCount(0);
+  const retry=setup.getByRole('button',{name:'重試載入其餘商品庫',exact:true});await expect(retry).toHaveClass('btn btn-ghost btn-small');await retry.click();
+ }
+ const resume=setup.getByRole('link',{name:'繼續設定商品庫',exact:true});
+ await expect(resume).toHaveAttribute('href',`#stores/${unfinished.tenant_id}/${unfinished.instance_id}/supply`);
+ await expect(resume).toHaveClass('btn btn-primary');await expect(setup.locator('.btn-primary')).toHaveCount(1);await expect(flow).toHaveCount(0);
+ await expect(setup.getByText(partialCatalogHint,{exact:true})).toHaveCount(0);await expect(setup.getByRole('button',{name:'載入更多商品庫',exact:true})).toHaveCount(0);
+ await expect(setup.getByRole('button',{name:'建立另一個商品庫',exact:true})).toHaveClass('btn btn-ghost btn-small');
+ expect(reads).toBe(scenario.retry?2:1);expect(directoryCommands(writes)).toEqual([]);
+ await writeFile(info.outputPath('pagination-directory-requests.json'),JSON.stringify({reads,writes,commands:directoryCommands(writes)},null,2));
+});
+
+function directoryReadGate(){let release!:()=>void;const promise=new Promise<void>(resolve=>release=resolve);return {promise,release};}
+test('job progress pagination: explicitly started flow stays mounted through loading, failure and an unfinished page',async({page,e2eAuthPool},info)=>{
+ const member=await supplyPerson(e2eAuthPool);await login(page,member.email);
+ const unfinished=directoryCatalog(false),gates=[directoryReadGate(),directoryReadGate()],writes=recordDirectoryWrites(page);let reads=0;
+ await page.route(supplyDirectoryRoute,async route=>{
+  if(!new URL(route.request().url()).searchParams.has('cursor'))return route.fulfill({json:{items:[],next_cursor:'synthetic-page-2'}});
+  const attempt=reads++;await gates[attempt].promise;
+  return attempt===0?route.fulfill({status:503,json:{status:503,title:'合成後頁讀取失敗',code:'unavailable'}}):route.fulfill({json:{items:[unfinished],next_cursor:null}});
+ });
+ try{
+  await page.goto('/#stores/supply/setup');
+  const setup=page.getByRole('region',{name:'開始供貨設定',exact:true}),flow=setup.getByRole('region',{name:'啟動應用',exact:true});
+  const create=setup.getByRole('button',{name:'建立新的商品庫',exact:true});await expect(create).toHaveClass('btn btn-ghost btn-small');await expect(flow).toHaveCount(0);await create.click();
+  const name=flow.getByLabel('業務空間名稱',{exact:true}),draft='合成分頁期間保留的名稱';await name.fill(draft);
+  await flow.evaluate(element=>Object.assign(window,{supplyPaginationFlowElement:element}));
+  const expectRetained=async()=>{
+   await expect(flow).toBeVisible();await expect(name).toHaveValue(draft);
+   expect(await flow.evaluate(element=>element===(window as unknown as {supplyPaginationFlowElement:Element}).supplyPaginationFlowElement)).toBe(true);
+   await expect(setup.locator('.btn-primary')).toHaveCount(1);
+  };
+  await expectRetained();await expect(create).toHaveCount(0);
+  await setup.getByRole('button',{name:'載入更多商品庫',exact:true}).click();await expect(setup.getByRole('button',{name:'正在載入…',exact:true})).toBeDisabled();await expect.poll(()=>reads).toBe(1);await expectRetained();
+  gates[0].release();await expect(setup.getByRole('alert').filter({hasText:'暫時無法載入其餘商品庫，請重試。'})).toHaveText('暫時無法載入其餘商品庫，請重試。');await expectRetained();
+  const retry=setup.getByRole('button',{name:'重試載入其餘商品庫',exact:true});await expect(retry).toHaveClass('btn btn-ghost btn-small');await retry.click();await expect.poll(()=>reads).toBe(2);await expectRetained();
+  gates[1].release();
+  const resume=setup.getByRole('link',{name:'繼續設定商品庫',exact:true});await expect(resume).toHaveAttribute('href',`#stores/${unfinished.tenant_id}/${unfinished.instance_id}/supply`);await expect(resume).toHaveClass('btn btn-ghost btn-small');await expectRetained();
+  await expect(setup.getByRole('button',{name:'載入更多商品庫',exact:true})).toHaveCount(0);
+  for(const width of [390,768,1440])await captureProgressEvidence(page,info,setup,'pagination-open-flow',width);
+  await captureProgressEvidence(page,info,setup,'pagination-open-flow',390,'dark');expect(directoryCommands(writes)).toEqual([]);
+  await writeFile(info.outputPath('pagination-flow-requests.json'),JSON.stringify({reads,writes,commands:directoryCommands(writes),mounted:true,draftRetained:true},null,2));
+ }finally{gates.forEach(gate=>gate.release());}
+});

@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {useMyStores} from './MyStoreAction';
+import {supplySetupFlowVisible} from '../../../../modules/agent-commerce/supplier-console/ui/setup-progress';
 import {ApiError, type PortalClient} from '../api';
 import {LaunchFlow, REASONS, savedStoreLaunch, startable} from './GuildLaunchpadApplications';
 import {GuildJoinReceiptSchema, readStoreSetup, setupGuild, setupListPath, type StoreSetupPurpose} from './store-setup';
@@ -136,11 +137,13 @@ function StoreSetupJourney({client, userId, registerLeave, purpose}: Required<Pr
 
 function SupplySetupResume({client, canLeave, restoring, primary, children}: {client: PortalClient; canLeave: () => boolean; restoring: boolean; primary: boolean; children: ReactNode}) {
   const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client, 'supply');
-  const [expanded, setExpanded] = useState(false);
+  const [started, setStarted] = useState(false);
   const unfinished = data?.items.filter(item => item.setup_state === 'setup_required') ?? [];
-  const showFlow = restoring || expanded || Boolean(data && unfinished.length === 0);
-  if (error && !restoring && !expanded) return <><p role="alert">暫時無法確認既有商品庫，請重試後再繼續。</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試</button></div></>;
-  if (!data && !restoring && !expanded) return <p role="status">正在確認既有商品庫…</p>;
+  const showFlow = Boolean(children) && supplySetupFlowVisible({started, restoring, data});
+  // Latch before committing the flow so a later page cannot replace a live LaunchFlow.
+  if (showFlow && !started) setStarted(true);
+  if (error && !showFlow) return <><p role="alert">暫時無法確認既有商品庫，請重試後再繼續。</p><div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試</button></div></>;
+  if (!data && !showFlow) return <p role="status">正在確認既有商品庫…</p>;
   return <>
     {unfinished.length > 0 && <section className="stack" aria-label="繼續未完成的商品庫">
       <h3>繼續未完成的商品庫</h3>
@@ -149,8 +152,9 @@ function SupplySetupResume({client, canLeave, restoring, primary, children}: {cl
         <div className="actions"><a className={primary && !showFlow && index === 0 ? 'btn btn-primary' : 'btn btn-ghost btn-small'} href={`#stores/${item.tenant_id}/${item.instance_id}/supply`} onClick={event => {if (!canLeave()) event.preventDefault();}}>繼續設定商品庫</a></div>
       </article>)}
     </section>}
+    {data?.next_cursor && unfinished.length === 0 && <p className="field-hint">商品庫清單尚未載入完畢，後續可能有未完成設定的商品庫。</p>}
     {pageError && <p role="alert">暫時無法載入其餘商品庫，請重試。</p>}
     {data?.next_cursor && <div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '正在載入…' : pageError ? '重試載入其餘商品庫' : '載入更多商品庫'}</button></div>}
-    {showFlow ? children : children && <div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={() => setExpanded(true)}>建立另一個商品庫</button></div>}
+    {showFlow ? children : children && <div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={() => setStarted(true)}>{data?.items.length ? '建立另一個商品庫' : '建立新的商品庫'}</button></div>}
   </>;
 }
