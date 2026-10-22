@@ -2244,8 +2244,8 @@
     },
     {
       "path": "apps/portal-web/src/api.ts",
-      "bytes": 25500,
-      "sha256": "9861059b9d51d94da16df8dd33f1444321378eaf5e5059a3b34fe05793e75c97"
+      "bytes": 26143,
+      "sha256": "256e2183e484074b0a2cdb97f22e1538dd081d967f15c65b28467a17183e5543"
     },
     {
       "path": "apps/portal-web/src/auth-messages.ts",
@@ -2684,8 +2684,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/EntryResources.tsx",
-      "bytes": 1780,
-      "sha256": "2b06c5a1ab8036948156d17823447d718f96a09cd0842d76a93c707ae2621ee6"
+      "bytes": 3444,
+      "sha256": "bcaf836a9c87ffe2505fc02ac0d6c7e06c8b7c27ebbe00c1b907c5c6f521b485"
     },
     {
       "path": "apps/portal-web/src/modules/EventAttendees.tsx",
@@ -3679,8 +3679,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/task-board-loading.ts",
-      "bytes": 3792,
-      "sha256": "786d435cbbcfbc7728f2b095a9dd5d679b423b80d96def89a93c91759e8a9133"
+      "bytes": 4048,
+      "sha256": "6e75144fb2d04eba56e105ab7c0910ba866b9f83a0965ac73587dca4fa911cf7"
     },
     {
       "path": "apps/portal-web/src/modules/tenant-workspaces.css",
@@ -23769,8 +23769,8 @@
     },
     {
       "path": "tests/e2e/instant-feedback.spec.ts",
-      "bytes": 6403,
-      "sha256": "60bae80834e5065e7aeb647d603dbb924c50c820531839bedf2626947cdf6acc"
+      "bytes": 10545,
+      "sha256": "a7e101ad21d135a5e9dfa2ed8ba1f66ac98986742ebcec08e6f4f5e122f6fc70"
     },
     {
       "path": "tests/e2e/interaction-notifications.spec.ts",
@@ -26219,8 +26219,8 @@
     },
     {
       "path": "tests/runtime/portal-client-recovery.test.ts",
-      "bytes": 25822,
-      "sha256": "f8e420bf240452df99c0af35b9f49aa372770565cc42449906388fad391cc71e"
+      "bytes": 30379,
+      "sha256": "c846b8bfd6d9e10ea65785839a42ea6182b0b53fdeb7cff21e2d8400692ee1bd"
     },
     {
       "path": "tests/runtime/portal-email-change.test.ts",
@@ -26789,8 +26789,8 @@
     },
     {
       "path": "tests/runtime/task-board-loading.test.ts",
-      "bytes": 11749,
-      "sha256": "5461c38082670f3a0b473331bc36f00d434941d0eb78d16d2479658b2dca622a"
+      "bytes": 13663,
+      "sha256": "c000597310b71ec0ee339283bc669d40aad819838f54ad6db2419d562b306647"
     },
     {
       "path": "tests/runtime/tenant-authority-policy-grants.test.ts",
