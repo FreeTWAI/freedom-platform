@@ -27,8 +27,11 @@
     "tests/runtime/tenant-policy-operator.test.ts",
     "apps/portal-web/src/modules/GuildLaunchpadApplications.tsx",
     "apps/portal-web/src/modules/GuildLaunchpadApplications.css",
+    "apps/portal-web/src/modules/StoreSetup.tsx",
+    "apps/portal-web/src/modules/store-setup.ts",
     "apps/portal-web/src/modules/module-words.ts",
-    "tests/e2e/guild-launchpad-applications.spec.ts"
+    "tests/e2e/guild-launchpad-applications.spec.ts",
+    "tests/e2e/store-setup-entry.spec.ts"
   ],
   "public_exports": [
     "modules/module-registry/service.ts",

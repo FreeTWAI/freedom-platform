@@ -6,6 +6,15 @@ import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool, type PoolClient } from 'pg';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import { digest } from '../../packages/db/index.js';
+import { HOSTED_STORE_MEDIA_PROFILE } from '../../contracts/guild-launchpad/v1/hosted-store-media.js';
+import { StorePublicationReviewSchema } from '../../contracts/guild-launchpad/v1/storefront-publication.js';
+import { emptySellerPolicies } from '../../contracts/guild-launchpad/v1/storefront-policies.js';
+import { syntheticSeller } from '../helpers/storefront-policies.js';
+import { photoSourcePng } from '../helpers/hosted-store-photo.js';
+import { FakeObjectStore } from '../../packages/asset-storage/fake-store.js';
+import { createStorefrontGalleryLifecycle } from '../../modules/assets/storefront-gallery.js';
+import { StorePreviewSchema } from '../../contracts/guild-launchpad/v1/storefront.js';
 import { STOREFRONT_CONTRACT, STOREFRONT_CONTRACT_SOURCE_COMMIT, STOREFRONT_CONTRACT_ARTIFACT_SHA256 } from '../../modules/module-registry/definitions.js';
 import { changeMemberStatus, type AdminActor } from '../../modules/platform-admin/service.js';
 import { formatMinor } from '../../modules/agent-commerce/hosted/format.js';
@@ -28,6 +37,10 @@ const patch = (path: string, session: Session, body: unknown, version: string, k
   call('PATCH', path, session, body, { 'Idempotency-Key': key, 'If-Match': `"${version}"` });
 async function view(s: Store, session = s.owner) { return expect(await call('GET', s.root, session)); }
 async function publish(s: Store, action = 'publish') { return post(s.root + '/' + action, s.owner, {}, (await view(s)).version); }
+async function publicationReview(s: Store, session = s.owner) { return expect(await call('GET', s.root + '/publication-review', session)); }
+async function publishReviewed(s: Store, review: {review_digest: string; store_version: string}, session = s.owner, key = randomUUID()) {
+  return post(s.root + '/publish-reviewed', session, {review_digest: review.review_digest}, review.store_version, key);
+}
 async function add(s: Store, body = product) { return expect(await post(s.root + '/products', s.owner, body), 201); }
 async function publicPair(slug: string) {
   const json = await app.request(h.origin + '/api/v1/public/stores/' + slug);
@@ -84,6 +97,7 @@ function commands(s: Store) {
     ['GET', s.root + '/appearance', undefined, undefined], ['PATCH', s.root + '/appearance', {template_id: 'catalog-list-v1'}, '1'],
     ['GET', s.root + '/preview-page', undefined, undefined],
     ['GET', s.root + '/preview', undefined, undefined], ['POST', s.root + '/publish', {}, '1'], ['POST', s.root + '/unpublish', {}, '1'],
+    ['GET', s.root + '/publication-review', undefined, undefined], ['POST', s.root + '/publish-reviewed', {review_digest: '0'.repeat(64)}, '1'],
   ] as const;
 }
 async function execute(c: readonly [string, string, unknown, string | undefined], session: Session, target = app) {
@@ -704,6 +718,229 @@ test('T-006 publication revisions, unpublish, immutable snapshots and disabled o
   const removeKey=randomUUID(); expect(await post(s.root+'/products/'+item.product_id+'/remove',s.owner,{},item.version,removeKey));
   expect(await post(s.root+'/products/'+item.product_id+'/remove',s.owner,{},item.version,removeKey));
   assert.equal((await add(s)).sku,'P0002');
+});
+
+test('publication review is a private stable snapshot with a strict additive wire contract', async () => {
+  const s = await ready(), first = await add(s), second = await add(s, {...product, title: '第二項核對商品'});
+  const response = await call('GET', s.root + '/publication-review', s.owner), review = expect(response);
+  assert.deepEqual(Object.keys(review).sort(), ['profile', 'store_version', 'preview', 'template_id', 'photo_count', 'photos', 'review_digest'].sort());
+  assert.equal(review.profile, 'freedom.hosted-store-publication/v1');
+  assert.equal(review.store_version, (await view(s)).version);
+  const preview = StorePreviewSchema.parse(review.preview);
+  assert.deepEqual(preview.projection.products.map(line => line.sku), [first.sku, second.sku]);
+  assert.equal(preview.dirty, true); assert.equal(preview.current_revision, null);
+  assert.equal(review.template_id, 'catalog-grid-v1'); assert.equal(review.photo_count, 0);
+  assert.deepEqual(review.photos, []);
+  assert.match(review.review_digest, /^[a-f0-9]{64}$/);
+  assert.equal(response.response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.response.headers.get('x-robots-tag'), 'noindex, nofollow');
+  assert.equal((await publicationReview(s)).review_digest, review.review_digest, 'Reading a new preview timestamp must not change its publication content digest');
+  assert.equal(await h.count('commerce_storefront_publications'), 0);
+  assert.equal((await view(s)).publication.state, 'never_published');
+  expect(await call('GET', s.root + '/publication-review?unexpected=1', s.owner), 422);
+  expect(await post(s.root + '/publish-reviewed', s.owner, {}, review.store_version), 422);
+  expect(await post(s.root + '/publish-reviewed', s.owner, {review_digest: 'invalid'}, review.store_version), 422);
+  expect(await post(s.root + '/publish-reviewed', s.owner, {review_digest: review.review_digest, sku: first.sku}, review.store_version), 422);
+  const missingVersion = await post(s.root + '/publish-reviewed', s.owner, {review_digest: review.review_digest});
+  expect(missingVersion, 428); assert.equal(missingVersion.data.code, 'version_required');
+});
+
+test('reviewed publication with all dimension flags OFF preserves legacy response bytes, digest and publication', async () => {
+  const s = await ready(); await add(s); expect(await publish(s));
+  const off = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true,
+    storeAppearanceEnabled: false, storePoliciesEnabled: false, storeGalleryEnabled: false});
+  const path = h.origin + '/api/v1' + s.root + '/publication-review', headers = {Cookie: s.owner.cookie};
+  const legacy = await app.request(path, {headers}), explicitOff = await off.request(path, {headers});
+  assert.equal(legacy.status, 200); assert.equal(explicitOff.status, 200);
+  const legacyBytes = await legacy.text(); assert.equal(await explicitOff.text(), legacyBytes);
+  const review = StorePublicationReviewSchema.parse(JSON.parse(legacyBytes));
+  const {revision: _revision, published_at: _publishedAt, ...content} = review.preview.projection;
+  assert.equal(review.review_digest, digest({profile: 'freedom.hosted-store-publication/v1', tenant_id: s.tenantId,
+    instance_id: s.instanceId, projection_sha256: digest(content), template_id: review.template_id,
+    media_sha256: createHash('sha256').update(JSON.stringify({profile: HOSTED_STORE_MEDIA_PROFILE, photos: []})).digest('hex')}));
+  assert.deepEqual(Object.keys(review).sort(), ['profile','store_version','preview','template_id','photo_count','photos','review_digest'].sort());
+  expect(await patch(s.root + '/products/' + (expect(await call('GET', s.root + '/products', s.owner)).items[0].product_id), s.owner, {title: '關閉維度後仍可上架'}, '1'));
+  const fresh = expect(await call('GET', s.root + '/publication-review', s.owner, undefined, {}, off));
+  const published = expect(await call('POST', s.root + '/publish-reviewed', s.owner, {review_digest: fresh.review_digest},
+    {'Idempotency-Key': randomUUID(), 'If-Match': `"${fresh.store_version}"`}, off));
+  assert.equal(published.publication.current_revision, '2');
+  assert.equal(JSON.parse((await publicPair(settings.slug)).jsonText).products[0].title, '關閉維度後仍可上架');
+  for (const table of ['commerce_publication_appearances','commerce_publication_seller_policies','commerce_publication_galleries']) assert.equal(await h.count(table), 0);
+});
+
+const publicationDimensionTables = {
+  appearance: ['commerce_publication_appearances','commerce_publication_appearance_refs'],
+  policies: ['commerce_publication_seller_policies','commerce_publication_policy_refs'],
+  gallery: ['commerce_publication_galleries','commerce_publication_gallery_refs'],
+} as const;
+async function frozenDimensionRows(dimension: keyof typeof publicationDimensionTables, publicationId: string) {
+  return Promise.all(publicationDimensionTables[dimension].map(async table => (await h.pool.query(
+    `SELECT to_jsonb(r)-'publication_id' AS row FROM ${table} r WHERE publication_id=$1 ORDER BY (to_jsonb(r)-'publication_id')::text`, [publicationId])).rows));
+}
+async function publicationWriteState(s: Store) {
+  const tables = ['commerce_storefront_publications','commerce_publication_photo_refs', ...Object.values(publicationDimensionTables).flat(),
+    'scoped_command_receipts','scoped_transition_journal'];
+  return {counts: await Promise.all(tables.map(table => h.count(table))),
+    profile: (await h.pool.query('SELECT to_jsonb(p) AS row FROM commerce_storefront_profiles p WHERE instance_id=$1', [s.instanceId])).rows};
+}
+for (const dimension of ['appearance','policies','gallery'] as const) test(`reviewed publication with ${dimension} ON rejects a changed draft without writes and freezes exactly the plain publish rows`, async () => {
+  const s = await ready(); let item = await add(s);
+  const store = new FakeObjectStore();
+  const target = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true,
+    storeAppearanceEnabled: dimension === 'appearance', storePoliciesEnabled: dimension === 'policies', storeGalleryEnabled: dimension === 'gallery',
+    ...(dimension === 'gallery' ? {storePhotoAssetStore: store, storePhotoUploadsEnabled: true,
+      storeGalleryAssets: createStorefrontGalleryLifecycle(runtime, {store})} : {})});
+  const request = (method: string, suffix: string, body?: unknown, version?: string) => call(method, s.root + suffix, s.owner, body,
+    {'Idempotency-Key': randomUUID(), ...(version ? {'If-Match': `"${version}"`} : {})}, target);
+  const review = () => request('GET', '/publication-review').then(r => StorePublicationReviewSchema.parse(expect(r)));
+  const publishReview = (r: Awaited<ReturnType<typeof review>>, version = r.store_version) => request('POST', '/publish-reviewed', {review_digest: r.review_digest}, version);
+  let galleryVersion = item.version;
+  if (dimension === 'gallery') {
+    await h.pool.query("UPDATE domain_media_storage_policy SET mode='r2_only',persistence_allowed=true,policy_revision='synthetic-reviewed-gallery',retained_byte_limit=16777216 WHERE purpose='storefront.product-photo'");
+    for (let n = 0; n < 2; n++) {
+      const response = await target.request(h.origin + '/api/v1' + s.root + '/products/' + item.product_id + '/gallery/photos/' + randomUUID(), {
+        method: 'POST', headers: {Origin: h.origin, Cookie: s.owner.cookie, 'X-CSRF-Token': s.owner.csrf,
+          'Content-Type': 'image/png', 'Idempotency-Key': randomUUID(), 'If-Match': `"${galleryVersion}"`}, body: new Uint8Array(photoSourcePng)});
+      assert.equal(response.status, 200); galleryVersion = (await response.json() as any).current.version;
+    }
+  }
+  const old = await review();
+  if (dimension === 'appearance') expect(await request('PATCH', '/appearance-settings', {
+    template_id: 'catalog-grid-v1', accent_preset: 'ocean', announcement: '重新核對的外觀', featured_product_ids: [item.product_id]}, old.store_version));
+  if (dimension === 'policies') {
+    const input = emptySellerPolicies(); input.seller = {...syntheticSeller}; input.policies.shipping.body = '重新核對的配送政策';
+    expect(await request('PUT', '/seller-policies', input, old.store_version));
+  }
+  if (dimension === 'gallery') expect(await request('PATCH', '/products/' + item.product_id + '/gallery/photos/main', {alt_text: '重新核對的主照片'}, galleryVersion));
+  const fresh = await review(), changedKey = `${dimension}_changed` as const;
+  assert.notEqual(fresh.review_digest, old.review_digest); assert.equal(fresh[changedKey], true);
+  for (const other of ['appearance_changed','policies_changed','gallery_changed'] as const) if (other !== changedKey) assert.equal(Object.hasOwn(fresh, other), false);
+  assert.equal(fresh.preview.dirty, expect(await request('GET', '/preview')).dirty);
+  if (dimension === 'gallery') {
+    const drafts = expect(await request('GET', '/product-galleries')).items;
+    assert.equal(fresh.photo_count, 2);
+    assert.deepEqual(fresh.photos, drafts[0].photos.map((photo: unknown) => ({sku: item.sku, photo})));
+    assert.ok(fresh.photos.every(({photo}) => photo.read_path.includes('/gallery/photos/')));
+    assert.equal((expect(await request('GET', '/product-media'))).items[0].photo.read_path.includes('/gallery/'), false);
+  }
+  // Appearance/policy commands bump profile CAS. Use today's version to isolate
+  // the old review digest check, rather than only exercising the 412 fence.
+  const before = await publicationWriteState(s), refused = await publishReview(old, fresh.store_version);
+  expect(refused, 409); assert.equal(refused.data.code, 'storefront_publication_changed');
+  assert.deepEqual(await publicationWriteState(s), before);
+  const published = expect(await publishReview(fresh)); assert.equal(published.publication.current_revision, '1');
+  const id = (await h.pool.query('SELECT current_publication_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0].current_publication_id;
+  const frozen = await frozenDimensionRows(dimension, id);
+  assert.equal(frozen[0].length, 1); assert.equal(frozen[1].length, dimension === 'gallery' ? 2 : dimension === 'policies' ? 1 : 0);
+  const unchanged = await review(); assert.equal(unchanged[changedKey], false); assert.equal(unchanged.preview.dirty, false);
+  assert.equal(expect(await publishReview(unchanged)).version, published.version);
+  assert.equal(expect(await request('POST', '/publish', {}, published.version)).version, published.version);
+  assert.equal(await h.count('commerce_storefront_publications'), 1);
+  item = expect(await request('GET', '/products')).items[0];
+  item = expect(await request('PATCH', '/products/' + item.product_id, {title: '一般發布仍凍結相同維度'}, item.version));
+  const plain = expect(await request('POST', '/publish', {}, published.version)); assert.equal(plain.publication.current_revision, '2');
+  const plainId = (await h.pool.query('SELECT current_publication_id FROM commerce_storefront_profiles WHERE instance_id=$1', [s.instanceId])).rows[0].current_publication_id;
+  assert.deepEqual(await frozenDimensionRows(dimension, plainId), frozen);
+});
+
+test('reviewed publication rejects unseen text and price edits even when the store version is unchanged', async () => {
+  const s = await ready(); let item = await add(s);
+  expect(await publish(s));
+  for (const change of [{title: '尚未核對的新名稱'}, {price_minor: product.price_minor + 100}]) {
+    const review = await publicationReview(s);
+    item = expect(await patch(s.root + '/products/' + item.product_id, s.owner, change, item.version));
+    assert.equal((await view(s)).version, review.store_version, 'Product edits deliberately do not bump the storefront profile version');
+    const receipts = await h.count('scoped_command_receipts');
+    const denied = await publishReviewed(s, review);
+    expect(denied, 409); assert.equal(denied.data.code, 'storefront_publication_changed');
+    assert.equal(await h.count('commerce_storefront_publications'), 1);
+    assert.equal(await h.count('scoped_command_receipts'), receipts, 'A rejected publication must not leave a success receipt');
+    const current = JSON.parse((await publicPair(settings.slug)).jsonText);
+    assert.equal(current.products[0].title, product.title); assert.equal(current.products[0].price_minor, product.price_minor);
+  }
+  const fresh = await publicationReview(s), published = expect(await publishReviewed(s, fresh));
+  assert.equal(published.publication.current_revision, '2');
+  const current = JSON.parse((await publicPair(settings.slug)).jsonText);
+  assert.equal(current.products[0].title, item.title); assert.equal(current.products[0].price_minor, item.price_minor);
+  assert.equal(await h.count('commerce_storefront_publications'), 2);
+});
+
+test('reviewed publication binds the digest to the original idempotent request and replays after later draft changes', async () => {
+  const s = await ready(), item = await add(s), review = await publicationReview(s), key = randomUUID();
+  const replies = await Promise.all([publishReviewed(s, review, s.owner, key), publishReviewed(s, review, s.owner, key)]);
+  const published = expect(replies[0]); assert.deepEqual(expect(replies[1]), published);
+  assert.equal(published.publication.current_revision, '1'); assert.equal(await h.count('commerce_storefront_publications'), 1);
+  expect(await patch(s.root + '/products/' + item.product_id, s.owner, {title: '重試不可順便公開的草稿'}, item.version));
+  assert.deepEqual(expect(await publishReviewed(s, review, s.owner, key)), published);
+  assert.equal(JSON.parse((await publicPair(settings.slug)).jsonText).products[0].title, product.title);
+  const fresh = await publicationReview(s); assert.notEqual(fresh.review_digest, review.review_digest);
+  const changedBody = await publishReviewed(s, {...review, review_digest: fresh.review_digest}, s.owner, key);
+  expect(changedBody, 409); assert.equal(changedBody.data.code, 'idempotency_conflict');
+  assert.equal(await h.count('commerce_storefront_publications'), 1);
+  assert.equal(expect(await publishReviewed(s, fresh)).publication.current_revision, '2');
+});
+
+test('reviewed publication requires current exact-store publish permission even for a successful receipt replay', async () => {
+  const s = await ready(); await add(s);
+  const reader = (await h.person('只能讀取商品的會員')).session;
+  await join(s, reader, 'operator', ['store:read']);
+  const review = await publicationReview(s);
+  const deniedReview = await call('GET', s.root + '/publication-review', reader);
+  expect(deniedReview, 403); assert.equal(deniedReview.data.code, 'capability_denied');
+  const denied = await publishReviewed(s, review, reader);
+  expect(denied, 403); assert.equal(denied.data.code, 'capability_denied');
+  const stranger = (await h.person('另一位商店會員')).session;
+  expect(await call('GET', s.root + '/publication-review', stranger), 404);
+  expect(await publishReviewed(s, review, stranger), 404);
+  assert.equal(await h.count('commerce_storefront_publications'), 0);
+  const publisher = (await h.person('可發布商品的會員')).session;
+  const principal = await join(s, publisher, 'operator', ['store:read', 'store:publish']);
+  const key = randomUUID(); expect(await publishReviewed(s, review, publisher, key));
+  const membership = expect(await call('GET', `/tenants/${s.tenantId}/members`, s.owner)).items.find((row: {principal_id: string}) => row.principal_id === principal);
+  expect(await post(`/tenants/${s.tenantId}/members/${principal}/change`, s.owner, {role: 'operator', status: 'active', instance_capabilities: [{instance_id: s.instanceId, capabilities: ['store:read']}], reason: '撤回商品發布權'}, membership.version));
+  const replay = await publishReviewed(s, review, publisher, key);
+  expect(replay, 403); assert.equal(replay.data.code, 'capability_denied');
+  const revokedReview = await call('GET', s.root + '/publication-review', publisher);
+  expect(revokedReview, 403); assert.equal(revokedReview.data.code, 'capability_denied');
+  const current = await publicationReview(s);
+  expect(await publishReviewed(s, current, publisher), 403);
+  assert.equal(await h.count('commerce_storefront_publications'), 1);
+});
+
+test('reviewed publication refuses an empty retail projection and never includes supply-only drafts', async () => {
+  const s = await ready(), empty = await publicationReview(s);
+  assert.deepEqual(empty.preview.projection.products, []);
+  const denied = await publishReviewed(s, empty);
+  expect(denied, 409); assert.equal(denied.data.code, 'storefront_has_no_products');
+  expect(await post(s.root + '/supply-products', s.owner, {title: '只供貨的私有商品', cost_minor: 7800, stock: 5}), 201);
+  assert.equal((await view(s)).product_count, 1);
+  const supplyOnly = await publicationReview(s);
+  assert.deepEqual(supplyOnly.preview.projection.products, []); assert.equal(supplyOnly.photo_count, 0);
+  const stillEmpty = await publishReviewed(s, supplyOnly);
+  expect(stillEmpty, 409); assert.equal(stillEmpty.data.code, 'storefront_has_no_products');
+  assert.equal(await h.count('commerce_storefront_publications'), 0);
+  assert.equal((await view(s)).publication.state, 'never_published');
+  const retail = await add(s), review = await publicationReview(s);
+  assert.deepEqual(review.preview.projection.products.map((line: {sku: string}) => line.sku), [retail.sku]);
+  expect(await publishReviewed(s, review));
+  assert.deepEqual(JSON.parse((await publicPair(settings.slug)).jsonText).products.map((line: {sku: string}) => line.sku), [retail.sku]);
+});
+
+test('reviewed publication binds the saved template as well as enforcing the profile version', async () => {
+  const s = await ready(); await add(s);
+  const review = await publicationReview(s);
+  const saved = expect(await patch(s.root + '/appearance', s.owner, {template_id: 'catalog-list-v1'}, review.store_version));
+  const staleVersion = await publishReviewed(s, review);
+  expect(staleVersion, 412); assert.equal(staleVersion.data.code, 'version_conflict');
+  const staleContent = await publishReviewed(s, {...review, store_version: saved.version});
+  expect(staleContent, 409); assert.equal(staleContent.data.code, 'storefront_publication_changed');
+  assert.equal(await h.count('commerce_storefront_publications'), 0);
+  const fresh = await publicationReview(s);
+  assert.equal(fresh.template_id, 'catalog-list-v1'); assert.notEqual(fresh.review_digest, review.review_digest);
+  assert.deepEqual(fresh.preview.projection.products, review.preview.projection.products);
+  expect(await publishReviewed(s, fresh));
+  const stored = (await h.pool.query('SELECT template_id FROM commerce_storefront_publications WHERE instance_id=$1', [s.instanceId])).rows;
+  assert.deepEqual(stored, [{template_id: 'catalog-list-v1'}]);
 });
 
 test('T-022 command header, CAS, strict query and idempotency errors follow platform conventions', async () => {
