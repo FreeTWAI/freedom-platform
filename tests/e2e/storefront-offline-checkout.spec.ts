@@ -210,12 +210,13 @@ for (const editedInAnotherTab of [false, true]) test(`unknown checkout and order
     await expect(page.getByRole('heading', {level: 1})).toHaveText(/^訂單 /);
     expect(bodies).toHaveLength(2); expect(bodies[1]).toBe(bodies[0]);
     expect(await page.evaluate(slug => localStorage.getItem(`freedom.shop.cart.v1:${slug}`), store.slug)).toBe(cartBeforeRecovery);
-    await expect(page.getByText('店家會用你留下的手機或 Email 和你約時間地點。', {exact: true})).toBeVisible();
+    await expect(page.getByRole('region', {name: '面交取貨', exact: true}).getByText('店家會用你留下的手機或 Email 和你約時間地點。', {exact: true})).toBeVisible();
     expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_checkout_orders WHERE instance_id=$1', [store.instance])).rows[0].n).toBe(1);
     expect((await e2eAuthPool.query('SELECT l.quantity FROM commerce_order_lines l JOIN commerce_checkout_orders o USING(order_id) WHERE o.instance_id=$1', [store.instance])).rows).toEqual([{quantity: 1}]);
     await page.getByRole('button', {name: '取消訂單', exact: true}).click();
     await page.getByRole('button', {name: '確認取消訂單', exact: true}).click();
     await expect(page.getByText('訂單狀態：已取消（你取消了訂單）', {exact: true})).toBeVisible();
+    await expect(page.getByRole('region', {name: '面交取貨', exact: true})).toHaveCount(0);
     expect((await e2eAuthPool.query('SELECT reserved FROM commerce_items WHERE item_id=$1', [store.products[0].product_id])).rows[0].reserved).toBe(0);
   } finally {await context.close(); await store.close();}
 });
@@ -270,11 +271,18 @@ test('changed terms require explicit editing; cash meetup records seller confirm
     await page.getByRole('button', {name: '修改資料', exact: true}).click();
     await freeze(page, store);
     const order = await place(page, '面交付款');
-    await expect(page.getByText('新的面交地點。', {exact: true})).toBeVisible();
+    const meetup = page.getByRole('region', {name: '面交取貨', exact: true});
+    await expect(meetup.locator('.shop-pay-label')).toHaveText('等待面交');
+    await expect(meetup.getByText('新的面交地點。', {exact: true})).toBeVisible();
+    await expect(meetup.getByText('店家會用你留下的手機或 Email 和你約時間地點。', {exact: true})).toBeVisible();
+    await expect(page.getByRole('region', {name: '面交付款', exact: true})).not.toContainText('新的面交地點。');
+    await expect(page.getByRole('region', {name: '面交付款', exact: true})).not.toContainText('店家會用你留下的手機或 Email 和你約時間地點。');
     const date = (await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') AS d")).rows[0].d;
     await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/meetup-completion`, {amount_minor: order.total_minor, completed_on: date}, 200, '1');
     await page.getByRole('button', {name: '更新訂單狀態', exact: true}).click();
     await expect(page.getByText('店家已確認收到付款。', {exact: true})).toBeVisible();
+    await expect(meetup.locator('.shop-pay-label')).toHaveText('已面交');
+    await expect(meetup.getByText('店家已登記在 '+date.replaceAll('-', '/')+' 完成面交。', {exact: true})).toBeVisible();
     const item = (await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1', [store.products[0].product_id])).rows[0];
     expect(item).toEqual({stock: 4, reserved: 0});
     expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_meetup_handovers WHERE order_id=$1', [order.order_ref])).rows[0].n).toBe(1);
@@ -452,6 +460,15 @@ test('with supplier console OFF, a merchant publishes public service information
   bp.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith(`/stores/${store.slug}/checkouts`))lastCheckoutInput=request.postDataJSON();});
   await buyerLogin(bp,person.email,'',store.origin);
   await start(bp,store);await freeze(bp,store);const bank=await place(bp,'銀行匯款');
+  const meetup=bp.getByRole('region',{name:'面交取貨',exact:true});
+  await expect(meetup.locator('.shop-pay-label')).toHaveText('等待面交');
+  await expect(meetup.getByText('店家會用你留下的手機或 Email 和你約時間地點。',{exact:true})).toBeVisible();
+  await expect(meetup.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  await expect(bp.getByRole('region',{name:'銀行匯款',exact:true})).not.toContainText('請先約定時間，在山邊小店門口面交。');
+  await bp.emulateMedia({colorScheme:'light'});
+  await bp.setViewportSize({width:390,height:900});
+  expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await bp.screenshot({path:info.outputPath('meetup-waiting-light-390.png'),fullPage:true});
   await expect(bp.getByRole('region',{name:'商店說明與聯絡',exact:true})).toHaveText('商店說明與聯絡'+description);
   await expect(bp.locator('body')).toContainText('000000123456');
   await sellerOrder(sp,store,bank);
@@ -462,13 +479,33 @@ test('with supplier console OFF, a merchant publishes public service information
   // The existing expiry handler must retain an already paid allocation even when its due work is selected.
   await endOfflinePaymentWindow(e2eAuthPool,bank.order_ref,{now:()=>new Date(Date.now()+30*86400000)});
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:5,reserved:1});
+  await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
+  await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+  await expect(meetup.locator('.shop-pay-label')).toHaveText('等待面交');
+  const handoverRequest=sp.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/meetup-handover'));
   await recordOffline(sp,'確認已面交');
+  const completedOn=(await handoverRequest).postDataJSON().completed_on as string;
   await expect(sp.getByText(/已登記面交：/)).toBeVisible();
   await sellerScreens(sp,width=>info.outputPath(`seller-bank-handover-${width}.png`));
   await buyer.clearCookies();await bp.goto('about:blank');await buyerLogin(bp,person.email,'',store.origin);
   await bp.goto(`${store.origin}/shops/${store.slug}/orders/${bank.order_ref}`);
   await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+  await expect(meetup.locator('.shop-pay-label')).toHaveText('已面交');
+  await expect(meetup.getByText('店家已登記在 '+completedOn.replaceAll('-','/')+' 完成面交。',{exact:true})).toBeVisible();
+  for(const width of [390,768,1440]){
+   await bp.setViewportSize({width,height:900});
+   expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await bp.screenshot({path:info.outputPath('meetup-completed-light-'+width+'.png'),fullPage:true});
+  }
+  await bp.emulateMedia({colorScheme:'dark'});await bp.setViewportSize({width:390,height:900});
+  expect(await bp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await bp.screenshot({path:info.outputPath('meetup-completed-dark-390.png'),fullPage:true});
+  await bp.emulateMedia({colorScheme:'light'});
   await start(bp,store);await freeze(bp,store);const cash=await place(bp,'面交付款');
+  await expect(meetup.locator('.shop-pay-label')).toHaveText('等待面交');
+  await expect(meetup.getByText('店家會用你留下的手機或 Email 和你約時間地點。',{exact:true})).toBeVisible();
+  await expect(meetup.getByText('請先約定時間，在山邊小店門口面交。',{exact:true})).toBeVisible();
+  await expect(bp.getByRole('region',{name:'面交付款',exact:true})).not.toContainText('請先約定時間，在山邊小店門口面交。');
   await sellerOrder(sp,store,cash);
   const cashRequests:{key:string;body:string|null;version:string|undefined}[]=[];
   await sp.route('**/meetup-completion',async route=>{
@@ -492,6 +529,9 @@ test('with supplier console OFF, a merchant publishes public service information
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
   await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
   await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
+  await expect(meetup.locator('.shop-pay-label')).toHaveText('已面交');
+  const cashCompletedOn=JSON.parse(cashRequests[0].body!).completed_on as string;
+  await expect(meetup.getByText('店家已登記在 '+cashCompletedOn.replaceAll('-','/')+' 完成面交。',{exact:true})).toBeVisible();
   // Existing seller cancellation remains reachable for an unpaid order and releases only its hold.
   await start(bp,store);await freeze(bp,store);const cancelled=await place(bp,'銀行匯款');
   await store.admission('/'+admission.admission_id+'/revoke',{reason:'合成停止新單，保留既有訂單處理'});
@@ -500,6 +540,7 @@ test('with supplier console OFF, a merchant publishes public service information
   await expect(sp.getByRole('region',{name:'訂單',exact:true})).toContainText('已取消');
   await bp.getByRole('button',{name:'更新訂單狀態',exact:true}).click();
   await expect(bp.getByText(/訂單狀態：已取消/)).toBeVisible();
+  await expect(meetup).toHaveCount(0);
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:3,reserved:0});
   await bp.goto(`${store.origin}/shops/${store.slug}/products/${store.products[0].sku}`);
   await expect(bp.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
