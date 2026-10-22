@@ -2,6 +2,7 @@ import {formatOrderLifecycle} from './format.js';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {OfflineOrder} from './offline-order.js';
+import {MeetupCard} from './meetup-card.js';
 import {bootCheckoutPage} from './checkout-page.js';
 import {cartDeliveryNote} from './delivery-copy.js';
 import {CartQuoteResponseSchema, type CartDeliveryOptionSchema} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
@@ -939,6 +940,8 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         {paymentAlert && (paymentAlert.section === 'payment' || !showActionSection) && renderPaymentAlert(paymentAlert)}
         {emailNote && <p className="shop-order-meta">{emailNote}</p>}
       </section>
+
+      <MeetupCard order={order} />
 
       <section className="shop-order-section" aria-labelledby="shop-order-items-heading">
         <h2 id="shop-order-items-heading">商品</h2>

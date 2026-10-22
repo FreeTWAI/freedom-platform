@@ -104,10 +104,16 @@ storage before sending, so a lost response or refresh can retry the same intent.
 Recovered intents retain the current cart because its original contents are not
 persisted with the intent; another tab may have prepared a newer purchase.
 No bank instructions or contact data are persisted in browser storage.
-`offline-order.tsx` displays authorized, frozen bank/meetup instructions, seller
+`offline-order.tsx` displays authorized, frozen bank instructions, seller
 confirmation and deadlines, and offers refresh and buyer cancellation. It never
 starts a payment attempt. An optional `meetup_notes` order field supplies public
 notes from the frozen shipping groups, rather than current merchant settings.
+`meetup-card.tsx` shows those notes and the arrangement sentence in one meetup
+card after payment and before items, including card-paid and retained member
+orders. Optional `meetup_handover` contains only the recorded `completed_on`
+calendar date; absent or null means no recorded handover. The card shows
+「等待面交」 while open and unrecorded, or 「已面交」 with the recorded date.
+Cancelled or closed orders without a handover have no meetup card.
 
 ## Store appearance (local candidate, 2026-10-20)
 
