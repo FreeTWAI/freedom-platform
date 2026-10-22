@@ -128,7 +128,11 @@ export async function closeChat(page:Page){
   if(await panel.isVisible()){
     // The phone launcher is hidden while its modal is open. Its own collapse
     // button remains reachable; wait for the panel to close before another action.
-    await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();
+    // The accessible name is translated; the last header button is the
+    // universal collapse control in all five supported languages.
+    const collapse=panel.locator('.floating-message-header > button').last();
+    await expect(collapse).toHaveAttribute('aria-label',/\S/);
+    await collapse.click();
     await expect(panel).toBeHidden();
   }
 }

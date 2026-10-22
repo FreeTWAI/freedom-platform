@@ -296,7 +296,7 @@ test('a failed read before navigating can be retried or skipped explicitly',asyn
   const item=page.locator('li',{hasText:'合成通知 1'});
   await item.getByRole('button',{name:'前往小隊集合',exact:true}).click();
   await expect(item.getByRole('alert')).toContainText('合成錯誤');await expect(page).toHaveURL(retainedPageUrl);
-  await expect(page.locator('#floating-message-panel')).toBeVisible();
+  await expect(page.locator('#floating-message-panel')).toBeHidden();
   await item.getByRole('button',{name:'不標已讀，直接前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
 });
 
