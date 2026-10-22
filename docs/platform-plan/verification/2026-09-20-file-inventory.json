@@ -20169,8 +20169,8 @@
     },
     {
       "path": "modules/community/public-social-sharing/freedom.module.json",
-      "bytes": 2288,
-      "sha256": "f1327a93335f543a950dc7bc63e66bed10d3a1eb79109b7713e714bb11c9f2e7"
+      "bytes": 2350,
+      "sha256": "c29e8c54c3799215e75c7debb41a473d52c9a113eff5b4a2939f985f9e6ac2a3"
     },
     {
       "path": "modules/community/repo-author-claims.ts",
@@ -26129,8 +26129,13 @@
     },
     {
       "path": "tests/runtime/public-social-post-script.test.ts",
-      "bytes": 3058,
-      "sha256": "cd4710a0981afd5571bd63f239e2218e6310625f6f304a9bd855be560b063df4"
+      "bytes": 3085,
+      "sha256": "77f752b608789bf7ab8925362f001f0e58891ad89688ef6965904c49fdebb2eb"
+    },
+    {
+      "path": "tests/runtime/public-social-posts-runtime-role.test.ts",
+      "bytes": 8584,
+      "sha256": "87855e1a2267c177de79b005c331ba30f905487263469957ce55a1905d3a9e57"
     },
     {
       "path": "tests/runtime/public-social-posts.test.ts",

@@ -14,7 +14,8 @@
     "tests/runtime/public-social-posts.test.ts",
     "tests/runtime/public-social-post-page.test.ts",
     "tests/e2e/public-social-posts.spec.ts",
-    "tests/runtime/public-social-post-script.test.ts"
+    "tests/runtime/public-social-post-script.test.ts",
+    "tests/runtime/public-social-posts-runtime-role.test.ts"
   ],
   "public_exports": [
     "modules/community/public-social-posts.ts",
