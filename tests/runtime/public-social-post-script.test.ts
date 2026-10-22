@@ -20,6 +20,7 @@ async function pageClient(domPostId:string,domRelatedId:string){
     documentElement:{dataset:{}},
     querySelector:(selector:string)=>selector==='[data-public-post]'?article:selector==='[data-post-login]'?login:null,
     querySelectorAll:(selector:string)=>selector==='[data-related-post]'?[related]:[],
+    addEventListener() {},
   };
   const fetch=async(path:string)=>{
     requests.push(path);
