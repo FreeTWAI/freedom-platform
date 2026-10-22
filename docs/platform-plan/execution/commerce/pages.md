@@ -80,6 +80,18 @@
 | SL-04 例外與退回 | ExceptionCase（`view=executor` 與出貨者動作）、退回包裹與詳情、退件檢驗（可再售／不可售）與回庫（EC-SPEC-05 §7～8；回庫對庫存的影響在 EC-SPEC-03 §2.1） | E05、E06、E09 |
 | SL-05 費用與交易文件 | 帳目、對帳單清單與明細（依付款天數分張；狀態與中文見 EC-SPEC-06 §5.4）、雙方同意的調整、付款證據與「確認收到」；欄位白名單（EC-SPEC-06 §5.5、§8.3） | E09、E10 |
 
+## 創作者推薦頁（CR，提案，待 Ted 決定）
+
+不在 `efaf314d` 的原需求盤點內；來源是 [creator-curation-spec](creator-curation-spec.md) §2.5，ID、路由與範圍待 Ted 決定。P2 以後的頁面另需新 ADR（OD-26）。資料、API 與錯誤狀態見該規格 §3、§4、§8。
+
+| 頁面 | 現況 | 路由（提議） | 目標操作 | 權限 | 里程碑 |
+| --- | --- | --- | --- | --- | --- |
+| **CR-01 我的推薦清單** | `missing` | `#stores/collections`、`#stores/collections/:id` | 草稿、加入本站公開商品、推薦理由、預覽、發布／撤下 | 本人；不需 `store:write` | 創作者推薦 P1 |
+| **CR-02 公開推薦清單** | `missing` | `/recommendations/:slug` | 公開內容與利益揭露；前往實際店家 | 匿名 | P1 |
+| **CR-03 合作選品** | `missing` | `#stores/discover` | 篩選、查看有效方案 | 同 community 會員；不需 `store:write` | P2 |
+| **CR-04 我的推薦合作** | `missing` | `#stores/recommendations`、`#stores/recommendations/:id` | 申請、接受條款、分享、查看本人義務 | 本人 | P2／P3 |
+| **CR-05 店家推薦方案** | `missing` | tenant／instance console 下的新頁（slug 隨 EC-SPEC-01 §7.5 登記） | 發布方案、處理創作者申請、查看本店義務與結算明細 | 新店家 capability（規格 §4.2） | P2／P3 |
+
 ## 現有測試要保護的介面
 
 改動 B／E 頁面時，以下既有瀏覽器測試的角色名稱、標籤與數量斷言要維持（完整清單在 inv-ui 盤點，見 [sources.md](sources.md)）：`tests/e2e/hosted-store.spec.ts`（建立、發布、版型、複製連結）、`hosted-order.spec.ts`（HO-UI01～03、買家清單分頁）、`hosted-seller-order.spec.ts`（HO-SUI01～04）、`storefront-product.spec.ts`（公開商品頁、OG、noindex、下架不能預留）、`hosted-shared-orders.spec.ts`、`hosted-supply-catalog.spec.ts`、`hosted-supply-terms.spec.ts`。
