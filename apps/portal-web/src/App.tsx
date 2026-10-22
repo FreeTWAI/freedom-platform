@@ -39,6 +39,7 @@ import {AdminReports,MemberReportingProvider} from './modules/MemberReporting'
 import { BrandPoster, CommunityLinks, type SiteConfig } from './modules/Community'
 import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './modules/PublicDiscovery'
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
+import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { CommunitySearch } from './modules/CommunitySearch'
 import { guildKeyFromHash } from './modules/guild-launchpad-route'
 import {ShareLauncher,SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
@@ -148,6 +149,11 @@ function MemberApp() {
   }, [session, onboarding, entryIntent])
 
   const applySession = useCallback((next: SessionPayload) => {
+    // Public reading can resume before the member workspace's onboarding gate.
+    const postReturn=window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
+    if(postReturn){window.location.replace(postReturn);return}
+    const memberReturn=window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
+    if(memberReturn){window.history.replaceState(null,'',memberReturn);window.dispatchEvent(new HashChangeEvent('hashchange'))}
     if(eventLoginFromLocation()){
       const state={...window.history.state};delete state.freedomEventLogin
       window.history.replaceState(Object.keys(state).length?state:null,'')
@@ -197,6 +203,8 @@ function MemberApp() {
         return
       }
       if (err instanceof ApiError && err.unauthorized) {
+        const sharedPost=window.location.pathname==='/'?anonymousSharedPost(window.location.search,window.location.hash):null
+        if(sharedPost){window.location.replace(sharedPost);return}
         toLogin()
         return
       }
@@ -360,6 +368,9 @@ function LoginView({
   const [skillEntryUrl] = useState(() => window.location.href)
   const skillReturnRequest = useRef<AbortController | null>(null)
   const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
+  const postEntryUrl=window.location.href
+  const postReturnPath=!resetToken&&window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
+  const memberPostPath=!resetToken&&window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
   const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
   const authForm = useRef<HTMLFormElement>(null)
@@ -368,10 +379,16 @@ function LoginView({
     setMode('register'); setError(null); setResetNotice('')
     requestAnimationFrame(() => { authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true }) })
   }, [])
-  useEffect(() => { if ((discoveryEnabled || (!resetToken && skillReturn)) && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled, site?.registration_enabled, resetToken, skillReturn, join])
+  useEffect(() => { if ((discoveryEnabled||postReturnPath||(!resetToken&&skillReturn)) && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled,postReturnPath,site?.registration_enabled,resetToken,skillReturn,join])
   const activeMode=resetToken?'confirm-reset':mode
   const storefrontReturnEnabled = site?.commerce_checkout_enabled === true && !resetToken
   useEffect(() => () => { authEpoch.current++; skillReturnRequest.current?.abort() }, [activeMode])
+  useEffect(() => {
+    if(!postReturnPath&&!memberPostPath)return
+    const moved=()=>{authEpoch.current++}
+    window.addEventListener('hashchange',moved);window.addEventListener('popstate',moved)
+    return()=>{window.removeEventListener('hashchange',moved);window.removeEventListener('popstate',moved)}
+  },[postReturnPath,memberPostPath])
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -422,6 +439,11 @@ function LoginView({
         throw new Error('登入回應不完整')
       }
       if (epoch !== authEpoch.current) return
+      if(postReturnPath||memberPostPath){
+        if(window.location.href!==postEntryUrl)return
+        if(postReturnPath){window.location.assign(postReturnPath);return}
+        onLoggedIn(session);return
+      }
       if (storefrontReturnEnabled && storefrontReturn) {
         const allowed = await successfulStorefrontReturn(storefrontReturn, session)
         if (epoch !== authEpoch.current) return
@@ -467,6 +489,8 @@ function LoginView({
       <section className="card login-card" aria-labelledby="login-heading">
         {!accessExpired && activeMode!=='confirm-reset'&&<div className="auth-switch" role="group" aria-label={t('auth.switch')}><button type="button" className={activeMode==='login'?'selected':''} aria-pressed={activeMode==='login'} onClick={()=>{setMode('login');setError(null);setResetNotice('')}}>{t('auth.memberLogin')}</button>{site?.registration_enabled&&<button type="button" className={activeMode==='register'?'selected':''} aria-pressed={activeMode==='register'} onClick={()=>{setMode('register');setError(null);setResetNotice('')}}>{t('auth.create')}</button>}</div>}
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>
+        {postReturnPath&&<p className="purpose-next-destination"><a href={postReturnPath}>返回貼文繼續閱讀</a><br/>{activeMode==='register'?'建立帳號後會回到這篇貼文，加入公會可稍後完成。':'登入後會回到這篇貼文。'}</p>}
+        {memberPostPath&&<p className="purpose-next-destination">登入後會回到指定貼文，並確認你的閱覽權限。</p>}
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
         {!skillReturn && discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
         {skillReturn && !accessExpired && (activeMode === 'login' || activeMode === 'register') && <div className="purpose-next-destination">
