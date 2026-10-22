@@ -17,7 +17,7 @@ export async function runMediaRestoreAcl(args:string[],env:NodeJS.ProcessEnv){
    const socket=url.searchParams.get('host');if(socket!==null&&(!/^\/[a-zA-Z0-9_./-]+$/.test(socket)||socket.includes('/../')||socket.includes('/./')))return failure('database_target_mismatch');
   }else if(url.searchParams.get('sslmode')!=='verify-full'||entries.some(([key])=>key!=='sslmode'))return failure('database_target_mismatch');
   const pool=new Pool({connectionString,max:1,connectionTimeoutMillis:5000,application_name:'freedom-media-restore-acl',options:`-c search_path=${target.schema}`});
-  try{const acl=await lockdownRestoredMediaAcl(pool,options);const retention=await runRestoredContactRetention(pool,{afterInstance});return {exitCode:0,report:{...acl,contactRetention:retention}};}finally{await pool.end();}
+  try{const acl=await lockdownRestoredMediaAcl(pool,options);const retention=await runRestoredContactRetention(pool,{afterInstance});return {exitCode:retention.status==='scan_complete'?0:2,report:{...acl,contactRetention:retention}};}finally{await pool.end();}
  }catch(error){return failure(error instanceof RestoreAclError?error.code:'invalid_arguments');}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const result=await runMediaRestoreAcl(process.argv.slice(2),process.env);process.stdout.write(JSON.stringify(result.report,null,2)+'\n');process.exitCode=result.exitCode;}

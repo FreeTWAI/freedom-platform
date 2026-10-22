@@ -14989,8 +14989,8 @@
     },
     {
       "path": "docs/development/seven-media-backup-restore.md",
-      "bytes": 11371,
-      "sha256": "e07d0a8d56fba713b8da8d70b8c4397d0f1bd84b92231077bb6e9fa7bc619d25"
+      "bytes": 11441,
+      "sha256": "31393d628c27e183ac2f9f1908c2491ca7b4d9038decad5464c4c0c065fa5cdc"
     },
     {
       "path": "docs/development/share-promotion.md",
@@ -23099,8 +23099,8 @@
     },
     {
       "path": "scripts/media-restore-acl.ts",
-      "bytes": 3413,
-      "sha256": "837209ed5677d783e13faa4e8c4ff476bce3b64734fe5df252b42af4a1ff6456"
+      "bytes": 3450,
+      "sha256": "a5f79bcdc3955ee261a8116a696a8fb6c0bbc078ae04e313e8d4c168f2a5b1f2"
     },
     {
       "path": "scripts/media-verify.ts",
