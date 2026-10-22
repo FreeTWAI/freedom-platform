@@ -103,7 +103,8 @@
     "modules/agent-commerce/orders.ts",
     "modules/agent-commerce/service-command.ts",
     "modules/agent-commerce/key-exit.ts",
-    "modules/agent-commerce/hosted-ui/CommerceTools.tsx"
+    "modules/agent-commerce/hosted-ui/CommerceTools.tsx",
+    "modules/agent-commerce/hosted-ui/read-requests.ts"
   ],
   "surfaces": [
     {

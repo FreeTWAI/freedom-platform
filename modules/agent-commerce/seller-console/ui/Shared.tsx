@@ -12,7 +12,7 @@ export function Permission(){return <p role="alert">{NOT_ALLOWED}。{permissionH
 export function ReadStatus<T>({c,name,label,slot}:{c:Controller;name:string;label:string;slot?:ReadSlot<T>}){
  const r=slot??c.slot(name);
  return <div className="seller-read stack">
-  {r.state==='failed'?<p role="alert">{r.status===403?NOT_ALLOWED+'。'+permissionHelp:`無法取得${label}，請稍後重試。${r.error}`}{r.data&&` 保留的資料時間：${formatIsoLocal(r.time)}`}</p>:<p role="status">{r.state==='idle'||r.state==='loading'?`正在讀取${label}…`:`資料時間：${formatIsoLocal(r.time)}`}</p>}
+  {r.state==='failed'?<p role="alert">{r.status===403?NOT_ALLOWED+'。'+permissionHelp:`無法取得${label}，請稍後重試。${r.error}`}{r.data&&` 保留的資料時間：${formatIsoLocal(r.time)}`}</p>:<p role="status">{r.state==='loading'&&r.data?`正在更新${label}；以下為上次讀取的資料（${formatIsoLocal(r.time)}）。`:r.state==='idle'||r.state==='loading'?`正在讀取${label}…`:`資料時間：${formatIsoLocal(r.time)}`}</p>}
   <div className="actions"><button type="button" className="btn btn-ghost" disabled={r.state==='loading'} onClick={()=>void c.load(name)}>{r.state==='failed'?'重試':'更新資料'}<span className="sr-only">：{label}</span></button></div>
  </div>;
 }

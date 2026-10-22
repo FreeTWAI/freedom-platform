@@ -10,7 +10,9 @@
     "tests/e2e/commerce-store-readiness.spec.ts",
     "tests/e2e/seller-console-settings.spec.ts",
     "tests/e2e/seller-console-visual.spec.ts",
-    "tests/e2e/seller-console-fixture.ts"
+    "tests/e2e/seller-console-fixture.ts",
+    "tests/runtime/commerce-console-reads.test.ts",
+    "tests/e2e/commerce-console-reads.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [

@@ -13,6 +13,7 @@ import {holdAttempt,markAttemptUnknown,releaseAttempt,restoreAttempt,retainedAtt
 import {editDraft,staleDrafts,discardDraft,reapplyAttempt,type Drafts,type Fields} from './drafts';
 import {heldMaterialUpload,materialUploadTargets} from './material-upload';
 import {leaveDecision} from './leave';
+import {createConsoleReadRequests} from '../../hosted-ui/read-requests';
 import {defaultReportPeriod,type ReportPeriod,supplierConsoleHref,reservationFilterParams,type ReservationFilters,type ConsoleScope,type SupplierConsoleRoute} from '../ui/route';
 import {commandFields} from '../ui/view';
 export type ReadSlot<T>={state:'idle'|'loading'|'ready'|'failed';data:T|null;asOf:string|null;lastOkAt:string|null;error:string;status?:number};
@@ -42,7 +43,7 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  const photoRef=useRef(photoStates);photoRef.current=photoStates;
  const readRef=useRef(reads);readRef.current=reads;const draftRef=useRef(drafts);draftRef.current=drafts;
  const attemptRef=useRef(attempt);attemptRef.current=attempt;const busyRef=useRef(false),mounted=useRef(false),generation=useRef(client.sessionGeneration);
- const tickets=useRef(new Map<string,{ticket:number;abort:AbortController}>()),serial=useRef(0),refusalMark=useRef<number|null>(null),commandAbort=useRef(new AbortController());
+ const requests=useRef(createConsoleReadRequests()),serial=useRef(0),refusalMark=useRef<number|null>(null),commandAbort=useRef(new AbortController());
  const root=`/tenants/${scope.tenantId}/storefronts/${scope.instanceId}`,binding=`${scope.tenantId}:${scope.instanceId}`;
  const slot=<T,>(key:string)=>(reads[key]??empty) as ReadSlot<T>;
  const profile=slot<SupplyCatalogView>('profile').data;
@@ -69,41 +70,48 @@ export function useSupplierConsoleController({client,userId,scope,route,register
   return table[key]??null;
  }
  const descriptorRef=useRef(descriptor);descriptorRef.current=descriptor;
- async function read(key:string):Promise<boolean> {
+ function read(key:string):Promise<boolean> {return load(key,false);}
+ // Confirmed writes and authority refusals require a read started AFTER the event.
+ function revalidate(key:string):Promise<boolean> {return load(key,true);}
+ function load(key:string,replace:boolean):Promise<boolean> {
   const d=descriptorRef.current(key),p=readRef.current.profile?.data as SupplyCatalogView|undefined;
-  if(!d||d.gate==='write'&&!p?.capabilities.includes('store:write')||d.gate==='owner'&&!(readRef.current.owner?.state==='ready'&&readRef.current.owner.data)||key==='media'&&!photosEnabled)return false;
-  tickets.current.get(key)?.abort.abort();const abort=new AbortController(),ticket=++serial.current,session=client.sessionGeneration; tickets.current.set(key,{abort,ticket});
-  const current=()=>mounted.current&&!abort.signal.aborted&&tickets.current.get(key)?.ticket===ticket&&generation.current===session&&session===client.sessionGeneration&&binding===`${scope.tenantId}:${scope.instanceId}`;
-  setReads(old=>({...old,[key]:{...(old[key]??empty),state:'loading',error:''}}));
-  try {
-   const result=d.schema.safeParse(await client.get(root+d.path,{signal:abort.signal}));if(!result.success)throw new Error('invalid_read');if(!current())return false;
-   const data=result.data as Record<string,unknown>;
-   if(key.startsWith('report:')&&!reportMatchesReadKey(result.data as SupplierReport,scope,key))throw new Error('read_target_mismatch');
-   if(key==='profile'&&(data.tenant_id!==scope.tenantId||data.instance_id!==scope.instanceId)||key.startsWith('product:')&&(data.product as {product_id:string}).product_id!==key.slice(8)||key.startsWith('partner:')&&(data.partner as {partner_id:string}).partner_id!==key.slice(8)||key.startsWith('request:')&&(data.request as {selection_id:string}).selection_id!==key.slice(8))throw new Error('read_target_mismatch');
-   if((key==='materials'||key.startsWith('material:'))&&!materialMatchesReadKey(data as {tenant_id:string;instance_id:string;material?:{material_id:string}},scope,key))throw new Error('read_target_mismatch');
-   if(key.startsWith('reservation:')&&(data.reservation as {order_id:string}).order_id!==key.slice(12)||key.startsWith('partner-reservations:')&&(data.filter as {partner_id:string}).partner_id!==key.slice(21)||key==='changes'&&data.product_id!==null||key.startsWith('changes:')&&data.product_id!==key.slice(8))throw new Error('read_target_mismatch');
-   if(key==='reservations'){
-    const query=new URLSearchParams(d.path.split('?')[1]),filter=data.filter as Record<string,string|null>;
-    if(['state','partner_id','product_id','from','to'].some(field=>filter[field]!==query.get(field)))throw new Error('read_target_mismatch');
-   }
-   const now=new Date().toISOString(),next:ReadSlot<unknown>={state:'ready',data,asOf:typeof data.as_of==='string'?data.as_of:now,lastOkAt:now,error:''};
-   readRef.current={...readRef.current,[key]:next};setReads(old=>({...old,[key]:next}));setPendingReads(old=>old.filter(k=>k!==key));if(refusalReleased({key,mark:refusalMark.current,ticket,current:current(),matched:data.tenant_id===scope.tenantId&&data.instance_id===scope.instanceId})){refusalMark.current=null;setRevoked(false);if(data.writable)setError(old=>old==='目前身分已沒有這項權限'?'':old);}
-   if(key.startsWith('material:')){const version=(data.material as {version:string}).version;setDrafts(old=>Object.fromEntries(Object.entries(old).map(([name,d])=>[name,name.startsWith(key+':')&&d.baseVersion!==version?{...d,stale:true}:d])));}
-   if(key.startsWith('product:'))setDrafts(old=>staleDrafts(old,key.slice(8),(data as unknown as SupplierProductDetail).product.version));
-   return true;
-  } catch(cause) {
+  if(!d||d.gate==='write'&&!p?.capabilities.includes('store:write')||d.gate==='owner'&&!(readRef.current.owner?.state==='ready'&&readRef.current.owner.data)||key==='media'&&!photosEnabled)return Promise.resolve(false);
+  return requests.current.run(key,d.path,async({signal,isCurrent})=>{
+   const ticket=++serial.current,session=client.sessionGeneration;
+   const current=()=>mounted.current&&isCurrent()&&generation.current===session&&session===client.sessionGeneration&&binding===`${scope.tenantId}:${scope.instanceId}`;
    if(!current())return false;
-   if(key==='owner'&&cause instanceof ApiError&&[403,404].includes(cause.status)) {
-    const next:ReadSlot<unknown>={state:'ready',data:null,asOf:null,lastOkAt:new Date().toISOString(),error:'只有業務空間擁有者可以查看預留',status:cause.status};readRef.current={...readRef.current,[key]:next};setReads(old=>({...old,[key]:next}));setPendingReads(old=>old.filter(k=>k!==key));return true;
+   setReads(old=>({...old,[key]:{...(old[key]??empty),state:'loading',error:''}}));
+   try {
+    const result=d.schema.safeParse(await client.get(root+d.path,{signal}));if(!result.success)throw new Error('invalid_read');if(!current())return false;
+    const data=result.data as Record<string,unknown>;
+    if(key.startsWith('report:')&&!reportMatchesReadKey(result.data as SupplierReport,scope,key))throw new Error('read_target_mismatch');
+    if(key==='profile'&&(data.tenant_id!==scope.tenantId||data.instance_id!==scope.instanceId)||key.startsWith('product:')&&(data.product as {product_id:string}).product_id!==key.slice(8)||key.startsWith('partner:')&&(data.partner as {partner_id:string}).partner_id!==key.slice(8)||key.startsWith('request:')&&(data.request as {selection_id:string}).selection_id!==key.slice(8))throw new Error('read_target_mismatch');
+    if((key==='materials'||key.startsWith('material:'))&&!materialMatchesReadKey(data as {tenant_id:string;instance_id:string;material?:{material_id:string}},scope,key))throw new Error('read_target_mismatch');
+    if(key.startsWith('reservation:')&&(data.reservation as {order_id:string}).order_id!==key.slice(12)||key.startsWith('partner-reservations:')&&(data.filter as {partner_id:string}).partner_id!==key.slice(21)||key==='changes'&&data.product_id!==null||key.startsWith('changes:')&&data.product_id!==key.slice(8))throw new Error('read_target_mismatch');
+    if(key==='reservations'){
+     const query=new URLSearchParams(d.path.split('?')[1]),filter=data.filter as Record<string,string|null>;
+     if(['state','partner_id','product_id','from','to'].some(field=>filter[field]!==query.get(field)))throw new Error('read_target_mismatch');
+    }
+    const now=new Date().toISOString(),next:ReadSlot<unknown>={state:'ready',data,asOf:typeof data.as_of==='string'?data.as_of:now,lastOkAt:now,error:''};
+    readRef.current={...readRef.current,[key]:next};setReads(old=>({...old,[key]:next}));setPendingReads(old=>old.filter(k=>k!==key));if(refusalReleased({key,mark:refusalMark.current,ticket,current:current(),matched:data.tenant_id===scope.tenantId&&data.instance_id===scope.instanceId})){refusalMark.current=null;setRevoked(false);if(data.writable)setError(old=>old==='目前身分已沒有這項權限'?'':old);}
+    if(key.startsWith('material:')){const version=(data.material as {version:string}).version;setDrafts(old=>Object.fromEntries(Object.entries(old).map(([name,d])=>[name,name.startsWith(key+':')&&d.baseVersion!==version?{...d,stale:true}:d])));}
+    if(key.startsWith('product:'))setDrafts(old=>staleDrafts(old,key.slice(8),(data as unknown as SupplierProductDetail).product.version));
+    return true;
+   } catch(cause) {
+    if(!current())return false;
+    if(key==='owner'&&cause instanceof ApiError&&[403,404].includes(cause.status)) {
+     const next:ReadSlot<unknown>={state:'ready',data:null,asOf:null,lastOkAt:new Date().toISOString(),error:'只有業務空間擁有者可以查看預留',status:cause.status};readRef.current={...readRef.current,[key]:next};setReads(old=>({...old,[key]:next}));setPendingReads(old=>old.filter(k=>k!==key));return true;
+    }
+    const status=cause instanceof ApiError?cause.status:undefined,message=cause instanceof ApiError&&!cause.network?cause.detail??cause.message:'暫時無法讀取資料，已保存的內容不會因此改變。';
+    const privateUnavailable=cause instanceof ApiError&&(cause.accessExpired||[401,403,404].includes(cause.status));
+    setReads(old=>{const next={...(old[key]??empty),state:'failed' as const,error:message,status,...(privateUnavailable?{data:null,asOf:null,lastOkAt:null}:{})};readRef.current={...readRef.current,[key]:next};return {...old,[key]:next};});
+    // A refusal may mean the member's access changed: reread the capabilities so pages and navigation follow them.
+    if(status===403&&key!=='profile')void revalidate('profile');
+    return false;
    }
-   const status=cause instanceof ApiError?cause.status:undefined,message=cause instanceof ApiError&&!cause.network?cause.detail??cause.message:'暫時無法讀取資料，已保存的內容不會因此改變。';
-   setReads(old=>{const next={...(old[key]??empty),state:'failed' as const,error:message,status,...(status===403||status===404?{data:null}:{})};readRef.current={...readRef.current,[key]:next};return {...old,[key]:next};});
-   // A refusal may mean the member's access changed: reread the capabilities so pages and navigation follow them.
-   if(status===403&&key!=='profile')void read('profile');
-   return false;
-  }
+  },{replace});
  }
- useEffect(()=>{mounted.current=true;generation.current=client.sessionGeneration;refusalMark.current=null;setRevoked(false);commandAbort.current=new AbortController();void read('profile');return()=>{mounted.current=false;tickets.current.forEach(t=>t.abort.abort());commandAbort.current.abort();};},[client,root]);
+ useEffect(()=>{mounted.current=true;generation.current=client.sessionGeneration;refusalMark.current=null;setRevoked(false);commandAbort.current=new AbortController();void read('profile');return()=>{mounted.current=false;requests.current.cancelAll();commandAbort.current.abort();};},[client,root]);
  useEffect(()=>{if(profile?.setup_state==='ready')void read('owner');},[profile?.setup_state]);
  useEffect(()=>{if(profile?.setup_state!=='ready')return;
   const keys=route.page==='overview'?['overview','changes']:route.page==='products'?['profile','products',...(photosEnabled?['media']:[])]:route.page==='product'?['product:'+route.id,'changes:'+route.id,...(photosEnabled?['media']:[])]:route.page==='partners'?['partners']:route.page==='partner'?['partner:'+route.id,'partners',...(ownerAllowed?['partner-reservations:'+route.id]:[])]:route.page==='terms'?['requests','offers','products']:route.page==='review'?['request:'+route.id]:route.page==='reservations'&&ownerAllowed?['partners','products']:route.page==='reservation'&&ownerAllowed?['reservation:'+route.id]:route.page==='materials'?['materials']:route.page==='material'?['materials','material:'+route.id]:route.page==='material-new'?['products']:route.page==='reports'?[reportKey]:route.page==='settings'?['profile']:route.page==='product-new'?['profile','products']:[];
@@ -111,7 +119,7 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  },[route.page,route.id,reportKey,profile?.setup_state,profile?.capabilities.join(','),ownerAllowed,photosEnabled]);
  useEffect(()=>{
   if(appliedFilter.current!==filterKey){
-   appliedFilter.current=filterKey;setPaging({filterKey,cursors:[undefined]});tickets.current.get('reservations')?.abort.abort();
+   appliedFilter.current=filterKey;setPaging({filterKey,cursors:[undefined]});requests.current.cancel('reservations');
    readRef.current={...readRef.current,reservations:empty};setReads(old=>({...old,reservations:empty}));
   }
   if(route.page==='reservations'&&ownerAllowed&&profile?.setup_state==='ready')void read('reservations');
@@ -136,7 +144,7 @@ export function useSupplierConsoleController({client,userId,scope,route,register
   if(photosEnabled&&productId)keys.push('media');
   if(value&&!a.kind.startsWith('material.'))keys.push(...loadedChanges());
   const admissible=keys.filter(key=>{const d=descriptorRef.current(key);return d&&(d.gate!=='write'||profile?.capabilities.includes('store:write'))&&(d.gate!=='owner'||ownerAllowed);});
-  setPendingReads(old=>[...new Set([...old,...admissible.filter(k=>k!=='media'&&k!=='changes'&&!k.startsWith('changes:'))])]);await Promise.all(admissible.map(read));
+  setPendingReads(old=>[...new Set([...old,...admissible.filter(k=>k!=='media'&&k!=='changes'&&!k.startsWith('changes:'))])]);await Promise.all([...new Set(admissible)].map(revalidate));
  }
  async function send(a:Attempt){
   if(busyRef.current||attemptRef.current&&attemptRef.current.key!==a.key||generation.current!==client.sessionGeneration)return;
@@ -152,7 +160,7 @@ export function useSupplierConsoleController({client,userId,scope,route,register
   if(!mounted.current||generation.current!==client.sessionGeneration)return;
   busyRef.current=false;
   if(outcome.state==='unknown'){setPhase('held');return;}
-  if(deniedUnknown){setPhase('held');if(outcome.state==='known'&&outcome.status===404)void read('profile');}
+  if(deniedUnknown){setPhase('held');if(outcome.state==='known'&&outcome.status===404)void revalidate('profile');}
   else{attemptRef.current=null;setAttempt(null);setPhase('idle');}
   if(outcome.state==='success'){
    const saved=`已保存：${a.label}。`;setNotice(saved);setSectionStatus(old=>({...old,[a.draft??a.target]:saved}));if(a.draft)discard(a.draft);
@@ -163,10 +171,10 @@ export function useSupplierConsoleController({client,userId,scope,route,register
    return;
   }
   const detail=outcome.detail??'操作未完成，請核對後重試。';setSectionStatus(old=>({...old,[a.draft??a.target]:detail}));
-  if(outcome.status===403){refusalMark.current=serial.current;setRevoked(true);setError('目前身分已沒有這項權限');void read('profile');}
+  if(outcome.status===403){refusalMark.current=serial.current;setRevoked(true);setError('目前身分已沒有這項權限');void revalidate('profile');}
   else if(outcome.status===412){setError('資料剛剛被更新。你的修改還在，請確認後再套用。');if(a.draft){setDrafts(old=>old[a.draft!]?{...old,[a.draft!]:{...old[a.draft!],conflict:true}}:old);setConflicts(old=>({...old,[a.draft!]:a}));}await refreshAttempt(a);}
   else if(outcome.status===404&&a.kind.startsWith('profile.')){setReads(old=>({...old,profile:{...(old.profile??empty),state:'failed',data:null,error:'找不到這個供貨商品庫',status:404}}));}
-  else {setError(a.kind.startsWith('material.')?detail:outcome.status===404?'找不到這個項目，其他資料仍可查看。':outcome.status===422?'有欄位格式不符，請檢查後再送出。 '+detail:detail);if(outcome.code==='idempotency_conflict')setRejected(a);if(outcome.code==='stock_below_reserved'&&a.productId)void read('product:'+a.productId);}
+  else {setError(a.kind.startsWith('material.')?detail:outcome.status===404?'找不到這個項目，其他資料仍可查看。':outcome.status===422?'有欄位格式不符，請檢查後再送出。 '+detail:detail);if(outcome.code==='idempotency_conflict')setRejected(a);if(outcome.code==='stock_below_reserved'&&a.productId)void revalidate('product:'+a.productId);}
   if(a.kind.startsWith('material.')&&outcome.status!==412)await refreshAttempt(a);
  }
  function command(input:Omit<Attempt,'key'|'scope'>){
@@ -193,9 +201,9 @@ export function useSupplierConsoleController({client,userId,scope,route,register
   retry:()=>attempt&&void send(attempt),position,remember,cursors,nextPage:(next:string)=>setPaging({filterKey,cursors:[...cursors,next]}),previousPage:()=>setPaging({filterKey,cursors:cursors.length>1?cursors.slice(0,-1):cursors}),
   materialBegin:(id:string)=>{if(busyRef.current||attemptRef.current||pendingReads.length||!can('store:write')||slot('profile').state!=='ready'||Object.values(photoRef.current).some(s=>s.blocking)||Object.entries(materialRef.current).some(([key,s])=>key!==id&&s.blocking)||materialUploadTargets(client,userId,scope).some(key=>key!==id))return false;materialRef.current={...materialRef.current,[id]:{dirty:true,blocking:true}};setMaterialStates(materialRef.current);return true;},
   materialStates,materialCreated,materialFocused:()=>setMaterialCreated(null),materialState:(id:string,dirty:boolean,blocking:boolean)=>{const pending=!!heldMaterialUpload(client,userId,{...scope,materialId:id});materialRef.current={...materialRef.current,[id]:{dirty:dirty||pending,blocking:blocking||pending}};setMaterialStates(materialRef.current);},
-  materialSaved:async(id:string)=>{setPendingReads(old=>[...new Set([...old,'materials','material:'+id])]);await Promise.all([read('materials'),read('material:'+id)]);},
+  materialSaved:async(id:string)=>{setPendingReads(old=>[...new Set([...old,'materials','material:'+id])]);await Promise.all([revalidate('materials'),revalidate('material:'+id)]);},
   photoStates,photoState:(id:string,dirty:boolean,blocking:boolean)=>{const pending=!!heldPhotoAttempt(client,userId,{...scope,productId:id});rememberConsolePhoto(client,userId,scope,id,dirty||blocking||pending);photoRef.current={...photoRef.current,[id]:{dirty:dirty||pending,blocking:blocking||pending}};setPhotoStates(photoRef.current);},
-  photoSaved:async(id:string)=>{setNotice('已保存照片。');setPendingReads(old=>[...new Set([...old,'product:'+id])]);await Promise.all([read('product:'+id),read('media'),read('products'),read('overview'),...loadedChanges().map(read)]);},
+  photoSaved:async(id:string)=>{setNotice('已保存照片。');setPendingReads(old=>[...new Set([...old,'product:'+id])]);await Promise.all([revalidate('product:'+id),revalidate('media'),revalidate('products'),revalidate('overview'),...loadedChanges().map(revalidate)]);},
  };
 }
 export type ConsoleController=ReturnType<typeof useSupplierConsoleController>;

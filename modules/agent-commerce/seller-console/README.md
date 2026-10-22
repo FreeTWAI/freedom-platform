@@ -58,3 +58,24 @@ PortalClient 也會將 mutating 5xx 轉成無 problem code 的 network error，�
 
 自有商品顯示庫存、已占用、可售，以及預留中與已付款待出貨；預留不是成交。
 庫存編輯下限仍由伺服器的 `stock_below_reserved` 409 決定，沒有新的寫入權限。
+
+## Read coordination (2026-10-22 source candidate)
+
+Seller and supplier consoles share the small transient `hosted-ui/read-requests.ts`
+queue. Identical in-flight reads of one slot/path share their result; a later
+explicit refresh still goes to the server. A changed path replaces the old read.
+Unregistering a seller view aborts its read; leaving either console cancels all
+its reads. Cancellation settles the waiting caller even when an adapter ignores
+AbortSignal. Caller-owned session and response-target checks remain mandatory.
+
+Confirmed writes, version conflicts, saved photos/materials and authority
+refusals explicitly replace reads started before that event. They cannot reuse a
+pre-write response to clear pending-read protection. The queue never handles
+commands, changes idempotency keys or retries writes. Failed refreshes preserve
+existing saved/unknown-command semantics. Retained values are marked stale while
+updating; current 401/403/404 or Access-expiry failures discard that slot's private
+read projection. No polling, durable cache, new server API or deployment flags.
+
+Regression entrypoints: `tests/runtime/commerce-console-reads.test.ts` and
+`tests/e2e/commerce-console-reads.spec.ts`; run the existing supplier recovery and
+seller console journeys as well. Test source does not assert a passed run.
