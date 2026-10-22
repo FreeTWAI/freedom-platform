@@ -39,12 +39,7 @@
 .app-frame.social-layout .home-journal-entry{display:grid;justify-items:start;gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--radius);min-width:0}
 .app-frame.social-layout .home-journal-entry h2{font-size:1rem;margin:0}
 .app-frame.social-layout .home-journal-entry p{font-size:.875rem;line-height:1.6;margin:0;color:var(--muted);overflow-wrap:anywhere}
-.app-frame.social-layout .home-journal-entry button{min-height:44px;max-width:100%;white-space:normal}
-.home-journal-dialog{width:min(1200px,calc(100vw - 24px));height:min(900px,calc(100dvh - 24px));max-width:none;max-height:none;padding:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);color:var(--ink);overflow:hidden}
-.home-journal-dialog[open]{display:flex;flex-direction:column}
-.home-journal-dialog::backdrop{background:#0009}
-.home-journal-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
-.home-journal-dialog>iframe{display:block;width:100%;flex:1;min-height:0;border:0;background:var(--bg-elev)}
+.app-frame.social-layout .home-journal-entry a{min-height:44px;max-width:100%;white-space:normal}
 .app-frame.social-layout .home-next-step{padding:18px;background:var(--bg-elev);border:1px solid var(--line);border-radius:14px}
 .app-frame.social-layout .freedom-home #home-next-step-description{font-size:.9375rem;line-height:1.6}
 .app-frame.social-layout .freedom-home .home-shortcuts{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}

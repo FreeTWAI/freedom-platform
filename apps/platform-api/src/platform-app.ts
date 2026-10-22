@@ -1,3 +1,4 @@
+import {createJournalAgentRoutes,createJournalMemberRoutes,createJournalPublicRoutes,isAgentJournalPath} from './routes/community-journal.js';
 import { storeCategoriesInstalled, storeCategoriesOptions } from './routes/hosted-store-categories.js';
 import { commerceOrderNotificationsInstalled } from './routes/hosted-checkout.js';
 import { storeVariantsInstalled, storeVariantsOptions, isProductGroupReplace } from './routes/hosted-store-variants.js';
@@ -161,10 +162,7 @@ export function isMemberCardPage(path:string){return /^\/member-cards\/[A-Za-z0-
 export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
   const githubSetupForm=path==='/admin'||path==='/admin/github/callback'?' https://github.com/organizations/FreeTWAI/settings/apps/new':'';
   const destinations=isPaymentHandoffPath(path)?(paymentFormOrigin?' '+paymentFormOrigin:''):githubSetupForm+(brokerFormOrigin?' '+brokerFormOrigin:'');
-  // The homepage embeds the public journal. Short retains its flag and payment/admin exclusions.
-  const frameOrigins = path==='/'||path==='/index.html' ? ['https://freetwai.evitina.tw'] : [];
-  if(shortVideosEnabled&&!isPaymentHandoffPath(path)&&path!=='/admin'&&!path.startsWith('/admin/'))frameOrigins.push('https://www.youtube-nocookie.com');
-  const frames=frameOrigins.length?` frame-src ${frameOrigins.join(' ')};`:'';
+  const frames=shortVideosEnabled&&!isPaymentHandoffPath(path)&&path!=='/admin'&&!path.startsWith('/admin/')?' frame-src https://www.youtube-nocookie.com;':'';
   return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:;"+frames+" base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
 }
 export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
@@ -251,7 +249,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     const privateAi=installedPrivateAiResponse(c.req.raw,runtime.privateAiProduct);
     if(privateAi)return privateAi;
     if(!['GET','HEAD','OPTIONS'].includes(c.req.method)) {
-      const agentUpload=isAgentSkillUploadPath(c.req.method,c.req.path)||isAgentDevelopmentPath(c.req.method,c.req.path);
+      const agentUpload=isAgentJournalPath(c.req.method,c.req.path)||isAgentSkillUploadPath(c.req.method,c.req.path)||isAgentDevelopmentPath(c.req.method,c.req.path);
       // Only the narrow Bearer-authenticated Agent endpoints accept a CLI
       // without Origin. Browser requests keep the normal same-origin checks.
       const shopMachine=c.req.path.startsWith('/shop-api/v1/');
@@ -491,6 +489,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/client-api/v1',createClientApiRoutes(pool));
   app.route('/shop-api/v1',createShopMachineRoutes(pool,shopHost));
   app.route('/',createPublicShopRoutes(pool));
+  app.route('/',createJournalPublicRoutes(pool));
+  app.route('/agent-api/v1',createJournalAgentRoutes(pool,authNetwork));
   app.route('/agent-api/v1',createAgentSkillSubmissionRoutes(pool,origin,authNetwork,runtime));
   app.route('/development-agent/v1',createDevelopmentAgentRoutes(pool,loadSocial,authNetwork));
   registerAuthenticationRoutes(app, featureContext);
@@ -555,6 +555,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createRepoMaintainerMemberRoutes(pool));
   app.route('/api/v1',createAvatarRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createClientConnectionRoutes(pool));
+  app.route('/api/v1',createJournalMemberRoutes(pool));
   app.route('/api/v1',createSkillSubmissionRoutes(pool,origin,runtime.githubMetricsToken,runtime));
   app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true}));
   app.route('/api/v1',createCommerceRoutes(pool));
