@@ -89,3 +89,70 @@ test('deferred floating chat panes retain the world draft across channel switche
   await expect(input).toBeHidden();await dock.getByRole('tab',{name:/^世界聊天/}).click();
   await expect(input).toHaveValue('這份世界頻道草稿要保留');
 });
+
+function resourceBarrier(){let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};}
+const resources=(page:Page)=>page.locator('.entry-resources');
+async function openResources(page:Page){
+  await page.goto('/');
+  await resources(page).locator('summary').click();
+  return resources(page).locator('.entry-resource-list');
+}
+
+test('an empty resource preview stops loading and retry keeps the login draft',async({page})=>{
+  await page.setViewportSize({width:320,height:844});let reads=0;
+  await page.route(url=>url.pathname==='/api/v1/community',route=>{
+    reads++;return route.fulfill({json:{skill_books:[]}});
+  });
+  const list=await openResources(page);
+  await expect(list.getByText('目前沒有可預覽的技能書。',{exact:true})).toBeVisible();
+  await expect(list).toHaveAttribute('aria-busy','false');
+  await expect(list.getByText('正在整理可預覽的資源…',{exact:true})).toHaveCount(0);
+  const email=page.getByLabel('電子郵件',{exact:true});await email.fill('synthetic-reader@example.test');
+  const baseline=reads;await list.getByRole('button',{name:'重新讀取資源',exact:true}).click();
+  await expect(list).toHaveAttribute('aria-busy','false');await expect.poll(()=>reads).toBe(baseline+1);
+  await expect(email).toHaveValue('synthetic-reader@example.test');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('bad resource cards stay local and rapid retry sends only one pending read',async({page})=>{
+  const held=resourceBarrier(),started=resourceBarrier();let reads=0,hold=false;
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.route(url=>url.pathname==='/api/v1/community',async route=>{
+    reads++;
+    if(hold){started.release();await held.promise;return route.fulfill({json:{skill_books:[]}});}
+    return route.fulfill({json:{skill_books:[null]}});
+  });
+  try{
+    const list=await openResources(page);
+    await expect(list.getByRole('alert')).toHaveText('資源暫時無法載入。');
+    await expect(page.getByLabel('電子郵件',{exact:true})).toBeEnabled();
+    const baseline=reads;hold=true;
+    const retry=list.getByRole('button',{name:'重新讀取資源',exact:true});
+    await retry.evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+    await started.promise;await expect(retry).toBeDisabled();await expect(list).toHaveAttribute('aria-busy','true');
+    expect(reads).toBe(baseline+1);held.release();
+    await expect(list.getByText('目前沒有可預覽的技能書。',{exact:true})).toBeVisible();
+    await expect(list.getByRole('alert')).toHaveCount(0);expect(errors).toEqual([]);
+  }finally{held.release();}
+});
+
+test('collapsing a pending preview cancels it and reopening reads fresh data',async({page})=>{
+  const held=resourceBarrier(),started=resourceBarrier();let holdNext=true,reads=0,oldUrl='';
+  await page.route(url=>url.pathname==='/api/v1/community',async route=>{
+    reads++;
+    if(!holdNext)return route.fulfill({json:{skill_books:[]}});
+    holdNext=false;oldUrl=route.request().url();started.release();await held.promise;
+    try{await route.fulfill({json:{skill_books:[{id:'old-book',title:'過期合成預覽',description:'合成資料',repository_url:'https://github.com/example/old'}]}});}
+    catch(cause){if(!route.request().failure())throw cause;}
+  });
+  try{
+    const list=await openResources(page);await started.promise;await expect(list).toHaveAttribute('aria-busy','true');
+    const cancelled=page.waitForEvent('requestfailed',request=>request.url()===oldUrl);
+    await resources(page).locator('summary').click();
+    expect((await cancelled).failure()?.errorText).toMatch(/abort|cancel/i);
+    const before=reads;await resources(page).locator('summary').click();
+    await expect(list.getByText('目前沒有可預覽的技能書。',{exact:true})).toBeVisible();
+    expect(reads).toBe(before+1);held.release();
+    await expect(list.getByText('過期合成預覽',{exact:true})).toHaveCount(0);
+  }finally{held.release();}
+});

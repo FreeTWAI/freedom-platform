@@ -207,3 +207,33 @@ test('appending does not mutate either input and preserves order', () => {
   const result=appendTaskItems([...first],[...next]);
   assert.deepEqual(result.map(x=>x.work_item_id),['b','a','c']);assert.equal(first.length,1);assert.equal(next.length,2);
 });
+
+
+// Completion must follow the caller's cancellation, not an ignored transport signal.
+async function flushCancelledRead() { for (let i=0;i<12;i++) await Promise.resolve(); }
+for(const action of ['cancel','reset','replace'] as const){
+  test(`cancelled read completion is immediate even when transport never settles: ${action}`,async()=>{
+    const lane=createTaskRead<string>(()=>1);let oldSignal!:AbortSignal,finished=false;
+    const done=lane.run('old',async signal=>{oldSignal=signal;return new Promise<string>(()=>{});});
+    void done.then(()=>{finished=true;});await tick();
+    if(action==='replace')await lane.run('new',async()=>'current');else lane[action]();
+    await flushCancelledRead();
+    assert.equal(oldSignal.aborted,true);assert.equal(finished,true);
+    assert.equal(lane.getSnapshot().value,action==='replace'?'current':null);
+  });
+}
+test('cancelling a shared pending read releases every waiter without another read',async()=>{
+  const lane=createTaskRead<number>(()=>1);let calls=0,finished=0;
+  const read=()=>{calls++;return new Promise<number>(()=>{});};
+  const first=lane.run('q',read),second=lane.run('q',read);
+  first.then(()=>{finished++;});second.then(()=>{finished++;});await tick();lane.cancel();
+  await flushCancelledRead();assert.strictEqual(first,second);assert.equal(finished,2);assert.equal(calls,1);
+});
+test('cancelled completion cannot become an acknowledgement or publish a late failure',async()=>{
+  const lane=createTaskRead<number>(()=>1),old=deferred<number>();
+  await lane.run('known',async()=>7);const known=lane.getSnapshot();
+  const first=lane.run('q',()=>old.promise,{retain:true});await tick();lane.cancel();
+  await flushCancelledRead();assert.strictEqual(lane.getSnapshot(),known);
+  await lane.run('q',async()=>8);old.reject(new Error('late transport failure'));
+  await first;await flushCancelledRead();assert.equal(lane.getSnapshot().value,8);
+});

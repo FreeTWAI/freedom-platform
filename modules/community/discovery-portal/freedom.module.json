@@ -1,0 +1,51 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "community-discovery",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/community/discovery-portal/**",
+    "apps/platform-api/src/guild-review.ts",
+    "apps/portal-web/public/services.css",
+    "apps/portal-web/src/modules/EntryResources.tsx",
+    "apps/portal-web/src/modules/GuildDiscoveryReport.tsx",
+    "apps/portal-web/src/modules/SkillBookBadges.tsx",
+    "apps/portal-web/src/modules/SkillBookIntro.css",
+    "apps/portal-web/src/modules/SkillShare.tsx",
+    "apps/portal-web/src/modules/SkillsPanel.tsx",
+    "apps/portal-web/src/modules/skill-book-commerce-references.ts"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/modules/EntryResources.tsx",
+    "apps/portal-web/src/modules/SkillsPanel.tsx",
+    "apps/portal-web/src/modules/GuildDiscoveryReport.tsx"
+  ],
+  "dependencies": [
+    "community",
+    "development",
+    "github-social",
+    "member-card",
+    "portal-shell",
+    "shared",
+    "skill-submissions"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/community/discovery-portal/README.md",
+    "docs/development/member-api.md",
+    "docs/development/github-social.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

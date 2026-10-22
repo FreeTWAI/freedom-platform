@@ -1,0 +1,45 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "co-creation",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/co-creation/**",
+    "apps/platform-api/src/routes/co-creation.ts",
+    "apps/portal-web/src/modules/CoCreationPanel.tsx",
+    "apps/portal-web/src/modules/CoCreation.css",
+    "tests/runtime/co-creation.test.ts",
+    "tests/e2e/co-creation.spec.ts",
+    "docs/development/co-creation.md"
+  ],
+  "public_exports": [
+    "modules/co-creation/service.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "community",
+    "member-card",
+    "portal-shell",
+    "shared",
+    "skill-submissions",
+    "work"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/co-creation/README.md",
+    "docs/development/co-creation.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}
