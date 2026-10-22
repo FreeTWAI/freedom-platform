@@ -1,8 +1,9 @@
 import type {PoolClient} from 'pg';
 import {z} from 'zod';
 import {
-  NOTIFICATION_ACTION_TABS,NOTIFICATION_BODY_MAX,NOTIFICATION_KINDS,NOTIFICATION_SOURCE_KEY_MAX,NOTIFICATION_TITLE_MAX,
+  NOTIFICATION_ACTION_TABS,NOTIFICATION_BODY_MAX,NOTIFICATION_KINDS,NOTIFICATION_SOURCE_KEY_MAX,NOTIFICATION_TITLE_MAX,isOrderNotificationAction,
   type NotificationAction,type NotificationKind,
+  ORDER_NOTIFICATION_KINDS,
 } from './types.js';
 
 const uuid=z.string().uuid();
@@ -15,6 +16,8 @@ const action=z.discriminatedUnion('tab',[
   z.object({tab:z.literal('guild-workspace'),resource_id:guildKey.nullable()}).strict(),
   z.object({tab:z.literal('events'),resource_id:uuid.nullable()}).strict(),
   z.object({tab:z.literal('social'),resource_id:uuid}).strict(),
+  z.object({tab:z.literal('stores'),resource_id:z.string().refine(resource_id=>isOrderNotificationAction({tab:'stores',resource_id}))}).strict(),
+  z.object({tab:z.literal('reservations'),resource_id:z.string().refine(resource_id=>isOrderNotificationAction({tab:'reservations',resource_id}))}).strict(),
 ]);
 const notifyInput=z.object({
   community_id:uuid,
@@ -33,6 +36,12 @@ export type NotifyMemberInput={
   title:string;body:string;action:NotificationAction|null;
 };
 
+/** One kill-switch predicate for counts, pages, reminders and read eligibility, before pagination. */
+export function notificationVisibilitySQL(orderNotificationsEnabled:boolean,alias:''|'n'=''):string {
+  const column=alias?'n.kind':'kind';
+  return orderNotificationsEnabled?'TRUE':`${column} NOT IN (${ORDER_NOTIFICATION_KINDS.map(kind=>`'${kind}'`).join(',')})`;
+}
+
 /**
  * Records one in-app notification inside the caller's transaction, so it
  * commits or rolls back with the domain change. Returns null when the same
@@ -41,7 +50,7 @@ export type NotifyMemberInput={
  * not required and nothing here grants roles or sends email/external traffic.
  * Invalid input or cross-community routing is a programming error and throws.
  */
-export async function notifyMember(q:PoolClient,input:NotifyMemberInput):Promise<{notification_id:string}|null>{
+export async function notifyMember(q:Pick<PoolClient,'query'>,input:NotifyMemberInput):Promise<{notification_id:string}|null>{
   const parsed=notifyInput.safeParse(input);
   if(!parsed.success)throw new Error(`notification_input_invalid: ${parsed.error.issues.map(i=>i.path.join('.')||'input').join(',')}`);
   const n=parsed.data;

@@ -1,3 +1,6 @@
+import {categoryDisplay,categoriesAssets,type CategoryView} from '../storefront/categories/pages.js';
+import type {RenderCatalog} from '../storefront/variants/buyer.js';
+import {variantsAssets,catalogProducts,variantCardDetail,featuredGroupSkus,variantControls,variantUnavailable} from '../storefront/variants/page.js';
 import type {RenderGallery} from '../../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import {galleryHtml,galleryAssets} from '../storefront/gallery/page.js';
 import type {RenderPolicies} from '../storefront/policies/model.js';
@@ -63,43 +66,51 @@ function shell(name: string, description: string, content: string, meta = '', pr
 function conditions(store: PublicStoreProjection) {
   return `<aside class="shop-notice" aria-label="預留與交易說明"><h2>看見喜歡的商品，下一步怎麼做？</h2><p>先查看商品，再登入確認這間商店目前是否開放預留。預留成功可保留 30 分鐘；此頁不提供付款，也不會安排出貨。</p><a href="${reservationPath(store)}">登入查看預留狀態</a></aside>`;
 }
-export function storeHtml(store: PublicStoreProjection, template: StoreTemplate = 'catalog-grid-v1', media: Media = [], options?: PageOptions, purchase?: PurchaseState, appearance?: RenderAppearance, policies?:RenderPolicies,previewBase?:string) {
+export function storeHtml(store: PublicStoreProjection, template: StoreTemplate = 'catalog-grid-v1', media: Media = [], options?: PageOptions, purchase?: PurchaseState, appearance?: RenderAppearance, policies?:RenderPolicies,previewBase?:string,catalog?:RenderCatalog,categories?:CategoryView) {
   const preview = options && 'preview' in options && options.preview;
   checkAppearance(store,appearance,Boolean(preview));
   const share = options && 'publicOrigin' in options ? options : undefined;
   const open = !preview && purchase?.open === true;
   const list = StoreTemplateSchema.parse(template) === 'catalog-list-v1', photos = photosFor(store, media, share);
-  const cover = store.products.map(product => photos.get(product.sku)).find(Boolean);
-  const rendered = new Map(store.products.map(p => {
+  const category=categories?categoryDisplay(categories,store.products,catalog):undefined;
+  const all=catalog?catalogProducts(store,catalog):store.products;
+  const displayed=category?.skus?category.skus.map(sku=>all.find(p=>p.sku===sku)!):all;
+  const cover = all.map(product => photos.get(product.sku)).find(Boolean);
+  const rendered = new Map(displayed.map(p => {
+    const variant=catalog?variantCardDetail(store,p.sku,catalog):undefined;
     const photo = picture(photos.get(p.sku), p.title), path = previewBase?`${previewBase}/products/${p.sku}`:productPath(store, p.sku);
     const image = preview && !previewBase ? `<div class="shop-photo-link">${photo}</div>` : `<a class="shop-photo-link" href="${path}" aria-label="查看${escape(p.title)}">${photo}</a>`;
     const title = preview && !previewBase ? escape(p.title) : `<a href="${path}">${escape(p.title)}</a>`;
     const action = preview && !previewBase ? `<details class="shop-preview-description"><summary>預覽完整商品內容</summary>${paragraphs(p.description)}</details>`
       : `<a class="shop-button shop-button-secondary" href="${path}" aria-label="查看商品：${escape(p.title)}">查看商品<span aria-hidden="true"> →</span></a>`;
-    return [p.sku,`<li><article>${image}<div class="shop-product-copy"><h3>${title}</h3><p class="shop-price">${escape(formatMinor(p.price_minor, store.currency))}</p><div class="shop-product-summary">${paragraphs(summary(p.description))}</div>${action}</div></article></li>`] as const;
+    return [p.sku,`<li><article>${image}<div class="shop-product-copy"><h3>${title}</h3><p class="shop-price">${escape(formatMinor(p.price_minor, store.currency))}${variant?.priceSuffix??''}</p>${variant?.summary?`<p class="shop-variant-summary">${escape(variant.summary)}</p>`:''}${variant?.status?`<p class="shop-availability">${escape(variant.status)}</p>`:''}<div class="shop-product-summary">${paragraphs(summary(p.description))}</div>${action}</div></article></li>`] as const;
   }));
   const items=[...rendered.values()].join('');
   const banner = preview ? '<aside class="shop-preview-notice">這是未發布的預覽。發布後才會有可分享的商店與商品頁。</aside>' : '';
   const coverImage=appearance?.cover?appearanceImage(appearance.cover):null;
   const explicitCover=coverImage?`<div class="shop-cover"><img src="${escape(coverImage.read_path)}" alt="${escape(store.name)}的封面圖" width="${coverImage.width}" height="${coverImage.height}" decoding="async" fetchpriority="high"></div>`:'';
-  const featured=appearance?.featured_skus.flatMap(sku=>rendered.has(sku)?[rendered.get(sku)!]:[])??[];
-  const featuredSection=featured.length?`<section class="shop-catalog shop-featured" aria-labelledby="featured-products"><div class="shop-section-heading"><h2 id="featured-products">主打商品</h2></div><ul class="shop-products${list?' shop-products-list':''}">${featured.join('')}</ul></section>`:'';
-  return shell(store.name, store.description, `${banner}${explicitCover?'<div class="shop-hero">':''}<header class="shop-brand-header"><p class="shop-eyebrow">${escape(store.brand ?? '獨立商店')}</p><h1>${escape(store.name)}</h1><div class="shop-introduction">${paragraphs(summary(store.description))}</div><a class="shop-button" href="#products">瀏覽商品 <span aria-hidden="true">↓</span></a></header>${explicitCover}${explicitCover?'</div>':''}${featuredSection}<section class="shop-catalog" aria-labelledby="products"><div class="shop-section-heading"><h2 id="products">店裡的商品</h2><p>${store.products.length} 件商品</p></div>${items ? `<ul class="shop-products${list ? ' shop-products-list' : ''}">${items}</ul>` : '<p class="shop-empty">店主正在準備商品，稍後再回來看看。</p>'}</section>${preview || open ? '' : conditions(store)}`, metadata(store.name, store.description, `/shops/${store.slug}`, coverImage ?? cover, share), Boolean(preview), open ? store.slug : undefined, store, appearance,policies);
+  const featured=(catalog&&appearance?featuredGroupSkus(appearance.featured_skus,catalog):appearance?.featured_skus)?.flatMap(sku=>rendered.has(sku)?[rendered.get(sku)!]:[])??[];
+  const featuredSection=!category?.selected&&featured.length?`<section class="shop-catalog shop-featured" aria-labelledby="featured-products"><div class="shop-section-heading"><h2 id="featured-products">主打商品</h2></div><ul class="shop-products${list?' shop-products-list':''}">${featured.join('')}</ul></section>`:'';
+  return shell(store.name, store.description, `${banner}${explicitCover?'<div class="shop-hero">':''}<header class="shop-brand-header"><p class="shop-eyebrow">${escape(store.brand ?? '獨立商店')}</p><h1>${escape(store.name)}</h1><div class="shop-introduction">${paragraphs(summary(store.description))}</div><a class="shop-button" href="#products">瀏覽商品 <span aria-hidden="true">↓</span></a></header>${explicitCover}${explicitCover?'</div>':''}${category?.nav??''}${featuredSection}<section class="shop-catalog" aria-labelledby="products"><div class="shop-section-heading"><h2 id="products">${escape(category?.selected?.name??'店裡的商品')}</h2><p>${displayed.length} 件商品</p></div>${items ? `<ul class="shop-products${list ? ' shop-products-list' : ''}">${items}</ul>` : '<p class="shop-empty">店主正在準備商品，稍後再回來看看。</p>'}</section>${preview || open ? '' : conditions(store)}`, metadata(store.name, store.description, `/shops/${store.slug}`, coverImage ?? cover, share)+(catalog?variantsAssets:'')+(categories?categoriesAssets:''), Boolean(preview), open ? store.slug : undefined, store, appearance,policies);
 }
-export function productHtml(store: PublicStoreProjection, sku: string, media: Media = [], share?: PublicShare, purchase?: PurchaseState, appearance?: RenderAppearance, policies?:RenderPolicies,gallery?:RenderGallery,previewBase?:string) {
+export function productHtml(store: PublicStoreProjection, sku: string, media: Media = [], share?: PublicShare, purchase?: PurchaseState, appearance?: RenderAppearance, policies?:RenderPolicies,gallery?:RenderGallery,previewBase?:string,catalog?:RenderCatalog) {
   const preview=previewBase!==undefined;
   checkAppearance(store,appearance,preview);
-  const product = publicProduct(store, sku);
-  if (!product) return null;
+  const rawProduct = publicProduct(store, sku);
+  if (!rawProduct) return null;
+  const group=catalog?.document.groups.find(g=>g.members.some(m=>m.sku===sku)),selected=group?.members.find(m=>m.sku===sku);
+  const product=group?{...rawProduct,title:group.title,description:group.description}:rawProduct,label=selected?.buyer_label??product.title;
   const open = !preview && purchase?.open === true;
-  const photos = photosFor(store, media, share), photo = photos.get(sku);
+  const photos = photosFor(store, media, share), photo = photos.get(group?.gallery_sku??sku);
   const legalLinks=policies?policyLinks(store.slug,policies,true):'';
   const action = preview ? '<p class="shop-action-note">這是未發布的商品預覽。</p>' : open
-    ? purchase.product === 'sold_out'
+    ? catalog&&variantUnavailable(catalog.availability?.get(sku))
+      ? `<p class="shop-availability">${escape(variantUnavailable(catalog.availability?.get(sku))!)}</p>`
+      : purchase.product === 'sold_out'
       ? '<p class="shop-availability">目前沒有可售數量</p>'
-      : `<div class="shop-add" id="shop-add-to-cart" data-store-slug="${escape(store.slug)}" data-store-name="${escape(store.name)}" data-sku="${escape(sku)}" data-title="${escape(product.title)}" data-price-minor="${escape(String(product.price_minor))}" data-currency="${escape(store.currency)}" data-revision="${escape(store.revision)}"><noscript><p class="shop-action-note">加入購物車需要開啟瀏覽器的 JavaScript。</p></noscript></div>`
+      : `<div class="shop-add" id="shop-add-to-cart" data-store-slug="${escape(store.slug)}" data-store-name="${escape(store.name)}" data-sku="${escape(sku)}" data-title="${escape(label)}" data-price-minor="${escape(String(product.price_minor))}" data-currency="${escape(store.currency)}" data-revision="${escape(store.revision)}"><noscript><p class="shop-action-note">加入購物車需要開啟瀏覽器的 JavaScript。</p></noscript></div>`
     : `<a class="shop-button" href="${reservationPath(store, sku)}">登入確認預留條件</a><p class="shop-action-note">先確認是否開放，再自行選擇數量與確認預留。尚未付款，不會安排出貨。</p>`;
-  return shell(`${product.title}｜${store.name}`, product.description, `${preview?'<aside class="shop-preview-notice">這是未發布的預覽。發布後才會有可分享的商店與商品頁。</aside>':''}<nav class="shop-breadcrumb" aria-label="商品導覽"><a href="${escape(previewBase??`/shops/${store.slug}`)}">← ${escape(store.name)}</a></nav><article class="shop-detail"><div class="shop-detail-photo${gallery!==undefined?' shop-detail-gallery':''}">${gallery!==undefined?galleryHtml(product.title,gallery,preview?undefined:{slug:store.slug,revision:store.revision,sku}):picture(photo, product.title, true)}</div><div class="shop-detail-copy"><p class="shop-eyebrow">${escape(store.brand ?? store.name)}</p><h1>${escape(product.title)}</h1><p class="shop-price">${escape(formatMinor(product.price_minor, store.currency))}</p><div class="shop-description">${paragraphs(product.description) || '<p>店主尚未補充商品說明。</p>'}</div>${action}${legalLinks?`<nav class="shop-policy-links" aria-label="配送與退換貨政策">${legalLinks}</nav>`:''}<p class="shop-product-ref">商品編號 ${escape(sku)}</p>${preview?'':`<a href="${productPath(store, sku)}">商品分享連結</a>`}</div></article>${open||preview ? '' : conditions(store)}`, metadata(`${product.title}｜${store.name}`, product.description, productPath(store, sku), photo, share)+(gallery!==undefined?galleryAssets:'')+(legalLinks&&!policies?.seller.business_name?'<link rel="stylesheet" href="/shop-policies.css">':''), preview, open ? store.slug : undefined, store, appearance,policies);
+  return shell(`${label}｜${store.name}`, product.description, `${preview?'<aside class="shop-preview-notice">這是未發布的預覽。發布後才會有可分享的商店與商品頁。</aside>':''}<nav class="shop-breadcrumb" aria-label="商品導覽"><a href="${escape(previewBase??`/shops/${store.slug}`)}">← ${escape(store.name)}</a></nav><article class="shop-detail"><div class="shop-detail-photo${gallery!==undefined?' shop-detail-gallery':''}">${gallery!==undefined?galleryHtml(label,gallery,preview?undefined:{slug:store.slug,revision:store.revision,sku:group?.gallery_sku??sku}):picture(photo, product.title, true)}</div><div class="shop-detail-copy"><p class="shop-eyebrow">${escape(store.brand ?? store.name)}</p><h1>${escape(product.title)}</h1><p class="shop-price">${escape(formatMinor(product.price_minor, store.currency))}</p>${group&&catalog?variantControls(group,sku,previewBase??`/shops/${store.slug}`,catalog,formatMinor(product.price_minor,store.currency)):''}<div class="shop-description">${paragraphs(product.description) || '<p>店主尚未補充商品說明。</p>'}</div>${action}${legalLinks?`<nav class="shop-policy-links" aria-label="配送與退換貨政策">${legalLinks}</nav>`:''}<p class="shop-product-ref">商品編號 ${escape(sku)}</p>${preview?'':`<a href="${productPath(store, sku)}">商品分享連結</a>`}</div></article>${open||preview ? '' : conditions(store)}`, metadata(`${label}｜${store.name}`, product.description, productPath(store, sku), photo, share)+(gallery!==undefined?galleryAssets:'')+(catalog?variantsAssets:'')+(legalLinks&&!policies?.seller.business_name?'<link rel="stylesheet" href="/shop-policies.css">':''), preview, open ? store.slug : undefined, store, appearance,policies);
 }
 export function storeMissingHtml(product = false) {
   const name = product ? '找不到這項商品' : '找不到這間商店', description = product ? '這項商品目前沒有公開。' : '這間商店目前沒有公開。';

@@ -74,13 +74,14 @@ export async function captureOffer(page:Page,target:Locator,path:string){
 
 /** Gallery uses the existing photo pass's schema and restricted role. The main
  * server stays gallery-OFF, so its 32 original journeys retain their baseline. */
-export async function startGalleryBrowserServer(){
+export async function startGalleryBrowserServer(options:{variants?:boolean;appearance?:boolean;categories?:boolean}={}){
  if(process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE!=='1'||process.env.NODE_ENV==='production')throw Error('Gallery browser fixture requires the local photo pass');
  const {e2eSchema}=await import('../../packages/testing/e2e-auth-isolation.js');
  const schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA),connectionString=process.env.TEST_DATABASE_URL;
  if(!connectionString)throw Error('Explicit disposable TEST_DATABASE_URL required');
  const {Pool}=await import('pg'),{serve}=await import('@hono/node-server'),{serveStatic}=await import('@hono/node-server/serve-static');
  const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const {collaborationGitHubFixture}=await import('../../packages/testing/github-collaboration.js');
  const {FakeObjectStore}=await import('../../packages/asset-storage/fake-store.js');
  const {createStorefrontGalleryLifecycle}=await import('../../modules/assets/storefront-gallery.js');
  const {createStorefrontProductPhotoLifecycle}=await import('../../modules/assets/storefront-product-photo.js');
@@ -95,7 +96,8 @@ export async function startGalleryBrowserServer(){
   if(!server.listening)await new Promise<void>(resolve=>server.once('listening',resolve));
   const address=server.address();if(!address||typeof address==='string')throw Error('Gallery fixture needs a loopback port');
   const origin=`http://127.0.0.1:${address.port}`,store=new FakeObjectStore();
-  app=createApp(pool,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeGalleryEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,
+  app=createApp(pool,origin,'local',{registrationCommunityId:DEMO_COMMUNITY,guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeGalleryEnabled:true,storeVariantsEnabled:options.variants===true,storeCategoriesEnabled:options.categories===true,storeAppearanceEnabled:options.appearance===true,
+   ...(options.variants?{githubSocial:{fetcher:async input=>collaborationGitHubFixture(input)}}:{}),tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,
    storePhotoAssetStore:store,storePhotoAssets:createStorefrontProductPhotoLifecycle(pool,{store}),storeGalleryAssets:createStorefrontGalleryLifecycle(pool,{store}),storePhotoUploadsEnabled:true,
    linkPreviewFetch:async()=>{throw Error('Gallery fixture forbids outbound previews');}});
   app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));

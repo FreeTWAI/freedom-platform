@@ -159,6 +159,12 @@
         "gallery_changed": {
           "type": "boolean"
         },
+        "variants_changed": {
+          "type": "boolean"
+        },
+        "categories_changed": {
+          "type": "boolean"
+        },
         "photo_count": {
           "type": "integer",
           "minimum": 0,

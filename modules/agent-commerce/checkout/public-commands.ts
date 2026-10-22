@@ -1,3 +1,4 @@
+import {readRetainedMemberOrder} from './member-orders.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives.js';
@@ -15,7 +16,8 @@ import {liveDevice,ensureDevice,grantDevice,hasDeviceGrant,assertDeviceLive,asse
 import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,commerceRateLimitInTransaction,lockOpenOrderBudgets,enforceOpenOrderLimits} from './limits.js';
 import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CommerceEmailOutbox} from '../operations/notifications/email-port.js';
-export interface HostedCheckoutOptions extends CheckoutPorts {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
+import type {OrderNotificationOptions} from './order-notifications.js';
+export interface HostedCheckoutOptions extends CheckoutPorts,OrderNotificationOptions {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
 export interface BrowserAccess {deviceToken?:string;sessionToken?:string;network:string;expectedBuyer?:wire.CheckoutBuyerIdentity}
 const defaults:CommerceSettings={checkoutEnabled:false,quarantine:false,providerProfiles:[]};
 export function quarantineGate(options:Pick<HostedCheckoutOptions,'settings'>) {requireCondition(!(options.settings??defaults).quarantine,503,'commerce_quarantined','商務服務暫停中。');}
@@ -92,6 +94,16 @@ export async function createPublicCheckout(pool:Pool,slug:string,input:CheckoutI
   await chargeCommerceBudgets(pool,access.network,charges);
   return isolatedTransaction(pool,async q=>run(q,await member(q,access.sessionToken,true,access.expectedBuyer)));
 }
+// Only the isolated domain transaction is repeated. Identity prechecks and
+// attempt budgets stay outside; OFF/card operations keep their existing behavior.
+const retryableOrderNotice=(method:string|undefined,options:OrderNotificationOptions)=>Boolean(options.orderNotifications)&&(method==='bank_transfer'||method==='cash_on_meetup');
+async function buyerOrderTransaction<T>(pool:Pool,run:(q:PoolClient)=>Promise<T>,canRetry:()=>boolean):Promise<T> {
+  try{return await isolatedTransaction(pool,run);}
+  catch(error){
+    if(!canRetry()||!(typeof error==='object'&&error!==null&&'code' in error&&error.code==='40P01'))throw error;
+    return isolatedTransaction(pool,run); // A second failure propagates unchanged.
+  }
+}
 export async function placePublicOrder(pool:Pool,slug:string,checkoutRef:string,input:{terms_sha256:string;client_order_id:string;payment_method?:'immediate_card'|'bank_transfer'|'cash_on_meetup'},access:BrowserAccess,options:HostedCheckoutOptions) {
   checkoutGate(options);
   const charges={network:'placementNetwork' as const,store:'placementStore' as const,slug};
@@ -125,34 +137,44 @@ export async function placePublicOrder(pool:Pool,slug:string,checkoutRef:string,
   };
   await precheckBuyerIdentity(pool,access.sessionToken,access.expectedBuyer);
   await chargeCommerceBudgets(pool,access.network,charges);
-  return isolatedTransaction(pool,async q=>run(q,await member(q,access.sessionToken,true,access.expectedBuyer)));
+  return buyerOrderTransaction(pool,async q=>run(q,await member(q,access.sessionToken,true,access.expectedBuyer)),()=>retryableOrderNotice(input.payment_method,options));
 }
 export async function cancelPublicOrder(pool:Pool,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions){
   quarantineGate(options);
   await chargeCommerceBudgets(pool,access.network,{network:'handoffNetwork'});
-  return isolatedTransaction(pool,async q=>{
+  let canRetry=false;
+  return buyerOrderTransaction(pool,async q=>{
     const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
-    await cancelUnpaidOrder(q,authorized.store,orderRef,'buyer','buyer_cancelled',{payment:options.payment});
+    canRetry=retryableOrderNotice(authorized.paymentMethod,options);
+    await cancelUnpaidOrder(q,authorized.store,orderRef,'buyer','buyer_cancelled',{payment:options.payment,orderNotifications:options.orderNotifications,actorPrincipalId:authorized.actorPrincipalId});
     const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
-  });
+  },()=>canRetry);
 }
 export async function readPublicOrder(pool:Pool,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions) {
-  return isolatedTransaction(pool,async q=>{
-    const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
-    const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
-  });
+  try {
+    return await isolatedTransaction(pool,async q=>{
+      const authorized=await authorizePublicOrder(q,slug,orderRef,access,options);
+      const value=await publicOrder(q,authorized.store,orderRef,options.payment);await authorized.recheck();return value;
+    });
+  } catch(error) {
+    if(options.settings?.checkoutEnabled===true&&error instanceof Problem&&error.code==='checkout_order_not_found') {
+      const retained=await readRetainedMemberOrder(pool,slug,orderRef,access.sessionToken,options.payment);
+      if(retained)return retained;
+    }
+    throw error;
+  }
 }
 /** Reads and handoff resumption use one buyer-access proof and decision-clock recheck. */
 async function authorizePublicOrder(q:PoolClient,slug:string,orderRef:string,access:BrowserAccess,options:HostedCheckoutOptions){
   const identity=await member(q,access.sessionToken),store=await resolve(q,slug,options,false,true);
   if(!OpaqueId.safeParse(orderRef).success)orderAccessNotFound();
-  const row=(await q.query<{checkout_id:string;buyer_principal_id:string|null}>(`SELECT co.checkout_id,o.buyer_principal_id FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
+  const row=(await q.query<{checkout_id:string;buyer_principal_id:string|null;payment_method:string}>(`SELECT co.checkout_id,o.buyer_principal_id,co.payment_method FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
     WHERE co.order_id=$1 AND co.tenant_id=$2 AND co.instance_id=$3`,[orderRef,store.tenantId,store.instanceId])).rows[0];
   if(!row)orderAccessNotFound();
   const device=await liveDevice(q,access.deviceToken);
   const byMember=identity?.principalId!==null&&identity?.principalId!==undefined&&identity.principalId===row.buyer_principal_id;
   if(!byMember&&!(device&&await hasDeviceGrant(q,device.device_id,row.checkout_id,orderRef)))orderAccessNotFound();
-  return {store,recheck:async()=>{
+  return {store,paymentMethod:row.payment_method,actorPrincipalId:identity?.principalId??null,recheck:async()=>{
     if(byMember)await currentMember(q,identity);
     else if(!await hasDeviceGrant(q,device!.device_id,row.checkout_id,orderRef))orderAccessNotFound();
   }};

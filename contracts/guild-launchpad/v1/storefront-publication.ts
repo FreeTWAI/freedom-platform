@@ -17,6 +17,8 @@ export const StorePublicationReviewSchema = z.object({
   appearance_changed: z.boolean().optional(),
   policies_changed: z.boolean().optional(),
   gallery_changed: z.boolean().optional(),
+  variants_changed: z.boolean().optional(),
+  categories_changed: z.boolean().optional(),
   photo_count: z.number().int().min(0).max(1600),
   photos: z.array(z.object({sku: z.string(), photo: PrivateProductPhotoSchema.or(DistributionPhotoItemSchema.shape.photo.unwrap()).or(GalleryPhotoSchema)}).strict()).max(1600),
   review_digest: ReviewDigestSchema,

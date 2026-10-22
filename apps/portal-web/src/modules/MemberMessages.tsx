@@ -25,9 +25,10 @@ import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileErr
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
 import {refreshLoadedMessages} from './message-refresh';
+import {isOrderNotificationAction,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
-type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social';
-type NotificationAction={tab:ActionTab;resource_id:string|null};
+type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
+type NotificationAction={tab:Exclude<ActionTab,'stores'|'reservations'>;resource_id:string|null}|OrderNotificationAction;
 type Notice={notification_id:string;kind:string;title:string;body:string;created_at:string;read_at:string|null;action:NotificationAction|null};
 type NoticePage={items:Notice[];unread_count:number;next_offset:number|null};
 type Participant={user_id:string;display_name:string;avatar_url:string|null;last_seen_at:string|null;is_online:boolean};
@@ -42,13 +43,16 @@ type Props={client:PortalClient;session:SessionPayload;messageImagesEnabled?:boo
 
 const PAGE=20,MAX_BODY=2000,LIVE_POLL_MS=1000;
 // Actions map to fixed in-app pages only; a notification can never supply a link.
-const actionLabels:Record<ActionTab,string>={members:'前往工坊夥伴',squads:'前往小隊集合',guilds:'前往職業公會','guild-workspace':'前往公會管理',messages:'開啟私訊',events:'前往活動',social:'查看貼文'};
+const actionLabels:Record<ActionTab,string>={members:'前往工坊夥伴',squads:'前往小隊集合',guilds:'前往職業公會','guild-workspace':'前往公會管理',messages:'開啟私訊',events:'前往活動',social:'查看貼文',stores:'查看店家訂單',reservations:'查看我的訂單'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(cause:unknown,fallback='暫時無法讀取，請稍後重試。')=>cause instanceof Error&&cause.message?cause.message:fallback;
 /** No response, timeout or 5xx: the server may already have applied the write. */
 const unconfirmed=(cause:unknown)=>!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500;
 const merge=<T,>(current:T[],next:T[],id:(value:T)=>string)=>{const seen=new Set(current.map(id));return [...current,...next.filter(value=>!seen.has(id(value)))];};
-const usableAction=(action:NotificationAction|null)=>!action||!Object.hasOwn(actionLabels,action.tab)||(action.tab==='messages'||action.tab==='social')&&!uuid.test(action.resource_id??'')?null:action;
+const usableAction=(action:NotificationAction|null)=>{
+  if(action?.tab==='stores'||action?.tab==='reservations')return isOrderNotificationAction(action)?action:null;
+  return !action||!Object.hasOwn(actionLabels,action.tab)||(action.tab==='messages'||action.tab==='social')&&!uuid.test(action.resource_id??'')?null:action;
+};
 const unreadText=(count:InboxUnread)=>count===undefined?'':count===null?'未讀數未確認':count>0?`${count} 則未讀`:'沒有未讀';
 
 type View='guild'|'squad'|'direct'|'world';
@@ -95,7 +99,7 @@ export function MemberMessages({client,session,messageImagesEnabled=false,member
   </section>;
 }
 
-export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{client:PortalClient;onUnread:(count:InboxUnread)=>void;onNavigate:(id:TabId)=>void;onSocial?:(action:{tab:'social';resource_id:string})=>void;onOpenPeer:(id:string)=>void}){
+export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpenPeer}:{client:PortalClient;onUnread:(count:InboxUnread)=>void;onNavigate:(id:TabId)=>void;onSocial?:(action:{tab:'social';resource_id:string})=>void;onOrder?:(action:OrderNotificationAction)=>void;onOpenPeer:(id:string)=>void}){
   const [items,setItems]=useState<Notice[]>([]),[nextOffset,setNextOffset]=useState<number|null>(null);
   const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading'),[error,setError]=useState('');
   const [more,setMore]=useState<{loading:boolean;error:string}>({loading:false,error:''});
@@ -135,6 +139,7 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{
     try{const page=await client.get<NoticePage>('/me/notifications?limit=1&offset=0');if(alive.current)onUnread(page.unread_count);}catch{if(alive.current)onUnread(null);}
   }
   function go(action:NotificationAction){
+    if(action.tab==='stores'||action.tab==='reservations'){if(isOrderNotificationAction(action))onOrder?.(action);return;}
     if(action.tab==='messages'){onOpenPeer(action.resource_id!);return;}
     if(action.tab==='social'&&onSocial){onSocial({tab:'social',resource_id:action.resource_id!});return;}
     onNavigate(action.tab);
@@ -167,12 +172,13 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOpenPeer}:{
     {items.length===0?<p className="empty">目前沒有通知。</p>:<ul className="messages-list" aria-label="通知">
       {items.map(item=>{
         const id=item.notification_id,action=usableAction(item.action),problem=itemErrors[id];
+        const orderAction=action?.tab==='stores'||action?.tab==='reservations';
         return <li key={id} className={item.read_at?undefined:'is-unread'} data-notification={id}>
           <h3>{item.title}</h3>
           <p className="messages-body">{item.body}</p>
           <p className="messages-meta">{formatIsoLocal(item.created_at)} · {item.read_at?'已讀':'未讀'}</p>
           <div className="messages-actions">
-            {action&&<button className="btn btn-primary" type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
+            {action&&(!orderAction||onOrder)&&<button className="btn btn-primary" type="button" disabled={busy[id]} onClick={()=>item.read_at?go(action):void markRead(item,action)}>{actionLabels[action.tab]}</button>}
             {!item.read_at&&<button className="btn btn-ghost" type="button" disabled={busy[id]} onClick={()=>void markRead(item)}>{busy[id]?'正在標記…':'標為已讀'}</button>}
           </div>
           {problem&&<div className="banner banner-error" role="alert">{problem.message}<div className="messages-actions">

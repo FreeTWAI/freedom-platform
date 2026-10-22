@@ -15,6 +15,7 @@ import {settleOrderPayments} from '../../modules/agent-commerce/payments/window.
 import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
 import {Problem} from '../../packages/shared/problem.js';
 import {checkoutHarness, type CheckoutHarness} from './hosted-checkout-harness.js';
+import {createOrderNotifications} from '../../modules/agent-commerce/checkout/order-notifications.js';
 
 const syllables = ['青', '禾', '川', '石', '林', '安', '白', '南'];
 const synthetic = (n: number) => Array.from({length: n}, () => syllables[randomInt(syllables.length)]).join('');
@@ -22,6 +23,8 @@ let x: CheckoutHarness;
 before(async () => { x = await checkoutHarness('fp_offline_expiry'); });
 beforeEach(async () => x.reset());
 after(async () => x?.stop());
+const notificationOptions=()=>({orderNotifications:createOrderNotifications(true,{checkoutEnabled:true,quarantine:false})});
+async function orderNotices(id:string){return(await x.h.pool.query(`SELECT recipient_ref,kind,title,body,action_tab FROM member_notifications WHERE source_key=$1 ORDER BY recipient_ref`,[`commerce-order/v1/${id}/payment_expired`])).rows;}
 
 const ports = (): CheckoutPorts => ({
   admission: {allowed: () => true},
@@ -59,8 +62,8 @@ async function backdate(sourceOrderId: string, days = 8) {
   const q = await x.h.pool.connect();
   try {
     await q.query('BEGIN');
-    await q.query(`INSERT INTO commerce_orders(order_id,public_shop_id,external_id,request_sha256,currency,total_minor,created_at,expires_at,order_profile,client_order_id)
-      SELECT $2::uuid,o.public_shop_id,'chk:'||$3::text||':'||($4::uuid)::text,o.request_sha256,o.currency,o.total_minor,t,t+interval '72 hours','hosted_checkout',$4::uuid
+    await q.query(`INSERT INTO commerce_orders(order_id,public_shop_id,external_id,request_sha256,currency,total_minor,created_at,expires_at,order_profile,client_order_id,buyer_principal_id)
+      SELECT $2::uuid,o.public_shop_id,'chk:'||$3::text||':'||($4::uuid)::text,o.request_sha256,o.currency,o.total_minor,t,t+interval '72 hours','hosted_checkout',$4::uuid,o.buyer_principal_id
       FROM commerce_orders o CROSS JOIN (SELECT date_trunc('milliseconds',clock_timestamp()-($5::int * interval '1 day')) AS t) n
       WHERE o.order_id=$1::uuid`, [sourceOrderId, id, checkoutId, client, days]);
     await q.query(`INSERT INTO commerce_checkout_orders(order_id,tenant_id,instance_id,checkout_id,customer_id,contact_id,display_number,terms,terms_sha256,environment,payment_method)
@@ -104,6 +107,8 @@ test('hold expiry returns stock and leaves the offline order open', async () => 
   assert.equal(after.stock, before.stock);
   assert.equal(after.reserved, before.reserved - 1);
   assert.equal((await state(order.order_id)).hold, 'held');
+  // Production has no notice-port parameter on this sweep; this is only a side-effect sanity check.
+  assert.deepEqual(await orderNotices(historical),[]);
 });
 
 test('confirmation inside the grace period allocates or opens an unallocatable exception', async () => {
@@ -129,21 +134,23 @@ test('confirmation inside the grace period allocates or opens an unallocatable e
 test('the offline window reschedules before grace, cancels after it, and never cancels a confirmed order', async () => {
   const {s, order, owner} = await placeBank();
   const date = await today();
-  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id), 'skipped');
+  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id,notificationOptions()), 'skipped');
   await x.h.pool.query(`UPDATE commerce_due_work SET due_at=clock_timestamp()-interval '1 minute', lease_until=NULL WHERE target_id=$1 AND kind='offline_payment_window_end'`, [order.order_id]);
-  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id), 'completed');
+  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id,notificationOptions()), 'completed');
   const rescheduled = await state(order.order_id);
   assert.equal(rescheduled.lifecycle, 'open');
+  assert.deepEqual(await orderNotices(order.order_id),[]);
   assert.equal(rescheduled.due, 1);
   assert.equal((await x.h.pool.query<{matched: boolean}>('SELECT due_at=(SELECT expires_at+interval \'72 hours\' FROM commerce_orders WHERE order_id=$1) AS matched FROM commerce_due_work WHERE target_id=$1 AND kind=\'offline_payment_window_end\'', [order.order_id])).rows[0].matched, true);
   await confirmOfflinePayment(x.runtime, owner, s.tenantId, s.instanceId, order.order_id, {amount_minor: order.terms.total_minor, received_on: date}, randomUUID(), order.version);
   await x.h.pool.query(`UPDATE commerce_due_work SET due_at=clock_timestamp()-interval '1 minute', lease_until=NULL WHERE target_id=$1`, [order.order_id]);
-  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id), 'completed');
+  assert.equal(await endOfflinePaymentWindow(x.runtime, order.order_id,notificationOptions()), 'completed');
   const kept = await state(order.order_id);
   assert.equal(kept.lifecycle, 'open');
   assert.equal(kept.reason, null);
   assert.equal(kept.payments, 1);
   assert.equal(kept.due, 0);
+  assert.deepEqual(await orderNotices(order.order_id),[]);
   const late = await placeBank();
   const historical = await backdate(late.order.order_id);
   const confirmed = await confirmOfflinePayment(x.runtime, late.owner, late.s.tenantId, late.s.instanceId, historical, {amount_minor: late.order.terms.total_minor, received_on: date}, randomUUID(), '1');
@@ -156,7 +163,21 @@ test('the offline window reschedules before grace, cancels after it, and never c
   assert.equal(stillOpen.due, 0);
   const ending = await placeBank();
   const expired = await backdate(ending.order.order_id);
-  assert.equal(await endOfflinePaymentWindow(x.runtime, expired), 'completed');
+  const identity=(await x.h.pool.query(`SELECT o.buyer_principal_id,p.user_ref FROM commerce_orders o JOIN principals p ON p.principal_id=o.buyer_principal_id WHERE o.order_id=$1`,[expired])).rows[0];
+  await x.h.pool.query("INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at) VALUES($1,$2,'viewer','active',clock_timestamp())",[ending.s.tenantId,identity.buyer_principal_id]);
+  await x.h.pool.query(`INSERT INTO tenant_module_permissions(tenant_id,principal_id,instance_id,capabilities,status,granted_by_principal_id)
+    SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[ending.s.tenantId,identity.buyer_principal_id,ending.s.instanceId,ending.s.owner.user.user_id]);
+  const results=await Promise.all([endOfflinePaymentWindow(x.runtime,expired,notificationOptions()),endOfflinePaymentWindow(x.runtime,expired,notificationOptions())]);
+  assert.deepEqual(results.sort(),['completed','skipped']);
+  assert.equal(await endOfflinePaymentWindow(x.runtime,expired,notificationOptions()),'skipped');
+  const notices=await orderNotices(expired);assert.equal(notices.length,2);
+  assert.equal(notices.filter(n=>n.recipient_ref===identity.user_ref).length,1);
+  assert.equal(notices.find(n=>n.recipient_ref===identity.user_ref).action_tab,'reservations');
+  assert.equal(notices.find(n=>n.recipient_ref===ending.s.owner.user.user_id).action_tab,'stores');
+  assert.ok(notices.every(n=>n.kind==='commerce_order_payment_expired'&&n.title==='訂單已因付款期限結束取消'));
+  const display=(await x.h.pool.query('SELECT display_number FROM commerce_checkout_orders WHERE order_id=$1',[expired])).rows[0].display_number;
+  assert.equal(notices.find(n=>n.recipient_ref===identity.user_ref).body,`「合成商店」的訂單 ${display} 已在付款確認寬限結束後取消；若你已付款，請聯絡店家。`);
+  assert.equal(notices.find(n=>n.recipient_ref===ending.s.owner.user.user_id).body,`「合成商店」的訂單 ${display} 已在付款確認寬限結束後取消，請至訂單頁查看。`);
   const cancelled = await state(expired);
   assert.equal(cancelled.lifecycle, 'cancelled');
   assert.equal(cancelled.reason, 'payment_not_completed');
@@ -184,4 +205,24 @@ test('card settlement and due work ignore offline orders unless the offline wind
   assert.equal(cancelled.lifecycle, 'cancelled');
   assert.equal(cancelled.reason, 'payment_not_completed');
   assert.equal((await state(order.order_id)).lifecycle, 'open');
+});
+
+test('quarantine stops expiry and a notification database error rolls cancellation back before the normal due-work retry',async()=>{
+  const {order}=await placeBank(),id=await backdate(order.order_id),opt=notificationOptions();
+  const paused=await runDueCommerceWork(x.runtime,{freedomEnv:'local',quarantine:true,...opt},{targets:[id]});
+  assert.equal(paused.claimed,0);assert.equal((await state(id)).lifecycle,'open');assert.deepEqual(await orderNotices(id),[]);
+  await x.h.pool.query(`CREATE FUNCTION synthetic_order_notice_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN IF NEW.source_key='commerce-order/v1/${id}/payment_expired' THEN RAISE EXCEPTION 'synthetic_notification_database_failure' USING ERRCODE='23514'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER synthetic_order_notice_failure BEFORE INSERT ON member_notifications FOR EACH ROW EXECUTE FUNCTION synthetic_order_notice_failure()`);
+  try{
+    const failed=await runDueCommerceWork(x.runtime,{freedomEnv:'local',...opt},{targets:[id]});
+    assert.equal(failed.failed,1);assert.equal(failed.completed,0);assert.equal(failed.externalCalls,0);
+    assert.equal((await state(id)).lifecycle,'open');assert.equal((await state(id)).due,1);assert.deepEqual(await orderNotices(id),[]);
+    const work=(await x.h.pool.query('SELECT failure_count,last_error,lease_until,due_at>clock_timestamp() AS rescheduled FROM commerce_due_work WHERE target_id=$1',[id])).rows[0];
+    assert.deepEqual(work,{failure_count:1,last_error:'internal',lease_until:null,rescheduled:true});
+  }finally{await x.h.pool.query('DROP TRIGGER synthetic_order_notice_failure ON member_notifications; DROP FUNCTION synthetic_order_notice_failure()');}
+  await x.h.pool.query("UPDATE commerce_due_work SET due_at=clock_timestamp()-interval '1 minute' WHERE target_id=$1",[id]);
+  const recovered=await runDueCommerceWork(x.runtime,{freedomEnv:'local',...opt},{targets:[id]});
+  assert.equal(recovered.completed,1);assert.equal(recovered.failed,0);assert.equal(recovered.externalCalls,0);
+  assert.equal((await state(id)).lifecycle,'cancelled');assert.equal((await state(id)).due,0);assert.equal((await orderNotices(id)).length,2);
 });

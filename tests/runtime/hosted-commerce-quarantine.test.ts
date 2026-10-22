@@ -1,3 +1,4 @@
+import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
@@ -149,4 +150,39 @@ test('quarantine blocks gallery upload, ordering, descriptions, removal and rece
  await h.f.x.h.pool.query("UPDATE domain_media_storage_policy SET mode='r2_only',persistence_allowed=true,policy_revision='synthetic-quarantine-gallery',retained_byte_limit=16777216 WHERE purpose='storefront.product-photo'");
  const saved=await upload();assert.equal(saved.status,200,await saved.clone().text());
  const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await upload()).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
+});
+
+test('member checkout list and retained B07 are read-only and remain available in quarantine',async()=>{
+  const x=h.f.x,s=await x.store(),principal=(await x.h.pool.query("SELECT principal_id FROM principals WHERE user_ref=$1 AND kind='person'",[s.owner.user.user_id])).rows[0].principal_id;
+  const frozen=await x.frozen(s,1),order=await x.place(s,frozen,randomUUID(),principal);
+  const current=h.expect(await x.h.call('GET',s.root,s.owner,undefined,{},x.app));h.expect(await x.send(s,'/unpublish',{},current.version));
+  const settings={...h.f.settings,checkoutEnabled:true,quarantine:true},app=createApp(x.runtime,x.h.origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:settings});
+  const before=await snapshot(),list=await x.h.call('GET','/me/orders',s.owner,undefined,{},app);
+  assert.equal(list.status,200);assert.deepEqual(list.data.items.map((o:{order_ref:string})=>o.order_ref),[order.order_id]);
+  const page=await app.request(x.h.origin+`/shops/${s.slug}/orders/${order.order_id}`,{headers:{Cookie:s.owner.cookie}});
+  assert.equal(page.status,200);assert.equal(page.headers.get('Cache-Control'),'private, no-store');
+  assert.equal((await app.request(x.h.origin+`/api/v1/public/stores/${s.slug}/orders/${order.order_id}`,{headers:{Cookie:s.owner.cookie}})).status,200);
+  assert.equal((await app.request(x.h.origin+`/shops/${s.slug}/orders/${order.order_id}`)).status,404);
+  assert.deepEqual(await snapshot(),before);
+});
+
+test('quarantine blocks all three variant mutations and receipt replay before any rows or sequences change',async()=>{
+ const s=await h.f.x.store(),app=createApp(h.f.x.runtime,h.f.x.h.origin,'local',{guildLaunchpadEnabled:true,storeVariantsEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:h.f.settings});
+ const root=s.root+'/product-groups/'+s.product.sku,key=randomUUID(),body={title:'合成規格商品',description:'',axes:[],members:[{product_id:s.product.product_id,product_version:s.product.version,value_keys:[]}],default_product_id:s.product.product_id,order:0};
+ const send=(method:string,suffix:string,value:unknown,commandKey=key)=>h.f.x.h.call(method,root+suffix,s.owner,value,{'Idempotency-Key':commandKey,'If-Match':'"1"'},app);
+ const before=await snapshot();h.f.settings.quarantine=true;
+ for(const [method,suffix,value] of [['PUT','',body],['POST','/products',{product:{title:'合成新品',price_minor:100,stock:2},value_keys:[]}],['POST','/split',{}]] as const)assert.equal((await send(method,suffix,value)).status,503);
+ assert.deepEqual(await snapshot(),before);assert.equal((await h.f.x.h.call('GET',root,s.owner,undefined,{},app)).status,200);
+ h.f.settings.quarantine=false;assert.equal((await send('PUT','',body)).status,200);
+ const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await send('PUT','',body)).status,503);assert.deepEqual(await snapshot(),committed);
+});
+
+test('quarantine blocks all five category mutations and replay before receipts, facts or profile changes',async()=>{
+ const s=await h.f.x.store(),app=createApp(h.f.x.runtime,h.f.x.h.origin,'local',{registrationCommunityId:DEMO_COMMUNITY,guildLaunchpadEnabled:true,storeCategoriesEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:h.f.settings});
+ const read=()=>h.f.x.h.call('GET',s.root+'/categories',s.owner,undefined,{},app),p=h.expect(await read()),key=randomUUID(),id=randomUUID();
+ const send=(method:string,suffix:string,body:unknown,commandKey=key)=>h.f.x.h.call(method,s.root+'/categories'+suffix,s.owner,body,{'Idempotency-Key':commandKey,'If-Match':`"${p.version}"`},app);
+ const before=await snapshot();h.f.settings.quarantine=true;
+ for(const [method,suffix,body] of [['POST','',{name:'合成分類'}],['PATCH','/'+id,{name:'合成新名'}],['POST','/reorder',{category_ids:[]}],['PUT','/'+id+'/groups',{group_keys:[]}],['POST','/'+id+'/remove',{}]] as const)assert.equal((await send(method,suffix,body)).status,503);
+ assert.deepEqual(await snapshot(),before);assert.equal((await read()).status,200);
+ h.f.settings.quarantine=false;assert.equal((await send('POST','',{name:'合成分類'})).status,201);const committed=await snapshot();h.f.settings.quarantine=true;assert.equal((await send('POST','',{name:'合成分類'})).status,503);assert.deepEqual(await snapshot(),committed);assert.equal((await read()).status,200);
 });
