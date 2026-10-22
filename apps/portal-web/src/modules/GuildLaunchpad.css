@@ -17,6 +17,15 @@
 .guild-launchpad-public>main{max-width:72rem;margin:auto;padding:0 1rem 3rem}
 .guild-launchpad-books{display:grid;gap:.6rem}
 .guild-launchpad-books a{overflow-wrap:anywhere}
+.guild-launchpad-book{display:grid;gap:.6rem;min-width:0;padding:.85rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
+.guild-launchpad-book h3{font-size:1rem;line-height:1.6}
+.guild-launchpad-entry,.guild-launchpad-share{display:grid;gap:.65rem;min-width:0}
+.guild-launchpad-entry{padding:1rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
+.guild-launchpad-entry .btn,.guild-launchpad-share .btn,.guild-launchpad-book .btn{min-height:44px;max-width:100%;white-space:normal}
+.guild-launchpad-entry .field,.guild-launchpad-share .field{display:grid;gap:.3rem;min-width:0}
+.guild-launchpad-entry input,.guild-launchpad-share input{width:100%;min-width:0}
+.guild-launchpad .guild-launchpad-external{flex-direction:column;align-items:flex-start;gap:.1rem;text-align:left}
+.guild-launchpad-destination{font-size:.8rem;font-weight:400;color:var(--muted);overflow-wrap:anywhere}
 .guild-launchpad-primary{display:grid;gap:.5rem;min-width:0}
 .guild-launchpad-primary .actions{margin:0;justify-content:flex-start}
 .guild-launchpad-primary .btn{max-width:100%}
@@ -27,6 +36,7 @@
 @media(max-width:720px){
   .guild-launchpad input,.guild-launchpad textarea,.guild-launchpad select{font-size:16px}
   .guild-launchpad-primary .actions>.btn-primary{width:100%}
+  .guild-launchpad-entry .btn-primary{width:100%}
 }
 
 /* Local navigation owns the hierarchy. Switching panels preserves drafts and pending operations. */
