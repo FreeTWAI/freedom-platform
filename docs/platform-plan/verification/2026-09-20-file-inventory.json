@@ -21304,8 +21304,8 @@
     },
     {
       "path": "modules/portal-shell/freedom.module.json",
-      "bytes": 2998,
-      "sha256": "7afcbe1b16f427c7e7024ce51556cde2e638876caac3a98aa2627a395be27dfd"
+      "bytes": 3050,
+      "sha256": "a115731e8e8413579ce18f836800f7bb76626b6c99896f6e27964641b213355d"
     },
     {
       "path": "modules/positioning/assessment.ts",

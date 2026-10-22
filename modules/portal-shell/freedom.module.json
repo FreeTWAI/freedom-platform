@@ -42,6 +42,7 @@
     "apps/portal-web/src/modules/PlatformLogo.tsx",
     "apps/portal-web/src/modules/SettingsMenu.tsx",
     "tests/runtime/game-console-routing.test.ts",
+    "tests/runtime/portal-client-recovery.test.ts",
     "tests/e2e/audit-shell.spec.ts",
     "tests/e2e/page-tools.spec.ts",
     "tests/e2e/mobile-install.spec.ts",
