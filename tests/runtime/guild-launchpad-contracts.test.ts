@@ -1,3 +1,4 @@
+import {StorePublicationReviewSchema} from '../../contracts/guild-launchpad/v1/storefront-publication.js';
 import {DistributionPhotoCommandSchema,SupplierMetricSchema,SupplierTodoSchema,SupplierTodosSchema,SupplierOverviewSchema,SupplierProductSchema,SupplierProductsSchema,SupplierProductDetailSchema,SupplierProductSelectionSchema,SupplierPartnerSchema,SupplierPartnersSchema,SupplierPartnerDetailSchema,SupplyProfileUpdateInputSchema,SupplyProfileReceiptSchema} from '../../contracts/guild-launchpad/v1/supplier-console.js';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -421,7 +422,7 @@ test('guild launchpad contracts regenerate deterministically and match generated
     cwd: root, env: verificationEnvironment(), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /30 v1 guild launchpad schemas, 18 bundles and one v2 assembly schema checked\/generated\./);
+  assert.match(result.stdout, /30 v1 guild launchpad schemas, 19 bundles and one v2 assembly schema checked\/generated\./);
 });
 
 test('generated guild launchpad schemas agree with Zod except listed server-only rules', () => {
@@ -862,4 +863,25 @@ for c in x['cases']:
 print(len(x['cases']))`;
  const result=spawnSync(python,['-X','utf8','-c',script],{cwd:root,env:verificationEnvironment(),encoding:'utf8',input:JSON.stringify({bundles,cases})});
  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),24);
+});
+
+
+test('publication review keeps OFF fields unchanged and strictly bounds enabled gallery photos', () => {
+  const projection = {slug:'synthetic-review',name:'合成店',brand:null,description:'',currency:'TWD',
+    products:[{sku:'P0001',title:'合成商品',description:'',price_minor:123}],revision:'1',published_at:isoMin,transaction_state:'not_enabled'};
+  const legacy = {profile:'freedom.hosted-store-publication/v1',store_version:'1',preview:{projection,dirty:true,current_revision:null},
+    template_id:'catalog-grid-v1',photo_count:0,photos:[],review_digest:'0'.repeat(64)};
+  assert.deepEqual(StorePublicationReviewSchema.parse(legacy), legacy);
+  assert.equal(StorePublicationReviewSchema.safeParse({...legacy,appearance_changed:null}).success, false);
+  assert.equal(StorePublicationReviewSchema.safeParse({...legacy,unexpected:true}).success, false);
+  const photos = Array.from({length:8}, (_, index) => ({sku:'P0001',photo:{content_type:'image/webp',byte_size:10,width:1,height:1,
+    photo_key:index===0?'main':`${id.slice(0,-1)}${index}`,position:index+1,alt_text:'',
+    read_path:`/api/v1/tenants/${id}/storefronts/${id2}/products/${id}/gallery/photos/${index===0?'main':`${id.slice(0,-1)}${index}`}/1`}}));
+  const enabled = {...legacy,appearance_changed:false,policies_changed:true,gallery_changed:true,photo_count:8,photos};
+  assert.deepEqual(StorePublicationReviewSchema.parse(enabled), enabled);
+  assert.equal(StorePublicationReviewSchema.safeParse({...enabled,gallery_changed:undefined}).success, false);
+  assert.equal(StorePublicationReviewSchema.safeParse({...enabled,photo_count:7}).success, false);
+  assert.equal(StorePublicationReviewSchema.safeParse({...enabled,photos:[...photos.slice(0,7),photos[0]]}).success, false);
+  assert.equal(StorePublicationReviewSchema.safeParse({...enabled,photos:photos.map(item=>({...item,sku:'P9999'}))}).success, false);
+  assert.equal(StorePublicationReviewSchema.safeParse({...enabled,photos:photos.map(item=>({...item,photo:{...item.photo,asset_id:id}}))}).success, false);
 });

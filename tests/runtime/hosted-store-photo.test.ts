@@ -20,6 +20,32 @@ async function publish(s:Store,action='publish'){
 }
 const media=(s:Store)=>f.app.request(f.h.origin+'/api/v1/public/stores/'+s.slug+'/media');
 
+test('reviewed publication refuses unseen photo replacements and removals without changing the public snapshot',async()=>{
+  const s=await f.openStore();await enable();const original=f.ok(await upload(s,'1'));
+  const review=f.ok(await f.call('GET',s.root+'/publication-review',s.owner));assert.equal(review.photo_count,1);
+  assert.equal(review.photos[0].photo.read_path,original.current.photo.read_path);
+  const replacement=f.ok(await upload(s,'2'));
+  assert.equal(f.ok(await f.call('GET',s.root,s.owner)).version,review.store_version);
+  const denied=await f.post(s.root+'/publish-reviewed',s.owner,{review_digest:review.review_digest},review.store_version);
+  assert.equal(denied.status,409);assert.equal(denied.data.code,'storefront_publication_changed');
+  assert.equal((await f.h.pool.query('SELECT count(*)::int n FROM commerce_storefront_publications WHERE instance_id=$1',[s.instanceId])).rows[0].n,0);
+  const fresh=f.ok(await f.call('GET',s.root+'/publication-review',s.owner));
+  assert.equal(fresh.photos[0].photo.read_path,replacement.current.photo.read_path);
+  assert.notEqual(fresh.photos[0].photo.read_path,review.photos[0].photo.read_path);
+  assert.notEqual(fresh.review_digest,review.review_digest);assert.deepEqual(fresh.preview.projection.products,review.preview.projection.products);
+  f.ok(await f.post(s.root+'/publish-reviewed',s.owner,{review_digest:fresh.review_digest},fresh.store_version));
+  const published=await(await media(s)).json() as any;
+  const beforeRemoval=f.ok(await f.call('GET',s.root+'/publication-review',s.owner));
+  f.ok(await f.post(s.root+'/products/'+s.productId+'/photo/remove',s.owner,{},replacement.current.version));
+  const stale=await f.post(s.root+'/publish-reviewed',s.owner,{review_digest:beforeRemoval.review_digest},beforeRemoval.store_version);
+  assert.equal(stale.status,409);assert.equal(stale.data.code,'storefront_publication_changed');
+  assert.deepEqual(await(await media(s)).json(),published);
+  assert.equal((await f.app.request(f.h.origin+published.photos[0].photo.read_path)).status,200);
+  const withoutPhoto=f.ok(await f.call('GET',s.root+'/publication-review',s.owner));assert.equal(withoutPhoto.photo_count,0);assert.deepEqual(withoutPhoto.photos,[]);
+  f.ok(await f.post(s.root+'/publish-reviewed',s.owner,{review_digest:withoutPhoto.review_digest},withoutPhoto.store_version));
+  assert.deepEqual((await(await media(s)).json() as any).photos,[]);
+});
+
 test('PHOTO-DOMAIN-01 add, replace and remove preserve publication history and original completion under policy OFF',async()=>{
   const s=await f.openStore();await enable();
   const removed=f.ok(await f.post(s.root+'/products/'+s.productId+'/photo/remove',s.owner,{},'1'));

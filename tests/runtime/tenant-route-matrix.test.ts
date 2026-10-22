@@ -360,6 +360,8 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/preview': 'tenant',
+  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/publication-review': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/publish-reviewed': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo': 'tenant',
@@ -663,8 +665,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 13, tenant: 154, middleware: 31 });
-  assert.equal(selectedRoutes.length, 226);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 8, global: 13, tenant: 156, middleware: 31 });
+  assert.equal(selectedRoutes.length, 228);
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
     const key = `${r.method} ${r.path}`;
@@ -834,6 +836,8 @@ const routes: Route[] = [
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/distribution-selections/:selection_id/withdraw', body: {}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/products/:product_id/remove', body: {}, version: '"1"' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/preview' },
+  { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/publication-review' },
+  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/publish-reviewed', body: {review_digest: '0'.repeat(64)}, version: '"1"' },
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/cover/remove',body:{},version:'"1"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/appearance-media/logo',body:photoSourcePng,version:'"1"',isRaw:true,contentType:'image/png'},
