@@ -30,6 +30,9 @@ import {SupplierReportSchema,type SupplierReport} from '../../contracts/guild-la
 import {PortalClient,ApiError} from '../../apps/portal-web/src/api';
 import type {SupplierProduct} from '../../contracts/guild-launchpad/v1/supplier-console';
 import type {Distribution} from '../../contracts/guild-launchpad/v1/hosted-distribution';
+import {supplySetupProgress,supplySetupFlowVisible,SUPPLY_CURRENCY_HINT} from '../../modules/agent-commerce/supplier-console/ui/setup-progress';
+import {GettingStarted} from '../../modules/agent-commerce/supplier-console/ui/pages/GettingStarted';
+import {Setup} from '../../modules/agent-commerce/supplier-console/ui/pages/Settings';
 const t='11111111-1111-4111-8111-111111111111',i='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444';
 const scope={tenantId:t,instanceId:i},root=`#stores/${t}/${i}/supply`;
 const attempt=(overrides:Partial<Omit<Attempt,'key'>>={},key='test-key')=>createAttempt({kind:'product.update',label:'儲存內容',scope,method:'patch',path:'/supply-products/'+id,body:{title:'杯子'},ifMatch:'1',target:id,...overrides},key);
@@ -619,4 +622,161 @@ test('merchant inventory renders unavailable values locally and keeps unknown pr
  const unknown={...base,product_id:other,sku:'P0002',available:0,reserved:20,inventory:{state:'inconsistent' as const,code:'reservation_inconsistent' as const}};
  assert.deepEqual(filterProducts([unknown,{...base,inventory}],undefined,'available').map(i=>i.product_id),[id,other]);
  assert.deepEqual(filterProducts([unknown,{...base,inventory}],'out_of_stock').map(i=>i.product_id),[other]);
+});
+
+
+// #940: setup progress follows independent current reads, never the shared capacity count.
+type ProgressReads=Parameters<typeof supplySetupProgress>[0];
+type ProgressInput={[K in keyof ProgressReads]:{-readonly [P in keyof ProgressReads[K]]:ProgressReads[K][P]}};
+function progressInput(owned=0,publicOffers=0,pending=0):ProgressInput {
+ const metric=(count:number)=>({state:'ready' as const,count});
+ return {
+  profile:{state:'ready',data:{tenant_id:t,instance_id:i,setup_state:'ready',catalog:{name:'合成供貨商品庫',description:'',currency:'TWD'},retail_enabled:false,product_count:owned,product_limit:200,writable:true,capabilities:['store:read','store:write','store:manage','store:publish'],version:'1'}},
+  overview:{state:'ready',data:{profile:'freedom.supplier-console.overview/v1',tenant_id:t,instance_id:i,as_of:asOf,metrics:{offered_products:metric(publicOffers),pending_requests:metric(pending),active_reservation_lines:metric(0),out_of_stock_products:metric(0)},product_count:owned,product_limit:200,todos:{state:'ready',items:[],truncated:false}}},
+  products:{state:'ready',data:{profile:'freedom.supplier-console.products/v1',as_of:asOf,items:Array.from({length:owned},(_,n)=>product(n,null,10)),limit:200}},
+  owner:{state:'ready',data:{reservation_enabled:false,admission_enabled:true,version:'1'}},
+ };
+}
+const progressStates=(input:ProgressInput)=>supplySetupProgress(input).stages.map(stage=>stage.state);
+function progressController(input:ProgressInput,extra:Record<string,unknown>={}):ConsoleController {
+ return presentationController(Object.fromEntries(Object.entries(input).map(([key,value])=>[key,{...readySlot(value.data),state:value.state}])),{
+  profile:input.profile.data,owner:{...readySlot(input.owner.data),state:input.owner.state},route:parse(root),root:'/tenants/'+t+'/storefronts/'+i,
+  drafts:{},conflicts:{},sectionStatus:{},can:(capability:string)=>input.profile.state==='ready'&&input.profile.data?.writable===true&&input.profile.data.capabilities.includes(capability),...extra,
+ });
+}
+
+test('SC-UI-progress setup has one current catalog stage and uses the existing form submit',()=>{
+ const input=progressInput();input.profile.data={...input.profile.data!,setup_state:'setup_required',catalog:null,version:null};input.overview={state:'idle',data:null};input.products={state:'idle',data:null};
+ assert.deepEqual(progressStates(input),['done','current','todo','todo','optional']);
+ assert.deepEqual(supplySetupProgress(input).nextAction,{kind:'setup',label:'建立供貨商品庫'});
+ const html=renderPresentation(createElement(Setup,{c:progressController(input)}));
+ assert.equal((html.match(/aria-current="step"/g)??[]).length,1);assert.equal((html.match(/class="btn btn-primary"/g)??[]).length,1);
+ assert.ok(html.includes('供貨設定進度'));assert.ok(!html.includes('sc-preparation-status'));
+ const described=html.match(/<select aria-describedby="([^"]+)"/);assert.ok(described);assert.ok(html.includes(`id="${described[1]}"`));
+ assert.ok(html.includes(SUPPLY_CURRENCY_HINT));assert.ok(html.indexOf(SUPPLY_CURRENCY_HINT)<html.indexOf('class="btn btn-primary"'));
+ for(const capabilities of [['store:write'],['store:manage']]){input.profile.data.capabilities=capabilities;assert.equal(supplySetupProgress(input).nextAction,null);}
+});
+
+for(const [owned,offers,pending,states,action] of [
+ [0,0,0,['done','done','current','todo','optional'],{kind:'navigate',page:'product-new',label:'新增商品'}],
+ [1,0,0,['done','done','done','current','optional'],{kind:'navigate',page:'products',state:'not_offered',label:'選擇要公開的商品'}],
+ [1,1,0,['done','done','done','done','optional'],null],
+ [3,2,4,['done','done','done','done','optional'],null],
+ [0,0,4,['done','done','current','todo','optional'],{kind:'navigate',page:'product-new',label:'新增商品'}],
+] as const)test(`SC-UI-progress owned ${owned}, public ${offers}, pending ${pending}`,()=>{
+ const input=progressInput(owned,offers,pending),result=supplySetupProgress(input);
+ assert.deepEqual(result.stages.map(stage=>stage.state),states);assert.deepEqual(result.nextAction,action);
+ assert.deepEqual(result.storage,{state:'ready',count:owned});assert.deepEqual(result.publication,{state:'ready',count:offers});
+ assert.equal(result.steady,owned>0&&offers>0);assert.equal(result.stages.filter(stage=>stage.state==='current').length,action?1:0);
+ assert.equal(result.stages[4].detail,pending?`${pending} 筆售價申請待確認`:'目前沒有待確認的申請');
+ assert.equal(result.stages[1].detail,'幣別：TWD（建立後不可變更）');
+});
+
+test('SC-UI-progress retail selections consume capacity but do not count as owned supply products',()=>{
+ const input=progressInput();input.profile.data={...input.profile.data!,retail_enabled:true,product_count:7};input.overview.data!.product_count=7;
+ assert.equal(supplySetupProgress(input).nextAction?.label,'新增商品');assert.deepEqual(supplySetupProgress(input).storage,{state:'ready',count:0});
+ input.profile.data.product_count=200;assert.equal(supplySetupProgress(input).nextAction,null);assert.equal(progressStates(input)[2],'current');
+ const own=progressInput(1);own.profile.data!.retail_enabled=true;
+ assert.equal(progressStates(own)[2],'done');assert.equal(supplySetupProgress(own).nextAction?.label,'選擇要公開的商品');
+});
+
+for(const name of ['profile','overview','products'] as const)for(const state of ['idle','loading','failed'] as const)for(const retained of [false,true])test(`SC-UI-progress ${name} ${state}, retained ${retained}`,()=>{
+ const input=progressInput(1,1,2);input[name].state=state;if(!retained)input[name].data=null;
+ const result=supplySetupProgress(input);assert.equal(result.nextAction,null);assert.equal(result.steady,false);
+ if(name==='profile'){assert.deepEqual(result.stages.slice(1).map(stage=>stage.state),['unknown','unknown','unknown','unknown']);assert.equal(result.storage.state,'unknown');assert.equal(result.publication.state,'unknown');}
+ if(name==='products'){assert.equal(result.stages[2].state,'unknown');assert.equal(result.storage.state,'unknown');}
+ if(name==='overview'){assert.equal(result.stages[3].state,'unknown');assert.equal(result.stages[4].state,'unknown');assert.equal(result.publication.state,'unknown');}
+});
+
+test('SC-UI-progress a failed retained empty overview does not offer add, even with a fresh empty owned read',()=>{
+ const input=progressInput();input.overview.state='failed';
+ const html=renderPresentation(createElement(GettingStarted,{c:progressController(input)}));
+ assert.equal(supplySetupProgress(input).nextAction,null);assert.ok(!html.includes('btn-primary'));assert.ok(html.includes('管理商品與供貨條件'));
+ assert.equal((html.match(/>暫時無法確認<\/span>/g)??[]).length,2);assert.ok(!html.includes('尚未公開'));
+});
+
+for(const name of ['offered_products','pending_requests'] as const)for(const bad of [undefined,{state:'unavailable',reason:'store_write_required'},{state:'ready'},{state:'ready',count:-1},{state:'ready',count:NaN}])test(`SC-UI-progress ${name} unavailable or invalid ${JSON.stringify(bad)}`,()=>{
+ const input=progressInput(1);Object.assign(input.overview.data!.metrics,{[name]:bad});
+ const result=supplySetupProgress(input);assert.equal(result.nextAction,null);assert.equal(result.stages[name==='offered_products'?3:4].state,'unknown');
+});
+
+test('SC-UI-progress unrelated unavailable metrics do not gate product setup',()=>{
+ const input=progressInput();input.overview.data!.metrics.active_reservation_lines={state:'unavailable',reason:'owner_required'};
+ Reflect.deleteProperty(input.overview.data!.metrics,'out_of_stock_products');input.owner={state:'ready',data:null};
+ assert.equal(supplySetupProgress(input).nextAction?.label,'新增商品');
+});
+
+test('SC-UI-progress read-only and inactive profiles never expose a next action or private cached counts',()=>{
+ const input=progressInput(1,1,3);input.profile.data!.capabilities=['store:read'];
+ const result=supplySetupProgress(input);assert.equal(result.nextAction,null);assert.equal(result.storage.state,'unknown');assert.equal(result.publication.state,'unknown');
+ assert.equal(renderPresentation(createElement(GettingStarted,{c:progressController(input)})),'');
+ const overview=renderPresentation(createElement(Overview,{c:progressController(input)}));
+ assert.ok(overview.includes('目前只有查看商品庫的權限。'));assert.ok(!overview.includes('sc-preparation-status'));assert.ok(!overview.includes('供貨設定進度'));
+ const inactive=progressInput();inactive.profile.data!.writable=false;assert.equal(supplySetupProgress(inactive).nextAction,null);
+ const noPublish=progressInput(1);noPublish.profile.data!.capabilities=['store:read','store:write'];assert.equal(supplySetupProgress(noPublish).nextAction,null);
+});
+
+for(const enabled of [false,true])for(const admission of [false,true])test(`SC-UI-progress owner setting ${enabled}, admission ${admission} remains a setting`,()=>{
+ const input=progressInput();input.owner.data={reservation_enabled:enabled,admission_enabled:admission,version:'1'};
+ const result=supplySetupProgress(input);assert.deepEqual(result.reservation,{state:'ready',enabled,admission});assert.equal(result.nextAction?.label,'新增商品');
+ const html=renderPresentation(createElement(GettingStarted,{c:progressController(input)}));
+ assert.ok(html.includes(enabled?'供貨預留：已開啟（30 分鐘）':'供貨預留：未開啟'));assert.equal(html.includes('平台暫停新預留'),!admission);
+ assert.ok(html.includes('由合作店家的商店接單與收款'));assert.ok(!html.includes('btn-primary">審核售價申請'));
+});
+
+for(const state of ['idle','loading','failed','ready'] as const)test(`SC-UI-progress owner ${state} never displays an unconfirmed setting`,()=>{
+ const input=progressInput();input.owner.state=state;if(state==='ready')input.owner.data=null;
+ const html=renderPresentation(createElement(GettingStarted,{c:progressController(input)}));
+ assert.ok(!html.includes('供貨預留：已開啟'));assert.ok(!html.includes('供貨預留：未開啟'));
+ assert.equal(html.includes('供貨預留：暫時無法確認'),state==='failed');assert.equal(supplySetupProgress(input).nextAction?.label,'新增商品');
+});
+
+test('SC-UI-progress contradictory ready counts are unknown rather than reconciled or actionable',()=>{
+ const input=progressInput(0,1),result=supplySetupProgress(input);assert.equal(result.contradictory,true);assert.equal(result.nextAction,null);
+ assert.deepEqual(result.stages.slice(2,4).map(stage=>stage.state),['unknown','unknown']);assert.equal(result.storage.state,'unknown');assert.equal(result.publication.state,'unknown');
+ assert.ok(renderPresentation(createElement(GettingStarted,{c:progressController(input)})).includes('商品與供貨資料不一致，請更新資料後再確認。'));
+});
+
+test('SC-UI-progress steady state hides progress in the existing collapsed details and has no primary even with requests',()=>{
+ const input=progressInput(2,1,3),html=renderPresentation(createElement(GettingStarted,{c:progressController(input)}));
+ assert.ok(!html.includes('btn-primary'));assert.ok(!html.includes('<details open'));assert.ok(html.indexOf('供貨設定進度')>html.indexOf('<summary>供貨步驟與使用說明</summary>'));
+ assert.ok(html.includes('選用'));assert.ok(!html.includes('持續處理'));assert.ok(!html.includes('先保存商品與供貨條件，再選擇'));
+ for(const text of ['商品供貨同意不會自動授權素材','不代表成交或付款','管理行銷素材與授權','查看供貨申請','查看合作店家','查看供貨預留'])assert.ok(html.includes(text),text);
+ const locked=renderPresentation(createElement(GettingStarted,{c:progressController(progressInput(),{locked:true})}));assert.ok(!locked.includes('btn-primary'));
+ const retail=progressInput(1);retail.profile.data!.retail_enabled=true;assert.ok(renderPresentation(createElement(GettingStarted,{c:progressController(retail)})).includes('零售商店的接單狀態請到商店確認。'));
+});
+
+test('SC-UI-progress is deterministic and does not mutate frozen independent read inputs',()=>{
+ const freeze=(value:unknown):void=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}};
+ const input=progressInput(1,0,2);freeze(input);const before=JSON.stringify(input);
+ assert.deepEqual(supplySetupProgress(input),supplySetupProgress(input));assert.equal(JSON.stringify(input),before);
+ assert.deepEqual(supplySetupProgress(input).stages.map(stage=>stage.key),['tools','catalog','product','offer','requests']);
+});
+
+const supplyResumePage=(states:('ready'|'setup_required')[],next_cursor:string|null=null)=>({items:states.map(setup_state=>({setup_state})),next_cursor});
+for(const [label,data,started,restoring,visible] of [
+ ['initial read pending',null,false,false,false],
+ ['complete empty',supplyResumePage([]),false,false,true],
+ ['complete ready only',supplyResumePage(['ready']),false,false,true],
+ ['complete unfinished',supplyResumePage(['setup_required']),false,false,false],
+ ['partial empty',supplyResumePage([],'next'),false,false,false],
+ ['partial ready only',supplyResumePage(['ready'],'next'),false,false,false],
+ ['partial unfinished',supplyResumePage(['setup_required'],'next'),false,false,false],
+ ['explicit start',supplyResumePage([],'next'),true,false,true],
+ ['restoring without directory',null,false,true,true],
+ ['restoring partial directory',supplyResumePage(['setup_required'],'next'),false,true,true],
+ ['started and later unfinished',supplyResumePage(['setup_required']),true,false,true],
+ ['started and failed later page retains cursor',supplyResumePage(['ready'],'next'),true,false,true],
+ ['started and directory retry cleared data',null,true,false,true],
+] as const)test(`SC-UI-resume flow visibility: ${label}`,()=>{
+ assert.equal(supplySetupFlowVisible({data,started,restoring}),visible);
+});
+
+for(const openedBy of ['complete scan','explicit start','restoring'] as const)test(`SC-UI-resume ${openedBy} remains open through later pages and errors`,()=>{
+ let started=supplySetupFlowVisible({started:openedBy==='explicit start',restoring:openedBy==='restoring',data:openedBy==='complete scan'?supplyResumePage([]):supplyResumePage([],'next')});
+ assert.equal(started,true);
+ for(const data of [supplyResumePage(['ready'],'next'),supplyResumePage(['ready'],'next'),supplyResumePage(['ready','setup_required']),null,supplyResumePage(['setup_required']),supplyResumePage(['ready'])]){
+  // A failed load-more retains the accumulated page and cursor; a full retry may clear it.
+  started=supplySetupFlowVisible({started,restoring:false,data});assert.equal(started,true);
+ }
 });

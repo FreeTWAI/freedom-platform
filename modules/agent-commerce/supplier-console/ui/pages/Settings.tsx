@@ -1,6 +1,8 @@
 import type {ConsoleController} from '../../state/useSupplierConsoleController';
 import {HostedReservationSetting} from '../../../../../apps/portal-web/src/modules/HostedReservationSetting';
 import {Editor,ReadStatus} from './Shared';
+import {Preparation} from './Preparation';
+import {SUPPLY_CURRENCY_HINT} from '../setup-progress';
 export function ReservationSetting({c}:{c:ConsoleController}){
  const setting=c.owner.data;
  return c.ownerAllowed&&setting?<HostedReservationSetting setting={setting} supplierOnly={!c.profile?.retail_enabled} writable={c.profile?.writable===true} locked={c.locked||c.owner.state!=='ready'} onToggle={()=>c.command({kind:'reservation.toggle',label:setting.reservation_enabled?'停止接受新預留':'開放 30 分鐘預留',method:'patch',path:c.root+'/reservation-setting',body:{reservation_enabled:!setting.reservation_enabled},ifMatch:setting.version,target:c.scope.instanceId})}/>:<p>只有業務空間擁有者可以修改預留設定。</p>;
@@ -16,4 +18,4 @@ export function Settings({c}:{c:ConsoleController}){
  <section className="sc-section stack"><h3>資料用途與界線</h3><p>商品、供貨條件與申請供目前有權限的成員管理；公開供貨版本後，同社群且有選品權限的店家可查看該版本。</p><p>預留不是成交；價差不是佣金。</p><h3>尚未提供</h3><ul><li>完整資料匯出（營運報表的 CSV 不是完整匯出）</li></ul></section>
  </>}</section>;
 }
-export function Setup({c}:{c:ConsoleController}){return <section className="stack"><h2 tabIndex={-1}>設定供貨商品庫</h2><p>先儲存私人商品與供貨條件，公開供貨版本後再讓店家提出售價。不需要零售商店網址。</p>{c.can('store:manage')?<Editor c={c} name="settings:profile" title="建立供貨商品庫" base={{name:'',description:'',currency:'TWD'}} version="" kind="profile.setup" path="/supply-profile" target={c.scope.instanceId} primary fields={[{key:'name',max:80,required:true},{key:'description',multiline:true},{key:'currency',options:[{value:'TWD',label:'新臺幣 TWD'},{value:'USD',label:'美元 USD'}]}]}><p>幣別建立後不可變更。</p></Editor>:<p>請業務空間擁有者或管理員設定</p>}</section>;}
+export function Setup({c}:{c:ConsoleController}){return <section className="stack"><h2 tabIndex={-1}>設定供貨商品庫</h2><Preparation c={c} setup/><p>先儲存私人商品與供貨條件，公開供貨版本後再讓店家提出售價。不需要零售商店網址。</p>{c.can('store:manage')?<Editor c={c} name="settings:profile" title="建立供貨商品庫" base={{name:'',description:'',currency:'TWD'}} version="" kind="profile.setup" path="/supply-profile" target={c.scope.instanceId} primary fields={[{key:'name',max:80,required:true},{key:'description',multiline:true},{key:'currency',hint:SUPPLY_CURRENCY_HINT,options:[{value:'TWD',label:'新臺幣 TWD'},{value:'USD',label:'美元 USD'}]}]}/>:<p>請業務空間擁有者或管理員設定</p>}</section>;}
