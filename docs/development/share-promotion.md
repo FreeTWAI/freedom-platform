@@ -322,9 +322,61 @@ JavaScript Date 毫秒值重建（#728）。貼文依 `(created_at,post_id)` 降
   base64url 標記，原樣放進下一次 `cursor`，最後一頁為 `null`。時間取 PostgreSQL
   精確 UTC 微秒字串，不經 JavaScript Date 截成毫秒，避免同毫秒的按讚者重複或游標停滯；
   完全同時的按讚以 user ID 穩定排序。這不改可見性條件、每頁上限或顯示日期。
-- 每張貼文的「分享」直接將 `/?social-post=<uuid>#social` 交給系統分享選單；沒有系統分享或操作失敗時，提供可複製／手動選取的貼文連結。取消系統分享不自動複製、不開發文器、不建立多平台工作或上傳照片。分享資料不自動夾帶原生正文或私人附圖。外部連結貼文另以「推廣原文」保留既有 `/go/` 計分入口。
+- 每張貼文的「分享」先開啟貼文連結對話框，由本人按「系統分享」或「複製貼文連結」；原生系統分享在該次點擊內直接呼叫，保留 user activation。未開放公開閱讀時仍提供 `/?social-post=<uuid>#social` 會員連結；原作者明確開放後改用 `/posts/<uuid>`。取消系統分享不自動複製、不開發文器、不建立多平台工作或上傳照片，也不自動開放公開閱讀。外部連結貼文另以「推廣原文」保留既有 `/go/` 計分入口。
 - 收件者登入後，以 `GET /social-posts?post_id=` 直接取得那篇有效貼文並聚焦，不再為定位舊貼文逐頁讀取，也不受近期頁數上限限制。這是同社群的既有會員讀面；匿名仍 401、跨社群／隱藏／刪除／不存在均不回內容，結尾 session clock 檢查不變。「回到動態牆」移除指定貼文參數並恢復一般動態。通知入口也共用精確定位。
-- 多平台發文仍從「建立貼文」的獨立 Social Post 入口由本人開啟，沿用平台選擇、轉交／下載與逐平台本人確認。一般貼文分享不會開啟此流程，也不因此公開原生貼文或會員附圖。
+- 多平台發文仍從「建立貼文」的獨立 Social Post 入口由本人開啟，沿用平台選擇、轉交／下載與逐平台本人確認。一般貼文分享不會開啟此流程；對外閱讀須另由原作者確認下列公開設定。
+
+## 單篇貼文免登入閱讀
+
+分享對話框提供作者的「開放免登入閱讀」，先呈現名稱、文字與目前附圖供確認。
+其他會員只能分享目前可公開閱讀的連結，不能替作者開放。歷史貼文與新建貼文
+預設都只在原會員範圍內；migration 不回填任何公開同意。
+
+訪客直接開啟 `/posts/<uuid>` 可讀這一篇完整文字與附圖，不用 JavaScript 也能閱讀。
+頁尾最多三則目前有效的公開文字摘要，每則最多 160 個 Unicode 字元；沒有匿名
+動態列表、游標或任意筆數參數。摘要的「登入繼續閱讀」、看更多、按讚與留言
+入口引導登入。這是單篇分享與有限探索，不是跨裝置閱讀配額；取得另一則作者
+已開放的直接分享網址，仍能讀那一篇。會員動態與留言 API 的原權限保持獨立。
+
+公開投影只包含貼文 ID、原生／連結類型、標題、文字、合法外部原文網址、時間、
+作者顯示名稱及核准附圖。會員 user ID、email、頭像、打卡位置、提及成員 ID、
+留言、按讚／閱讀名單及私人互動數不進公開 HTML、JSON 或 OG。原文純文字中的
+名稱或 @文字屬作者確認的正文，不加會員查詢或個人資料連結。頁面使用工坊原始
+Logo 與三款主題，沒有會員側欄或新手導覽（此頁為公開閱讀，導覽停用）。
+
+`GET/POST /api/v1/social-posts/:id/public-sharing` 只供原作者，沿原 session、
+onboarding、Origin、CSRF、Idempotency-Key、If-Match 與 journal。publication
+版本獨立於文字的 edit revision 及媒體版本；開放時三者均須符合本人確認的內容。
+未知結果保留同一個 key、body 與版本，不能悄悄建立新命令重送。撤回或內容變更後，
+舊成功 receipt 也不能恢復先前的公開狀態。
+
+公開讀面為 `GET /api/v1/public/shared-posts/:id` 及其 `/image`。同一 SQL snapshot
+核對指定公開社群、作者有效／已完成加入／非驗收帳號、有效貼文、明確公開同意、
+文字／媒體版本與附圖 digest；圖片沿 domain media 在 object I/O 前後再驗一次。
+文字修改、圖片更換、刪除、隱藏、作者停用或關閉公開均停止讀取；文字或圖片變更
+後須作者重新開放目前版本。原生貼文原本的會員縮圖與舊公開外部縮圖規則未放寬。
+
+HTML、JSON、圖片均 `no-store`；公開頁 `noindex,nofollow`，撤回使用不含舊標題、
+圖片或 OG 的通用 404。外部分享服務已快取或使用者已下載的副本無法由撤回追回。
+啟用 JavaScript 時，頁面離開會清除內容與 OG、bfcache 返回時重新讀取；分頁重新可見／聚焦時做有界
+重驗，以公開投影的 opaque digest 判斷文字、圖片及延伸摘要變化，沒有背景輪詢。
+
+登入／註冊使用獨立的 `post_return=<uuid>`，成功後回到原公開貼文；新帳號可以
+繼續閱讀，會員討論仍依原加入公會條件開放。暫停註冊時保留登入與閱讀。
+只接受單一 UUID，拒絕重複參數、外部網址、路徑與控制字元；不截走商店或技能書
+的既有 `return_to`。舊 `/?social-post=<uuid>#social` 在匿名時轉往公開閱讀頁；
+若尚未公開，通用頁提供 `/?social-post=<uuid>#account` 會員登入，登入後仍以
+原精確 lookup 開啟同一篇，避免在公開 404 與登入之間循環。
+
+此候選新增 `184_public_social_posts.sql`，換入 source 前須先套用；部署相容性清單
+同步登記 184，不更動舊 migration bytes 或正式旗標，也不執行部署。
+公開入口沿既有 `registrationCommunityId`／`resolvePublicCommunity` 選定單一社群；
+多社群卻沒有有效的公開社群設定時，公開讀面回 404，作者也不能開放。部署前須核對
+既有公開社群設定，明確同意不能讓貼文跨社群公開。
+號碼須在合併前再次核對最新 main。
+測試入口是 `public-social-posts.test.ts`、`public-social-post-page.test.ts` 與
+`public-social-posts.spec.ts`，並保留既有 `social-wall.spec.ts` 舊連結／系統分享回歸。
+實跑結果以該次 PR 為準，文件本身不代表已部署。
 
 新增會員路由：`POST /social-posts/:id/comment-images`、`GET /social-posts/:id/comments/:commentId/image`、`POST /social-posts/:id/comments/:commentId/like`。寫入沿用 session／CSRF／Origin 與 Idempotency-Key。上傳圖片綁定本人與目標貼文，只能附加至一則留言；斷線後沿用原上傳與留言 key。HTTP 二進位上限512 KiB，瀏覽器先縮圖；伺服器完整解碼並正規化為最長1920px、最多1 MiB WebP。格式限定靜態 PNG／JPEG／WebP。
 
