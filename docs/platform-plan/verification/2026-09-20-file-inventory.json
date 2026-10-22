@@ -23434,8 +23434,8 @@
     },
     {
       "path": "tests/e2e/audit-shell.spec.ts",
-      "bytes": 21282,
-      "sha256": "ef3664d8d9af46e2d9617fac73ddc0e260e9700786ed3f5af823a8ceb9c6f28a"
+      "bytes": 22178,
+      "sha256": "4eb66884247976f7b5e3f39586b2caabaadffad84be9f5dc392c61994164352d"
     },
     {
       "path": "tests/e2e/audit-skills.spec.ts",
