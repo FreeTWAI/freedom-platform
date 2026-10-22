@@ -1,3 +1,4 @@
+import {formatOrderLifecycle} from './format.js';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {OfflineOrder} from './offline-order.js';
@@ -57,26 +58,12 @@ const ERROR_COPY: Record<ErrorKind, string> = {
   failed: '無法取得訂單，請稍後重試。',
 };
 
-const CANCEL_REASON_COPY: Record<NonNullable<PublicOrder['cancel_reason']>, string> = {
-  buyer_cancelled: '你取消了訂單',
-  seller_cancelled: '店家取消了訂單',
-  payment_not_completed: '未在期限內完成付款',
-  paid_cancelled: '店家無法出貨，將退款',
-};
-
 export function parseQuantityInput(raw: string): number | null {
   const trimmed = raw.trim();
   if (!POSITIVE_INT_PATTERN.test(trimmed)) return null;
   const value = Number(trimmed);
   if (!Number.isInteger(value) || value < 1 || value > MAX_LINE_QUANTITY) return null;
   return value;
-}
-
-function formatOrderLifecycle(order: PublicOrder): string {
-  if (order.lifecycle_state === 'open') return '進行中';
-  if (order.lifecycle_state === 'closed') return '已完成';
-  const reason = order.cancel_reason ? CANCEL_REASON_COPY[order.cancel_reason] : undefined;
-  return reason ? `已取消（${reason}）` : '已取消';
 }
 
 async function classifyOrderResponse(response: Response): Promise<OrderResult> {
@@ -251,6 +238,7 @@ interface OrderPageProps {
 type ViewState = 'loading' | 'link_prompt' | 'order' | 'not_found' | 'invalid_link' | 'forgotten';
 
 function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malformedAccessLink, emailEnabled }: OrderPageProps) {
+  const readOnly = container.dataset.retainedOrder === 'true';
   const [view, setView] = useState<ViewState>(malformedAccessLink ? 'invalid_link' : 'loading');
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
@@ -841,12 +829,12 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
   const offline = order.payment_method !== 'immediate_card';
   const isOpenOrder = order.lifecycle_state === 'open';
   const showActionSection =
-    !offline && isOpenOrder &&
+    !readOnly && !offline && isOpenOrder &&
     (currentPayView === 'ready' ||
       currentPayView === 'expired' ||
       ((currentPayView === 'failed' || currentPayView === 'awaiting') && order.can_resume_payment));
   const paymentSection = orderPaymentSectionCopy(currentPayView);
-  const emailNote = offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
+  const emailNote = readOnly ? '請以下單時登入的會員帳號查看訂單，或前往「我的訂單」。' : offline && emailEnabled ? '請保留訂單網址，也可以用下單時登入的會員帳號查看。' : orderEmailNote(currentPayView, emailEnabled);
   const paymentControlsDisabled = busy || forgetting || paymentBusy || redirecting;
 
   return (
@@ -860,7 +848,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       </div>
       {errorBlock}
 
-      {offline && <OfflineOrder key={order.order_ref} order={order} disabled={paymentControlsDisabled}
+      {offline && <OfflineOrder key={order.order_ref} order={order} readOnly={readOnly} disabled={paymentControlsDisabled}
         onCancel={cancelOfflineOrder} onRefresh={() => void runInitialOrRetryGet()} />}
 
       {showActionSection && (
@@ -933,7 +921,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         <h2 id="shop-order-payment-heading" className="shop-pay-section-heading" ref={paymentHeadingRef} tabIndex={-1}>付款</h2>
         <p className="shop-pay-label">{offline && currentPayView === 'paid' ? '已收款（店家確認）' : paymentSection.label}</p>
         {!offline && paymentSection.description && <p>{paymentSection.description}</p>}
-        {!offline && isOpenOrder && paymentSection.canQueryWhenOpen && (
+        {!readOnly && !offline && isOpenOrder && paymentSection.canQueryWhenOpen && (
           <div className="shop-order-actions">
             <button
               type="button"
@@ -1015,7 +1003,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
         )}
       </section>
 
-      <section className="shop-order-section" aria-labelledby="shop-order-browser-heading">
+      {readOnly ? <div className="shop-order-actions"><a href="/#reservations">我的訂單</a></div> : <section className="shop-order-section" aria-labelledby="shop-order-browser-heading">
         <h2 id="shop-order-browser-heading">這個瀏覽器</h2>
         <p>這個瀏覽器會記住你在自由工坊商店的訂單。用的是共用電腦的話，看完後請讓這個瀏覽器忘記訂單。</p>
         <div className="shop-order-actions">
@@ -1064,7 +1052,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
             </button>
           </div>
         </dialog>
-      </section>
+      </section>}
     </>
   );
 }
@@ -2007,8 +1995,8 @@ function bootOrderPage() {
   if (!STORE_SLUG_PATTERN.test(storeSlug) || !OPAQUE_ID_PATTERN.test(orderRef)) return;
 
   const initialAccess = consumeAccessHash();
-  let accessToken: string | null = initialAccess.kind === 'valid' ? initialAccess.token : null;
-  const malformedAccessLink = initialAccess.kind === 'malformed';
+  let accessToken: string | null = container.dataset.retainedOrder !== 'true' && initialAccess.kind === 'valid' ? initialAccess.token : null;
+  const malformedAccessLink = container.dataset.retainedOrder !== 'true' && initialAccess.kind === 'malformed';
 
   const tokenBox: TokenBox = {
     read: () => accessToken,

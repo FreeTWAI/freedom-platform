@@ -1,3 +1,7 @@
+import {variantBuyerLabels} from '../../../../modules/agent-commerce/storefront/variants/checkout.js';
+import {storeVariantsInstalled} from './hosted-store-variants.js';
+import {createOrderNotifications} from '../../../../modules/agent-commerce/checkout/order-notifications.js';
+export {createMemberCheckoutOrderRoutes} from './member-checkout-orders.js';
 import {Hono} from 'hono';
 import {z} from 'zod';
 import type {Pool} from 'pg';
@@ -36,10 +40,16 @@ export function commerceCheckoutQueryDeps(input: {
   };
 }
 
+/** Quarantine preserves history; disabling either installation flag hides order notices. */
+export function commerceOrderNotificationsInstalled(runtime:Pick<PlatformRuntime,'commerceOrderNotificationsEnabled'|'commerceSettings'>):boolean {
+  return runtime.commerceOrderNotificationsEnabled===true&&runtime.commerceSettings?.checkoutEnabled===true;
+}
 /** The one checkout configuration shared by the checkout API and the public store pages. */
 export function hostedCheckoutOptions(origin:string,runtime:PlatformRuntime,environment:FreedomEnv):commands.HostedCheckoutOptions {
   const email=runtime.commerceSettings?.emailEnabled?(runtime.commercePorts?.email??commerceEmailOutbox):undefined;
-  return {origin,settings:runtime.commerceSettings,environment:providerEnvironment(environment),...runtime.commercePorts,email};
+  return {origin,settings:runtime.commerceSettings,environment:providerEnvironment(environment),...runtime.commercePorts,email,
+    orderNotifications:createOrderNotifications(commerceOrderNotificationsInstalled(runtime),runtime.commerceSettings),
+    ...(storeVariantsInstalled(runtime)?{buyerLabels:variantBuyerLabels}:{})};
 }
 
 /** Parsing and response mapping only. Store resolution, access and effects live

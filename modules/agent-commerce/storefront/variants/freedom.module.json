@@ -1,0 +1,34 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "commerce-store-variants",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/agent-commerce/storefront/variants/**",
+    "migrations/181_storefront_product_variants.sql",
+    "contracts/guild-launchpad/v1/storefront-variants.ts",
+    "contracts/guild-launchpad/v1/storefront-variants.schema.json",
+    "apps/platform-api/src/routes/hosted-store-variants.ts",
+    "apps/portal-web/src/storefront/variants.ts",
+    "apps/portal-web/public/shop-variants.css",
+    "tests/runtime/storefront-variants.test.ts"
+  ],
+  "public_exports": [],
+  "dependencies": [
+    "commerce-storefront",
+    "hosted-checkout"
+  ],
+  "contract_families": [],
+  "client_profiles": [],
+  "instructions": [
+    "modules/agent-commerce/storefront/README.md",
+    "modules/agent-commerce/storefront/gallery/design.md",
+    "DESIGN.md",
+    "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md"
+  ],
+  "invariants": [],
+  "tests": [
+    "e2e.harness",
+    "runtime.full"
+  ],
+  "surfaces": []
+}

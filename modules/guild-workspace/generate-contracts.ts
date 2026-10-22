@@ -1,3 +1,5 @@
+import * as categories from '../../contracts/guild-launchpad/v1/storefront-categories.js';
+import * as variants from '../../contracts/guild-launchpad/v1/storefront-variants.js';
 import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
 import * as policies from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import * as shipping from '../../contracts/guild-launchpad/v1/hosted-shipping.js';
@@ -117,6 +119,20 @@ const tenantWorkDocuments: ReadonlyArray<readonly [string, z.ZodType, 'input' | 
 ];
 
 const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [string, z.ZodType, 'input' | 'output', readonly string[]]>]> = [
+  ['storefront-categories', 'Frozen store categories and private profile-versioned category commands. No transaction or deployment authority.', [
+    ['CategoryName', categories.CategoryNameSchema, 'output', []],
+    ['CategoryDraft', categories.CategoryDraftSchema, 'output', []],
+    ['CategoryPage', categories.CategoryPageSchema, 'output', []],
+    ['CreateCategoryInput', categories.CreateCategoryInputSchema, 'input', []],
+    ['RenameCategoryInput', categories.RenameCategoryInputSchema, 'input', []],
+    ['ReorderCategoriesInput', categories.ReorderCategoriesInputSchema, 'input', []],
+    ['SetCategoryGroupsInput', categories.SetCategoryGroupsInputSchema, 'input', []],
+    ['RemoveCategoryInput', categories.RemoveCategoryInputSchema, 'input', []],
+    ['CategoryCommandAck', categories.CategoryCommandAckSchema, 'output', []],
+    ['PublicationCategoriesDocument', categories.PublicationCategoriesDocumentSchema, 'output', []],
+    ['RenderCategories', categories.RenderCategoriesSchema, 'output', []],
+    ['CategoryErrorCode', categories.CategoryErrorCodeSchema, 'output', []],
+  ]],
   ['hosted-checkout', 'Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.', [
     ['buyer-identity-header', checkout.CheckoutBuyerIdentitySchema, 'input', ['equality_precondition_not_authority']],
     ['shipping-method-ref', checkout.ShippingMethodRefSchema, 'output', []],
@@ -134,6 +150,9 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['payment-query-input', checkout.PaymentQueryInputSchema, 'input', ['current_buyer_access','shared_order_query_budget']],
     ['payment-query', checkout.PaymentQueryResponseSchema, 'output', ['store_and_current_access']],
     ['order', checkout.PublicOrderSchema, 'output', ['store_and_current_access']],
+    ['member-order-query', checkout.MemberOrderQuerySchema, 'input', ['current_member_only']],
+    ['member-order-summary', checkout.MemberOrderSummarySchema, 'output', ['original_buyer_frozen_publication','order_path_matches_store_and_order']],
+    ['member-order-page', checkout.MemberOrderPageSchema, 'output', ['current_member_bound_cursor','order_path_matches_store_and_order']],
     ['redeem-input', checkout.RedeemAccessInputSchema, 'input', ['single_use_link']],
     ['access-request-input', checkout.AccessRequestInputSchema, 'input', ['uniform_accepted_response']],
     ['forget-input', checkout.ForgetAccessInputSchema, 'input', []],
@@ -245,6 +264,17 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['seller-policies-command', policies.SellerPoliciesAckSchema, 'output', ['completion_metadata_only_receipt','current_store_manage']],
     ['policy-version', policies.PolicyVersionReadSchema, 'output', ['ever_published_same_store','no_private_version_number']],
     ['publication-seller-policies', policies.PublicationSellerPoliciesSchema, 'output', ['server_only_freeze_refs']],
+  ]],
+  ['storefront-variants', 'Own SKU groups with current store authorization and immutable publication sidecars; legacy storefront/v1 unchanged.', [
+    ['product-group-draft',variants.ProductGroupDraftSchema,'output',['current_store_read']],
+    ['product-group-page',variants.ProductGroupPageSchema,'output',['bounded_200_skus','current_store_read']],
+    ['replace-product-group-input',variants.ReplaceProductGroupInputSchema,'input',['group_cas','existing_own_selections','unique_existing_combinations','normalized_nfc_no_control_or_bidi_text','unique_axis_keys_names_values','complete_label_120_utf16']],
+    ['create-variant-product-input',variants.CreateVariantProductInputSchema,'input',['group_cas','atomic_product_create','sku_limit_200']],
+    ['split-product-group-input',variants.SplitProductGroupInputSchema,'input',['group_cas','retain_home_gallery_and_group_identity']],
+    ['variant-command',variants.VariantCommandAckSchema,'output',['completion_metadata_only_receipt','current_store_write']],
+    ['publication-variants',variants.PublicationVariantsDocumentSchema,'output',['server_only','canonical_digest','exact_sku_partition']],
+    ['render-variant-group',variants.RenderVariantGroupSchema,'output',['no_source_identity']],
+    ['variant-error-code',variants.VariantErrorCodeSchema,'output',[]],
   ]],
   ['storefront-gallery', 'C1 own product galleries, product CAS and immutable server-only publication sidecar; public storefront/v1 unchanged.', [
     ['gallery-draft',gallery.ProductGalleryDraftSchema,'output',['current_store_read','exact_product_version_paths','virtual_primary','retained_recovery_rows']],

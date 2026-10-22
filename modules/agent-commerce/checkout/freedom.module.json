@@ -22,13 +22,20 @@
     "tests/runtime/hosted-seller-checkout-orders.test.ts",
     "tests/runtime/hosted-seller-exceptions.test.ts",
     "tests/runtime/hosted-seller-contracts.test.ts",
-    "tests/runtime/checkout-buyer-identity.test.ts"
+    "tests/runtime/checkout-buyer-identity.test.ts",
+    "migrations/180_member_checkout_order_index.sql",
+    "apps/platform-api/src/routes/member-checkout-orders.ts",
+    "tests/runtime/member-checkout-orders.test.ts",
+    "modules/agent-commerce/checkout/order-notifications.ts",
+    "modules/agent-commerce/checkout/notification-action.ts",
+    "tests/runtime/commerce-order-notifications.test.ts"
   ],
   "public_exports": [
     "modules/agent-commerce/checkout/index.ts"
   ],
   "dependencies": [
-    "agent-commerce"
+    "agent-commerce",
+    "member-communications"
   ],
   "contract_families": [],
   "client_profiles": [],

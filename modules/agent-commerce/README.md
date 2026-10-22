@@ -150,9 +150,11 @@ publication.
 gallery 開啟時沿用圖組編輯器的明確儲存操作。結果不明時保留原上傳操作，
 已確認寫入後讀取失敗時，只重試讀取。
 
-啟用的外觀、賣方資訊與商店政策、商品圖組都納入同一次上架審閱及交易內摘要核對，
+啟用的外觀、賣方資訊與商店政策、商品圖組、規格與商品分類都納入同一次上架審閱及交易內摘要核對，
 並以既有快照 helper 凍結；任一內容在審閱後改變，須重新確認。
-審閱顯示各維度是否變更；圖組啟用時顯示圖組的全部照片與張數。
+審閱以選用的 `variants_changed`／`categories_changed` 等欄位顯示各維度是否變更；
+各旗標 OFF 時省略對應欄位與摘要輸入。規格啟用時，照片依商品組的 `gallery_sku`
+只列一次，不列買家頁不會使用的其他成員照片；圖組啟用時列該共用圖組的全部照片。
 旗標全部關閉時，審閱回應與摘要維持原格式。
 
 The product area can publish all saved, publishable store content in one click.
@@ -162,7 +164,10 @@ public product list, saved template, and versioned private photos from the same
 rowset. `POST .../publish-reviewed` submits that shown digest, profile If-Match
 and original idempotency key. Inside the existing instance/community/profile
 transaction locks, the command compares public text/price, template and media
-before saving that same rowset. Product/photo changes do not bump the profile
+and every enabled dimension digest before saving that same rowset. Both plain
+and reviewed publication freeze the variants and categories sidecars from the
+checked dimensions object. Categories resolve group membership with the same
+variants setting as preview and publication. Product/photo changes do not bump the profile
 version, so profile CAS alone is insufficient. A changed review requires another
 explicit click; a committed receipt retry never publishes newer drafts. This is
 whole-store publication, including accepted distribution products and excluding

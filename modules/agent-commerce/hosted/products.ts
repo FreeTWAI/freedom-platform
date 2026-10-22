@@ -1,9 +1,11 @@
+import {detachRemovedVariant} from '../storefront/variants/lifecycle.js';
 import {INVENTORY_POSITION_COLUMNS,inventoryPositions} from './inventory.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ProductInputSchema, ProductUpdateInputSchema, ProductViewSchema, MerchantProductViewSchema, MerchantProductPageSchema, type MerchantProductView, ProductRemovedSchema, type ProductView } from '../../../contracts/guild-launchpad/v1/storefront.js';
 import { checkVersion } from '../../../packages/db/index.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
+import type {TenantScopeContext} from '../../../packages/resource-scopes/index.js';
 import type { Actor } from '../../identity-membership/service.js';
 import { profile, ready, retailReady, productCount, storeCommand, storeRead, storeFact, type Profile } from './store.js';
 
@@ -42,6 +44,13 @@ export async function addProduct(pool: Pool, actor: Actor, tenantId: string, ins
   return storeCommand(pool, actor, tenantId, instanceId, 'store:write', supplyOnly ? 'storefront.supply-product.create' : 'storefront.product.create', input, key, undefined, async (q, context) => {
     const p = await profile(q, tenantId, instanceId, true); ready(p);
     if (!supplyOnly) retailReady(p);
+    const result=await createProductRow(q,context,p,input,supplyOnly);
+    return supplyOnly ? {product_id: result.product_id, version: result.version} : result;
+  });
+}
+/** SQL-local create for compound catalog commands; caller holds the profile lock. */
+export async function createProductRow(q:PoolClient,context:TenantScopeContext,p:Profile,input:{title:string;description:string;price_minor:number;stock:number},supplyOnly=false,operation=supplyOnly?'storefront.supply-product.create':'storefront.product.create'){
+ const tenantId=p.tenant_id,instanceId=p.instance_id;
     requireCondition(await productCount(q, p) < 200, 409, 'storefront_product_limit', '每間商店最多 200 項商品。');
     const sku = 'P' + String(p.product_seq + 1).padStart(4, '0'), productId = randomUUID();
     await q.query(`UPDATE commerce_storefront_profiles p SET product_seq=p.product_seq+1
@@ -55,9 +64,8 @@ export async function addProduct(pool: Pool, actor: Actor, tenantId: string, ins
       SELECT $1,m.resource_id,$4,$5,'交易尚未啟用。',$6,$8 FROM commerce_resource_tenants m
       WHERE m.tenant_id=$2 AND m.instance_id=$3 AND m.resource_id=$7 AND m.resource_kind='shop' AND m.mapping_state='confirmed'`,
     [randomUUID(), tenantId, instanceId, productId, input.price_minor, productSnapshot(result), p.storefront_shop_id, !supplyOnly]);
-    await storeFact(q, context, productId, '1', supplyOnly ? 'storefront.supply-product.create' : 'storefront.product.create', 'storefront_product');
-    return supplyOnly ? {product_id: productId, version: result.version} : result;
-  });
+    await storeFact(q, context, productId, '1', operation, 'storefront_product');
+    return result;
 }
 export async function updateProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, raw: unknown, key: string, expected: string) {
   const input = ProductUpdateInputSchema.parse(raw);
@@ -80,7 +88,7 @@ export async function updateProduct(pool: Pool, actor: Actor, tenantId: string, 
     return next;
   }, productId);
 }
-export async function removeProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, key: string, expected: string) {
+export async function removeProduct(pool: Pool, actor: Actor, tenantId: string, instanceId: string, productId: string, key: string, expected: string, variantsEnabled=false) {
   return storeCommand(pool, actor, tenantId, instanceId, 'store:write', 'storefront.product.remove', {}, key, expected, async (q, context) => {
     const p = await profile(q, tenantId, instanceId, true); ready(p);
     const old = (await products(q, p, true)).find(item => item.product_id === productId);
@@ -89,6 +97,7 @@ export async function removeProduct(pool: Pool, actor: Actor, tenantId: string, 
       SELECT 1 FROM commerce_hosted_supply_offers WHERE item_id=$1 UNION ALL
       SELECT 1 FROM commerce_distribution_acceptances a JOIN commerce_selections l USING(selection_id) WHERE l.item_id=$1`, [productId]);
     requireCondition(!refs.rowCount, 409, 'storefront_product_in_use', '這項商品已有交易或供貨紀錄，不能移除。');
+    if(variantsEnabled)await detachRemovedVariant(q,context,p,productId);
     // Retained upload/history targets outlive the real product; only its draft pointer is cleared.
     await q.query(`UPDATE commerce_product_photo_targets SET asset_id=NULL,representation_id=NULL,policy_revision=NULL,linked_at_product_version=NULL
       WHERE tenant_id=$1 AND instance_id=$2 AND product_id=$3`, [tenantId,instanceId,productId]);
