@@ -1,0 +1,90 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "portal-shell",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/portal-shell/**",
+    "apps/portal-web/src/AppInstall.tsx",
+    "apps/portal-web/src/AppInstall.css",
+    "apps/portal-web/src/CalmExperience.css",
+    "apps/portal-web/src/GameConsole.css",
+    "apps/portal-web/src/GameConsoleThemes.css",
+    "apps/portal-web/src/LayoutDesign.css",
+    "apps/portal-web/src/LocalAction.css",
+    "apps/portal-web/src/PageTools.tsx",
+    "apps/portal-web/src/PageTools.css",
+    "apps/portal-web/src/RequestFeedback.tsx",
+    "apps/portal-web/src/RequestFeedback.css",
+    "apps/portal-web/src/ShareLauncher.css",
+    "apps/portal-web/src/WorkspaceCompanionLayout.css",
+    "apps/portal-web/src/access-fetch.ts",
+    "apps/portal-web/src/game-console-core.ts",
+    "apps/portal-web/src/language.tsx",
+    "apps/portal-web/src/light-theme.css",
+    "apps/portal-web/src/main.tsx",
+    "apps/portal-web/src/module-light-theme.css",
+    "apps/portal-web/src/portal-feedback.tsx",
+    "apps/portal-web/src/portal-session.tsx",
+    "apps/portal-web/src/request-activity.ts",
+    "apps/portal-web/src/rpg-theme.css",
+    "apps/portal-web/src/useLocalAction.ts",
+    "apps/portal-web/src/versefolk-theme.css",
+    "apps/portal-web/src/api.ts",
+    "apps/portal-web/src/types.ts",
+    "apps/portal-web/src/interface-messages.ts",
+    "apps/portal-web/src/page-help.ts",
+    "apps/portal-web/src/auth-messages.ts",
+    "apps/portal-web/src/game-console-routing.ts",
+    "apps/portal-web/src/LazyPage.tsx",
+    "apps/portal-web/src/WorkshopIcon.tsx",
+    "apps/portal-web/src/Navigation.tsx",
+    "apps/portal-web/src/styles.css",
+    "apps/portal-web/src/modules/PlatformLogo.tsx",
+    "apps/portal-web/src/modules/SettingsMenu.tsx",
+    "tests/runtime/game-console-routing.test.ts",
+    "tests/e2e/audit-shell.spec.ts",
+    "tests/e2e/page-tools.spec.ts",
+    "tests/e2e/mobile-install.spec.ts",
+    "tests/e2e/shared-feedback-language.spec.ts",
+    "apps/portal-web/src/features/metadata.ts"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/api.ts",
+    "apps/portal-web/src/types.ts",
+    "apps/portal-web/src/language.tsx",
+    "apps/portal-web/src/portal-session.tsx",
+    "apps/portal-web/src/portal-feedback.tsx",
+    "apps/portal-web/src/request-activity.ts",
+    "apps/portal-web/src/game-console-routing.ts",
+    "apps/portal-web/src/useLocalAction.ts",
+    "apps/portal-web/src/features/metadata.ts"
+  ],
+  "dependencies": [
+    "development",
+    "development-access",
+    "member-card",
+    "member-communications",
+    "newcomer-guides",
+    "shared",
+    "social-feed"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/portal-shell/README.md",
+    "DESIGN.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

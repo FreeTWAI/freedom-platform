@@ -16,14 +16,18 @@
     "tests/runtime/github-social.test.ts",
     "apps/portal-web/src/modules/GitHubSocial.tsx",
     "apps/portal-web/src/modules/SkillBookCover.tsx",
-    "tests/runtime/skill-book-star-gate.test.ts"
+    "tests/runtime/skill-book-star-gate.test.ts",
+    "modules/github-social/**",
+    "apps/portal-web/src/modules/GitHubSocial.css",
+    "apps/portal-web/src/skill-social.tsx"
   ],
   "public_exports": [],
   "dependencies": [
     "command-core",
     "community",
     "development",
-    "shared"
+    "shared",
+    "platform-admin-portal"
   ],
   "contract_families": [],
   "client_profiles": [

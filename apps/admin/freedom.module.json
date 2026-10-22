@@ -22,20 +22,55 @@
     "tests/e2e/admin-review-center.spec.ts",
     "tests/e2e/audit-operations.spec.ts",
     "tests/e2e/github-setup.spec.ts",
-    "tests/runtime/admin-access-session.test.ts"
+    "tests/runtime/admin-access-session.test.ts",
+    "apps/platform-api/src/admin-sync-worker.ts",
+    "modules/platform-admin/**"
   ],
-  "public_exports": ["apps/portal-web/src/modules/AdminPanel.tsx"],
-  "dependencies": ["development", "guild-workspace", "positioning", "shared"],
+  "public_exports": [
+    "apps/portal-web/src/modules/AdminPanel.tsx"
+  ],
+  "dependencies": [
+    "development",
+    "guild-workspace",
+    "positioning",
+    "shared",
+    "command-core",
+    "community",
+    "member-card",
+    "member-communications",
+    "resource-scopes",
+    "tenant-workspaces"
+  ],
   "contract_families": [],
-  "client_profiles": ["platform-admin"],
-  "instructions": ["AGENTS.md", "DESIGN.md", "docs/development/platform-admin-api.md"],
-  "invariants": ["current-authority-before-replay", "no-secrets-in-artifacts", "source-pr-is-not-deployment"],
-  "tests": ["runtime.full", "ui.default"],
-  "surfaces": [{
-    "surface_id": "platform-admin-portal.workspace",
-    "kind": "page",
-    "entry": "apps/portal-web/src/modules/AdminPanel.tsx",
-    "operations": ["admin.members.manage", "admin.guilds.review", "admin.credentials.read", "admin.workspace.navigate"],
-    "auth_profile": "platform-admin"
-  }]
+  "client_profiles": [
+    "platform-admin"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "DESIGN.md",
+    "docs/development/platform-admin-api.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts",
+    "source-pr-is-not-deployment"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "platform-admin-portal.workspace",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/AdminPanel.tsx",
+      "operations": [
+        "admin.members.manage",
+        "admin.guilds.review",
+        "admin.credentials.read",
+        "admin.workspace.navigate"
+      ],
+      "auth_profile": "platform-admin"
+    }
+  ]
 }
