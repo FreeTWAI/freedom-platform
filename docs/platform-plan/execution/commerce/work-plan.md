@@ -774,4 +774,4 @@ Claude 達到額度上限後，Ted 授權 Codex 接手，並可使用 Grok CLI `
 
 | 工作 | 範圍 | 驗收 | 相依與開放 |
 | --- | --- | --- | --- |
-| wp-self-ship-retention（PR-C） | migration 186；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；180 天從履約登記或取消、未成單從 checkout 到期後 30 天；不結單 | PR-A → PR-C；UI PR-B 另批，正式開放另待 Ted |
+| wp-self-ship-retention（PR-C） | migration 186；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；180 天從履約登記或取消（Ted 已核准）；未成單從 checkout 到期後 30 天（沿用 EC-SPEC-09 §3 提案，待 Ted 確認）；不結單 | PR-A → PR-C；UI PR-B 另批，正式開放另待 Ted |
