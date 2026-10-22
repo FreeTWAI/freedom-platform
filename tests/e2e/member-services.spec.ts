@@ -890,3 +890,133 @@ test('admin hide requires confirmation and cancelling never changes the service'
     await db.query('DELETE FROM users WHERE user_id=$1', [userId]);
   }
 });
+
+test('closing the form keeps the unsent create and edit drafts apart until they are saved or cleared', async ({ page, context, e2eAuthPool }) => {
+  test.setTimeout(180_000);
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+  const writes: string[] = [];
+  page.on('request', request => { if (['POST', 'PUT', 'DELETE'].includes(request.method()) && request.url().includes('/api/v1/member-services')) writes.push(`${request.method()} ${new URL(request.url()).pathname}`); });
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  const form = page.locator('form.service-form');
+  const toggle = mine.getByRole('button', { name: /^(新增服務|關閉表單)$/ });
+  const field = (name: string) => form.getByRole('textbox', { name: new RegExp(`^${name}`) });
+  const note = form.getByRole('status').filter({ hasText: '已還原上次未送出的內容' });
+
+  // An unsent create draft, including the chosen file, survives 關閉表單 and 取消; nothing is written.
+  await toggle.click();
+  await field('標題').fill('E2E 草稿服務');
+  await field('簡介').fill('還沒送出的簡介');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'draft-cover.png', mimeType: 'image/png', buffer: PNG });
+  await toggle.click();
+  await expect(form).toHaveCount(0);
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('E2E 草稿服務');
+  await expect(field('簡介')).toHaveValue('還沒送出的簡介');
+  await expect(form.getByText('已選圖片：draft-cover.png')).toBeVisible();
+  await expect(note).toBeVisible();
+  await form.getByRole('button', { name: '取消', exact: true }).click();
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('E2E 草稿服務');
+  expect(writes).toEqual([]);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1', [owner])).rows[0].n).toBe(0);
+
+  // 清除重填 is the explicit way to drop it.
+  await note.getByRole('button', { name: '清除重填', exact: true }).click();
+  await expect(field('標題')).toHaveValue('');
+  await expect(form.getByText('已選圖片：draft-cover.png')).toHaveCount(0);
+  await toggle.click();
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('');
+  await expect(note).toHaveCount(0);
+
+  // Two saved services to edit.
+  for (const title of ['E2E 草稿甲', 'E2E 草稿乙']) {
+    if (!await form.isVisible()) await toggle.click();
+    await field('標題').fill(title);
+    await form.locator('select').selectOption({ label: '設計' });
+    await field('簡介').fill(`${title} 原始簡介`);
+    await form.getByLabel('聯絡名稱', { exact: true }).fill('官網');
+    await form.getByLabel('https 連結', { exact: true }).fill('https://example.com/draft');
+    await form.getByRole('button', { name: '建立服務', exact: true }).click();
+    await expect(mine.locator('li.service-mine-row').filter({ hasText: title })).toBeVisible();
+  }
+  // A saved create leaves no draft behind.
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('');
+  await expect(note).toHaveCount(0);
+  await toggle.click();
+
+  // Edit drafts are kept per service and never leak into a new service or another service.
+  const row = (title: string) => mine.locator('li.service-mine-row').filter({ hasText: title });
+  await row('E2E 草稿甲').getByRole('button', { name: '編輯', exact: true }).click();
+  await field('簡介').fill('甲的未存修改');
+  await toggle.click();
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('');
+  await toggle.click();
+  await row('E2E 草稿乙').getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(field('簡介')).toHaveValue('E2E 草稿乙 原始簡介');
+  await expect(note).toHaveCount(0);
+  await row('E2E 草稿甲').getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(field('簡介')).toHaveValue('甲的未存修改');
+  await expect(note).toBeVisible();
+  await toggle.click();
+
+  // If the service changes elsewhere, the old edit draft is dropped instead of being applied to newer content.
+  const other = await context.newPage();
+  await other.goto('/');
+  await navigate(other, '社員服務');
+  await other.getByRole('region', { name: '我的服務', exact: true }).locator('li.service-mine-row').filter({ hasText: 'E2E 草稿甲' }).getByRole('button', { name: '編輯', exact: true }).click();
+  await other.locator('form.service-form').getByRole('textbox', { name: /^簡介/ }).fill('別的分頁存的簡介');
+  await other.locator('form.service-form').getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(other.getByText('已更新服務。')).toBeVisible();
+  await other.close();
+  await row('E2E 草稿乙').getByRole('button', { name: '暫停', exact: true }).click();
+  await expect(row('E2E 草稿乙').locator('.service-state')).toHaveText('暫停中');
+  await row('E2E 草稿甲').getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(field('簡介')).toHaveValue('別的分頁存的簡介');
+  await expect(note).toHaveCount(0);
+  await toggle.click();
+
+  // Abandoning a create whose outcome is unknown drops its draft, so it cannot be submitted again under a new key.
+  let lose = true;
+  await page.route(/\/api\/v1\/member-services$/, async route => {
+    if (route.request().method() !== 'POST' || !lose) return route.continue();
+    lose = false;
+    await route.fetch();
+    return route.abort('failed');
+  });
+  await toggle.click();
+  await field('標題').fill('E2E 草稿未確認');
+  await form.locator('select').selectOption({ label: '設計' });
+  await field('簡介').fill('結果不明');
+  await form.getByLabel('聯絡名稱', { exact: true }).fill('官網');
+  await form.getByLabel('https 連結', { exact: true }).fill('https://example.com/unknown');
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form.getByRole('button', { name: '重試儲存', exact: true })).toBeVisible();
+  await form.getByRole('button', { name: '放棄並關閉', exact: true }).click();
+  await toggle.click();
+  await expect(field('標題')).toHaveValue('');
+  await expect(note).toHaveCount(0);
+  expect((await e2eAuthPool.query(`SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1 AND title='E2E 草稿未確認'`, [owner])).rows[0].n).toBe(1);
+  await toggle.click();
+
+  for (const theme of ['light', 'dark', 'versefolk'] as const) {
+    await themeOf(page, theme);
+    await row('E2E 草稿乙').getByRole('button', { name: '編輯', exact: true }).click();
+    await field('簡介').fill('截圖用的未存修改');
+    await toggle.click();
+    await row('E2E 草稿乙').getByRole('button', { name: '編輯', exact: true }).click();
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await note.screenshot({ path: `${SHOTS}/draft-restored-${theme}-${width}.png` });
+      await noOverflow(page);
+    }
+    await note.getByRole('button', { name: '清除重填', exact: true }).click();
+    await toggle.click();
+  }
+  await themeOf(page, 'light');
+});

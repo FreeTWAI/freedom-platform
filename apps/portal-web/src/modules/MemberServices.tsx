@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useId, useState, type FormEvent} from 'react'
+import {useCallback, useEffect, useId, useRef, useState, type FormEvent} from 'react'
 import {accessAwareFetch} from '../access-fetch'
 import {ApiError, type PortalClient} from '../api'
 import {SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS, SERVICE_COVER_INPUT_BYTES, SERVICE_LIMIT, SERVICE_MODE_LABELS, SERVICE_MODES, validateMemberService, type ServiceCategory, type ServiceMode} from '../../../../packages/shared/member-service'
@@ -24,6 +24,9 @@ type CoverOperation = {stage: 'cover'; service: Service; file: File; key: string
 type Operation = SaveOperation | CoverOperation
 
 const BLANK: Draft = {title: '', category: '', summary: '', description: '', price_text: '', area_text: '', service_mode: 'online', contacts: [{label: '', url: ''}]}
+const draftOf = (service: Service): Draft => ({title: service.title, category: service.category, summary: service.summary, description: service.description ?? '', price_text: service.price_text ?? '', area_text: service.area_text ?? '', service_mode: service.service_mode, contacts: service.contacts.map(row => ({...row}))})
+// An unsent form closed in this page is kept per target ('new' or a service id) until it is saved or cleared.
+type Kept = {draft: Draft; file: File | null; version: number | null}
 
 // No response, a 5xx or an unreadable success body leaves a write's outcome unknown.
 const unknownOutcome = (cause: unknown) => !(cause instanceof ApiError) || cause.network
@@ -54,6 +57,8 @@ export function MemberServices({client}: {client: PortalClient}) {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Service | null>(null)
   const [draft, setDraft] = useState<Draft>(BLANK)
+  const kept = useRef(new Map<string, Kept>()), origin = useRef('new')
+  const [restored, setRestored] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
   const [pending, setPending] = useState<Operation | null>(null)
@@ -84,11 +89,28 @@ export function MemberServices({client}: {client: PortalClient}) {
   }, [client])
   useEffect(() => { void load(category) }, [load, category])
   useEffect(() => { void refreshMine().catch(() => {}) }, [refreshMine])
-  function openCreate() { setEditing(null); setDraft(BLANK); setFile(null); setIssues([]); setError(''); setFormOpen(true) }
+  function keep() {
+    if (!formOpen || pending) return
+    const base = editing ? draftOf(editing) : BLANK
+    if (file || JSON.stringify(draft) !== JSON.stringify(base)) kept.current.set(origin.current, {draft, file, version: editing?.aggregate_version ?? null})
+    else kept.current.delete(origin.current)
+  }
+  function openCreate() {
+    keep()
+    const saved = kept.current.get('new')
+    origin.current = 'new'; setEditing(null); setDraft(saved?.draft ?? BLANK); setFile(saved?.file ?? null); setRestored(Boolean(saved))
+    setIssues([]); setError(''); setFormOpen(true)
+  }
   function openEdit(service: Service) {
-    setEditing(service)
-    setDraft({title: service.title, category: service.category, summary: service.summary, description: service.description ?? '', price_text: service.price_text ?? '', area_text: service.area_text ?? '', service_mode: service.service_mode, contacts: service.contacts.map(row => ({...row}))})
-    setFile(null); setIssues([]); setError(''); setFormOpen(true)
+    keep()
+    // A draft for an older version of this service is dropped rather than applied to newer content.
+    const saved = kept.current.get(service.service_id), current = saved?.version === service.aggregate_version ? saved : undefined
+    if (saved && !current) kept.current.delete(service.service_id)
+    origin.current = service.service_id; setEditing(service); setDraft(current?.draft ?? draftOf(service)); setFile(current?.file ?? null); setRestored(Boolean(current))
+    setIssues([]); setError(''); setFormOpen(true)
+  }
+  function clearDraft() {
+    kept.current.delete(origin.current); setDraft(editing ? draftOf(editing) : BLANK); setFile(null); setRestored(false); setIssues([])
   }
   function patch(partial: Partial<Draft>) { setDraft(current => ({...current, ...partial})) }
   async function write(method: 'PUT' | 'DELETE', path: string, body: BodyInit, headers: Record<string, string>, fallback: string) {
@@ -109,11 +131,15 @@ export function MemberServices({client}: {client: PortalClient}) {
     return write('PUT', `/member-services/${op.service.service_id}/cover`, op.file, {'Content-Type': op.file.type, 'Idempotency-Key': op.key, 'If-Match': `"${op.version}"`}, '封面未能換上。')
   }
   async function finish(created: boolean) {
+    kept.current.delete(origin.current); setRestored(false)
     setPending(null); setFormOpen(false); setFile(null); setNotice(created ? '已新增服務。' : '已更新服務。')
     await Promise.all([load(category), refreshMine()])
   }
   function closeForm() {
-    setFormOpen(false); setIssues([]); setConflict(null)
+    // Abandoning an operation whose outcome is unknown also drops its draft, so a later save cannot repeat it under a new key.
+    if (pending) kept.current.delete(origin.current)
+    else keep()
+    setFormOpen(false); setIssues([]); setConflict(null); setRestored(false)
     if (pending) { setPending(null); void Promise.all([load(category), refreshMine().catch(() => null)]) }
   }
   async function reloadLatest() {
@@ -243,6 +269,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     {formOpen && <form className="card service-form" onSubmit={event => void submit(event)} aria-busy={saving}>
       <h2>{editing ? '編輯服務' : '新增服務'}</h2>
       <p className="service-public-note">服務頁會公開，任何拿到連結的人都看得到。</p>
+      {restored && !pending && <p className="field-hint service-draft-note" role="status">已還原上次未送出的內容，還沒有儲存。<button type="button" className="btn btn-ghost btn-small" disabled={saving} onClick={clearDraft}>清除重填</button></p>}
       <fieldset className="service-form-fields" disabled={pending !== null}>
       <label className="field">標題<input required maxLength={80} value={draft.title} aria-invalid={Boolean(issue('title'))} onChange={event => patch({title: event.target.value})}/>{issue('title') && <span className="field-error">{issue('title')}</span>}</label>
       <label className="field">分類<select required value={draft.category} aria-invalid={Boolean(issue('category'))} onChange={event => patch({category: event.target.value as ServiceCategory | ''})}>
@@ -273,7 +300,7 @@ export function MemberServices({client}: {client: PortalClient}) {
         setIssues(current => current.filter(item => item.field !== 'cover'))
         if (next && next.size > SERVICE_COVER_INPUT_BYTES) { event.target.value = ''; setFile(null); setIssues(current => [...current, {field: 'cover', message: '封面需為 4 MiB 以下，請換一張較小的圖片。'}]); return }
         setFile(next)
-      }}/>{issue('cover') && <span className="field-error">{issue('cover')}</span>}</label>
+      }}/>{file && <span className="field-hint">已選圖片：{file.name}</span>}{issue('cover') && <span className="field-error">{issue('cover')}</span>}</label>
       {editing?.cover_url && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(editing, 'remove-cover')}>移除封面</button>}
       </fieldset>
       {error && <div className="banner banner-error" role="alert"><p>{error}</p></div>}
