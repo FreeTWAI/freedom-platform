@@ -38,7 +38,8 @@
     "tests/e2e/supplier-console-queries.spec.ts",
     "tests/e2e/supplier-console-report.spec.ts",
     "tests/e2e/supplier-console-materials.spec.ts",
-    "docs/platform-plan/execution/supplier-console/**"
+    "docs/platform-plan/execution/supplier-console/**",
+    "tests/e2e/supplier-console-search.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [

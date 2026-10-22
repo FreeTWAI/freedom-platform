@@ -13,3 +13,17 @@ test('navigation is per capability, without inferring other grants',()=>{assert.
 for(const slug of ['fulfilment','shipments','customers','support','storefront','products','sourcing','promotions','payments','invoices','reports','settings'])test('fallback '+slug+' works independently of console flag',()=>{for(const enabled of [true,false])for(const suffix of ['', '/future/subpage']){const hash=root+'/'+slug+suffix;const dispatched=enabled&&parse(hash);assert.deepEqual(fallback(hash),{...scope,orders:false});if(!dispatched)assert.ok(fallback(hash));}});
 test('order fallback and legacy three-segment/plain-order dispatch',()=>{assert.deepEqual(fallback(root+'/orders/'+id),{...scope,orders:true});assert.deepEqual(fallback(root+'/orders/'+id+'/future/subpage'),{...scope,orders:true});assert.equal(fallback(root+'/orders/bad/future'),null);assert.deepEqual(fallback(root+'/orders/reservations'),{...scope,orders:true});assert.equal(fallback(root),null);assert.equal(fallback(root+'/orders'),null);assert.deepEqual(sellerOrdersRoute(root+'/orders'),scope);assert.equal(sellerOrdersRoute(root),null);for(const slug of ['supply','supply/products','supply-orders','supply/settings'])assert.equal(fallback(root+'/'+slug),null);assert.equal(fallback('#stores/bad/'+scope.instanceId+'/payments'),null);});
 test('href rejects invalid resource IDs',()=>{for(const page of ['order','case'] as SellerPage[])assert.throws(()=>href(scope,page,{id:'bad'}));assert.throws(()=>sellerRootHref({...scope,tenantId:'bad'}));});
+test('existing payment filters round trip through order routes without leaking to other pages',()=>{
+ const query={awaiting_offline_payment:'true',payment_method:'bank_transfer',needs_action:'true',lifecycle:'open',display_number:'261016-ABCDEF'} as const;
+ assert.deepEqual(parse(href(scope,'orders',{query}))!.query,query);
+ for(const method of ['bank_transfer','cash_on_meetup','immediate_card'] as const){
+  assert.equal(parse(href(scope,'orders',{query:{payment_method:method}}))!.query.payment_method,method);
+ }
+ for(const invalid of ['crypto','toString','__proto__','false'])assert.equal(parse(root+'/orders?payment_method='+invalid)!.query.payment_method,undefined);
+ assert.deepEqual(parse(root+'/orders?awaiting_offline_payment=false')!.query,{});
+ for(const page of ['payments','settings','overview'] as const){
+  assert.deepEqual(parse(href(scope,page,{query}))!.query,{});
+ }
+ // A link never silently normalizes an invalid identifier; only form submission may do so.
+ assert.equal(parse(root+'/orders?display_number=261016-abcdef&awaiting_offline_payment=true')!.query.display_number,'261016-abcdef');
+});
