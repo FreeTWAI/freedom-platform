@@ -813,6 +813,31 @@
       "sha256": "6f0dad580509bd841c8cfd997bfeae41f07a6dd9f5681bc2a2cff5381e344e61"
     },
     {
+      "path": "apps/portal-web/promo-preview/index.html",
+      "bytes": 380,
+      "sha256": "6a8c05c861964f6cda6d472001de37c221c5cc64f49ea977967e4c81e00d7d55"
+    },
+    {
+      "path": "apps/portal-web/promo-preview/main.tsx",
+      "bytes": 1610,
+      "sha256": "7492b4852ee52256fc1cfd712dacd085af5e412a1a90bf100d71d9cb1c64ce42"
+    },
+    {
+      "path": "apps/portal-web/promo-preview/playwright.config.ts",
+      "bytes": 1092,
+      "sha256": "43d680230c6367c104ec58d0458b95f9e5b9bf7bff640081da9f6d63b70f566d"
+    },
+    {
+      "path": "apps/portal-web/promo-preview/preview.spec.ts",
+      "bytes": 7817,
+      "sha256": "aeb85055a125338ca5761c564353ea1a169d3a978dc3f22b26324918a3576815"
+    },
+    {
+      "path": "apps/portal-web/promo-preview/vite.config.ts",
+      "bytes": 477,
+      "sha256": "6bae4c8bacfc84e36a6bf74321042a7409322aaa65c022a8555ae6c38d4bb2d4"
+    },
+    {
       "path": "apps/portal-web/public/favicon.ico",
       "bytes": 2502,
       "sha256": "8419e2a8590beb301342673c0a4301586e45e2916311137d1d99b5015a8dba81"
@@ -3866,6 +3891,46 @@
       "path": "apps/portal-web/src/modules/newcomer-guides/packs/dragon/content/workbench.json",
       "bytes": 2736,
       "sha256": "e1e77b8499f08236d18d6bf6f4e3bd0c1f74c97374d555170f738141506b1307"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/PromotionalPreview.tsx",
+      "bytes": 5451,
+      "sha256": "b2515a6ba2f15c8591135cafab7a0d75590feee94e63ac5544109a87a09ede56"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/SOURCES.md",
+      "bytes": 1774,
+      "sha256": "653b5477a0c76c60e1a7d2905470363b5a1e341d369880cbb5dfe06670ca52de"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/layout.ts",
+      "bytes": 4302,
+      "sha256": "ddce86e7da6e45f1b3c6dc4445a77164d2cb39a94259aff1f3812f28abd45f92"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/messages.ts",
+      "bytes": 4990,
+      "sha256": "370b4235fdb80f31efdbb60a3a2a7c56692631b72c2ec102a07dc63a3015c32d"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/model.ts",
+      "bytes": 3882,
+      "sha256": "8e0d4beb8016578260f1ef7d15229ed5cdfbccd086bb2a9305a499850093798c"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/preview.css",
+      "bytes": 1967,
+      "sha256": "e01c07a37f0a2cd636fa045fce783255eaea4e6ec26530df75f712a8fe0e3db1"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/render.ts",
+      "bytes": 2938,
+      "sha256": "089ed2543e114108cb1e3dd4a99d2a8d7aefd6424b33da1e58d6884776194abc"
+    },
+    {
+      "path": "apps/portal-web/src/modules/promotional-content/licenses/TYPO-LICENSE.txt",
+      "bytes": 1101,
+      "sha256": "1a66a150e092baeabf80139ff80fa0f1d199b1cd9461f57ec945d25b90fd7bb4"
     },
     {
       "path": "apps/portal-web/src/storefront/buyer-state.ts",
@@ -15093,6 +15158,11 @@
       "sha256": "b403bb198d12cad43da8aec7c54cd07eb63469fcff013100ca12f649dab7f5e8"
     },
     {
+      "path": "docs/platform-plan/contracts/promotional-content-v1.md",
+      "bytes": 6378,
+      "sha256": "8297fb53c26b6bd986f07038767f7fc957f82e53c0de8e0c5e7c08960d3eeb8c"
+    },
+    {
       "path": "docs/platform-plan/contracts/skill-package.example.yaml",
       "bytes": 2058,
       "sha256": "e2cfe4c558e4497566638cacbd706b827d2e6c1c233094796741f406a841dbd0"
@@ -19899,8 +19969,8 @@
     },
     {
       "path": "modules/community/personal-content/freedom.module.json",
-      "bytes": 2235,
-      "sha256": "b46cbd00bca7b8dafbda6d22d741c23c1b728b6ee1c9236e91a1bae1b2a7c5c2"
+      "bytes": 2444,
+      "sha256": "9c641552590d8186530cebfa1516a4d77eda5739fc5eef79fda41c0968e195e5"
     },
     {
       "path": "modules/community/reporting/freedom.module.json",
@@ -25746,6 +25816,11 @@
       "path": "tests/runtime/production-dossier.test.ts",
       "bytes": 12181,
       "sha256": "5d99e7b38e8ca719ed03c5779d168177ab5c79086eb3b4a8e24cbaed2f4d11e9"
+    },
+    {
+      "path": "tests/runtime/promotional-content.test.ts",
+      "bytes": 5372,
+      "sha256": "f8287e106c03c5091a8a60f13a5e223db4abbf024b6b29cd0091c3ddd06746ed"
     },
     {
       "path": "tests/runtime/published-skills.test.ts",
