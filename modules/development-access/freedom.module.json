@@ -23,7 +23,11 @@
     "modules/development-access/service.ts",
     "apps/platform-api/src/routes/development-access.ts",
     "tests/runtime/development-access-grant-race.test.ts",
-    "tests/runtime/development-access.test.ts"
+    "tests/runtime/development-access.test.ts",
+    "modules/development-access/**",
+    "apps/portal-web/src/modules/DevelopmentAccess.tsx",
+    "apps/portal-web/src/modules/DevelopmentAccess.css",
+    "apps/portal-web/src/modules/github-connect-help.ts"
   ],
   "public_exports": [
     "modules/development-access/service.ts"

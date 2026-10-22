@@ -86,7 +86,8 @@
   "owner_role": "foundation",
   "public_exports": [
     "packages/contribution-tools/contracts.mjs",
-    "packages/contribution-tools/context.mjs"
+    "packages/contribution-tools/context.mjs",
+    "packages/contribution-tools/modules.mjs"
   ],
   "surfaces": [
     {
@@ -96,7 +97,10 @@
       "operations": [
         "development.prepare",
         "development.context",
-        "development.verify"
+        "development.verify",
+        "development.modules",
+        "development.module-new",
+        "development.module-check"
       ],
       "auth_profile": "local-checkout"
     },

@@ -79,7 +79,9 @@
     "modules/co-creation/service.ts",
     "apps/portal-web/src/modules/task-board-loading.ts",
     "tests/runtime/task-board-loading.test.ts",
-    "tests/e2e/task-board-loading.spec.ts"
+    "tests/e2e/task-board-loading.spec.ts",
+    "apps/portal-web/src/modules/BenefitObservations.tsx",
+    "apps/portal-web/src/modules/WorkSharingEntry.tsx"
   ],
   "owner_role": "foundation",
   "public_exports": [

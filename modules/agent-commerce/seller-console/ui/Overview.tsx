@@ -28,6 +28,6 @@ export function Overview({c,route,checkoutEnabled=false}:{c:Controller;route:Sel
     {(home||settings)&&<div className="actions"><a className="btn btn-ghost" href={home?sellerRootHref(route):sellerConsoleHref(route,'settings-payments')}>{home?'前往商店首頁':'前往收款設定'}</a></div>}
    </li>;
   })}</ol></Axis>
-  {data.orders&&<Axis title="訂單概況" readState={r.state}><dl className="seller-facts">{([['open','進行中'],['awaiting_offline_payment','待確認收款'],['needs_action','待處理問題']] as const).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{data.orders![key].more?'99+':data.orders![key].count}</dd></div>)}</dl><div className="actions"><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders',{query:{lifecycle:'open'}})}>查看訂單</a><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders',{query:{needs_action:'true'}})}>查看待處理</a></div></Axis>}
+  {data.orders&&<Axis title="訂單概況" readState={r.state}><dl className="seller-facts">{([['open','進行中'],['awaiting_offline_payment','待確認收款'],['needs_action','待處理問題']] as const).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{data.orders![key].more?'99+':data.orders![key].count}</dd></div>)}</dl><div className="actions"><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders',{query:{lifecycle:'open'}})}>查看訂單</a><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders',{query:{awaiting_offline_payment:'true'}})}>查看待確認收款</a><a className="btn btn-ghost" href={sellerConsoleHref(route,'orders',{query:{needs_action:'true'}})}>查看待處理</a></div></Axis>}
  </>}</section>;
 }

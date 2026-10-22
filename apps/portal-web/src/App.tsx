@@ -1,3 +1,4 @@
+import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
@@ -6,6 +7,8 @@ import {buyerRoute} from './modules/hosted-order-state'
 import { client, PortalContext, describeError, isOwnRef, type ActionError, type PortalContextValue } from './portal-session'
 import { ErrorPanel } from './portal-feedback'
 import { Navigation, TAB_TITLES } from './Navigation'
+import { TAB_GUIDANCE } from './features/metadata'
+import { renderPortalFeature } from './features/registry'
 import React, { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageLoadBoundary } from './LazyPage'
 import { RequestFeedback } from './RequestFeedback'
@@ -25,7 +28,6 @@ import {NotificationBell,type BellAction} from './modules/NotificationBell'
 import {FloatingMessages} from './modules/FloatingMessages'
 import './SocialLayout.css'
 import { PlatformPurpose, entryIntentFromHash, entryIntentLabel, type EntryIntent } from './PlatformPurpose'
-const NotificationPreferencesPanel = lazy(() => import('./modules/NotificationPreferences').then(m => ({default: m.NotificationPreferencesPanel})))
 import {readEventParticipationToken} from './modules/EventParticipation'
 import {DevelopmentAccessProvider} from './modules/DevelopmentAccess'
 import { GameConsoleProvider, GameConsolePopout, useGameConsole } from './GameConsole'
@@ -34,9 +36,10 @@ import {GuideHost} from './modules/newcomer-guides/GuideHost'
 import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import {AdminReports,MemberReportingProvider} from './modules/MemberReporting'
-import { BrandPoster, CommunityLinks, CommunityPanel, type SiteConfig } from './modules/Community'
+import { BrandPoster, CommunityLinks, type SiteConfig } from './modules/Community'
 import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './modules/PublicDiscovery'
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
+import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { CommunitySearch } from './modules/CommunitySearch'
 import { guildKeyFromHash } from './modules/guild-launchpad-route'
 import {ShareLauncher,SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
@@ -47,45 +50,15 @@ import {authErrorMessage} from './auth-messages'
 import {AppInstallProvider,InstallAppButton} from './AppInstall'
 
 const PublicGuildLaunchpad = lazy(() => import('./guild-blocks/GuildLaunchpadPage').then(m => ({default: m.PublicGuildLaunchpad})))
-const WorkbenchPanel = lazy(() => import('./modules/WorkbenchPanel').then(m => ({default: m.WorkbenchPanel})))
-const ShowcasePanel = lazy(() => import('./modules/ShowcasePanel').then(m => ({default: m.ShowcasePanel})))
-const EngagementPanel = lazy(() => import('./modules/EngagementPanel').then(m => ({default: m.EngagementPanel})))
-const SkillsPanel = lazy(() => import('./modules/SkillsPanel').then(m => ({default: m.SkillsPanel})))
-const MemberHome = lazy(() => import('./modules/MemberHome').then(m => ({default: m.MemberHome})))
-const FriendsPanel = lazy(() => import('./modules/FriendsPanel').then(m => ({default: m.FriendsPanel})))
-const CommunityArPanel=lazy(()=>import('./modules/community-ar/Panel').then(m=>({default:m.CommunityArPanel})))
 const PublicArPage=lazy(()=>import('./modules/community-ar/Panel').then(m=>({default:m.PublicArPage})))
 const PublicMemberPage = lazy(() => import('./modules/PublicMemberPage').then(m => ({default: m.PublicMemberPage})))
 const Onboarding = lazy(() => import('./modules/Onboarding').then(m => ({default: m.Onboarding})))
-const AccountPanel = lazy(() => import('./modules/Membership').then(m => ({default: m.AccountPanel})))
-const MembersPanel = lazy(() => import('./modules/Membership').then(m => ({default: m.MembersPanel})))
-const SquadsPanel = lazy(() => import('./modules/Squads').then(m => ({default: m.SquadsPanel})))
-const SquadOutcomeDetail = lazy(() => import('./modules/SquadOutcomes').then(m => ({default: m.SquadOutcomeDetail})))
-const CoCreationPanel = lazy(() => import('./modules/CoCreationPanel').then(m => ({default: m.CoCreationPanel})))
 const AdminPanel = lazy(() => import('./modules/AdminPanel').then(m => ({default: m.AdminPanel})))
 const GitHubCallback = lazy(() => import('./modules/GitHubCallback').then(m => ({default: m.GitHubCallback})))
-const MemberTasks = lazy(() => import('./modules/MemberTasks').then(m => ({default: m.MemberTasks})))
 const MemberMessages = lazy(() => import('./modules/MemberMessages').then(m => ({default: m.MemberMessages})))
-const EventsPanel = lazy(() => import('./modules/EventsPanel').then(m => ({default: m.EventsPanel})))
-const SocialZone = lazy(() => import('./modules/SocialZone').then(m => ({default: m.SocialZone})))
-const MemberServices = lazy(() => import('./modules/MemberServices').then(m => ({default: m.MemberServices})))
-const PromotionBoards = lazy(() => import('./modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
-const EventHighlights = lazy(() => import('./modules/EventHighlights').then(m => ({default: m.EventHighlights})))
 const PublicEventPage = lazy(() => import('./modules/PublicEventPage').then(m => ({default: m.PublicEventPage})))
-const TaskBoardPanel = lazy(() => import('./modules/TaskBoardPanel').then(m => ({default: m.TaskBoardPanel})))
 const WelcomePreview = lazy(() => import('./modules/WelcomePreview').then(m => ({default: m.WelcomePreview})))
-const MemberGuildWorkspace = lazy(() => import('./modules/GuildWorkspace').then(m => ({default: m.MemberGuildWorkspace})))
-const HostedOrderPage = lazy(() => import('./modules/HostedOrder').then(m => ({default: m.HostedOrderPage})))
-const HostedStore = lazy(() => import('./modules/HostedStore').then(m => ({default: m.HostedStore})))
-const TenantSettings = lazy(() => import('./modules/TenantSettings').then(m => ({default: m.TenantSettings})))
-const PositioningPanel = lazy(() => import('./modules/PositioningPanels').then(m => ({default: m.PositioningPanel})))
-const GuildsPanel = lazy(() => import('./guild-blocks/GuildDirectoryPage').then(m => ({default: m.GuildsPanel})))
-const SupplierPanel = lazy(() => import('./modules/CommercePanels').then(m => ({default: m.SupplierPanel})))
-const RetailPanel = lazy(() => import('./modules/CommercePanels').then(m => ({default: m.RetailPanel})))
-const OpenSourcePanel = lazy(() => import('./modules/OpenSourcePanels').then(m => ({default: m.OpenSourcePanel})))
-const MarketingPanel = lazy(() => import('./modules/OpenSourcePanels').then(m => ({default: m.MarketingPanel})))
-const PrivateWorkAI = lazy(() => import('./modules/PrivateWorkAI').then(m => ({default: m.PrivateWorkAI})))
-import { MyContent } from './modules/MyContent'
+import { HostedOrderPage } from './features/commerce'
 
 const DEMO_ACCOUNTS = [
   { email: 'maker@local.test', label: '作者示範帳號' },
@@ -96,41 +69,6 @@ const DEMO_PASSWORD = 'freedom-local-demo'
 const onboardingStarted=(userId:string)=>{try{return sessionStorage.getItem(`freedom-onboarding-started:${userId}`)==='yes'}catch{return false}}
 const rememberOnboarding=(userId:string,started:boolean)=>{try{if(started)sessionStorage.setItem(`freedom-onboarding-started:${userId}`,'yes');else sessionStorage.removeItem(`freedom-onboarding-started:${userId}`)}catch{/* Keep the in-memory choice. */}}
 
-const TAB_GUIDANCE: Record<TabId, string> = {
-  ar:'製作衣服或海報圖案，掃描本人公開名片與公開活動，拍照分享。',
-  friends: '查看好友、待回覆邀請與可用的私訊入口。',
-  home: '查看會員摘要與常用入口，從這裡繼續公會和技能書旅程。',
-  positioning: '透過情境題整理你的能力與想走的方向；結果由你確認，也可以日後重新探索。',
-  guilds: '加入感興趣的職業公會，設定主要公會，查看公會技能書。',
-  skills: '預覽技能書，領取已解鎖的內容，選一本開始練習。',
-  members: '認識工坊夥伴，查看他們願意公開的名片資訊。',
-  account: '編輯名片資料、頭像與公開範圍。',
-  cocreation: '查看一起開發的作品和參與入口。',
-  squads: '查看小隊與共同進行的協作。',
-  opensource: '貼上 GitHub 網址與介紹，預覽後分享到社群技能書。',
-  'private-ai': '建立私人工作、閱讀成果，並逐次確認模型推論的資料與上限。',
-  workbench: '查看自己的工作、認領紀錄與進度。',
-  showcase: '瀏覽作品和需求，尋找合作機會。',
-  engagement: '查看合作紀錄與目前狀態。',
-  supplier: '下載 MD，讓 AI 整理商品並製作內部商店。',
-  retail: '挑商品、下載 MD，讓 AI 製作公開商店。',
-  marketing: '撰寫介紹草稿並記錄分享成果。',
-  'guild-workspace': '管理你有權負責的公會資訊與技能書。',
-  reservations: '查看本人預留；預留不代表付款或出貨。',
-  stores: '管理商店展示與店主預留紀錄；預留不代表付款或履約。',
-  business: '建立業務空間、切換工作區，並邀請仍在本社群的夥伴。',
-  community: '查看自由工坊的社群入口和公開資訊。',
-  'community-search': '依關鍵字、類型與主題搜尋目前可閱讀的社群內容。',
-  'my-content': '找回私人草稿，查看本人內容的發布與審核狀態。',
-  todos: '查看會員待辦事項與可直接前往的操作。',
-  messages: '查看收到的訊息與對話。',
-  events: '查看社群活動、審核結果與報名狀態。',
-  highlights: '活動結束後會自動出現在這裡。這一頁是公開的，參加過的夥伴可以補上照片、海報和影片連結。',
-  tasks: '探索工坊工作、GitHub Issue／PR 歷史與已連結 GitHub 的會員排行，查看有來源的驗收紀錄。',
-  social: '發布近況與作品、按讚留言，也能分享外部社群連結。',
-  services: '列出社員的本業服務。用你的連結分享出去，點擊計入業務推廣排行榜。服務頁是公開的。',
-  promotion: '查看六種分享的點擊排行。分數只供比較，不計入經驗或驗收。',
-}
 
 export function App() {
   // Old pop-out links now enter the same member message panel.
@@ -211,6 +149,11 @@ function MemberApp() {
   }, [session, onboarding, entryIntent])
 
   const applySession = useCallback((next: SessionPayload) => {
+    // Public reading can resume before the member workspace's onboarding gate.
+    const postReturn=window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
+    if(postReturn){window.location.replace(postReturn);return}
+    const memberReturn=window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
+    if(memberReturn){window.history.replaceState(null,'',memberReturn);window.dispatchEvent(new HashChangeEvent('hashchange'))}
     if(eventLoginFromLocation()){
       const state={...window.history.state};delete state.freedomEventLogin
       window.history.replaceState(Object.keys(state).length?state:null,'')
@@ -243,7 +186,14 @@ function MemberApp() {
     setPhase('boot')
     setBootError(null)
     try {
+      const entryUrl = window.location.href, generation = sessionGeneration.current
       const next = await client.getSession()
+      const skillReturn = !window.location.hash && window.location.pathname === '/' ? skillAcquisitionFromSearch(window.location.search) : null
+      if (skillReturn) {
+        const allowed = await validateSkillReturn(skillReturn)
+        if (generation !== sessionGeneration.current) return
+        if (window.location.href === entryUrl && allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
+      }
       applySession(next)
     } catch (err) {
       if (err instanceof ApiError && err.accessExpired) {
@@ -253,6 +203,8 @@ function MemberApp() {
         return
       }
       if (err instanceof ApiError && err.unauthorized) {
+        const sharedPost=window.location.pathname==='/'?anonymousSharedPost(window.location.search,window.location.hash):null
+        if(sharedPost){window.location.replace(sharedPost);return}
         toLogin()
         return
       }
@@ -412,7 +364,13 @@ function LoginView({
 }) {
   const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>('login')
   const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
+  const [skillReturn] = useState(() => skillAcquisitionFromSearch(window.location.search))
+  const [skillEntryUrl] = useState(() => window.location.href)
+  const skillReturnRequest = useRef<AbortController | null>(null)
   const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
+  const postEntryUrl=window.location.href
+  const postReturnPath=!resetToken&&window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
+  const memberPostPath=!resetToken&&window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
   const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
   const authForm = useRef<HTMLFormElement>(null)
@@ -421,10 +379,16 @@ function LoginView({
     setMode('register'); setError(null); setResetNotice('')
     requestAnimationFrame(() => { authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true }) })
   }, [])
-  useEffect(() => { if (discoveryEnabled && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled, site?.registration_enabled, join])
+  useEffect(() => { if ((discoveryEnabled||postReturnPath||(!resetToken&&skillReturn)) && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled,postReturnPath,site?.registration_enabled,resetToken,skillReturn,join])
   const activeMode=resetToken?'confirm-reset':mode
   const storefrontReturnEnabled = site?.commerce_checkout_enabled === true && !resetToken
-  useEffect(() => () => { authEpoch.current++ }, [activeMode])
+  useEffect(() => () => { authEpoch.current++; skillReturnRequest.current?.abort() }, [activeMode])
+  useEffect(() => {
+    if(!postReturnPath&&!memberPostPath)return
+    const moved=()=>{authEpoch.current++}
+    window.addEventListener('hashchange',moved);window.addEventListener('popstate',moved)
+    return()=>{window.removeEventListener('hashchange',moved);window.removeEventListener('popstate',moved)}
+  },[postReturnPath,memberPostPath])
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -474,6 +438,12 @@ function LoginView({
       if (!session?.user || !session.csrf_token) {
         throw new Error('登入回應不完整')
       }
+      if (epoch !== authEpoch.current) return
+      if(postReturnPath||memberPostPath){
+        if(window.location.href!==postEntryUrl)return
+        if(postReturnPath){window.location.assign(postReturnPath);return}
+        onLoggedIn(session);return
+      }
       if (storefrontReturnEnabled && storefrontReturn) {
         const allowed = await successfulStorefrontReturn(storefrontReturn, session)
         if (epoch !== authEpoch.current) return
@@ -481,6 +451,15 @@ function LoginView({
         onLoggedIn(session, activeMode === 'register'
           ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
           : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
+      } else if (skillReturn) {
+        // Same-document Back/Forward can retain this form while changing the entry.
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
+        const controller = new AbortController(); skillReturnRequest.current?.abort(); skillReturnRequest.current = controller
+        const allowed = await validateSkillReturn(skillReturn, {signal: controller.signal})
+        if (epoch !== authEpoch.current || controller.signal.aborted) return
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
+        if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
+        onLoggedIn(session, t('auth.skillReturnUnavailable'))
       } else if (activeMode === 'register' && discoveryEnabled && returnPath) {
         let allowed = false
         try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
@@ -510,8 +489,13 @@ function LoginView({
       <section className="card login-card" aria-labelledby="login-heading">
         {!accessExpired && activeMode!=='confirm-reset'&&<div className="auth-switch" role="group" aria-label={t('auth.switch')}><button type="button" className={activeMode==='login'?'selected':''} aria-pressed={activeMode==='login'} onClick={()=>{setMode('login');setError(null);setResetNotice('')}}>{t('auth.memberLogin')}</button>{site?.registration_enabled&&<button type="button" className={activeMode==='register'?'selected':''} aria-pressed={activeMode==='register'} onClick={()=>{setMode('register');setError(null);setResetNotice('')}}>{t('auth.create')}</button>}</div>}
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>
+        {postReturnPath&&<p className="purpose-next-destination"><a href={postReturnPath}>返回貼文繼續閱讀</a><br/>{activeMode==='register'?'建立帳號後會回到這篇貼文，加入公會可稍後完成。':'登入後會回到這篇貼文。'}</p>}
+        {memberPostPath&&<p className="purpose-next-destination">登入後會回到指定貼文，並確認你的閱覽權限。</p>}
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
-        {discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {!skillReturn && discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {skillReturn && !accessExpired && (activeMode === 'login' || activeMode === 'register') && <div className="purpose-next-destination">
+          <p>{t('auth.skillReturnHint')}</p><a href={skillReadingPath(skillReturn)!}>{t('auth.skillReturnRead')}</a>
+        </div>}
         {storefrontReturnEnabled && storefrontReturn && activeMode === 'login' && <p className="muted">登入後會返回原本的商店頁面。</p>}
         {storefrontReturnEnabled && storefrontReturn && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。</p>}
         {notice && !accessExpired && (
@@ -883,38 +867,12 @@ function Workspace({
               />
             )}
             <PageLoadBoundary label={t(`nav.${tab}`)} resetKey={tab}>
-            {tab === 'account' && <><AccountPanel client={client} session={session} onNavigate={selectTab} />{site?.notification_preferences_enabled===true&&<NotificationPreferencesPanel key={session.user.user_id+':'+session.csrf_token} client={client} followingEnabled={site.community_relations_enabled===true}/>}</>}
-            {tab === 'todos' && <MemberTasks client={client} onNavigate={selectTab} />}
-            {tab === 'friends' && <FriendsPanel client={client} session={session} initialScope={friendScope} memberBlockingEnabled={site?.member_blocking_enabled===true} onNavigate={selectTab} onMessage={id=>{selectTab('messages');setNotificationTarget({tab:'messages',resource_id:id,sequence:++notificationSequence.current});}} />}
-            {tab === 'members' && <MembersPanel client={client} session={session} memberBlockingEnabled={site?.member_blocking_enabled===true} onIncomingFriends={()=>{selectTab('friends');setFriendScope('incoming');}} onMessage={id=>{selectTab('messages');setNotificationTarget({tab:'messages',resource_id:id,sequence:++notificationSequence.current});}} focusRequest={notificationTarget?.tab==='members'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined} />}
-            {tab === 'cocreation' && <CoCreationPanel client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'community' && <CommunityPanel client={client} onNavigate={selectTab} />}
-            {tab === 'community-search' && (site?.community_search_enabled === true ? <CommunitySearch key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} authKey={`${session.user.user_id}:${client.sessionGeneration}`} relationsEnabled={site.community_relations_enabled === true}/> : <p>社群內容搜尋尚未開放。</p>)}
-            {tab === 'my-content' && (site?.personal_content_enabled === true ? <MyContent key={`${session.user.user_id}:${client.sessionGeneration}`}/> : <p>我的內容尚未開放。</p>)}
-            {tab === 'ar' && <CommunityArPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} enabled={site?.ar_enabled===true} userId={session.user.user_id} registerLeave={registerPageLeave}/>}
-            {tab === 'events' && <EventsPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} locationHash={locationHash} registerLeave={registerPageLeave} onList={()=>selectTab('events')} participationEnabled={site?.event_participation_enabled===true}/>}
-            {tab === 'highlights' && <EventHighlights key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} outcomesEnabled={site?.event_outcomes_enabled===true}/>}
-            {tab === 'tasks' && <TaskBoardPanel client={client} onNavigate={selectTab} />}
-            {tab === 'social' && <SocialZone client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>}
-            {tab === 'services' && <MemberServices client={client} />}
-            {tab === 'promotion' && <PromotionBoards client={client} />}
-            {tab === 'skills' && <SkillsPanel client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'squads' && (/^#squad-outcomes\/[0-9a-f-]{36}$/i.test(locationHash)&&site?.squad_outcomes_enabled===true ? <SquadOutcomeDetail client={client} id={locationHash.slice('#squad-outcomes/'.length)} eventLinksEnabled={site?.event_outcomes_enabled===true}/> : <SquadsPanel client={client} session={session} onNavigate={selectTab} outcomesEnabled={site?.squad_outcomes_enabled===true} eventLinksEnabled={site?.event_outcomes_enabled===true}/>)}
-            {tab === 'workbench' && <WorkbenchPanel />}
-            {tab === 'private-ai' && <PrivateWorkAI client={client} key={session.user.user_id}/>}
-            {tab === 'showcase' && <ShowcasePanel />}
-            {tab === 'engagement' && <EngagementPanel />}
-            {tab === 'home' && <MemberHome client={client} session={session} onNavigate={selectTab} personalContentEnabled={site?.personal_content_enabled === true} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} shortVideos={site?.short_videos_enabled === true} onOpenSupply={() => selectTab('stores', '#stores/supply')} firstParticipationEnabled={site?.first_participation_enabled===true}/>}
-            {tab === 'positioning' && <PositioningPanel client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'guilds' && <GuildsPanel client={client} session={session} onNavigate={selectTab} site={site} locationHash={locationHash} registerPendingLeave={registerPageLeave} />}
-            {tab === 'guild-workspace' && <MemberGuildWorkspace client={client}/>}
-            {tab === 'reservations' && <HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={registerPageLeave} replaceLocation={replaceBuyerLocation} checkoutOrders={site?.commerce_checkout_enabled===true?{userId:session.user.user_id,csrfToken:session.csrf_token,onSessionExpired}:undefined} />}
-            {tab === 'stores' && <HostedStore categoriesEnabled={site?.store_categories_enabled===true} variantsEnabled={site?.store_variants_enabled===true} galleryEnabled={site?.store_gallery_enabled===true} policiesEnabled={site?.store_policies_enabled===true} appearanceEnabled={site?.store_appearance_enabled===true} supplyOfferPhotosEnabled={site?.supply_offer_photos_enabled===true} distributionPhotosEnabled={site?.distribution_photos_enabled===true} materialMediaEnabled={site?.supply_material_media_enabled===true} materialUploadsEnabled={site?.supply_material_uploads_enabled===true} checkoutEnabled={site?.commerce_checkout_enabled===true} commerceConsoleEnabled={site?.commerce_console_enabled === true} providerEnvironment={site?.public_mode === true ? 'live' : 'sandbox'} consoleEnabled={site?.supplier_console_enabled === true} client={client} photosEnabled={site?.hosted_store_photos_enabled===true} photoUploadsEnabled={site?.hosted_store_photo_uploads_enabled===true} enabled={site?.guild_launchpad_enabled === true} locationHash={locationHash} userId={session.user.user_id} registerLeave={registerPageLeave} />}
-            {tab === 'business' && <TenantSettings client={client} session={session} enabled={site ? site.guild_launchpad_enabled === true : null} />}
-            {tab === 'supplier' && <SupplierPanel client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'retail' && <RetailPanel client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'opensource' && <OpenSourcePanel key={session.user.user_id+':'+session.csrf_token} client={client} session={session} onNavigate={selectTab} />}
-            {tab === 'marketing' && <MarketingPanel client={client} session={session} onNavigate={selectTab} />}
+            {renderPortalFeature(tab, {
+              client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,
+              registerPageLeave, replaceBuyerLocation, onSessionExpired,
+              openMemberMessage: id => { selectTab('messages'); setNotificationTarget({tab:'messages', resource_id:id, sequence:++notificationSequence.current}); },
+              showIncomingFriends: () => { selectTab('friends'); setFriendScope('incoming'); },
+            })}
             </PageLoadBoundary>
               </main>
             </div>

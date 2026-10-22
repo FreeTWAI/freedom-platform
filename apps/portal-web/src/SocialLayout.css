@@ -36,6 +36,10 @@
 .app-frame.social-layout .home-feed-title{font-size:.9375rem;font-weight:600;color:var(--muted);margin:0 0 12px}
 .app-frame.social-layout .home-context{display:grid;gap:16px;min-width:0}
 .app-frame.social-layout .home-support{display:grid;gap:16px}
+.app-frame.social-layout .home-journal-entry{display:grid;justify-items:start;gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--radius);min-width:0}
+.app-frame.social-layout .home-journal-entry h2{font-size:1rem;margin:0}
+.app-frame.social-layout .home-journal-entry p{font-size:.875rem;line-height:1.6;margin:0;color:var(--muted);overflow-wrap:anywhere}
+.app-frame.social-layout .home-journal-entry a{min-height:44px;max-width:100%;white-space:normal}
 .app-frame.social-layout .home-next-step{padding:18px;background:var(--bg-elev);border:1px solid var(--line);border-radius:14px}
 .app-frame.social-layout .freedom-home #home-next-step-description{font-size:.9375rem;line-height:1.6}
 .app-frame.social-layout .freedom-home .home-shortcuts{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
