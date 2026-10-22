@@ -46,12 +46,17 @@
     "migrations/179_member_shared_skill_books.sql",
     "tests/e2e/skill-sharing.spec.ts",
     "tests/runtime/member-shared-skill-books.test.ts",
-    "tests/runtime/skill-book-upstreams.test.ts"
+    "tests/runtime/skill-book-upstreams.test.ts",
+    "modules/development/skill-acquisition.ts",
+    "apps/portal-web/public/skill-acquisition.js",
+    "tests/runtime/skill-acquisition.test.ts",
+    "tests/e2e/skill-acquisition.spec.ts"
   ],
   "public_exports": [
     "modules/development/page-github.ts",
     "modules/development/pages.ts",
-    "modules/development/service.ts"
+    "modules/development/service.ts",
+    "modules/development/skill-acquisition.ts"
   ],
   "dependencies": [
     "shared"
