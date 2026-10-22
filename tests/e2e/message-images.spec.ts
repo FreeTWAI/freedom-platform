@@ -207,8 +207,13 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
       for(const name of ['移除','附加圖片','取消回覆'])await expect(thread.getByRole('button',{name,exact:true})).toBeDisabled();
       expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
       let blocked=0;page.on('dialog',async dialog=>{blocked++;await dialog.accept();});
-      if(mode==='page'){await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);}
-      else {
+      if(mode==='page'){
+        await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);
+        // The new unified inbox closes when the member navigates to Home.
+        // Reopen the same mounted conversation: the unknown payload must survive.
+        await expect(page.locator('#floating-message-panel')).toBeHidden();
+        await openChat(page);
+      }else{
         await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();
         await page.getByRole('menu',{name:'個人檔案'}).getByRole('menuitem',{name:'登出',exact:true}).click();
         expect(await page.evaluate(async()=>(await fetch('/api/v1/session')).status)).toBe(200);await openChat(page);
@@ -447,9 +452,15 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
       };
     },mode);
     await thread.locator('form.messages-compose').evaluate((form:HTMLFormElement)=>form.requestSubmit());
-    await expect(thread.getByRole('alert')).toContainText('傳送結果未確認');
     expect(await page.locator('html').getAttribute('data-dm-immediate-unload')).toBe('true');expect(notices).toBe(mode==='dock-logout'?1:0);expect(logouts).toBe(0);
-    await expect(page).toHaveURL(mode==='dock-logout'?/#messages$/:/#home$/);await expect(thread.getByRole('textbox')).toHaveValue(caption);await expect(thread.getByLabel('待送出的圖片')).toBeVisible();
+    await expect(page).toHaveURL(mode==='dock-logout'?/#messages$/:/#home$/);
+    if(mode==='page-navigation'){
+      // Home closes the overlay but must not dispose its unknown image send.
+      await expect(page.locator('#floating-message-panel')).toBeHidden();
+      await openChat(page);
+    }
+    await expect(thread.getByRole('alert')).toContainText('傳送結果未確認');
+    await expect(thread.getByRole('textbox')).toHaveValue(caption);await expect(thread.getByLabel('待送出的圖片')).toBeVisible();
     await thread.getByRole('button',{name:'重試送出',exact:true}).click();await expect(thread.getByRole('textbox')).toHaveValue('');
     expect(keys).toHaveLength(2);expect(keys[1]).toBe(keys[0]);expect(payloads[1]).toBe(payloads[0]);await assertOneStoredImage(e2eAuthPool,caption,payloads[0],sender.email);
   });
