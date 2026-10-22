@@ -108,6 +108,8 @@ import {readGuestEventCalendar} from '../../../modules/community/event-calendar.
 import {readGuestEventReminder,saveGuestEventReminder} from '../../../modules/community/event-reminders.js';
 import {mutateGuestEventParticipation,processEventWaitlist,readGuestEventParticipation,requestGuestEventParticipation} from '../../../modules/community/event-waitlist.js';
 import {checkSocialThumbnailHeaders,isSocialThumbnailUpload,registerMemberPromotion,registerPublicPromotion} from './routes/promotion.js';
+import {registerPublicSocialPosts,registerMemberPublicSocialPosts} from './routes/public-social-posts.js';
+import {registerPublicSocialPostPage} from './routes/public-social-post-page.js';
 import {SOCIAL_NOTE_REQUEST_BYTES} from '../../../modules/community/social-posts.js';
 import {checkServiceCoverHeaders,isServiceCoverUpload,registerMemberServices,registerPublicMemberServices} from './routes/member-services.js';
 import {publicMemberCard,publicMemberAvatar} from '../../../modules/identity-membership/member-sharing.js';
@@ -501,6 +503,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   });
   app.get('/api/v1/public/events/:id/video',async c=>eventAssetVideoResponse(c,pool,z.uuid().parse(c.req.param('id')),runtime.eventVideoAssetStore));
   registerPublicPromotion(app,pool,runtime,origin);
+  registerPublicSocialPosts(app,pool,runtime);
+  registerPublicSocialPostPage(app,pool,runtime,freedomEnv==='local'||Boolean(runtime.registrationCommunityId()));
   registerPublicMemberServices(app,pool,runtime);
   app.route('/',createEventHighlightPublicRoutes(pool,runtime.publicOrigin,runtime));
   if(runtime.squadOutcomesEnabled===true)app.route('/api/v1/public',createPublicSquadOutcomeRoutes(pool));
@@ -764,6 +768,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime)));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
   registerMemberPromotion(app,pool,runtime);
+  registerMemberPublicSocialPosts(app,pool,runtime);
   registerMemberServices(app,pool,runtime);
   app.route('/api/v1',createEventHighlightMemberRoutes(pool,runtime));
   if(runtime.squadOutcomesEnabled===true)app.route('/api/v1',createSquadOutcomeRoutes(pool));
