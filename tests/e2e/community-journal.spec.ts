@@ -1,3 +1,4 @@
+import {test as browserTest} from '@playwright/test';
 import {journalMedia} from '../../modules/community-journal/media.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -56,4 +57,45 @@ test('assigned editor can issue a key, review, publish and withdraw an API submi
   await page.getByRole('button',{name:'撤回目前公開版本'}).click();await expect(page.getByRole('button',{name:'撤回目前公開版本'})).toHaveCount(0);
   expect((await (await page.request.get('/api/v1/public/journal')).json()).data.journals).toHaveLength(0);
  }finally{await e2eAuthPool.query('DELETE FROM community_journal_publisher');}
+});
+
+for(const stage of ['state','key','detail'] as const){
+ browserTest(`private editor ignores delayed ${stage} response after session denial`,async({page})=>{
+  const submission={submission_id:'old-draft',source_revision:'a'.repeat(64),payload_sha256:'b'.repeat(64),status:'ready_for_review',created_at:'OLD-PRIVATE-DRAFT'};
+  const oldState={aggregate_version:'1',published_submission_id:null,keys:[{key_id:'old-key',label:'OLD-PRIVATE-KEY',expires_at:'2099-01-01',revoked_at:null}],submissions:[submission]};
+  let denied=false,stateReads=0;let release!:()=>void,started!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;}),waiting=new Promise<void>(resolve=>{started=resolve;});
+  await page.route('**/api/v1/session',route=>denied?route.fulfill({status:401,json:{detail:'SESSION-DENIED'}}):route.fulfill({json:{user:{user_id:'old-actor'},csrf_token:'old-csrf'}}));
+  await page.route('**/api/v1/me/community-journal**',async route=>{
+   const path=new URL(route.request().url()).pathname;
+   const delayed=stage==='detail'?path.endsWith('/submissions/old-draft'):stage==='key'?path.endsWith('/keys'):path.endsWith('/community-journal')&&++stateReads===2;
+   if(delayed){started();await gate;}
+   if(path.endsWith('/keys'))return route.fulfill({json:{token:'fjp_LATE_PRIVATE_SECRET'}});
+   if(path.endsWith('/submissions/old-draft'))return route.fulfill({json:{...submission,payload:{...snapshot.data,journals:[{...journal('2026-10-22'),title:'LATE-PRIVATE-ARTICLE'}]}}});
+   return route.fulfill({json:oldState});
+  });
+  await page.goto('/journal/manage');await expect(page.getByText('OLD-PRIVATE-KEY',{exact:false})).toBeVisible();
+  await page.getByRole('button',{name:stage==='detail'?'查看內容':'建立 30 天投稿金鑰',exact:true}).click();await waiting;
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+  denied=true;
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
+  await expect(page.getByRole('alert')).toContainText('SESSION-DENIED');
+  const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/v1/me/community-journal'+(stage==='key'?'/keys':stage==='detail'?'/submissions/old-draft':''));
+  release();await (await response).finished();
+  // Wait for React's render after the held response, not a fixed timeout.
+  await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+  await expect(page.getByText('OLD-PRIVATE-KEY',{exact:false})).toHaveCount(0);await expect(page.getByText('OLD-PRIVATE-DRAFT',{exact:false})).toHaveCount(0);
+  await expect(page.getByText('fjp_LATE_PRIVATE_SECRET',{exact:false})).toHaveCount(0);await expect(page.getByRole('heading',{name:'LATE-PRIVATE-ARTICLE'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true})).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('SESSION-DENIED');
+ });
+}
+
+browserTest('private editor refuses an action result belonging to the previous actor',async({page})=>{
+ let actor='old-actor';
+ await page.route('**/api/v1/session',r=>r.fulfill({json:{user:{user_id:actor},csrf_token:actor+'-csrf'}}));
+ await page.route('**/api/v1/me/community-journal',r=>r.fulfill({json:{aggregate_version:'1',published_submission_id:null,keys:[],submissions:[]}}));
+ await page.route('**/api/v1/me/community-journal/keys',async r=>{actor='new-actor';await r.fulfill({json:{token:'fjp_PREVIOUS_ACTOR_SECRET'}});});
+ await page.goto('/journal/manage');await page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('登入狀態已變更');await expect(page.getByText('fjp_PREVIOUS_ACTOR_SECRET',{exact:false})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true})).toHaveCount(0);
 });
