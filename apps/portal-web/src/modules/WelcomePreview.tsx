@@ -19,12 +19,20 @@ const publicRepo=(url:string)=>{try{const parsed=new URL(url);return parsed.prot
 const publicWebsite=(url?:string|null)=>{try{const parsed=new URL(url??'');return parsed.protocol==='https:'&&!parsed.username&&!parsed.password?parsed.href:null}catch{return null}};
 type WelcomeProps={client:PortalClient;name:string;entryLabel?:string;onStart:()=>void;onCompleted:()=>void;onLogout:()=>void};
 const eventsFrom=(value:unknown)=>requireItems<PreviewEvent>(value,'活動').filter(item=>item.state==='published'&&Date.parse(item.starts_at)>Date.now()).slice(0,3);
-const tasksFrom=(value:unknown)=>requireItems<PreviewTask>(value,'任務').slice(0,3);
+// Validate the fields rendered by these cards inside the read lane, not during render.
+// A malformed preview is a retryable section error; it must not crash other sections.
+function previewTextRows<T>(items:T[],fields:readonly (keyof T)[],label:string):T[]{
+  const preview=items.slice(0,3);
+  if(preview.some(item=>!item||typeof item!=='object'||fields.some(field=>typeof item[field]!=='string')))
+    throw new Error(`${label} 回應格式不完整。`);
+  return preview;
+}
+const tasksFrom=(value:unknown)=>previewTextRows(requireItems<PreviewTask>(value,'任務'),['work_item_id','title','objective'],'任務');
 const guildsFrom=(value:unknown)=>requireItems<GuildSummary>(value,'公會');
 const booksFrom=(value:unknown)=>{
   const books=(value as Catalog|null)?.skill_books;
   if(!Array.isArray(books))throw new Error('技能書回應格式不完整。');
-  return books.slice(0,3);
+  return previewTextRows<Catalog['skill_books'][number]>(books,['id','title','description'],'技能書');
 };
 // Reuse the existing session-fenced read lane. No completed cache or polling.
 function usePreviewRead<T>(client:PortalClient,path:string,decode:(value:unknown)=>T){
