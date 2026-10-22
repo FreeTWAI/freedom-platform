@@ -148,4 +148,10 @@
 .social-active-tag{display:flex;align-items:center;gap:12px;margin:0;color:var(--blue-ink)}
 .social-active-tag button{min-height:44px;font-size:.875rem}
 .social-share-dialog{width:min(600px,calc(100vw - 24px))}
+.social-sharing-consent{display:grid;gap:12px;border:1px solid var(--line);border-radius:12px;padding:16px}
+.social-sharing-consent p{margin:0;font-size:14px}
+.social-share-preview{max-height:260px;overflow:auto;padding:12px;border-radius:8px;background:var(--bg);overflow-wrap:anywhere}
+.social-share-preview p{white-space:pre-wrap;margin-top:8px;line-height:1.65}
+.social-share-preview img{display:block;max-width:100%;height:auto;margin-top:12px;border-radius:8px}
+.social-sharing-consent .btn,.social-share-dialog>.stack>.actions .btn{min-height:44px;width:auto}
 @media(max-width:480px){.social-compose-toolbar{gap:0}.social-topic-select{flex-basis:100%}.social-comment-meta time{flex-basis:100%}.social-text-picker{left:-44px}.social-interactions>.social-actions>.btn{gap:4px;padding:6px 4px}.social-write-trigger strong{padding-inline:10px}.social-composer-prompt{gap:6px}}
