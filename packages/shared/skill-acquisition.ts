@@ -1,7 +1,7 @@
 /** Public reading continuity only. Never a grant, referral, checkout or arbitrary redirect. */
 export type SkillAcquisitionIntent = {path: string; intro: number | null};
-const catalogPath = /^\/development\/skills\/[a-z0-9-]{1,64}$/;
-const submissionPath = /^\/development\/submissions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const catalogPath = /^\/development\/skills\/([a-z0-9-]{1,64})$/;
+const submissionPath = /^\/development\/submissions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 export function publicSkillPath(value: unknown): string | null {
   return typeof value === 'string' && (catalogPath.exec(value)?.[0] === value || submissionPath.exec(value)?.[0] === value) ? value : null;
 }
@@ -19,7 +19,12 @@ export function skillAcquisitionFromSearch(search: string): SkillAcquisitionInte
   return {path, intro};
 }
 export function skillReadingPath(intent: SkillAcquisitionIntent): string | null {
-  const path = publicSkillPath(intent.path);
+  const value = intent.path;
+  if (typeof value !== 'string') return null;
+  const catalog = catalogPath.exec(value);
+  const submission = submissionPath.exec(value);
+  const path = catalog?.[0] === value ? '/development/skills/' + catalog[1]
+    : submission?.[0] === value ? '/development/submissions/' + submission[1] : null;
   if (!path) return null;
   const intro = introduction(intent.intro);
   return path + (intro === null ? '' : '?intro=' + intro) + '#skill-use-title';

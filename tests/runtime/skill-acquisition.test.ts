@@ -14,12 +14,29 @@ for (const path of [book,submission]) {
       const href=skillAccountHref(path,7,register)!;
       const query=new URL(href,'https://fixture.invalid').search;
       assert.deepEqual(skillAcquisitionFromSearch(query),{path,intro:7});
-      assert.equal(skillReadingPath(skillAcquisitionFromSearch(query)!),path+'?intro=7#skill-use-title');
+      const reading=skillReadingPath(skillAcquisitionFromSearch(query)!)!;
+      assert.equal(reading,path+'?intro=7#skill-use-title');
+      assert.ok(reading.startsWith('/development/skills/')||reading.startsWith('/development/submissions/'));
       assert.equal(new URLSearchParams(query).get('join'),register?'1':null);
     }
   });
 }
+test('literal reading prefixes preserve valid paths and introduction boundaries byte-for-byte',()=>{
+  for(const path of [book,submission,'/development/skills/a','/development/skills/-','/development/skills/'+'a'.repeat(64),
+    '/development/submissions/00000000-0000-0000-0000-000000000000']){
+    assert.equal(publicSkillPath(path),path);
+    for(const intro of [null,1,7,100]){
+      const reading=skillReadingPath({path,intro})!;
+      assert.equal(reading,path+(intro===null?'':'?intro='+intro)+'#skill-use-title');
+      assert.ok(reading.startsWith('/development/skills/')||reading.startsWith('/development/submissions/'));
+    }
+  }
+});
 for(const path of ['https://evil.invalid/','//evil.invalid','/\\evil.invalid','/development/skills/../admin',
+  '//evil','/development/skills/../x','javascript:alert(1)','/development/skills/%2fsocial-post',
+  '/development/skills/social%2Fpost','/development/skills/Social-post',submission.replace('b371','B371'),
+  '/development/submissions/b371a8d0-0453-4e7e-8730-03cc9803f4e',
+  '/development/submissions/g371a8d0-0453-4e7e-8730-03cc9803f4e8',
   '/development/skills/%2e%2e','/development/skills/social-post?token=secret','/development/skills/social-post#private',
   '/development/skills/social-post/SKILL.md','/development/skills/social-post.md','/development/skills/'+'a'.repeat(65),
   book+'\n',book+'\r',submission+'\n',book+' ', '/development/submissions/not-a-uuid','/api/v1/me/skill-books','/events/b371a8d0-0453-4e7e-8730-03cc9803f4e8','/shops/demo']) {
