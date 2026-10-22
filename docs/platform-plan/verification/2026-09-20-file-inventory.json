@@ -16024,8 +16024,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md",
-      "bytes": 33352,
-      "sha256": "f0c65d045f943ea2967b708d23cc1cc4e99e8079a11e8f28959b8c7f71bd8b70"
+      "bytes": 33410,
+      "sha256": "a4ca298ec7fe001b745010980d3b8deb50868dcdef949eec67aac6a1cea6a44e"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
@@ -16074,8 +16074,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-11-offline-payment.md",
-      "bytes": 25001,
-      "sha256": "c57d0c992d8358c7f3b08bb4c5af3d8047e79b429a98310825217c807ac1f6a0"
+      "bytes": 25572,
+      "sha256": "76a9191fde161bd2a61eeccb0727fe6692740de38c3998104676fec97f4de6fe"
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
