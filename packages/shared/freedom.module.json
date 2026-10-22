@@ -31,6 +31,7 @@
     "packages/shared/squad-kinds.ts",
     "apps/portal-web/src/modules/shared.tsx",
     "packages/shared/html.ts",
+    "packages/shared/skill-acquisition.ts",
     "apps/portal-web/src/format.ts",
     "apps/portal-web/src/modules/BrandIcon.tsx",
     "apps/portal-web/src/modules/ModuleBanner.tsx",
@@ -61,7 +62,8 @@
     "packages/shared/member-blocking.ts",
     "packages/shared/tenant-list-cursor.ts",
     "apps/portal-web/src/modules/shared.tsx",
-    "packages/shared/html.ts"
+    "packages/shared/html.ts",
+    "packages/shared/skill-acquisition.ts"
   ],
   "dependencies": [],
   "contract_families": [],

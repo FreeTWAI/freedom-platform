@@ -8,14 +8,24 @@ import {supplierConsoleHref} from '../route';
 import {partnerLabel,selectionState,selectionShopLabel,priceGap,PRICE_GAP_NOTE,REVIEW_NOTE} from '../view';
 import {ReadStatus,ConfirmAction,useListRestore} from './Shared';
 import {Truncated} from './Partners';
+import {ListSearch} from '../ListSearch';
+import {productMatches} from '../../../hosted-ui/CommerceTools';
 export function Terms({c}:{c:ConsoleController}){
  const r=c.slot<z.infer<typeof DistributionsSchema>>('requests'),o=c.slot<z.infer<typeof SupplyOffersSchema>>('offers'),products=c.slot<SupplierProducts>('products').data,pos=c.position('terms'),restore=useListRestore(c,'terms',r);
  const queue=r.data?.items.filter(s=>s.state==='awaiting_supply_acceptance'&&s.offer.state==='offered')??[],other=r.data?.items.filter(s=>!queue.includes(s))??[];
- const list=(items:Distribution[])=>{const filtered=items.filter(s=>[s.seller_name,s.sku,s.offer.terms.title].join(' ').includes(pos.search));return !filtered.length?<p>目前沒有申請。</p>:<ul className="sc-list">{filtered.map(s=><li className="sc-row" key={s.selection_id}><div><a data-sc-item={s.selection_id} href={supplierConsoleHref(c.scope,'review',{id:s.selection_id})} onClick={()=>restore.open(s.selection_id)}>{s.offer.terms.title} · {selectionShopLabel(s,r.data!.items)}</a><p>{s.sku} · 售價 {formatMinor(s.retail_price_minor,s.offer.terms.currency)} <span className="badge">{selectionState(s)}</span></p></div></li>)}</ul>;};
- return <section className="stack"><h2 tabIndex={-1} ref={restore.heading}>供貨條件與審核</h2><label className="field">搜尋申請<input type="search" value={pos.search} onChange={e=>c.remember('terms',{search:e.target.value})}/></label>
- <ReadStatus c={c} name="requests" label="售價申請"/>{r.data&&<><h3>待確認申請</h3>{list(queue)}{r.data.truncated&&<Truncated c={c}/>}</>}
- <h3>公開中的供貨版本</h3><ReadStatus c={c} name="offers" label="供貨版本"/><ReadStatus c={c} name="products" label="目前商品版本"/>{o.data&&<>{!o.data.items.length&&<p>尚未公開供貨版本。請到商品詳情確認供貨條件。</p>}<ul className="sc-list">{o.data.items.filter(offer=>offer.state==='offered').map(offer=>{const product=products?.items.find(p=>p.product_id===offer.product_id);return <li className="sc-row" key={offer.offer_id}><a href={supplierConsoleHref(c.scope,'product',{id:offer.product_id})}>{offer.terms.title}</a><span className="badge">{product?.offer?.offer_id===offer.offer_id&&!product.offer.matches_current_terms?'需要重新公開':'公開中'}</span></li>;})}</ul>{o.data.truncated&&<Truncated c={c}/>}</>}
- {r.data&&<><h3>其他申請紀錄</h3>{list(other)}</>}
+ const matches=(s:Distribution)=>productMatches({title:s.offer.terms.title,sku:s.sku,description:[s.seller_name,s.selection_id].join(' ')},pos.search);
+ const count=r.data?.items.filter(matches).length??0;
+ const list=(items:Distribution[],empty:string)=>{const filtered=items.filter(matches);return <>
+  {!filtered.length?<p>{items.length&&pos.search.trim()?'已載入的申請沒有符合搜尋條件，請清除搜尋或調整關鍵字。':r.data?.truncated?empty:'目前沒有申請。'}</p>:<ul className="sc-list">{filtered.map(s=><li className="sc-row" key={s.selection_id}><div><a data-sc-item={s.selection_id} href={supplierConsoleHref(c.scope,'review',{id:s.selection_id})} onClick={()=>restore.open(s.selection_id)}>{s.offer.terms.title} · {selectionShopLabel(s,r.data!.items)}</a><p>{s.sku} · 售價 {formatMinor(s.retail_price_minor,s.offer.terms.currency)} <span className="badge">{selectionState(s)}</span></p></div></li>)}</ul>}
+  <p className="field-hint">顯示 {filtered.length}／{items.length} 筆已載入申請</p>
+ </>;};
+ return <section className="stack"><h2 tabIndex={-1} ref={restore.heading}>供貨條件與審核</h2>
+ <ReadStatus c={c} name="requests" label="售價申請"/>{r.data&&<>
+ <ListSearch label="搜尋申請" hint="商品名稱、SKU、店家名稱或申請 ID" value={pos.search}
+  onChange={search=>c.remember('terms',{search,lastId:null,scroll:0})} count={count} total={r.data.items.length} truncated={r.data.truncated} stale={r.state!=='ready'}/>
+ <h3>待確認申請</h3>{list(queue,'已載入的資料中沒有待確認申請。')}{r.data.truncated&&<Truncated c={c}/>}</>}
+ <h3>公開中的供貨版本</h3><ReadStatus c={c} name="offers" label="供貨版本"/><ReadStatus c={c} name="products" label="目前商品版本"/>{o.data&&<>{!o.data.items.some(offer=>offer.state==='offered')&&<p>已載入的資料中沒有公開中的供貨版本。請到商品詳情確認供貨條件。</p>}<ul className="sc-list">{o.data.items.filter(offer=>offer.state==='offered').map(offer=>{const product=products?.items.find(p=>p.product_id===offer.product_id);return <li className="sc-row" key={offer.offer_id}><a href={supplierConsoleHref(c.scope,'product',{id:offer.product_id})}>{offer.terms.title}</a><span className="badge">{product?.offer?.offer_id===offer.offer_id&&!product.offer.matches_current_terms?'需要重新公開':'公開中'}</span></li>;})}</ul>{o.data.truncated&&<Truncated c={c}/>}</>}
+ {r.data&&<><h3>其他申請紀錄</h3>{list(other,'已載入的資料中沒有其他申請紀錄。')}</>}
  </section>;
 }
 export function Review({c}:{c:ConsoleController}){

@@ -166,3 +166,14 @@ test('destination cards reject executable/credential URLs and display the parsed
  assert.ok(html.includes('<bdi>github.com.attacker.example/owner/repo</bdi>'));
  assert.ok(html.includes('rel="noopener noreferrer"'));assert.ok(!html.includes('http-equiv="refresh"'));
 });
+
+
+test('catalog skill CTA follows readable content and preserves the selected introduction without discovery',()=>{
+ const html=render('7');
+ assert.ok(html.indexOf('id="skill-use-title"')<html.indexOf('id="join-workshop"'));
+ assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('免費加入，探索更多資源'));
+ assert.ok(html.includes('return_to=%2Fdevelopment%2Fskills%2F'+id+'&amp;skill_intro=7'));
+ assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
+ assert.ok(html.includes('href="/#skills">登入工坊 Star'), 'original author-support entry remains available');
+ assert.ok(html.includes('到 GitHub 看原始碼'));assert.equal(meta(html,'og:url'),base+'?intro=7');
+});
