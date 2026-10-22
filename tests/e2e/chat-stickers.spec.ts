@@ -498,13 +498,17 @@ for(const surface of ['page','dock'] as const)for(const status of [403,404])test
   let notices=0,logouts=0;page.on('dialog',async dialog=>{notices++;await dialog.accept();});
   page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith('/api/v1/auth/logout'))logouts++;});
   await page.evaluate(()=>{location.hash='home';});
+  await expect(page).toHaveURL(/#home$/);
+  // Explicit page navigation collapses the phone/modal overlay, but the
+  // committed-yet-unknown send and its original key must stay mounted.
+  await expect(page.locator('#floating-message-panel')).toBeHidden();expect(notices).toBe(0);
+  expect(sends).toHaveLength(1);
+  await openChat(page);
+  await expect(panel.getByRole('alert')).toContainText('目前無法使用此頻道');
   if(surface==='page'){
-    await expect(page).toHaveURL(/#home$/);expect(notices).toBe(0);
     await panel.getByRole('button', { name: '← 返回公會列表', exact: true }).click();
     await page.getByRole('tab',{name:/^私人訊息/}).click();
   }else{
-    // Console stays mounted across page navigation; its original command remains reachable.
-    await expect(page).toHaveURL(/#home$/);await expect(panel.getByRole('alert')).toContainText('目前無法使用此頻道');
     await closeChat(page);
   }
   await closeChat(page);const beforeLogout=notices;await page.getByRole('button',{name:'設定',exact:true}).click();
@@ -555,8 +559,10 @@ for(const surface of ['page','dock'] as const)test(`${surface} direct retains it
   await expect(panel.getByRole('button',{name:'選擇貼圖',exact:true})).toBeDisabled();
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   let blocked=0;page.on('dialog',async dialog=>{blocked++;await dialog.accept();});
-  if(surface==='page'){await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);await expect(panel).toBeVisible();}
-  else{
+  if(surface==='page'){
+    await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);
+    await expect(panel).toBeHidden();await openChat(page);await expect(panel).toBeVisible();
+  }else{
     await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();
     await page.getByRole('menu',{name:'個人檔案'}).getByRole('menuitem',{name:'登出',exact:true}).click();
     expect(await page.evaluate(async()=>(await fetch('/api/v1/session')).status)).toBe(200);await openChat(page);

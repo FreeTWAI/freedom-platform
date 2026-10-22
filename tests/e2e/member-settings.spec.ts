@@ -292,9 +292,11 @@ test('a failed read before navigating can be retried or skipped explicitly',asyn
   await page.route(/\/api\/v1\/me\/notifications\/[^/]+\/read$/,route=>route.fulfill({status:422,json:{title:'無法標記',detail:'合成錯誤'}}));
   await page.route(/\/api\/v1\/me\/conversations(\?.*)?$/,route=>route.fulfill({json:{items:[],unread_count:0,next_offset:null}}));
   await login(page,'#messages');await openNotifications(page);
+  const retainedPageUrl=page.url();
   const item=page.locator('li',{hasText:'合成通知 1'});
   await item.getByRole('button',{name:'前往小隊集合',exact:true}).click();
-  await expect(item.getByRole('alert')).toContainText('合成錯誤');await expect(page).toHaveURL(/#messages$/);
+  await expect(item.getByRole('alert')).toContainText('合成錯誤');await expect(page).toHaveURL(retainedPageUrl);
+  await expect(page.locator('#floating-message-panel')).toBeVisible();
   await item.getByRole('button',{name:'不標已讀，直接前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
 });
 

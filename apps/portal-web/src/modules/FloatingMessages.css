@@ -37,7 +37,11 @@
   .floating-message-panel .messages-hub>[role=tabpanel],.floating-message-panel .messages-thread{overflow:hidden}
   .floating-message-panel .messages-scroll{min-height:0}
   /* Rich drafts can exceed the keyboard's remaining space; keep every control reachable. */
-  .floating-message-panel .messages-thread[data-chat-open=true]>.messages-compose{flex-shrink:1;min-height:0;max-height:70%;overflow:auto;overscroll-behavior:contain}
+  .floating-message-panel .messages-thread[data-chat-open=true]>.messages-compose{flex-shrink:1;min-height:0;max-height:70%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;align-content:start;scrollbar-gutter:stable}
+  /* A single outer composer scroll is easier to operate with the software keyboard
+     than two competing nested scroll regions around the sticker search. */
+  .floating-message-panel .messages-thread[data-chat-open=true] .chat-sticker-picker{max-height:none;overflow:visible}
+
   /* The outer header owns the top safe area; a conversation must not add it again. */
   html .floating-message-panel .messages-thread[data-chat-open=true]>.chat-header{padding-top:10px}
   html .floating-message-panel .messages-thread[data-chat-open=true] .chat-search-trigger,
