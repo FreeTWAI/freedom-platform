@@ -1,3 +1,4 @@
+import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
 import {sellerOrdersRoute} from './modules/hosted-seller-order-state'
@@ -242,7 +243,14 @@ function MemberApp() {
     setPhase('boot')
     setBootError(null)
     try {
+      const entryUrl = window.location.href, generation = sessionGeneration.current
       const next = await client.getSession()
+      const skillReturn = !window.location.hash && window.location.pathname === '/' ? skillAcquisitionFromSearch(window.location.search) : null
+      if (skillReturn) {
+        const allowed = await validateSkillReturn(skillReturn)
+        if (generation !== sessionGeneration.current) return
+        if (window.location.href === entryUrl && allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
+      }
       applySession(next)
     } catch (err) {
       if (err instanceof ApiError && err.accessExpired) {
@@ -410,6 +418,8 @@ function LoginView({
 }) {
   const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>('login')
   const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
+  const [skillReturn] = useState(() => skillAcquisitionFromSearch(window.location.search))
+  const skillReturnRequest = useRef<AbortController | null>(null)
   const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
   const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
@@ -419,10 +429,10 @@ function LoginView({
     setMode('register'); setError(null); setResetNotice('')
     requestAnimationFrame(() => { authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true }) })
   }, [])
-  useEffect(() => { if (discoveryEnabled && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled, site?.registration_enabled, join])
+  useEffect(() => { if ((discoveryEnabled || (!resetToken && skillReturn)) && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled, site?.registration_enabled, resetToken, skillReturn, join])
   const activeMode=resetToken?'confirm-reset':mode
   const storefrontReturnEnabled = site?.commerce_checkout_enabled === true && !resetToken
-  useEffect(() => () => { authEpoch.current++ }, [activeMode])
+  useEffect(() => () => { authEpoch.current++; skillReturnRequest.current?.abort() }, [activeMode])
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -472,6 +482,7 @@ function LoginView({
       if (!session?.user || !session.csrf_token) {
         throw new Error('登入回應不完整')
       }
+      if (epoch !== authEpoch.current) return
       if (storefrontReturnEnabled && storefrontReturn) {
         const allowed = await successfulStorefrontReturn(storefrontReturn, session)
         if (epoch !== authEpoch.current) return
@@ -479,6 +490,12 @@ function LoginView({
         onLoggedIn(session, activeMode === 'register'
           ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
           : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
+      } else if (skillReturn) {
+        const controller = new AbortController(); skillReturnRequest.current?.abort(); skillReturnRequest.current = controller
+        const allowed = await validateSkillReturn(skillReturn, {signal: controller.signal})
+        if (epoch !== authEpoch.current || controller.signal.aborted) return
+        if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
+        onLoggedIn(session, t('auth.skillReturnUnavailable'))
       } else if (activeMode === 'register' && discoveryEnabled && returnPath) {
         let allowed = false
         try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
@@ -509,7 +526,10 @@ function LoginView({
         {!accessExpired && activeMode!=='confirm-reset'&&<div className="auth-switch" role="group" aria-label={t('auth.switch')}><button type="button" className={activeMode==='login'?'selected':''} aria-pressed={activeMode==='login'} onClick={()=>{setMode('login');setError(null);setResetNotice('')}}>{t('auth.memberLogin')}</button>{site?.registration_enabled&&<button type="button" className={activeMode==='register'?'selected':''} aria-pressed={activeMode==='register'} onClick={()=>{setMode('register');setError(null);setResetNotice('')}}>{t('auth.create')}</button>}</div>}
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
-        {discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {!skillReturn && discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {skillReturn && !accessExpired && (activeMode === 'login' || activeMode === 'register') && <div className="purpose-next-destination">
+          <p>{t('auth.skillReturnHint')}</p><a href={skillReadingPath(skillReturn)!}>{t('auth.skillReturnRead')}</a>
+        </div>}
         {storefrontReturnEnabled && storefrontReturn && activeMode === 'login' && <p className="muted">登入後會返回原本的商店頁面。</p>}
         {storefrontReturnEnabled && storefrontReturn && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。</p>}
         {notice && !accessExpired && (

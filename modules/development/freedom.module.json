@@ -15,12 +15,17 @@
     "tests/runtime/skill-book-guides.test.ts",
     "tests/runtime/member-skill-registration.test.ts",
     "tests/e2e/development-guide.spec.ts",
-    "tests/e2e/skill-book-library.spec.ts"
+    "tests/e2e/skill-book-library.spec.ts",
+    "modules/development/skill-acquisition.ts",
+    "apps/portal-web/public/skill-acquisition.js",
+    "tests/runtime/skill-acquisition.test.ts",
+    "tests/e2e/skill-acquisition.spec.ts"
   ],
   "public_exports": [
     "modules/development/page-github.ts",
     "modules/development/pages.ts",
-    "modules/development/service.ts"
+    "modules/development/service.ts",
+    "modules/development/skill-acquisition.ts"
   ],
   "dependencies": [
     "shared"
