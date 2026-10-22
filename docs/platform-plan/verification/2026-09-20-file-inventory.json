@@ -23859,8 +23859,8 @@
     },
     {
       "path": "tests/e2e/skill-book-library.spec.ts",
-      "bytes": 38870,
-      "sha256": "82ff0670ad189524cfc1c112a3229f91c3197b5f2c5e8a77b40632bb0ac861d4"
+      "bytes": 38871,
+      "sha256": "9c5e08317ec5853efabd7e75e1ca9b2892fd363cc2528583c1e9ce3fd1dd3181"
     },
     {
       "path": "tests/e2e/skill-book-upgrade.spec.ts",
