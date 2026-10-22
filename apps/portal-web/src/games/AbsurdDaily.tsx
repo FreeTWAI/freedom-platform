@@ -1,0 +1,336 @@
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
+import { saveGameDraft } from './result-bridge';
+import { resultExports, type RunResult } from './result-card';
+import type { Stage, StageView } from './stage';
+import './arcade.css';
+import './toy-theme.css';
+type Photo = NonNullable<RunResult['photos']>[number];
+type Pointer = {
+    id: number;
+    x: number;
+    y: number;
+    pan: Point;
+    index: number;
+};
+type Live = {
+    game: GameId;
+    seed: number;
+    clock: RunClock;
+    client: number;
+    roundAt: number;
+    film: number;
+    photos: Photo[];
+    pan: Point;
+    targetPan: Point;
+    fov: number;
+    stamps: StampState;
+    cash: CashState;
+    stampPoint: Point;
+    raised: boolean;
+    pointer: Pointer | null;
+    done: boolean;
+    started: boolean;
+    paused: boolean;
+};
+const hints = { photo: '拖曳取景，抓到怪事再按快門。方向鍵也能移鏡。', stamp: '按住拖到藍圈，放手蓋章。也可以直接點藍圈。', cash: '道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。' };
+function freshSeed() { const value = new Uint32Array(1); crypto.getRandomValues(value); return seedOf(value[0]); }
+function initialGame() { return gameOf(new URLSearchParams(location.search).get('game')); }
+function GameBoard({ game, seed, onBack, onResult }: {
+    game: GameId;
+    seed: number;
+    onBack: () => void;
+    onResult: (result: RunResult) => void;
+}) {
+    const host = useRef<HTMLDivElement>(null), section = useRef<HTMLElement>(null), stage = useRef<Stage | null>(null), frame = useRef(0), generation = useRef(0), loop = useRef<(time: number) => void>(() => { }), audio = useRef<AudioContext | null>(null), soundRef = useRef(false), motionRef = useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const live = useRef<Live>({ game, seed, clock: { elapsed: 0, last: null, running: false }, client: 0, roundAt: 0, film: 0, photos: [], pan: { x: 0, y: 0 }, targetPan: { x: 0, y: 0 }, fov: 44, stamps: newStamps(seed), cash: newCash(seed), stampPoint: stampTarget(seed, 0), raised: false, pointer: null, done: false, started: false, paused: false });
+    const [, repaint] = useState(0), [ready, setReady] = useState(false), [error, setError] = useState(''), [retry, setRetry] = useState(0), [notice, setNotice] = useState(''), [sound, setSound] = useState(false), [flash, setFlash] = useState(0);
+    const pendingResult = useRef<Omit<RunResult, 'image'> | null>(null), [captureError, setCaptureError] = useState(false);
+    const updateUi = () => repaint(n => n + 1), lastUi = useRef(0);
+    const view = (): StageView => { const l = live.current; return { game, seed, seconds: game === 'photo' ? (l.clock.elapsed - l.roundAt) / 1000 : l.clock.elapsed / 1000, client: l.client, pan: l.pan, fov: l.fov, stamp: l.stamps, stampPoint: l.stampPoint, raised: l.raised, cash: l.cash, motion: motionRef.current }; };
+    function render() { stage.current?.update(view()); if (stage.current && host.current) {
+        const stats = stage.current.stats();
+        host.current.dataset.renderCalls = String(stats.calls);
+        host.current.dataset.renderTriangles = String(stats.triangles);
+        host.current.dataset.renderTextures = String(stats.textures);
+    } }
+    function sfx(kind: 'photo' | 'stamp' | 'cash' | 'wrong') {
+        if (!soundRef.current)
+            return;
+        try {
+            const ctx = audio.current ?? (audio.current = new AudioContext());
+            void ctx.resume().catch(() => { });
+            const osc = ctx.createOscillator(), gain = ctx.createGain(), t = ctx.currentTime;
+            osc.type = kind === 'stamp' ? 'triangle' : 'sine';
+            osc.frequency.setValueAtTime(kind === 'photo' ? 900 : kind === 'stamp' ? 140 : kind === 'wrong' ? 130 : 600, t);
+            osc.frequency.exponentialRampToValueAtTime(kind === 'wrong' ? 70 : kind === 'photo' ? 120 : kind === 'stamp' ? 45 : 950, t + .085);
+            gain.gain.setValueAtTime(.075, t);
+            gain.gain.exponentialRampToValueAtTime(.001, t + .09);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + .1);
+        }
+        catch { /* Sound is optional; it never blocks an accepted action. */ }
+    }
+    function stop() { cancelAnimationFrame(frame.current); frame.current = 0; live.current.clock = pause(live.current.clock); live.current.pointer = null; live.current.raised = false; }
+    function finish(result: RunResult) { if (live.current.done)
+        return; live.current.done = true; stop(); onResult(result); }
+    function settle(summary: Omit<RunResult, 'image'>) { stop(); pendingResult.current = summary; try {
+        render();
+        if (!stage.current)
+            throw Error('Scene unavailable');
+        finish({ ...summary, image: stage.current.capture() });
+    }
+    catch {
+        setCaptureError(true);
+        setNotice('這局已完成，成果畫面還沒保存。請重試產生圖片，完成次數不會重算。');
+        updateUi();
+    } }
+    function photosDone() { const l = live.current; if (!l.photos.length) {
+        l.started = false;
+        l.clock = { elapsed: 0, last: null, running: false };
+        l.client = 0;
+        l.roundAt = 0;
+        setNotice('這局還沒拍到照片。再開一次照相館，按快門留下怪事。');
+        updateUi();
+        return;
+    } const best = l.photos.reduce((a, b) => a.stars >= b.stars ? a : b); finish({ game, seed, title: GAMES[0].title, caption: best.caption, details: best.details, image: best.image, photos: l.photos }); }
+    function syncClock() { live.current.clock = tick(live.current.clock, performance.now()); }
+    function nextClient() { syncClock(); const l = live.current; if (l.done)
+        return; if (l.client === 2) {
+        photosDone();
+        return;
+    } l.client++; l.roundAt = l.clock.elapsed; l.film = 0; l.pointer = null; l.pan = { x: 0, y: 0 }; l.targetPan = { x: 0, y: 0 }; l.fov = 44; setNotice(CLIENTS[l.client].title); render(); updateUi(); }
+    function shoot() {
+        syncClock();
+        const l = live.current;
+        if (!ready || !l.started || l.paused || l.done || l.film >= RULES.film || !stage.current)
+            return;
+        try {
+            render();
+            const { visible, blocked, lift } = stage.current.framing(), grade = gradePhoto(CLIENTS[l.client].id, visible, (l.clock.elapsed - l.roundAt) / 1000, blocked, lift), image = stage.current.capture();
+            l.photos.push({ ...grade, image });
+            l.film++;
+            sfx('photo');
+            setNotice(`${grade.caption} ${grade.details}`);
+            if (motionRef.current)
+                setFlash(n => n + 1);
+            updateUi();
+        }
+        catch (cause) {
+            setNotice(cause instanceof Error ? cause.message : '這張未能保存，請重試。');
+        }
+    }
+    function applyStamp(point: Point, index = live.current.stamps.practice ? -1 : live.current.stamps.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
+        return; const outcome = stamp(l.stamps, index, point, l.clock.elapsed); if (outcome.kind === 'ignored')
+        return; l.stamps = outcome.state; l.raised = false; l.stampPoint = point; sfx(outcome.kind === 'miss' ? 'wrong' : 'stamp'); setNotice(outcome.kind === 'practice' ? '練習完成。十二張正式公文，開始！' : outcome.kind === 'hit' ? '啪！已閱，但看不懂。' : '章歪了。墨跡留下，這張再蓋一次。'); render(); updateUi(); if (l.stamps.endedAt !== null) {
+        const elapsed = l.stamps.endedAt - (l.stamps.startedAt ?? l.stamps.endedAt);
+        settle({ game, seed, title: GAMES[1].title, caption: l.stamps.misses ? '主管：印象深刻，文件也是。' : '主管：下班可以，先批准你的下班。', details: `完成 12 份文件 · ${seconds(elapsed)} 秒 · 多蓋 ${l.stamps.misses} 次` });
+    } }
+    function applyCash(accept: boolean, index = live.current.cash.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
+        return; const outcome = sortCash(l.cash, index, accept, l.clock.elapsed); if (outcome.kind === 'ignored')
+        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(outcome.kind === 'wrong' ? '這張分錯了，退回來重新看看。' : accept ? '道具鈔收到。財富看起來很有希望。' : '這張不是錢，老闆先收回去。'); render(); updateUi(); if (l.cash.endedAt !== null) {
+        const elapsed = l.cash.endedAt - (l.cash.startedAt ?? l.cash.endedAt);
+        settle({ game, seed, title: GAMES[2].title, caption: '數完一百萬，還收到了老闆畫的大餅。', details: `100 萬道具鈔 · 退回 ${l.cash.rejected} 張票券 · ${seconds(elapsed)} 秒 · 分錯 ${l.cash.mistakes} 次` });
+    } }
+    loop.current = (now: number) => { const l = live.current; if (!stage.current || l.done || !l.clock.running || l.paused)
+        return; const before = l.clock.elapsed; l.clock = tick(l.clock, now); const blend = 1 - Math.exp(-20 * Math.min(.05, (l.clock.elapsed - before) / 1000)); l.pan = { x: l.pan.x + (l.targetPan.x - l.pan.x) * blend, y: l.pan.y + (l.targetPan.y - l.pan.y) * blend }; try {
+        render();
+    }
+    catch {
+        stop();
+        setReady(false);
+        setError('3D 畫面暫時中斷。按重試恢復這一局。');
+        return;
+    } if (game === 'photo' && l.clock.elapsed - l.roundAt >= RULES.photoMs)
+        nextClient(); if (now - lastUi.current > 100) {
+        lastUi.current = now;
+        updateUi();
+    } if (!l.done && l.clock.running)
+        frame.current = requestAnimationFrame(loop.current); };
+    function start() { if (!ready)
+        return; const l = live.current; l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true }); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
+    function setPaused() { const l = live.current; if (!l.started || l.done)
+        return; stop(); l.paused = true; void audio.current?.suspend().catch(() => { }); updateUi(); }
+    useEffect(() => { const change = () => { motionRef.current = !matchMedia('(prefers-reduced-motion: reduce)').matches; render(); }; const media = matchMedia('(prefers-reduced-motion: reduce)'); media.addEventListener('change', change); const hidden = () => { if (document.hidden)
+        setPaused(); }; const blur = () => setPaused(); document.addEventListener('visibilitychange', hidden); window.addEventListener('blur', blur); return () => { media.removeEventListener('change', change); document.removeEventListener('visibilitychange', hidden); window.removeEventListener('blur', blur); }; }, []);
+    useEffect(() => {
+        const current = ++generation.current;
+        let mounted = true, owned: Stage | null = null;
+        setReady(false);
+        setError('');
+        const timeout = window.setTimeout(() => { if (mounted && generation.current === current) {
+            generation.current++;
+            setError('遊戲場景載入較久。請重試，或回遊樂場。');
+        } }, 15000);
+        void import('./stage').then(module => { if (!mounted || generation.current !== current)
+            return; try {
+            owned = module.createStage(host.current!, () => { if (!mounted)
+                return; stop(); live.current.paused = true; setReady(false); setError('3D 畫面暫時中斷。按重試恢復這一局。'); });
+            stage.current = owned;
+            owned.update(view());
+            clearTimeout(timeout);
+            setReady(true);
+        }
+        catch {
+            owned?.dispose();
+            stage.current = null;
+            clearTimeout(timeout);
+            setError('此瀏覽器暫時無法開啟 3D 場景。可重試，或改用支援 WebGL 2 的瀏覽器。');
+        } }).catch(() => { if (mounted && generation.current === current) {
+            clearTimeout(timeout);
+            setError('遊戲素材未能載入。請重試。');
+        } });
+        return () => { mounted = false; generation.current++; clearTimeout(timeout); stop(); owned?.dispose(); stage.current = null; };
+    }, [retry]);
+    useEffect(() => () => { void audio.current?.close().catch(() => { }); }, []);
+    function pan(dx: number, dy: number) { const l = live.current; l.targetPan = { x: clamp(l.targetPan.x + dx, -1.8, 1.8), y: clamp(l.targetPan.y + dy, -2.8, 2.8) }; }
+    function keyboard(event: KeyboardEvent) { if ((event.target as HTMLElement).closest('input,textarea,select,button,a') || event.altKey || event.metaKey || event.ctrlKey || !live.current.started || live.current.paused)
+        return; const l = live.current, key = event.key; if (key === 'Escape') {
+        event.preventDefault();
+        setPaused();
+        return;
+    } if (game === 'photo') {
+        if (key.startsWith('Arrow')) {
+            event.preventDefault();
+            pan(key === 'ArrowRight' ? .25 : key === 'ArrowLeft' ? -.25 : 0, key === 'ArrowUp' ? .25 : key === 'ArrowDown' ? -.25 : 0);
+        }
+        if ((key === ' ' || key === 'Enter') && !event.repeat) {
+            event.preventDefault();
+            shoot();
+        }
+    }
+    else if (game === 'cash' && (key === 'ArrowLeft' || key === 'ArrowRight') && !event.repeat) {
+        event.preventDefault();
+        applyCash(key === 'ArrowRight');
+    }
+    else if (game === 'stamp') {
+        if (key.startsWith('Arrow')) {
+            event.preventDefault();
+            l.stampPoint = { x: clamp(l.stampPoint.x + (key === 'ArrowRight' ? .06 : key === 'ArrowLeft' ? -.06 : 0), -1.1, 1.1), y: clamp(l.stampPoint.y + (key === 'ArrowDown' ? .06 : key === 'ArrowUp' ? -.06 : 0), -1.1, 1.1) };
+            render();
+        }
+        if ((key === ' ' || key === 'Enter') && !event.repeat) {
+            event.preventDefault();
+            applyStamp(l.stampPoint);
+        }
+    } }
+    function pointerDown(event: PointerEvent) { syncClock(); const l = live.current; if (!ready || !l.started || l.paused || l.done || l.pointer || pendingResult.current)
+        return; event.preventDefault(); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
+        l.stamps = beginStamps(l.stamps, l.clock.elapsed);
+        const p = stage.current?.point(event.clientX, event.clientY);
+        if (p)
+            l.stampPoint = p;
+        l.raised = true;
+        render();
+    } }
+    function pointerMove(event: PointerEvent) { const l = live.current, p = l.pointer; if (!p || p.id !== event.pointerId)
+        return; if (game === 'photo') {
+        const rect = event.currentTarget.getBoundingClientRect();
+        l.targetPan = { x: clamp(p.pan.x - (event.clientX - p.x) / rect.width * 4.8, -1.8, 1.8), y: clamp(p.pan.y + (event.clientY - p.y) / rect.height * 4.8, -2.8, 2.8) };
+    }
+    else if (game === 'stamp') {
+        const point = stage.current?.point(event.clientX, event.clientY);
+        if (point)
+            l.stampPoint = point;
+        render();
+    } }
+    function pointerUp(event: PointerEvent) { const l = live.current, p = l.pointer; if (!p || p.id !== event.pointerId)
+        return; l.pointer = null; l.raised = false; if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId); if (game === 'stamp') {
+        const point = stage.current?.point(event.clientX, event.clientY);
+        if (point)
+            applyStamp(point, p.index);
+    }
+    else if (game === 'cash') {
+        const dx = event.clientX - p.x;
+        if (Math.abs(dx) >= RULES.swipePx)
+            applyCash(dx > 0, p.index);
+        else
+            setNotice('往右滑收鈔，往左滑退票券。也能用下方按鈕。');
+    } }
+    const l = live.current, remaining = Math.max(0, RULES.photoMs - (l.clock.elapsed - l.roundAt)), cashCard = cashDeck(seed)[Math.min(l.cash.index, 29)];
+    return <section ref={section} className="ad-board" tabIndex={-1} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
+    <div className="ad-toolbar"><button className="ad-secondary" onClick={onBack}>← 遊樂場</button><span className="ad-seed">同題 #{seed}</span><button className="ad-secondary" aria-pressed={sound} onClick={() => { soundRef.current = !sound; setSound(!sound); if (!sound)
+        sfx(game); }}>聲音 {sound ? '開' : '關'}</button>{l.started && !l.paused && <button className="ad-secondary" onClick={setPaused}>暫停</button>}</div>
+    <div className="ad-game-title"><div><h1>{GAMES.find(g => g.id === game)!.title}</h1><p>{game === 'photo' ? CLIENTS[l.client].title : game === 'stamp' ? documentTitle(Math.min(l.stamps.index, 11), l.stamps.practice) : '收鈔往右，票券往左'}</p></div><output className="ad-counter" aria-live="off">{game === 'photo' ? `${l.client + 1}/3 · ${Math.ceil(remaining / 1000)} 秒` : game === 'stamp' ? l.stamps.practice ? '練習中' : `${Math.min(l.stamps.index, 12)}/12` : `${l.cash.amount / 10000} / 100 萬`}</output></div>
+    <div className="ad-play-layout"><div className="ad-stage-wrap"><div className="ad-stage" ref={host} data-game-stage={ready ? 'ready' : 'loading'} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { l.pointer = null; l.raised = false; render(); }} onLostPointerCapture={() => { l.pointer = null; l.raised = false; }}/>
+      {game === 'photo' && ready && l.started && <div className="ad-viewfinder" aria-hidden="true"><i /><i /><i /><i /><span>FREE TWAI　●　LIVE</span></div>}
+      {flash > 0 && motionRef.current && <div key={flash} className="ad-flash" aria-hidden="true"/>}
+      {(!ready || !l.started || l.paused) && <div className="ad-stage-cover">{error ? <><p role="alert">{error}</p><button onClick={() => setRetry(n => n + 1)}>重試場景</button></> : !ready ? <p role="status">正在佈置現場…</p> : <><strong>{l.paused ? '休息一下，怪事等你。' : GAMES.find(g => g.id === game)!.subtitle}</strong><p>{hints[game]}</p><button onClick={start}>{l.paused ? '繼續這一局' : game === 'stamp' ? '先蓋一張練習紙' : '開始這一局'}</button></>}</div>}
+    </div><div className="ad-controls"><p className="ad-instruction">{game === 'photo' ? CLIENTS[l.client].request : game === 'cash' ? `目前這張：${cashCard.label}。僅供遊戲使用。` : l.stamps.practice ? '先蓋中藍圈一次，不計時。' : '蓋中藍圈才算。印章歪了可以重蓋。'}</p>
+      {captureError && <button disabled={!ready} onClick={() => { if (pendingResult.current)
+        settle(pendingResult.current); }}>重試產生成果圖片</button>}
+      <div className="ad-action-area" inert={!ready || !l.started || l.paused || captureError}>
+      {game === 'photo' ? <><div className="ad-pan-pad" aria-label="移動鏡頭"><button aria-label="鏡頭往左" onClick={() => pan(-.35, 0)}>←</button><button aria-label="鏡頭往上" onClick={() => pan(0, .35)}>↑</button><button aria-label="鏡頭往下" onClick={() => pan(0, -.35)}>↓</button><button aria-label="鏡頭往右" onClick={() => pan(.35, 0)}>→</button></div><label className="ad-zoom"><span>廣角</span><input aria-label="鏡頭廣角" type="range" min="38" max="60" value={l.fov} onChange={e => { l.fov = Number(e.target.value); updateUi(); }}/><span>更廣</span></label><button className="ad-shutter" disabled={l.film >= RULES.film} onClick={shoot} aria-label="拍照快門"><span aria-hidden="true">◎</span><small>快門 · {2 - l.film} 張</small></button><button className="ad-secondary" onClick={nextClient}>{l.client === 2 ? '挑選照片' : '下一位客人 →'}</button></> : game === 'stamp' ? <><button className="ad-stamp-button" onPointerDown={() => { l.stamps = beginStamps(l.stamps, l.clock.elapsed); }} onClick={() => applyStamp(l.stampPoint)}>啪！蓋章</button><p className="ad-meta">方向鍵微調印章 · 空白鍵落印<br />多蓋 {l.stamps.misses} 次</p></> : <><div className="ad-sort-buttons"><button className="ad-secondary" onClick={() => applyCash(false)}>← 退票券</button><button onClick={() => applyCash(true)}>收道具鈔 →</button></div><p className="ad-meta">已分類 {l.cash.index} / 30 · 分錯 {l.cash.mistakes} 次<br />最後一張剛好湊滿一百萬。</p></>}
+      </div><p className="ad-notice" role="status">{notice || hints[game]}</p>{game === 'photo' && l.photos.length > 0 && <div className="ad-contact-sheet" aria-label="這局拍到的照片">{l.photos.map((p, i) => <img key={i} src={p.image} alt={`底片 ${i + 1}：${p.caption}`} width="96" height="72"/>)}</div>}
+    </div></div>
+  </section>;
+}
+function Result({ result, onBack, onReplay }: {
+    result: RunResult;
+    onBack: () => void;
+    onReplay: () => void;
+}) {
+    const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), linkRef = useRef<HTMLInputElement>(null);
+    const link = challengeUrl(location.origin, result.game, result.seed);
+    useEffect(() => { let current = true; setExports(null); setStatus('正在沖洗成果圖…'); const logo = document.querySelector<HTMLImageElement>('.ad-brand img'); void resultExports(selected, logo).then(value => { if (current) {
+        setExports(value);
+        setStatus('成果圖好了。選一個方式，把這次怪事帶走。');
+    } }).catch(() => { if (current)
+        setStatus('成果圖未能產生，請按重試。'); }); return () => { current = false; }; }, [selected, generation]);
+    useEffect(() => { if (!exports) {
+        setObjectUrl('');
+        return;
+    } const url = URL.createObjectURL(exports.png); setObjectUrl(url); return () => URL.revokeObjectURL(url); }, [exports]);
+    useEffect(() => { if (manualLink) {
+        linkRef.current?.focus();
+        linkRef.current?.select();
+    } }, [manualLink]);
+    async function share() { if (!exports || sharing)
+        return; setSharing(true); try {
+        const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text: `${selected.caption}\n同題挑戰：${link}` } : { title: selected.title, text: selected.caption, url: link };
+        if (!navigator.share) {
+            setManualLink(true);
+            setStatus('這個瀏覽器沒有系統分享選單。可下載圖片，或複製同題連結。');
+            return;
+        }
+        await navigator.share(payload);
+        setStatus('已交給系統分享選單。');
+    }
+    catch (cause) {
+        if (cause instanceof Error && cause.name === 'AbortError')
+            setStatus('已取消分享，成果仍在這裡。');
+        else {
+            setStatus('系統分享未完成。可下載圖片，或複製同題連結。');
+            setManualLink(true);
+        }
+    }
+    finally {
+        setSharing(false);
+    } }
+    async function copy() { try {
+        await navigator.clipboard.writeText(link);
+        setStatus('同題連結已複製。這個連結分享題目，成果圖請另外附上。');
+    }
+    catch {
+        setManualLink(true);
+        setStatus('請長按或選取下方連結複製。');
+    } }
+    function workshop() { if (!exports)
+        return; try {
+        saveGameDraft(sessionStorage, { version: 1, createdAt: Date.now(), game: result.game, seed: result.seed, title: selected.title, text: `${selected.caption}\n${selected.details}\n\n${link}\n換你試試看？ #離譜日常`, image: exports.site });
+        location.assign('/?game-share=1#home');
+    }
+    catch {
+        setStatus('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。');
+    } }
+    return <section className="ad-result"><div className="ad-result-heading"><p className="ad-eyebrow">本日離譜成果</p><h1>{selected.caption}</h1><p>{selected.details}</p></div><div className="ad-result-layout"><div className="ad-result-photo"><img src={selected.image} alt={`本局真正拍到的畫面：${selected.caption}`} width="960" height="720"/>{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel"><h2>這次怪事，值得留一張。</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`離譜日常-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
+}
+export function AbsurdDaily() {
+    const [game, setGame] = useState<GameId | null>(initialGame), [seed, setSeed] = useState(() => seedOf(new URLSearchParams(location.search).get('seed'))), [result, setResult] = useState<RunResult | null>(null), [run, setRun] = useState(0);
+    const choose = useCallback((next: GameId | null, keepSeed = false) => { const nextSeed = keepSeed ? seed : freshSeed(); setGame(next); setSeed(nextSeed); setResult(null); setRun(n => n + 1); const url = new URL(location.href); url.pathname = '/play'; url.search = next ? new URLSearchParams({ game: next, seed: String(nextSeed) }).toString() : ''; url.hash = ''; history.pushState(null, '', url); window.scrollTo({ top: 0, behavior: 'instant' }); }, [seed]);
+    useEffect(() => { document.title = '離譜日常 · 自由工坊'; const back = () => { setGame(initialGame()); setSeed(seedOf(new URLSearchParams(location.search).get('seed'))); setResult(null); setRun(n => n + 1); }; window.addEventListener('popstate', back); return () => window.removeEventListener('popstate', back); }, []);
+    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>離譜日常</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">{result ? <Result result={result} onBack={() => choose(null)} onReplay={() => choose(game, true)}/> : game ? <GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={() => choose(null)} onResult={setResult}/> : <><section className="ad-welcome"><p className="ad-eyebrow">自由工坊・造物遊樂場</p><h1>認真上班，<br /><em>離譜下班。</em></h1><p>每個人都很認真，只有事情越來越不對勁。</p><span className="ad-pill">免登入試玩 · 手機電腦都能玩 · 成果直接分享</span><div className="ad-hero-art" aria-hidden="true"><img src="/games/absurd-daily/photo.jpg" alt="" width="960" height="720"/><span>一位客人，三張鳥臉。</span><b>CASE 003</b></div></section><div className="ad-game-cards">{GAMES.map((g, i) => <article key={g.id} className={`ad-game-card ad-card-${g.id}`}><div className="ad-card-art" aria-hidden="true"><span className="ad-art-index">0{i + 1}</span><img src={`/games/absurd-daily/${g.id}.jpg`} alt="" width="960" height="720" loading="lazy"/><span className="ad-art-copy">{i === 0 ? '三位，一件風衣。' : i === 1 ? '最後一張（修正版）' : '老闆的大餅也是餅。'}</span></div><div><h2>{g.title}</h2><p>{g.subtitle}</p><button onClick={() => choose(g.id)}>{g.action} →</button></div></article>)}</div><section className="ad-how"><h2>失手也有作品。</h2><p>按快門、落印、翻鈔，留下這一局真正發生的事。拍得漂亮可以分享，拍得離譜也可以。</p><p>拍下作品、分享同題，也可以把成果發到自由工坊。</p></section></>}</main><footer className="ad-footer">自由工坊原創遊戲 · 遊戲成果由你確認後分享</footer></div>;
+}

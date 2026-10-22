@@ -54,13 +54,13 @@
     },
     {
       "path": "package-lock.json",
-      "bytes": 126798,
-      "sha256": "0c1412f92481c9be3d32835802a567752f5c3762c22927ce581457e3aaf668eb"
+      "bytes": 129416,
+      "sha256": "2cc14ecb91dc1a8f8810bdfafb3c02151d0dd17b07d835454b1e04ce73093ca9"
     },
     {
       "path": "package.json",
-      "bytes": 8717,
-      "sha256": "a8dc77bce56e82a8554188c3183a47b0b91f9cb2224d75c9dadd865ce7a4644d"
+      "bytes": 8772,
+      "sha256": "2434b7772f0963f508fe1a145e4cad1ee20b6c9079d63aaac5d5b2ec7851bf41"
     },
     {
       "path": "playwright.config.ts",
@@ -2123,6 +2123,21 @@
       "sha256": "ea5b6a99d870648d74482e3f3b7b11ab078bc0376e2d7c0dbb58e6d01143950f"
     },
     {
+      "path": "apps/portal-web/public/games/absurd-daily/cash.jpg",
+      "bytes": 50390,
+      "sha256": "b2ce82fa250c2ab1194fa1618570972ae311657017d17c40800ed7690d8c4b99"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/photo.jpg",
+      "bytes": 74580,
+      "sha256": "9f74ae564502f865fe75312c70f293fac9e94893f4ff02bc74446fc4d1655fbb"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/stamp.jpg",
+      "bytes": 50377,
+      "sha256": "a06e768e78b787814c60c56e9f422d77d8cb00bcb88b7ca4520ad8f3d6be5708"
+    },
+    {
       "path": "apps/portal-web/public/licenses/member-card/dijkstrajs-MIT.txt",
       "bytes": 714,
       "sha256": "c46324e45a005413535a6fb7a97e9eacd3cc6bf30335b7d5c10b8ee3af9e60c2"
@@ -2319,8 +2334,8 @@
     },
     {
       "path": "apps/portal-web/src/main.tsx",
-      "bytes": 708,
-      "sha256": "26f5399ae2588b9f661990695fde1316dab21e32553e96e6c01422b7a9036948"
+      "bytes": 1720,
+      "sha256": "ebf2adf0c5bdb558b7c114e395e51fddd14709f99a9724faadb72341c3660cda"
     },
     {
       "path": "apps/portal-web/src/module-light-theme.css",
@@ -2446,6 +2461,46 @@
       "path": "apps/portal-web/src/features/work.tsx",
       "bytes": 2167,
       "sha256": "7bbded82b880451d1f5b8c5f0c6b6c513a3f341f5ab5a67a7e78d5fd70712268"
+    },
+    {
+      "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
+      "bytes": 29917,
+      "sha256": "8c087649a3a247b19b346eb6b94f176cf574612eccfe4c21fc150c6906868020"
+    },
+    {
+      "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
+      "bytes": 2685,
+      "sha256": "9cf4427e3ab57f7da04b041ac3bdc708127d6726143c55010dc9709282ec2072"
+    },
+    {
+      "path": "apps/portal-web/src/games/arcade.css",
+      "bytes": 11860,
+      "sha256": "cf3ec6a07a94e5a3d3b1b673e4cce402b7c3163d495f8a48e65356c9814608ce"
+    },
+    {
+      "path": "apps/portal-web/src/games/domain.ts",
+      "bytes": 9786,
+      "sha256": "6d582c91e25bc2411cb7a9c83b2190034ad640a2053e184f4033db8b16bf3bd1"
+    },
+    {
+      "path": "apps/portal-web/src/games/result-bridge.ts",
+      "bytes": 2464,
+      "sha256": "c492e6b8bb19fc6a2679058137a1b906cd9d9a8e3e38b95a8237f4d6ddc578d0"
+    },
+    {
+      "path": "apps/portal-web/src/games/result-card.ts",
+      "bytes": 4448,
+      "sha256": "ec6ed03120b26538f94fabdf038dece31f37a94522198901a917373e08ca731d"
+    },
+    {
+      "path": "apps/portal-web/src/games/stage.ts",
+      "bytes": 33677,
+      "sha256": "de1ebf8a025f325104d2cf2a358b7d24ec84c47aff43bd6f66a42e370116c5dd"
+    },
+    {
+      "path": "apps/portal-web/src/games/toy-theme.css",
+      "bytes": 8867,
+      "sha256": "865322c3299f4298c1494c6590708d2d1d47b293eac0f6fe7564017f976d64c1"
     },
     {
       "path": "apps/portal-web/src/guild-blocks/GuildBlockState.tsx",
@@ -3084,8 +3139,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 18393,
-      "sha256": "8e43cc43d71d8839cd916db5ac28b61e5830b894caa4f7dc24efdf02abcd8383"
+      "bytes": 18798,
+      "sha256": "84c141fd5ff469f529c3aca34831d1ab5a81a878f7fe5d725bd8f010602e6d94"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -3424,8 +3479,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.tsx",
-      "bytes": 50769,
-      "sha256": "6506ba55542d5b327d6e3eba08212f1e602657ab46d888546dc782e88946695d"
+      "bytes": 53985,
+      "sha256": "ed2151eab00eb5b718c28e9186692627ecaac9892228912ffbd8a0def9a65b70"
     },
     {
       "path": "apps/portal-web/src/modules/SquadInvitations.css",
@@ -14558,6 +14613,11 @@
       "sha256": "c0a78b5ad80f71e74ae60595d6ae1861bca4ff916329210ed9565f983ce94e6b"
     },
     {
+      "path": "docs/development/absurd-daily.md",
+      "bytes": 9361,
+      "sha256": "ca73d2c4c7bcf33dfd2126d6fe9fe44f42dab2e665263c8c6ebe3a99b589f995"
+    },
+    {
       "path": "docs/development/agent-development-guide.md",
       "bytes": 3752,
       "sha256": "8b763720cbc9fed7bc8f26a878339b56e6ee82b1d8f18c4b4be3dc16ff9ce16a"
@@ -17988,6 +18048,16 @@
       "sha256": "744cb512b806c6f934d10f99e89288a56940a1a77577244a4a9a8747c3020fa3"
     },
     {
+      "path": "modules/absurd-daily/README.md",
+      "bytes": 1210,
+      "sha256": "f4c0ea46946cf15a866d0f22ed63f0c43fe24f74dbf7b2d7176d9c93a023b1f3"
+    },
+    {
+      "path": "modules/absurd-daily/freedom.module.json",
+      "bytes": 1128,
+      "sha256": "752d110fb48aa95ccdf915dfa1b6c101ddfdfde5f7b16ccca4cd606a706ce18f"
+    },
+    {
       "path": "modules/agent-commerce/README.md",
       "bytes": 37854,
       "sha256": "dfd9d35061c54f5123970cb09afe5a1ca6087cab28d07c2dfdc34762ac793ea5"
@@ -20639,8 +20709,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 3492,
-      "sha256": "90c7acfededa4e75cb337a1693d680fc845c40a065ea764da1195ba94cacd221"
+      "bytes": 3512,
+      "sha256": "8e0674ea95d26332ef45c4e68af0008efe69a870dd9f4d535332717f9a1692e0"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -21349,8 +21419,8 @@
     },
     {
       "path": "modules/portal-shell/freedom.module.json",
-      "bytes": 3050,
-      "sha256": "a115731e8e8413579ce18f836800f7bb76626b6c99896f6e27964641b213355d"
+      "bytes": 3070,
+      "sha256": "4ff9b2c6e6c67b723dd4614cec0b0657d070aaf0e9fbd095d0883f468d8a2902"
     },
     {
       "path": "modules/positioning/assessment.ts",
@@ -23363,6 +23433,11 @@
       "sha256": "f3a6b1d99917d49773fca403a0b668967868a7f1202633c489944eefe400084d"
     },
     {
+      "path": "tests/e2e/absurd-daily.spec.ts",
+      "bytes": 11585,
+      "sha256": "791020cc3b2efcd8f28a63751a4fd7385bf7a579373d4afb86b31a5cca701518"
+    },
+    {
       "path": "tests/e2e/account-deactivation.spec.ts",
       "bytes": 8045,
       "sha256": "40ff8d84a3132e7074964ab466488855663d8d5b281550ab85c90ce637f49c4f"
@@ -24571,6 +24646,11 @@
       "path": "tests/media-fixtures/manifest.json",
       "bytes": 1799,
       "sha256": "55a828af1d623fc413e086ee42cc141bac9bf98a92251f9f00fb8960d20f4700"
+    },
+    {
+      "path": "tests/runtime/absurd-daily.test.ts",
+      "bytes": 6432,
+      "sha256": "cabb46c982b48d7d9b69829fd58ea04d87abda130ba0def7909af56650866031"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",
