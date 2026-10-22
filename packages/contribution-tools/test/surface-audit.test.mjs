@@ -48,8 +48,9 @@ test('actual avatar/private routes and real mounts map twelve baseline+candidate
   const report = run();
   assert.equal(report.structural_status, 'unavailable', JSON.stringify(report.issues));
   assert.equal(report.coverage_kind, 'fixed-syntax-only');
-  // New guide release mount remains explicitly unaudited by this narrow avatar/private-work syntax audit.
-  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 5);
+  // Five existing and three public-social delegates remain unaudited receiver escapes.
+  // This narrow syntax check never claims their authorization has been audited.
+  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 8);
   assert.equal(report.status, 'unavailable'); assert.equal(report.registrations.length, 12);
   assert.equal(report.evidence.length, 10); assert.equal(report.behavior_checked, false);
   assert.equal(report.merge_authorized, false); assert.equal(report.execution_authorized, false);

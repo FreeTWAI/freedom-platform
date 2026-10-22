@@ -50,23 +50,9 @@
     "tests/e2e/short-videos-share.spec.ts",
     "tests/e2e/short-videos-focus.spec.ts",
     "tests/runtime/short-video-embed.test.ts",
-    "tests/runtime/short-video-flag.test.ts",
-    "modules/community/public-social-posts.ts",
-    "modules/community/public-social-post-page.ts",
-    "apps/platform-api/src/routes/public-social-posts.ts",
-    "apps/platform-api/src/routes/public-social-post-page.ts",
-    "apps/portal-web/src/modules/public-post-return.ts",
-    "apps/portal-web/public/social-post.css",
-    "apps/portal-web/public/social-post.js",
-    "migrations/184_public_social_posts.sql",
-    "tests/runtime/public-social-posts.test.ts",
-    "tests/runtime/public-social-post-page.test.ts",
-    "tests/e2e/public-social-posts.spec.ts"
+    "tests/runtime/short-video-flag.test.ts"
   ],
-  "public_exports": [
-    "modules/community/public-social-posts.ts",
-    "modules/community/public-social-post-page.ts"
-  ],
+  "public_exports": [],
   "dependencies": [
     "community",
     "work",
@@ -76,8 +62,7 @@
   ],
   "contract_families": [],
   "client_profiles": [
-    "member",
-    "public"
+    "member"
   ],
   "instructions": [
     "AGENTS.md",
@@ -99,35 +84,6 @@
         "community.social-feed-page.view"
       ],
       "auth_profile": "member-session"
-    },
-    {
-      "surface_id": "community.public-social-post",
-      "kind": "http",
-      "entry": "apps/platform-api/src/routes/public-social-posts.ts",
-      "operations": [
-        "community.public-social-post.read",
-        "community.public-social-post-image.read"
-      ],
-      "auth_profile": "public-anonymous-read"
-    },
-    {
-      "surface_id": "community.social-post-publication",
-      "kind": "http",
-      "entry": "apps/platform-api/src/routes/public-social-posts.ts",
-      "operations": [
-        "community.social-post-publication.read",
-        "community.social-post-publication.update"
-      ],
-      "auth_profile": "member-session"
-    },
-    {
-      "surface_id": "community.public-social-post-page",
-      "kind": "page",
-      "entry": "apps/platform-api/src/routes/public-social-post-page.ts",
-      "operations": [
-        "community.public-social-post-page.view"
-      ],
-      "auth_profile": "public-anonymous-read"
     }
   ]
 }

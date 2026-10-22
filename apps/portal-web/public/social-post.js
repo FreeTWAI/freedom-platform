@@ -4,9 +4,15 @@
     const theme = choice === 'guide-dragon' ? 'dark' : choice === 'guide-ai-sister' ? 'light' : choice;
     if (['light', 'dark', 'versefolk'].includes(theme)) document.documentElement.dataset.theme = theme;
   } catch { /* Reading remains available when browser storage is disabled. */ }
+  // Treat DOM attributes as untrusted input even on a server-rendered page.
+  // Only UUIDs can become link destinations or API path components.
+  const canonicalId = value => typeof value === 'string' && value.length === 36
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value.toLowerCase() : null;
   const article = document.querySelector('[data-public-post]');
-  const id = article?.getAttribute('data-public-post');
+  const id = canonicalId(article?.getAttribute('data-public-post'));
   if (!id) return;
+  const encodedId = encodeURIComponent(id);
   const lifetime = new AbortController();
   let checking = false;
   let capabilityEpoch = 0;
@@ -30,7 +36,7 @@
   const setMember = member => {
     const link = document.querySelector('[data-post-login]');
     if (link) {
-      link.href = member ? `/?social-post=${id}#social` : `/?post_return=${id}#account`;
+      link.href = member ? `/?social-post=${encodedId}#social` : `/?post_return=${encodedId}#account`;
       link.textContent = member ? '開啟貼文與討論' : '登入看更多與留言';
     }
     const description = document.querySelector('[data-invite-description]');
@@ -38,8 +44,14 @@
     const preview = document.querySelector('[data-preview-description]');
     if (preview) preview.textContent = member ? '看看其他夥伴的公開分享。' : '先看看幾則分享，登入後就能繼續閱讀。';
     for (const related of document.querySelectorAll('[data-related-post]')) {
-      const target = related.getAttribute('data-related-post');
-      related.href = member ? `/posts/${target}` : `/?post_return=${target}#account`;
+      const target = canonicalId(related.getAttribute('data-related-post'));
+      if (!target) {
+        related.removeAttribute('href');
+        related.textContent = '這則分享暫時無法開啟';
+        continue;
+      }
+      const encodedTarget = encodeURIComponent(target);
+      related.href = member ? `/posts/${encodedTarget}` : `/?post_return=${encodedTarget}#account`;
       related.textContent = member ? '繼續閱讀' : '登入繼續閱讀';
     }
   };
@@ -58,7 +70,7 @@
     if (checking || document.visibilityState === 'hidden' || lifetime.signal.aborted) return;
     checking = true;
     try {
-      const result = await json(`/api/v1/public/shared-posts/${id}`);
+      const result = await json(`/api/v1/public/shared-posts/${encodedId}`);
       if (result.response.status === 404) { reloadCurrent(); return; }
       if (!result.response.ok) { if (status) status.textContent = '暫時無法確認貼文最新狀態，請重新整理。'; return; }
       // The opaque projection digest also changes after an image replacement,
