@@ -165,7 +165,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     const timer = window.setTimeout(() => {
       void post(slug, 'cart-quotes', {
         publication_revision: cart.revision, lines,
-        ...(method ? {delivery: {method, ...(method === 'home' && postal ? {postal_code: postal} : {})}} : {}),
+        ...(method ? {delivery: {method, ...((method === 'home' || method === 'self_ship') && postal ? {postal_code: postal} : {})}} : {}),
       }, undefined, enhanced ? identity ?? undefined : undefined, controller.signal).then(({response, data}) => {
         if (!active || enhanced && (!identity || !buyer?.matches(identity, generation!))) return;
         if (enhanced && (CheckoutErrorSchema.safeParse(data).data?.code === 'checkout_identity_changed' || response.ok && CheckoutBuyerIdentitySchema.safeParse(response.headers.get('X-Commerce-Buyer')).data !== identity)) {identityRejected(); return;}
@@ -193,7 +193,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       key: crypto.randomUUID(),
       body: {publication_revision: quote!.publication_revision, lines,
         contact: {name: contactName.trim(), email: email.trim(), phone: mobile.trim()},
-        delivery: {method, name: contactName.trim(), mobile: mobile.trim(), ...(method === 'home' ? {postal_code: postal.trim(), address: address.trim()} : {})},
+        delivery: {method, name: contactName.trim(), mobile: mobile.trim(), ...((method === 'home' || method === 'self_ship') ? {postal_code: postal.trim(), address: address.trim()} : {})},
         invoice: null, consents: []},
     };
     try {
@@ -210,7 +210,13 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         setError(errorCopy(data));
         const problem = CheckoutErrorSchema.safeParse(data);
         if (enhanced && problem.success && problem.data.lines) {setDeliveryFailure(problem.data.lines); setRefresh(value => value + 1);}
-        if (problem.success && problem.data.fields) setFieldErrors(Object.fromEntries(problem.data.fields.map(field => [field.path, `${fieldNames[field.path] ?? '收件資料'}${field.code === 'required' ? '為必填' : '格式不符'}，請修正後再試。`])));
+        if (problem.success && problem.data.fields) {
+          const copy:Record<string,string>={required:'請填寫此欄位。',format:'請檢查此欄位的格式。',too_long:'此欄位內容太長。',unknown_postal_code:'請填寫可辨識的臺灣郵遞區號。'};
+          setFieldErrors(Object.fromEntries(problem.data.fields.map(field => [field.path, method==='self_ship' ? copy[field.code]??'請檢查此欄位的格式。' : `${fieldNames[field.path] ?? '收件資料'}${field.code === 'required' ? '為必填' : '格式不符'}，請修正後再試。`])));
+          const targets:Record<string,string>={'delivery.name':'checkout-name','delivery.mobile':'checkout-mobile','delivery.postal_code':'checkout-postal','delivery.address':'checkout-address'};
+          const target=problem.data.fields.map(field=>targets[field.path]).find(Boolean);
+          if(target)requestAnimationFrame(()=>document.getElementById(target)?.focus());
+        }
         const definitive = response.status >= 400 && response.status < 500 && CheckoutErrorSchema.safeParse(data).success;
         setFreezeUnknown(!definitive);
         if (definitive) freezeRequest.current = null;
@@ -263,7 +269,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
 
   const quoteReady = Boolean(!identityBlocked && quote && !quoteBusy && method && quote.shipping.state === 'quoted' && quote.total_minor !== null && quote.lines.every(line => line.state === 'ok' || line.state === 'revision_changed'));
   const deliveryOption = quote?.delivery_options.find(option => option.method === method);
-  const paymentOptions = quote?.payment_options ?? [];
+  const paymentOptions = (quote?.payment_options ?? []).filter(option => method !== 'self_ship' || option.method === 'bank_transfer');
   const panels = enhanced ? deliveryPanels(quote, method, deliveryFailure) : [];
   const alternatives = deliveryAlternatives(quote, method);
   const needsAlternative = panels.length > 0 && (!method || quote?.shipping.state === 'unavailable' || deliveryFailure.length > 0);
@@ -272,20 +278,20 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     {enhanced && identityNotice && <p role="status" className="shop-order-alert">{IDENTITY_CHANGED_COPY}</p>}
     {enhanced && previousOrder && <p>{PREVIOUS_ORDER_COPY}</p>}
     {enhanced && identityChecking && identityBlocked && <p role="status">正在確認登入狀態…</p>}
-    {enhanced && identityError && <div><p role="alert">{identityError}</p><button type="button" className="shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div>}
+    {enhanced && identityError && <div><p role="alert">{identityError}</p><div className="actions shop-order-actions"><button type="button" className="btn btn-ghost btn-small shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div></div>}
     {error && <p role="alert" className="shop-order-alert">{error}</p>}
     {intent ? <section className="shop-order-section" aria-labelledby="shop-order-retry-heading">
       <h2 id="shop-order-retry-heading">確認下單結果</h2>
       <p>上次下單結果尚未確認。重試會沿用同一筆訂單。</p>
-      <div className="shop-order-actions"><button className="shop-button shop-pay-primary" disabled={busy || identityBlocked} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
+      <div className="actions shop-order-actions"><button className="btn btn-primary shop-button shop-pay-primary" disabled={busy || identityBlocked} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
     </section> : cart.lines.length === 0 ? <p>購物車是空的。<a href={`/shops/${slug}`}>回到商店</a></p> : checkout ? <>
       <section className="shop-order-section" aria-labelledby="shop-checkout-summary">
         <h2 id="shop-checkout-summary">2. 核對商品與配送</h2>
         <ul className="shop-order-lines">{checkout.terms.items.map(line => <li className="shop-order-line" key={line.sku}><p>{line.title} × {line.quantity}</p><p>{formatMinor(line.line_total_minor, checkout.terms.currency)}</p></li>)}</ul>
-        {checkout.terms.shipping.groups.map(group => <div key={group.group_ref}><p>{deliveryNames[group.method]}・運費 {formatMinor(group.amount_minor, checkout.terms.currency)}</p>{group.meetup_note && <p className="shop-preserve-lines">{group.meetup_note}</p>}</div>)}
+        {checkout.terms.shipping.groups.map(group => <div key={group.group_ref}><p>{deliveryNames[group.method]}・運費 {formatMinor(group.amount_minor, checkout.terms.currency)}</p>{group.meetup_note && <p className="shop-preserve-lines">{group.meetup_note}</p>}{group.self_ship&&<><p>店家確認收款後 {group.self_ship.handling_days} 個工作天內寄出。</p>{group.self_ship.note&&<p className="shop-preserve-lines">{group.self_ship.note}</p>}</>}</div>)}
         <p className="shop-pay-label">總額 {formatMinor(checkout.terms.total_minor, checkout.terms.currency)}</p>
         <p>收件人：{contactName}・{mobile}</p><p>Email：{email}</p>
-        {method === 'home' && <p>地址：{postal} {address}</p>}
+        {(method === 'home' || method === 'self_ship') && <p>地址：{postal} {address}</p>}
       </section>
       <section className="shop-order-section" aria-labelledby="shop-checkout-payment">
         <h2 id="shop-checkout-payment">3. 付款方式</h2>
@@ -293,13 +299,14 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           <input type="radio" name="payment" checked={payment === option.method} disabled={busy || !option.available || !checkout.terms.payment_methods.includes(option.method)} onChange={() => setPayment(option.method)} />
           <span>{methodNames[option.method]}{option.reason && <span className="shop-checkout-reason">{unavailable[option.reason]}</span>}</span>
         </label>)}
+        {method === 'self_ship'&&<p>自行寄送只提供銀行匯款，店家確認收款後寄出。</p>}
         {payment === 'bank_transfer' && <p>下單後提供匯款帳號，請於 {checkout.terms.offline_payment?.bank_transfer_deadline_days} 天內付款。店家確認後更新訂單狀態。</p>}
         {payment === 'cash_on_meetup' && <p>請於 {checkout.terms.offline_payment?.meetup_deadline_days} 天內完成面交付款。</p>}
       </section>
       <section className="shop-order-section" aria-labelledby="shop-checkout-confirm">
         <h2 id="shop-checkout-confirm">4. 最後確認</h2><p>請確認商品、收件資料與付款方式。報價有效至 {formatTaipeiDateTime(checkout.expires_at)}。</p>
-        <div className="shop-order-actions"><button className="shop-button shop-pay-primary" type="button" disabled={busy || identityBlocked || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
-          <button className="shop-button shop-button-secondary" type="button" disabled={busy || identityBlocked} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
+        <div className="actions shop-order-actions"><button className="btn btn-primary shop-button shop-pay-primary" type="button" disabled={busy || identityBlocked || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
+          <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" disabled={busy || identityBlocked} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
       </section>
     </> : <form onSubmit={event => {event.preventDefault(); void freeze();}}>
       <fieldset className="shop-checkout-fields" disabled={busy || identityBlocked || freezeUnknown}>
@@ -316,27 +323,28 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           <h2 id={`delivery-blocked-title-${panel.method}`}>以下商品無法使用「{deliveryNames[panel.method]}」：</h2>
           <ul>{panel.lines.map(line => <li key={line.sku}>{deliveryLineTitle(line.sku, quote, cart.lines)}：{SHIPPING_REASON_COPY[line.reason]}</li>)}</ul>
         </section>)}
-        {needsAlternative && (alternatives.length > 0 ? <div className="shop-order-actions">
-          {alternatives.map(option => <button className="shop-button shop-button-secondary" type="button" key={option.method} disabled={quoteBusy || identityBlocked} onClick={() => {setDeliveryFailure([]); setMethod(option.method);}}>改用{deliveryNames[option.method]}</button>)}
+        {needsAlternative && (alternatives.length > 0 ? <div className="actions shop-order-actions">
+          {alternatives.map(option => <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" key={option.method} disabled={quoteBusy || identityBlocked} onClick={() => {setDeliveryFailure([]); setMethod(option.method);}}>改用{deliveryNames[option.method]}</button>)}
           <p>選擇後將重新報價。</p>
-        </div> : <div><p>這些商品目前無法一起配送，請回購物車調整或分開下單。</p><div className="shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車調整</a></div></div>)}
-        {method === 'home' && <>
+        </div> : <div><p>這些商品目前無法一起配送，請回購物車調整或分開下單。</p><div className="actions shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車調整</a></div></div>)}
+        {(method === 'home' || method === 'self_ship') && <>
           <div className="shop-order-access-field"><label htmlFor="checkout-postal">郵遞區號</label><input {...fieldProps('delivery.postal_code')} id="checkout-postal" className="shop-text-input" autoComplete="postal-code" inputMode="numeric" maxLength={10} required value={postal} onChange={event => setPostal(event.target.value)} />{fieldError('delivery.postal_code')}</div>
           <div className="shop-order-access-field"><label htmlFor="checkout-address">收件地址</label><input {...fieldProps('delivery.address')} id="checkout-address" className="shop-text-input" autoComplete="street-address" maxLength={120} required value={address} onChange={event => setAddress(event.target.value)} />{fieldError('delivery.address')}</div>
         </>}
+        {method === 'self_ship'&&<><p>每單一件包裹；不配送離島。</p><p>自行寄送只提供銀行匯款，店家確認收款後寄出。</p><p>收件資料僅供這間店處理訂單；不會顯示在公開商店頁。</p><p>請填寫 3、5 或 6 碼郵遞區號。</p><p>工作天為週一至週五，不另排除國定假日。</p></>}
         {deliveryOption?.note && <p className="shop-preserve-lines">{deliveryOption.note}</p>}
-        {quoteReady && quote && <p>商品與運費合計 {formatMinor(quote.total_minor!, quote.currency)}</p>}
+        {quoteReady && quote && <><p>商品 {formatMinor(quote.merchandise_total_minor, quote.currency)}</p><p>運費 {formatMinor(quote.shipping.total_minor!, quote.currency)}</p><p>商品與運費合計 {formatMinor(quote.total_minor!, quote.currency)}</p></>}
         {quote?.lines.some(line => line.state === 'revision_changed') && <p>商品內容或價格已更新，請在下一步核對最新報價。</p>}
         {quote?.lines.some(line => line.state === 'insufficient' || line.state === 'unavailable') && <p>商品庫存已改變，請回購物車調整。</p>}
         {paymentOptions.map(option => <p key={option.method}>{methodNames[option.method]}：{option.reason ? unavailable[option.reason] : '可使用'}</p>)}
-        {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
+        {paymentOptions.some(option => option.reason === 'member_required') && <div className="actions shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
       </fieldset>
-      <div className="shop-order-actions">
-        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
-        {!freezeUnknown && <button className="shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
+      <div className="actions shop-order-actions">
+        <button className="btn btn-primary shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
+        {!freezeUnknown && <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
       </div>
     </form>}
-    {!intent && !freezeUnknown && <div className="shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車</a></div>}
+    {!intent && !freezeUnknown && <div className="actions shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車</a></div>}
   </>;
 }
 

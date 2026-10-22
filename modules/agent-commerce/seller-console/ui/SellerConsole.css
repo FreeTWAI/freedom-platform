@@ -33,3 +33,9 @@
 .seller-console .seller-settings-wide { grid-column: 1 / -1; }
 .seller-console textarea { width: 100%; min-width: 0; max-width: 100%; }
 @media(max-width:720px) { .seller-console .seller-settings-fields { grid-template-columns: minmax(0,1fr); } .seller-console textarea { font-size: 16px; } }
+
+.seller-console .seller-self-ship-note { white-space: pre-line; }
+.seller-console .seller-self-ship form { max-width: 46rem; }
+
+.seller-console .seller-self-ship textarea { font: inherit; min-height: 44px; max-width: 100%; }
+@media(max-width:720px) { .seller-console .seller-self-ship textarea { font-size: 16px; } }

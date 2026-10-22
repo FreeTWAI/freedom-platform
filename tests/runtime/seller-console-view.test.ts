@@ -65,3 +65,16 @@ test('merchant banner uses readiness facts across the complete checkout truth ta
   assert.equal(storeOrderStatus({readiness:changed(key,state,true)}).text,'目前尚未開放結帳接單，請檢查開店準備。');
  assert.equal(storeOrderStatus({readiness:{...ready,accepting_orders:false}}).text,'目前尚未開放結帳接單，請檢查開店準備。');
 });
+
+// A disabled flag hides a new method but preserves a saved one for other settings.
+test('self-ship settings distinguish hidden, read-only and editable states and preserve unrelated profile fields',async()=>{
+ const {selfShipSettingMode,withSelfShip}=await import('../../modules/agent-commerce/seller-console/ui/SelfShipSettings.js');
+ assert.equal(selfShipSettingMode(false,false),'hidden');assert.equal(selfShipSettingMode(false,true),'readonly');
+ for(const exists of [false,true])assert.equal(selfShipSettingMode(true,exists),'editable');
+ const {ShippingProfileInputSchema}=await import('../../contracts/guild-launchpad/v1/hosted-shipping.js');
+ const profile=ShippingProfileInputSchema.parse({schema:'freedom.shipping-profile/v1',working_days:[1,3,5],services:[],delivery_options:[{method:'meetup',note:'保留面交說明。'},{method:'home',fee_per_parcel_minor:6000,free_over_minor:null,outlying:{kind:'excluded'}}],drop_ship:null});
+ const option={method:'self_ship' as const,fee_per_order_minor:0,handling_days:14,note:'保留第二行。\n合成物流'};
+ const added=withSelfShip(profile,option);assert.deepEqual(added.delivery_options,[...profile.delivery_options,option]);assert.deepEqual(ShippingProfileInputSchema.parse(added),added);
+ const replaced=withSelfShip(added,{...option,fee_per_order_minor:1000000});assert.deepEqual(replaced.delivery_options.slice(0,2),profile.delivery_options);assert.deepEqual(replaced.working_days,profile.working_days);assert.deepEqual(replaced.services,profile.services);assert.deepEqual(replaced.drop_ship,profile.drop_ship);
+ assert.deepEqual(withSelfShip(added,null),profile);assert.deepEqual(profile.delivery_options.length,2);
+});
