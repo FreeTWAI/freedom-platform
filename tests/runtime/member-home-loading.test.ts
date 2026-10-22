@@ -2,9 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {PortalClient} from '../../apps/portal-web/src/api.js';
 import {
-  createHomeReadCycle, observeHomeReturns, loadHomeNextSteps,
+  createHomeReadCycle, observeHomeReturns, loadHomeNextSteps, resolveHomeJournalUrl,
   type HomeReadClient, type HomeTaskAction,
 } from '../../apps/portal-web/src/modules/member-home-loading.js';
+
+test('journal entry accepts only the configured public HTTPS home without private parameters', () => {
+  assert.equal(resolveHomeJournalUrl('https://freetwai.evitina.tw'), 'https://freetwai.evitina.tw/');
+  assert.equal(resolveHomeJournalUrl(' https://FreeTWAI.evitina.tw/ '), 'https://freetwai.evitina.tw/');
+  for (const value of [undefined, null, '', 1, 'javascript:alert(1)', 'http://freetwai.evitina.tw/',
+    'https://127.0.0.1/', 'https://freetwai.evitina.tw.evil.example/',
+    'https://owner:secret@freetwai.evitina.tw/', 'https://freetwai.evitina.tw:8443/',
+    'https://freetwai.evitina.tw/api/v1/private/drafts', 'https://freetwai.evitina.tw/?token=example',
+    'https://freetwai.evitina.tw/#draft', 'not-a-url']) {
+    assert.equal(resolveHomeJournalUrl(value), null, String(value));
+  }
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
