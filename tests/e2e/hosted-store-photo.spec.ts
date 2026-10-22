@@ -17,17 +17,19 @@ test.setTimeout(90_000);
 test.skip(process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE!=='1','Requires the separately scheduled local photo fixture pass.');
 const photo=(page:Page)=>page.locator('.hosted-store-photo');
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
-async function ready(page:Page,db:Parameters<typeof person>[0]){
+async function ready(page:Page,db:Parameters<typeof person>[0],beforeOpen?:(store:Awaited<ReturnType<typeof launchStore>>)=>void){
+  expect((await(await page.request.get('/api/v1/site')).json()).store_gallery_enabled).toBe(false);
   const member=await person(db);await login(page,member.email);const store=await launchStore(page,'照片驗收工作室');
   const slug='photos-'+randomUUID().slice(0,8);await post(page,store.root+'/setup',{name:'照片驗收商店',slug,currency:'TWD'},201);
   const product=ProductViewSchema.parse(await post(page,store.root+'/products',{title:'手作茶杯',price_minor:35000,stock:2},201));
-  await open(page,store.hash);await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeVisible();
+  beforeOpen?.(store);
+  await open(page,store.hash);await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeEnabled();
   return {...store,member,slug,product,path:'/api/v1'+store.root+'/products/'+product.product_id+'/photo'};
 }
-async function save(page:Page,file:Awaited<ReturnType<typeof source>>,replace=false){
+async function save(page:Page,file:Awaited<ReturnType<typeof source>>){
   await storeArea(page,'商品');
+  await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeEnabled();
   await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
-  await photo(page).getByRole('button',{name:replace?'儲存替換照片':'儲存照片',exact:true}).click();
   await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
   await expect(photo(page).locator(':scope > img')).toBeVisible();
 }
@@ -49,31 +51,53 @@ test.beforeEach(async({e2eAuthPool})=>{
   await e2eAuthPool.query("UPDATE domain_media_storage_policy SET persistence_allowed=true WHERE purpose='storefront.product-photo'");
 });
 
-test('large phone photo is prepared locally, previewed without cropping, and uploaded only after explicit save',async({page,e2eAuthPool},info)=>{
+test('editing product text blocks photo autosave so refreshing a photo cannot discard that draft',async({page,e2eAuthPool},info)=>{
+  await ready(page,e2eAuthPool);
+  await page.locator('.hosted-store-product').getByRole('button',{name:'編輯',exact:true}).click();
+  const form=page.getByRole('form',{name:'編輯手作茶杯',exact:true});
+  await form.getByLabel('商品名稱',{exact:true}).fill('尚未儲存的新商品名稱');
+  await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'一鍵上架商品',exact:true})).toBeDisabled();
+  await expect(form.getByLabel('商品名稱',{exact:true})).toHaveValue('尚未儲存的新商品名稱');
+  await form.getByRole('button',{name:'儲存',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'尚未儲存的新商品名稱',exact:true})).toBeVisible();
+  await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeEnabled();
+});
+
+test('large phone photo is prepared locally and automatically saved once, keeping a full preview while uploading',async({page,e2eAuthPool},info)=>{
   await page.setViewportSize({width:390,height:900});const s=await ready(page,e2eAuthPool);
   const pixels=Buffer.alloc(1600*2400*3);for(let i=0;i<pixels.length;i++)pixels[i]=(i*31+(i>>7)*17)%256;
   const buffer=await sharp(pixels,{raw:{width:1600,height:2400,channels:3}}).png({compressionLevel:0}).toBuffer();expect(buffer.length).toBeGreaterThan(2*1024*1024);
   const uploads:Request[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname===s.path)uploads.push(request);});
+  let finishUpload!:()=>void;const uploadHeld=new Promise<void>(resolve=>{finishUpload=resolve;});
+  await page.route('**'+s.path,async route=>{if(route.request().method()==='POST')await uploadHeld;await route.continue();});
+  try{
   await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles({name:'synthetic-phone-photo.png',mimeType:'image/png',buffer});
-  const preview=page.getByRole('img',{name:'待儲存的完整商品照片',exact:true});await expect(preview).toBeVisible();expect(uploads).toHaveLength(0);
+  const preview=page.getByRole('img',{name:'待儲存的完整商品照片',exact:true});await expect(preview).toBeVisible();await expect.poll(()=>uploads.length).toBe(1);
+  await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeDisabled();await expect(photo(page).getByRole('button',{name:'儲存照片',exact:true})).toHaveCount(0);
   const shape=await preview.evaluate(node=>{const image=node as HTMLImageElement;return {width:image.naturalWidth,height:image.naturalHeight,fit:getComputedStyle(image).objectFit};});
   expect(shape.width/shape.height).toBeCloseTo(2/3,2);expect(shape.fit).toBe('contain');
-  await photo(page).getByRole('button',{name:'儲存照片',exact:true}).click();await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
+  finishUpload();await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
   expect(uploads).toHaveLength(1);expect(uploads[0].postDataBuffer()!.length).toBeLessThanOrEqual(2*1024*1024);await expect(photo(page).locator(':scope > img')).toBeVisible();
   await page.screenshot({path:info.outputPath('photo-mobile.png'),fullPage:true});
+  }finally{finishUpload();await page.unrouteAll({behavior:'wait'});}
 });
 
 for(const width of [390,1280])test(`member photo draft, preview, immutable publication and removal at ${width}px`,async({page,browser,baseURL,e2eAuthPool},info)=>{
   await page.setViewportSize({width,height:900});const s=await ready(page,e2eAuthPool),a=await source('tea-a.png','#e8a45c'),b=await source('tea-b.png','#387362');
   await save(page,a);const privateA=await photo(page).locator(':scope > img').getAttribute('src');expect(privateA).toContain(s.product.product_id+'/photo/2');
   await storeArea(page,'店面與發布');
+  const review=page.locator('#store-publish-panel .hosted-store-publication-review');
+  await review.getByText('查看本次上架內容',{exact:true}).click();
+  await expect(review.getByRole('img',{name:'手作茶杯 本次上架照片',exact:true})).toHaveAttribute('src',privateA!);
+  await expect.poll(()=>review.getByRole('img').evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(120);
   const previewEvent=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await previewEvent;
   const anonymous=await browser.newContext({baseURL,viewport:{width,height:900}});
   try{
     await expect(preview.locator('article img')).toHaveAttribute('src',privateA!);
     expect((await anonymous.request.get(privateA!)).status()).toBe(401);
-    await storeArea(page,'店面與發布');
-    await page.getByRole('button',{name:'發布展示頁',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
+    await storeArea(page,'商品');
+    await page.getByRole('button',{name:'一鍵上架商品',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
     const pub=await anonymous.newPage();await pub.goto('/shops/'+s.slug);
     const media=async()=>PublicStoreMediaSchema.parse(await(await anonymous.request.get('/api/v1/public/stores/'+s.slug+'/media')).json());
     const first=await media(),publicA=first.photos[0].photo.read_path;await expect(pub.locator('article img')).toHaveAttribute('src',publicA);
@@ -88,7 +112,7 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
     await detail.screenshot({path:info.outputPath(`synthetic-photo-product-${width}.png`),fullPage:true});
     await detail.close();
     const bytesA=await(await anonymous.request.get(publicA)).body();expect(bytesA.subarray(0,4).toString()).toBe('RIFF');expect(digest(await(await page.request.get(privateA!)).body())).toBe(digest(bytesA));
-    await save(page,b,true);await preview.reload();await expect(preview.locator('article img')).toHaveAttribute('src',new RegExp('/photo/3$'));
+    await save(page,b);await preview.reload();await expect(preview.locator('article img')).toHaveAttribute('src',new RegExp('/photo/3$'));
     await pub.reload();expect(await media()).toEqual(first);expect(digest(await(await anonymous.request.get(publicA)).body())).toBe(digest(bytesA));
     await storeArea(page,'店面與發布');
     await page.getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 2 版');
@@ -117,15 +141,31 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
 });
 
 test('committed HTTP loss survives actual 401 unmount, other member and same-member manual replay with policy OFF',async({page,e2eAuthPool},info)=>{
-  const s=await ready(page,e2eAuthPool),file=await source('original-unknown.png','#793b52');const requests:ReturnType<typeof signature>[]=[],statuses:number[]=[],acks:unknown[]=[];
+  let slugRead!:ReturnType<Page['waitForResponse']>;const slugRequests:Request[]=[],slugFinished:Request[]=[];
+  const s=await ready(page,e2eAuthPool,store=>{
+    const slugPath='/api/v1'+store.root+'/slug-availability';
+    const matches=(request:Request)=>request.method()==='GET'&&new URL(request.url()).pathname===slugPath;
+    // Initial settings mount starts this debounced read, even with its panel hidden.
+    slugRead=page.waitForResponse(response=>matches(response.request()));
+    page.on('request',request=>{if(matches(request))slugRequests.push(request);});
+    page.on('requestfinished',request=>{if(matches(request))slugFinished.push(request);});
+  }),file=await source('original-unknown.png','#793b52');const requests:ReturnType<typeof signature>[]=[],statuses:number[]=[],acks:unknown[]=[];
+  const slugResponse=await slugRead;expect(slugResponse.status()).toBe(200);await slugResponse.finished();
+  await storeArea(page,'商店資料');await expect(page.locator('#store-settings-panel').getByText('可以使用：/shops/'+s.slug,{exact:true})).toBeVisible();
+  await storeArea(page,'商品');
   await page.route('**'+s.path,async route=>{
     if(route.request().method()!=='POST')return route.continue();requests.push(signature(route.request()));
     const response=await route.fetch();statuses.push(response.status());if(response.ok())acks.push(await response.json());
     if(requests.length===1){expect(response.status()).toBe(200);await route.abort('failed');}else await route.fulfill({response});
   });
-  await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);await photo(page).getByRole('button',{name:'儲存照片',exact:true}).click();
+  await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
   const retry=photo(page).getByRole('button',{name:'重試原照片操作',exact:true});await expect(retry).toBeVisible();expect(statuses).toEqual([200]);
   await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(new RegExp('#'+s.hash+'$'));await expect(photo(page)).toContainText(file.name);
+  // The leave guard restores the hash without remounting settings or starting another read.
+  // Settle every started read before expiry so only the manual photo retry gets 401.
+  await expect(page.locator('#store-settings-panel')).toContainText('可以使用：/shops/'+s.slug);
+  expect(slugRequests).toHaveLength(1);await expect.poll(()=>slugFinished.length).toBe(slugRequests.length);
+  expect(slugFinished).toEqual(slugRequests);
   const expired=await e2eAuthPool.query("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE user_id=$1 AND expires_at>now()",[s.member.id]);expect(expired.rowCount).toBe(1);
   await retry.click();await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(photo(page)).toHaveCount(0);expect(statuses).toEqual([200,401]);
   await e2eAuthPool.query("UPDATE domain_media_storage_policy SET persistence_allowed=false WHERE purpose='storefront.product-photo'");
@@ -148,10 +188,9 @@ test('committed HTTP loss survives actual 401 unmount, other member and same-mem
 
 test('photo CAS conflict keeps the file and creates a new key only after explicit member review',async({page,e2eAuthPool})=>{
   const s=await ready(page,e2eAuthPool),file=await source('cas-review.png','#297482'),requests:ReturnType<typeof signature>[]=[],statuses:number[]=[];
-  await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
   const session=await(await page.request.get('/api/v1/session')).json();const update=await page.request.patch('/api/v1'+s.root+'/products/'+s.product.product_id,{data:{title:'另一視窗改名',description:'',price_minor:35000,stock:2},headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':'"1"'}});expect(update.status()).toBe(200);
   await page.route('**'+s.path,async route=>{if(route.request().method()!=='POST')return route.continue();requests.push(signature(route.request()));const response=await route.fetch();statuses.push(response.status());await route.fulfill({response});});
-  await photo(page).getByRole('button',{name:'儲存照片',exact:true}).click();const review=photo(page).getByRole('button',{name:'確認以最新商品套用照片變更',exact:true});await expect(review).toBeVisible();await expect(page.locator('.hosted-store-product')).toContainText('另一視窗改名');await expect(photo(page)).toContainText(file.name);expect(statuses).toEqual([412]);expect(requests[0].version).toBe('"1"');
+  await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);const review=photo(page).getByRole('button',{name:'確認以最新商品套用照片變更',exact:true});await expect(review).toBeVisible();await expect(page.locator('.hosted-store-product')).toContainText('另一視窗改名');await expect(photo(page)).toContainText(file.name);expect(statuses).toEqual([412]);expect(requests[0].version).toBe('"1"');
   await review.click();await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');expect(statuses).toEqual([412,200]);expect(requests[1]).toMatchObject({version:'"2"',sha256:requests[0].sha256,bytes:requests[0].bytes,mime:requests[0].mime});expect(requests[1].key).not.toBe(requests[0].key);
   expect((await e2eAuthPool.query("SELECT count(*)::int n FROM scoped_command_receipts WHERE target_id=$1 AND operation='storefront.product.photo.upload'",[s.product.product_id])).rows[0].n).toBe(1);
 });
@@ -163,9 +202,12 @@ test('supply-only product photo through the console stays private (AT-11, S1 ste
   const product=await post(page,store.root+'/supply-products',{title,description:'合成尚未公開供貨照片',cost_minor:400,stock:10},201);
   expect((await(await page.request.get('/api/v1'+store.root+'/supply-profile')).json()).retail_enabled).toBe(false);
   await page.evaluate(hash=>{location.hash=hash;},store.hash+'/supply/products/'+product.product_id);await expect(page.locator('.supplier-console')).toBeVisible();
-  const file=await source('synthetic-supply-only-'+suffix+'.png','#486b74');await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
-  await expect(photo(page).getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
-  await photo(page).getByRole('button',{name:'儲存照片',exact:true}).click();await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
+  const file=await source('synthetic-supply-only-'+suffix+'.png','#486b74'),fileInput=photo(page).getByLabel('商品照片',{exact:true});
+  // The owner-read result can start another product/media refresh after an
+  // enabled assertion. Click the real picker so Playwright rechecks live
+  // actionability rather than dispatching change on a newly disabled input.
+  const chooser=page.waitForEvent('filechooser');await fileInput.click();await(await chooser).setFiles(file);
+  await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
   const image=photo(page).locator(':scope > img');await expect(image).toBeVisible();const privatePath=await image.getAttribute('src');expect(privatePath).toContain(product.product_id+'/photo/2');
   await page.reload();await expect(image).toHaveAttribute('src',privatePath!);await expect.poll(()=>image.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(120);
   const anonymous=await browser.newContext({baseURL}),retail=await browser.newContext({baseURL});
@@ -3178,7 +3220,6 @@ test('SC-E2E-85 a malformed committed photo upload ack retains the original File
   });
   await photo(page).getByLabel('商品照片', {exact:true}).setInputFiles(file);
   await expect(photo(page).getByRole('img', {name:'待儲存的完整商品照片', exact:true})).toBeVisible();
-  await photo(page).getByRole('button', {name:'儲存照片', exact:true}).click();
   const retry = photo(page).getByRole('button', {name:'重試原照片操作', exact:true});
   await expect(retry).toBeVisible();
   await expect(photo(page).getByRole('status')).toHaveText('尚未確認原操作結果。照片與原操作仍保留，請重試確認後再離開。');
@@ -3273,8 +3314,11 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
     const active=a.locator('.supplier-console [data-sc-active="true"]');
     await expect(active.getByRole('heading',{name:'商品詳情：'+title,exact:true})).toBeVisible();
     const photo=active.locator('.hosted-store-photo');
-    await photo.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-offer-a.png','#e8a45c'));
-    await photo.getByRole('button',{name:'儲存照片',exact:true}).click();
+    const firstFile=await source('synthetic-offer-a.png','#e8a45c'),chooser=a.waitForEvent('filechooser');
+    const photoPath='/api/v1'+sa.root+'/products/'+product.product_id+'/photo';
+    const firstUpload=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await photo.getByLabel('商品照片',{exact:true}).click();await(await chooser).setFiles(firstFile);
+    expect((await firstUpload).status()).toBe(200);
     await expect(photo.getByRole('status')).toContainText('已儲存照片變更');
     await decoded(photo.locator(':scope > img'));
     await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
@@ -3323,9 +3367,13 @@ test('SC-E2E-86 supplier explicitly shares, replaces and stops an evaluation pho
       await captureOffer(b,detail,info.outputPath(`seller-photo-light-${width}.png`));
       await captureOffer(a,block,info.outputPath(`supplier-photo-light-${width}.png`));
     }
-    await photo.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-offer-b.png','#387362'));
-    await photo.getByRole('button',{name:'儲存替換照片',exact:true}).click();
+    const replacementFile=await source('synthetic-offer-b.png','#387362'),replacementChooser=a.waitForEvent('filechooser');
+    const previousPhoto=await photo.locator(':scope > img').getAttribute('src');expect(previousPhoto).toBeTruthy();
+    const replacementUpload=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await photo.getByLabel('商品照片',{exact:true}).click();await(await replacementChooser).setFiles(replacementFile);
+    expect((await replacementUpload).status()).toBe(200);
     await expect(photo.getByRole('status')).toContainText('已儲存照片變更');
+    await expect(photo.locator(':scope > img')).not.toHaveAttribute('src',previousPhoto!);await decoded(photo.locator(':scope > img'));
     await expect(block).toContainText('已提供的照片不是目前的商品照片');
     await confirm(a,block,'改用目前的商品照片');await expect(block).toContainText('已提供目前的商品照片');
     await b.reload();await decoded(image);expect(await image.getAttribute('src')).not.toBe(firstPath);
@@ -3357,8 +3405,11 @@ test('SC-E2E-87 shop owners see optional evaluation thumbnails in the catalog an
     await a.evaluate(hash=>{location.hash=hash;},sa.hash+'/supply/products/'+product.product_id);
     const active=a.locator('.supplier-console [data-sc-active="true"]'),upload=active.locator('.hosted-store-photo');
     await expect(active.getByRole('heading',{name:'商品詳情：'+title,exact:true})).toBeVisible();
-    await upload.getByLabel('商品照片',{exact:true}).setInputFiles(await source('synthetic-catalog-thumb.png','#387362'));
-    await upload.getByRole('button',{name:'儲存照片',exact:true}).click();
+    const file=await source('synthetic-catalog-thumb.png','#387362'),chooser=a.waitForEvent('filechooser');
+    const photoPath='/api/v1'+sa.root+'/products/'+product.product_id+'/photo';
+    const uploadResponse=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===photoPath);
+    await upload.getByLabel('商品照片',{exact:true}).click();await(await chooser).setFiles(file);
+    expect((await uploadResponse).status()).toBe(200);
     await expect(upload.getByRole('status')).toContainText('已儲存照片變更');
     await active.getByRole('button',{name:'公開供貨版本',exact:true}).click();
     await a.getByRole('dialog',{name:'公開供貨版本的影響',exact:true}).getByRole('button',{name:'確認公開供貨版本',exact:true}).click();
@@ -3699,7 +3750,7 @@ test('APPEARANCE-E2E-05 buyer product, cart, checkout and order shells retain th
   }finally{await context.close();}
 });
 
-// Gallery cases are appended to the existing fixture pass; original 32 cases above are unchanged.
+// Gallery cases share the fixture pass; the single-photo cases above keep gallery OFF.
 test.describe('C1 own product gallery',()=>{
  let server:{origin:string;stop:()=>Promise<void>};
  test.beforeAll(async()=>{server=await (await import('./hosted-store-fixture.js')).startGalleryBrowserServer();});
@@ -3712,6 +3763,7 @@ test.describe('C1 own product gallery',()=>{
    await post(page,store.root+'/setup',{name:'合成圖組商店',slug,currency:'TWD'},201);
    const product=ProductViewSchema.parse(await post(page,store.root+'/products',{title:'合成圖組商品',description:'供圖組驗收使用的合成商品。',price_minor:12000,stock:8},201));
    await open(page,store.hash);await expect(gallery(page).getByLabel('新增商品照片',{exact:true})).toBeVisible();
+   await expect(photo(page)).toHaveCount(0);await expect(page.getByText('選圖後會自動儲存照片',{exact:false})).toHaveCount(0);
    return {...store,member,slug,product,context,page,base:'/api/v1'+store.root+'/products/'+product.product_id+'/gallery'};
   }catch(e){await context.close();throw e;}
  }
@@ -3720,7 +3772,7 @@ test.describe('C1 own product gallery',()=>{
   await block.getByLabel('新增商品照片',{exact:true}).setInputFiles(file);await expect(block.getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
   await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
  }
- async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish-reviewed'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
  test('GALLERY-E2E-legacy primary photos decode on B01 and serve B01/B03 Open Graph images',async({browser,e2eAuthPool},info)=>{
   const s=await setup(browser,e2eAuthPool),buyer=await browser.newContext({baseURL:server.origin,viewport:{width:390,height:900}});
   try{
@@ -3746,6 +3798,12 @@ test.describe('C1 own product gallery',()=>{
    await add(page,await source('synthetic-wide.png','#5e8ca0'));await add(page,{name:'synthetic-tall.png',mimeType:'image/png',buffer:await sharp({create:{width:80,height:120,channels:3,background:'#b7a077'}}).png().toBuffer()});
    const second=gallery(page).locator('ol > li').nth(1);await second.getByLabel('照片說明',{exact:true}).fill('合成商品側面');await second.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(second.getByRole('button',{name:'儲存說明',exact:true})).toBeDisabled();
    await expect(gallery(page).getByLabel('新增商品照片',{exact:true})).toBeEnabled();await captureOffer(page,gallery(page),info.outputPath(`gallery-editor-${width}.png`));
+   const review=page.locator('#store-products-panel .hosted-store-publication-review');
+   await expect(review).toContainText('本次會公開全部 1 件商品、2 張已儲存照片');
+   await review.getByText('查看本次上架內容',{exact:true}).click();
+   await expect(review.getByRole('img')).toHaveCount(2);
+   for(const image of await review.getByRole('img').all())await expect(image).toHaveAttribute('src',/\/gallery\/photos\//);
+   await expect(review.locator('dl div').filter({hasText:'商品圖組'})).toContainText('有尚未發布的變更');
    await storeArea(page,'店面與發布');const popup=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await popup;
    const link=preview.getByRole('link',{name:'查看商品：合成圖組商品',exact:true});await expect(link).toHaveAttribute('href',new RegExp('/preview-page/products/P0001$'));await link.click();await expect(preview.locator('.shop-gallery-photo')).toHaveCount(2);await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await expect(preview.getByRole('link',{name:'商品分享連結',exact:true})).toHaveCount(0);await preview.close();
    await publish(page);const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/'+s.product.sku);
