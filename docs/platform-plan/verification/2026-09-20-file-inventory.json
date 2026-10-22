@@ -15829,8 +15829,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-02-catalog-storefront-cart.md",
-      "bytes": 31169,
-      "sha256": "5d21d5ba3c2c0b53d3507bbbefe8e5888126f0355564105add716eae7eae83c8"
+      "bytes": 31232,
+      "sha256": "0ca491b965ebdf3321a00771b9a8a52dc4dda16b4930933006a2e4a7a74cef70"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-03-order-inventory.md",
@@ -17844,8 +17844,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/freedom.module.json",
-      "bytes": 2047,
-      "sha256": "915c775465bd44ad7275292bbcf89c635d051b90b0c5b84909a47c4b07052e38"
+      "bytes": 1990,
+      "sha256": "e935aedff58ac58e0e924964c0c277697cf53eada605f8d1d80337c95163e683"
     },
     {
       "path": "modules/agent-commerce/checkout/index.ts",
@@ -18174,8 +18174,8 @@
     },
     {
       "path": "modules/agent-commerce/hosted/publish.ts",
-      "bytes": 19412,
-      "sha256": "9878015de715698305528b6a8b20989aaec912b8cc1129a6cd98d1c6e7817032"
+      "bytes": 19182,
+      "sha256": "e31c09a0b19e91197febea4243707e4a514558ebea96133cfb716c4f0fe4a2b1"
     },
     {
       "path": "modules/agent-commerce/hosted/release-upgrade.ts",
@@ -18900,7 +18900,7 @@
     {
       "path": "modules/agent-commerce/storefront/README.md",
       "bytes": 25818,
-      "sha256": "89f8ed432e33a5b40301f39666207bf1ac6cdb52a26d8283c72484cd40561e35"
+      "sha256": "ec214bfaa12eed2f073501d2147e5d240affb2188f90a731cad2c0ec55723e0b"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
