@@ -332,7 +332,7 @@ function GuildPublicEntry({guildKey, publicMode, onReadBooks, contactUrl}: {
       {contactUrl && <a className="btn btn-ghost btn-small guild-launchpad-external" href={contactUrl} rel="noopener noreferrer" target="_blank"><span>聯絡這個公會</span><span className="guild-launchpad-destination">{new URL(contactUrl).hostname} · 另開分頁</span></a>}
       <button type="button" className="btn btn-ghost btn-small" disabled={action.pending !== null} aria-busy={action.pending === 'copy'} onClick={() => void copy()}>{action.pending === 'copy' ? '複製中…' : '複製公會連結'}</button>
     </div>
-    <p className="guild-launchpad-status" role="status">{status}</p>
+    <p className="guild-launchpad-share-status" role="status">{status}</p>
     {manualCopy && <label className="field">公會公開連結<input ref={field} readOnly value={url} onFocus={event => event.currentTarget.select()}/></label>}
   </section>;
 }
