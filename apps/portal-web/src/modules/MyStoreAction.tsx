@@ -45,16 +45,19 @@ export function MyStoreAction({client, canStart, reasons, onCreate, onEnter, pur
   const {data, error, retry} = useMyStores(client, purpose);
   const supply = purpose === 'supply';
   const listPath = supply ? '#stores/supply' : '#stores';
-  const beginSetup = () => canStart ? onCreate() : onEnter(supply ? '#stores/supply/setup' : '#stores/setup');
+  const beginSetup = () => supply ? onEnter('#stores/supply/setup') : canStart ? onCreate() : onEnter('#stores/setup');
   if (error) return <><p role="alert" className="field-hint">{supply ? '暫時無法讀取你的供貨資料。' : '暫時無法讀取你的商店。'}</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></>;
   if (!data) return <p role="status">{supply ? '正在確認你的供貨資料…' : '正在確認你的商店…'}</p>;
   // Readable stores can belong to other owners. Keep launch eligibility separate
   // from this read-only projection; the existing flow rechecks tenant permissions.
   const supplySetup = purpose === 'supply'
-    ? <button type="button" className="btn btn-ghost" onClick={beginSetup}>開始供貨設定</button> : null;
+    ? <button type="button" className="btn btn-ghost btn-small" onClick={beginSetup}>開始供貨設定</button> : null;
+  const items = supply ? [...data.items].sort((a, b) => Number(b.setup_state === 'setup_required') - Number(a.setup_state === 'setup_required')) : data.items;
+  const unfinished = supply ? items.find(item => item.setup_state === 'setup_required') : undefined;
+  const direct = unfinished ?? (items.length === 1 && !data.next_cursor ? items[0] : null);
   if (data.items.length) return <>
-    {data.items.slice(0, 3).map(item => <p key={item.instance_id}>{item.name ?? '尚未完成設定'}・{supply ? item.setup_state === 'setup_required' ? '待設定供貨資料' : '供貨資料已就緒' : stateWord(item)}</p>)}
-    <div className="actions"><button type="button" className="btn btn-primary" onClick={() => onEnter(data.items.length === 1 && !data.next_cursor ? `#stores/${data.items[0].tenant_id}/${data.items[0].instance_id}${supply ? '/supply' : ''}` : listPath)}>{purpose === 'supply' ? '查看商品與供貨' : '進入我的商店'}</button>{supplySetup}</div>
+    {items.slice(0, 3).map(item => <p key={item.instance_id}>{item.name ?? '尚未完成設定'}・{supply ? item.setup_state === 'setup_required' ? '商品庫資料待設定' : '商品庫資料已建立' : stateWord(item)}{supply && `；業務空間：${item.tenant_display_name}`}</p>)}
+    <div className="actions"><button type="button" className="btn btn-primary" onClick={() => onEnter(direct ? `#stores/${direct.tenant_id}/${direct.instance_id}${supply ? '/supply' : ''}` : listPath)}>{unfinished ? '繼續設定商品庫' : supply ? '查看商品與供貨' : '進入我的商店'}</button>{supplySetup}{supply && (items.length > 1 || data.next_cursor) && <button type="button" className="btn btn-ghost btn-small" onClick={() => onEnter(listPath)}>查看全部供貨商品庫</button>}</div>
   </>;
   if (data.next_cursor) return <div className="actions"><button type="button" className="btn btn-ghost" onClick={() => onEnter(listPath)}>{purpose === 'supply' ? '查看供貨資料' : '查看我的商店'}</button>{supplySetup}</div>;
   return <><div className="actions"><button type="button" className="btn btn-primary" onClick={beginSetup}>{purpose === 'supply' ? '開始供貨設定' : '建立我的商店'}</button></div>

@@ -1680,6 +1680,124 @@
             }
           ]
         },
+        "self_ship": {
+          "type": "object",
+          "properties": {
+            "handling_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                    },
+                    {
+                      "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ship_by": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shipment": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "shipment_ref": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "carrier_key": {
+                      "type": "string",
+                      "enum": [
+                        "post",
+                        "tcat",
+                        "hct",
+                        "tjoin",
+                        "other"
+                      ]
+                    },
+                    "carrier_name": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tracking_number": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[0-9A-Za-z-]{1,50}$(?![\\s\\S])"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sent_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    "recorded_at": {
+                      "type": "string",
+                      "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+                    },
+                    "redacted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "shipment_ref",
+                    "carrier_key",
+                    "carrier_name",
+                    "tracking_number",
+                    "sent_on",
+                    "recorded_at",
+                    "redacted"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "handling_days",
+            "note",
+            "ship_by",
+            "shipment"
+          ],
+          "additionalProperties": false
+        },
         "meetup_handover": {
           "anyOf": [
             {
@@ -2530,6 +2648,9 @@
             },
             "record_meetup_handover": {
               "type": "boolean"
+            },
+            "record_self_shipment": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -2980,6 +3101,42 @@
       "additionalProperties": false,
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: taipei_calendar_date."
     },
+    "self-shipment-input": {
+      "type": "object",
+      "properties": {
+        "carrier_key": {
+          "type": "string",
+          "enum": [
+            "post",
+            "tcat",
+            "hct",
+            "tjoin",
+            "other"
+          ]
+        },
+        "carrier_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[^\\u0000\\uD800-\\uDFFF]*$(?![\\s\\S])"
+        },
+        "tracking_number": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z-]{1,50}$(?![\\s\\S])"
+        },
+        "sent_on": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "carrier_key",
+        "tracking_number",
+        "sent_on"
+      ],
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: whole_order_immutable_shipment."
+    },
     "error-code": {
       "type": "string",
       "enum": [
@@ -3029,6 +3186,11 @@
         "meetup_already_recorded",
         "meetup_not_selected",
         "nothing_to_hand_over",
+        "self_ship_not_selected",
+        "self_shipment_already_recorded",
+        "self_shipment_stock_unavailable",
+        "nothing_to_ship",
+        "shipment_date_invalid",
         "refund_not_available",
         "refund_exceeds_payment",
         "refund_date_invalid",

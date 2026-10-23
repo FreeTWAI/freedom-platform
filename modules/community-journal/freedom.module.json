@@ -2,7 +2,7 @@
   "format":"freedom.module/v1",
   "module_id":"community-journal",
   "owner_role":"community",
-  "owned_paths":["modules/community-journal/**","apps/portal-web/src/journal/**","apps/portal-web/public/journal-assets/**","apps/platform-api/src/routes/community-journal.ts","migrations/185_community_journal.sql","tests/runtime/community-journal.test.ts","tests/e2e/community-journal.spec.ts","docs/development/community-journal.md"],
+  "owned_paths":["modules/community-journal/**","apps/portal-web/src/journal/**","apps/portal-web/public/journal-assets/**","apps/platform-api/src/routes/community-journal.ts","migrations/186_community_journal.sql","tests/runtime/community-journal.test.ts","tests/e2e/community-journal.spec.ts","docs/development/community-journal.md"],
   "public_exports":["modules/community-journal/payload.ts","modules/community-journal/service.ts"],
   "dependencies":["command-core","shared"],
   "contract_families":[],

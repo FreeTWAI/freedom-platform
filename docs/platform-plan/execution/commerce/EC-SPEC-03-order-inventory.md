@@ -145,8 +145,10 @@ v1 的兩個 profile 及其 wire 不變；不把 literal false 換成 true。新
 | payment confirmed | 已驗證的 provider 事件或查詢結果（EC-SPEC-04） | 金額、商家、環境、交易識別相符；非模擬 | 若 hold 仍 `held` → convert；否則 → allocate 或例外；成功後建立 fulfilment orders（EC-SPEC-05） |
 | payment window end | 排程 | `open`、無確認付款、所有 attempt 都是 `failed` 或 `expired_unpaid`（EC-SPEC-04 §3.3、§6.2） | `cancelled(payment_not_completed)`；若 attempt 仍未知，繼續查詢，不取消（EC-SPEC-04 §6.3） |
 | cancel paid（未出貨） | 買家申請＋賣家同意，或賣家主動（EC-SPEC-06 §2.4） | 已確認付款、該行項沒有已交寄的量 | 有配置就 allocation release（`paid_unallocatable` 沒有配置）；`cancelled(…)` 只在全部行項不出貨時；退款另建 refund，不視為已退 |
-| ship | shipment 交寄證據 | 包裹行項 ≤ 剩餘配置 | 每個 (shipment, allocation) 一筆 movement：N、A 同減 |
+| ship | shipment 交寄證據；面交 `handover_id` 或自行寄送 `shipment_id`（EC-SPEC-05 §2.7） | 包裹行項 ≤ 剩餘配置 | 每個 (shipment, allocation) 一筆 movement：N、A 同減 |
 | close | 賣家／排程 | §3.2 條件 | `closed` |
+
+自行寄送沿 `recordHandover`，`source_ref=commerce_self_shipments.shipment_id`，同一交易內全單 ship，重送不得重扣。已有任何 shipped quantity 時，`cancelPaidOrder` 繼續拒絕 `order_partially_shipped`。賣家的取消入口仍只取消未付款訂單。登記出貨／面交只啟動 EC-SPEC-09 §3 的保存期限，不寫 `closed`，不視為退款。
 
 「已付款」只來自 server 端已驗證事件或查詢（EC-SPEC-04）；瀏覽器返回頁不觸發任何轉換。
 

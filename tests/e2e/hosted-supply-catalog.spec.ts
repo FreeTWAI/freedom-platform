@@ -86,7 +86,10 @@ for (const action of ['setup', 'create', 'edit'] as const) {
       await card.getByRole('button', {name: '編輯供貨商品', exact: true}).click();
     }
     const form = page.getByRole('form', {name: action === 'setup' ? '建立供貨商品庫' : action === 'create' ? '新增供貨商品' : '編輯供貨商品', exact: true});
-    if (action === 'setup') await form.getByLabel('商品庫名稱', {exact: true}).fill('私人商品庫');
+    if (action === 'setup') {
+      await expect(form.getByRole('combobox', {name: '供貨幣別', exact: true})).toHaveAccessibleDescription('建立後不可變更。供貨單價、運費與合作售價都使用這個幣別，只有相同幣別的店家能選用，不會自動換匯。選錯時需在另一個業務空間重建，既有商品不會搬移。');
+      await form.getByLabel('商品庫名稱', {exact: true}).fill('私人商品庫');
+    }
     else {
       await form.getByLabel('商品名稱', {exact: true}).fill('供貨茶杯');
       await form.getByLabel('供貨單價（TWD）', {exact: true}).fill('180');

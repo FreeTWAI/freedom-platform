@@ -49,7 +49,7 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
     let deliveryReady=false;
     // Node and Worker install this same SQL-local port even with checkout off.
     // Direct authorized callers also get its delivery choices when no port was supplied.
-    const shippingCart=checkout.shipping?.cart??createShippingQuotePort({environment}).cart!;
+    const shippingCart=checkout.shipping?.cart??createShippingQuotePort({environment,selfShipEnabled:checkout.selfShipEnabled===true}).cart!;
     if(p&&shipping?.methods.length){
       // Evaluate actual own-stock lines independently: a supply line the cart
       // cannot fulfil must not hide a usable own-stock delivery choice.
@@ -57,7 +57,7 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
         const price=Number(item.price_minor);
         const result=await shippingCart(q,p,{lines:[{sku:item.sku,item_id:item.item_id,quantity:1,unit_price_minor:price,supplier_shop_id:p.supply_shop_id,own:true}],merchandise_net_minor:price,delivery:null});
         const choices=CartQuoteResponseSchema.shape.delivery_options.parse((result as {delivery_options:unknown}).delivery_options);
-        if(choices.some(option=>option.available)){deliveryReady=true;break;}
+        if(choices.some(option=>option.available&&(option.method!=='self_ship'||facts.bank_transfer))){deliveryReady=true;break;}
       }
     }
     const payment:StoreReadiness['methods']['payment']=[];
@@ -65,7 +65,7 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
     if(facts.cash_on_meetup)payment.push('cash_on_meetup');
     if(facts.card)payment.push('card');
     const accepting=p?.slug?(await publicPurchaseStateWithClient(q,p.slug,checkout)).open:false;
-    return StoreReadinessSchema.parse({accepting_orders:accepting,items:[
+    return StoreReadinessSchema.parse({accepting_orders:accepting&&(!(shipping?.methods.length&&shipping.methods.every(method=>method==='self_ship'))||deliveryReady),items:[
       {key:'storefront',state:published?'done':'missing',revision:p?.revision??null},
       {key:'products',state:sellable?'done':'missing',published_count:products.length,sellable_count:sellable,own_stock_count:own.length},
       {key:'store_information',state:publication?.description?.trim()?'done':'missing'},
@@ -74,7 +74,7 @@ export async function storeReadiness(q:PoolClient,tenantId:string,instanceId:str
       {key:'delivery',state:deliveryReady?'done':'missing',version:shipping?.version??null},
       {key:'admission',state:facts.active_admission?'done':facts.last_revoked?'revoked':'not_admitted'},
       {key:'platform',state:publicCheckoutPlatformOpen(checkout)?'done':'paused'},
-    ],methods:{payment,delivery:shipping?.methods??[]}});
+    ],methods:{payment,delivery:(shipping?.methods??[]).filter(method=>method!=='self_ship'||checkout.selfShipEnabled===true)}});
   }finally{
     // Checkout's supplier resolver restores the seller tenant but clears admin
     // context. Retain the authorized admin context for the caller's next read.

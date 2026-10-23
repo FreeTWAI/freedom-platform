@@ -4,6 +4,9 @@ import {performance} from 'node:perf_hooks';
 import {after, before, beforeEach, test} from 'node:test';
 import {SellerCheckoutOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 import {CheckoutTermsSchema} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
+import {readRetainedMemberOrder} from '../../modules/agent-commerce/checkout/member-orders.js';
 import {authenticate} from '../../modules/identity-membership/service.js';
 import {lockStore} from '../../modules/agent-commerce/checkout/authority.js';
 import {checkoutInventory} from '../../modules/agent-commerce/checkout/inventory.js';
@@ -508,6 +511,48 @@ async function placePublicBank() {
   const placed = await placePublicOrder(x.runtime, s.slug, created.value.checkout_ref, {terms_sha256: created.value.terms_sha256, client_order_id: randomUUID(), payment_method: 'bank_transfer'}, opened, opt);
   return {s, owner: await actorOf(s.owner.cookie), opt, access: opened, order: placed.value.order};
 }
+
+test('buyer HTTP and retained member reads expose only the recorded meetup completion date', async () => {
+  const {s, opt, access, order} = await placePublicBank();
+  const app = createApp(x.runtime, x.h.origin, 'local', {
+    guildLaunchpadEnabled: true, hostedReservationsEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY,
+    commerceSettings: opt.settings, commercePorts: opt,
+  });
+  async function read(ref: string) {
+    const result = await x.h.call('GET', '/public/stores/'+s.slug+'/orders/'+ref, s.owner, undefined, {}, app);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    return result.data;
+  }
+  async function post(ref: string, action: string, body: unknown, version: string) {
+    const result = await x.h.call('POST', s.root+'/checkout-orders/'+ref+'/'+action, s.owner, body,
+      {'Idempotency-Key': randomUUID(), 'If-Match': '"'+version+'"'}, app);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    return result.data;
+  }
+  assert.equal(order.meetup_handover, null, 'placement always emits the field');
+  assert.equal((await read(order.order_ref)).meetup_handover, null);
+  const date = await today();
+  const paid = await post(order.order_ref, 'offline-payments', {amount_minor: order.total_minor, received_on: date}, '1');
+  assert.equal((await read(order.order_ref)).meetup_handover, null, 'receipt alone is not a handover');
+  await post(order.order_ref, 'meetup-handover', {completed_on: date}, paid.version);
+  assert.deepEqual((await read(order.order_ref)).meetup_handover, {completed_on: date});
+  const cash = await more(s, 'cash_on_meetup');
+  assert.equal((await read(cash.order_id)).meetup_handover, null);
+  await post(cash.order_id, 'meetup-completion', {amount_minor: cash.terms.total_minor, completed_on: date}, cash.version);
+  assert.deepEqual((await read(cash.order_id)).meetup_handover, {completed_on: date});
+  const home = await more(s, 'bank_transfer', 'home');
+  assert.deepEqual((await read(home.order_id)).meetup_notes, []);
+  assert.equal((await read(home.order_id)).meetup_handover, null);
+  const current = await x.h.call('GET', s.root, s.owner, undefined, {}, x.app);
+  assert.equal(current.status, 200);
+  assert.equal((await x.send(s, '/unpublish', {}, current.data.version)).status, 200);
+  for (const ref of [order.order_ref, cash.order_id]) {
+    const retained = await readRetainedMemberOrder(x.runtime, s.slug, ref, access.sessionToken);
+    assert.ok(retained);
+    assert.deepEqual(retained.meetup_handover, {completed_on: date});
+    assert.deepEqual((await read(ref)).meetup_handover, {completed_on: date}, 'HTTP uses the retained fallback');
+  }
+});
 
 test('member buyer notices follow bank receipt, handover, cash meetup and seller cancellation once using frozen store facts',async()=>{
   const {s,order,owner}=await placeOffline('bank_transfer',20),date=await today(),opt=notificationOptions();

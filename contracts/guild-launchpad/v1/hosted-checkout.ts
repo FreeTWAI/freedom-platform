@@ -9,13 +9,17 @@ export const CheckoutMoneySchema=z.number().int().nonnegative().max(Number.MAX_S
 const money=CheckoutMoneySchema;
 const sha=z.string().regex(/^[a-f0-9]{64}$(?![\s\S])/);
 export const CheckoutTimeSchema=z.string().regex(new RegExp(z.regexes.datetime({precision:3}).source.replace(/\\d/g,'[0-9]')+'(?![\\s\\S])'));
+export function isCheckoutCalendarDate(value:string) {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/.test(value)&&value.slice(0,4)!=='0000'&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+}
+export const CheckoutDateSchema=z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).refine(isCheckoutCalendarDate,'Invalid calendar date.');
 const time=CheckoutTimeSchema;
 const sku=text.min(1).max(32);
 const quantity=z.number().int().min(1).max(99);
 // A stale-draft equality precondition, never a credential or buyer selector.
 export const CheckoutBuyerIdentitySchema=z.union([z.literal('guest'),z.string().length(43).regex(/^member:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/)]);
 export type CheckoutBuyerIdentity=z.infer<typeof CheckoutBuyerIdentitySchema>;
-export const ShippingMethodRefSchema=z.enum(['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup']);
+export const ShippingMethodRefSchema=z.enum(['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup','self_ship']);
 export const DeliveryFieldErrorCodeSchema=z.enum(['required','format','too_short','too_long','unknown_postal_code','blocked_term']);
 export const ShippingUnavailableReasonSchema=z.enum(['fulfilment_not_agreed','shipping_attributes_missing','method_unsupported','temperature_unsupported','too_large','cvs_value_limit','outlying_unsupported']);
 /** Seller meetup note: trimmed, 1–200 code points, controls forbidden except LF. */
@@ -23,11 +27,16 @@ export const MeetupNoteSchema=z.string().trim().regex(/^(?:[^\uD800-\uDFFF]|[\uD
 const groupRef=z.string().regex(/^g(?:[1-9]|[1-4][0-9]|50)$(?![\s\S])/);
 const logisticsServiceKey=z.enum(['ecpay.logistics.home.tcat','ecpay.logistics.home.post','ecpay.logistics.cvs.unimartc2c','ecpay.logistics.cvs.famic2c','ecpay.logistics.cvs.hilifec2c']);
 const frozenLogistics=z.object({service_key:logisticsServiceKey,logistics_sub_type:z.enum(['TCAT','POST','UNIMARTC2C','FAMIC2C','HILIFEC2C']),ship_from_location_id:OpaqueId,temperature:z.literal('ambient'),handling_days:z.number().int().min(1).max(14),cutoff_time:z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$(?![\s\S])/),working_days:z.array(z.number().int().min(1).max(7)).min(1).max(7)}).strict();
+/** Seller shipping is independent of provider accounts; its promise always uses Monday–Friday. */
+export const SELF_SHIP_CARRIER_LABELS={post:'中華郵政',tcat:'黑貓宅急便',hct:'新竹物流',tjoin:'嘉里大榮',other:'其他'} as const;
+export const SelfShipTermsSchema=z.object({service_key:z.literal('seller.self_ship.v1'),fee_basis:z.literal('order'),handling_days:z.number().int().min(1).max(14),working_days:z.tuple([z.literal(1),z.literal(2),z.literal(3),z.literal(4),z.literal(5)]),note:MeetupNoteSchema.nullable()}).strict();
+export const SelfShipmentSchema=z.object({shipment_ref:OpaqueId,carrier_key:z.enum(['post','tcat','hct','tjoin','other']),carrier_name:z.string().min(1).max(40).nullable(),tracking_number:z.string().regex(/^[0-9A-Za-z-]{1,50}$(?![\s\S])/).nullable(),sent_on:z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/),recorded_at:time,redacted:z.boolean()}).strict().refine(v=>v.redacted?v.tracking_number===null&&v.carrier_name===null:v.tracking_number!==null&&(v.carrier_key==='other'?v.carrier_name!==null:v.carrier_name===null),'Shipment redaction and carrier must agree.');
+export const SelfShipOrderSchema=z.object({handling_days:z.number().int().min(1).max(14),note:MeetupNoteSchema.nullable(),ship_by:z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).nullable(),shipment:SelfShipmentSchema.nullable()}).strict();
 const frozenParcel=z.object({parcel_ref:z.string().regex(/^g(?:[1-9]|[1-4][0-9]|50)-p[1-9][0-9]{0,3}$(?![\s\S])/),lines:z.array(z.object({sku,quantity}).strict()).min(1).max(50),weight_g:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),declared_value_minor:money}).strict();
-const frozenGroup=z.object({group_ref:groupRef,supplier_shop_id:OpaqueId,method_ref:ShippingMethodRefSchema,fulfilment_mode:z.enum(['self','drop_ship']),agreement:z.object({agreement_id:OpaqueId,version:Version}).strict().nullable(),profile_version:Version,logistics:frozenLogistics.nullable(),meetup:z.object({note:MeetupNoteSchema}).strict().nullable(),parcels:z.array(frozenParcel).min(1).max(4950),attribute_versions:z.array(z.object({sku,version:Version}).strict()).max(50),fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,amount_minor:money}).strict();
+const frozenGroup=z.object({group_ref:groupRef,supplier_shop_id:OpaqueId,method_ref:ShippingMethodRefSchema,fulfilment_mode:z.enum(['self','drop_ship']),agreement:z.object({agreement_id:OpaqueId,version:Version}).strict().nullable(),profile_version:Version,logistics:frozenLogistics.nullable(),meetup:z.object({note:MeetupNoteSchema}).strict().nullable(),self_ship:SelfShipTermsSchema.optional(),parcels:z.array(frozenParcel).min(1).max(4950),attribute_versions:z.array(z.object({sku,version:Version}).strict()).max(50),fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,amount_minor:money}).strict();
 /** Frozen delivery terms. Invariants that relate groups to the quoted lines live in validateShippingQuote. */
 export const CheckoutShippingSchema=z.object({delivery_profile_version:Version,destination_state:z.enum(['complete','store_required']),groups:z.array(frozenGroup).min(1).max(50)}).strict();
-const publicGroup=z.object({group_ref:groupRef,method:ShippingMethodRefSchema,amount_minor:money,fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,parcel_count:z.number().int().min(1).max(4950),handling_days:z.number().int().min(1).max(14).nullable(),items:z.array(z.object({sku,quantity}).strict()).min(1).max(50),meetup_note:MeetupNoteSchema.nullable()}).strict();
+const publicGroup=z.object({group_ref:groupRef,method:ShippingMethodRefSchema,amount_minor:money,fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,parcel_count:z.number().int().min(1).max(4950),handling_days:z.number().int().min(1).max(14).nullable(),items:z.array(z.object({sku,quantity}).strict()).min(1).max(50),meetup_note:MeetupNoteSchema.nullable(),self_ship:SelfShipTermsSchema.pick({handling_days:true,note:true}).optional()}).strict();
 const publicShipping=z.object({destination_state:z.enum(['complete','store_required']),groups:z.array(publicGroup).min(1).max(50)}).strict();
 const cartOutlying=z.discriminatedUnion('kind',[z.object({kind:z.literal('excluded')}).strict(),z.object({kind:z.literal('surcharge'),surcharge_per_parcel_minor:money}).strict()]);
 /** available ⇔ no unavailable lines ⇔ both totals are present. */
@@ -90,7 +99,7 @@ const cartLine=z.object({sku,title:z.string().nullable(),options,unit_price_mino
   state:z.enum(['ok','insufficient','unavailable','revision_changed']),available:z.number().int().nonnegative().optional()}).strict();
 const cartGroup=z.object({group_ref:groupRef,amount_minor:money}).strict();
 export const CartQuoteResponseSchema=z.object({publication_revision:Version,currency:CurrencySchema,lines:z.array(cartLine).min(1).max(50),
-  merchandise_total_minor:money,discounts:z.array(z.never()).max(0),delivery_options:z.array(CartDeliveryOptionSchema).max(5),shipping:z.discriminatedUnion('state',[
+  merchandise_total_minor:money,discounts:z.array(z.never()).max(0),delivery_options:z.array(CartDeliveryOptionSchema).max(6),shipping:z.discriminatedUnion('state',[
     z.object({state:z.literal('quoted'),method:ShippingMethodRefSchema,groups:z.array(cartGroup).min(1).max(50),total_minor:money}).strict(),
     z.object({state:z.literal('unavailable'),method:ShippingMethodRefSchema,groups:z.array(z.never()).max(0),total_minor:z.null(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).min(1).max(50)}).strict(),
     z.object({state:z.enum(['needs_delivery_data','not_configured']),groups:z.array(z.never()).max(0),total_minor:z.null()}).strict(),
@@ -110,6 +119,9 @@ export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.str
   payment_method:PaymentMethodSchema,payment_grace_until:time.nullable(),offline_instructions:OfflineInstructionsSchema.nullable(),
   /** Frozen public meetup notes; optional for older order response producers. */
   meetup_notes:z.array(MeetupNoteSchema).max(50).optional(),
+  self_ship:SelfShipOrderSchema.optional(),
+  /** Recorded meetup handover; optional for older order response producers. */
+  meetup_handover:z.object({completed_on:CheckoutDateSchema}).strict().nullable().optional(),
   latest_payment_attempt:z.object({attempt_ref:OpaqueId,state:z.enum(['ready','awaiting_result','paid','failed','expired']),created_at:time}).strict().nullable(),can_resume_payment:z.boolean(),contact:contact.nullable(),delivery:object.nullable(),invoice:object.nullable(),redacted:z.boolean(),
 }).strict().refine(v=>v.redacted? v.contact===null&&v.delivery===null&&v.invoice===null:v.contact!==null&&v.delivery!==null,'Invalid redaction projection.')
   .refine(v=>(v.payment_grace_until!==null)===(v.payment_method!=='immediate_card'),'Grace follows the payment method.')

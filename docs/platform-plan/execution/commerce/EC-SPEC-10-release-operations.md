@@ -511,3 +511,10 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 | 排程上限（200 列、50 次呼叫、5 分鐘） | 以 staging 觀察校準 | 尖峰時的處理延遲 |
 | 第一次正式收款前要有成功的 production 還原 | 是 | C2 正式收款的開始時間 |
 | Access 排除 | Ted 依 §4.4 設定 | staging 的 sandbox 驗證 |
+
+
+### 店家自行寄送切片（2026-10-22 核准）
+
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。PR-A public 啟動拒絕 `self_ship_retention_not_ready`，local／staging 可測；PR-C 完成保存與還原驗證後才解除。正式開放另待 Ted 核准，沒有本輪 flag 或部署操作。
+
+新增 retained shape/capability `commerce.hosted-self-ship.v1`，不能只因 intake OFF 就退回不認得 self_ship 的 reader。migration 185 名稱與 ledger 必須精確相符。使用既有 `20-runtime-grants.psql` 的獨立 marker，清掉 stale table/column grants 後僅 SELECT/INSERT；隔離測試執行實際 block 並驗 ACL 與二次套用。通用 `30-verify-readonly.psql` 不在本案修改範圍。此切片只有站內通知，沒有交易 email 模板或排信。
