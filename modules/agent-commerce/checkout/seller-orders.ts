@@ -126,7 +126,7 @@ export async function sellerRefunds(q:PoolClient,context:SellerCheckoutContext,o
     provider_reference:r.provider_reference,basis:r.basis,mode:r.mode,state:r.state,recorded_without_provider:r.mode==='manual_record',recorded_by:r.recorded_by_principal_id,created_at:r.created_at.toISOString()}));
 }
 export const CASE_RESOLUTION_CODES:Readonly<Record<PaymentExceptionKind,readonly ('refunded'|'confirmed'|'checked_with_provider')[]>>={
-  fulfiller_unable:['refunded'],amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
+  fulfiller_unable:[],amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
 };
 export async function sellerExceptionRows(q:PoolClient,context:SellerCheckoutContext,where:string,values:unknown[]=[]) {
   return (await q.query(`SELECT e.*,e.version::text,o.display_number,
@@ -136,7 +136,7 @@ export async function sellerExceptionRows(q:PoolClient,context:SellerCheckoutCon
     WHERE e.tenant_id=$1 AND e.instance_id=$2 AND ${where}`,[context.tenant.tenant_id,context.profile.instance_id,...values])).rows;
 }
 export async function sellerExceptionView(q:PoolClient,context:SellerCheckoutContext,row:Awaited<ReturnType<typeof sellerExceptionRows>>[number],keys:readonly string[]) {
-  const kind=row.kind as PaymentExceptionKind,codes=CASE_RESOLUTION_CODES[kind],actions:('resolve_with_evidence'|'retry_allocation')[]=row.status==='open'&&keys.includes('store:orders:manage')?(kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']):[];
+  const kind=row.kind as PaymentExceptionKind,codes=CASE_RESOLUTION_CODES[kind],actions:('resolve_with_evidence'|'retry_allocation')[]=row.status==='open'&&kind!=='fulfiller_unable'&&keys.includes('store:orders:manage')?(kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']):[];
   let facts=null;
   if(keys.includes('store:finance:read')) {
     if(row.subject_kind==='offline_payment') {

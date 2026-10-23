@@ -12,7 +12,7 @@ export function PaidCancellation({c,order,ready}:{c:Controller;order:SellerCheck
  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId(),dirty='paid-cancellation:'+order.order_ref;
  const locked=c.locked||!ready,stale=version!==order.version,label=pending?'登記退款':'取消訂單並退款';
  useEffect(()=>()=>c.markDirty(dirty,false),[c.markDirty,dirty]);
- if(order.payment_method==='immediate_card')return null;
+ if(order.payment_method==='immediate_card'||!cancellation&&order.payment_state!=='confirmed')return null;
  function close(){dialog.current?.close();if(trigger.current?.isConnected&&!trigger.current.disabled)trigger.current.focus();}
  const changed=()=>c.markDirty(dirty,true);
  function open(){setVersion(order.version);setError('');dialog.current?.showModal();}

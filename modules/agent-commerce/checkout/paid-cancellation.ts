@@ -48,7 +48,7 @@ export async function cancelPaidOfflineOrderHeld(q:PoolClient,context:SellerChec
     payment.amount_minor,payment.currency,body.refund_state,body.refund_state==='recorded'?body.refunded_on:null,body.refund_state==='recorded'?body.refund_method:null,body.refund_state==='recorded'?context.tenant.principal_id:null]);
   await q.query(`UPDATE commerce_exception_cases SET status='resolved',resolution_code='cancelled',
     resolution_note='已取消整筆訂單；退款狀態請見訂單。',resolved_by_principal_id=$2,updated_at=clock_timestamp(),version=version+1
-    WHERE order_id=$1 AND kind='paid_unallocatable' AND status='open'`,[id,context.tenant.principal_id]);
+    WHERE order_id=$1 AND kind IN ('paid_unallocatable','fulfiller_unable') AND status='open'`,[id,context.tenant.principal_id]);
   await options.orderNotifications?.emit(q,{store,orderId:id,event:'paid_cancelled',actorPrincipalId:context.tenant.principal_id});
   return {id};
 }

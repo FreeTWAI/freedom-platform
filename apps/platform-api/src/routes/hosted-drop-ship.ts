@@ -11,8 +11,8 @@ import type {PlatformEnv} from '../module-context.js';
 import {commandHeaders,etag,privateCache,singleQuery} from './tenant-http.js';
 export function createHostedDropShipRoutes(pool:Pool,options:DropShipAgreementOptions&SellerCheckoutReadOptions={}) {
   const app=new Hono<PlatformEnv>(),root='/tenants/:tenant_id/storefronts/:instance_id';
-  app.use('*',async(c,next)=>{try{if(!c.req.path.endsWith('/drop-ship/orders'))z.object({}).strict().parse(singleQuery(c));await next();}finally{privateCache(c);}});
-  const ids=(c:Parameters<typeof singleQuery>[0])=>[OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;
+  app.use('*',async(c,next)=>{try{await next();}finally{privateCache(c);}});
+  const ids=(c:Parameters<typeof singleQuery>[0])=>{if(!c.req.path.endsWith('/drop-ship/orders'))z.object({}).strict().parse(singleQuery(c));return [OpaqueId.parse(c.req.param('tenant_id')),OpaqueId.parse(c.req.param('instance_id'))] as const;};
   app.get(root+'/drop-ship/suppliers',async c=>{const [t,i]=ids(c);return c.json(await listDropShipSupplierProducts(pool,c.get('actor'),t,i));});
   for(const side of ['store','supplier'] as const) {
     const path=root+(side==='store'?'/drop-ship/agreements':'/supplier-console/drop-ship/agreements');

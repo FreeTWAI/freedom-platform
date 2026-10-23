@@ -924,6 +924,7 @@
         "next_action": {
           "type": "string",
           "enum": [
+            "cancel_and_refund",
             "refund_payment",
             "allocate_or_refund",
             "check_with_provider",
@@ -1224,6 +1225,7 @@
               "next_action": {
                 "type": "string",
                 "enum": [
+                  "cancel_and_refund",
                   "refund_payment",
                   "allocate_or_refund",
                   "check_with_provider",
@@ -2637,6 +2639,7 @@
               "next_action": {
                 "type": "string",
                 "enum": [
+                  "cancel_and_refund",
                   "refund_payment",
                   "allocate_or_refund",
                   "check_with_provider",

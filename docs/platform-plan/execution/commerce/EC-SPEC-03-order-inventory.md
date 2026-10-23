@@ -130,7 +130,7 @@ v1 的兩個 profile 及其 wire 不變；不把 literal false 換成 true。新
 
 付款摘要的 `overpaid`：這筆訂單有一筆結果為 `overpaid`、`after_cancel` 或 `amount_mismatch` 的付款套用紀錄（§5，以下稱未套用的付款），而且還沒退完：完成的退款（`confirmed` 或 `recorded`，EC-SPEC-04 §7.2）合計小於那筆紀錄的金額。表示收到的錢和訂單不符，店家必須核對並退款。它優先於其他付款摘要值，包括已確認付款。買家看到「付款金額待店家確認」（EC-SPEC-01 §6.2）；之後才到的正確付款仍照 §5 套用。
 
-未套用的付款全部退完後就不是 `overpaid`：有確認付款時是 `confirmed`；沒有確認付款、但有完成的退款時是 `refunded`。買家 DTO 的 `payment_state` 依序取第一個成立的：`overpaid`、`confirmed`（即上表的 `paid`）、`refunded`、`pending`、`simulated`、`unpaid`。訂單只要有任何一筆未套用的付款，不論退完與否，就不再提供付款或重新付款（`can_resume_payment` 為假）：那筆 attempt 已經收過錢，重新付款前的查詢不會得到「確定未付」（EC-SPEC-04 §4.3）。確認付款的退款與 `partially_refunded` 隨 M4 的售後退款定義（EC-SPEC-06 §2）。
+未套用的付款全部退完後就不是 `overpaid`：有確認付款時是 `confirmed`；沒有確認付款、但有完成的退款時是 `refunded`。離線已付款取消登記全額退款後，買家 DTO 顯示 `refunded`；其餘訂單的 `payment_state` 依序取第一個成立的：`overpaid`、`confirmed`（即上表的 `paid`）、`refunded`、`pending`、`simulated`、`unpaid`。訂單只要有任何一筆未套用的付款，不論退完與否，就不再提供付款或重新付款（`can_resume_payment` 為假）：那筆 attempt 已經收過錢，重新付款前的查詢不會得到「確定未付」（EC-SPEC-04 §4.3）。信用卡確認付款的退款與 `partially_refunded` 隨 M4 的售後退款定義（EC-SPEC-06 §2）。
 
 需要高效查詢的待辦（例如「已過保留期且付款未定」）以這些表的索引查詢，不另存第二份狀態。若之後加摘要欄位，只能由同一個領域函式在同一交易內更新，並有測試比對。
 
@@ -144,13 +144,15 @@ v1 的兩個 profile 及其 wire 不變；不把 literal false 換成 true。新
 | hold expire | 讀取、下單缺額結算、排程 | hold 仍 `held` 且 DB 時間 ≥ `expires_at` | hold release；訂單仍 `open`（付款可能晚到） |
 | payment confirmed | 已驗證的 provider 事件或查詢結果（EC-SPEC-04） | 金額、商家、環境、交易識別相符；非模擬 | 若 hold 仍 `held` → convert；否則 → allocate 或例外；成功後建立 fulfilment orders（EC-SPEC-05） |
 | payment window end | 排程 | `open`、無確認付款、所有 attempt 都是 `failed` 或 `expired_unpaid`（EC-SPEC-04 §3.3、§6.2） | `cancelled(payment_not_completed)`；若 attempt 仍未知，繼續查詢，不取消（EC-SPEC-04 §6.3） |
-| cancel paid（未出貨） | 買家申請＋賣家同意，或賣家主動（EC-SPEC-06 §2.4） | 已確認付款、該行項沒有已交寄的量 | 有配置就 allocation release（`paid_unallocatable` 沒有配置）；`cancelled(…)` 只在全部行項不出貨時；退款另建 refund，不視為已退 |
+| cancel paid（離線、全單未交付） | 店家 `store:orders:manage`；同時登記退款另需 `store:refund` | `open`、已確認的匯款／面交現金、沒有自行寄送紀錄、面交交貨或任何 shipped quantity | 重用 `cancelPaidOrder` 釋放全部 allocation 與剩餘 holds；`cancelled(paid_cancelled)`；新增 `commerce_paid_cancellations`，可先待退款或同時登記全額退款；同交易結清 open `paid_unallocatable` 並通知會員買家 |
 | ship | shipment 交寄證據；面交 `handover_id` 或自行寄送 `shipment_id`（EC-SPEC-05 §2.7） | 包裹行項 ≤ 剩餘配置 | 每個 (shipment, allocation) 一筆 movement：N、A 同減 |
 | close | 賣家／排程 | §3.2 條件 | `closed` |
 
-自行寄送沿 `recordHandover`，`source_ref=commerce_self_shipments.shipment_id`，同一交易內全單 ship，重送不得重扣。已有任何 shipped quantity 時，`cancelPaidOrder` 繼續拒絕 `order_partially_shipped`。賣家的取消入口仍只取消未付款訂單。登記出貨／面交只啟動 EC-SPEC-09 §3 的保存期限，不寫 `closed`，不視為退款。
+自行寄送沿 `recordHandover`，`source_ref=commerce_self_shipments.shipment_id`，同一交易內全單 ship，重送不得重扣。已有任何 shipped quantity 時，`cancelPaidOrder` 繼續拒絕 `order_partially_shipped`。未付款仍走原取消入口；已確認離線付款且全單尚未交付時，店家另用 `POST …/checkout-orders/:order_id/paid-cancellation`。登記出貨／面交只啟動 EC-SPEC-09 §3 的保存期限，不寫 `closed`，不視為退款。
 
-「已付款」只來自 server 端已驗證事件或查詢（EC-SPEC-04）；瀏覽器返回頁不觸發任何轉換。
+離線全額退款登記後，買家與店家付款摘要顯示 `refunded`；取消本身不等於已退款。取消原因為缺貨、無法出貨、買家要求或其他，選填店家備註最多 200 字且不回傳買家。稍後退款走 `POST …/paid-cancellation/refund`，日期以 server 的台北日期檢查，從確認收款日到今天；平台不查核退款。**Ted 2026-10-23 核准 b.1**，無部分取消、出貨後退貨或信用卡退款，也不新增開關或核准步驟。
+
+「已付款」來自 server 端已驗證事件、查詢或店家確認的離線付款（EC-SPEC-04／11）；瀏覽器返回頁不觸發任何轉換。
 
 ## 4. 下單、保留與付款期限
 

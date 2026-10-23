@@ -1478,9 +1478,12 @@ test('paid offline cancellation stays pending until the owner records the full r
     await openBuyer(e2eAuthPool,buyer,store);const bp=await buyer.newPage(),sp=await seller.newPage();
     await start(bp,store);await freeze(bp,store);const order=await place(bp,'銀行匯款'),orderPath=`/shops/${store.slug}/orders/${order.order_ref}`;
     const date=(await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
-    await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/offline-payments`,{amount_minor:order.total_minor,received_on:date},200,'1');
     await buyerLogin(sp,store.seller.email,sellerHash(store,'orders/'+order.order_ref),store.origin);await sellerOrder(sp,store,order);
     const console=sp.locator('.seller-console'),cancel=console.getByRole('button',{name:'取消訂單並退款',exact:true});
+    await expect(console.getByRole('region',{name:'退款紀錄',exact:true})).toHaveCount(0);
+    await expect(cancel).toHaveCount(0);
+    await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/offline-payments`,{amount_minor:order.total_minor,received_on:date},200,'1');
+    await sp.reload();await sellerOrder(sp,store,order);
     await expect(cancel).toHaveClass(/btn-small/);await cancel.click();
     const dialog=sp.getByRole('dialog',{name:'取消訂單並退款',exact:true});await expect(dialog).toBeVisible();
     await dialog.getByLabel('取消原因',{exact:true}).selectOption('out_of_stock');

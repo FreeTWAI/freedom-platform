@@ -1,3 +1,4 @@
+import {seedStandingAgreement} from './drop-ship-fixture.js';
 import {seedSelfShipment} from './self-ship-fixture.js';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
 import {seedSellerPolicyRows} from '../helpers/storefront-policies.js';
@@ -716,6 +717,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
       await seedSelfShipment(q, saved.checkout_id, data.principalId);
     });
   }
+  await isolatedTransaction(owner,async q=>{await seedStandingAgreement(q,hosted[0].instanceId,hosted[1].instanceId);await seedStandingAgreement(q,hosted[1].instanceId,hosted[0].instanceId);});
   const record: { table: string; mechanism: 'rls_update' | 'rls_insert' | 'policy_assertion' | 'documented_exception';
     update_covered: boolean; outcome: string; select?: number; own_select?: number; policies?: string[]; reason?: string }[] = [];
   for (const { relname: table } of tables) {
@@ -749,6 +751,21 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
       assert.ok(DOCUMENTED_UNCOVERED_RLS_TABLES[table], `${table}: missing A/B fixture without documented reason`);
       record.push({ table, mechanism: 'documented_exception', update_covered: false, outcome: 'uncovered', reason: DOCUMENTED_UNCOVERED_RLS_TABLES[table] });
       continue;
+    }
+    if(['commerce_fulfilment_agreements','commerce_fulfilment_agreement_items'].includes(table)){
+      const policies=(await owner.query(`SELECT policyname,cmd,qual,with_check FROM pg_policies WHERE schemaname=current_schema() AND tablename=$1`,[table])).rows;
+      assert.deepEqual(policies,[{policyname:table+'_participants',cmd:'ALL',qual:'((freedom_ctx_tenant() = tenant_id) OR (freedom_ctx_tenant() = supplier_tenant_id))',with_check:'((freedom_ctx_tenant() = tenant_id) OR (freedom_ctx_tenant() = supplier_tenant_id))'}]);
+      for(const tenant of [A,B])await isolatedTransaction(runtime,async q=>{
+        assert.equal((await q.query(`SELECT * FROM ${quoted}`)).rowCount,0);
+        await bindPrincipalContext(q,tenant.principalId);await bindTenantContext(q,{tenantId:tenant.tenantId,tenantScopeId:tenant.scopeId});
+        assert.equal((await q.query(`SELECT * FROM ${quoted}`)).rowCount,2,'both participants read both retained agreements');
+        await q.query('SAVEPOINT retarget_agreement');
+        await assert.rejects(q.query(`UPDATE ${quoted} SET tenant_id=$1 WHERE agreement_id=$2`,[randomUUID(),aRow.agreement_id]),(e:unknown)=>(e as {code:string}).code==='23514');
+        await q.query('ROLLBACK TO SAVEPOINT retarget_agreement');
+        await assert.rejects(q.query(`DELETE FROM ${quoted}`),(e:unknown)=>(e as {code:string}).code==='23514');
+        await q.query('ROLLBACK TO SAVEPOINT retarget_agreement');
+      });
+      record.push({table,mechanism:'policy_assertion',update_covered:true,outcome:'both participant tenants read frozen consent; unbound reads hidden; retarget and deletion rejected',select:2,own_select:2,policies:policies.map(p=>p.policyname)});continue;
     }
     if ([...galleryTables,'commerce_publication_variants',...categoryTables,'commerce_storefront_seller_drafts','commerce_storefront_policy_drafts','commerce_storefront_seller_versions','commerce_storefront_policy_versions','commerce_publication_seller_policies','commerce_publication_policy_refs','commerce_storefront_appearance_drafts','commerce_storefront_appearance_targets','commerce_publication_appearances','commerce_publication_appearance_refs'].includes(table)) {
       const mutable=table==='commerce_storefront_categories'||table==='commerce_storefront_category_members'||table==='commerce_product_groups'||table==='commerce_product_group_members'||table==='commerce_product_gallery_photos'||table==='commerce_storefront_seller_drafts'||table==='commerce_storefront_policy_drafts'||table.startsWith('commerce_storefront_appearance_');

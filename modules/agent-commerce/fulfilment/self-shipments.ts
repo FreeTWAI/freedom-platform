@@ -24,7 +24,9 @@ export function shipmentInput(raw:unknown) {
       record[key]=normalized;
     }
   }
-  const parsed=SelfShipmentInputSchema.parse(value);
+  const result=SelfShipmentInputSchema.safeParse(value);
+  requireCondition(result.success,422,'validation_failed','出貨資料有誤。');
+  const parsed=result.data;
   requireCondition(parsed.carrier_key==='other'?parsed.carrier_name!==undefined:parsed.carrier_name===undefined,422,'validation_failed','物流業者資料有誤。');
   return parsed;
 }

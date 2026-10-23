@@ -1,5 +1,6 @@
 import {runRestoredContactRetention} from '../../modules/agent-commerce/operations/contact-retention.js';
 import {applyConfirmedPaymentHeld,cancelPaidOrder} from '../../modules/agent-commerce/checkout/payments.js';
+import {seedStandingAgreement} from '../runtime/drop-ship-fixture.js';
 import {seedSelfShipment} from '../runtime/self-ship-fixture.js';
 import sharp from 'sharp';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
@@ -571,6 +572,7 @@ const personalOnly = () => ({
 });
 
 const EXPECTED: Record<string, number> = {
+  commerce_fulfilment_agreements:2,commerce_fulfilment_agreement_items:2,
   tenants: 2, tenant_memberships: 3, tenant_invitations: 2, workspaces: 2,
   tenant_authority_audit: 2, module_instances: 4, deployment_bindings: 4, workspace_module_bindings: 2,
   tenant_high_risk_verifications: 0, tenant_ownership_transfers: 0, tenant_recovery_cases: 0,
@@ -660,6 +662,7 @@ before(async () => {
     VALUES($1,1,NULL,'synthetic-F-GUILD-TWO-TENANTS-v1',10,3,2,1000,104857600,4,NULL,'active')`, [defaultPolicyId]);
   await installSpace(spaces.a, people.p1, people.p3);
   await installSpace(spaces.b, people.p2, people.p1);
+  await isolatedTransaction(owner,async q=>{await seedStandingAgreement(q,spaces.a.hosted!.instanceId,spaces.b.hosted!.instanceId);await seedStandingAgreement(q,spaces.b.hosted!.instanceId,spaces.a.hosted!.instanceId);});
   await owner.query(`INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at)
     VALUES($1,$2,'viewer','active',clock_timestamp())`, [spaces.b.tenantId, people.p1.principalId]);
   personalWorkId = randomUUID();
@@ -1087,4 +1090,17 @@ test('category restore retains active/tombstone and frozen A/B rows through cont
    for(const table of categoryTables){const rows=(await q.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;assert.equal(rows.length,table==='commerce_publication_categories'?1:2);assert.deepEqual(rows,(await restoredPool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=$1 ORDER BY to_jsonb(t)::text`,[space.tenantId])).rows);assert.equal((await q.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[other.tenantId])).rowCount,0);}
   }
  });
+});
+
+
+test('J6-R4 restored standing consent preserves products, signatures and both participant RLS reads',async()=>{
+ for(const table of ['commerce_fulfilment_agreements','commerce_fulfilment_agreement_items']){
+  const retained=(await restoredPool.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows;
+  assert.equal(retained.length,2);assert.deepEqual(retained,(await owner.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows);
+  for(const space of [spaces.a,spaces.b])await isolatedTransaction(runtimePool,async q=>{
+   assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount,0);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
+   assert.deepEqual((await q.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows,retained);
+  });
+  await isolatedTransaction(runtimePool,async q=>{await bindTenantContext(q,{tenantId:spaces.c.tenantId,tenantScopeId:spaces.c.scopeId});assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount,0);});
+ }
 });

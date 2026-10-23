@@ -3,7 +3,7 @@ import {OpaqueId,Version} from './primitives.js';
 import {SelfShipmentSchema} from './hosted-checkout.js';
 const time=z.string().datetime({offset:true});
 const digest=z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/);
-const fee=z.number().int().nonnegative().max(9007199254740900).multipleOf(100);
+const fee=z.number().int().nonnegative().max(9007199254740900);
 const shortNote=z.string().trim().max(200).regex(/^[^\p{Cc}\p{Cf}<>]*$(?![\s\S])/u);
 export const DropShipProposalSchema=z.object({supplier_instance_id:OpaqueId,selection_ids:z.array(OpaqueId).min(1).max(200),fee_per_order_minor:fee,promise_working_days:z.number().int().min(1).max(14)}).strict().refine(v=>new Set(v.selection_ids).size===v.selection_ids.length,'Duplicate products.');
 export const DropShipDecisionSchema=z.object({terms_sha256:digest}).strict();

@@ -133,7 +133,10 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
         const line=expected.get(part.sku);
         if(!line||line.supplier_shop_id!==group.supplier_shop_id)invalidShippingQuote();
         if(group.fulfilment_mode==='self'&&!line.own)invalidShippingQuote();
-        if(group.fulfilment_mode==='drop_ship'&&manual){const a=line.drop_ship;if(line.own||!a||a.agreement_id!==group.agreement?.agreement_id||a.version!==group.agreement.version||a.executor_shop_id!==group.supplier_shop_id||a.fee_per_order_minor!==group.drop_ship?.fee_per_order_minor||a.terms_sha256!==group.drop_ship.terms_sha256)invalidShippingQuote();}
+        if(group.fulfilment_mode==='drop_ship'&&manual){
+          const a=line.drop_ship,frozen=group.drop_ship,price=frozen?.items.find(i=>i.sku===line.sku);
+          if(line.own||!a||!frozen||a.agreement_id!==group.agreement?.agreement_id||a.version!==group.agreement.version||a.executor_shop_id!==group.supplier_shop_id||a.fee_per_order_minor!==frozen.fee_per_order_minor||a.terms_sha256!==frozen.terms_sha256||a.promise_working_days!==frozen.promise_working_days||a.supplier_name!==frozen.supplier_name||!price||price.selection_id!==line.selection_id||price.unit_supply_cost_minor!==a.unit_supply_cost_minor)invalidShippingQuote();
+        }
         const partValue=line.unit_price_minor*part.quantity;
         if(!Number.isSafeInteger(partValue))invalidShippingQuote();
         declared+=partValue;
@@ -144,6 +147,10 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
     for(const [sku,quantity] of quantities){
       if(covered.has(sku)||expected.get(sku)!.quantity!==quantity)invalidShippingQuote();
       covered.add(sku);
+    }
+    if(manual&&group.drop_ship){
+      const cost=[...quantities].reduce((sum,[sku,quantity])=>sum+expected.get(sku)!.drop_ship!.unit_supply_cost_minor*quantity,0);
+      if(!Number.isSafeInteger(cost)||cost!==group.drop_ship.supply_cost_minor||group.drop_ship.items.length!==quantities.size||new Set(group.drop_ship.items.map(i=>i.sku)).size!==quantities.size)invalidShippingQuote();
     }
     if(!meetup&&!manual){
       const skus=[...quantities.keys()].sort(bySku);

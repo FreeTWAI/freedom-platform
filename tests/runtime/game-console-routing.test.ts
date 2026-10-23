@@ -17,7 +17,8 @@ const NOTIFICATION_CHANNELS: Record<NotificationKind, 'system'> = {
   event_waitlist_invited: 'system', event_schedule_changed: 'system', event_cancelled: 'system', event_start_reminder: 'system',
   squad_member_removed: 'system', social_post_commented: 'system', social_post_liked: 'system', squad_join_requested: 'system', squad_join_accepted: 'system',
   commerce_order_paid_cancelled: 'system', commerce_order_refund_recorded: 'system',
-  commerce_order_shipped: 'system',commerce_order_placed: 'system', commerce_order_buyer_cancelled: 'system', commerce_order_payment_confirmed: 'system',
+  commerce_order_shipped: 'system',
+  commerce_drop_ship_proposed:'system',commerce_drop_ship_accepted:'system',commerce_drop_ship_declined:'system',commerce_drop_ship_revoked:'system',commerce_drop_ship_payment_confirmed:'system',commerce_drop_ship_shipped:'system',commerce_drop_ship_unable:'system',commerce_order_placed: 'system', commerce_order_buyer_cancelled: 'system', commerce_order_payment_confirmed: 'system',
   commerce_order_handed_over: 'system', commerce_order_seller_cancelled: 'system', commerce_order_payment_expired: 'system',
 };
 

@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react';
 import {DropShipAgreementsSchema,DropShipAgreementSchema,DropShipSupplierProductsSchema,DropShipProposalSchema,type DropShipAgreement} from '../../../../contracts/guild-launchpad/v1/hosted-drop-ship';
 import type {z} from 'zod';
-import {formatMinor} from '../../../../apps/portal-web/src/format';
+import {formatMinor,parseMajorToMinor} from '../../../../apps/portal-web/src/format';
 import type {Controller} from '../state/controller';
 import {useRead,ReadStatus,Confirm} from './Shared';
 const state={proposed:'等待供應商決定',accepted:'已生效',declined:'已婉拒',withdrawn:'已撤回',revoked:'已撤銷',superseded:'已有新版本'} as const;
@@ -20,11 +20,11 @@ function Proposal({c,products,agreements,writable}:{c:Controller;products:Produc
  const [selected,setSelected]=useState<string[]>(current?.items.map(i=>i.selection_id)??[]),[fee,setFee]=useState(String((current?.fee_per_order_minor??0)/100)),[days,setDays]=useState(String(current?.promise_working_days??3)),[error,setError]=useState('');
  useEffect(()=>()=>c.markDirty(name,false),[c.markDirty,name]);
  const edit=()=>{c.markDirty(name,true);setError('');};
- return <form className="card stack" aria-label={'代出貨提案：'+products[0].supplier_name} onSubmit={e=>{e.preventDefault();const parsed=DropShipProposalSchema.safeParse({supplier_instance_id:supplierId,selection_ids:selected,fee_per_order_minor:Number(fee)*100,promise_working_days:Number(days)});if(!parsed.success){setError('請選擇商品，填寫非負整數費用與 1–14 個工作天。');return;}c.command({label:latest?'提出新版本':'提出代出貨',path:c.root+'/drop-ship/agreements',body:parsed.data,ifMatch:latest?.version,schema:DropShipAgreementSchema,success:()=>{c.markDirty(name,false);setError('');}});}}>
+ return <form className="card stack" aria-label={'代出貨提案：'+products[0].supplier_name} onSubmit={e=>{e.preventDefault();let minor=NaN;try{minor=/^0(?:\.0{1,2})?$/.test(fee.trim())?0:parseMajorToMinor(fee);}catch{}const parsed=DropShipProposalSchema.safeParse({supplier_instance_id:supplierId,selection_ids:selected,fee_per_order_minor:minor,promise_working_days:Number(days)});if(!parsed.success){setError('請選擇商品，填寫非負費用（最多兩位小數）與 1–14 個工作天。');return;}c.command({label:latest?'提出新版本':'提出代出貨',path:c.root+'/drop-ship/agreements',body:parsed.data,ifMatch:latest?.version,schema:DropShipAgreementSchema,success:()=>{c.markDirty(name,false);setError('');}});}}>
  <h3>{products[0].supplier_name}</h3>{current&&<p>目前同意：第 {current.version} 版 · {state[current.state]}</p>}{error&&<p role="alert">{error}</p>}
  <fieldset className="stack" disabled={c.locked||!writable}><legend>{latest?'提出新版本':'提出代出貨'}</legend>
  {products.map(p=><label className="field" key={p.selection_id}><span><input type="checkbox" checked={selected.includes(p.selection_id)} onChange={e=>{setSelected(old=>e.target.checked?[...old,p.selection_id]:old.filter(id=>id!==p.selection_id));edit();}}/> {p.title}</span></label>)}
- <label className="field">每單代出貨費（元，含郵資）<input type="number" min="0" step="1" required value={fee} onChange={e=>{setFee(e.target.value);edit();}}/></label>
+ <label className="field">每單代出貨費（元，含郵資）<input type="number" min="0" step="0.01" required value={fee} onChange={e=>{setFee(e.target.value);edit();}}/></label>
  <label className="field">寄送承諾（工作天）<input type="number" min="1" max="14" step="1" required value={days} onChange={e=>{setDays(e.target.value);edit();}}/></label>
  <p className="field-hint">費用可為 0 元。工作天為週一至週五，從店家確認收款的次日起算。</p><div className="actions"><button className="btn btn-ghost btn-small" type="submit">{latest?'提出新版本':'提出代出貨'}</button></div></fieldset></form>;
 }

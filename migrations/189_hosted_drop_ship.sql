@@ -9,7 +9,7 @@ CREATE TABLE commerce_fulfilment_agreements (
   supplier_shop_id uuid NOT NULL REFERENCES commerce_shops(shop_id),
   version bigint NOT NULL CHECK(version>0),
   state text NOT NULL DEFAULT 'proposed' CHECK(state IN ('proposed','accepted','declined','withdrawn','revoked','superseded')),
-  fee_per_order_minor bigint NOT NULL CHECK(fee_per_order_minor BETWEEN 0 AND 9007199254740900 AND fee_per_order_minor%100=0),
+  fee_per_order_minor bigint NOT NULL CHECK(fee_per_order_minor BETWEEN 0 AND 9007199254740900),
   currency text NOT NULL DEFAULT 'TWD' CHECK(currency='TWD'),
   promise_working_days integer NOT NULL CHECK(promise_working_days BETWEEN 1 AND 14),
   item_count integer NOT NULL CHECK(item_count BETWEEN 1 AND 200),

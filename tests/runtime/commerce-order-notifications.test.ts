@@ -11,7 +11,7 @@ import {createOrderNotifications,SELLER_ORDER_NOTIFICATION_RECIPIENTS_SQL,type O
 import {createPaymentMethodsPort} from '../../modules/agent-commerce/payments/offline/methods.js';
 import {completeMeetup,confirmOfflinePayment} from '../../modules/agent-commerce/payments/offline/confirm.js';
 import {cancelSellerPaidCheckoutOrder,recordSellerPaidCancellationRefund,readSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
-import {orderNotificationDestination} from '../../modules/agent-commerce/checkout/notification-action.js';
+import {orderNotificationDestination,dropShipNotificationAction} from '../../modules/agent-commerce/checkout/notification-action.js';
 import {authenticate} from '../../modules/identity-membership/service.js';
 import {listNotifications} from '../../modules/member-communications/service.js';
 import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
@@ -299,4 +299,13 @@ test('paid cancellation and later refund send member notices with the actual ref
   const immediate=await placed();await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,immediate.order_id,{amount_minor:immediate.terms.total_minor,received_on:date},randomUUID(),'1');
   await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,immediate.order_id,{reason:'other',refund_state:'recorded',refunded_on:date,refund_method:'bank_transfer'},randomUUID(),'1',{orderNotifications:port});
   assert.match((await notices(immediate.order_id,'paid_cancelled'))[0].body,/已退款/);assert.deepEqual(await notices(immediate.order_id,'refund_recorded'),[]);
+});
+
+test('supplier notification actions resolve only to fixed same-origin agreement and fulfilment pages',()=>{
+ const scope={tenantId:randomUUID(),instanceId:randomUUID()},id=randomUUID();
+ for(const [destination,suffix] of [['supplier-orders','supply/drop-ship-orders'],['supplier-agreements','supply/drop-ship-agreements'],['store-agreements','drop-ship']] as const){
+  const action=dropShipNotificationAction(scope,id,destination);assert.equal(action.resource_id.length,99);
+  assert.deepEqual(orderNotificationDestination(action),{tab:'stores',hash:`#stores/${scope.tenantId}/${scope.instanceId}/${suffix}`});
+ }
+ assert.equal(orderNotificationDestination({tab:'stores',resource_id:'https://example.invalid/private'}),null);
 });

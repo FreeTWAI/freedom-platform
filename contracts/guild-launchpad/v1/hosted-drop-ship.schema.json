@@ -73,8 +73,7 @@
         "fee_per_order_minor": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740900,
-          "multipleOf": 100
+          "maximum": 9007199254740900
         },
         "currency": {
           "type": "string",
@@ -310,8 +309,7 @@
               "fee_per_order_minor": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 9007199254740900,
-                "multipleOf": 100
+                "maximum": 9007199254740900
               },
               "currency": {
                 "type": "string",
@@ -590,8 +588,7 @@
         "drop_ship_fee_minor": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740900,
-          "multipleOf": 100
+          "maximum": 9007199254740900
         },
         "currency": {
           "type": "string",
@@ -837,8 +834,7 @@
               "drop_ship_fee_minor": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 9007199254740900,
-                "multipleOf": 100
+                "maximum": 9007199254740900
               },
               "currency": {
                 "type": "string",
@@ -1045,8 +1041,7 @@
         "fee_per_order_minor": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740900,
-          "multipleOf": 100
+          "maximum": 9007199254740900
         },
         "promise_working_days": {
           "type": "integer",

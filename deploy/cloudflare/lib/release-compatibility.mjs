@@ -577,7 +577,6 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
   // while guest admission is disabled.
   if (Math.max(plannedLast, floorLast) >= 178) required.add('community.guest-invitation-credit.v1');
   if (Math.max(plannedLast, floorLast) >= 169) required.add('commerce.hosted-payment.v1');
-  if (Math.max(plannedLast, floorLast) >= 189) required.add('commerce.hosted-drop-ship.v1');
   if (Math.max(plannedLast, floorLast) >= 187) required.add('commerce.checkout-contact-retention.v1');
   if (Math.max(plannedLast, floorLast) >= 168) required.add('commerce.hosted-checkout.v1');
   if (Math.max(plannedLast, floorLast) >= 165) required.add('opensource.sharing-visibility.v1');
@@ -597,7 +596,7 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
   // 114 requires a persisted preparation before every new ingest submission;
   // generic pre-114 ingest support cannot satisfy the changed writer contract.
   if (Math.max(plannedLast, floorLast) >= 114 && required.has('execution.model-credential-ingest.v1')) required.add('execution.model-credential-preparation.v1');
-  for (const shape of ['commerce.checkout-contact-retention.v1', 'commerce.hosted-self-ship.v1', 'commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'avatar.legacy-bytes.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.domain-gc.v1']) {
+  for (const shape of ['commerce.paid-cancellation.v1', 'commerce.hosted-drop-ship.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-self-ship.v1', 'commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'avatar.legacy-bytes.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.domain-gc.v1']) {
     if (!required.has(shape)) continue;
     for (const capability of SHAPES[shape].capabilities) required.add(capability);
     if (floor.capabilities.includes(shape)) {
