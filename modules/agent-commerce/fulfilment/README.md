@@ -324,7 +324,7 @@ line on an unoffered method is not reported as `fulfilment_not_agreed`.
 ## Minimal standing drop-ship (2026-10-23)
 
 Ted's approved minimum takes precedence over the broader EC-SPEC-05 C2 plan.
-Migration186 retains immutable agreement versions and at most 200 sellable
+Migration189 retains immutable agreement versions and at most 200 sellable
 selections from one supplier. Acceptance signs the exact digest; new overlapping
 acceptance supersedes the old version. Either party can revoke future intake.
 The frozen whole-order group keeps its supplier, cost, fee and weekday promise.

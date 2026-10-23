@@ -196,7 +196,7 @@ test('member order positions preserve microseconds and reject malformed signed p
 test('member history and B07 share every lifecycle label; retained HTML exports no historical storefront',()=>{
   assert.equal(formatOrderLifecycle({lifecycle_state:'open',cancel_reason:null}),'進行中');
   assert.equal(formatOrderLifecycle({lifecycle_state:'closed',cancel_reason:null}),'已完成');
-  const reasons={buyer_cancelled:'你取消了訂單',seller_cancelled:'店家取消了訂單',payment_not_completed:'未在期限內完成付款',paid_cancelled:'店家無法出貨，將退款'} as const;
+  const reasons={buyer_cancelled:'你取消了訂單',seller_cancelled:'店家取消了訂單',payment_not_completed:'未在期限內完成付款',paid_cancelled:'店家已取消這筆訂單'} as const;
   for(const [reason,copy] of Object.entries(reasons))assert.equal(formatOrderLifecycle({lifecycle_state:'cancelled',cancel_reason:reason as keyof typeof reasons}),`已取消（${copy}）`);
   assert.equal(formatOrderLifecycle({lifecycle_state:'cancelled',cancel_reason:null}),'已取消');
   const historical={...store,name:'合成 <商店>',description:'PRIVATE HISTORICAL DESCRIPTION'};

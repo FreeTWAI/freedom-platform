@@ -223,7 +223,7 @@ Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍�
 
 確認付款且完整配置後，具 `store:fulfil` 的成員可 `POST …/checkout-orders/:order_id/self-shipments`，以 session、CSRF、Idempotency-Key 及 sidecar If-Match 登記業者、單號、寄出日期。業者 key 為 `post`／`tcat`／`hct`／`tjoin`／`other`；只有 `other` 可填非空名稱。單號為 1～50 個 ASCII 英數或連字號，僅檢查格式，不驗真實物流編號。寄出日期為確認收款日到今天的台北日期。
 
-伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 提供此資料約束；PR-C 的有界到期工作在保存開關為 `orders`／`all` 時才執行遮蔽，預設 `off`。
+伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 提供此資料約束；PR-C 的有界到期工作在保存開關為 `all` 時才執行遮蔽，預設 `off`。
 
 買家尚未付款顯示等待付款確認，確認後未寄顯示等待出貨、凍結承諾與說明，寄出後顯示已出貨、業者、單號與寄出日。明示「只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。」遮蔽後仍顯示已出貨、carrier key 的固定名稱與寄出日，不再回傳單號或自填業者名稱。出貨只啟動保存期限，**不寫 closed、不表示送達或退款**。
 

@@ -65,6 +65,6 @@ export function SelfShipOrder({c,order,ready,contact}:{c:Controller;order:Seller
   <p>{shipment?'已出貨':pending?ship.ship_by?'等待出貨':'等待付款確認':'訂單已取消，不能登記出貨。'}</p>
   {pending&&<><p>{ship.ship_by?`店家承諾於 ${ship.ship_by} 前寄出。`:`店家確認收款後 ${ship.handling_days} 個工作天內寄出。`}</p><p>工作天為週一至週五，不另排除國定假日。</p>{ship.note&&<p className="seller-self-ship-note">{ship.note}</p>}</>}
   <div className={contact&&fulfilment?'seller-self-ship-sections':'stack'}>{contact}{fulfilment&&<div className="stack">{fulfilment}</div>}</div>
-  <p>只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。</p>
+  <p>只記錄{order.drop_ship?'供應商':'店家'}填寫的資訊，工坊不追蹤物流、不核實簽收。</p>
  </div></Axis>;
 }

@@ -94,7 +94,7 @@ export function createShippingQuotePort({environment,selfShipEnabled=false,dropS
     return loaded.seller.document.delivery_options.map(option=>{
       if(option.method==='self_ship') {
         const result=selfShipQuote({lines:input.lines,sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,fee:option.fee_per_order_minor,handlingDays:option.handling_days,note:option.note,outlying:false});
-        return {...cartOption('self_ship',result.kind!=='unavailable',option.fee_per_order_minor,1,null,{kind:'excluded'},option.note,result.kind==='unavailable'?result.lines:[]),...(result.kind!=='unavailable'?{fulfilment_mode:result.group.fulfilment_mode}:{})};
+        return {...cartOption('self_ship',result.kind!=='unavailable',option.fee_per_order_minor,1,null,{kind:'excluded'},option.note,result.kind==='unavailable'?result.lines:[]),...(result.kind!=='unavailable'&&result.group.fulfilment_mode==='drop_ship'?{fulfilment_mode:'drop_ship' as const}:{})};
       }
       if(option.method==='meetup') {
         const meetup=meetupQuote({lines:meetupLines(input.lines),sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,note:option.note});

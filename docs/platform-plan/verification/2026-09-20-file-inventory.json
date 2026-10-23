@@ -4274,8 +4274,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/self-ship-card.tsx",
-      "bytes": 1800,
-      "sha256": "3f762bea25abbcde205af420d070773295c6a51726d3f0b65e701b018add4392"
+      "bytes": 1902,
+      "sha256": "4811a6d4f7433e2e929cef1a49eeae3b17da9173f80e2cd1f0a3727f547dcdb3"
     },
     {
       "path": "apps/portal-web/src/storefront/variants.ts",
@@ -16214,8 +16214,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-05-fulfilment.md",
-      "bytes": 99506,
-      "sha256": "74f6943c4029ecc90bb8957c50836e633b883292a7aff2dfb0cd13e4c9d1a3d4"
+      "bytes": 99495,
+      "sha256": "3b83dbd7f06978e19bf64b87b4c74cd390770296301d1e1a73cd277a6137edb8"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-06-invoice-aftersales.md",
@@ -18344,13 +18344,13 @@
     },
     {
       "path": "modules/agent-commerce/checkout/terms.ts",
-      "bytes": 26302,
-      "sha256": "1c68a6d69ca7ccac6940ef02d6b1b189432f025cad84bcaa802ef1df52fd1f1c"
+      "bytes": 26379,
+      "sha256": "27cdb74bda3436b8ace974e721dc332fbf3709059857c09312d6d88dcc9fa2ad"
     },
     {
       "path": "modules/agent-commerce/fulfilment/README.md",
       "bytes": 33354,
-      "sha256": "f4847f0d08feb9ae691ca073758fa3e85518ac3137dbf5dd5cc5c3bedbbb9477"
+      "sha256": "1813193a890e9d18e18d5c3e7fb0b061447e7ac2da826e351b904d1c17df4706"
     },
     {
       "path": "modules/agent-commerce/fulfilment/freedom.module.json",
@@ -18389,8 +18389,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/index.ts",
-      "bytes": 12075,
-      "sha256": "1110ea916270a35e8d9d3202b666419e739ca4979f1f9b31e4e3309039730a4a"
+      "bytes": 12111,
+      "sha256": "f8a6cfc87fdaec73b7a616a138e24884f81eacabc97c444421891e35f61ce77b"
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/meetup.ts",
@@ -19349,8 +19349,8 @@
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SelfShipOrder.tsx",
-      "bytes": 10924,
-      "sha256": "196e63acf80faf36540eca33d138c0d5ffc18683e4f972ebaf5a633c068d155c"
+      "bytes": 10956,
+      "sha256": "35538faf71537bef9cd2539a198fd425ab83a3731acd55a83476b2d984be770f"
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SelfShipSettings.tsx",
@@ -24559,8 +24559,8 @@
     },
     {
       "path": "tests/e2e/storefront-drop-ship.spec.ts",
-      "bytes": 9469,
-      "sha256": "3d327a53254b43f8bbc43d0af2779a88bce259a6f9a079b10d898ac3c010d578"
+      "bytes": 9741,
+      "sha256": "4645b1523fc17af506ec1b4c0e4ac985036784190321d39fdd9aa0326a28cdc2"
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
@@ -24579,8 +24579,8 @@
     },
     {
       "path": "tests/e2e/storefront-orders.spec.ts",
-      "bytes": 43358,
-      "sha256": "3ecf5d311eb42c01222f5a81eec6de63e56a40846524d6d05c364df60f694fae"
+      "bytes": 43355,
+      "sha256": "b75e37d5c185603b11da07be5969b4ee28f53412d5cc0a0ebf2a65613abfb6b4"
     },
     {
       "path": "tests/e2e/storefront-payment-fixture.ts",
@@ -25079,8 +25079,8 @@
     },
     {
       "path": "tests/runtime/buyer-journey.test.ts",
-      "bytes": 17915,
-      "sha256": "dac5501d52a6af818fd6c46458c721cdcf547eae0506187c9125277f6d5090ff"
+      "bytes": 17912,
+      "sha256": "c649ba7c288f1bce59ba51034612488346984b82fc4b8e472ca0b3c380f17216"
     },
     {
       "path": "tests/runtime/chat-content.test.ts",
