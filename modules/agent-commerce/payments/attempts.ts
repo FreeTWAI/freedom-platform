@@ -197,7 +197,6 @@ export async function inspectRepay(q:PoolClient,orderId:string,options:PaymentAt
   const context=await inspectOrderHandoffGate(q,attempt.attempt_id,options,true);
   if(context.failure)return {failure:context.failure,attempt};
   const facts=(await q.query(`SELECT ${confirmedPaymentSQL('$1')} AS confirmed,
-        EXISTS(SELECT 1 FROM commerce_paid_cancellations pc WHERE pc.order_id=co.order_id AND pc.refund_state='recorded') AS offline_refunded,
     EXISTS(SELECT 1 FROM commerce_payment_attempts WHERE order_id=$1 AND state IN ('paid','confirmed')) AS paid,
     EXISTS(SELECT 1 FROM commerce_checkout_payment_applications WHERE order_id=$1 AND outcome IN ('overpaid','after_cancel','amount_mismatch')) AS overpaid,
     (SELECT count(*)::int FROM commerce_payment_attempts WHERE order_id=$1) AS attempts,
