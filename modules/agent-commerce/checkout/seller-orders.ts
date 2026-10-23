@@ -162,9 +162,10 @@ export async function sellerExceptionView(q:PoolClient,context:SellerCheckoutCon
 }
 export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerCheckoutContext,id:string,options:SellerCheckoutReadOptions={}) {
   const row=await sellerCheckoutOrderRow(q,context,id),keys=await effectiveStoreCapabilities(q,context.tenant,context.profile.instance_id),payment=(await options.payment?.summarize(q,[id]))?.get(id),base=await summary(q,row,payment),t=row.terms as CheckoutTerms;
-  const applications=(await q.query(`SELECT a.application_id,a.payment_ref,a.amount_minor,a.currency,a.outcome,a.created_at,coalesce(r.refunded,0) AS refunded,p.payment_id AS offline_payment_id
+  const applications=(await q.query(`SELECT a.application_id,a.payment_ref,a.amount_minor,a.currency,a.outcome,a.created_at,coalesce(r.refunded,0)+coalesce(pc.amount_minor,0) AS refunded,p.payment_id AS offline_payment_id
     FROM commerce_checkout_payment_applications a LEFT JOIN LATERAL (SELECT sum(amount_minor) AS refunded FROM commerce_refunds WHERE application_id=a.application_id AND state IN ('recorded','confirmed')) r ON true
-    LEFT JOIN commerce_offline_payments p ON p.payment_id=a.payment_ref AND p.order_id=a.order_id WHERE a.order_id=$1 ORDER BY a.created_at,a.application_id`,[id])).rows.map(r=>{
+    LEFT JOIN commerce_offline_payments p ON p.payment_id=a.payment_ref AND p.order_id=a.order_id
+    LEFT JOIN commerce_paid_cancellations pc ON pc.order_id=a.order_id AND pc.payment_id=a.payment_ref AND pc.refund_state='recorded' WHERE a.order_id=$1 ORDER BY a.created_at,a.application_id`,[id])).rows.map(r=>{
       const unapplied=['overpaid','after_cancel','amount_mismatch'].includes(r.outcome),amount=Number(r.amount_minor),refunded=Number(r.refunded),offline=r.offline_payment_id!==null;
       return {application_ref:r.application_id,attempt_ref:offline||r.outcome==='simulated'?null:r.payment_ref,offline_payment_ref:offline?r.offline_payment_id:null,amount_minor:amount,currency:r.currency,outcome:r.outcome,created_at:r.created_at.toISOString(),refunded_minor:refunded,refundable_minor:unapplied?amount-refunded:0};
     });
