@@ -16179,8 +16179,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
-      "bytes": 4384,
-      "sha256": "f81496fd17ea5ea60a4a47725da49e7ad63a66ae4c982cbbc42bf8a82ecaaf60"
+      "bytes": 4578,
+      "sha256": "ecb4142a9a1dbf0b49acd8f834d88d754626bf63ff61f89b75c2b6a867333908"
     },
     {
       "path": "docs/platform-plan/execution/commerce/WP-00-baseline.md",
@@ -16206,6 +16206,11 @@
       "path": "docs/platform-plan/execution/commerce/ecpay-logistics-status-map.tsv",
       "bytes": 18726,
       "sha256": "e0c1fd2767a887dc02d4b84dc09da5f05a588b688459b18cecbe4997f08e3e55"
+    },
+    {
+      "path": "docs/platform-plan/execution/commerce/erp-integration-proposal.md",
+      "bytes": 10410,
+      "sha256": "a7e129fb6ed66dd262ebaf79ec12e45a72bcc2d78599572798dafb474771d410"
     },
     {
       "path": "docs/platform-plan/execution/commerce/handoff-2026-10-19-member-cohort-integration.md",
