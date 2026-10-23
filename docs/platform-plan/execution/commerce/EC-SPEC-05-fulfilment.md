@@ -223,7 +223,7 @@ Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍�
 
 站內通知種類 `commerce_order_shipped` 只含店名、顯示訂單編號與開啟訂單的動作，不含姓名、電話、郵區、地址、業者、單號或寄送說明。沿既有獨立通知 flag，沒有 email template、排信或補寄。
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。public 啟動 guard `self_ship_retention_not_ready` 要求 `FREEDOM_COMMERCE_CONTACT_RETENTION=all`；runtime 與 wrangler 安裝檢查都會拒絕未設定、`off` 或 `orders`。自行寄送在 checkout 收集地址，未成單地址只受 `all` 的 30 天規則涵蓋；該規則仍待 Ted 確認。local／staging 不要求 `all`；Node、Worker 與 site 使用同一旗標解析。正式開放仍需 Ted 另外核准，不自動開旗標。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。2026-10-23 依 Ted「不要再設什麼30天規則」及移除等待條件的決定，runtime 與 wrangler 移除 public 自行寄送對保存開關 `all` 的相依；各環境可用未設定、`off` 或 `all`。Node、Worker 與 site 使用同一旗標解析，既有 console／launchpad 檢查保留。正式自行寄送的旗標仍由 Ted 決定，不自動開旗標。
 
 後續 §2.6 可另設 exact-version 同意，凍結供應商的服務、費用、工作天與限期收件投影，才讓供應商自行寄送。不得擴張本表 tenant policy、把完整 contacts 給供應商，或繞過 `not_agreed`。
 

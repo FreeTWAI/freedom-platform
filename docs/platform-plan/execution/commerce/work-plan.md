@@ -246,7 +246,7 @@ M2 的 staging 驗收（EC-SPEC-10 §4.6 的 J02～J04）要先能成立訂單�
 | fulfil-rules | 配送分組與拆包、運費、收件資料檢查、貨態代碼對照，全部是純函式（EC-SPEC-05 §3.2～§3.5、§6.3、§6.4） | flash | — | 完成（`fc/fulfil-rules` `5c8d8379`，整合 `f941a48b`；CDN 修正輪 `d44f1d1d`，整合 `f38b9a08`） |
 | ecpay-logistics | 選店、建單、列印、貨態通知與查詢、7-ELEVEN 店到店取消與改門市的協定（EC-SPEC-05 §5～§7）；共用的 CDN 字詞檢查，AIO 一併套用 | argon | ecpay-proto、ecpay-aio | 完成（`fc/ecpay-logistics` `1f99faeb`，整合 `f7711535`） |
 | offline-core | 線下收款設定、sidecar 的 `payment_method`、terms 與下單的線下方式、長效保留與到期、確認收款、面交完成與交貨、主機設定的線下 profile（EC-SPEC-11 §2～§5、§8） | Codex | M2；wp05-settings（`delivery_options[]`） | 之後 |
-| self-ship B | `self_ship` 每單定額、單包、正規化地址、bank-only、全單出貨與庫存、站內通知；不含外部物流／email／代出貨／退款／結單 | Codex；Claude 整合 | wp03、wp05-settings、offline-core | 2026-10-22 Ted 已核准；本輪 PR-A（spec／schema／API）→ PR-C（180／30 天遮蔽）；PR-B UI 等 #981／#980 後續交付。各 PR 需獨立驗證；local／staging 先行、正式另核准。不是完整 wp05-fulfilment 完成。 |
+| self-ship B | `self_ship` 每單定額、單包、正規化地址、bank-only、全單出貨與庫存、站內通知；不含外部物流／email／代出貨／退款／結單 | Codex；Claude 整合 | wp03、wp05-settings、offline-core | 2026-10-22 Ted 已核准；本輪 PR-A（spec／schema／API）→ PR-C（180 天遮蔽）；PR-B UI 等 #981／#980 後續交付。各 PR 需獨立驗證；local／staging 先行、正式另核准。2026-10-23 Ted 移除未成單 30 天與等待條件，public 自行寄送不再依賴保存開關；正式自行寄送旗標仍由 Ted 決定。不是完整 wp05-fulfilment 完成。 |
 | wp05-fulfilment | 出貨設定、履約單、shipment、例外、退回與檢驗；給 SL 頁的讀取投影與命令 | Codex | M2 | 之後 |
 
 **M4 發票與售後（`commerce.hosted-invoice.v1`）**
@@ -774,4 +774,4 @@ Claude 達到額度上限後，Ted 授權 Codex 接手，並可使用 Grok CLI `
 
 | 工作 | 範圍 | 驗收 | 相依與開放 |
 | --- | --- | --- | --- |
-| wp-self-ship-retention（PR-C） | migration 186；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；180 天從履約登記或取消（Ted 已核准）；未成單從 checkout 到期後 30 天（沿用 EC-SPEC-09 §3 提案，待 Ted 確認）；等待條件沿用 DC12 提案，待 Ted 確認；不結單 | PR-A → PR-C；合併與部署預設 `off`，Ted 逐環境設定保存開關；`orders` 啟用已核准的 180 天規則，`all` 加入 30 天規則前要 Ted 確認；等待條件兩模式適用、仍待 Ted；先 local／staging，正式開放另待驗證與 Ted 核准；UI PR-B 另批 |
+| wp-self-ship-retention（PR-C） | migration 186；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；每張參照訂單從履約登記或取消滿 180 天（2026-10-22 已核准）；Ted 2026-10-23「不要再設什麼30天規則」，未成單保留，移除等待條件；無起點保留、人工請求由店主處理、備份 30 天；顧客只在有已遮蔽連結且沒有 live 連結時遮蔽，舊 live contact 的 Email 修改限制永久保留；不結單 | PR-A → PR-C；預設 `off`，只接受 `off`／`all`；Ted 2026-10-23「all, all」指定 staging／production 都 `all`，由發布操作者設定。public 自行寄送不再依賴保存開關；正式自行寄送旗標仍由 Ted 決定，UI PR-B 另批 |

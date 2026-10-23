@@ -511,13 +511,23 @@ migration186, even when checkout is disabled or quarantine is on. A binary
 without the retention executor and switch support cannot honour the policy, so an
 application-only rollback to it is incompatible. The capability means the binary
 contains the executor and honours `FREEDOM_COMMERCE_CONTACT_RETENTION`; it does
-not activate masking. Unset or `off` runs no discovery, dispatch or customer sweep.
-`orders` enables the approved 180-day order rule; `all` also enables the 30-day
-unreferenced-contact rule, still awaiting Ted. Ted sets the mode per environment,
-local/staging first and production only after verification and approval. Active
-modes remain independent of checkout/quarantine. Returning to `off` stops new
-masking and never restores erased data. The waiting conditions apply to both
-active modes and still await Ted's confirmation. Restoring below186 cannot erase
+not activate masking. The exact supported values are `off` and `all`; `orders`
+is invalid. Unset or `off` runs no discovery, dispatch or customer sweep.
+`all` enables only the approved 180-day order rule and customer sweep. Every
+referencing order must have a fulfilment/cancellation start point at least 180 days
+ago. On 2026-10-23 Ted said 「不要再設什麼30天規則」: unreferenced contacts
+remain live; 「別在那邊搞一堆遮蔽 很無聊」 removes deferrals for exceptions,
+payments, refunds, provider events and inventory. Ted's 「all, all」 sets the
+staging/production policy to `all`; the release operator applies those values.
+Retention remains independent of checkout/quarantine. Returning to `off` stops new
+masking and never restores erased data. Customers need a redacted checkout/order
+customer-linked contact and no live checkout-customer, normalized-email or
+order-customer link. Older live contacts after email revision permanently protect
+their checkout customers. Orders without a start point retain their contact data;
+store owners handle their own customers' privacy requests, without a platform
+workflow. Ted also confirmed 30-day backups on 2026-10-23. Public self-ship no
+longer depends on retention mode; its existing console checks and Ted's production
+flag decision remain. Restoring below186 cannot erase
 the retained floor. Capability-only retained history and enabled/written shapes
 require schema186 and exact independently approved source/artifact/ledger identities.
 
