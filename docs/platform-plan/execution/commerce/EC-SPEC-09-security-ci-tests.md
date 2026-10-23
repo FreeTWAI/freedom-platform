@@ -159,9 +159,9 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 **已決定（DC12）：2026-10-22 20:21Z Ted 核准「照B開工ok」。** 訂單的聯絡資料（含收件地址）在履約登記（面交完成或登記自行寄送）後 180 天遮蔽；取消的訂單從取消時起算 180 天。履約只作保存起算，**不是結單，不寫 `closed`，也不是退款**。
 
-依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；顧客記錄在它所有聯絡資料都遮蔽後跟著遮蔽。
+依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；顧客至少有一筆經 checkout 或 order 連結的聯絡資料已遮蔽，而且沒有任何仍有效的聯絡資料，才跟著遮蔽。沒有連結聯絡資料的顧客不遮蔽。
 
-**待 Ted 確認：** 第一列「沒有成立訂單的結帳聯絡資料，checkout 到期後 30 天遮蔽」沿用本節原本的提案，已一併實作，但 Ted 沒有對這一列單獨表態。遮蔽排程不受旗標控制，部署後就會開始執行，所以 PR-C 合併前要先確認。下面規則中的「等待條件」也沿用 DC12 原本的提案，同樣待確認。表中其他列仍是提案；人工個資請求的負責人與備份副本的保存窗口也待 Ted 決定。
+**待 Ted 確認：** 第一列「沒有成立訂單的結帳聯絡資料，checkout 到期後 30 天遮蔽」沿用本節原本的提案，已一併實作，但 Ted 沒有對這一列單獨表態。合併與部署都不會開始執行；`FREEDOM_COMMERCE_CONTACT_RETENTION` 未設定或為 `off` 時預設停止，Ted 依環境設定值。`orders` 只啟用已核准的 180 天訂單規則；`all` 才加入未成單的 30 天規則，必須等 Ted 確認這一列後才能設定。先 local 與 staging 驗證，正式環境仍需驗證完成及 Ted 核准。下面規則中的「等待條件」在 `orders` 與 `all` 兩種模式都適用，沿用 DC12 原本的提案，同樣待 Ted 確認。表中其他列仍是提案；人工個資請求的負責人與備份副本的保存窗口也待 Ted 決定。
 
 | 資料 | 位置 | 預設 | 到期時 |
 | --- | --- | --- | --- |
@@ -172,7 +172,7 @@ guest、provider 通知與排程都沒有 principal。規則：
 | 選店 session 的門市暫存 | 選店 session | 到期後 1 天 | 刪除 |
 | 訂單對話 | `commerce_support_messages` | 同訂單的聯絡資料 | 內文改成「（已依保存期限移除）」，保留作者種類與時間 |
 | 發票的買家識別 | 發票文件 | 同訂單的聯絡資料 | 載具號碼遮罩；統編、捐贈碼、發票號碼與金額保留（帳務資料，不是個人資料） |
-| 顧客記錄 | `commerce_customers` | 這位顧客所有聯絡資料（含未成單 checkout）都遮罩之後 | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
+| 顧客記錄 | `commerce_customers` | 至少一筆 checkout／order 連結的聯絡資料已遮罩，且沒有 live contact（含未成單 checkout） | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
 | 訂單、行項、terms、付款、退款、履約、包裹、發票號碼與金額、供貨帳、provider 事件 | 各領域表 | 隨商店保留（交易與帳務紀錄，不含個資） | 不刪；商店遷出時依 EC-SPEC-08 §5.6 |
 | 卡號片段、授權碼、通知與查詢回應裡的收件人與寄件人欄位、標籤檔 | 不保存 | — | — |
 | 收件資料讀取與列印的紀錄（誰、哪一筆、用途，不含內容） | receipt | 1 年 | 刪除 |
@@ -185,12 +185,13 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 規則：
 
-- 遮罩由現有 due-work（§2.4）的 `checkout_contact_retention` 執行：每次最多發現 200 間店、領取 200 件工作，每店交易最多 200 contacts／200 customers，工作每 10 分鐘再到期；舊列同樣由有界掃描觸及。租約失效、重播、失敗均不重寫已遮蔽列；checkout 關閉或 quarantine 不停止此種隱私工作。清空五個個資欄位與 salt，與同訂單的單號／自填業者名稱在同交易完成。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
+- 保存開關只接受精確的 `off`／`orders`／`all`（未設定等於 `off`）；空字串、布林、大小寫變體與空白都無效，就緒檢查以 `commerce_contact_retention_invalid` 拒絕。`off` 不發現工作、不領取既有 `checkout_contact_retention` 列，也不掃描顧客；既有列留待之後啟用。排程遇無效值只記固定錯誤名稱，不執行遮蔽，其餘工作照原流程繼續。改回 `off` 只停止新的遮蔽，不會還原已清空的資料。
+- 遮罩由現有 due-work（§2.4）的 `checkout_contact_retention` 執行：每次最多發現 200 間店、領取 200 件工作，每店交易最多 200 contacts／200 customers，工作每 10 分鐘再到期；舊列同樣由有界掃描觸及。租約失效、重播、失敗均不重寫已遮蔽列；保存開關為 `orders`／`all` 時，checkout 關閉或 quarantine 不停止此種隱私工作。`orders` 不觸及任何沒有訂單參照的 contact，不論已到期多久。清空五個個資欄位與 salt，與同訂單的單號／自填業者名稱在同交易完成。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
 - 留下的摘要不能被拿來比對猜測的個資：聯絡資料的摘要含一個隨機 salt，salt 存在聯絡資料列、隨遮罩清除；建立 checkout 的請求摘要以冪等鍵為金鑰（HMAC-SHA256），明文的鍵不保存。
-- 等待條件（沿用 DC12 原提案，待 Ted 確認）：同訂單仍有 `commerce_exception_cases.status=open`、未結付款、處理中的退款或未完成履約時不遮蔽；結束後使用原起算日，不重開 180 天。現行退款表只有終態 `recorded`，沒有實作中的退款流程；未來新增非終態必須維持此保護。
+- 等待條件（兩種啟用模式都適用，沿用 DC12 原提案，待 Ted 確認）：同訂單仍有 `commerce_exception_cases.status=open`、未結付款、處理中的退款或未完成履約時不遮蔽；結束後使用原起算日，不重開 180 天。現行退款表只有終態 `recorded`，沒有實作中的退款流程；未來新增非終態必須維持此保護。
 - 未履約也未取消的訂單沒有起算點，不能為了遮蔽而結單、退款或發明備援期限。離線付款未付的期限工作會取消訂單；已付未履約、未定付款、沒有付款期限的舊訂單須另由 Ted 決定處理方式。
 - 衍生副本（搜尋、快取、報表彙總）本來就不放個資；萬一有，依 OPEN-07 先隱藏、7 天內清除。
-- 還原：備份可能含遮蔽前個資。既有 `scripts/media-restore-acl.ts --execute-lockdown` 在 ACL lockdown 後執行有界遮蔽頁；`repeat_page` 重跑同游標，`next_page` 用回傳游標續跑直到 `scan_complete`。全程維持 quarantine，未完成所有頁不得重新開放；工具永遠不宣告 deploymentReady。另須重新套用還原點後的撤銷（T-047，EC-SPEC-10 §8.4）。
+- 還原：備份可能含遮蔽前個資。既有 `scripts/media-restore-acl.ts --execute-lockdown` 必須附 `--contact-retention <off|orders|all>`，由操作者聲明該環境的設定。`off` 只執行 ACL lockdown，回報 `contactRetention.status=disabled`，不構成遮蔽完成；`orders`／`all` 在 ACL lockdown 後依該模式執行有界遮蔽頁；`repeat_page` 重跑同游標，`next_page` 用回傳游標續跑直到 `scan_complete`。全程維持 quarantine，未完成所有頁不得重新開放；工具永遠不宣告 deploymentReady。另須重新套用還原點後的撤銷（T-047，EC-SPEC-10 §8.4）。
 - 匯出（EC-SPEC-08 §4）：下載入口 7 天；每次下載重新確認是 owner，再發一個 15 分鐘的網址；7 天後刪檔。
 - catalog：`DC-08-PII` 僅含 contacts、customers、self-shipments，狀態 `bounded_ec_spec_09_section_3`，`decision_refs` 含 `DC12` 與本表；其他 commerce 資料維持 `policy_undecided`。
 - 日誌、journal、outbox、分析與模型都不含 Email、電話、地址、門市、載具、統編、對話內文與卡號片段（EC-AT48）。CSV 匯出同樣不含（EC-SPEC-06 §6），並防公式注入（EC-SPEC-07 §9）。
@@ -351,7 +352,7 @@ provider 入口：
 | owner／admin 的能力改讀實例版本；升級命令 | 已建：`modules/agent-commerce/hosted/capabilities.ts`、`modules/agent-commerce/hosted/release-upgrade.ts`（`upgradeStoreRelease`） |
 | 授權驗證的基本讀取鍵 | `modules/tenant-workspaces/instance-grants.ts`、`apps/portal-web/src/modules/TenantSettings.tsx` |
 | provider 入口的判斷函式 | 已建：`modules/agent-commerce/operations/provider-entry-paths.ts`（`isCommerceProviderEntry`、`isCommerceProviderEntryPath`）；`platform-app.ts` 閘道加一個條件 |
-| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作（`retention.ts`）尚未建立 |
+| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作已建於 `modules/agent-commerce/operations/contact-retention.ts`（`186`），預設 `off`，由保存開關啟用 |
 | 跨領域測試 | 已建：`tests/runtime/commerce-rate-limits.test.ts`、`hosted-payment-canary.test.ts`（秘密 canary）、`hosted-payment-schema.test.ts`、`hosted-payment-handoff.test.ts`、`hosted-payment-notifications.test.ts`、`commerce-effect-journal.test.ts`。尚未建立：`commerce-capability-matrix.test.ts`、`commerce-entry-gate.test.ts`、`commerce-retention.test.ts`、`tests/e2e/commerce-no-model-keys.spec.ts` |
 
 descriptor 的歸屬與工作順序在 [work-plan.md](work-plan.md)。
@@ -364,7 +365,7 @@ descriptor 的歸屬與工作順序在 [work-plan.md](work-plan.md)。
 
 | 項目 | 建議 | 只影響 |
 | --- | --- | --- |
-| DC12 保存期限 | §3 的預設：聯絡資料在各軸線結束且售後期限屆滿後 180 天遮罩；出貨者 14 天、上限 30 | 正式對外的隱私承諾與遮罩工作 |
+| DC12 保存期限 | §3 訂單聯絡資料由履約登記或取消後 180 天起算（已核准）；未成單 30 天與兩模式的等待條件仍待 Ted；出貨者 14 天、上限 30 仍為提案 | 正式對外的隱私承諾與遮罩工作 |
 | 能力的名稱與拆法 | §2.2 | 成員授權畫面；Ted 可以改 |
 | 1.1.0 由 owner 手動升級 | 不自動升級既有商店 | 既有商店啟用訂單與收款的時間 |
 | provider 帳戶只限 owner／admin，並重新輸入密碼 | 是 | 誰能設定收款、物流與發票帳戶 |

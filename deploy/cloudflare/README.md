@@ -167,6 +167,8 @@ transport，不會連到綠界。
 見 [EC-SPEC-04](../../docs/platform-plan/execution/commerce/EC-SPEC-04-payment.md)、
 [EC-SPEC-10 §2.2、§4.4、§6.2、§8.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md)。
 
+`FREEDOM_COMMERCE_CONTACT_RETENTION` 預設為 `off`（未設定相同），合併與部署不會啟動聯絡資料遮罩：不發現工作、不領取既有到期列、不掃描顧客。只接受精確的 `off`／`orders`／`all`，其他值以 `commerce_contact_retention_invalid` 拒絕；排程遇無效值只記固定名稱並繼續其餘工作。Ted 逐環境設定，先 local／staging 驗證，正式環境另待驗證及核准。`orders` 只執行已核准的履約登記／取消後 180 天規則；`all` 加入未成單到期後 30 天規則，仍待 Ted 確認。等待條件兩模式都適用、仍待 Ted 確認。啟用後獨立於 checkout／quarantine，改回 `off` 只停止新遮罩、不還原資料。顧客須有已遮罩的連結聯絡資料且沒有 live contact 才遮罩，沒有連結的顧客保留。public 自行寄送開啟時，runtime 與 wrangler 檢查要求 `all`（`self_ship_retention_not_ready`），因未成單郵寄地址只有 30 天規則涵蓋；local／staging 無此相依。schema 186 的 capability floor 仍保留，能力不代表啟用。
+
 ## 商務主控台與結帳開關
 
 `FREEDOM_COMMERCE_CONSOLE_ENABLED` 預設關閉，只有明確的 `true` 才安裝新的賣家訂單、付款例外、人工退款紀錄與付款查詢路由；關閉時這些路由回傳 404。它需要同一環境的 `FREEDOM_GUILD_LAUNCHPAD_ENABLED=true`。賣家與供應商共用頁框元件，開關各自獨立；自有庫存離線試用可以保留 Supplier console 關閉。`FREEDOM_COMMERCE_CHECKOUT_ENABLED=true` 則需要主控台開關同時開啟，確保店家可以處理新訂單。兩者都只接受 `true`／`false`；就緒與安裝檢查分別以 `commerce_launchpad_required`、`commerce_console_required` 拒絕缺少的依賴。關閉結帳不會關閉既有訂單的賣家服務。詳見 [EC-SPEC-10 §2.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md#22-主機設定提議)。

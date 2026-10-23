@@ -508,8 +508,16 @@ on `FREEDOM_COMMERCE_SELF_SHIP_ENABLED`.
 `commerce.checkout-contact-retention.v1` is mandatory for every candidate and
 active binary when the planned schema or retained historical floor reaches
 migration186, even when checkout is disabled or quarantine is on. A binary
-without the retention scheduler would leave contacts unredacted, so an
-application-only rollback to it is incompatible. Restoring below186 cannot erase
+without the retention executor and switch support cannot honour the policy, so an
+application-only rollback to it is incompatible. The capability means the binary
+contains the executor and honours `FREEDOM_COMMERCE_CONTACT_RETENTION`; it does
+not activate masking. Unset or `off` runs no discovery, dispatch or customer sweep.
+`orders` enables the approved 180-day order rule; `all` also enables the 30-day
+unreferenced-contact rule, still awaiting Ted. Ted sets the mode per environment,
+local/staging first and production only after verification and approval. Active
+modes remain independent of checkout/quarantine. Returning to `off` stops new
+masking and never restores erased data. The waiting conditions apply to both
+active modes and still await Ted's confirmation. Restoring below186 cannot erase
 the retained floor. Capability-only retained history and enabled/written shapes
 require schema186 and exact independently approved source/artifact/ledger identities.
 
