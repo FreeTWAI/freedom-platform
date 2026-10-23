@@ -124,12 +124,14 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   await open(page, supplier);
   await expect(primary(page)).toContainText('已有商店可直接沿用');
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
-  await expect(flow(page).getByRole('heading', {name: '啟動商品與供貨', exact: true})).toBeFocused();
-  await openGuildSection(page, '商品與供貨');
+  await expect(page).toHaveURL(/#stores\/supply\/setup$/);
+  await expect(flow(page).getByRole('heading', {name: '設定供貨空間', exact: true})).toBeFocused();
+  await open(page, supplier);
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
-  await expect(flow(page).getByRole('heading', {name: '啟動商品與供貨', exact: true})).toBeFocused();
+  await expect(flow(page).getByRole('heading', {name: '設定供貨空間', exact: true})).toBeFocused();
   await flow(page).getByRole('button', {name: '取消', exact: true}).click();
-  await expect(primary(page).getByRole('button', {name: '開始供貨設定', exact: true})).toBeFocused();
+  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page.getByRole('heading', {name: '我的供貨商品庫', level: 2, exact: true})).toBeVisible();
   // Start through commerce, then prove the supplier entry reuses this exact instance.
   await open(page, commerce);
   await primary(page).getByRole('button', {name: '建立我的商店', exact: true}).click();
@@ -215,9 +217,9 @@ test('supplier-only member publishes supply without a slug, retail page or comme
     const launch = flow(page);
     await launch.getByLabel('業務空間名稱', {exact: true}).fill('供應商工作室');
     await launch.getByRole('button', {name: '建立業務空間', exact: true}).click();
-    await launch.getByRole('button', {name: '產生啟動方案', exact: true}).click();
-    await launch.getByRole('button', {name: '確認啟動', exact: true}).click();
-    await launch.getByRole('button', {name: '設定供貨資料', exact: true}).click();
+    await launch.getByRole('button', {name: '確認供貨空間', exact: true}).click();
+    await launch.getByRole('button', {name: '確認建立供貨空間', exact: true}).click();
+    await launch.getByRole('button', {name: '繼續供貨設定', exact: true}).click();
     const storeHash = new URL(page.url()).hash;
     const setup = page.getByRole('form', {name: '建立供貨商品庫', exact: true});
     await setup.getByLabel('商品庫名稱', {exact: true}).fill('供應商商品庫');
@@ -313,9 +315,9 @@ test('read-only access to another store does not hide supplier setup or grant wr
     await primary(readerPage).getByRole('button', {name: '開始供貨設定', exact: true}).click();
     await flow(readerPage).getByLabel('業務空間名稱', {exact: true}).fill('讀者自己的供貨空間');
     await flow(readerPage).getByRole('button', {name: '建立業務空間', exact: true}).click();
-    await flow(readerPage).getByRole('button', {name: '產生啟動方案', exact: true}).click();
-    await flow(readerPage).getByRole('button', {name: '確認啟動', exact: true}).click();
-    await flow(readerPage).getByRole('button', {name: '設定供貨資料', exact: true}).click();
+    await flow(readerPage).getByRole('button', {name: '確認供貨空間', exact: true}).click();
+    await flow(readerPage).getByRole('button', {name: '確認建立供貨空間', exact: true}).click();
+    await flow(readerPage).getByRole('button', {name: '繼續供貨設定', exact: true}).click();
     await expect(readerPage.getByRole('form', {name: '建立供貨商品庫', exact: true})).toBeVisible();
     expect(new URL(readerPage.url()).hash).not.toBe('#' + store.hash);
     expect(await (await readerPage.request.get('/api/v1' + store.root)).json()).toEqual(original);

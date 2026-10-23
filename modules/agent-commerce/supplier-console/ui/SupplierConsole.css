@@ -38,3 +38,20 @@
 .merchant-inventory-values { font-variant-numeric: tabular-nums; }
 .merchant-inventory-breakdown { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-variant-numeric: tabular-nums; }
 .merchant-inventory .btn-small { width: auto; min-height: 44px; max-width: 100%; font-size: .875rem; padding: .4rem .75rem; }
+
+.supplier-readiness{min-width:0}
+.sc-readiness-list{margin:0;padding-left:1.5rem}
+.sc-readiness-list>li{padding-block:.3rem}
+.sc-readiness-heading{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .75rem}
+.supplier-readiness .field-hint{margin:.15rem 0 0;font-size:.875rem}
+/* Match the retail readiness pattern above the portal's light-theme badge rule. */
+html .supplier-readiness .badge.readiness-state{background:var(--bg-elev);color:var(--muted);border:1px solid var(--line);border-radius:100px;padding:.2rem .6rem;font-size:.875rem;white-space:normal}
+html .supplier-readiness .badge.readiness-state[data-state="done"]{background:var(--green-soft);color:var(--ink)}
+html .supplier-readiness .badge.readiness-state[data-state="current"]{background:var(--info-bg);color:var(--ink)}
+.sc-preparation-status{margin:.6rem 0 0;display:grid;gap:.35rem}
+.sc-preparation-status>div{display:flex;align-items:baseline;gap:.75rem;min-width:0}
+.sc-preparation-status dt{font-weight:650;flex:0 0 auto}
+.sc-preparation-status dd{margin:0;min-width:0}
+.sc-getting-started h3{margin:0}
+.sc-getting-started>.actions{margin:0}
+.sc-getting-started .actions>.btn{width:auto;max-width:100%;white-space:normal;flex:0 1 auto}

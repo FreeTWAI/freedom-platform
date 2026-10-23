@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
+import {useCallback,useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode,type RefObject} from 'react';
 import {hasLoneSurrogate, recommendedApplications, type FieldError} from '../../../../contracts/guild-launchpad/v1/config';
 import {parseConfig, convertV1, type Config, type ConfigView} from '../../../../contracts/guild-launchpad/v2/config';
 import {canReplaceLaunchpadLayout} from '../../../../modules/guild-workspace/launchpad-layout-guards';
@@ -6,6 +6,7 @@ import {GuildBlock, type GuildBlockLoaders} from '../guild-blocks/runtime';
 import {LaunchpadApplicationSchema, type LaunchpadApplication} from '../../../../contracts/guild-launchpad/v1/module-registry';
 import {ApiError, type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
+import {useLocalAction} from '../useLocalAction';
 import type {GuildSummary} from './Onboarding';
 import {useModuleMutation} from './shared';
 import {MyWorkPanel, rememberActing} from './GuildLaunchpadMyWork';
@@ -175,9 +176,10 @@ function launchpadSections(guildKey: string, config: Config, applications: Launc
   return sections;
 }
 
-function Reading({guild, config, announcements, skillBooks, applications, visitor, memberTier, mode, client, guildKey, userId, registerLeave, registerPendingLeave, canLeave, canNavigate, onLogin, blockLoaders, supplierConsoleEnabled, activeSection, selectSection}: {
+function Reading({guild, config, announcements, skillBooks, applications, visitor, memberTier, mode, client, guildKey, userId, registerLeave, registerPendingLeave, canLeave, canNavigate, onLogin, blockLoaders, supplierConsoleEnabled, activeSection, selectSection, skillBooksHeading}: {
   activeSection: string;
   selectSection: (section: string) => void;
+  skillBooksHeading: RefObject<HTMLHeadingElement | null>;
   guild: {name: string; purpose: string};
   config: Config;
   announcements: AnnouncementRef[];
@@ -256,7 +258,7 @@ function Reading({guild, config, announcements, skillBooks, applications, visito
     {showPrimary && <div hidden={activeSection !== 'primary'}><LegacyLaunchpadPrimary primary={primary} config={config} guildKey={guildKey} memberTier={memberTier} internHint={INTERN_HINT} client={client}
       focusWork={focusWork} canLeave={canLeave} canNavigate={canNavigate} launchRequest={launchRequest} setLaunchRequest={setLaunchRequest}/></div>}
     {blocks.map(block => <section key={block.id} hidden={activeSection !== blockSection(block)} className="guild-launchpad-block" ref={block.kind === 'my_work' ? workSection : block.kind === 'applications' ? applicationsSection : undefined} tabIndex={block.kind === 'my_work' ? -1 : undefined}>
-      {block.kind !== 'extension' && !(block.kind === 'applications' && launching) && <><h2>{block.kind === 'applications' ? '工具目錄' : BLOCK_LABEL[block.kind]}</h2>{block.title && <p>{block.title}</p>}</>}
+      {block.kind !== 'extension' && !(block.kind === 'applications' && launching) && <><h2 ref={block.kind === 'skill_books' ? skillBooksHeading : undefined} tabIndex={block.kind === 'skill_books' ? -1 : undefined}>{block.kind === 'applications' ? '工具目錄' : BLOCK_LABEL[block.kind]}</h2>{block.title && <p>{block.title}</p>}</>}
       {block.kind === 'extension' && <GuildBlock id={block.extension_id} heading={block.title} loaders={blockLoaders} client={client} guildKey={guildKey}
         viewer={visitor || mode === 'public' ? 'visitor' : memberTier === 'full' ? 'member' : 'read_only'}
         navigate={path => {if (canNavigate()) window.location.hash = path;}}
@@ -273,7 +275,13 @@ function Reading({guild, config, announcements, skillBooks, applications, visito
       {block.kind === 'skill_books' && <div className="guild-launchpad-books">{skillBooks.length ? skillBooks.map(book => {
         const intro = httpsUrl(book.introduction_url);
         const upstream = httpsUrl(book.upstream_url);
-        return <p key={book.book_id}>{book.title}{intro && <> · <a href={intro} rel="noopener noreferrer" target="_blank">閱讀介紹</a></>}{upstream && <> · <a href={upstream} rel="noopener noreferrer" target="_blank">上游</a></>}</p>;
+        return <article className="guild-launchpad-book" key={book.book_id}>
+          <h3>{book.title}</h3>
+          <div className="guild-launchpad-actions">
+            {intro && <a className="btn btn-ghost btn-small" href={intro} rel="noopener noreferrer" target="_blank" aria-label="閱讀介紹（另開分頁）">閱讀介紹 <span aria-hidden="true">↗</span></a>}
+            {upstream && <a className="btn btn-ghost btn-small guild-launchpad-external" href={upstream} rel="noopener noreferrer" target="_blank"><span>查看原始專案</span><span className="guild-launchpad-destination">{new URL(upstream).hostname} · 另開分頁</span></a>}
+          </div>
+        </article>;
       }) : <p className="muted">目前沒有可顯示的技能書。</p>}</div>}
       {block.kind === 'applications' && <GuildLaunchpadApplications client={client} guildKey={guildKey} publicMode={mode === 'public' || !userId} userId={userId} onLogin={onLogin} onWork={showWork} onStore={showStore} canLeave={canLeave} registerPendingLeave={registerPendingLeave} visitor={visitor} recommendedRefs={config.application_refs} launchRequest={launchRequest} onLaunchStateChange={onLaunchStateChange}/>}
       {block.kind === 'community_tasks' && <p>目前沒有可顯示的公共任務。</p>}
@@ -293,10 +301,46 @@ function SupportLine({support}: {support: Config['support']}) {
   return <p>需要協助時，可開啟頁面工具中的「頁面說明」。</p>;
 }
 
+/** Share the published public destination, never the current query or a member draft. */
+function GuildPublicEntry({guildKey, publicMode, onReadBooks, contactUrl}: {
+  guildKey: string; publicMode: boolean; onReadBooks?: () => void; contactUrl: string | null;
+}) {
+  const destination = new URL('/', window.location.origin);
+  destination.hash = `guilds/${guildKey}`;
+  const url = destination.href;
+  const [status, setStatus] = useState('');
+  const [manualCopy, setManualCopy] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const action = useLocalAction([guildKey, publicMode, url]);
+  useLayoutEffect(() => {
+    if (manualCopy) {field.current?.focus(); field.current?.select();}
+  }, [manualCopy]);
+  async function copy() {
+    setStatus('');
+    const result = await action.run('copy', () => navigator.clipboard.writeText(url));
+    if (result.status === 'done') {
+      setManualCopy(false); setStatus('已複製公會連結');
+    } else if (result.status === 'failed') {
+      setStatus('無法自動複製，請選取下方公會連結。'); setManualCopy(true);
+      field.current?.focus(); field.current?.select();
+    }
+  }
+  return <section className={publicMode ? 'guild-launchpad-entry' : 'guild-launchpad-share'} aria-label="公會公開入口">
+    {publicMode && <p className="muted">公開內容免登入；加入公會與參與交流，請先使用會員登入。</p>}
+    <div className="guild-launchpad-actions">
+      {onReadBooks && <button type="button" className="btn btn-primary btn-small" onClick={onReadBooks}>查看公會技能書</button>}
+      {contactUrl && <a className="btn btn-ghost btn-small guild-launchpad-external" href={contactUrl} rel="noopener noreferrer" target="_blank"><span>聯絡這個公會</span><span className="guild-launchpad-destination">{new URL(contactUrl).hostname} · 另開分頁</span></a>}
+      <button type="button" className="btn btn-ghost btn-small" disabled={action.pending !== null} aria-busy={action.pending === 'copy'} onClick={() => void copy()}>{action.pending === 'copy' ? '複製中…' : '複製公會連結'}</button>
+    </div>
+    <p className="guild-launchpad-share-status" role="status">{status}</p>
+    {manualCopy && <label className="field">公會公開連結<input ref={field} readOnly value={url} onFocus={event => event.currentTarget.select()}/></label>}
+  </section>;
+}
+
 export function PublicGuildLaunchpad({client, guildKey, onLogin, pageTools, blockLoaders = EMPTY_BLOCK_LOADERS}: {client: PortalClient; guildKey: string; onLogin: () => void; pageTools?: ReactNode; blockLoaders?: GuildBlockLoaders}) {
   return <div className="guild-launchpad-public">
     <header><img src="/brand/freedom-workshop.webp" alt="自由工坊" width={1280} height={720}/><div className="guild-launchpad-public-tools">{pageTools}<button type="button" className="btn btn-ghost" onClick={onLogin}>會員登入</button></div></header>
-    <main><GuildLaunchpad client={client} guildKey={guildKey} mode="public" onLogin={onLogin} blockLoaders={blockLoaders}/></main>
+    <main><GuildLaunchpad key={guildKey} client={client} guildKey={guildKey} mode="public" onLogin={onLogin} blockLoaders={blockLoaders}/></main>
   </div>;
 }
 
@@ -307,6 +351,8 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   supplierConsoleEnabled?: boolean;
 }) {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const skillBooksHeading = useRef<HTMLHeadingElement>(null);
+  const focusSkillBooks = useRef(false);
   const selectSection = useCallback((id: string) => setSelectedSection(id), []);
   useEffect(() => {setSelectedSection(null);}, [client, guildKey, mode]);
   const [guild, setGuild] = useState<{name: string; purpose: string} | null>(null);
@@ -598,6 +644,12 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   const groups = (['工作', '公會資源', '管理'] as const).map(group => ({label: group, items: sections.filter(section => section.group === group)})).filter(group => group.items.length);
   const defaultSection = visitor ? sections.find(section => section.id === 'information') : sections.find(section => section.group === '工作');
   const activeSection = sections.find(section => section.id === selectedSection)?.id ?? defaultSection?.id ?? sections[0]?.id ?? '';
+  const publicBookBlock = mode === 'public' && skillBooks.length > 0 ? readingConfig?.blocks.find(block => block.kind === 'skill_books' && block.enabled) : undefined;
+  const publicContact = mode === 'public' && readingConfig?.support.kind === 'guild_public_contact' && readingConfig.blocks.some(block => block.kind === 'support' && block.enabled)
+    ? httpsUrl(readingConfig.support.public_url) : null;
+  useLayoutEffect(() => {
+    if (focusSkillBooks.current) {focusSkillBooks.current = false; skillBooksHeading.current?.focus();}
+  }, [activeSection]);
 
   const looseErrors = errors.filter(error => !['mission_override', 'starter.title_label', 'starter.objective_hint', 'starter.note_hint', 'support.public_url', 'reason'].some(path => error.path === path || error.path.endsWith(`.${path}`)) && !/blocks\.\d+\.(title|enabled|order)/.test(error.path));
 
@@ -614,6 +666,12 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
     {conflict && <p><button type="button" className="btn btn-ghost" onClick={() => void reload()} disabled={busy}>重新載入最新版本</button></p>}
     {visitor && mode === 'member' && guild && <div className="actions"><button type="button" className="btn btn-primary" disabled={busy || joining} onClick={() => void join()}>加入{guild.name}</button></div>}
     {visitor && joinError && <p className="banner banner-error" role="alert">{joinError}</p>}
+    {!loading && guild && readingConfig && <GuildPublicEntry key={`${mode}:${guildKey}`} guildKey={guildKey} publicMode={mode === 'public'} contactUrl={publicContact}
+      onReadBooks={publicBookBlock ? () => {
+        const section = blockSection(publicBookBlock);
+        if (activeSection === section) skillBooksHeading.current?.focus();
+        else {focusSkillBooks.current = true; selectSection(section);}
+      } : undefined}/>}
     <div className="guild-launchpad-layout">
     {sections.length > 0 && <>
       <nav className="guild-launchpad-nav" aria-label="公會功能">
@@ -626,7 +684,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       </select></label>
     </>}
     <div className="guild-launchpad-content">
-    {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection}/>}
+    {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection} skillBooksHeading={skillBooksHeading}/>}
     {showEditor && draft && <form hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
       <h2>調整版面</h2>
       {looseErrors.length > 0 && <ul>{looseErrors.map(error => <li key={`${error.path}:${error.code}`}>{looseText(error, draft)}</li>)}</ul>}

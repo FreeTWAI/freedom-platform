@@ -6,6 +6,7 @@ import {after, test} from 'node:test';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
 import * as checkout from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {SellerDateSchema, isSellerCalendarDate} from '../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 import * as offline from '../../contracts/guild-launchpad/v1/hosted-offline-payment.js';
 import {syntheticShippingQuote} from '../../scripts/synthetic-shipping-quote.js';
 import {IMPLEMENTED_PROVIDER_PROFILES} from '../../modules/agent-commerce/operations/runtime-settings.js';
@@ -83,6 +84,41 @@ function expectTerms(label: string, methods: readonly string[], offlinePayment: 
 }
 
 after(async () => { await x?.stop(); });
+
+test('buyer handover is an optional date-only allowlist with the existing strict calendar validator', () => {
+  assert.equal(checkout.CheckoutDateSchema, SellerDateSchema);
+  assert.equal(checkout.isCheckoutCalendarDate, isSellerCalendarDate);
+  const order = {
+    order_ref: randomUUID(), display_number: '280229-ABCDEF', store: {slug: 'synthetic-shop', name: '合成商店'},
+    created_at: time, pay_by: time, reservation_expired: false, lifecycle_state: 'open', cancel_reason: null, currency: 'TWD',
+    lines: [{sku: 'P0001', title: '合成商品', options: [], quantity: 1, unit_price_minor: 100, line_total_minor: 100}],
+    merchandise_total_minor: 100, discount_total_minor: 0, shipping_total_minor: 0, total_minor: 100,
+    payment_state: 'confirmed', payment_method: 'immediate_card', payment_grace_until: null, offline_instructions: null,
+    meetup_notes: ['請先約定面交。'], latest_payment_attempt: null, can_resume_payment: false,
+    contact: {name: '合成買家', email: 'buyer@example.test', phone: '0900123456'}, delivery: {}, invoice: null, redacted: false,
+  };
+  assert.equal(checkout.PublicOrderSchema.safeParse(order).success, true);
+  for (const handover of [null, {completed_on: '2028-02-29'}]) {
+    assert.deepEqual(checkout.PublicOrderSchema.parse({...order, meetup_handover: handover}).meetup_handover, handover);
+  }
+  for (const handover of [
+    {}, {completed_on: '2027-02-29'}, {completed_on: '2028-02-30'}, {completed_on: '0000-01-01'},
+    {completed_on: '2028-02-29T00:00:00.000Z'}, {completed_on: '2028-02-29\n'},
+    ...['handover_ref', 'recorded_at', 'recorded_by_principal_id', 'offline_payment_id'].map(key => ({completed_on: '2028-02-29', [key]: randomUUID()})),
+  ]) assert.equal(checkout.PublicOrderSchema.safeParse({...order, meetup_handover: handover}).success, false, JSON.stringify(handover));
+  for (const name of ['order', 'payment-query']) {
+    assert.ok(checkoutBundle.$defs[name].properties.meetup_handover);
+    assert.equal(checkoutBundle.$defs[name].required.includes('meetup_handover'), false);
+  }
+  assert.ok(checkoutBundle.$defs.placement.properties.order.properties.meetup_handover);
+  validate(checkoutBundle, [
+    {name: 'order', value: order, valid: true},
+    {name: 'order', value: {...order, meetup_handover: null}, valid: true},
+    {name: 'order', value: {...order, meetup_handover: {completed_on: '2028-02-29'}}, valid: true},
+    {name: 'order', value: {...order, meetup_handover: {completed_on: '2028-02-29', handover_ref: randomUUID()}}, valid: false},
+    {name: 'order', value: {...order, meetup_handover: {completed_on: time}}, valid: false},
+  ]);
+});
 
 test('offline settings schemas match the generated contract and keep field ranges out of the input shape', () => {
   assert.equal(offlineBundle.$id, 'https://freetwai.com/contracts/guild-launchpad/v1/hosted-offline-payment');

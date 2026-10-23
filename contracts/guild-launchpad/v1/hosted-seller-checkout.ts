@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
 import {CurrencySchema} from './storefront.js';
-import {PublicOrderSchema,CheckoutMoneySchema,CheckoutTimeSchema,checkoutTextPattern,PaymentMethodSchema} from './hosted-checkout.js';
+import {PublicOrderSchema,CheckoutMoneySchema,CheckoutTimeSchema,CheckoutDateSchema,isCheckoutCalendarDate,checkoutTextPattern,PaymentMethodSchema} from './hosted-checkout.js';
 const money=CheckoutMoneySchema,time=CheckoutTimeSchema,integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),text=z.string().regex(checkoutTextPattern);
 const display=PublicOrderSchema.shape.display_number,cursor=z.string().max(512).nullable();
 export const SellerPaymentStateSchema=z.enum(['unpaid','pending','simulated','confirmed','overpaid','refunded']);
@@ -19,10 +19,8 @@ export const SellerPaymentAttemptSchema=z.object({attempt_ref:OpaqueId,sequence:
   created_at:time,handed_off_at:time.nullable(),paid_at:time.nullable(),confirmed_at:time.nullable(),failed_at:time.nullable(),superseded_at:time.nullable(),expired_at:time.nullable()}).strict();
 export const SellerPaymentApplicationSchema=z.object({application_ref:OpaqueId,attempt_ref:OpaqueId.nullable(),offline_payment_ref:OpaqueId.nullable(),amount_minor:money,currency:CurrencySchema,
   outcome:z.enum(['converted','allocated','unallocatable','after_cancel','overpaid','amount_mismatch','simulated']),created_at:time,refunded_minor:money,refundable_minor:money}).strict();
-export function isSellerCalendarDate(value:string) {
-  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/.test(value)&&value.slice(0,4)!=='0000'&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
-}
-export const SellerDateSchema=z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).refine(isSellerCalendarDate,'Invalid calendar date.');
+export const isSellerCalendarDate=isCheckoutCalendarDate;
+export const SellerDateSchema=CheckoutDateSchema;
 export const SellerProviderReferenceSchema=z.string().regex(/^[A-Za-z0-9_-]{1,64}$(?![\s\S])/);
 export const SellerRefundSchema=z.object({refund_ref:OpaqueId,application_ref:OpaqueId,attempt_ref:OpaqueId,amount_minor:money.positive(),currency:CurrencySchema,refunded_on:SellerDateSchema,
   provider_reference:SellerProviderReferenceSchema.nullable(),basis:z.literal('unapplied_payment'),mode:z.literal('manual_record'),state:z.literal('recorded'),recorded_without_provider:z.boolean(),recorded_by:OpaqueId,created_at:time}).strict();
