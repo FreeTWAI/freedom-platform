@@ -24,10 +24,10 @@ export const SellerDateSchema=CheckoutDateSchema;
 export const SellerProviderReferenceSchema=z.string().regex(/^[A-Za-z0-9_-]{1,64}$(?![\s\S])/);
 export const SellerRefundSchema=z.object({refund_ref:OpaqueId,application_ref:OpaqueId,attempt_ref:OpaqueId,amount_minor:money.positive(),currency:CurrencySchema,refunded_on:SellerDateSchema,
   provider_reference:SellerProviderReferenceSchema.nullable(),basis:z.literal('unapplied_payment'),mode:z.literal('manual_record'),state:z.literal('recorded'),recorded_without_provider:z.boolean(),recorded_by:OpaqueId,created_at:time}).strict();
-export const ExceptionCaseViewSchema=z.object({case_ref:OpaqueId,kind:z.enum(['amount_mismatch','paid_after_cancel','overpaid','paid_unallocatable','payment_unconfirmed','unmatched_payment','contradicting_event']),
+export const ExceptionCaseViewSchema=z.object({case_ref:OpaqueId,kind:z.enum(['fulfiller_unable','amount_mismatch','paid_after_cancel','overpaid','paid_unallocatable','payment_unconfirmed','unmatched_payment','contradicting_event']),
   status:z.enum(['open','resolved','dismissed']),responsible_party:z.literal('retailer'),order:z.object({order_ref:OpaqueId,display_number:display}).strict().nullable(),
-  subject:z.object({kind:z.enum(['payment_attempt','payment_event','offline_payment']),ref:OpaqueId}).strict(),next_action:z.enum(['refund_payment','allocate_or_refund','check_with_provider','contact_provider']),due_at:time,opened_at:time,updated_at:time,
-  resolution:z.object({code:z.enum(['refunded','allocated','cancelled','confirmed','checked_with_provider']),note:text.min(1).max(1000),resolved_by:OpaqueId}).strict().nullable(),
+  subject:z.object({kind:z.enum(['payment_attempt','payment_event','offline_payment','order']),ref:OpaqueId}).strict(),next_action:z.enum(['refund_payment','allocate_or_refund','check_with_provider','contact_provider']),due_at:time,opened_at:time,updated_at:time,
+  resolution:z.object({code:z.enum(['cancelled','shipped','refunded','allocated','confirmed','checked_with_provider']),note:text.min(1).max(1000),resolved_by:OpaqueId}).strict().nullable(),
   payment_facts:z.object({merchant_trade_no:text.nullable(),trade_no:text.nullable(),expected_amount_minor:money.nullable(),paid_amount_minor:money.nullable(),currency:CurrencySchema,payment_date:time.nullable(),payment_type:text.nullable()}).strict().nullable(),
   allowed_actions:z.array(z.enum(['resolve_with_evidence','retry_allocation'])).max(2),resolution_codes:z.array(z.enum(['refunded','confirmed','checked_with_provider'])).max(3),version:Version}).strict();
 export const ExceptionCasePageSchema=z.object({items:z.array(ExceptionCaseViewSchema).max(50),next_cursor:cursor}).strict();
@@ -45,6 +45,7 @@ export const PaidCancellationInputSchema=z.discriminatedUnion('refund_state',[
 ]);
 export const SellerCheckoutOrderSchema=SellerCheckoutOrderSummarySchema.extend({lines:z.array(SellerOrderLineSchema).min(1).max(50),merchandise_total_minor:money,discount_total_minor:money,shipping_total_minor:money,
   paid_cancellation:SellerPaidCancellationSchema.nullable().optional(),
+  drop_ship:z.object({supplier_name:z.string(),supply_cost_minor:money,fee_per_order_minor:money,state:z.enum(['waiting','shipped','unable']),unable:z.object({reason:z.enum(['out_of_stock','cannot_ship','other']),note:text.max(200).nullable()}).strict().nullable()}).strict().optional(),
   payment_grace_until:time.nullable(),self_ship:PublicOrderSchema.shape.self_ship,meetup_handover:z.object({handover_ref:OpaqueId,completed_on:SellerDateSchema,recorded_at:time}).strict().nullable(),
   latest_payment_attempt:PublicOrderSchema.shape.latest_payment_attempt,payment_detail:z.object({attempts:z.array(SellerPaymentAttemptSchema),applications:z.array(SellerPaymentApplicationSchema),
     offline_payments:z.array(offlinePaymentView).max(1),refunds:z.array(SellerRefundSchema)}).strict().nullable(),

@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 // The 72-hour payment-case interval is an adjustable operational default.
 const policy = (next_action: 'refund_payment' | 'allocate_or_refund' | 'check_with_provider' | 'contact_provider') => Object.freeze({ responsible_party: 'retailer' as const, due_hours: 72, next_action });
 export const PAYMENT_EXCEPTION_POLICIES = Object.freeze({
+  fulfiller_unable: policy('refund_payment'),
   unmatched_payment: policy('check_with_provider'),
   amount_mismatch: policy('refund_payment'),
   paid_unallocatable: policy('allocate_or_refund'),

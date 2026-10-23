@@ -502,4 +502,10 @@ FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespac
 WHERE n.nspname='public' AND c.relname IN ('commerce_paid_cancellations') AND c.relkind='r'
 \gexec
 -- END PAID CANCELLATION GRANTS
+-- Standing drop-ship consent has immutable terms and retained transitions.
+SELECT format('REVOKE ALL PRIVILEGES ON TABLE %s FROM %I; GRANT SELECT, INSERT, UPDATE ON TABLE %s TO %I;',
+  c.oid::regclass, :'runtime', c.oid::regclass, :'runtime')
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relname IN ('commerce_fulfilment_agreements','commerce_fulfilment_agreement_items') AND c.relkind='r'
+\gexec
 COMMIT;

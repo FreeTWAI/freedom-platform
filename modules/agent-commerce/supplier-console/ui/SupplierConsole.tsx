@@ -1,3 +1,4 @@
+import {SupplierDropShip} from './pages/DropShip';
 import {useEffect,useRef} from 'react';
 import type {PortalClient} from '../../../../apps/portal-web/src/api';
 import {useSupplierConsoleController,type RegisterLeave} from '../state/useSupplierConsoleController';
@@ -18,9 +19,9 @@ import {fieldLabels,attemptFieldText} from './view';
 import {ConsoleShell} from '../../hosted-ui/ConsoleShell';
 import './SupplierConsole.css';
 const NAV_GROUPS=['營運','合作','管理'] as const;
-export function SupplierConsole({client,userId,route,registerLeave,photosEnabled=false,photoUploadsEnabled=false,materialMediaEnabled=false,materialUploadsEnabled=false,supplyOfferPhotosEnabled=false}:{client:PortalClient;userId:string;route:SupplierConsoleRoute;registerLeave:RegisterLeave;photosEnabled?:boolean;photoUploadsEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;supplyOfferPhotosEnabled?:boolean}){
+export function SupplierConsole({client,userId,route,registerLeave,photosEnabled=false,photoUploadsEnabled=false,materialMediaEnabled=false,materialUploadsEnabled=false,supplyOfferPhotosEnabled=false,dropShipEnabled=false}:{client:PortalClient;userId:string;route:SupplierConsoleRoute;registerLeave:RegisterLeave;photosEnabled?:boolean;photoUploadsEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;dropShipEnabled?:boolean}){
  const c=useSupplierConsoleController({client,userId,scope:route,route,registerLeave,photosEnabled}),profile=c.profile,r=c.slot('profile'),ready=profile?.setup_state==='ready';
- const pages=consoleNavigation(profile?.capabilities??[],c.ownerAllowed),current=SUPPLIER_CONSOLE_PAGES.find(p=>p.page===route.page)!,selected=current.parent??current.page;
+ const pages=consoleNavigation(profile?.capabilities??[],c.ownerAllowed,dropShipEnabled),current=SUPPLIER_CONSOLE_PAGES.find(p=>p.page===route.page)!,selected=current.parent??current.page;
  const content=useRef<HTMLDivElement>(null),previous=useRef(route.page+':'+route.id),retry=useRef<HTMLButtonElement>(null),focused=useRef<{el:HTMLElement;section:Element|null;lost:boolean}|null>(null);
  useEffect(()=>{const key=route.page+':'+route.id;if(previous.current!==key){content.current?.querySelector<HTMLElement>('[data-sc-active="true"] h2')?.focus();previous.current=key;}},[route.page,route.id]);
  // Keyboard focus must not fall to the page when the console disables or removes the focused control during a write or
@@ -39,7 +40,7 @@ export function SupplierConsole({client,userId,route,registerLeave,photosEnabled
  });return()=>cancelAnimationFrame(frame);});
  const href=(page:Parameters<typeof supplierConsoleHref>[1])=>supplierConsoleHref(route,page);
  const nav=pages.map(p=>({key:p.page,label:p.label,group:p.group!,href:href(p.page)}));
- const page=route.page==='materials'?<Materials c={c}/>:route.page==='material-new'?<MaterialNew c={c}/>:route.page==='overview'?<Overview c={c}/>:route.page==='products'?<Products c={c}/>:route.page==='product-new'?<NewProduct c={c}/>:route.page==='partners'?<Partners c={c}/>:route.page==='partner'?<Partner c={c}/>:route.page==='terms'?<Terms c={c}/>:route.page==='review'?<Review c={c}/>:route.page==='reservations'?<Reservations c={c}/>:route.page==='reservation'?<Reservation c={c}/>:route.page==='reports'?<Reports c={c}/>:route.page==='settings'?<Settings c={c}/>:route.page==='not-found'?<section className="stack"><h2 tabIndex={-1}>找不到這個頁面</h2><div className="actions"><a className="btn btn-ghost" href={href('overview')}>回到營運概覽</a></div></section>:null;
+ const page=route.page==='drop-ship-agreements'?(dropShipEnabled?<SupplierDropShip key="agreements" parent={c} agreements/>:<p>目前未開放代出貨同意。</p>):route.page==='drop-ship-orders'?<SupplierDropShip key="orders" parent={c} agreements={false}/>:route.page==='materials'?<Materials c={c}/>:route.page==='material-new'?<MaterialNew c={c}/>:route.page==='overview'?<Overview c={c}/>:route.page==='products'?<Products c={c}/>:route.page==='product-new'?<NewProduct c={c}/>:route.page==='partners'?<Partners c={c}/>:route.page==='partner'?<Partner c={c}/>:route.page==='terms'?<Terms c={c}/>:route.page==='review'?<Review c={c}/>:route.page==='reservations'?<Reservations c={c}/>:route.page==='reservation'?<Reservation c={c}/>:route.page==='reports'?<Reports c={c}/>:route.page==='settings'?<Settings c={c}/>:route.page==='not-found'?<section className="stack"><h2 tabIndex={-1}>找不到這個頁面</h2><div className="actions"><a className="btn btn-ghost" href={href('overview')}>回到營運概覽</a></div></section>:null;
  const materialIds=[...new Set([...Object.keys(c.reads).filter(k=>k.startsWith('material:')).map(k=>k.slice(9)),...Object.keys(c.materialStates),...(route.page==='material'?[route.id!]:[])])];
  const productIds=[...new Set([...Object.keys(c.reads).filter(k=>k.startsWith('product:')).map(k=>k.slice(8)),...(route.page==='product'?[route.id!]:[])])];
  return <div className="supplier-console stack" onFocus={e=>{const el=e.target as HTMLElement;focused.current={el,section:el.closest('.sc-section'),lost:false};}}>

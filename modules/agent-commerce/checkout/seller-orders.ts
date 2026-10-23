@@ -126,7 +126,7 @@ export async function sellerRefunds(q:PoolClient,context:SellerCheckoutContext,o
     provider_reference:r.provider_reference,basis:r.basis,mode:r.mode,state:r.state,recorded_without_provider:r.mode==='manual_record',recorded_by:r.recorded_by_principal_id,created_at:r.created_at.toISOString()}));
 }
 export const CASE_RESOLUTION_CODES:Readonly<Record<PaymentExceptionKind,readonly ('refunded'|'confirmed'|'checked_with_provider')[]>>={
-  amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
+  fulfiller_unable:['refunded'],amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
 };
 export async function sellerExceptionRows(q:PoolClient,context:SellerCheckoutContext,where:string,values:unknown[]=[]) {
   return (await q.query(`SELECT e.*,e.version::text,o.display_number,
@@ -186,7 +186,9 @@ export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerChec
   const selfShip=await selfShipOrderView(q,id,t),paidCancellation=await paidCancellationView(q,id,true);
   const shipped=await q.query('SELECT 1 FROM commerce_self_shipments WHERE order_id=$1',[id]);
   const cancelPaid=manage&&writable&&open&&row.confirmed&&row.payment_method!=='immediate_card'&&row.handover_id==null&&shipped.rowCount===0&&[...base.stock.lines.values()].every(line=>line.shipped===0);
-  return {...base.value,paid_cancellation:paidCancellation,...(paidCancellation?.refund_state==='recorded'?{payment_state:'refunded' as const}:{}),...(selfShip?{self_ship:selfShip}:{}),payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
+  const drop=t.shipping.groups[0]?.drop_ship,unable=drop?(await q.query(`SELECT fulfiller_reason AS reason,fulfiller_note AS note FROM commerce_exception_cases WHERE order_id=$1 AND kind='fulfiller_unable' AND status='open' ORDER BY created_at DESC LIMIT 1`,[id])).rows[0]??null:null;
+  const dropShip=drop?{supplier_name:drop.supplier_name,supply_cost_minor:drop.supply_cost_minor,fee_per_order_minor:drop.fee_per_order_minor,state:selfShip?.shipment?'shipped' as const:unable?'unable' as const:'waiting' as const,unable}:undefined;
+  return {...base.value,...(dropShip?{drop_ship:dropShip}:{}),paid_cancellation:paidCancellation,...(paidCancellation?.refund_state==='recorded'?{payment_state:'refunded' as const}:{}),...(selfShip?{self_ship:selfShip}:{}),payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
     lines:t.items.map(l=>({sku:l.sku,title:l.title,quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor,inventory:base.stock.lines.get(l.sku)!})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,latest_payment_attempt:payment?.latest_payment_attempt??null,payment_detail,exceptions,
     actions:{cancel:manage&&open&&!row.confirmed&&writable,
@@ -196,7 +198,7 @@ export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerChec
       record_refund:keys.includes('store:refund')&&applications.some(a=>a.refundable_minor>0)&&writable,view_contact:keys.includes('store:customers:read'),view_finance:keys.includes('store:finance:read'),
       confirm_offline_payment:manage&&open&&row.payment_method==='bank_transfer'&&!row.confirmed&&writable,
       complete_meetup:manage&&fulfil&&open&&row.payment_method==='cash_on_meetup'&&!row.confirmed&&writable,
-      ...(selfShip?{record_self_shipment:fulfil&&writable&&open&&row.confirmed&&selfShip.shipment===null&&remaining>0}:{}),
+      ...(selfShip?{record_self_shipment:t.shipping.groups[0]?.fulfilment_mode==='self'&&fulfil&&writable&&open&&row.confirmed&&selfShip.shipment===null&&remaining>0}:{}),
       record_meetup_handover:fulfil&&writable&&open&&row.confirmed&&meetupDelivery&&row.handover_id==null&&remaining>0}};
 }
 export function readSellerCheckoutOrder(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,options:SellerCheckoutReadOptions={}) {

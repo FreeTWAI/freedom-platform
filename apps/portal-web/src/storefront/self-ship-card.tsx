@@ -11,7 +11,7 @@ export function SelfShipCard({order}:{order:View}){
  const state=selfShipCardState(order),ship=order.self_ship,shipment=ship?.shipment;
  if(state==='absent'||!ship)return null;
  return <section className="shop-order-section" aria-labelledby="shop-order-self-ship-heading">
-  <h2 id="shop-order-self-ship-heading">宅配（店家自行寄送）</h2>
+  <h2 id="shop-order-self-ship-heading">{ship.fulfilment_mode==='drop_ship'?'由供應商寄出':'宅配（店家自行寄送）'}</h2>
   {shipment?<><p className="shop-pay-label">已出貨</p><p>物流業者：{shipment.redacted?SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]:shipment.carrier_name??SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]}</p>
    {!shipment.redacted&&<p>物流單號：{shipment.tracking_number}</p>}<p>店家登記於 {formatCalendarDate(shipment.sent_on)} 寄出。</p>
    <p>只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。</p></>:<>

@@ -5,12 +5,14 @@ import {PublicStoreProjectionSchema} from '../../../contracts/guild-launchpad/v1
 import {notifyMember,type NotifyMemberInput} from '../../member-communications/notifications.js';
 import {displayNumberPattern} from '../seller-console/route.js';
 import type {CommerceSettings} from '../operations/runtime-settings.js';
-import type {CheckoutStore} from './authority.js';
-import {buyerOrderNotificationAction,sellerOrderNotificationAction} from './notification-action.js';
+import {bindStore,type CheckoutStore} from './authority.js';
+import {buyerOrderNotificationAction,sellerOrderNotificationAction,dropShipNotificationAction} from './notification-action.js';
 
 const events=['placed','buyer_cancelled','payment_confirmed','handed_over','seller_cancelled','payment_expired','shipped','paid_cancelled','refund_recorded'] as const;
 export type OrderNotificationEvent=typeof events[number];
 export interface OrderNotificationPort {
+  agreement?(q:PoolClient,input:{agreementId:string;event:'proposed'|'accepted'|'declined'|'revoked'}):Promise<void>;
+  dropShip?(q:PoolClient,input:{store:CheckoutStore;orderId:string;event:'shipped'|'unable';actorPrincipalId?:string|null}):Promise<void>;
   emit(q:PoolClient,input:{store:CheckoutStore;orderId:string;event:OrderNotificationEvent;actorPrincipalId?:string|null}):Promise<void>;
 }
 export interface OrderNotificationOptions {orderNotifications?:OrderNotificationPort}
@@ -82,7 +84,40 @@ function copy(event:OrderNotificationEvent,method:Facts['payment_method'],buyer:
   }
 }
 
-const installed:OrderNotificationPort={async emit(q,input){
+/** Only member IDs for the named, authorized counterparty are read; no contact data enters notices. */
+async function participantNotice(q:PoolClient,tenantId:string,instanceId:string,capability:'store:manage'|'store:fulfil'|'store:orders:read',notice:Omit<NotifyMemberInput,'community_id'|'recipient_ref'>) {
+  const original=(await q.query("SELECT nullif(current_setting('freedom.tenant_id',true),'') AS id")).rows[0].id;
+  if(!original)throw new Error('drop_ship_notification_tenant_missing');
+  await bindStore(q,tenantId);
+  const recipients=(await q.query(SELLER_ORDER_NOTIFICATION_RECIPIENTS_SQL.replaceAll('store:orders:read',capability),[tenantId,instanceId,[]])).rows;
+  await bindStore(q,original);
+  if(recipients.length>50)diagnostic('commerce_order_notification_fanout_capped');
+  for(const recipient of recipients.slice(0,50))await notifyMember(q,{...notice,...recipient});
+}
+async function dropShipOrderNotice(q:PoolClient,input:{orderId:string;event:'payment_confirmed'|'shipped'|'unable'}) {
+  const row=(await q.query(`SELECT co.tenant_id,co.instance_id,a.supplier_tenant_id,a.supplier_instance_id FROM commerce_checkout_orders co
+    JOIN commerce_fulfilment_agreements a ON a.agreement_id=(co.terms->'shipping'->'groups'->0->'agreement'->>'agreement_id')::uuid
+      AND a.version::text=co.terms->'shipping'->'groups'->0->'agreement'->>'version'
+    WHERE co.order_id=$1 AND co.terms->'shipping'->'groups'->0->>'fulfilment_mode'='drop_ship'`,[input.orderId])).rows[0];
+  if(!row)return;
+  const supplier=input.event==='payment_confirmed',scope={tenantId:supplier?row.supplier_tenant_id:row.tenant_id,instanceId:supplier?row.supplier_instance_id:row.instance_id};
+  await participantNotice(q,scope.tenantId,scope.instanceId,supplier?'store:fulfil':'store:orders:read',{
+    kind:`commerce_drop_ship_${input.event}`,source_key:`commerce-drop-ship/v1/${input.orderId}/${input.event}`,
+    title:{payment_confirmed:'代出貨訂單已確認收款',shipped:'供應商已登記出貨',unable:'供應商回報無法出貨'}[input.event],
+    body:input.event==='unable'?'請開啟訂單查看原因，並由店家處理取消與退款。':'請開啟訂單查看最新狀態。',
+    action:supplier?dropShipNotificationAction(scope,input.orderId,'supplier-orders'):sellerOrderNotificationAction(scope,input.orderId)});
+}
+const installed:OrderNotificationPort={
+  async agreement(q,input){
+    const a=(await q.query('SELECT tenant_id,instance_id,supplier_tenant_id,supplier_instance_id FROM commerce_fulfilment_agreements WHERE agreement_id=$1',[input.agreementId])).rows[0];
+    if(!a)throw new Error('drop_ship_agreement_notification_missing');
+    const supplier=input.event==='proposed',scope={tenantId:supplier?a.supplier_tenant_id:a.tenant_id,instanceId:supplier?a.supplier_instance_id:a.instance_id};
+    await participantNotice(q,scope.tenantId,scope.instanceId,'store:manage',{kind:`commerce_drop_ship_${input.event}`,source_key:`commerce-drop-ship-agreement/v1/${input.agreementId}/${input.event}`,
+      title:{proposed:'收到代出貨提案',accepted:'供應商已同意代出貨',declined:'供應商已婉拒代出貨',revoked:'代出貨同意已撤銷'}[input.event],body:'請開啟代出貨同意查看最新條件。',
+      action:dropShipNotificationAction(scope,input.agreementId,supplier?'supplier-agreements':'store-agreements')});
+  },
+  async dropShip(q,input){await dropShipOrderNotice(q,input);},
+  async emit(q,input){
   await q.query('SAVEPOINT commerce_order_notifications');
   try{
     const sql=databaseQueries(q),orderId=OpaqueId.parse(input.orderId),shopId=OpaqueId.parse(input.store.storefront_shop_id);
@@ -119,6 +154,7 @@ const installed:OrderNotificationPort={async emit(q,input){
         for(const recipient of recipients.slice(0,50))notices.push({...base,...recipient,
           ...copy(event,facts.payment_method,false,publication.name,facts.display_number),action:sellerAction});
       }
+      if(event==='payment_confirmed')await dropShipOrderNotice(databaseQueries(q) as PoolClient,{orderId,event});
       const seen=new Set<string>();
       for(const notice of notices){
         const key=`${notice.community_id}/${notice.recipient_ref}`;if(seen.has(key))continue;seen.add(key);

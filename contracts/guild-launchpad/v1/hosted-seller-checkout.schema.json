@@ -847,6 +847,7 @@
         "kind": {
           "type": "string",
           "enum": [
+            "fulfiller_unable",
             "amount_mismatch",
             "paid_after_cancel",
             "overpaid",
@@ -903,7 +904,8 @@
               "enum": [
                 "payment_attempt",
                 "payment_event",
-                "offline_payment"
+                "offline_payment",
+                "order"
               ]
             },
             "ref": {
@@ -948,9 +950,10 @@
                 "code": {
                   "type": "string",
                   "enum": [
+                    "cancelled",
+                    "shipped",
                     "refunded",
                     "allocated",
-                    "cancelled",
                     "confirmed",
                     "checked_with_provider"
                   ]
@@ -1144,6 +1147,7 @@
               "kind": {
                 "type": "string",
                 "enum": [
+                  "fulfiller_unable",
                   "amount_mismatch",
                   "paid_after_cancel",
                   "overpaid",
@@ -1200,7 +1204,8 @@
                     "enum": [
                       "payment_attempt",
                       "payment_event",
-                      "offline_payment"
+                      "offline_payment",
+                      "order"
                     ]
                   },
                   "ref": {
@@ -1245,9 +1250,10 @@
                       "code": {
                         "type": "string",
                         "enum": [
+                          "cancelled",
+                          "shipped",
                           "refunded",
                           "allocated",
-                          "cancelled",
                           "confirmed",
                           "checked_with_provider"
                         ]
@@ -1801,6 +1807,77 @@
             }
           ]
         },
+        "drop_ship": {
+          "type": "object",
+          "properties": {
+            "supplier_name": {
+              "type": "string"
+            },
+            "supply_cost_minor": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "fee_per_order_minor": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "waiting",
+                "shipped",
+                "unable"
+              ]
+            },
+            "unable": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "out_of_stock",
+                        "cannot_ship",
+                        "other"
+                      ]
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[^\\u0000\\uD800-\\uDFFF]*$(?![\\s\\S])"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "note"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "supplier_name",
+            "supply_cost_minor",
+            "fee_per_order_minor",
+            "state",
+            "unable"
+          ],
+          "additionalProperties": false
+        },
         "payment_grace_until": {
           "anyOf": [
             {
@@ -1815,6 +1892,13 @@
         "self_ship": {
           "type": "object",
           "properties": {
+            "fulfilment_mode": {
+              "type": "string",
+              "enum": [
+                "self",
+                "drop_ship"
+              ]
+            },
             "handling_days": {
               "type": "integer",
               "minimum": 1,
@@ -2476,6 +2560,7 @@
               "kind": {
                 "type": "string",
                 "enum": [
+                  "fulfiller_unable",
                   "amount_mismatch",
                   "paid_after_cancel",
                   "overpaid",
@@ -2532,7 +2617,8 @@
                     "enum": [
                       "payment_attempt",
                       "payment_event",
-                      "offline_payment"
+                      "offline_payment",
+                      "order"
                     ]
                   },
                   "ref": {
@@ -2577,9 +2663,10 @@
                       "code": {
                         "type": "string",
                         "enum": [
+                          "cancelled",
+                          "shipped",
                           "refunded",
                           "allocated",
-                          "cancelled",
                           "confirmed",
                           "checked_with_provider"
                         ]

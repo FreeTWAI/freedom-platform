@@ -35,6 +35,8 @@ const NOTIFICATION_CONSOLE_CHANNELS = {
   commerce_order_paid_cancelled: 'system',
   commerce_order_refund_recorded: 'system',
   commerce_order_shipped: 'system',
+  commerce_drop_ship_proposed:'system',commerce_drop_ship_accepted:'system',commerce_drop_ship_declined:'system',commerce_drop_ship_revoked:'system',
+  commerce_drop_ship_payment_confirmed:'system',commerce_drop_ship_shipped:'system',commerce_drop_ship_unable:'system',
   commerce_order_placed: 'system',
   commerce_order_buyer_cancelled: 'system',
   commerce_order_payment_confirmed: 'system',
