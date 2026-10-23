@@ -23,6 +23,7 @@
 | [EC-SPEC-09](EC-SPEC-09-security-ci-tests.md) | 安全、隱私、CI 範圍與測試層級 |
 | [EC-SPEC-10](EC-SPEC-10-release-operations.md) | 能力開關、writer floor、發布順序、回退與試用 |
 | [EC-SPEC-11](EC-SPEC-11-offline-payment.md) | 線下付款：銀行匯款、面交付款與面交取貨，由店家確認收款 |
+| [erp-integration-proposal.md](erp-integration-proposal.md) | 公開免費 ERP 與夥伴開店後台串接：獨立使用、店家權限、共同訂單及分階段驗收；提案，未實作 |
 | [work-plan.md](work-plan.md) | 工作包、依賴、CLI 分工、共用檔案與 Supplier Console 的接點 |
 | [creator-curation-plan.md](creator-curation-plan.md) | 創作者推薦與社群合作增量：canonical 對齊、固定 main 盤點、待審相依、分階段交付、待 Ted 決定的 CC-D1～20；提案，未實作 |
 | [creator-curation-spec.md](creator-curation-spec.md) | 無須開店的推薦清單、版本化合作與歸因、佣金義務與結算、退出與退款、CC-01～24；planned／not_run |
