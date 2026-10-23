@@ -8,13 +8,13 @@ import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CheckoutStore} from './authority.js';
 import {buyerOrderNotificationAction,sellerOrderNotificationAction} from './notification-action.js';
 
-const events=['placed','buyer_cancelled','payment_confirmed','handed_over','seller_cancelled','payment_expired'] as const;
+const events=['placed','buyer_cancelled','payment_confirmed','handed_over','seller_cancelled','payment_expired','shipped'] as const;
 export type OrderNotificationEvent=typeof events[number];
 export interface OrderNotificationPort {
   emit(q:PoolClient,input:{store:CheckoutStore;orderId:string;event:OrderNotificationEvent;actorPrincipalId?:string|null}):Promise<void>;
 }
 export interface OrderNotificationOptions {orderNotifications?:OrderNotificationPort}
-const kinds={placed:'commerce_order_placed',buyer_cancelled:'commerce_order_buyer_cancelled',payment_confirmed:'commerce_order_payment_confirmed',
+const kinds={shipped:'commerce_order_shipped',placed:'commerce_order_placed',buyer_cancelled:'commerce_order_buyer_cancelled',payment_confirmed:'commerce_order_payment_confirmed',
   handed_over:'commerce_order_handed_over',seller_cancelled:'commerce_order_seller_cancelled',payment_expired:'commerce_order_payment_expired'} as const;
 
 /** One bounded snapshot without explicit recipient locks. The later notice INSERT
@@ -64,6 +64,7 @@ function diagnostic(event:'commerce_order_notification_skipped'|'commerce_order_
 }
 function copy(event:OrderNotificationEvent,method:Facts['payment_method'],buyer:boolean,S:string,D:string) {
   switch(event){
+    case 'shipped':return {title:'店家已登記出貨',body:`「${S}」已登記訂單 ${D} 出貨，請開啟訂單查看。`};
     case 'placed':return method==='bank_transfer'
       ?{title:'新訂單待確認收款',body:`「${S}」收到訂單 ${D}，等待銀行匯款；請至訂單頁查看。`}
       :{title:'新訂單待安排面交',body:`「${S}」收到訂單 ${D}，等待面交付款；請至訂單頁查看。`};

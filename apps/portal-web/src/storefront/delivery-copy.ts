@@ -1,6 +1,6 @@
 import type {CartQuoteResponseSchema, CartDeliveryOptionSchema, ShippingMethodRef, ShippingUnavailableReason} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 
-export const DELIVERY_NAMES: Record<ShippingMethodRef, string> = {meetup: '面交取貨', home: '宅配', 'cvs:UNIMARTC2C': '7-ELEVEN 取貨', 'cvs:FAMIC2C': '全家取貨', 'cvs:HILIFEC2C': '萊爾富取貨'};
+export const DELIVERY_NAMES: Record<ShippingMethodRef, string> = {self_ship:'宅配（店家自行寄送）',meetup: '面交取貨', home: '宅配', 'cvs:UNIMARTC2C': '7-ELEVEN 取貨', 'cvs:FAMIC2C': '全家取貨', 'cvs:HILIFEC2C': '萊爾富取貨'};
 export const SHIPPING_REASON_COPY: Record<ShippingUnavailableReason, string> = {
   fulfilment_not_agreed: '目前無法配送',
   shipping_attributes_missing: '店家尚未補齊配送資料，暫時無法使用這個取貨方式。',

@@ -22,7 +22,7 @@ const ENABLED = [
   'commerce_publication_variants',
   'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
-  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
+  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments',
   'commerce_resource_tenants', 'commerce_order_quotes', 'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants',
   'application_installations', 'application_module_links', 'capacity_ledger', 'capacity_reservations',
   'deployment_bindings', 'module_dependencies', 'module_instances', 'module_launch_plan_consumptions', 'module_launch_plans',

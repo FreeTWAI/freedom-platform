@@ -342,6 +342,7 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['offline-payment-confirm-input', sellerCheckout.OfflinePaymentConfirmInputSchema, 'input', ['amount_equals_order_total','taipei_calendar_date']],
     ['meetup-completion-input', sellerCheckout.MeetupCompletionInputSchema, 'input', ['amount_equals_order_total','taipei_calendar_date']],
     ['meetup-handover-input', sellerCheckout.MeetupHandoverInputSchema, 'input', ['taipei_calendar_date']],
+    ['self-shipment-input', sellerCheckout.SelfShipmentInputSchema, 'input', ['whole_order_immutable_shipment']],
     ['error-code', sellerCheckout.SellerCheckoutErrorCodeSchema, 'output', []],
   ]],
   ['hosted-offline-payment', 'Offline payment settings. The fresh-auth id is request metadata and is not stored or projected. Shapes grant no payment authority.', [

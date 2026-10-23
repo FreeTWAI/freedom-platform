@@ -47,6 +47,8 @@ export interface ShippingQuoteLine {
 }
 export interface ShippingQuoteInput {readonly lines:readonly ShippingQuoteLine[]; readonly merchandise_net_minor:number}
 export interface ShippingQuotePort {
+  /** Canonicalize new delivery variants before hashing or persistence; legacy values remain unchanged. */
+  normalizeDelivery?(delivery:Record<string,unknown>):Record<string,unknown>;
   /** Freeze and placement recompute. SQL-local. Validates the buyer's delivery; throws CheckoutDeliveryProblem. */
   quote(q:PoolClient,store:StoreContext['profile'],input:ShippingQuoteInput&{delivery:Record<string,unknown>}):Promise<unknown>;
   /** Cart quotes, inside the READ ONLY transaction. Never throws for undeliverable lines. */
@@ -113,8 +115,9 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
   const covered=new Set<string>();
   shipping.groups.forEach((group,index)=>{
     if(group.group_ref!==`g${index+1}`)invalidShippingQuote();
-    const meetup=group.method_ref==='meetup';
-    if((group.meetup!==null)!==meetup||(group.logistics===null)!==meetup)invalidShippingQuote();
+    const meetup=group.method_ref==='meetup',manual=group.method_ref==='self_ship';
+    if((group.meetup!==null)!==meetup||(group.logistics===null)!==(meetup||manual)||(group.self_ship!==undefined)!==manual)invalidShippingQuote();
+    if(manual&&(shipping.groups.length!==1||group.fulfilment_mode!=='self'||group.parcels.length!==1||group.attribute_versions.length!==0||group.outlying_surcharge_per_parcel_minor!==0||group.amount_minor%100!==0||group.amount_minor>1_000_000))invalidShippingQuote();
     if((group.agreement===null)!==(group.fulfilment_mode==='self'))invalidShippingQuote();
     if(meetup&&(group.fee_per_parcel_minor!==0||group.outlying_surcharge_per_parcel_minor!==0||group.parcels.length!==1||group.attribute_versions.length!==0))invalidShippingQuote();
     const quantities=new Map<string,number>();
@@ -136,7 +139,7 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
       if(covered.has(sku)||expected.get(sku)!.quantity!==quantity)invalidShippingQuote();
       covered.add(sku);
     }
-    if(!meetup){
+    if(!meetup&&!manual){
       const skus=[...quantities.keys()].sort(bySku);
       if(group.attribute_versions.length!==skus.length||group.attribute_versions.some((entry,entryIndex)=>entry.sku!==skus[entryIndex]))invalidShippingQuote();
     }
@@ -171,6 +174,7 @@ export function parseCheckoutInput(raw:CheckoutInput) {
 export const contactHash=(input:ReturnType<typeof parseCheckoutInput>,salt:string)=>hashJSON({contact:input.contact,delivery:input.delivery,invoice:input.invoice,salt});
 async function choosePaymentTerms(q:PoolClient,store:StoreContext['profile'],ports:CheckoutPorts,amountsMinor:readonly number[],shippingMethodRefs:readonly string[],totalMinor:number){
   if(!ports.paymentMethods){
+    requireCondition(!shippingMethodRefs.includes('self_ship'),409,'payment_method_unavailable','這間店目前沒有可用的付款方式。');
     ports.payment?.assertTermsAvailable({currency:store.currency,totalMinor,amountsMinor});
     return {payment_methods:['immediate_card'] as PaymentMethod[],offline_payment:null as PaymentOptionResolution['offline']};
   }
@@ -221,7 +225,7 @@ export function publicCheckoutTerms(terms:CheckoutTerms) {
     shipping:{destination_state:terms.shipping.destination_state,groups:terms.shipping.groups.map(group=>{
       const quantities=new Map<string,number>();
       for(const parcel of group.parcels)for(const line of parcel.lines)quantities.set(line.sku,(quantities.get(line.sku)??0)+line.quantity);
-      return {group_ref:group.group_ref,method:group.method_ref,amount_minor:group.amount_minor,fee_per_parcel_minor:group.fee_per_parcel_minor,outlying_surcharge_per_parcel_minor:group.outlying_surcharge_per_parcel_minor,parcel_count:group.parcels.length,handling_days:group.logistics?.handling_days??null,items:[...quantities.keys()].sort(bySku).map(sku=>({sku,quantity:quantities.get(sku)!})),meetup_note:group.meetup?.note??null};
+      return {group_ref:group.group_ref,method:group.method_ref,amount_minor:group.amount_minor,fee_per_parcel_minor:group.fee_per_parcel_minor,outlying_surcharge_per_parcel_minor:group.outlying_surcharge_per_parcel_minor,parcel_count:group.parcels.length,handling_days:group.self_ship?.handling_days??group.logistics?.handling_days??null,items:[...quantities.keys()].sort(bySku).map(sku=>({sku,quantity:quantities.get(sku)!})),meetup_note:group.meetup?.note??null,...(group.self_ship?{self_ship:{handling_days:group.self_ship.handling_days,note:group.self_ship.note}}:{})};
     })},
     shipping_total_minor:terms.shipping_total_minor,tax_state:terms.tax_state,total_minor:terms.total_minor,consents:terms.consents,payment_methods:terms.payment_methods,offline_payment:terms.offline_payment};
 }
@@ -251,7 +255,7 @@ export async function ensureCustomer(q:PoolClient,store:CheckoutStore,email:stri
 }
 interface FrozenCheckout {checkout_id:string;terms:CheckoutTerms;terms_sha256:string;expires_at:Date;version:string}
 export async function freezeCheckout(q:PoolClient,store:CheckoutStore,raw:CheckoutInput & {idempotencyKey:string;checkoutId?:string;memberPrincipalId?:string},ports:CheckoutPorts={}) {
-  const input=parseCheckoutInput(raw),context=await lockStore(q,store,input.lines.map(l=>l.sku)),p=context.profile;
+  const parsedInput=parseCheckoutInput(raw),input={...parsedInput,delivery:ports.shipping?.normalizeDelivery?.(parsedInput.delivery)??parsedInput.delivery},context=await lockStore(q,store,input.lines.map(l=>l.sku)),p=context.profile;
   requireCondition(/^[A-Za-z0-9_-]{22,128}$/.test(raw.idempotencyKey),422,'invalid_idempotency_key','冪等鍵無效。');
   const key=hashKey(raw.idempotencyKey),request=createHmac('sha256',Buffer.from(raw.idempotencyKey,'utf8')).update(canonicalJSON({input,checkout_id:raw.checkoutId??null}),'utf8').digest('hex');
   const prior=(await q.query<{request_sha256:string;response:FrozenCheckout}>(`SELECT request_sha256,response FROM commerce_checkout_idempotency_keys WHERE instance_id=$1 AND idempotency_key_sha256=$2`,[p.instance_id,key])).rows[0];

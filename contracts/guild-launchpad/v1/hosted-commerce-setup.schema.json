@@ -1232,7 +1232,7 @@
               }
             },
             "delivery": {
-              "maxItems": 5,
+              "maxItems": 6,
               "type": "array",
               "items": {
                 "type": "string",
@@ -1241,7 +1241,8 @@
                   "cvs:UNIMARTC2C",
                   "cvs:FAMIC2C",
                   "cvs:HILIFEC2C",
-                  "meetup"
+                  "meetup",
+                  "self_ship"
                 ]
               }
             }
@@ -1523,7 +1524,7 @@
               }
             },
             "delivery": {
-              "maxItems": 5,
+              "maxItems": 6,
               "type": "array",
               "items": {
                 "type": "string",
@@ -1532,7 +1533,8 @@
                   "cvs:UNIMARTC2C",
                   "cvs:FAMIC2C",
                   "cvs:HILIFEC2C",
-                  "meetup"
+                  "meetup",
+                  "self_ship"
                 ]
               }
             }
@@ -2061,7 +2063,7 @@
                         }
                       },
                       "delivery": {
-                        "maxItems": 5,
+                        "maxItems": 6,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -2070,7 +2072,8 @@
                             "cvs:UNIMARTC2C",
                             "cvs:FAMIC2C",
                             "cvs:HILIFEC2C",
-                            "meetup"
+                            "meetup",
+                            "self_ship"
                           ]
                         }
                       }
