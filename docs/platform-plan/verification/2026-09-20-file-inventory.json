@@ -18194,8 +18194,8 @@
     },
     {
       "path": "modules/agent-commerce/fulfilment/self-shipments.ts",
-      "bytes": 5396,
-      "sha256": "bf2966d566dcfb56b20bb2e6ffcef7392bac9adc37c0acfb7896dde450557956"
+      "bytes": 5578,
+      "sha256": "7121d0db2ae5003c9efe52f21217c330f5830f6f30c4ba55f8bd0c5459710aee"
     },
     {
       "path": "modules/agent-commerce/fulfilment/quote/delivery-input.ts",
@@ -25549,8 +25549,8 @@
     },
     {
       "path": "tests/runtime/hosted-self-ship.test.ts",
-      "bytes": 26937,
-      "sha256": "a6e1017aee01def1fa4a2d8260f423e3440747e9fccaf4e7349016b51ca3386e"
+      "bytes": 30538,
+      "sha256": "a07d96f3f21de122081135b36384e86b0b06208f6062e9c1583964caecafd18b"
     },
     {
       "path": "tests/runtime/hosted-seller-checkout-orders.test.ts",
