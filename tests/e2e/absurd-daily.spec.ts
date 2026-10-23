@@ -5,8 +5,13 @@ import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 
 async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
+  // Keep lazy Three startup on a running clock, then freeze gameplay time.
+  // Continuous RAF + trace readback on software WebGL can consume a whole
+  // photo round between clicks and starve keyboard actions on the other games.
+  await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
   await page.goto(`/play?game=${game}&seed=42`);
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
   await page.getByRole('button',{name:game==='stamp'?'先蓋一張練習紙':'開始這一局',exact:true}).click();
 }
 async function login(page:Page){
@@ -31,8 +36,9 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();
   for(let i=0;i<5;i++)await page.getByRole('button',{name:'鏡頭往上',exact:true}).click();
   await page.getByRole('slider').focus();await page.getByRole('slider').press('End');
+  await page.clock.runFor(160);
   await shutter.click();await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();
-  await page.waitForTimeout(3500);await shutter.click();
+  await page.clock.fastForward(3500);await shutter.click();
   await page.getByRole('button',{name:'挑選照片',exact:true}).click();
   await expect(page.locator('.ad-photo-choices button')).toHaveCount(4);
   await page.locator('.ad-photo-choices button').first().click();
@@ -56,7 +62,7 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     const target=stampTarget(42,i),x=Math.round((target.x-point.x)/.06),y=Math.round((target.y-point.y)/.06);
     for(let k=0;k<Math.abs(x);k++)await page.keyboard.press(x>0?'ArrowRight':'ArrowLeft');
     for(let k=0;k<Math.abs(y);k++)await page.keyboard.press(y>0?'ArrowDown':'ArrowUp');
-    point={x:point.x+x*.06,y:point.y+y*.06};await page.waitForTimeout(230);await page.keyboard.press('Space');
+    point={x:point.x+x*.06,y:point.y+y*.06};await page.clock.fastForward(230);await page.keyboard.press('Space');
     if(i<11)await expect(page.locator('.ad-counter')).toHaveText(`${i+1}/12`);
   }
   await expect(page.locator('.ad-result-heading')).toContainText('完成 12 份文件');
@@ -67,8 +73,8 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   test.setTimeout(120_000);await openGame(page,'cash');const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
-  await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.waitForTimeout(180);
-  for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.waitForTimeout(175);}
+  await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
+  for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
   await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   await page.evaluate(()=>{
@@ -125,12 +131,15 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   const deck=cashDeck(42),progress=page.locator('.ad-controls .ad-meta');
   await page.keyboard.press(deck[0].valid?'ArrowRight':'ArrowLeft');
   await expect(progress).toContainText('已分類 1 / 30');
+  // Expire the first action's cooldown so it cannot mask a broken pause guard.
+  await page.clock.fastForward(180);
   // Throw from a real render call after initialization, rather than dispatching
   // contextlost (which has its own, already-paused callback).
   await page.evaluate(()=>{
     const prototype=WebGL2RenderingContext.prototype,original=prototype.drawElements;
     prototype.drawElements=function(...args){prototype.drawElements=original;throw Error('Synthetic active-render failure');};
   });
+  await page.clock.fastForward(16);
   await expect(page.getByRole('alert')).toHaveText('3D 畫面暫時中斷。按重試恢復這一局。');
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
   const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
@@ -139,7 +148,7 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   await expect(progress).toContainText('已分類 1 / 30');
   await resume.click();
   for(let i=1;i<3;i++){
-    await page.waitForTimeout(180);
+    await page.clock.fastForward(180);
     await page.keyboard.press(deck[i].valid?'ArrowRight':'ArrowLeft');
     await expect(progress).toContainText(`已分類 ${i+1} / 30`);
   }

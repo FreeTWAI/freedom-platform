@@ -23494,8 +23494,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 14931,
-      "sha256": "873b523f87e84ecce646108cfd635399514dc64e9ae356ad97f4a78197830d58"
+      "bytes": 15493,
+      "sha256": "9a944854426155d78040b8688387e7a997e360bdd0fb9cd945da16512045f1bc"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
