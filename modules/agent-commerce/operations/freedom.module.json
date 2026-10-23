@@ -21,7 +21,7 @@
     "tests/runtime/commerce-effect-journal.test.ts",
     "tests/runtime/commerce-email-outbox.test.ts",
     "tests/runtime/commerce-email-delivery.test.ts",
-    "migrations/186_checkout_contact_retention.sql",
+    "migrations/187_checkout_contact_retention.sql",
     "tests/runtime/commerce-contact-retention.test.ts"
   ],
   "public_exports": [

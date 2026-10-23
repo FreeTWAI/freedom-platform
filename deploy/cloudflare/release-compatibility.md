@@ -503,11 +503,13 @@ approved source, artifact and ledger identities remain required. Acknowledging
 the shape grants no shipping, deployment or restore authority and does not turn
 on `FREEDOM_COMMERCE_SELF_SHIP_ENABLED`.
 
-## Checkout contact retention schema186 write floor
+## Checkout contact retention schema187 write floor
+
+Renumbered to 187 because #985 took migration 186.
 
 `commerce.checkout-contact-retention.v1` is mandatory for every candidate and
 active binary when the planned schema or retained historical floor reaches
-migration186, even when checkout is disabled or quarantine is on. A binary
+migration187, even when checkout is disabled or quarantine is on. A binary
 without the retention executor and switch support cannot honour the policy, so an
 application-only rollback to it is incompatible. The capability means the binary
 contains the executor and honours `FREEDOM_COMMERCE_CONTACT_RETENTION`; it does
@@ -527,11 +529,11 @@ their checkout customers. Orders without a start point retain their contact data
 store owners handle their own customers' privacy requests, without a platform
 workflow. Ted also confirmed 30-day backups on 2026-10-23. Public self-ship no
 longer depends on retention mode; its existing console checks and Ted's production
-flag decision remain. Restoring below186 cannot erase
+flag decision remain. Restoring below187 cannot erase
 the retained floor. Capability-only retained history and enabled/written shapes
-require schema186 and exact independently approved source/artifact/ledger identities.
+require schema187 and exact independently approved source/artifact/ledger identities.
 
-Migration186 only extends the `commerce_due_work` kind check and adds two partial
+Migration187 only extends the `commerce_due_work` kind check and adds two partial
 indexes; it creates no new table. The runtime gains only
 `UPDATE(tracking_number, carrier_name, redacted_at)` on `commerce_self_shipments`
 for contact redaction; the other columns retain their existing grants.

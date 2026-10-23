@@ -355,7 +355,7 @@ provider 入口：
 | owner／admin 的能力改讀實例版本；升級命令 | 已建：`modules/agent-commerce/hosted/capabilities.ts`、`modules/agent-commerce/hosted/release-upgrade.ts`（`upgradeStoreRelease`） |
 | 授權驗證的基本讀取鍵 | `modules/tenant-workspaces/instance-grants.ts`、`apps/portal-web/src/modules/TenantSettings.tsx` |
 | provider 入口的判斷函式 | 已建：`modules/agent-commerce/operations/provider-entry-paths.ts`（`isCommerceProviderEntry`、`isCommerceProviderEntryPath`）；`platform-app.ts` 閘道加一個條件 |
-| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作已建於 `modules/agent-commerce/operations/contact-retention.ts`（`186`），預設 `off`，由保存開關啟用 |
+| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作已建於 `modules/agent-commerce/operations/contact-retention.ts`（`187`，因 #985 已使用 186 而改編），預設 `off`，由保存開關啟用 |
 | 跨領域測試 | 已建：`tests/runtime/commerce-rate-limits.test.ts`、`hosted-payment-canary.test.ts`（秘密 canary）、`hosted-payment-schema.test.ts`、`hosted-payment-handoff.test.ts`、`hosted-payment-notifications.test.ts`、`commerce-effect-journal.test.ts`。尚未建立：`commerce-capability-matrix.test.ts`、`commerce-entry-gate.test.ts`、`commerce-retention.test.ts`、`tests/e2e/commerce-no-model-keys.spec.ts` |
 
 descriptor 的歸屬與工作順序在 [work-plan.md](work-plan.md)。

@@ -1594,7 +1594,7 @@ test('schema185 hosted self-ship records recognize exact identity without a new 
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
   const renamed=fixtureAt(185);renamed.scan.ledger.at(-1).name='185_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
-  const future=fixtureAt(185);future.scan.ledger.push({name:'186_unreviewed.sql',sha256:'e'.repeat(64)});
+  const future=fixtureAt(187);future.scan.ledger.push({name:'188_unreviewed.sql',sha256:'e'.repeat(64)});
   future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
@@ -1629,9 +1629,9 @@ test('self-ship shape requires an explicitly approved reader and survives intake
   assert(codes(evaluate(renamed)).includes('schema_unknown'));
 });
 
-test('schema186 recognition requires independently approved exact contact retention ledger bytes', () => {
-  const f = fixtureAt(186), old = prefix(f.scan, 185);
-  assert.equal(f.scan.ledger.at(-1).name, '186_checkout_contact_retention.sql');
+test('schema187 recognition requires independently approved exact contact retention ledger bytes', () => {
+  const f = fixtureAt(187), old = prefix(f.scan, 186);
+  assert.equal(f.scan.ledger.at(-1).name, '187_checkout_contact_retention.sql');
   const result = evaluate(f);
   assert.equal(result.status, 'compatible');
   assert.deepEqual(result.required_shapes, []);
@@ -1643,24 +1643,24 @@ test('schema186 recognition requires independently approved exact contact retent
   f.host.observation.schema_ledger = old.ledger;
   f.host.observation.schema_ledger_digest = old.ledger_digest;
   assert.equal(evaluate(f).status, 'compatible');
-  const changed = fixtureAt(186); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
+  const changed = fixtureAt(187); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
   changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
   assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
-  const renamed = fixtureAt(186); renamed.scan.ledger.at(-1).name = '186_unreviewed.sql';
+  const renamed = fixtureAt(187); renamed.scan.ledger.at(-1).name = '187_unreviewed.sql';
   renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
   assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
-  const future = fixtureAt(186); future.scan.ledger.push({ name: '187_unreviewed.sql', sha256: 'e'.repeat(64) });
+  const future = fixtureAt(187); future.scan.ledger.push({ name: '188_unreviewed.sql', sha256: 'e'.repeat(64) });
   future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
 });
 
 for (const version of ['v2', 'v3']) for (const missing of ['candidate', 'active']) {
-  test(`schema186 ${version} fences the ${missing} retention scheduler even with checkout off`, () => {
-    const f = fixtureAt(186), capability = 'commerce.checkout-contact-retention.v1';
+  test(`schema187 ${version} fences the ${missing} retention scheduler even with checkout off`, () => {
+    const f = fixtureAt(187), capability = 'commerce.checkout-contact-retention.v1';
     if (version === 'v3') {
       f.host.schema = 'freedom.release-compatibility-host/v3';
       f.host.migration_profile = { format: DAG_MIGRATIONS,
-        legacy: { format: LEGACY_MIGRATIONS, first: 1, last: 186, known_gaps: [22] },
+        legacy: { format: LEGACY_MIGRATIONS, first: 1, last: 187, known_gaps: [22] },
         legacy_ledger: structuredClone(f.scan.ledger) };
     }
     const active = { source_sha: 'c'.repeat(40), artifact_sha256: 'd'.repeat(64) };
@@ -1678,8 +1678,8 @@ for (const version of ['v2', 'v3']) for (const missing of ['candidate', 'active'
   });
 }
 
-test('a schema185 restore and rollback plan cannot erase retained schema186 contact retention', () => {
-  const f = fixtureAt(186), older = prefix(f.scan, 185), capability = 'commerce.checkout-contact-retention.v1';
+test('a schema186 restore and rollback plan cannot erase retained schema187 contact retention', () => {
+  const f = fixtureAt(187), older = prefix(f.scan, 186), capability = 'commerce.checkout-contact-retention.v1';
   f.host.rollback_floor.schema_ledger = structuredClone(f.scan.ledger);
   f.host.rollback_floor.schema_ledger_digest = f.scan.ledger_digest;
   f.scan = older;
@@ -1695,8 +1695,8 @@ test('a schema185 restore and rollback plan cannot erase retained schema186 cont
 });
 
 for (const source of ['enable_shapes', 'enabled_shapes', 'written_shapes', 'rollback_floor_shapes', 'capability_floor']) {
-  test(`contact retention ${source} cannot be acknowledged on schema185`, () => {
-    const f = fixtureAt(185), shape = 'commerce.checkout-contact-retention.v1';
+  test(`contact retention ${source} cannot be acknowledged on schema186`, () => {
+    const f = fixtureAt(186), shape = 'commerce.checkout-contact-retention.v1';
     if (source === 'enable_shapes') f.input.enable_shapes = [shape];
     else if (source === 'rollback_floor_shapes') f.host.rollback_floor_shapes = [shape];
     else if (source === 'capability_floor') f.host.rollback_floor.capabilities = [shape];
@@ -1707,16 +1707,51 @@ for (const source of ['enable_shapes', 'enabled_shapes', 'written_shapes', 'roll
   });
 }
 
-test('schema185 alone does not require the schema186 contact retention capability', () => {
-  const f = fixtureAt(185), capability = 'commerce.checkout-contact-retention.v1';
+test('schema186 alone does not require the schema187 contact retention capability', () => {
+  const f = fixtureAt(186), capability = 'commerce.checkout-contact-retention.v1';
   f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.filter(c => c !== capability);
   const result = evaluate(f);
   assert.equal(result.status, 'compatible');
   assert.equal(result.required_capabilities.includes(capability), false);
 });
 
-test('schema186 rejects a gap before the unknown future migration', () => {
-  const f = fixtureAt(186); f.scan.ledger.at(-1).name = '187_unreviewed.sql';
+test('schema187 rejects a gap before the unknown future migration', () => {
+  const f = fixtureAt(187); f.scan.ledger.at(-1).name = '188_unreviewed.sql';
   f.scan.ledger_digest = compatibilityLedgerDigest(f.scan.ledger);
   assert.deepEqual(codes(evaluate(f)), ['schema_ledger_invalid']);
+});
+
+test('schema186 journal tables recognize exact identity without a new reader floor',()=>{
+  const f=fixtureAt(186),old=prefix(f.scan,185);
+  assert.equal(f.scan.ledger.at(-1).name,'186_community_journal.sql');
+  const result=evaluate(f);
+  assert.equal(result.status,'compatible');
+  assert.deepEqual(result.required_capabilities,evaluate(fixtureAt(185)).required_capabilities);
+  for(const flag of ['deployment_authority','execution_authority','restore_proof']) assert.equal(result[flag],false);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(186);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(186);renamed.scan.ledger.at(-1).name='186_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(187);future.scan.ledger.push({name:'188_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema186 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(186);f.scan.ledger.at(-1).name='187_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained journal schema186 floor refuses a schema185 observation without adding a written shape',()=>{
+  const f=fixtureAt(186);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,185);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
 });

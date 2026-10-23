@@ -516,7 +516,9 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 
 ### 店家自行寄送切片（2026-10-22 核准）
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。2026-10-23 依 Ted「不要再設什麼30天規則」與移除等待條件的決定，public 自行寄送不再要求保存開關 `all`，runtime 與 wrangler 均移除此相依；console／launchpad 等既有檢查保留。schema 186 仍強制 `commerce.checkout-contact-retention.v1`，表示 binary 包含執行器並遵守開關；預設 `off`，改回 `off` 不還原資料。Ted 同日「all, all」指定 staging／production 的保存值由發布操作者設為 `all`。正式自行寄送的旗標仍由 Ted 決定，沒有本輪 flag 或部署操作。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。2026-10-23 依 Ted「不要再設什麼30天規則」與移除等待條件的決定，public 自行寄送不再要求保存開關 `all`，runtime 與 wrangler 均移除此相依；console／launchpad 等既有檢查保留。schema 187 仍強制 `commerce.checkout-contact-retention.v1`，表示 binary 包含執行器並遵守開關；預設 `off`，改回 `off` 不還原資料。Ted 同日「all, all」指定 staging／production 的保存值由發布操作者設為 `all`。正式自行寄送的旗標仍由 Ted 決定，沒有本輪 flag 或部署操作。
+
+因 #985 已使用 migration 186，本案改編為 187。
 
 新增 retained shape/capability `commerce.hosted-self-ship.v1`，不能只因 intake OFF 就退回不認得 self_ship 的 reader。migration 185 名稱與 ledger 必須精確相符。使用既有 `20-runtime-grants.psql` 的獨立 marker，清掉 stale table/column grants 後僅 SELECT/INSERT；隔離測試執行實際 block 並驗 ACL 與二次套用。通用 `30-verify-readonly.psql` 不在本案修改範圍。此切片只有站內通知，沒有交易 email 模板或排信。
 
