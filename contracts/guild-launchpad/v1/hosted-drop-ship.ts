@@ -17,7 +17,7 @@ export const DropShipAgreementSchema=z.object({agreement_id:OpaqueId,tenant_id:O
   items:z.array(z.object({selection_id:OpaqueId,item_id:OpaqueId,title:z.string()}).strict()).min(1).max(200)}).strict();
 export const DropShipAgreementsSchema=z.object({items:z.array(DropShipAgreementSchema).max(200)}).strict();
 export const DropShipSupplierProductsSchema=z.object({items:z.array(z.object({supplier_instance_id:OpaqueId,supplier_name:z.string(),selection_id:OpaqueId,item_id:OpaqueId,title:z.string()}).strict()).max(200)}).strict();
-export const DropShipOrderQuerySchema=z.object({tab:z.enum(['waiting','shipped']).default('waiting'),limit:z.coerce.number().int().min(1).max(50).default(20),cursor:z.string().max(512).optional()}).strict();
+export const DropShipOrderQuerySchema=z.object({tab:z.enum(['waiting','shipped']).optional(),limit:z.number().int().min(1).max(50).optional(),cursor:z.string().max(512).optional()}).strict();
 export const DropShipOrderSchema=z.object({order_ref:OpaqueId,version:Version,store_name:z.string(),display_number:z.string(),payment_confirmed_at:time,ship_by:z.string(),
   items:z.array(z.object({sku:z.string(),title:z.string(),quantity:z.number().int().positive(),unit_supply_cost_minor:z.number().int().nonnegative(),supply_cost_minor:z.number().int().nonnegative()}).strict()).min(1).max(50),
   supply_cost_minor:z.number().int().nonnegative(),drop_ship_fee_minor:fee,currency:z.literal('TWD'),

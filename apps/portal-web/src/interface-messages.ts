@@ -6,6 +6,9 @@ export const interfaceMessages = {
   'auth.skillReturnRead': ['返回技能書繼續閱讀', 'Continue reading the skill book', 'スキルブックに戻って読む', '스킬북 계속 읽기', 'Seguir leyendo el recurso'],
   'auth.skillReturnUnavailable': ['登入成功。原本的技能書目前無法確認或已停止公開，你仍可繼續探索工坊。', 'You are signed in. The original skill book is unavailable or could not be checked. You can still explore the workshop.', 'ログインしました。元のスキルブックを確認できないか、公開が停止されています。工坊の探索は続けられます。', '로그인했습니다. 원래 스킬북을 확인할 수 없거나 공개가 중단되었습니다. 공방은 계속 둘러볼 수 있습니다.', 'Has iniciado sesión. El recurso original no está disponible o no se pudo comprobar. Puedes seguir explorando el taller.'],
 
+  'sellerConsole.drop-ship':['代出貨','Drop-shipping','直送代行','공급업체 직배송','Envío directo'],
+  'supplierConsole.drop-ship-agreements':['代出貨同意','Drop-ship agreements','直送代行の同意','직배송 동의','Acuerdos de envío directo'],
+  'supplierConsole.drop-ship-orders':['代出貨訂單','Drop-ship orders','直送代行の注文','직배송 주문','Pedidos de envío directo'],
   'sellerConsole.orders':["訂單", "Orders", "注文", "주문", "Pedidos"],
   'sellerConsole.overview':["開店準備", "Store readiness", "開店準備", "개점 준비", "Preparación de la tienda"],
   'sellerConsole.order':["訂單詳情", "Order details", "注文詳細", "주문 상세", "Detalles del pedido"],

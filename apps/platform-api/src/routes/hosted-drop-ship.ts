@@ -28,7 +28,7 @@ export function createHostedDropShipRoutes(pool:Pool,options:DropShipAgreementOp
   }
   app.get(root+'/supplier-console/drop-ship/orders',async c=>{
     const [t,i]=ids(c),raw=singleQuery(c);if(raw.limit!==undefined)requireCondition(/^[1-9][0-9]?$/.test(raw.limit),422,'validation_failed','頁面大小無效。');
-    return c.json(await listSupplierDropShipOrders(pool,c.get('actor'),t,i,DropShipOrderQuerySchema.parse(raw),options.cursors));
+    return c.json(await listSupplierDropShipOrders(pool,c.get('actor'),t,i,DropShipOrderQuerySchema.parse({...raw,...(raw.limit!==undefined?{limit:Number(raw.limit)}:{})}),options.cursors));
   });
   for(const action of ['ship','unable'] as const)app.post(root+'/supplier-console/drop-ship/orders/:order_id/'+action,async c=>{
     const [t,i]=ids(c),h=commandHeaders(c,true);return c.json(await supplierDropShipCommand(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('order_id')),action,await c.req.json(),h.key,h.expected!,options));

@@ -41,7 +41,7 @@ const publicGroup=z.object({group_ref:groupRef,fulfilment_mode:z.enum(['self','d
 const publicShipping=z.object({destination_state:z.enum(['complete','store_required']),groups:z.array(publicGroup).min(1).max(50)}).strict();
 const cartOutlying=z.discriminatedUnion('kind',[z.object({kind:z.literal('excluded')}).strict(),z.object({kind:z.literal('surcharge'),surcharge_per_parcel_minor:money}).strict()]);
 /** available ⇔ no unavailable lines ⇔ both totals are present. */
-export const CartDeliveryOptionSchema=z.object({method:ShippingMethodRefSchema,available:z.boolean(),shipping_total_minor:money.nullable(),parcel_count:z.number().int().nonnegative().max(4950).nullable(),free_over_minor:money.nullable(),outlying:cartOutlying.nullable(),note:MeetupNoteSchema.nullable(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).max(50)}).strict().superRefine((value,ctx)=>{
+export const CartDeliveryOptionSchema=z.object({fulfilment_mode:z.enum(['self','drop_ship']).optional(),method:ShippingMethodRefSchema,available:z.boolean(),shipping_total_minor:money.nullable(),parcel_count:z.number().int().nonnegative().max(4950).nullable(),free_over_minor:money.nullable(),outlying:cartOutlying.nullable(),note:MeetupNoteSchema.nullable(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).max(50)}).strict().superRefine((value,ctx)=>{
   const both=value.shipping_total_minor!==null&&value.parcel_count!==null;
   const neither=value.shipping_total_minor===null&&value.parcel_count===null;
   if(!both&&!neither||value.available!==(value.lines.length===0)||(value.lines.length===0)!==both)ctx.addIssue({code:'custom',message:'Cart delivery option availability does not match its lines and totals.'});

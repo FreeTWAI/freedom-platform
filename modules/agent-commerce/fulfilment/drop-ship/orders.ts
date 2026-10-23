@@ -53,7 +53,7 @@ export async function supplierDropShipOrderView(q:PoolClient,orderId:string,supp
     recipient:row.redacted_at||![row.recipient_name,row.mobile,row.postal_code,row.address].every(v=>typeof v==='string')?null:{name:row.recipient_name,mobile:row.mobile,postal_code:row.postal_code,address:row.address},shipment:manual?.shipment??null,unable});
 }
 export async function listSupplierDropShipOrders(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,cursors:TenantListCursorCodec=unavailableTenantListCursor) {
-  OpaqueId.parse(tenantId);OpaqueId.parse(instanceId);const query=wire.DropShipOrderQuerySchema.parse(raw);
+  OpaqueId.parse(tenantId);OpaqueId.parse(instanceId);const query={tab:'waiting' as const,limit:20,...wire.DropShipOrderQuerySchema.parse(raw)};
   return storeRead(pool,actor,tenantId,instanceId,'store:fulfil',async(q,context)=>{
     const supplier=await profile(q,tenantId,instanceId);ready(supplier);
     const binding={purpose:'supplier-orders' as const,tenantId,principalId:context.principal_id,scopeId:context.scope.scope_id,resourceId:instanceId,filter:JSON.stringify(['drop-ship/v1',query.tab])};

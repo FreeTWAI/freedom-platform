@@ -4,7 +4,6 @@
   "description": "Standing drop-ship consent and the authorized supplier order allowlist. Authorization is enforced by Commerce.",
   "$defs": {
     "DropShipAgreementSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "agreement_id": {
@@ -232,10 +231,10 @@
         "revoke_reason",
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipAgreementsSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "items": {
@@ -476,10 +475,10 @@
       "required": [
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipDecisionSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "terms_sha256": {
@@ -490,14 +489,13 @@
       "required": [
         "terms_sha256"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipOrderQuerySchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "tab": {
-          "default": "waiting",
           "type": "string",
           "enum": [
             "waiting",
@@ -505,7 +503,6 @@
           ]
         },
         "limit": {
-          "default": 20,
           "type": "integer",
           "minimum": 1,
           "maximum": 50
@@ -515,10 +512,10 @@
           "maxLength": 512
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipOrderSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "order_ref": {
@@ -756,10 +753,10 @@
         "shipment",
         "unable"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipOrdersSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "items": {
@@ -1022,10 +1019,10 @@
         "items",
         "next_cursor"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipProposalSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "supplier_instance_id": {
@@ -1063,10 +1060,10 @@
         "fee_per_order_minor",
         "promise_working_days"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipRevokeSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "reason": {
@@ -1075,10 +1072,10 @@
           "pattern": "^[^\\p{Cc}\\p{Cf}<>]*$(?![\\s\\S])"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipSupplierProductsSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "items": {
@@ -1126,10 +1123,10 @@
       "required": [
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
     "DropShipUnableSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "reason": {
@@ -1149,7 +1146,8 @@
       "required": [
         "reason"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     }
   }
 }
