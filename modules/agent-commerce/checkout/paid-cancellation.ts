@@ -23,14 +23,16 @@ async function refundDate(q:PoolClient,paymentId:string,date:string) {
     AND $2::date<=(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date AS ok FROM commerce_offline_payments WHERE payment_id=$1`,[paymentId,date])).rows[0];
   requireCondition(ok,422,'refund_date_invalid','退款日期必須在確認收款日到今天之間（台北時間）。');
 }
-async function lockedOrder(q:PoolClient,context:SellerCheckoutContext,id:string,expected:string) {
+async function lockedOrder(q:PoolClient,context:SellerCheckoutContext,id:string,expected:string,open=false) {
   await sellerCheckoutOrderRow(q,context,id);const store={storefront_shop_id:context.profile.storefront_shop_id};
-  await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);checkVersion(order.version,expected);
+  await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);
+  if(open)requireCondition(order.lifecycle_state==='open',409,'checkout_order_closed','訂單已結束。');
+  checkVersion(order.version,expected);
   return {store,order};
 }
 /** The caller owns the scoped seller command and transaction. Delivery method is deliberately irrelevant. */
 export async function cancelPaidOfflineOrderHeld(q:PoolClient,context:SellerCheckoutContext,id:string,body:PaidCancellationInput,expected:string,options:SellerCheckoutReadOptions={}) {
-  const {store,order}=await lockedOrder(q,context,id,expected);
+  const {store,order}=await lockedOrder(q,context,id,expected,true);
   requireCondition(order.lifecycle_state==='open',409,'checkout_order_closed','訂單已結束。');
   requireCondition(order.payment_method==='bank_transfer'||order.payment_method==='cash_on_meetup',409,'payment_method_mismatch','只有已確認的離線付款訂單可以在這裡取消。');
   const payment=await confirmedOfflinePayment(q,id),inv=await checkoutInventory(q,id);
