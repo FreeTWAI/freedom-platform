@@ -19769,8 +19769,8 @@
     },
     {
       "path": "modules/agent-control/README.md",
-      "bytes": 9060,
-      "sha256": "fb985f857a60d742614fbfd34e7225ef5c63b855972ae268badf5980b74bb29a"
+      "bytes": 9518,
+      "sha256": "47a13ac3c584a2384c4a40250b8f597c50c3f2080ec897e1a4bbfd1533ec5d27"
     },
     {
       "path": "modules/agent-control/agent-connections.md",
@@ -19929,8 +19929,8 @@
     },
     {
       "path": "modules/agent-control/model-broker-authorizations.ts",
-      "bytes": 21639,
-      "sha256": "9f0e1e1b2cbd23e1920397a7d47851f6177f2f59d747b70e88203961e1c6ec3f"
+      "bytes": 22385,
+      "sha256": "f4f50a2319cbe2f84448a53f2e1780081f84bf87b6256b70b8704445085c0f82"
     },
     {
       "path": "modules/agent-control/runtime-proof.ts",
@@ -22599,8 +22599,8 @@
     },
     {
       "path": "packages/db/README.md",
-      "bytes": 13553,
-      "sha256": "4cffa068316ce52133faf5aa2bf0f9a8e67b7de69e332e13673af7d49eea3480"
+      "bytes": 14203,
+      "sha256": "87f306b0c598b8e0b6e132c9f4020cb469618b84f22fcad079a7186f64498738"
     },
     {
       "path": "packages/db/command-core.ts",
@@ -22674,8 +22674,8 @@
     },
     {
       "path": "packages/db/snapshot-evidence.ts",
-      "bytes": 12619,
-      "sha256": "1c181cc271dc1dc1c03fd8267f85e4386e1d20088336d3ba7a6f524189551946"
+      "bytes": 13986,
+      "sha256": "1482e91f0afea3981f85a37d7390d6b64bd5271bec99b5105ea5a7230ce1db64"
     },
     {
       "path": "packages/db/transaction.ts",
@@ -27289,8 +27289,8 @@
     },
     {
       "path": "tests/runtime/tenant-snapshot-evidence-rls.test.ts",
-      "bytes": 2953,
-      "sha256": "a6358a1bccace287826753f9534fcc994c2e5a626f4fa46d2b71d142c2ac8624"
+      "bytes": 6379,
+      "sha256": "19efabe7501c9db1321945f4b8265f7432bf27d3ee874d9bee658134237a0a93"
     },
     {
       "path": "tests/runtime/tenant-transaction.test.ts",
