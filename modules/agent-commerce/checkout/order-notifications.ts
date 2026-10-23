@@ -8,13 +8,13 @@ import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CheckoutStore} from './authority.js';
 import {buyerOrderNotificationAction,sellerOrderNotificationAction} from './notification-action.js';
 
-const events=['placed','buyer_cancelled','payment_confirmed','handed_over','seller_cancelled','payment_expired','shipped'] as const;
+const events=['placed','buyer_cancelled','payment_confirmed','handed_over','seller_cancelled','payment_expired','shipped','paid_cancelled','refund_recorded'] as const;
 export type OrderNotificationEvent=typeof events[number];
 export interface OrderNotificationPort {
   emit(q:PoolClient,input:{store:CheckoutStore;orderId:string;event:OrderNotificationEvent;actorPrincipalId?:string|null}):Promise<void>;
 }
 export interface OrderNotificationOptions {orderNotifications?:OrderNotificationPort}
-const kinds={shipped:'commerce_order_shipped',placed:'commerce_order_placed',buyer_cancelled:'commerce_order_buyer_cancelled',payment_confirmed:'commerce_order_payment_confirmed',
+const kinds={paid_cancelled:'commerce_order_paid_cancelled',refund_recorded:'commerce_order_refund_recorded',shipped:'commerce_order_shipped',placed:'commerce_order_placed',buyer_cancelled:'commerce_order_buyer_cancelled',payment_confirmed:'commerce_order_payment_confirmed',
   handed_over:'commerce_order_handed_over',seller_cancelled:'commerce_order_seller_cancelled',payment_expired:'commerce_order_payment_expired'} as const;
 
 /** One bounded snapshot without explicit recipient locks. The later notice INSERT
@@ -62,8 +62,10 @@ function diagnostic(event:'commerce_order_notification_skipped'|'commerce_order_
   // Diagnostics cannot turn a healthy domain transaction into a failed command.
   try{if(event==='commerce_order_notification_fanout_capped')console.error(event,{selected:50,overflow:true});else console.error(event);}catch{}
 }
-function copy(event:OrderNotificationEvent,method:Facts['payment_method'],buyer:boolean,S:string,D:string) {
+function copy(event:OrderNotificationEvent,method:Facts['payment_method'],buyer:boolean,S:string,D:string,refundState?:string) {
   switch(event){
+    case 'paid_cancelled':return {title:'店家已取消訂單',body:`「${S}」的訂單 ${D} 已由店家取消；${refundState==='recorded'?'已退款':'待退款，店家會在平台外退款'}。`};
+    case 'refund_recorded':return {title:'店家已登記退款',body:`「${S}」已登記訂單 ${D} 的全額退款；已退款。請開啟訂單查看。`};
     case 'shipped':return {title:'店家已登記出貨',body:`「${S}」已登記訂單 ${D} 出貨，請開啟訂單查看。`};
     case 'placed':return method==='bank_transfer'
       ?{title:'新訂單待確認收款',body:`「${S}」收到訂單 ${D}，等待銀行匯款；請至訂單頁查看。`}
@@ -87,7 +89,7 @@ const installed:OrderNotificationPort={async emit(q,input){
     const event=z.enum(events).parse(input.event),actor=input.actorPrincipalId==null?null:OpaqueId.parse(input.actorPrincipalId);
     // Read allowlisted scalars only; the retained publication selects S, never today's store profile.
     const raw=(await sql.query(`SELECT co.tenant_id,co.instance_id,t.community_id,co.terms->>'publication_id' AS publication_id,
-      co.display_number,co.payment_method,o.buyer_principal_id,b.user_ref AS buyer_ref,u.community_id AS buyer_community_id,
+      co.display_number,co.payment_method,(SELECT refund_state FROM commerce_paid_cancellations pc WHERE pc.order_id=co.order_id) AS refund_state,o.buyer_principal_id,b.user_ref AS buyer_ref,u.community_id AS buyer_community_id,
       (b.status='active' AND u.active) AS buyer_active,a.user_ref AS actor_ref
       FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
       JOIN commerce_storefront_profiles p ON p.tenant_id=co.tenant_id AND p.instance_id=co.instance_id AND p.storefront_shop_id=o.public_shop_id
@@ -108,7 +110,7 @@ const installed:OrderNotificationPort={async emit(q,input){
       const base={kind:kinds[event],source_key};
       if(event!=='placed'&&event!=='buyer_cancelled'&&facts.buyer_active&&facts.buyer_principal_id!==actor&&facts.buyer_ref!==facts.actor_ref){
         notices.push({...base,community_id:facts.buyer_community_id,recipient_ref:facts.buyer_ref,
-          ...copy(event,facts.payment_method,true,publication.name,facts.display_number),action:buyerAction});
+          ...copy(event,facts.payment_method,true,publication.name,facts.display_number,raw.refund_state),action:buyerAction});
       }
       if(event==='placed'||event==='buyer_cancelled'||event==='payment_expired'){
         const excluded=[...new Set([facts.buyer_ref,facts.actor_ref].filter((id):id is string=>id!==null))];
