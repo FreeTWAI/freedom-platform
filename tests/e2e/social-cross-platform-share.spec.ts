@@ -6,6 +6,97 @@ async function composer(page:Page){await login(page);await page.getByRole('butto
 async function sharing(page:Page){const dialog=await composer(page);await dialog.getByRole('button',{name:'↗ Social Post 分享',exact:true}).click();const panel=dialog.getByRole('region',{name:'多平台分享',exact:true});await panel.getByRole('button',{name:'了解並開啟',exact:true}).click();for(const name of ['X','Instagram','Facebook','Threads']){const button=panel.getByRole('button',{name,exact:true});await expect(button).toHaveAttribute('aria-pressed','true');await button.click();}return {dialog,panel};}
 function writes(page:Page){const result:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&request.url().includes('/api/v1/')&&!request.url().includes('/auth/')&&!request.url().endsWith('/read'))result.push(request.url());});return result;}
 
+// Browser auto-detection and explicit settings use the same localized composer.
+const sharingLanguages=[
+  {id:'zh-Hant',locale:'zh-TW',name:'繁體中文',login:'登入',title:'建立貼文',close:'關閉發文',content:'貼文內容',publish:'發布貼文',workshop:'發布到工坊',share:'↗ Social Post 分享',panel:'多平台分享',enable:'了解並開啟',decline:'先不要',collapse:'收合',selected:'已選 1 個平台'},
+  {id:'en',locale:'en-US',name:'English',login:'Sign in',title:'Create post',close:'Close composer',content:'Post content',publish:'Publish post',workshop:'Publish to Workshop',share:'↗ Social Post share',panel:'Share to platforms',enable:'Understand and enable',decline:'Not now',collapse:'Collapse',selected:'1 platforms selected'},
+  {id:'ja',locale:'ja-JP',name:'日本語',login:'ログイン',title:'投稿を作成',close:'投稿画面を閉じる',content:'投稿内容',publish:'投稿する',workshop:'工坊に投稿',share:'↗ Social Post 共有',panel:'複数のサービスに共有',enable:'確認して有効にする',decline:'今はしない',collapse:'閉じる',selected:'1件選択中'},
+  {id:'ko',locale:'ko-KR',name:'한국어',login:'로그인',title:'게시물 작성',close:'게시 작성기 닫기',content:'게시물 내용',publish:'게시',workshop:'공방에 게시',share:'↗ Social Post 공유',panel:'여러 플랫폼에 공유',enable:'이해하고 사용하기',decline:'나중에',collapse:'접기',selected:'플랫폼 1개 선택'},
+  {id:'es',locale:'es-ES',name:'Español',login:'Iniciar sesión',title:'Crear publicación',close:'Cerrar editor',content:'Contenido de la publicación',publish:'Publicar',workshop:'Publicar en Workshop',share:'↗ Social Post compartir',panel:'Compartir en plataformas',enable:'Entendido, activar',decline:'Ahora no',collapse:'Contraer',selected:'1 plataformas seleccionadas'},
+] as const;
+const textToolLabels={
+  'zh-Hant':{emoji:'插入 emoji',mention:'標註會員',search:'搜尋標註會員'},
+  en:{emoji:'Insert emoji',mention:'Mention a member',search:'Search members to mention'},
+  ja:{emoji:'絵文字を挿入',mention:'メンバーをメンション',search:'メンションするメンバーを検索'},
+  ko:{emoji:'이모지 삽입',mention:'회원 멘션',search:'멘션할 회원 검색'},
+  es:{emoji:'Insertar emoji',mention:'Mencionar a un miembro',search:'Buscar miembros para mencionar'},
+} as const;
+
+for(const language of sharingLanguages)test(`${language.id}: browser-selected composer and collapsed, expanded and declined sharing keep one language without writes or opt-in`,async({browser})=>{
+  const context=await browser.newContext({locale:language.locale,viewport:{width:390,height:844}});
+  try{
+    const page=await context.newPage();await page.goto('/');
+    const form=page.locator('.login-card form');
+    await form.locator('[name=email]').fill('maker@local.test');
+    await form.locator('[name=password]').fill('freedom-local-demo');
+    await form.getByRole('button',{name:language.login,exact:true}).click();
+    await expect(page.locator('html')).toHaveAttribute('lang',language.id);
+    await page.getByRole('button',{name:language.title,exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:language.title,exact:true}),outbound=writes(page);
+    await expect(dialog.getByRole('heading',{name:language.title,exact:true})).toBeVisible();
+    await expect(dialog.getByRole('button',{name:language.close,exact:true})).toBeVisible();
+    await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeDisabled();
+    const checkLayout=async(publishLabel:string)=>{
+      for(const width of [320,390,1280]){
+        await page.setViewportSize({width,height:844});
+        expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth),`${language.id} ${width}: composer has no horizontal overflow`).toBe(true);
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${language.id} ${width}: document has no horizontal overflow`).toBe(true);
+        const dialogBox=(await dialog.boundingBox())!;expect(dialogBox).not.toBeNull();
+        expect(dialogBox.x).toBeGreaterThanOrEqual(0);expect(dialogBox.x+dialogBox.width).toBeLessThanOrEqual(width);
+        for(const label of [language.close,publishLabel]){
+          const control=dialog.getByRole('button',{name:label,exact:true});await control.scrollIntoViewIfNeeded();
+          const box=(await control.boundingBox())!;expect(box).not.toBeNull();
+          expect(box.height,`${language.id} ${width}: ${label} touch target`).toBeGreaterThanOrEqual(44);
+          expect(box.x).toBeGreaterThanOrEqual(dialogBox.x);expect(box.x+box.width).toBeLessThanOrEqual(dialogBox.x+dialogBox.width);
+        }
+      }
+    };
+    const draft='原文 stays unchanged 🎨\nhttps://example.test/?a=1&b=2',source=dialog.getByLabel(language.content,{exact:true}),trigger=dialog.getByRole('button',{name:language.share,exact:true});
+    await source.fill(draft);
+    const labels=textToolLabels[language.id],emoji=dialog.getByRole('button',{name:labels.emoji,exact:true}),mention=dialog.getByRole('button',{name:labels.mention,exact:true});
+    await expect(emoji).toBeEnabled();await expect(emoji).toHaveAttribute('title',labels.emoji);
+    await expect(mention).toBeEnabled();await expect(mention).toHaveAttribute('title',labels.mention);
+    if(language.id==='en'){
+      await emoji.click();
+      await dialog.getByRole('region',{name:'emoji',exact:true}).getByRole('button',{name:'Insert 🎉',exact:true}).click();
+      await expect(source).toHaveValue(`${draft}🎉`);await expect(emoji).toBeFocused();
+      await source.fill(draft);
+    }
+    await mention.click();
+    const picker=dialog.getByRole('region',{name:labels.mention,exact:true}),search=picker.getByRole('searchbox',{name:labels.search,exact:true});
+    await expect(search).toBeVisible();await search.press('Escape');
+    await expect(picker).toHaveCount(0);await expect(dialog).toBeVisible();
+    // Both existing text pickers return to their shared emoji toolbar anchor.
+    await expect(emoji).toBeFocused();await expect(source).toHaveValue(draft);
+    await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeEnabled();
+    await expect(trigger).toHaveAttribute('aria-expanded','false');
+    await checkLayout(language.publish);
+    await trigger.click();
+    const panel=dialog.getByRole('region',{name:language.panel,exact:true});
+    await expect(panel.getByRole('button',{name:language.enable,exact:true})).toBeVisible();
+    await expect(panel.getByRole('button',{name:'X',exact:true})).toHaveCount(0);
+    await expect(dialog.getByRole('button',{name:language.workshop,exact:true})).toBeEnabled();
+    await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toHaveCount(0);
+    await checkLayout(language.workshop);
+    await panel.getByRole('button',{name:language.collapse,exact:true}).click();
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded','false');
+    await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeEnabled();
+    await trigger.click();
+    await panel.getByRole('button',{name:language.decline,exact:true}).click();
+    await expect(trigger).toBeFocused();await expect(source).toHaveValue(draft);
+    await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeEnabled();
+    await dialog.getByRole('button',{name:language.close,exact:true}).click();
+    await page.getByRole('button',{name:language.title,exact:true}).click();
+    await expect(source).toHaveValue(draft);await trigger.click();
+    await expect(panel.getByRole('button',{name:language.enable,exact:true})).toBeVisible();
+    for(const name of ['X','Instagram','Facebook','Threads'])await expect(panel.getByRole('button',{name,exact:true})).toHaveCount(0);
+    await expect(panel.getByRole('link')).toHaveCount(0);
+    expect(outbound).toHaveLength(0);
+    expect(await page.evaluate(()=>localStorage.getItem('freedom-interface-language-v1'))).toBeNull();
+  }finally{await context.close();}
+});
+
 test('sharing loads only on demand, consent cancellation preserves copy and returns keyboard focus with zero post writes',async({page})=>{
   const outbound=writes(page);let loads=0,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve});
   await page.route('**/assets/SocialCrossPlatformShare-*.js',async route=>{loads++;await gate;await route.continue();});
@@ -93,13 +184,24 @@ test('phone and desktop logo selection fits all themes, shows focus and honors r
 });
 
 test('five sharing languages preserve selected logos and original captions across actual settings changes',async({page})=>{
-  const {dialog,panel}=await sharing(page);await dialog.getByLabel('貼文內容',{exact:true}).fill('不翻譯會員自己的文字。');await panel.getByRole('button',{name:'X',exact:true}).click();
-  const languages=[['English','Settings','Multi','Share to platforms','1 platforms selected'],['日本語','設定','','複数のサービスに共有','1件選択中'],['한국어','설정','','여러 플랫폼에 공유','플랫폼 1개 선택'],['Español','Ajustes','','Compartir en plataformas','1 plataformas seleccionadas'],['繁體中文','設定','','多平台分享','已選 1 個平台']] as const;
-  let settings='設定';
-  for(const [name,nextSettings,,title,selected] of languages){
-    await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();await page.getByRole('button',{name:settings,exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');settings=nextSettings;
-    await page.getByRole('button',{name:'建立貼文',exact:true}).click();const translated=dialog.getByRole('region',{name:title,exact:true});await expect(translated.locator('.social-share-selection')).toHaveText(selected);await expect(translated.getByRole('button',{name:'X',exact:true})).toHaveAttribute('aria-pressed','true');await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue('不翻譯會員自己的文字。');
+  const initial=await sharing(page);let dialog=initial.dialog;const outbound=writes(page);
+  await dialog.getByLabel('貼文內容',{exact:true}).fill('不翻譯會員自己的文字。');await initial.panel.getByRole('button',{name:'X',exact:true}).click();
+  let current:typeof sharingLanguages[number]=sharingLanguages[0];
+  for(const language of [...sharingLanguages.slice(1),sharingLanguages[0]]){
+    await dialog.getByRole('button',{name:current.close,exact:true}).click();await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await page.keyboard.press('Escape');
+    await expect(page.locator('html')).toHaveAttribute('lang',language.id);
+    await page.getByRole('button',{name:language.title,exact:true}).click();dialog=page.getByRole('dialog',{name:language.title,exact:true});
+    const translated=dialog.getByRole('region',{name:language.panel,exact:true});
+    await expect(translated.locator('.social-share-selection')).toHaveText(language.selected);
+    await expect(translated.getByRole('button',{name:'X',exact:true})).toHaveAttribute('aria-pressed','true');
+    for(const name of ['Instagram','Facebook','Threads'])await expect(translated.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','false');
+    await expect(dialog.getByLabel(language.content,{exact:true})).toHaveValue('不翻譯會員自己的文字。');
+    await expect(dialog.getByRole('button',{name:language.workshop,exact:true})).toBeEnabled();
+    await expect(dialog.getByRole('button',{name:language.share,exact:true})).toHaveAttribute('aria-expanded','true');
+    await expect(translated.getByRole('button',{name:language.enable,exact:true})).toHaveCount(0);
+    current=language;
   }
+  expect(outbound).toHaveLength(0);
 });
 
 test('real logout and another login clear opt-in, prepared private caption, original media and progress',async({page})=>{
