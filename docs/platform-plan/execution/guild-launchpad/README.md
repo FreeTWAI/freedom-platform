@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。編號仍待 #985／#989 整合順序確認。
+本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的保留政策草稿後續使用 187；這不代表人像或部署核准。
 
 <!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=186 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
