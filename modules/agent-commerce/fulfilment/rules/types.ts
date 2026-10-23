@@ -116,6 +116,7 @@ export type QuoteLineFulfilment =
   | { readonly kind: 'self' }
   | {
       readonly kind: 'drop_ship';
+      readonly manual_only?: true;
       readonly executor_shop_id: string;
       readonly agreement_id: string;
       readonly agreement_version: string;
