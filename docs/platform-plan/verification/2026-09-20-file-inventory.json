@@ -16308,14 +16308,19 @@
       "sha256": "aba8cc216502fcedf584344e795900d44df697de4bfe0dffbe0d399cbfb385fc"
     },
     {
+      "path": "docs/platform-plan/execution/commerce/proposal-recovery-2026-10-23.json",
+      "bytes": 8630,
+      "sha256": "0be1a7a03edf98f7175578b631963aa46e9cb38509870a82d65db4db50233e39"
+    },
+    {
       "path": "docs/platform-plan/execution/commerce/sources.md",
       "bytes": 27175,
       "sha256": "106651edcd742fb9c98f7ea4e73866e054d637a589d0ae7f553a595744225e33"
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 101336,
-      "sha256": "23cb6c68cd5da6c8a12426b795ca8ef9eb422148409c9445190612a76378cae4"
+      "bytes": 102727,
+      "sha256": "74b38bf17823bd4e48fd2ab7971434d8828c980bec8c07056843fa864573d523"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
