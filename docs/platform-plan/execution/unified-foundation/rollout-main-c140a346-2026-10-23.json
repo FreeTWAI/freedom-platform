@@ -1,6 +1,16 @@
 {
   "format": "freedom.main-rollout/v1",
-  "status": "deployed_public_smoke_restore_and_operator_passed",
+  "status": "deployed_production_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+  "status_breakdown": {
+    "deployed": "both environments run c140a346 at schema 185",
+    "public_smoke": "production only: attempt 1 failed (edge still served cf7e518b), attempt 2 passed 14 checks; staging has no public smoke, only deploy-receipt health, homepage and binding",
+    "backups_and_isolated_restores": "four sets passed (production before on attempt 2)",
+    "operator_dispatcher": "both environments bound to b76f639d; original timers restored with unchanged schedules",
+    "operator_reset_9a": "script refused with timers_changed_after_reset; services inactive; recorded as an operator observation, not a pass",
+    "before_chain_admission": "the copied production BEFORE-chain adapter import is a symlink outside the pin lists; review and pin it before any reuse or rebinding",
+    "natural_scheduled_backup": "pending: first runs due 2026-10-24T03:30:53Z (staging) and 04:31:38Z (production); an active timer is not a receipt",
+    "member_ux_acceptance": "not_run"
+  },
   "recorded_at": "2026-10-23T11:34:50.649001+00:00",
   "evidence_cutoff_at": "2026-10-23T11:27:45.598878+00:00",
   "kind": "sanitized_operator_observations",
@@ -278,7 +288,7 @@
   },
   "targets": {
     "staging": {
-      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
       "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
       "previous_release_sha": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
       "worker_version": "ac64295d-d1f5-4867-95ed-c75408894ee6",
@@ -550,7 +560,7 @@
       "absent_flags_receipt_sha256": "82db5b8dce1dd68742f0f09075d4c1e7d06fc9724eb59f4e150826c20e9bc964"
     },
     "production": {
-      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
       "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
       "previous_release_sha": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
       "worker_version": "6e0fb868-a532-4858-85c7-94481f0ca003",

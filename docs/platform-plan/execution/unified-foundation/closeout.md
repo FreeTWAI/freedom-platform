@@ -14,7 +14,7 @@
 
 **截至11:28 UTC，staging 與 production 都已部署 `c140a346`／schema185，
 四組成功 before／after 備份、隔離還原與清理通過，兩環境 dispatcher 已綁定本次來源，
-原 timer 已恢復 active／enabled。會員 UX 驗收未執行。**
+原 timer 已恢復 active／enabled。公開 smoke 只在 production 執行；新 dispatcher 的自然排程備份待10月24日確認。會員 UX 驗收未執行。**
 來源為 #990 合併後的 main，接續兩環境原 `cf7e518b`／schema172；main Verify 39903035598 的17個 jobs
 與 CodeQL 39903035600 的3個 jobs 全部通過。
 13 個 migration（173–185）以各環境 `_migrator` 在一個交易內套用，兩環境 ledger 都是184列、COMMIT 已確認
