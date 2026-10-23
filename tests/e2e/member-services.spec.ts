@@ -1181,3 +1181,80 @@ test('clearing a restored draft resets the native picker and allows the same ima
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1', [owner])).rows[0].n).toBe(1);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers c JOIN member_services s USING (service_id) WHERE s.owner_user_id=$1', [owner])).rows[0].n).toBe(1);
 });
+
+for (const lostResponse of [false, true]) {
+  test(`reopening the same in-flight create keeps its identity after a ${lostResponse ? 'lost' : 'successful'} response`, async ({ page, e2eAuthPool }) => {
+    const owner = '20000000-0000-4000-8000-000000000002';
+    await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+    await login(page, 'reviewer@local.test');
+    await navigate(page, '社員服務');
+    const mine = page.getByRole('region', { name: '我的服務', exact: true });
+    const toggle = mine.getByRole('button', { name: /^(新增服務|關閉表單)$/ });
+    const title = `E2E 同草稿重開 ${lostResponse ? '遺失' : '成功'}`;
+    const form = await fillService(page, title, '設計', 'N 的建立回應還沒收到', true);
+    const posts: { key: string; body: string; status: number }[] = [];
+    const uploads: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route(/\/api\/v1\/member-services$/, async route => {
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      const response = await route.fetch();
+      posts.push({ key: request.headers()['idempotency-key'], body: request.postData() ?? '', status: response.status() });
+      if (posts.length === 1) {
+        await gate;
+        if (lostResponse) return route.abort('failed');
+      }
+      return route.fulfill({ response });
+    });
+    await page.route('**/api/v1/member-services/*/cover', route => {
+      uploads.push(createHash('sha256').update(route.request().postDataBuffer()!).digest('hex'));
+      return route.continue();
+    });
+    const services = async () => (await e2eAuthPool.query('SELECT service_id::text AS id, title FROM member_services WHERE owner_user_id=$1', [owner])).rows;
+    await form.getByRole('button', { name: '建立服務', exact: true }).click();
+    try {
+      // route.fetch has committed the real POST, but the browser has not received its response.
+      await expect.poll(() => posts.length).toBe(1);
+      expect(posts[0].status).toBe(201);
+      expect(posts[0].key).toBeTruthy();
+      expect(await services()).toHaveLength(1);
+      await toggle.click();
+      await expect(form).toHaveCount(0);
+      await toggle.click();
+      await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue(title);
+      await expect(form.getByText('已選圖片：cover.png')).toBeVisible();
+      await expect(form.getByRole('textbox', { name: /^標題/ })).toBeDisabled();
+      await expect(form.getByRole('button', { name: '正在儲存…', exact: true })).toBeDisabled();
+      expect(posts).toHaveLength(1);
+    } finally { release(); }
+    if (lostResponse) {
+      await expect(form.getByRole('alert')).toContainText('儲存結果還沒確認');
+      await expect(form.getByRole('textbox', { name: /^標題/ })).toBeDisabled();
+      await expect(form.getByRole('button', { name: '放棄並關閉', exact: true })).toBeEnabled();
+      await form.getByRole('button', { name: '重試儲存', exact: true }).click();
+    }
+    await expect(form).toHaveCount(0);
+    await expect(card(page, title).locator('img.service-cover')).toBeVisible();
+    const saved = await services();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].title).toBe(title);
+    expect(posts).toHaveLength(lostResponse ? 2 : 1);
+    expect(new Set(posts.map(post => post.key))).toEqual(new Set([posts[0].key]));
+    expect(new Set(posts.map(post => post.body))).toEqual(new Set([posts[0].body]));
+    expect(posts.every(post => post.status === 201)).toBe(true);
+    expect(uploads).toEqual([createHash('sha256').update(PNG).digest('hex')]);
+    // A subsequent enabled submit edits the saved service, never creates a replacement N.
+    await mine.locator('li.service-mine-row').filter({ hasText: title }).getByRole('button', { name: '編輯', exact: true }).click();
+    await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+    await expect(form).toHaveCount(0);
+    expect(await services()).toEqual(saved);
+    expect(posts).toHaveLength(lostResponse ? 2 : 1);
+    expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [saved[0].id])).rows[0].n).toBe(1);
+    expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2', [owner, posts[0].key])).rows[0].n).toBe(1);
+    await toggle.click();
+    await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('');
+    await expect(form.getByText('已選圖片：cover.png')).toHaveCount(0);
+    expect(posts).toHaveLength(lostResponse ? 2 : 1);
+  });
+}

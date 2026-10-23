@@ -59,6 +59,8 @@ export function MemberServices({client}: {client: PortalClient}) {
   const [editing, setEditing] = useState<Service | null>(null)
   const [draft, setDraft] = useState<Draft>(BLANK)
   const kept = useRef(new Map<string, Kept>()), origin = useRef('new'), generation = useRef(0)
+  const inFlight = useRef<{identity: FormIdentity; target: string; operation: Operation} | null>(null)
+  const boundOperation = useRef<FormIdentity | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [restored, setRestored] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -99,13 +101,15 @@ export function MemberServices({client}: {client: PortalClient}) {
   }
   function openCreate() {
     keep()
-    const saved = kept.current.get('new')
+    const saved = kept.current.get('new'), running = inFlight.current?.target === 'new' ? inFlight.current : null
+    boundOperation.current = running?.identity ?? null; setPending(running?.operation ?? null)
     generation.current++; if (fileInput.current) fileInput.current.value = ''
     origin.current = 'new'; setEditing(null); setDraft(saved?.draft ?? BLANK); setFile(saved?.file ?? null); setRestored(Boolean(saved))
     setIssues([]); setError(''); setFormOpen(true)
   }
   function openEdit(service: Service) {
     keep()
+    boundOperation.current = null; setPending(null)
     // A draft for an older version of this service is dropped rather than applied to newer content.
     const saved = kept.current.get(service.service_id), current = saved?.version === service.aggregate_version ? saved : undefined
     if (saved && !current) kept.current.delete(service.service_id)
@@ -138,10 +142,13 @@ export function MemberServices({client}: {client: PortalClient}) {
   function dropSavedDraft(identity: FormIdentity, target = identity.target) {
     if (kept.current.get(target)?.generation === identity.generation) kept.current.delete(target)
   }
+  function ownsOperation(identity: FormIdentity) {
+    return generation.current === identity.generation || boundOperation.current === identity
+  }
   async function finish(created: boolean, identity: FormIdentity, target: string) {
     dropSavedDraft(identity); dropSavedDraft(identity, target)
     // A response belongs to the form that submitted it, even if another draft is now open.
-    if (generation.current === identity.generation) {
+    if (ownsOperation(identity)) {
       setRestored(false); setPending(null); setFormOpen(false); setFile(null)
     }
     setNotice(created ? '已新增服務。' : '已更新服務。')
@@ -149,8 +156,9 @@ export function MemberServices({client}: {client: PortalClient}) {
   }
   function closeForm() {
     // Abandoning an operation whose outcome is unknown also drops its draft, so a later save cannot repeat it under a new key.
-    if (pending) kept.current.delete(origin.current)
+    if (pending && !saving) kept.current.delete(origin.current)
     else keep()
+    boundOperation.current = null
     generation.current++
     setFormOpen(false); setIssues([]); setConflict(null); setRestored(false)
     if (pending) { setPending(null); void Promise.all([load(category), refreshMine().catch(() => null)]) }
@@ -176,6 +184,7 @@ export function MemberServices({client}: {client: PortalClient}) {
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     let op = pending
     if (!op) {
       const payload = {...draft, category: draft.category, contacts: draft.contacts.map(row => ({label: row.label, url: row.url}))}
@@ -184,10 +193,13 @@ export function MemberServices({client}: {client: PortalClient}) {
       op = {stage: 'save', method: editing ? 'PUT' : 'POST', path: editing ? `/member-services/${editing.service_id}` : '/member-services', body: parsed.value,
         key: crypto.randomUUID(), version: editing ? editing.aggregate_version : null, file, coverKey: crypto.randomUUID()}
     }
-    const identity: FormIdentity = {target: origin.current, generation: generation.current}
-    const current = () => generation.current === identity.generation
+    const identity: FormIdentity = pending && boundOperation.current ? boundOperation.current : {target: origin.current, generation: generation.current}
+    const current = () => ownsOperation(identity)
     keep()
     const created = op.stage === 'save' && op.method === 'POST', retried = pending
+    // A reopened target rejoins this operation; another target keeps its own form identity.
+    inFlight.current = {identity, target: origin.current, operation: op}
+    boundOperation.current = identity; setPending(op)
     setIssues([]); setSaving(true); setError(''); setNotice(''); setConflict(null)
     try {
       if (op.stage === 'save') {
@@ -221,6 +233,8 @@ export function MemberServices({client}: {client: PortalClient}) {
         if (current()) { origin.current = saved.service_id; setEditing(saved) }
         if (!save.file) { await finish(created, identity, saved.service_id); return }
         op = {stage: 'cover', service: saved, file: save.file, key: save.coverKey, version: saved.aggregate_version}
+        inFlight.current = {identity, target: saved.service_id, operation: op}
+        if (current()) setPending(op)
       }
       const cover = op
       try { await uploadCover(cover) }
@@ -238,7 +252,7 @@ export function MemberServices({client}: {client: PortalClient}) {
       }
       await finish(created, identity, cover.service.service_id)
     } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : '服務未能儲存。') }
-    finally { setSaving(false) }
+    finally { inFlight.current = null; setSaving(false) }
   }
   async function act(service: Service, action: 'pause' | 'resume' | 'hide' | 'delete' | 'remove-cover') {
     setSaving(true); setError('')
