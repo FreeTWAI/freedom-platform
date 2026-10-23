@@ -7,6 +7,7 @@ import {ReadStatus,Capacity,dataTime,Changes} from './Shared';
 import {GettingStarted} from './GettingStarted';
 export function Overview({c}:{c:ConsoleController}){
  const r=c.slot<SupplierOverview>('overview'),d=r.data,href=(page:Parameters<typeof supplierConsoleHref>[1],extra={})=>supplierConsoleHref(c.scope,page,extra);
+ const writer=c.profile?.capabilities.includes('store:write')===true,refresh=()=>Promise.all(['profile','overview','products'].map(key=>c.read(key)));
  const metrics=d?[
   {name:'公開供貨商品',metric:d.metrics.offered_products,definition:'目前有公開供貨版本的商品，包含需更新版本的商品。',href:href('products',{state:'offered'})},
   {name:'待確認售價申請',metric:d.metrics.pending_requests,definition:'仍在公開版本上等待你確認的售價申請。',href:href('terms')},
@@ -15,7 +16,9 @@ export function Overview({c}:{c:ConsoleController}){
  ]:[];
  return <section className="stack"><h2 tabIndex={-1}>營運概覽</h2>
   {!c.profile?.capabilities.includes('store:write')&&<p>目前只有查看商品庫的權限。供貨價與條件不會顯示，需要商品編輯權限才能查看指標與清單。</p>}
-  <ReadStatus c={c} name="overview" label="營運概覽"/>
+  <ReadStatus c={c} name="overview" label="營運概覽" onRefresh={writer?refresh:undefined}/>
+  {writer&&c.slot('products').state==='failed'&&<ReadStatus c={c} name="products" label="供貨商品" scopedAction onRefresh={refresh}/>}
+  {writer&&c.slot('profile').state==='failed'&&<ReadStatus c={c} name="profile" label="商品庫資料" scopedAction onRefresh={refresh}/>}
   <GettingStarted c={c}/>
   {d&&<><InventoryIssues count={d.inventory_inconsistent_count}/><div className="sc-metrics">{metrics.map(m=><article className="card stack" key={m.name}><h3>{m.name}</h3><strong className="sc-metric-value">{m.name==='缺貨商品'&&d.inventory_inconsistent_count?'暫時無法確認':m.metric.state==='ready'?metricText(m.metric):'無法取得'}</strong>{m.metric.state==='unavailable'&&<p>{permissionReason(m.metric.reason)}</p>}<p>{m.definition}</p><p className="field-hint">{r.state==='loading'?'更新中':r.state==='failed'?'未更新':'資料時間'} {dataTime(d.as_of)}</p>{m.href&&m.metric.state==='ready'&&<div className="actions"><a className="btn btn-ghost" href={m.href}>查看清單<span className="sr-only">：{m.name}</span></a></div>}</article>)}</div>
   <Capacity count={d.product_count}/><section className="stack"><h3>待辦</h3>{d.todos.state==='unavailable'?<p>無法取得：{permissionReason(d.todos.reason)}</p>:<>

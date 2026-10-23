@@ -25,7 +25,8 @@
         "cvs:UNIMARTC2C",
         "cvs:FAMIC2C",
         "cvs:HILIFEC2C",
-        "meetup"
+        "meetup",
+        "self_ship"
       ],
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
@@ -93,7 +94,8 @@
                   "cvs:UNIMARTC2C",
                   "cvs:FAMIC2C",
                   "cvs:HILIFEC2C",
-                  "meetup"
+                  "meetup",
+                  "self_ship"
                 ]
               },
               "fulfilment_mode": {
@@ -233,6 +235,78 @@
                     "type": "null"
                   }
                 ]
+              },
+              "self_ship": {
+                "type": "object",
+                "properties": {
+                  "service_key": {
+                    "type": "string",
+                    "const": "seller.self_ship.v1"
+                  },
+                  "fee_basis": {
+                    "type": "string",
+                    "const": "order"
+                  },
+                  "handling_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 14
+                  },
+                  "working_days": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "const": 1
+                      },
+                      {
+                        "type": "number",
+                        "const": 2
+                      },
+                      {
+                        "type": "number",
+                        "const": 3
+                      },
+                      {
+                        "type": "number",
+                        "const": 4
+                      },
+                      {
+                        "type": "number",
+                        "const": 5
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 5,
+                    "maxItems": 5
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                          },
+                          {
+                            "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "service_key",
+                  "fee_basis",
+                  "handling_days",
+                  "working_days",
+                  "note"
+                ],
+                "additionalProperties": false
               },
               "parcels": {
                 "minItems": 1,
@@ -553,7 +627,7 @@
           }
         },
         "delivery_options": {
-          "maxItems": 5,
+          "maxItems": 6,
           "type": "array",
           "items": {
             "type": "object",
@@ -565,7 +639,8 @@
                   "cvs:UNIMARTC2C",
                   "cvs:FAMIC2C",
                   "cvs:HILIFEC2C",
-                  "meetup"
+                  "meetup",
+                  "self_ship"
                 ]
               },
               "available": {
@@ -730,7 +805,8 @@
                     "cvs:UNIMARTC2C",
                     "cvs:FAMIC2C",
                     "cvs:HILIFEC2C",
-                    "meetup"
+                    "meetup",
+                    "self_ship"
                   ]
                 },
                 "groups": {
@@ -785,7 +861,8 @@
                     "cvs:UNIMARTC2C",
                     "cvs:FAMIC2C",
                     "cvs:HILIFEC2C",
-                    "meetup"
+                    "meetup",
+                    "self_ship"
                   ]
                 },
                 "groups": {
@@ -1186,7 +1263,8 @@
                           "cvs:UNIMARTC2C",
                           "cvs:FAMIC2C",
                           "cvs:HILIFEC2C",
-                          "meetup"
+                          "meetup",
+                          "self_ship"
                         ]
                       },
                       "amount_minor": {
@@ -1264,6 +1342,39 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "self_ship": {
+                        "type": "object",
+                        "properties": {
+                          "handling_days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 14
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "allOf": [
+                                  {
+                                    "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                                  },
+                                  {
+                                    "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "handling_days",
+                          "note"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -1733,6 +1844,144 @@
                   }
                 ]
               }
+            },
+            "self_ship": {
+              "type": "object",
+              "properties": {
+                "handling_days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 14
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "allOf": [
+                        {
+                          "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                        },
+                        {
+                          "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ship_by": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "shipment": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "shipment_ref": {
+                          "type": "string",
+                          "minLength": 36,
+                          "maxLength": 36,
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                        },
+                        "carrier_key": {
+                          "type": "string",
+                          "enum": [
+                            "post",
+                            "tcat",
+                            "hct",
+                            "tjoin",
+                            "other"
+                          ]
+                        },
+                        "carrier_name": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "tracking_number": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9A-Za-z-]{1,50}$(?![\\s\\S])"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sent_on": {
+                          "type": "string",
+                          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                        },
+                        "recorded_at": {
+                          "type": "string",
+                          "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+                        },
+                        "redacted": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "shipment_ref",
+                        "carrier_key",
+                        "carrier_name",
+                        "tracking_number",
+                        "sent_on",
+                        "recorded_at",
+                        "redacted"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "handling_days",
+                "note",
+                "ship_by",
+                "shipment"
+              ],
+              "additionalProperties": false
+            },
+            "meetup_handover": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "completed_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "completed_on"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "latest_payment_attempt": {
               "anyOf": [
@@ -2232,6 +2481,144 @@
             ]
           }
         },
+        "self_ship": {
+          "type": "object",
+          "properties": {
+            "handling_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                    },
+                    {
+                      "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ship_by": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shipment": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "shipment_ref": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "carrier_key": {
+                      "type": "string",
+                      "enum": [
+                        "post",
+                        "tcat",
+                        "hct",
+                        "tjoin",
+                        "other"
+                      ]
+                    },
+                    "carrier_name": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tracking_number": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[0-9A-Za-z-]{1,50}$(?![\\s\\S])"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sent_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    "recorded_at": {
+                      "type": "string",
+                      "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+                    },
+                    "redacted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "shipment_ref",
+                    "carrier_key",
+                    "carrier_name",
+                    "tracking_number",
+                    "sent_on",
+                    "recorded_at",
+                    "redacted"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "handling_days",
+            "note",
+            "ship_by",
+            "shipment"
+          ],
+          "additionalProperties": false
+        },
+        "meetup_handover": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "completed_on": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                }
+              },
+              "required": [
+                "completed_on"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "latest_payment_attempt": {
           "anyOf": [
             {
@@ -2652,6 +3039,144 @@
               }
             ]
           }
+        },
+        "self_ship": {
+          "type": "object",
+          "properties": {
+            "handling_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                    },
+                    {
+                      "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ship_by": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shipment": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "shipment_ref": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    },
+                    "carrier_key": {
+                      "type": "string",
+                      "enum": [
+                        "post",
+                        "tcat",
+                        "hct",
+                        "tjoin",
+                        "other"
+                      ]
+                    },
+                    "carrier_name": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tracking_number": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[0-9A-Za-z-]{1,50}$(?![\\s\\S])"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sent_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    "recorded_at": {
+                      "type": "string",
+                      "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}(?:Z))$(?![\\s\\S])"
+                    },
+                    "redacted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "shipment_ref",
+                    "carrier_key",
+                    "carrier_name",
+                    "tracking_number",
+                    "sent_on",
+                    "recorded_at",
+                    "redacted"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "handling_days",
+            "note",
+            "ship_by",
+            "shipment"
+          ],
+          "additionalProperties": false
+        },
+        "meetup_handover": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "completed_on": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                }
+              },
+              "required": [
+                "completed_on"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "latest_payment_attempt": {
           "anyOf": [

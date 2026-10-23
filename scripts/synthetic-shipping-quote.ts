@@ -51,6 +51,7 @@ export function syntheticShippingPort(options?: SyntheticShippingOptions): Shipp
 export function syntheticShippingQuote(input: ShippingQuoteInput, options: SyntheticShippingOptions = {}) {
   if (input.lines.length < 1) throw new Error('shipping_quote_invalid');
   const method = options.method_ref ?? 'home';
+  if(method==='self_ship')throw new Error('synthetic_shipping_manual_unsupported');
   const meetup = method === 'meetup';
   // Meetup has no drop-ship group. Reject the fixture; do not relabel a supplied line as own.
   if (meetup && input.lines.some(line => !line.own)) throw new Error('shipping_quote_invalid');

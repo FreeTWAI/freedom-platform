@@ -12,7 +12,7 @@
 
 | 方式 | 誰出貨 | 何時可用 |
 | --- | --- | --- |
-| 賣家自出貨 | 零售商（賣家）用自己的寄件地與物流帳戶 | 賣家自有商品（`commerce_items` 屬於賣家的店）。賣家向供應商批發進貨後，貨在自己手上，也是自有商品 |
+| 賣家自出貨 | 零售商（賣家）交寄自己持有的商品：自己的綠界物流帳戶，或 §2.7 店家自行寄送 | 賣家自有商品（`commerce_items` 屬於賣家的店）。賣家向供應商批發進貨後，貨在自己手上，也是自有商品 |
 | 供應商直送 | 供應商用自己的寄件地與物流帳戶，寄給賣家的買家 | 供貨商品（共享供應商的實體庫存，EC-SPEC-03 §2），且該商品有已接受的代出貨同意（§2.6） |
 | 第三方倉 | 委外倉儲 | C4，不在本版 |
 
@@ -46,6 +46,8 @@ B05 列出各不可用方式的商品名稱與原因，選定方式的目的地�
 C2 不支援「出貨者使用別人的物流帳戶」。之後若要支援，必須是帳戶主人對特定事業的明確授權，另立規格。
 
 ### 1.3 領域名稱與提議的表
+
+店家自行寄送另用 `commerce_self_shipments` 保存每單唯一的交寄事實（§2.7、migration 185）；行項證據沿原 allocations／ship movements。下列綠界 shipments／labels／tracking 表仍是其各自的設計，不由自行寄送推定完成。
 
 SC-SPEC-07 使用的領域名稱對到以下的表。能沿用既有模型的就沿用（計畫 Supplier v1.1 §4.1）。
 
@@ -159,7 +161,7 @@ FulfillmentOrder 與 Shipment 是既有訂單行項與配置（EC-SPEC-03）的�
 
 | 欄位 | 規則 |
 | --- | --- |
-| `method` | `home`（宅配）、`cvs:<LogisticsSubType>`（例如 `cvs:UNIMARTC2C`），或 `meetup`（面交取貨：只限賣家自出貨、不收運費、附面交說明，EC-SPEC-11 §2.2） |
+| `method` | `home`（綠界宅配）、`cvs:<LogisticsSubType>`（綠界超商取貨）、`meetup`（面交取貨，EC-SPEC-11 §2.2），或 `self_ship`（宅配〔店家自行寄送〕，§2.7）。`self_ship` 不授予供應商代出貨同意。 |
 | `fee_per_parcel_minor` | 每個包裹的運費（TWD 最小單位，100 的倍數） |
 | `free_over_minor` | 可選；訂單商品金額（折扣後）達到就全部包裹免運，由賣家吸收；離島加價照收（§3.4） |
 | `outlying` | `excluded`，或每包離島加價（TWD 最小單位，100 的倍數） |
@@ -167,6 +169,8 @@ FulfillmentOrder 與 Shipment 是既有訂單行項與配置（EC-SPEC-03）的�
 
 - 開放結帳的條件之一是至少一個配送方式，而且店家已發布 `shipping` 政策（EC-SPEC-02 §2.3）。
 - 修改運費只影響之後的報價；已凍結的 checkout 與訂單不變。
+
+`fee_per_parcel_minor`、免運門檻與離島加價是綠界配送的選項。面交運費為零；自行寄送採 §2.7 的每單定額與單包限制。配送屬性、自動拆包及綠界寄件地／帳戶檢查只適用 `home`／`cvs:*`；面交與自行寄送不要求商品尺寸或重量。尚未成立的 checkout 下單時仍重驗報價，已成立訂單不受後續設定變更影響。
 
 ### 2.5 商品配送屬性（ProductShippingAttributes）
 
@@ -188,6 +192,40 @@ FulfillmentOrder 與 Shipment 是既有訂單行項與配置（EC-SPEC-03）的�
 5. 同一賣家商店、同一商品，同時最多一個 `accepted`（子表 `commerce_fulfilment_agreement_items` 的部分唯一索引）。
 6. `withdrawn`（賣家在供應商決定前撤回申請）、`revoked`、`superseded` 只影響之後的結帳：涵蓋的商品在新結帳回 `unavailable(fulfilment_not_agreed)`（§3.1），賣家在同意清單與商品頁看到原因。已建立的履約單照凍結的同意版本繼續到完成或取消：出貨者仍可讀收件資料、建單、列印、交寄與處理退回（§4.4 的條件不包含同意狀態）。供應商不想再做時，逐筆回報無法履約（§4.5）；賣家不想再讓供應商處理時，取消那些履約單並退款。
 7. 權限：提出、接受、撤回、撤銷需要該商店的 `store:manage`（綁定地址揭露與費用的商業承諾）。撤銷可由任一方發起（賣家 §9.1、供應商 §9.2），記錄發起者與原因。兩方都能讀自己參與的同意；RLS 依兩個 tenant。
+
+### 2.7 店家自行寄送（self_ship）
+
+Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍與 EC-SPEC-09 §3 的聯絡資料保存決定。程式核准不授權部署、真實開旗標或正式開放。
+
+店家自行到郵局、黑貓等物流業者交寄，再登記交寄事實；平台不建單、不列印標籤、不查貨態、不核實簽收，不代收或代付物流費。`self_ship` 和綠界 `home` 是不同服務。超商選店、代出貨同意、退貨、退款及結單均不在本切片。
+
+| 設定 | v1 規則 |
+| --- | --- |
+| 提供方式 | `delivery_options` 有一筆 `method=self_ship` 表示提供，可與面交並存；修改需 `store:manage`、Idempotency-Key、目前設定版本 If-Match。 |
+| 運費 | `fee_per_order_minor`，TWD 最小單位 0～1,000,000，100 的倍數，每單只收一次；零元可用。沒有滿額免運或離島加價。 |
+| 承諾 | `handling_days` 1～14。從平台確認收款的台北日期之後計數，週一至五為工作天，不另排除國定假日；第 N 個工作天結束前寄出，不表示到貨日。 |
+| 說明 | `note` 可為 null，非空最多 200 字純文字，不填買家個資。 |
+| 範圍 | 只限自有商品、一單一包一個單號、不分批，不配送共用郵區表判定的離島。店家負責確認實際承運條件。 |
+
+服務種類 `seller.self_ship.v1` 不建立 provider account 或 `commerce_logistics_services` 列。`fulfilment_mode=self` 仍表示賣家持有的商品；供貨行項保持 `fulfilment_not_agreed`。供貨價同意不等於代出貨同意，也不授予收件資料讀權。
+
+凍結一個群組、一個包裹、全部行項；`logistics`、`meetup`、`agreement` 都為 null，`attribute_versions=[]`，另存 `self_ship` 服務／每單計費／工作天／說明快照。為沿用單包算式，凍結的 `fee_per_parcel_minor` 等於每單費，離島加價為零；總運費為群組金額和。既有 frozen terms 不加預設欄位、不重寫 hash。舊 closed-enum client 不能讀新 method，需更新同批 producer/consumer；新版仍接受舊 terms。
+
+收件人姓名、手機、郵遞區號、地址必填，使用不依物流商的 `validateHomeRecipient`，正規化後才計算摘要與保存。地址只在 `commerce_checkout_contacts.delivery`；不複製進 terms、shipment、receipt、journal、通知、email、公開頁或分享卡。原買家沿訂單存取讀取，同店成員另需 `store:customers:read`。欄位錯誤回 422 `delivery_invalid`，只附欄位代碼；地區／行項不可配送回 422 `shipping_unavailable`。
+
+只提供銀行匯款，沿 EC-SPEC-11 的會員、TWD 整數元、付款期限與庫存規則；不提供信用卡，`cash_on_meetup` 仍只限 `meetup`。
+
+確認付款且完整配置後，具 `store:fulfil` 的成員可 `POST …/checkout-orders/:order_id/self-shipments`，以 session、CSRF、Idempotency-Key 及 sidecar If-Match 登記業者、單號、寄出日期。業者 key 為 `post`／`tcat`／`hct`／`tjoin`／`other`；只有 `other` 可填非空名稱。單號為 1～50 個 ASCII 英數或連字號，僅檢查格式，不驗真實物流編號。寄出日期為確認收款日到今天的台北日期。
+
+伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 只有此資料約束；PR-C 才執行遮蔽。
+
+買家尚未付款顯示等待付款確認，確認後未寄顯示等待出貨、凍結承諾與說明，寄出後顯示已出貨、業者、單號與寄出日。明示「只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。」遮蔽後仍顯示已出貨、carrier key 的固定名稱與寄出日，不再回傳單號或自填業者名稱。出貨只啟動保存期限，**不寫 closed、不表示送達或退款**。
+
+站內通知種類 `commerce_order_shipped` 只含店名、顯示訂單編號與開啟訂單的動作，不含姓名、電話、郵區、地址、業者、單號或寄送說明。沿既有獨立通知 flag，沒有 email template、排信或補寄。
+
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。PR-A 僅允許 local／staging，public 啟動拒絕 `self_ship_retention_not_ready`；PR-C 完成並驗證遮蔽排程後才移除該 guard。正式開放仍需 Ted 另外核准，不因 guard 移除自動開旗標。
+
+後續 §2.6 可另設 exact-version 同意，凍結供應商的服務、費用、工作天與限期收件投影，才讓供應商自行寄送。不得擴張本表 tenant policy、把完整 contacts 給供應商，或繞過 `not_agreed`。
 
 ## 3. 結帳：配送群組與凍結報價
 
@@ -414,6 +452,8 @@ C2 採用綠界舊版國內物流（MD5 CheckMacValue、表單格式），不用
 - 交寄記錄不能撤銷；記錯的情形走例外與退回檢驗。
 - 店到店建單後要在有效日內交寄（日曆天）：7-ELEVEN 5 天、全家 6 天、萊爾富 7 天 [7444]。SL-02 的待交寄清單顯示到期日。過了有效日這張單怎麼處理（能否再寄、是否要重新建單）官方沒有寫，列入 §11 核對；核對前，過期的包裹開例外，由出貨者先查詢再決定。
 - 鎖序接在 EC-SPEC-03 §6 之後：… → `commerce_orders` → payment attempt → 履約單 → shipment（UUID 排序）→ 配置 → item（UUID 排序）。
+
+§2.7 自行寄送是獨立服務，沒有綠界單據、回呼或後續貨態，不套用本節的綠界三天無貨態例外。兩者皆在首次登記實際交寄事實時扣庫存。
 
 ### 5.6 作廢
 
@@ -720,11 +760,11 @@ stage 的固定門市（7-ELEVEN `131386`、全家 `006598`）[8809] 只用於 s
 
 | 項目 | 建議 | 只影響 |
 | --- | --- | --- |
-| DC03 首發配送 | 黑貓宅配常溫＋一條店到店（依第一位商家已開通的連鎖） | 其他子類型；B2C 需要測標 |
+| DC03 首發配送 | 2026-10-22 Ted 已核准先做 §2.7 店家自行寄送 B；綠界 A 等真店家帳戶及另行授權 | 不代表原綠界物流驗收完成；正式開放另核准 |
 | 同訂單重寄（未取、遺失後） | C2 不提供；改為退款，買家可重新下單 | 重寄需要「不扣庫存的包裹行項」，C4 另立 |
 | 供應商收件資料保留 | 送達或退回後 14 天（同意可設 ≤ 30） | 隱私承諾（DC12） |
 | 直送接受期限 | 24 小時 | 例外 `fulfiller_unresponsive` 的時間點 |
-| 離島 | 預設不配送；店家可開並加價 | 離島買家 |
+| 離島 | 綠界預設不配送，店家可開並加價；self_ship v1 固定不配送（2026-10-22 核准） | 離島買家 |
 | live 人工交寄 | 允許，3 天無貨態開例外 | 交寄證據的強度 |
 | 逆物流 API、COD、冷鏈 | C4 | 對應的 profile |
 | stage 連線授權 | 需要 Ted | sandbox 端到端驗證；不影響向量與契約測試 |

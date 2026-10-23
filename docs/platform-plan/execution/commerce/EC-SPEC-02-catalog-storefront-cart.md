@@ -192,6 +192,8 @@ OFF 不查政策表、不掛路由或 namespace guard，保留 host assets 既�
 - 回傳：`checkout_ref`、terms 的公開視圖、`terms_sha256`、`expires_at`（checkout 本身 24 小時有效，供保留過期後重新下單用）。公開視圖只有行項、折扣、配送群組的運費、總額、政策版本與付款方式；不含供貨來源、選品與庫存項目等內部 ID、listing／offer 雜湊，也不含聯絡資料的摘要（EC-SPEC-09 §2.7）。`terms_sha256` 仍是完整凍結 terms 的雜湊；瀏覽器只把它原樣送回下單。
 - 店家未開放結帳時回 409 `checkout_not_enabled`（C1 的 B05 依此顯示「尚未開放線上付款」）。
 
+自行寄送（2026-10-22 Ted 核准，EC-SPEC-05 §2.7）：`self_ship` 獨立於綠界 `home`，結帳必填收件人姓名、手機、郵遞區號與地址。generic HomeRecipient 正規化後只保存於原 `delivery`，在摘要與冪等請求計算之前完成。錯誤 422 `delivery_invalid` 不含輸入值；不可配送為 422 `shipping_unavailable`。報價列出每單定額費、單包、工作天承諾與說明；公共 terms 不含收件資料。只能選銀行轉帳，cash 仍要求面交，供貨行項仍是 `fulfilment_not_agreed`。訂單卡顯示等待出貨／已出貨，不推論送達或結單。政策同意仍另待決，不新增勾選框。UI 由 PR-B 後續交付；本輪 PR-A 為穩定 API。
+
 ### 5.4 `POST /api/v1/public/stores/:slug/checkouts/:checkout_ref/orders`
 
 - 需要該 checkout 的 device grant（§4.2）。checkout 不記錄建立者，所以會員 session 本身不能代替 grant；下單時若有會員 session，訂單記下 `buyer_principal_id`。輸入 `terms_sha256`、`client_order_id`（UUID）；同一 checkout 內 `client_order_id` 就是冪等鍵，重送回同一張訂單。

@@ -47,7 +47,7 @@ export function commerceOrderNotificationsInstalled(runtime:Pick<PlatformRuntime
 /** The one checkout configuration shared by the checkout API and the public store pages. */
 export function hostedCheckoutOptions(origin:string,runtime:PlatformRuntime,environment:FreedomEnv):commands.HostedCheckoutOptions {
   const email=runtime.commerceSettings?.emailEnabled?(runtime.commercePorts?.email??commerceEmailOutbox):undefined;
-  return {origin,settings:runtime.commerceSettings,environment:providerEnvironment(environment),...runtime.commercePorts,email,
+  return {origin,selfShipEnabled:runtime.commerceSelfShipEnabled===true,settings:runtime.commerceSettings,environment:providerEnvironment(environment),...runtime.commercePorts,email,
     orderNotifications:createOrderNotifications(commerceOrderNotificationsInstalled(runtime),runtime.commerceSettings),
     ...(storeVariantsInstalled(runtime)?{buyerLabels:variantBuyerLabels}:{})};
 }

@@ -290,6 +290,7 @@ const routeTable: Record<string, string> = {
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/self-shipments': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/payment-queries': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/refunds': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/refunds': 'tenant',
@@ -680,8 +681,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 167, middleware: 32 });
-  assert.equal(selectedRoutes.length, 241);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 168, middleware: 32 });
+  assert.equal(selectedRoutes.length, 242);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
@@ -737,6 +738,7 @@ const routes: Route[] = [
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments', body: {amount_minor:100, received_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion', body: {amount_minor:100, completed_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover', body: {completed_on:'2026-01-01'}, version: '"1"' },
+  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/self-shipments', body: {carrier_key:'post', tracking_number:'SYNTHETIC-123', sent_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/payment-queries', body: {} },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/refunds' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/refunds', body: { application_ref: randomUUID(), amount_minor: 100, refunded_on: '2026-01-01' } },

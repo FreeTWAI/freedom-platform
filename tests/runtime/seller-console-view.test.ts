@@ -65,3 +65,66 @@ test('merchant banner uses readiness facts across the complete checkout truth ta
   assert.equal(storeOrderStatus({readiness:changed(key,state,true)}).text,'目前尚未開放結帳接單，請檢查開店準備。');
  assert.equal(storeOrderStatus({readiness:{...ready,accepting_orders:false}}).text,'目前尚未開放結帳接單，請檢查開店準備。');
 });
+
+// A disabled flag hides a new method but preserves a saved one for other settings.
+test('self-ship settings distinguish hidden, read-only and editable states and preserve unrelated profile fields',async()=>{
+ const {selfShipSettingMode,withSelfShip}=await import('../../modules/agent-commerce/seller-console/ui/SelfShipSettings.js');
+ assert.equal(selfShipSettingMode(false,false),'hidden');assert.equal(selfShipSettingMode(false,true),'readonly');
+ for(const exists of [false,true])assert.equal(selfShipSettingMode(true,exists),'editable');
+ const {ShippingProfileInputSchema}=await import('../../contracts/guild-launchpad/v1/hosted-shipping.js');
+ const profile=ShippingProfileInputSchema.parse({schema:'freedom.shipping-profile/v1',working_days:[1,3,5],services:[],delivery_options:[{method:'meetup',note:'保留面交說明。'},{method:'home',fee_per_parcel_minor:6000,free_over_minor:null,outlying:{kind:'excluded'}}],drop_ship:null});
+ const option={method:'self_ship' as const,fee_per_order_minor:0,handling_days:14,note:'保留第二行。\n合成物流'};
+ const added=withSelfShip(profile,option);assert.deepEqual(added.delivery_options,[...profile.delivery_options,option]);assert.deepEqual(ShippingProfileInputSchema.parse(added),added);
+ const replaced=withSelfShip(added,{...option,fee_per_order_minor:1000000});assert.deepEqual(replaced.delivery_options.slice(0,2),profile.delivery_options);assert.deepEqual(replaced.working_days,profile.working_days);assert.deepEqual(replaced.services,profile.services);assert.deepEqual(replaced.drop_ship,profile.drop_ship);
+ assert.deepEqual(withSelfShip(added,null),profile);assert.deepEqual(profile.delivery_options.length,2);
+});
+
+test('self-shipment drafts mirror the server normalization and rejection order',async t=>{
+ const {selfShipmentDraft}=await import('../../modules/agent-commerce/seller-console/ui/SelfShipOrder.js');
+ const {shipmentInput}=await import('../../modules/agent-commerce/fulfilment/self-shipments.js');
+ const cases=[
+  {label:'ordinary name',other:'合成物流',accept:true},
+  {label:'fullwidth angles',other:'合成＜物流＞',accept:false,nameError:true},
+  {label:'small angles',other:'合成﹤物流﹥',accept:false,nameError:true},
+  {label:'U+2028 line separator',other:'a\u2028b',accept:false,nameError:true},
+  {label:'U+200B zero-width space',other:'a\u200bb',accept:false,nameError:true},
+  {label:'U+202E bidi override',other:'a\u202eb',accept:false,nameError:true},
+  {label:'U+0085 control',other:'a\u0085b',accept:false,nameError:true},
+  {label:'ASCII angles',other:'<x>',accept:false,nameError:true},
+  {label:'40 characters after NFKC',other:'㍿'.repeat(10),accept:true},
+  {label:'39 raw characters become 42',other:'a'.repeat(38)+'㍿',accept:false},
+  {label:'empty other',other:'',accept:false},
+  {label:'spaces-only other',other:'   ',accept:false},
+  {label:'fullwidth tracking',tracking:'ＳＹＮ－１２３',accept:true},
+  {label:'raw tracking angle',tracking:'SYN<123',accept:false},
+  {label:'51-character tracking',tracking:'A'.repeat(51),accept:false},
+  {label:'preset carrier with no name',carrier:'tcat',accept:true},
+  {label:'name and tracking trim after NFKC',other:'  合成物流  ',tracking:' ＳＹＮ－１２３ ',accept:true},
+  {label:'raw tracking tab before trim',tracking:'\tSYN-123',accept:false},
+  {label:'raw name tab before trim',other:'\t合成物流',accept:false,nameError:true},
+  {label:'invalid date',date:'2026-02-30',accept:false},
+  {label:'missing carrier',carrier:'',accept:false},
+ ];
+ for(const row of cases){
+  const draft={carrier:row.carrier??'other',other:row.other??'合成物流',tracking:row.tracking??'SYN-123',date:row.date??'2026-10-22'};
+  const raw={carrier_key:draft.carrier,...(draft.carrier==='other'?{carrier_name:draft.other}:{}),tracking_number:draft.tracking,sent_on:draft.date};
+  const ui=selfShipmentDraft(draft);let server:ReturnType<typeof shipmentInput>|undefined;
+  try{server=shipmentInput(raw);}catch(error){assert(error instanceof Error);assert(error.name==='ZodError'||'code' in error&&error.code==='validation_failed',row.label);}
+  assert.equal(!!ui.body,row.accept,row.label+' UI');assert.equal(!!server,row.accept,row.label+' server');
+  if(server){assert.deepEqual(ui.fields,{},row.label);assert.deepEqual(ui.body,server,row.label+' normalized body');}
+  else assert(Object.keys(ui.fields).length>0,row.label+' field message');
+  if(row.nameError)assert.equal(ui.fields.other,'物流業者名稱不能包含角括號（含全形）或看不見的控制字元。',row.label);
+  if(row.label==='raw tracking angle'||row.label==='raw tracking tab before trim')assert.equal(ui.fields.tracking,'請填寫 1–50 字的英文字母、數字或連字號。',row.label);
+  t.diagnostic(JSON.stringify({case:row.label,ui:!!ui.body,server:!!server,...(server?{carrier_name:server.carrier_name??null,tracking_number:server.tracking_number}:{fields:ui.fields})}));
+ }
+});
+
+test('self-shipment failed commands always supply safe form copy',async()=>{
+ const {selfShipmentFailure}=await import('../../modules/agent-commerce/seller-console/ui/SelfShipOrder.js');
+ const {ApiError}=await import('../../apps/portal-web/src/api.js');
+ assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:422,code:'validation_failed'})),'出貨資料有誤，請核對物流業者名稱、物流單號與寄出日期。');
+ assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:409,code:'future_unmapped_code'})),'無法登記出貨，請更新訂單後再核對。');
+ assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:422,code:'shipment_date_invalid'})),'寄出日期須在確認收款日到今天之間。');
+ assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:409,code:'constructor'})),'無法登記出貨，請更新訂單後再核對。');
+ assert.equal(selfShipmentFailure(new Error('private detail')),'無法登記出貨，請更新訂單後再核對。');
+});

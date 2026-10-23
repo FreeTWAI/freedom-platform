@@ -30,7 +30,7 @@ async function mockUploads(page: Page, options: { grant?: (path: string) => Reco
     ['sub-waiting', submission('sub-waiting', 'awaiting_upload', 2)],
     ['sub-revoked', submission('sub-revoked', 'revoked', 5)],
   ]);
-  const keys = [{ key_id: 'key-old', label: '舊筆電', scope: 'skill:submit', expires_at: '2026-12-01T00:00:00Z', revoked_at: null as string | null }];
+  const keys = [{ key_id: 'key-old', label: '舊筆電', scope: 'skill:submit', expires_at: new Date(Date.now() + 40 * 86_400_000).toISOString(), revoked_at: null as string | null }];
   let keyFailures = 1;
   const grant = options.grant ?? (() => ({ token: GRANT, expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), submit_url: '/agent-api/v1/skill-submissions/sub-new' }));
   const record = (request: Request) => {
@@ -59,7 +59,7 @@ async function mockUploads(page: Page, options: { grant?: (path: string) => Reco
     if (path.endsWith('/revoke')) { keys[0].revoked_at = '2026-09-23T02:00:00Z'; items.get('sub-waiting')!.grant_revoked_at = '2026-09-23T02:00:00Z'; return route.fulfill({ json: keys[0] }); }
     if (keyFailures-- > 0) return route.fulfill({ status: 403, json: { title: '需要重新確認', detail: '請重新登入後再建立金鑰。' } });
     const body = request.postDataJSON() as { label: string; expires_in_days: number };
-    const key = { key_id: 'key-new', label: body.label, scope: 'skill:submit', expires_at: '2026-10-23T00:00:00Z', revoked_at: null };
+    const key = { key_id: 'key-new', label: body.label, scope: 'skill:submit', expires_at: new Date(Date.now() + body.expires_in_days * 86_400_000).toISOString(), revoked_at: null };
     keys.unshift(key);
     return route.fulfill({ status: 201, json: { key, token: KEY } });
   });
@@ -182,7 +182,7 @@ test('replayed, expired and off-origin grants never display a token and offer a 
   const responses = [
     undefined,
     { token: GRANT, expires_at: '2026-01-01T00:00:00Z', submit_url: '/agent-api/v1/skill-submissions/sub-waiting' },
-    { token: GRANT, expires_at: '2099-01-01T00:00:00Z', submit_url: 'https://attacker.example/agent-api/v1/skill-submissions/sub-waiting' },
+    { token: GRANT, expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), submit_url: 'https://attacker.example/agent-api/v1/skill-submissions/sub-waiting' },
   ];
   const requests = await mockUploads(page, { grant: () => responses.shift() });
   await login(page); await navigate(page, '技能書架');
@@ -295,7 +295,7 @@ for (const mode of ['draft', 'key'] as const) {
       pending = true; await responseGate;
       await route.fulfill({ status: 201, json: mode === 'draft'
         ? { submission: submission('sub-delayed', 'awaiting_upload', 1), upload_grant: { token: GRANT, expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), submit_url: '/agent-api/v1/skill-submissions/sub-delayed' } }
-        : { key: { key_id: 'key-delayed', label: '延遲金鑰', scope: 'skill:submit', expires_at: '2099-01-01T00:00:00Z', revoked_at: null }, token: KEY } });
+        : { key: { key_id: 'key-delayed', label: '延遲金鑰', scope: 'skill:submit', expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(), revoked_at: null }, token: KEY } });
     });
     await login(page); await navigate(page, '技能書架');
     const trigger = page.getByRole('button', { name: '上傳技能', exact: true });

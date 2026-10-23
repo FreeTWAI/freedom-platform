@@ -21,7 +21,8 @@
         "cvs:UNIMARTC2C",
         "cvs:FAMIC2C",
         "cvs:HILIFEC2C",
-        "meetup"
+        "meetup",
+        "self_ship"
       ],
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
     },
@@ -69,6 +70,39 @@
             "method": {
               "type": "string",
               "const": "home"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "mobile": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "postal_code": {
+              "type": "string",
+              "maxLength": 10
+            },
+            "address": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "method",
+            "name",
+            "mobile",
+            "postal_code",
+            "address"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "self_ship"
             },
             "name": {
               "type": "string",
@@ -199,6 +233,23 @@
             "method": {
               "type": "string",
               "const": "home"
+            },
+            "postal_code": {
+              "type": "string",
+              "maxLength": 10
+            }
+          },
+          "required": [
+            "method"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "self_ship"
             },
             "postal_code": {
               "type": "string",
@@ -729,6 +780,51 @@
             "note"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "self_ship"
+            },
+            "fee_per_order_minor": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "multipleOf": 100
+            },
+            "handling_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                    },
+                    {
+                      "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "fee_per_order_minor",
+            "handling_days",
+            "note"
+          ],
+          "additionalProperties": false
         }
       ],
       "description": "Structural shape only. The server decides identity, membership, capability, current version and quotas. Server-only rules: none."
@@ -934,7 +1030,7 @@
           }
         },
         "delivery_options": {
-          "maxItems": 5,
+          "maxItems": 6,
           "type": "array",
           "items": {
             "oneOf": [
@@ -1036,6 +1132,51 @@
                 },
                 "required": [
                   "method",
+                  "note"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "self_ship"
+                  },
+                  "fee_per_order_minor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000,
+                    "multipleOf": 100
+                  },
+                  "handling_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 14
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                          },
+                          {
+                            "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "method",
+                  "fee_per_order_minor",
+                  "handling_days",
                   "note"
                 ],
                 "additionalProperties": false
@@ -1234,7 +1375,7 @@
           }
         },
         "delivery_options": {
-          "maxItems": 5,
+          "maxItems": 6,
           "type": "array",
           "items": {
             "oneOf": [
@@ -1336,6 +1477,51 @@
                 },
                 "required": [
                   "method",
+                  "note"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "self_ship"
+                  },
+                  "fee_per_order_minor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000,
+                    "multipleOf": 100
+                  },
+                  "handling_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 14
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                          },
+                          {
+                            "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "method",
+                  "fee_per_order_minor",
+                  "handling_days",
                   "note"
                 ],
                 "additionalProperties": false
@@ -1581,7 +1767,7 @@
                   }
                 },
                 "delivery_options": {
-                  "maxItems": 5,
+                  "maxItems": 6,
                   "type": "array",
                   "items": {
                     "oneOf": [
@@ -1683,6 +1869,51 @@
                         },
                         "required": [
                           "method",
+                          "note"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "method": {
+                            "type": "string",
+                            "const": "self_ship"
+                          },
+                          "fee_per_order_minor": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000,
+                            "multipleOf": 100
+                          },
+                          "handling_days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 14
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "allOf": [
+                                  {
+                                    "pattern": "^(?:[^\\uD800-\\uDFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]){1,200}$(?![\\s\\S])"
+                                  },
+                                  {
+                                    "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F]*$(?![\\s\\S])"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "method",
+                          "fee_per_order_minor",
+                          "handling_days",
                           "note"
                         ],
                         "additionalProperties": false
@@ -2171,6 +2402,7 @@
       "type": "string",
       "enum": [
         "shipping_input_invalid",
+        "self_ship_not_enabled",
         "ship_from_location_not_found",
         "ship_from_location_retired",
         "ship_from_location_limit",
@@ -2230,6 +2462,7 @@
           "type": "string",
           "enum": [
             "shipping_input_invalid",
+            "self_ship_not_enabled",
             "ship_from_location_not_found",
             "ship_from_location_retired",
             "ship_from_location_limit",

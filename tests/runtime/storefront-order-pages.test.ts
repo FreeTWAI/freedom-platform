@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import type {PublicOrder} from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
+import {MeetupCard} from '../../apps/portal-web/src/storefront/meetup-card.js';
+import {OfflineOrder} from '../../apps/portal-web/src/storefront/offline-order.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import { storeMissingHtml } from '../../modules/agent-commerce/hosted/page.js';
 import { orderAccessPageHtml, orderMissingHtml, orderPageHtml } from '../../modules/agent-commerce/storefront/pages.js';
-import { formatTaipeiDateTime } from '../../apps/portal-web/src/storefront/format.js';
+import { formatCalendarDate, formatTaipeiDateTime } from '../../apps/portal-web/src/storefront/format.js';
 import { orderEmailNote, type PaymentView } from '../../apps/portal-web/src/storefront/payment-view.js';
 import { checkoutHarness, ok, type CheckoutHarness } from './hosted-checkout-harness.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
@@ -29,6 +34,55 @@ beforeEach(async () => {
 
 after(async () => {
   await x?.stop();
+});
+
+test('meetup card renders waiting and recorded states across payment methods and retained lifecycles', () => {
+  const time = '2028-02-29T12:34:56.789Z';
+  const order: PublicOrder = {
+    order_ref: randomUUID(), display_number: '280229-ABCDEF', store: {slug: 'synthetic-shop', name: '合成商店'},
+    created_at: time, pay_by: time, reservation_expired: false, lifecycle_state: 'open', cancel_reason: null, currency: 'TWD',
+    lines: [{sku: 'P0001', title: '合成商品', options: [], quantity: 1, unit_price_minor: 100, line_total_minor: 100}],
+    merchandise_total_minor: 100, discount_total_minor: 0, shipping_total_minor: 0, total_minor: 100,
+    payment_state: 'confirmed', payment_method: 'immediate_card', payment_grace_until: null, offline_instructions: null,
+    meetup_notes: ['請先約定面交。\n保留第二行。', '<合成店門口>'], meetup_handover: null,
+    latest_payment_attempt: null, can_resume_payment: false, contact: null, delivery: null, invoice: null, redacted: true,
+  };
+  const render = (value: PublicOrder) => renderToStaticMarkup(createElement(MeetupCard, {order: value}));
+  for (const payment_method of ['cash_on_meetup', 'bank_transfer', 'immediate_card'] as const) {
+    const value = {...order, payment_method, payment_grace_until: payment_method === 'immediate_card' ? null : time};
+    const waiting = render(value);
+    assert.match(waiting, /aria-labelledby="shop-order-meetup-heading"/);
+    assert.match(waiting, /<h2 id="shop-order-meetup-heading">面交取貨<\/h2>/);
+    assert.match(waiting, /<p class="shop-pay-label">等待面交<\/p>/);
+    assert.match(waiting, /店家會用你留下的手機或 Email 和你約時間地點。/);
+    assert.match(waiting, /請先約定面交。\n保留第二行。/);
+    assert.match(waiting, /&lt;合成店門口&gt;/);
+    assert.equal(waiting.match(/class="shop-preserve-lines"/g)?.length, 2);
+    assert.doesNotMatch(waiting, /<button/);
+    const older = {...value};
+    delete older.meetup_handover;
+    assert.equal(render(older), waiting, 'an older producer is waiting, including card payment with meetup');
+    if (payment_method !== 'immediate_card') {
+      const offline = renderToStaticMarkup(createElement(OfflineOrder, {
+        order: {...value, payment_state: 'unpaid'}, disabled: false, onCancel: async () => {}, onRefresh: () => {},
+      }));
+      assert.doesNotMatch(offline, /請先約定面交|合成店門口|店家會用你留下/);
+      if (payment_method === 'cash_on_meetup') assert.match(offline, /前完成面交付款。/);
+    }
+    const completed = {...value, meetup_handover: {completed_on: '2028-02-29'}};
+    const recorded = render(completed);
+    assert.match(recorded, /<p class="shop-pay-label">已面交<\/p>/);
+    assert.match(recorded, /店家已登記在 2028\/02\/29 完成面交。/);
+    assert.doesNotMatch(recorded, /等待面交|店家會用你留下|請先約定面交|合成店門口|<button/);
+    for (const lifecycle_state of ['cancelled', 'closed'] as const) {
+      assert.equal(render({...value, lifecycle_state}), '');
+      assert.equal(render({...older, lifecycle_state}), '');
+      assert.equal(render({...completed, lifecycle_state}), recorded);
+    }
+  }
+  assert.equal(render({...order, meetup_notes: []}), '');
+  assert.equal(render({...order, meetup_notes: undefined, meetup_handover: {completed_on: '2028-02-29'}}), '');
+  assert.equal(formatCalendarDate('2028-02-29'), '2028/02/29');
 });
 
 test('order page serves identical no-store HTML shell for real and random order refs without cookies or DB writes', async () => {
@@ -234,4 +288,22 @@ test('formatTaipeiDateTime formats Asia/Taipei 24-hour timestamps including midn
   assert.equal(formatTaipeiDateTime('2026-10-15T16:30:00.000Z'), '2026/10/16 00:30');
   assert.equal(formatTaipeiDateTime('2026-01-05T01:05:00.000Z'), '2026/01/05 09:05');
   assert.equal(formatTaipeiDateTime('2026-12-31T15:59:00.000Z'), '2026/12/31 23:59');
+});
+
+
+test('self-ship card keeps payment, fulfilment, retained and redacted states distinct without leaking references',async()=>{
+ const {SelfShipCard,selfShipCardState}=await import('../../apps/portal-web/src/storefront/self-ship-card.js');
+ type View=Pick<PublicOrder,'self_ship'|'lifecycle_state'>;
+ const render=(order:View)=>renderToStaticMarkup(createElement(SelfShipCard,{order}));
+ const waiting:View={lifecycle_state:'open',self_ship:{handling_days:3,note:'<合成物流>\n第二行',ship_by:null,shipment:null}};
+ assert.equal(selfShipCardState(waiting),'waiting_payment');assert.match(render(waiting),/等待付款確認/);assert.match(render(waiting),/確認收款後 3 個工作天內寄出/);assert.match(render(waiting),/&lt;合成物流&gt;/);
+ const paid:View={...waiting,self_ship:{...waiting.self_ship!,ship_by:'2026-10-28'}};assert.equal(selfShipCardState(paid),'waiting_ship');assert.match(render(paid),/等待出貨/);assert.match(render(paid),/2026\/10\/28/);
+ const sent:View={...paid,self_ship:{...paid.self_ship!,shipment:{shipment_ref:randomUUID(),carrier_key:'other',carrier_name:'私有合成承運人',tracking_number:'PRIVATE-123',sent_on:'2026-10-23',recorded_at:'2026-10-23T01:00:00.000Z',redacted:false}}};
+ assert.equal(selfShipCardState(sent),'sent');assert.match(render(sent),/已出貨/);assert.match(render(sent),/私有合成承運人/);assert.match(render(sent),/PRIVATE-123/);assert.match(render(sent),/工坊不追蹤物流、不核實簽收/);
+ for(const lifecycle_state of ['open','closed','cancelled'] as const){
+  const redacted:View={lifecycle_state,self_ship:{...sent.self_ship!,shipment:{...sent.self_ship!.shipment!,redacted:true,carrier_name:null,tracking_number:null}}};
+  assert.equal(selfShipCardState(redacted),'redacted');assert.match(render(redacted),/已出貨/);assert.match(render(redacted),/物流業者：其他/);assert.match(render(redacted),/2026\/10\/23/);assert.doesNotMatch(render(redacted),/PRIVATE|私有|物流單號|<button|href=/);
+ }
+ for(const lifecycle_state of ['closed','cancelled'] as const)assert.equal(render({...waiting,lifecycle_state}),'');
+ assert.equal(render({lifecycle_state:'open'}),'');
 });

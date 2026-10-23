@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {Pool} from 'pg';
-import {readCommerceSettings,readNodeCommerceSettings} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readNodeCommerceSettings,readCommerceSelfShipEnabled} from '../../modules/agent-commerce/operations/runtime-settings.js';
 import {ReadinessError} from '../../apps/platform-api/src/readiness.js';
 import {readWorkerConfig,workerRuntime,type WorkerEnv} from '../../apps/platform-api/src/worker.js';
 import {nodeRuntime,createApp} from '../../apps/platform-api/src/app.js';
@@ -83,4 +83,21 @@ test('an offline-only profile list needs no keyring or journal and still install
 test('checkout requires console even with launchpad enabled',()=>{
   for(const consoleEnabled of [undefined,'false'])assert.throws(()=>readCommerceSettings({FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:consoleEnabled}),{name:'ReadinessError',message:'commerce_console_required'});
   assert.throws(()=>readCommerceSettings({FREEDOM_COMMERCE_CONSOLE_ENABLED:'true'}),{name:'ReadinessError',message:'commerce_launchpad_required'});
+});
+
+
+test('self ship defaults off, is local/staging only in PR-A, and Node/Worker/site agree',async()=>{
+  assert.equal(readCommerceSelfShipEnabled({}),false);
+  for(const invalid of ['TRUE','',' true','true ','synthetic-secret'])assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:invalid}),{message:'commerce_self_ship_flag_invalid'});
+  assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true'}),{message:'commerce_self_ship_console_required'});
+  for(const freedomEnv of ['local','staging'] as const){
+    const bindings={...env(),FREEDOM_ENV:freedomEnv,FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:freedomEnv==='local'?'http://127.0.0.1:4310':'https://staging.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+    const settings=readNodeCommerceSettings(bindings),config=readWorkerConfig(bindings),worker=workerRuntime(bindings,config);
+    assert.equal(worker.commerceSelfShipEnabled,true);assert.equal(settings.checkoutEnabled,false);
+    const pool={query(){throw new Error('site must not query SQL');}} as unknown as Pool;
+    for(const quarantine of [false,true]){const app=createApp(pool,config.origin,freedomEnv,{guildLaunchpadEnabled:true,commerceSettings:{...settings,quarantine},commerceSelfShipEnabled:true});const site=await (await app.request(config.origin+'/api/v1/site')).json();assert.equal(site.commerce_self_ship_enabled,!quarantine);}
+  }
+  const publicBindings={...env(),FREEDOM_ENV:'public',APP_ORIGIN:'https://synthetic.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+  assert.throws(()=>readNodeCommerceSettings(publicBindings),{message:'self_ship_retention_not_ready'});assert.throws(()=>readWorkerConfig(publicBindings),{message:'self_ship_retention_not_ready'});
+  assert.throws(()=>nodeRuntime('public','https://synthetic.example.test',{commerceSelfShipEnabled:true}),{message:'self_ship_retention_not_ready'});
 });

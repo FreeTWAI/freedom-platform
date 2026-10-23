@@ -1,3 +1,4 @@
+import {selfShipOrderView} from './self-ship-view.js';
 import type {PoolClient} from 'pg';
 import {PublicOrderSchema} from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {confirmedPaymentSQL} from './confirmed-payment.js';
@@ -10,10 +11,11 @@ export async function publicOrder(q:PoolClient,store:{instanceId:string;tenantId
   const row=(await q.query(`SELECT co.order_id,co.display_number,co.terms,co.lifecycle_state,co.cancel_reason,co.payment_method,o.created_at,o.expires_at,
     o.expires_at<=clock_timestamp() AS reservation_expired,CASE WHEN co.payment_method='immediate_card' THEN NULL ELSE o.expires_at+interval '72 hours' END AS payment_grace_until,
     ${confirmedPaymentSQL('co.order_id')} AS confirmed,s.document AS offline_document,
-    c.contact_name,c.contact_email,c.contact_phone,c.delivery,c.invoice,c.redacted_at
+    c.contact_name,c.contact_email,c.contact_phone,c.delivery,c.invoice,c.redacted_at,to_char(h.completed_on,'YYYY-MM-DD') AS completed_on
     FROM commerce_checkout_orders co JOIN commerce_orders o USING(order_id)
     JOIN commerce_checkout_contacts c ON c.contact_id=co.contact_id AND c.checkout_id=co.checkout_id AND c.tenant_id=co.tenant_id AND c.instance_id=co.instance_id
     LEFT JOIN commerce_offline_payment_settings s ON s.tenant_id=co.tenant_id AND s.instance_id=co.instance_id AND s.version::text=co.terms->'offline_payment'->>'settings_version'
+    LEFT JOIN commerce_meetup_handovers h ON h.order_id=co.order_id AND h.tenant_id=co.tenant_id AND h.instance_id=co.instance_id
     WHERE co.order_id=$1 AND co.tenant_id=$2 AND co.instance_id=$3 AND o.order_profile='hosted_checkout'`,[orderId,store.tenantId,store.instanceId])).rows[0];
   if(!row)return orderAccessNotFound();
   const summary=(await payment?.summarize(q,[orderId]))?.get(orderId)??{payment_state:row.confirmed?'confirmed':'unpaid',latest_payment_attempt:null,can_resume_payment:false};
@@ -25,7 +27,9 @@ export async function publicOrder(q:PoolClient,store:{instanceId:string;tenantId
     lines:t.items.map(l=>({sku:l.sku,title:l.title,options:[],quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,total_minor:t.total_minor,
     payment_method:row.payment_method,payment_grace_until:row.payment_grace_until?.toISOString()??null,offline_instructions,
+    ...(t.shipping.groups[0]?.method_ref==='self_ship'?{self_ship:await selfShipOrderView(q,orderId,t)}:{}),
     meetup_notes:[...new Set(t.shipping.groups.flatMap(group=>group.meetup?[group.meetup.note]:[]))],
+    meetup_handover:row.completed_on===null?null:{completed_on:row.completed_on},
     ...summary,contact:redacted?null:{name:row.contact_name,email:row.contact_email,phone:row.contact_phone},
     delivery:redacted?null:row.delivery,invoice:redacted?null:row.invoice,redacted});
 }
