@@ -298,6 +298,143 @@ test('sending during the first comment page keeps its snapshot, cursor and one c
   }finally{release();}
 });
 
+for (const {action, target} of [{action: 'edit', target: 1}, {action: 'delete', target: 1}, {action: 'edit', target: 26}] as const) test(`a delayed comment refresh cannot undo a confirmed ${action} of comment ${target} or reset pagination`, async ({page, e2eAuthPool}) => {
+  await login(page);
+  const text = `E2E 留言更新交錯 ${action} ${target} ${Date.now()}`;
+  await page.getByLabel('貼文內容', {exact: true}).fill(text);
+  await page.getByRole('button', {name: '發布貼文', exact: true}).click();
+  const post = card(page, text); await expect(post).toBeVisible();
+  const postId = (await post.getAttribute('id'))!.replace('social-post-', '');
+  await e2eAuthPool.query(`INSERT INTO community_social_comments(post_id,community_id,author_user_id,body,created_at)
+    SELECT p.post_id,p.community_id,p.author_user_id,'更新前留言 '||lpad(i::text,2,'0'),now()-interval '2 days'+i*interval '1 second'
+    FROM community_social_posts p CROSS JOIN generate_series(1,26) i WHERE p.post_id=$1`, [postId]);
+  await page.getByRole('button', {name: '更新動態', exact: true}).click();
+  const toggle = post.getByRole('button', {name: /^留言 · /});
+  await expect(toggle).toHaveText('留言 · 26'); await toggle.click();
+  await expect(post.locator('.social-comment')).toHaveCount(24);
+  if (target === 26) {
+    await post.getByRole('button', {name: '載入更多留言', exact: true}).click();
+    await expect(post.locator('.social-comment')).toHaveCount(26);
+  }
+  const originalBody = `更新前留言 ${String(target).padStart(2, '0')}`;
+  const targetId = (await e2eAuthPool.query('SELECT comment_id FROM community_social_comments WHERE post_id=$1 AND body=$2', [postId, originalBody])).rows[0].comment_id;
+  await post.getByLabel('寫留言', {exact: true}).fill('尚未送出的草稿不能改變');
+  await toggle.click();
+
+  let release!: () => void, captured!: () => void, held = false;
+  const gate = new Promise<void>(resolve => release = resolve), snapshot = new Promise<void>(resolve => captured = resolve);
+  let firstPage: {items: {comment_id: string; body: string}[]; next_cursor: string | null} | undefined;
+  const requestedCursors: (string | null)[] = [];
+  await page.route(`**/api/v1/social-posts/${postId}/comments*`, async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const cursor = new URL(route.request().url()).searchParams.get('cursor'); requestedCursors.push(cursor);
+    if (cursor || held) return route.continue();
+    held = true; const response = await route.fetch(); firstPage = await response.json(); captured();
+    await gate; await route.fulfill({response});
+  });
+  try {
+    await toggle.click(); await snapshot;
+    expect(firstPage!.items).toHaveLength(24); expect(firstPage!.next_cursor).toBeTruthy();
+    expect(firstPage!.items[0].body).toBe('更新前留言 01');
+    const comment = post.locator('.social-comment').filter({hasText: originalBody});
+    await comment.getByLabel('留言選項', {exact: true}).click();
+    if (action === 'edit') {
+      await comment.getByRole('button', {name: '編輯留言', exact: true}).click();
+      await comment.getByLabel('編輯留言', {exact: true}).fill('已確認的新版留言');
+      await comment.getByRole('button', {name: '儲存留言', exact: true}).click();
+      await expect(post.getByText('已確認的新版留言', {exact: true})).toBeVisible();
+    } else {
+      await comment.getByRole('button', {name: '刪除留言', exact: true}).click();
+      await comment.getByRole('button', {name: '確定刪除留言', exact: true}).click();
+      await expect(comment).toHaveCount(0);
+    }
+    const count = action === 'edit' ? 26 : 25;
+    await expect(toggle).toHaveText(`留言 · ${count}`);
+    release(); await expect(post.getByText('正在載入留言…', {exact: true})).toHaveCount(0);
+    await expect(post.getByText(originalBody, {exact: true})).toHaveCount(0);
+    await expect(post.locator('.social-comment')).toHaveCount(target === 26 ? 25 : count - 2);
+    if (action === 'edit') await expect(post.getByText('已確認的新版留言', {exact: true})).toHaveCount(1);
+    await expect(post.getByText('更新前留言 24', {exact: true})).toBeVisible();
+    await post.getByRole('button', {name: '載入更多留言', exact: true}).click();
+    await expect(post.locator('.social-comment')).toHaveCount(count);
+    expect(requestedCursors).toEqual([null, firstPage!.next_cursor]);
+    await expect(post.getByRole('button', {name: '載入更多留言', exact: true})).toHaveCount(0);
+    await expect(toggle).toHaveText(`留言 · ${count}`);
+    await expect(post.getByLabel('寫留言', {exact: true})).toHaveValue('尚未送出的草稿不能改變');
+    const row = (await e2eAuthPool.query('SELECT body,state FROM community_social_comments WHERE comment_id=$1', [targetId])).rows[0];
+    expect(row).toEqual(action === 'edit' ? {body: '已確認的新版留言', state: 'active'} : {body: originalBody, state: 'deleted'});
+    // A new read after the ACK must still accept later authoritative changes.
+    if (action === 'edit') await e2eAuthPool.query('UPDATE community_social_comments SET body=$2,edit_revision=edit_revision+1 WHERE comment_id=$1', [targetId, '其他分頁更新的留言']);
+    await toggle.click(); await toggle.click();
+    await expect(post.getByText('正在載入留言…', {exact: true})).toHaveCount(0);
+    await expect(post.getByText(originalBody, {exact: true})).toHaveCount(0);
+    if (target === 26) await post.getByRole('button', {name: '載入更多留言', exact: true}).click();
+    if (action === 'edit') {
+      await expect(post.getByText('其他分頁更新的留言', {exact: true})).toHaveCount(1);
+      await expect(post.getByText('已確認的新版留言', {exact: true})).toHaveCount(0);
+    }
+  } finally { release(); }
+});
+
+test('a comment read that captures a newer server revision does not roll back to an earlier local ACK', async ({page, e2eAuthPool}) => {
+  await login(page);
+  const text = `E2E 留言新版回應 ${Date.now()}`;
+  await page.getByLabel('貼文內容', {exact: true}).fill(text);
+  await page.getByRole('button', {name: '發布貼文', exact: true}).click();
+  const post = card(page, text); await expect(post).toBeVisible();
+  const postId = (await post.getAttribute('id'))!.replace('social-post-', '');
+  const toggle = post.getByRole('button', {name: /^留言 · /}); await toggle.click();
+  await post.getByLabel('寫留言', {exact: true}).fill('原始留言');
+  await post.getByRole('button', {name: '送出留言', exact: true}).click();
+  await expect(post.getByText('原始留言', {exact: true})).toBeVisible(); await toggle.click();
+  let release!: () => void, requested!: () => void;
+  const gate = new Promise<void>(resolve => release = resolve), started = new Promise<void>(resolve => requested = resolve);
+  await page.route(`**/api/v1/social-posts/${postId}/comments`, async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    requested(); await gate;
+    // The request started first, but its database snapshot is taken after both edits.
+    const response = await route.fetch(); await route.fulfill({response});
+  });
+  try {
+    await toggle.click(); await started;
+    const comment = post.locator('.social-comment'); await comment.getByLabel('留言選項', {exact: true}).click();
+    await comment.getByRole('button', {name: '編輯留言', exact: true}).click();
+    await comment.getByLabel('編輯留言', {exact: true}).fill('本頁已確認的修改');
+    await comment.getByRole('button', {name: '儲存留言', exact: true}).click();
+    await expect(post.getByText('本頁已確認的修改', {exact: true})).toBeVisible();
+    await e2eAuthPool.query('UPDATE community_social_comments SET body=$2,edit_revision=edit_revision+1 WHERE post_id=$1', [postId, '伺服器的更新版本']);
+    release();
+    await expect(post.getByText('伺服器的更新版本', {exact: true})).toBeVisible();
+    await expect(post.getByText('本頁已確認的修改', {exact: true})).toHaveCount(0);
+    await expect(post.locator('.social-comment')).toHaveCount(1);
+    await expect(toggle).toHaveText('留言 · 1');
+  } finally { release(); }
+});
+
+test('a failed comment read does not claim there are no comments and can retry without losing the draft', async ({page}) => {
+  await login(page);
+  const text = `E2E 留言讀取失敗 ${Date.now()}`;
+  await page.getByLabel('貼文內容', {exact: true}).fill(text);
+  await page.getByRole('button', {name: '發布貼文', exact: true}).click();
+  const post = card(page, text); await expect(post).toBeVisible();
+  const postId = (await post.getAttribute('id'))!.replace('social-post-', '');
+  let reads = 0;
+  await page.route(`**/api/v1/social-posts/${postId}/comments`, async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    if (++reads === 1) return route.fulfill({status: 503, contentType: 'application/problem+json', body: JSON.stringify({detail: '留言讀取暫時失敗'})});
+    await route.continue();
+  });
+  await post.getByRole('button', {name: '留言 · 0', exact: true}).click();
+  await expect(post.getByRole('alert')).toBeVisible();
+  await expect(post.getByText('還沒有留言，聊聊你的想法。', {exact: true})).toHaveCount(0);
+  await post.getByLabel('寫留言', {exact: true}).fill('讀取失敗也保留這份草稿');
+  await post.getByRole('button', {name: '重新載入留言', exact: true}).click();
+  await expect(post.getByRole('alert')).toHaveCount(0);
+  await expect(post.getByText('還沒有留言，聊聊你的想法。', {exact: true})).toBeVisible();
+  await expect(post.getByLabel('寫留言', {exact: true})).toHaveValue('讀取失敗也保留這份草稿');
+  expect(reads).toBe(2);
+});
+
 test('an author edits a post and a comment in place; the feed marks both as edited (#399)',async({page})=>{
   await login(page);
   const text=`E2E 編輯前 ${Date.now()}`;
