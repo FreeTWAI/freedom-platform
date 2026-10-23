@@ -140,6 +140,8 @@ function GameBoard({ game, seed, onBack, onResult }: {
     }
     catch {
         stop();
+        l.paused = true;
+        void audio.current?.suspend().catch(() => { });
         setReady(false);
         setError('3D 畫面暫時中斷。按重試恢復這一局。');
         return;

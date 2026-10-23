@@ -32,6 +32,16 @@
 
 規則測試：多 seed 牌數／金額、固定最後牌、方向錯誤不變、過期操作／重入、印章邊界、照片上限和投影、時鐘暫停／恢復、結果資料損毀／過期／quota、分享取消。TypeScript、production build、平台 module/context/inventory 檢查。實際 Three renderer 的手機／桌面截圖及鍵盤／pointer 完整三局、分享檔／剪貼簿失敗、站內帶圖預覽與登入接續。記錄實跑，不將 AI 自測稱為真人喜好、實機效能或分享率證據。真人趣味評估與 iPhone/Android 真機為 EXTERNAL_PENDING。
 
+### AD-6 回復反例（PR #986 審查修正）
+
+- 執行中的 renderer 拋錯與 WebGL context loss 都進入同一個暫停狀態；保留本局資料、停止計時與操作，重建場景後必須本人按「繼續這一局」。回復後時鐘及分類冷卻必須再次前進，不能只有畫面恢復。
+- Stage factory 在回傳前任何初始化步驟失敗，也必須移除 canvas 並釋放已取得的 renderer、環境、材質及觀察器；重試不得堆疊 canvas 或殘留 WebGL context。
+- 反射環境沿用同一 RoomEnvironment，但 PMREM 明確限制為 64px（原預設 256px），降低首次光影計算；不改遊戲規則、角色模型或手機解析度。使用目前 Three 的 PCFShadowMap，避免已移除常數的相容警告。此調整不代表實機 FPS 已驗收。
+- 沿用發文工具既有樣式的初始載入要求；分開遊戲與會員 JavaScript 不得讓 optimizer CSS 變成延遲下載依賴。這項以既有建置測試核對，不刪減原斷言。
+- 入口先完成動態 import 再掛載頁面，避免初始 Suspense reveal 的計時器阻塞已暫停時鐘的登入旅程；沿用既有兩個聊天 polling 案例驗回，不修改其時鐘或等待條件。
+- 站內分享的瀏覽器案例須在 finally 關閉自己的頁面並刪除自己的唯一測試貼文，避免後續測試帳號的已讀外鍵使聊天室清理失敗。不能擴大刪除範圍或放寬聊天室斷言。
+- CI 失敗須讀實際 trace／error context 並記錄原因；完整必要 checks 與最新 head 的獨立審查仍為合併前置，不能用本機通過代替。
+
 
 ## AD-9 美術來源與最新修正
 
@@ -63,3 +73,14 @@
 - 平台 production bundle 實際 Chromium 像素截圖：390 手機及 1440 桌面、三款場景、零 pageerror、無橫向溢出。固定攝影棚合批並共用後，觀察到約 210 次渲染呼叫（原約 268）；屬軟體瀏覽器的結構量測，不是實機 FPS 承諾。
 - `module-check` 通過的是 descriptor／source ownership；不冒充整站授權與行為驗證。來源 inventory 另以既有邊界與 POSIX path serialization 計算並核對，非原生 verifier／CI verdict。
 - 平台整合瀏覽器旅程另列在 `tests/e2e/absurd-daily.spec.ts`。完整啟動測試資料庫未在初次 180 秒預算內完成；本機延長啟動預算後繼續驗證，不更改 CI 或刪掉必要案例。最終結果記於 PR。
+
+### PR #986 審查後回歸（2026-10-23）
+
+舊 head `5432561f` 的 Verify 39835211178 失敗，獨立審查要求修正執行中 renderer 例外的暫停狀態。已讀原 CI 的 browser trace／error context 與 partition 6 receipt，未將失敗歸類為機器波動：
+
+- 3D 檔案請求皆成功，但首次建立光影環境阻塞到五秒 ready 斷言之後；限制 PMREM 尺寸並改用目前的陰影常數，保留原五秒斷言。
+- 初始 lazy/Suspense 入口讓兩個暫停虛擬時鐘的既有登入案例停在 loading；改由入口 import 完成後掛載。
+- partition 6 失敗的是既有 optimizer CSS 初始圖譜斷言，已恢復 eager stylesheet；原案例未修改。
+- 新分享案例留下貼文，後續 synthetic chat 帳號讀取後使清理卡在已讀外鍵，進而累積貼圖；只清理本案例自己的貼文，聊天原案例未修改。
+
+整合 main `c140a346` 後，本輪 Node 24 型別／標準建置、11 個遊戲規則加 5 個既有文字歷史／樣式規則全部通過。以同一隔離 schema 依序跑遊戲 8 個、兩個 polling 案例、聊天搜尋、貼圖與未知圖片發布等共 **29 個瀏覽器案例，29 passed、0 skipped（4.9 分鐘）**。新增的兩個故障注入分別驗真正 render 呼叫拋錯後保留進度並恢復冷卻，以及 factory 回傳前失敗後 canvas 為零、舊 WebGL context 已釋放、重試只有一個 canvas。這是本機結果；新 head 的完整 CI、獨立重新審查與實機／真人驗收仍各自成立。

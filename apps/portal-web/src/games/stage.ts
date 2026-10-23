@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, HemisphereLight, PCFSoftShadowMap, PMREMGenerator, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material } from 'three';
+import { ACESFilmicToneMapping, HemisphereLight, PCFShadowMap, PMREMGenerator, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type WebGLRenderTarget } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -42,23 +42,51 @@ const INK = '#302744', LIME = '#ffc857', BLUE = '#5062cb', PAPER = '#fff1d5';
 /** AD-6: all geometry/material/texture ownership is per mounted stage. */
 export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<CanvasTexture>(), shadows = new Set<DirectionalLight['shadow']>();
+    let disposed = false, environment: WebGLRenderTarget | undefined, pmrem: PMREMGenerator | undefined, room: RoomEnvironment | undefined, observer: ResizeObserver | undefined;
+    const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
+    // AD-6: initialization can fail before the caller receives a Stage to dispose.
+    function dispose() {
+        if (disposed) return;
+        disposed = true;
+        observer?.disconnect();
+        renderer.domElement.removeEventListener('webglcontextlost', lost);
+        geometries.forEach(g => g.dispose());
+        materials.forEach(m => m.dispose());
+        textures.forEach(t => t.dispose());
+        shadows.forEach(s => s.dispose());
+        room?.dispose();
+        pmrem?.dispose();
+        environment?.dispose();
+        renderer.dispose();
+        renderer.forceContextLoss();
+        renderer.domElement.remove();
+    }
+    try {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RULES.maxDpr));
     renderer.toneMapping = ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.12;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.shadowMap.type = PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden', 'true');
     host.append(renderer.domElement);
     const scene = new Scene();
     scene.background = new Color('#ba9bdf');
     const camera = new PerspectiveCamera(44, 4 / 3, .1, 60), ray = new Raycaster(), ground = new Plane(new Vector3(0, 1, 0), 0), intersection = new Vector3();
     scene.add(new HemisphereLight('#fff2da', '#785f9b', 2.15));
-    const pmrem = new PMREMGenerator(renderer), room = new RoomEnvironment(), environment = pmrem.fromScene(room, .06);
+    pmrem = new PMREMGenerator(renderer);
+    room = new RoomEnvironment();
+    // Clay materials need broad light, not the default 256px GGX prefilter.
+    // 64px keeps the same room/reflections with 1/16 of its base texel work.
+    environment = pmrem.fromScene(room, .06, .1, 100, { size: 64 });
     scene.environment = environment.texture;
     scene.environmentIntensity = .42;
     room.dispose();
+    room = undefined;
     pmrem.dispose();
+    pmrem = undefined;
     const key = new DirectionalLight('#fff1d7', 4.2);
+    shadows.add(key.shadow);
     key.position.set(-3.5, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -70,7 +98,6 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const rim = new DirectionalLight('#bdc7ff', 2.4);
     rim.position.set(5, 3, -3);
     scene.add(rim);
-    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<CanvasTexture>();
     const geo = <T extends BufferGeometry>(value: T): T => { geometries.add(value); return value; };
     const round = geo(new RoundedBoxGeometry(1, 1, 1, 3, .12)), sphere = geo(new SphereGeometry(1, 24, 16)), cylinder = geo(new CylinderGeometry(1, 1, 1, 24)), cone = geo(new CylinderGeometry(0, 1, 1, 24)), plane = geo(new PlaneGeometry(1, 1)), box = geo(new BoxGeometry(1, 1, 1));
     const torus = geo(new TorusGeometry(1, .09, 10, 40)), arch = geo(new TorusGeometry(1, .09, 10, 36, Math.PI)), coat = geo(new CylinderGeometry(.72, 1, 1, 32));
@@ -91,7 +118,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     function shadow(parent: Group, x: number, z: number, sx: number, sz: number) { const m = mesh(parent, cylinder, '#c0c9b1', x, .012, z, sx, .014, sz); return m; }
     let world = new Group();
     scene.add(world);
-    let keyId = '', lastView: StageView | null = null, disposed = false, ready = false;
+    let keyId = '', lastView: StageView | null = null, ready = false;
     let clientRoot: Group | null = null, board: Group | null = null, birds: Group[] = [], anchors: Anchor[] = [], stampRoot: Group | null = null, paperMesh: Mesh | null = null, paperMat: MeshBasicMaterial | null = null, paperKey = '', paperTexture: CanvasTexture | null = null, cashMesh: Mesh | null = null, cashKey = '', tower: Group | null = null, crab: Group | null = null, lamp: Group | null = null;
     function rod(p: Group, c: string, a: Vector3, b: Vector3, r = .04) { const m = mesh(p, cylinder, c, 0, 0, 0, r, a.distanceTo(b), r); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), b.clone().sub(a).normalize()); return m; }
     function eye(p: Group, x: number, y: number, z: number, size = .16, look = 0) { ball(p, PAPER, x, y, z, size, size * 1.13, size * .72); ball(p, INK, x + look, y - .005, z + size * .66, size * .48, size * .61, size * .28); ball(p, '#fffaf0', x + look - size * .13, y + size * .22, z + size * .9, size * .13); }
@@ -487,11 +514,9 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     function resize() { if (disposed)
         return; renderer.setSize(Math.max(1, host.clientWidth), Math.max(1, host.clientHeight), false); if (lastView)
         update(lastView); }
-    const observer = new ResizeObserver(resize);
+    observer = new ResizeObserver(() => { try { resize(); } catch { if (!disposed) onLost(); } });
     observer.observe(host);
     resize();
-    const lost = (event: Event) => { event.preventDefault(); if (!disposed)
-        onLost(); };
     renderer.domElement.addEventListener('webglcontextlost', lost);
     return {
         update,
@@ -501,7 +526,10 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         framing() { scene.updateMatrixWorld(true); const visible = anchors.filter(a => a.object.visible && a.points.every(p => { const v = a.object.localToWorld(p.clone()).project(camera); return v.z >= -1 && v.z <= 1 && Math.abs(v.x) <= .97 && Math.abs(v.y) <= .97; })).map(a => a.id); return { visible, blocked: !!board && Math.abs(board.position.x) < .85, lift: clientRoot?.position.y ?? 0 }; },
         point(x, y) { const r = host.getBoundingClientRect(); ray.setFromCamera(new Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera); return ray.ray.intersectPlane(ground, intersection) ? { x: intersection.x / 1.2, y: intersection.z / 1.5 } : null; },
         stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
-        dispose() { if (disposed)
-            return; disposed = true; observer.disconnect(); renderer.domElement.removeEventListener('webglcontextlost', lost); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); environment.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); },
+        dispose,
     };
+    } catch (cause) {
+        dispose();
+        throw cause;
+    }
 }

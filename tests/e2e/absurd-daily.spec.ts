@@ -97,6 +97,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
 
 test('AD-7 guest result survives login, shows current author, and publishes only after confirmation',async({page,e2eAuthPool})=>{
   await page.goto('/?game-share=1#home');const draft=await artifact();await putArtifact(page,draft);
+  try {
   const writes:string[]=[];page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/social-posts/notes'))writes.push(r.url());});
   await login(page);
   const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true});
@@ -110,6 +111,63 @@ test('AD-7 guest result survives login, shows current author, and publishes only
   expect(writes).toHaveLength(1);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_posts WHERE note=$1',[draft.text])).rows[0].n).toBe(1);
   expect(await page.evaluate(key=>sessionStorage.getItem(key),GAME_HANDOFF_KEY)).toBeNull();
+  } finally {
+    // AD-7: this alphabetically early test must not leave a post that later
+    // synthetic chat members read, creating foreign keys into their fixtures.
+    await page.close();
+    await e2eAuthPool.query(`DELETE FROM community_social_posts WHERE note=$1
+      AND author_user_id IN (SELECT user_id FROM users WHERE email='maker@local.test')`,[draft.text]);
+  }
+});
+
+test('AD-6 render exception recovers paused, keeps progress and resumes action cooldowns only on Continue',async({page})=>{
+  test.setTimeout(120_000);await openGame(page,'cash');
+  const deck=cashDeck(42),progress=page.locator('.ad-controls .ad-meta');
+  await page.keyboard.press(deck[0].valid?'ArrowRight':'ArrowLeft');
+  await expect(progress).toContainText('已分類 1 / 30');
+  // Throw from a real render call after initialization, rather than dispatching
+  // contextlost (which has its own, already-paused callback).
+  await page.evaluate(()=>{
+    const prototype=WebGL2RenderingContext.prototype,original=prototype.drawElements;
+    prototype.drawElements=function(...args){prototype.drawElements=original;throw Error('Synthetic active-render failure');};
+  });
+  await expect(page.getByRole('alert')).toHaveText('3D 畫面暫時中斷。按重試恢復這一局。');
+  await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
+  await expect(resume).toBeVisible();await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
+  await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
+  await expect(progress).toContainText('已分類 1 / 30');
+  await resume.click();
+  for(let i=1;i<3;i++){
+    await page.waitForTimeout(180);
+    await page.keyboard.press(deck[i].valid?'ArrowRight':'ArrowLeft');
+    await expect(progress).toContainText(`已分類 ${i+1} / 30`);
+  }
+});
+
+test('AD-6 factory failure releases an unreturned stage and retry creates exactly one healthy canvas',async({page})=>{
+  test.setTimeout(120_000);
+  await page.addInitScript(()=>{
+    const prototype=WebGL2RenderingContext.prototype,original=prototype.compileShader;
+    prototype.compileShader=function(...args){
+      if(document.querySelector('.ad-stage canvas')){
+        prototype.compileShader=original;
+        (window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext=this;
+        throw Error('Synthetic pre-return environment failure');
+      }
+      return original.apply(this,args);
+    };
+  });
+  await page.goto('/play?game=cash&seed=42');
+  await expect(page.getByRole('alert')).toContainText('此瀏覽器暫時無法開啟 3D 場景');
+  await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext.isContextLost())).toBe(true);
+  await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
+  await page.getByRole('button',{name:'開始這一局',exact:true}).click();
+  await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 1 / 30');
 });
 
 test('AD-7 importing preserves an existing draft and refuses to overwrite its image',async({page})=>{

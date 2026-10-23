@@ -2334,8 +2334,8 @@
     },
     {
       "path": "apps/portal-web/src/main.tsx",
-      "bytes": 1720,
-      "sha256": "ebf2adf0c5bdb558b7c114e395e51fddd14709f99a9724faadb72341c3660cda"
+      "bytes": 2049,
+      "sha256": "cbcc96c6a853fc81cc3d731e043525fc0f1088d2621ed1cba8acaf625e347b30"
     },
     {
       "path": "apps/portal-web/src/module-light-theme.css",
@@ -2464,8 +2464,8 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 29917,
-      "sha256": "8c087649a3a247b19b346eb6b94f176cf574612eccfe4c21fc150c6906868020"
+      "bytes": 29998,
+      "sha256": "e7736f65932a082a5409ba96877c1ff445d5d328ed19adfe194538be184f7da5"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
@@ -2494,8 +2494,8 @@
     },
     {
       "path": "apps/portal-web/src/games/stage.ts",
-      "bytes": 33677,
-      "sha256": "de1ebf8a025f325104d2cf2a358b7d24ec84c47aff43bd6f66a42e370116c5dd"
+      "bytes": 34557,
+      "sha256": "0e9cc5d31aa465edc0cb88076af54da074da1331700985683afb7eb008daef55"
     },
     {
       "path": "apps/portal-web/src/games/toy-theme.css",
@@ -14629,8 +14629,8 @@
     },
     {
       "path": "docs/development/absurd-daily.md",
-      "bytes": 9361,
-      "sha256": "ca73d2c4c7bcf33dfd2126d6fe9fe44f42dab2e665263c8c6ebe3a99b589f995"
+      "bytes": 12497,
+      "sha256": "309d645741908a62430c892bec20847e51677f2d46b697f0c961e96c5898d0be"
     },
     {
       "path": "docs/development/agent-development-guide.md",
@@ -23494,8 +23494,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 11585,
-      "sha256": "791020cc3b2efcd8f28a63751a4fd7385bf7a579373d4afb86b31a5cca701518"
+      "bytes": 14931,
+      "sha256": "873b523f87e84ecce646108cfd635399514dc64e9ae356ad97f4a78197830d58"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
