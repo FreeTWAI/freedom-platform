@@ -1020,3 +1020,164 @@ test('closing the form keeps the unsent create and edit drafts apart until they 
   }
   await themeOf(page, 'light');
 });
+
+test('a definitive cover rejection keeps the created service draft under its saved id', async ({ page, e2eAuthPool }) => {
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  const toggle = mine.getByRole('button', { name: /^(新增服務|關閉表單)$/ });
+  const form = await fillService(page, 'E2E 封面明確拒絕', '設計', '已建立的服務只重試封面', true);
+  const writes: string[] = [];
+  page.on('request', request => {
+    if (['POST', 'PUT'].includes(request.method()) && /\/api\/v1\/member-services(?:\/[^/]+(?:\/cover)?)?$/.test(new URL(request.url()).pathname)) writes.push(request.method());
+  });
+  let reject = true;
+  const coverStatuses: number[] = [];
+  await page.route('**/api/v1/member-services/*/cover', async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    if (reject) {
+      reject = false;
+      coverStatuses.push(400);
+      return route.fulfill({ status: 400, json: { code: 'validation_failed', detail: '這張封面未通過驗證。' } });
+    }
+    const response = await route.fetch();
+    coverStatuses.push(response.status());
+    return route.fulfill({ response });
+  });
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('這張封面未通過驗證。服務已儲存。');
+  const services = async () => (await e2eAuthPool.query('SELECT service_id::text AS id, title FROM member_services WHERE owner_user_id=$1', [owner])).rows;
+  const saved = await services();
+  expect(saved).toHaveLength(1);
+  expect(saved[0].title).toBe('E2E 封面明確拒絕');
+  await form.getByRole('button', { name: '取消', exact: true }).click();
+  await toggle.click();
+  await expect(form.getByRole('heading', { name: '新增服務', exact: true })).toBeVisible();
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('');
+  await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('');
+  await expect(form.getByText('已選圖片：cover.png')).toHaveCount(0);
+  await expect(form.getByText('已還原上次未送出的內容', { exact: false })).toHaveCount(0);
+  expect(await services()).toEqual(saved);
+  await mine.locator('li.service-mine-row').filter({ hasText: saved[0].title }).getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue(saved[0].title);
+  await expect(form.getByText('已選圖片：cover.png')).toBeVisible();
+  await expect(form.getByText('已還原上次未送出的內容', { exact: false })).toBeVisible();
+  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(card(page, saved[0].title).locator('img.service-cover')).toBeVisible();
+  expect(await services()).toEqual(saved);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers WHERE service_id=$1', [saved[0].id])).rows[0].n).toBe(1);
+  expect(coverStatuses).toEqual([400, 200]);
+  expect(writes).toEqual(['POST', 'PUT', 'PUT', 'PUT']);
+});
+
+test('a delayed edit completion clears only its own draft while the new draft text and image survive', async ({ page, e2eAuthPool }) => {
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  const toggle = mine.getByRole('button', { name: /^(新增服務|關閉表單)$/ });
+  const form = await fillService(page, 'E2E 延遲編輯甲', '設計', '甲原始簡介');
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  const id = (await e2eAuthPool.query('SELECT service_id::text AS id FROM member_services WHERE owner_user_id=$1', [owner])).rows[0].id as string;
+  await fillService(page, 'E2E 保留新增 N', '設計', 'N 未送出的簡介');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'new-N.png', mimeType: 'image/png', buffer: PNG });
+  await toggle.click();
+  const row = mine.locator('li.service-mine-row').filter({ hasText: 'E2E 延遲編輯甲' });
+  await row.getByRole('button', { name: '編輯', exact: true }).click();
+  await form.getByRole('textbox', { name: /^簡介/ }).fill('甲已儲存的簡介');
+  // Retain A once first, so successful completion must remove an existing draft entry.
+  await toggle.click();
+  await row.getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(form.getByText('已還原上次未送出的內容', { exact: false })).toBeVisible();
+  let release: () => void = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let committed = false;
+  await page.route(`**/api/v1/member-services/${id}`, async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    committed = true;
+    await gate;
+    return route.fulfill({ response });
+  });
+  await form.getByRole('button', { name: '儲存變更', exact: true }).click();
+  try {
+    await expect.poll(() => committed).toBe(true);
+    await toggle.click();
+    await toggle.click();
+    await expect(form.getByRole('heading', { name: '新增服務', exact: true })).toBeVisible();
+    await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('E2E 保留新增 N');
+    await expect(form.getByText('已選圖片：new-N.png')).toBeVisible();
+  } finally { release(); }
+  await expect(form).toHaveAttribute('aria-busy', 'false');
+  await expect(form.getByRole('heading', { name: '新增服務', exact: true })).toBeVisible();
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('E2E 保留新增 N');
+  await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('N 未送出的簡介');
+  await expect(form.getByText('已選圖片：new-N.png')).toBeVisible();
+  expect((await e2eAuthPool.query('SELECT summary FROM member_services WHERE service_id=$1', [id])).rows[0].summary).toBe('甲已儲存的簡介');
+  await toggle.click();
+  await toggle.click();
+  await expect(form.getByRole('textbox', { name: /^標題/ })).toHaveValue('E2E 保留新增 N');
+  await expect(form.getByText('已選圖片：new-N.png')).toBeVisible();
+  await row.getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(form.getByRole('textbox', { name: /^簡介/ })).toHaveValue('甲已儲存的簡介');
+  await expect(form.getByText('已還原上次未送出的內容', { exact: false })).toHaveCount(0);
+  await expect(form.getByText('已選圖片：new-N.png')).toHaveCount(0);
+  await toggle.click();
+  await toggle.click();
+  const uploads: string[] = [];
+  await page.route('**/api/v1/member-services/*/cover', route => {
+    uploads.push(createHash('sha256').update(route.request().postDataBuffer()!).digest('hex'));
+    return route.continue();
+  });
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(card(page, 'E2E 保留新增 N').locator('img.service-cover')).toBeVisible();
+  expect(uploads).toEqual([createHash('sha256').update(PNG).digest('hex')]);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1', [owner])).rows[0].n).toBe(2);
+});
+
+test('clearing a restored draft resets the native picker and allows the same image to be selected and saved', async ({ page, e2eAuthPool }) => {
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  const toggle = mine.getByRole('button', { name: /^(新增服務|關閉表單)$/ });
+  const form = await fillService(page, 'E2E 清除原生選檔', '設計', '清除前的草稿');
+  await form.locator('input[type="file"]').setInputFiles({ name: 'image-A.png', mimeType: 'image/png', buffer: PNG });
+  await toggle.click();
+  await toggle.click();
+  await expect(form.getByText('已選圖片：image-A.png')).toBeVisible();
+  const picker = form.locator('input[type="file"]');
+  await picker.evaluate(input => {
+    input.dataset.changes = '0';
+    input.addEventListener('change', () => { input.dataset.changes = String(Number(input.dataset.changes) + 1); });
+  });
+  const imageB = { name: 'image-B.png', mimeType: 'image/png', buffer: PNG };
+  await picker.setInputFiles(imageB);
+  await expect(form.getByText('已選圖片：image-B.png')).toBeVisible();
+  expect(await picker.evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe('image-B.png');
+  await form.getByRole('button', { name: '清除重填', exact: true }).click();
+  expect(await picker.evaluate(input => (input as HTMLInputElement).files?.length ?? 0)).toBe(0);
+  await expect(picker).toHaveValue('');
+  await expect(form.getByText('已選圖片：image-B.png')).toHaveCount(0);
+  await picker.setInputFiles(imageB);
+  await expect(picker).toHaveAttribute('data-changes', '2');
+  await expect(form.getByText('已選圖片：image-B.png')).toBeVisible();
+  await form.getByRole('textbox', { name: /^標題/ }).fill('E2E 重選同一張封面');
+  await form.locator('select').selectOption({ label: '設計' });
+  await form.getByRole('textbox', { name: /^簡介/ }).fill('清除後重新選擇 B');
+  await form.getByLabel('聯絡名稱', { exact: true }).fill('官網');
+  await form.getByLabel('https 連結', { exact: true }).fill('https://example.com/reselect');
+  await form.getByRole('button', { name: '建立服務', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(card(page, 'E2E 重選同一張封面').locator('img.service-cover')).toBeVisible();
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1', [owner])).rows[0].n).toBe(1);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_service_covers c JOIN member_services s USING (service_id) WHERE s.owner_user_id=$1', [owner])).rows[0].n).toBe(1);
+});
