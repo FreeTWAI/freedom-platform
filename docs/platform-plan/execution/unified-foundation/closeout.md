@@ -10,6 +10,61 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-23 main c140a346 發布完成（商店／供貨、公開閱讀與 migration 173–185）
+
+**截至11:28 UTC，staging 與 production 都已部署 `c140a346`／schema185，
+四組成功 before／after 備份、隔離還原與清理通過，兩環境 dispatcher 已綁定本次來源，
+原 timer 已恢復 active／enabled。會員 UX 驗收未執行。**
+來源為 #990 合併後的 main，接續兩環境原 `cf7e518b`／schema172；main Verify 39903035598 的17個 jobs
+與 CodeQL 39903035600 的3個 jobs 全部通過。
+13 個 migration（173–185）以各環境 `_migrator` 在一個交易內套用，兩環境 ledger 都是184列、COMMIT 已確認
+（staging 交易 792282、production 交易 793952）；兩環境的回退下限從此是 `c140a346`／185。
+27個旗標與路由、cron 維持不變。8個新旗標不存在，等同關閉：訂單通知、店家自行寄送（宅配）、商店外觀、分類、相簿、
+賣場政策、商品規格、供貨方案照片。checkout／交易 Email 仍為 OFF。
+
+從前版起有22個 first-parent merges，含 #963（11支，#961再含 #957／#959）、#975、#977與 #981批次。
+商店／供貨包含準備進度、准入審核、占用庫存、照片自動儲存與上架、搜尋篩選與中斷恢復；
+公開閱讀包含貼文有限摘要、技能書註冊回流、公會資源與12本會員分享技能書。
+另含首頁／任務／導覽分區載入與取消、好友確認、訊息載入意圖、活動邀請額度與保存鎖定修正，
+以及管理介面與宣傳圖開發預覽。分類、面交訂單卡與店家自行寄送仍受原旗標限制；
+文件、CI、開發預覽及已部署程式都不當作會員驗收。逐PR範圍見[本次發布收據](rollout-main-c140a346-2026-10-23.json)。
+
+Ted 於06:19:04.087 UTC 回答是否今天發布：「要，今天上」，並記錄先 staging再 production、
+備份／migrator／health／receipt都做的指示。無 staging acceptance window，member UX acceptance為 `not_run`；
+真實手機與 Safari未驗。Production公開唯讀 smoke於09:35:12.732 UTC通過14項，未登入正式會員或建立訂單。
+`/` 線上 Worker CSP 已確認允許 youtube-nocookie frame，`/pay/ecpay/` 加43個 A 無 frame-src；
+`/admin` 與 `/admin/github/callback` 在 Worker 前被 Access 以302攔截，**未觀察線上 admin Worker CSP**，
+僅驗精確部署來源函式（`liveAdminWorkerCsp=not_observed_access_protected`、`adminCspSource=exact_source_function`）。
+Smoke內嵌 `priorFailedAttempt` 仍是前輪 Short歷史紀錄，本輪首試失敗另行保留。
+
+Staging before `271ae1a1` 於08:39:48.552 UTC、after `906eec4f` 於08:58:05.063 UTC建立，均首試通過、各還原66個物件。
+Production before第二次 `cb1981d5` 於09:18:01.863 UTC、after `47a9f8d7` 於11:13:13.618 UTC建立，各還原53個物件；
+after首試通過，dump為7,313,644 bytes。Before來源為 `cf7e518b`／172，after來源與operator為 `c140a346`／185；
+四組遠端讀回、資料庫與物件隔離還原、素材政策與清理通過，production另驗10項座標約束；不把還原當新線上ledger查詢。
+
+Production before首試約11秒以 `daily_backup_installation_or_record_failed` 失敗，沒有run dir；
+原因為複製的adapter相對匯入 `./capture-boundary-diagnostics.mjs` 缺檔。
+Kit新增symlink指向前輪已釘選 `366a7edc…` 原檔，乾跑import通過後才重跑，已綁定hash未改；
+**symlink本身未釘選，bind-time admission若重跑會拒絕**，後續步驟未重跑該admission。
+Production smoke首試09:34:28 UTC以 `ERR_ASSERTION` 失敗，health仍回 `cf7e518b`；
+操作者交接記錄部署後約12秒的edge傳播延遲、六次GET確認後原樣重跑通過；六次中間回覆未見獨立檔案。
+Production after的IO gate從09:35起反覆拒絕，11:13才通過後執行備份，沒有繞過；其他本機工作造成負載為操作者觀察。
+
+9a的 `reset-failed` 後兩個service皆inactive，但腳本以 `timers_changed_after_reset` 拒絕，**不列腳本通過**。
+操作者觀察只有衍生 `NextElapseUSecRealtime` 改變：5分鐘隨機延遲且 `FixedRandomDelay=no` 會重抽；
+OnCalendar、Persistent、enablement等設定未變。沒有重試或補造 `reset.json`。
+操作者交接另記離線稽核三項absence assertions因證據已建立而失敗，非gate且未放寬；
+目前 `offline-audit.log` 卻保留準備期passed摘要，未找到該三項失敗的獨立輸出，兩者分開記錄。
+
+兩個日常backup service於10月23日03:33／04:34 UTC以exit65失敗；操作者記錄其前有10月22日13:33 UTC
+主機Node 24.21.0→24.22.1更新，本次dispatcher已釘選新Node。
+Staging階段約09:31:28 UTC由 `0a478a84` 換為 `b4c16179`，兩環境約11:27:18 UTC綁定 `b76f639d`；
+11:27:30 UTC恢復原timer，`unitOrScheduleChanged=false`，03:30／04:30 UTC、5分鐘隨機延遲、Persistent與service argv維持。
+下次排程為10月24日03:30:53／04:31:38 UTC，**新dispatcher自然備份尚未觀察**。
+GitHub Deployments staging-next／next於11:27:41／11:27:45 UTC各記success
+（deployment 7277015615／7277016870，status 20386963738／20386970127）；
+原168項需求、T-047、第二操作者與真人成果未驗項保留。
+
 ## 2026-10-20 main cf7e518b 發布完成（供貨／零售公會資格與修正）
 
 **截至22:28 UTC，staging 與 production 都已部署 `cf7e518b`／schema172，

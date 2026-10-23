@@ -16119,8 +16119,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
-      "bytes": 4384,
-      "sha256": "f81496fd17ea5ea60a4a47725da49e7ad63a66ae4c982cbbc42bf8a82ecaaf60"
+      "bytes": 4578,
+      "sha256": "ecb4142a9a1dbf0b49acd8f834d88d754626bf63ff61f89b75c2b6a867333908"
     },
     {
       "path": "docs/platform-plan/execution/commerce/WP-00-baseline.md",
@@ -16146,6 +16146,11 @@
       "path": "docs/platform-plan/execution/commerce/ecpay-logistics-status-map.tsv",
       "bytes": 18726,
       "sha256": "e0c1fd2767a887dc02d4b84dc09da5f05a588b688459b18cecbe4997f08e3e55"
+    },
+    {
+      "path": "docs/platform-plan/execution/commerce/erp-integration-proposal.md",
+      "bytes": 10410,
+      "sha256": "a7e129fb6ed66dd262ebaf79ec12e45a72bcc2d78599572798dafb474771d410"
     },
     {
       "path": "docs/platform-plan/execution/commerce/handoff-2026-10-19-member-cohort-integration.md",
@@ -16174,8 +16179,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 39305,
-      "sha256": "21aae8659d9223428d501774c560dcd4e242c30093cfddf0f8bfe112735618c3"
+      "bytes": 40539,
+      "sha256": "9ef23bf5b5d842c53c07a9f18cb84ba8863bdc9e387fa6225d718bdb2b34c121"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -16659,8 +16664,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/closeout.md",
-      "bytes": 108074,
-      "sha256": "19b57809a6cb3a80ba56d899bb7000cf53d4efdc452da4de9f6e6e306e8af3a9"
+      "bytes": 113368,
+      "sha256": "10c65658218fa05ad1eceb3cb096a74f167371c8330d5be55df82b760c78528b"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/composition-evidence-2026-10-05.json",
@@ -16679,8 +16684,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/current-state.json",
-      "bytes": 324930,
-      "sha256": "6fbcca43ae7381f1ea36e00e3bf242486cdef629af12e76b79e62e3fa06ea654"
+      "bytes": 371020,
+      "sha256": "ff49b68e406c5f48d9c30d6e8897a1b59063a84835ce8a58c971ff406c260314"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/daily-snapshot-pins-evidence-2026-10-05.json",
@@ -16811,6 +16816,11 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-cohorts-2026-10-20.json",
       "bytes": 46160,
       "sha256": "9abab1958bae6029b0b59d5dd89bc9e833a8e564b42c213ff93c8cc5d3bb19b7"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-c140a346-2026-10-23.json",
+      "bytes": 85300,
+      "sha256": "a290097c4da5cb5fdbcd230bae5bcadd8c9404282ff673e5a20313e0cc02d5e8"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",

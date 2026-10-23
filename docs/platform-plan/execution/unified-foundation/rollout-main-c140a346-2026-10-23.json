@@ -1,0 +1,1919 @@
+{
+  "format": "freedom.main-rollout/v1",
+  "status": "deployed_public_smoke_restore_and_operator_passed",
+  "recorded_at": "2026-10-23T11:34:50.649001+00:00",
+  "evidence_cutoff_at": "2026-10-23T11:27:45.598878+00:00",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "source": {
+    "selected_release": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+    "tree": "24b69cd79346bc624f15216ea16e53b91c2f1d25",
+    "parents": [
+      "0aa6286b531ed0e5155817eef472257e3f0ae206",
+      "76cf61c043da957279c1115910dd17386f256675"
+    ],
+    "merge_pr": 990,
+    "included_prs": [
+      {
+        "pr": 934,
+        "description": "Return buyers to checkout after sign-in and reconfirm a changed identity; checkout remains gated."
+      },
+      {
+        "pr": 921,
+        "description": "Show store readiness and admin admissions, and support structured supply offer plans."
+      },
+      {
+        "pr": 962,
+        "description": "Retain load-older intent during background message refresh."
+      },
+      {
+        "pr": 937,
+        "description": "Show occupied stock and each store's order-taking state."
+      },
+      {
+        "pr": 963,
+        "description": "Batch integration of eleven PRs, including the search batch #961.",
+        "integrated_prs": [
+          961,
+          919,
+          898,
+          779,
+          768,
+          793,
+          893,
+          923,
+          896,
+          927,
+          933
+        ]
+      },
+      {
+        "pr": 961,
+        "description": "Batch integration of community and friend search improvements.",
+        "integrated_prs": [
+          957,
+          959
+        ]
+      },
+      {
+        "pr": 957,
+        "description": "Improve community search composition, immediate interaction and request cancellation."
+      },
+      {
+        "pr": 959,
+        "description": "Improve friend search, request cancellation and invitation pagination recovery."
+      },
+      {
+        "pr": 919,
+        "description": "Register twelve member-shared skill books."
+      },
+      {
+        "pr": 898,
+        "description": "Accept ASCII Bearer variants without changing scoped secrets."
+      },
+      {
+        "pr": 779,
+        "description": "Integrate external-link metadata parsing, charset handling and transport ownership."
+      },
+      {
+        "pr": 768,
+        "description": "Preserve exact guest invitation credit and retry fencing."
+      },
+      {
+        "pr": 793,
+        "description": "Release the confirmed event-save guard before refreshing the list."
+      },
+      {
+        "pr": 893,
+        "description": "Add multi-step post undo and defer copy-tool loading."
+      },
+      {
+        "pr": 923,
+        "description": "Support direct participation and continuation of cooperation progress on home."
+      },
+      {
+        "pr": 896,
+        "description": "Reorganize the platform admin workspace and mobile review flow."
+      },
+      {
+        "pr": 927,
+        "description": "Document direct CodeQL coverage for fork PRs."
+      },
+      {
+        "pr": 933,
+        "description": "Record the completed main cf7e518b rollout and operator evidence."
+      },
+      {
+        "pr": 951,
+        "description": "Improve navigation search, keyboard recovery and load-failure handling."
+      },
+      {
+        "pr": 954,
+        "description": "Load home sections independently with cancellable refresh and session isolation."
+      },
+      {
+        "pr": 943,
+        "description": "Improve store setup, product-photo autosave and direct publication."
+      },
+      {
+        "pr": 955,
+        "description": "Load community task sections independently with search cancellation and pagination recovery."
+      },
+      {
+        "pr": 942,
+        "description": "Document the creator promotion and community collaboration plan and specification."
+      },
+      {
+        "pr": 894,
+        "description": "Add a development preview and PNG export for promotional images."
+      },
+      {
+        "pr": 956,
+        "description": "Allow store owners to categorize products; category flag remains OFF."
+      },
+      {
+        "pr": 964,
+        "description": "Allow signed-out skill-book reading and return to the original book after registration."
+      },
+      {
+        "pr": 965,
+        "description": "Improve supply search, filters and the awaiting-payment order entry."
+      },
+      {
+        "pr": 975,
+        "description": "Batch integration of platform-entry modularization and cancellable reads.",
+        "integrated_prs": [
+          967,
+          972
+        ]
+      },
+      {
+        "pr": 967,
+        "description": "Modularize platform feature entrypoints and add community PR contribution tools and checks."
+      },
+      {
+        "pr": 972,
+        "description": "End cancelled reads promptly and improve resource-preview empty states and retry recovery."
+      },
+      {
+        "pr": 977,
+        "description": "Batch integration of public post reading, the journal entry and category tests.",
+        "integrated_prs": [
+          971,
+          974,
+          976
+        ]
+      },
+      {
+        "pr": 971,
+        "description": "Allow limited signed-out post reading and return to the original post after sign-in."
+      },
+      {
+        "pr": 974,
+        "description": "Add a read-only co-creation journal entry on home."
+      },
+      {
+        "pr": 976,
+        "description": "Wait for category refresh before measuring storefront layout in browser tests."
+      },
+      {
+        "pr": 966,
+        "description": "Improve mobile password controls and section loading on the welcome page."
+      },
+      {
+        "pr": 970,
+        "description": "Add public guild resources and link sharing, with revision ordering repairs."
+      },
+      {
+        "pr": 981,
+        "description": "Batch integration of supplier validation, storefront tests, meetup cards, friend confirmation and store setup repairs.",
+        "integrated_prs": [
+          958,
+          978,
+          980,
+          982,
+          983
+        ]
+      },
+      {
+        "pr": 958,
+        "description": "Validate supplier-console product prices early and distinguish update sources."
+      },
+      {
+        "pr": 978,
+        "description": "Test the storefront journey from setup through meetup with all store flags enabled."
+      },
+      {
+        "pr": 980,
+        "description": "Show waiting/completed meetup cards and dates on buyer orders; checkout remains gated."
+      },
+      {
+        "pr": 982,
+        "description": "Confirm before removing friends or declining invitations."
+      },
+      {
+        "pr": 983,
+        "description": "Keep supply-only catalogs separate from existing stores and retain independent-store setup in the wizard."
+      },
+      {
+        "pr": 979,
+        "description": "Show actual supply setup progress and return interrupted setup to the original catalog."
+      },
+      {
+        "pr": 987,
+        "description": "Add seller self-shipping and immutable shipment records; self-shipping flag remains OFF."
+      },
+      {
+        "pr": 990,
+        "description": "Add seller self-shipping settings, checkout, shipment registration and buyer cards; self-shipping flag remains OFF."
+      }
+    ],
+    "previous_release": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+    "dist_sha256": "11c1d2d2cbd9141245ae54a389e5668405bcf16cc52e681cb711cd8b111f4c50",
+    "dist_file_count": 410,
+    "schema": 185,
+    "migrations_applied": [
+      "173_supply_structured_terms.sql",
+      "174_supply_offer_photos.sql",
+      "175_storefront_appearance.sql",
+      "176_storefront_seller_policies.sql",
+      "177_storefront_product_gallery.sql",
+      "178_guest_invitation_credit.sql",
+      "179_member_shared_skill_books.sql",
+      "180_member_checkout_order_index.sql",
+      "181_storefront_product_variants.sql",
+      "182_commerce_order_notifications.sql",
+      "183_storefront_categories.sql",
+      "184_public_social_posts.sql",
+      "185_hosted_self_ship.sql"
+    ],
+    "main_verify": {
+      "run_id": 39903035598,
+      "job_count": 17,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39903035598",
+      "run_receipt_sha256": "430c0f892dafc574e8d5ae97b1d165dbfe4c1669220941ed34ae1964982ad88a",
+      "jobs_receipt_sha256": "01be6bcb71ddbf08eba1d469db0cf9e82109871c7dae02226ced844315592cae"
+    },
+    "main_codeql": {
+      "run_id": 39903035600,
+      "job_count": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/39903035600",
+      "run_receipt_sha256": "342e1a219dbab7783a6eed706c88056db2eb6e9b9a237d3f50d9547039c81fc5",
+      "jobs_receipt_sha256": "750daa389917fae02da538ad5a0f8a3c3628c7723229a535990b406886cc9fb7"
+    },
+    "preparation": {
+      "source_receive_receipt_sha256": "76e498f2fe1edd9460d876e9181b6f8a5e86a58aebe798ccc177cd7655fee365",
+      "source_build_receipt_sha256": "a0fc92fec6e4cf913da2da23ee550f58e7ac9649b66e6c7e4e60880c2a4ff6a9",
+      "archive_verification_sha256": "7acb8e17f16b5adc3c77955c24edba3b02f0cf117db5c285ec17590dd02e00d7",
+      "checkout_verification_sha256": "261d7fc4360c0e58f06525952e3b93235b30c84d60ffa9af83053e55dc20241b",
+      "binding_receipt_sha256": "8ce18f7803a24678a51e492a125e0a5afa15582fcdbe6d97191a647a968096d1",
+      "limitation": "Source receipt/build were preparation only with fullCiApproved=false; completed main CI and owner authorization are separately evidenced. Binding and deploy seals alone did not execute deployment."
+    },
+    "first_parent_merges_log_sha256": "cf26d1d24af7becdcd6dc77e17508d8b70de7cb0f34355585ee96451258cf6d9",
+    "first_parent_merge_count": 22
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+      "previous_release_sha": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+      "worker_version": "ac64295d-d1f5-4867-95ed-c75408894ee6",
+      "previous_worker_version": "c8b30684-b58a-42ea-b868-149bc104c48d",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "9b5d911680201e8cd2a51f13cfe476d07b28fd9ef497fdbb5259ff061ba5534c",
+      "deploy_attempts": 2,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+      "route_unchanged": true,
+      "route": {
+        "id": "407b27e7a6944a6ebdf6ddc9dba063fa",
+        "pattern": "staging.freetwai.com/*",
+        "script": "freedom-platform-staging-next"
+      },
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "migrations_applied": [
+        "173_supply_structured_terms.sql",
+        "174_supply_offer_photos.sql",
+        "175_storefront_appearance.sql",
+        "176_storefront_seller_policies.sql",
+        "177_storefront_product_gallery.sql",
+        "178_guest_invitation_credit.sql",
+        "179_member_shared_skill_books.sql",
+        "180_member_checkout_order_index.sql",
+        "181_storefront_product_variants.sql",
+        "182_commerce_order_notifications.sql",
+        "183_storefront_categories.sql",
+        "184_public_social_posts.sql",
+        "185_hosted_self_ship.sql"
+      ],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+          "set_id": "271ae1a1-1b52-4113-ad52-b3e34553d8e0",
+          "created_at": "2026-10-23T08:39:48.552Z",
+          "completed_receipt_sha256": "9c1aa06ec8ede1480c4f233aafa931f107a3964af1a512c6466cda7f10b19993",
+          "pointer_sha256": "d1159c3e79d01a471a34981c8f6cec75a74b2b486d5c374035861dc2f9aebb54",
+          "manifest_sha256": "84ec732d1599df13b48a34b8ec5269e9f252d2c9e247f38d8b17a2affc038c60",
+          "dump": {
+            "sha256": "3eebcd0a298e10d5dd901d2f6dab049fb6e5cb1c06f1e9043a86a251ced2f4b1",
+            "byteSize": 3092628
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "attempt": 1,
+          "operator_source": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+          "basis": "Fresh October 23 before-backup under the copied predecessor operator; source remains cf7e518b, schema172."
+        },
+        "after": {
+          "status": "passed",
+          "source": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+          "set_id": "906eec4f-a88f-4a92-bf6c-05312d188b52",
+          "created_at": "2026-10-23T08:58:05.063Z",
+          "completed_receipt_sha256": "dc2f07bc1635927eded9b6c9c09b2e36cd0e889cafaa4233f0da981c235972af",
+          "pointer_sha256": "d00419a0325af65eb4dca258c285bd2b6cf44435c8e395583756af766497da53",
+          "manifest_sha256": "466763c74c2d29d1e42599553f9dddc0e3cd9849fe7cdd28b72a32ae205d5875",
+          "dump": {
+            "sha256": "ed80ca1feae75dff7cd8c7cbe33dd340e90ed15cbb79d1e6143830590c8f0e4f",
+            "byteSize": 3331405
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema185_floor": {
+            "status": "passed",
+            "schema": 185,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema185_floor_sha256": "798da19a684901f600f87b0164a909bf7c9d80fb2b64f3e3982b63353a560d4a",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "attempt": 1,
+          "operator_source": "c140a346ba3c8788a3f729919465f46a49ccf99b"
+        }
+      },
+      "acceptance": {
+        "status": "not_run",
+        "scope": "No staging acceptance window per owner instruction; deployment health/homepage and final Worker binding were checked.",
+        "member_ux_acceptance": "not_run",
+        "human_acceptance": false,
+        "temporary_access_cleanup": "revoked",
+        "access_grant_receipt_sha256": "a553703859f2be4f8c2324d14b7c5249da278827f6a9127e40ae2d2a45688729",
+        "access_revoke_receipt_sha256": "d3a8e6d2ea529284cd846c59dddd69a0f58e1ff1a7db9bb45eb22ec5f9da79df"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "dispatcher_sha256": "b76f639d220b52ba3453a51c002ab40cae9f210bdb28bc506eb06b94332dd92d",
+        "installed_receipt_sha256": "96309c60a09f3fb3994e69f2dcf08c20429b3b5930675194f2508c82288fc769",
+        "backup_set_id": "906eec4f-a88f-4a92-bf6c-05312d188b52",
+        "completed_receipt_sha256": "dc2f07bc1635927eded9b6c9c09b2e36cd0e889cafaa4233f0da981c235972af",
+        "wrapper": "run-after-staging-backup",
+        "wrapper_sha256": "e31ba116ce5a328cc3b27e5f55a40a4ef4e7dd919b9586164c74b20de8ad8a52",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapter_sha256": "b34c259350ba8581fd673846a833d7ee1426633fa6d589340d59f82192e52fae",
+        "runtime_pins_sha256": "11a48ada28b1638aea9801cb21d071a476fd32db3173571872a1217ca8ab55d2"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-24T03:30:53Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-23T11:27:17.995Z",
+      "worker_binding_receipt_sha256": "a7ac2ea96774bbf055f43a71661809c45c2f46f5ed21856cad6214fe4e5216ac",
+      "github_deployment": {
+        "at": "2026-10-23T11:27:41.294115+00:00",
+        "environment": "staging-next",
+        "sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "deploymentId": 7277015615,
+        "statusId": 20386963738,
+        "state": "success",
+        "environmentUrl": "https://staging.freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "target": "staging",
+        "pinsSha256": "59ef3ea273b4d9637aba70f6d7379c740969da4a83d037b14bddd9dba55ac8c9",
+        "wrapperSha256": "aed1258eb79c5d695e739c814a96f7444e34132ef78f7ce072e6e99faec0ecaa",
+        "planSha256": "4044422ec03051f67e42be8f6ebffc564588209919ca4649abe1b19bcf6e756a",
+        "renderedSha256": "9e331890d41bf6ba3e5fc9dbe445d7c7839854463d5ac62c8eda8d90982f0310",
+        "providerMutations": false
+      },
+      "deploy_completed_at_approx": "2026-10-23T08:57:02.441048+00:00",
+      "deploy_completion_time_basis": "Approximate completion from release-receipt.json file modification time; the receipt has no embedded completion timestamp. This is not the health observation time.",
+      "migration": {
+        "status": "passed",
+        "role": "freedom_staging_next_migrator",
+        "schema_before": 172,
+        "schema_after": 185,
+        "ledger_rows": 184,
+        "transaction_id": "792282",
+        "single_transaction": true,
+        "commit_status": "confirmed",
+        "completed_receipt_sha256": "42a8fcde96f2dd51f7b42025fc1d2c1f63e7f00d3efce3db4cef7694763f7d5b",
+        "floor_receipt_sha256": "8482f79e422c9c91fb3ffc7645a50053918a2d99e3c19183cbcd96fef6ede10e",
+        "rollback_floor": {
+          "environment": "staging",
+          "minimumSchema": 185,
+          "candidateRelease": "c140a346ba3c8788a3f729919465f46a49ccf99b"
+        },
+        "completed_at_approx": "2026-10-23T08:55:38.634825+00:00",
+        "timestamp_basis": "File modification time of completed.json; no embedded migration completion timestamp.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "82db5b8dce1dd68742f0f09075d4c1e7d06fc9724eb59f4e150826c20e9bc964"
+    },
+    "production": {
+      "status": "deployed_public_smoke_restore_and_operator_passed",
+      "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+      "previous_release_sha": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+      "worker_version": "6e0fb868-a532-4858-85c7-94481f0ca003",
+      "previous_worker_version": "4ae7a458-a18f-4ee5-a592-3e2231304c3b",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "5d851fadeadca985c347dc77530a4a86bd9f9d6c12401468683a150e4248339d",
+      "deploy_attempts": 2,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+      "route_unchanged": true,
+      "route": {
+        "id": "703bcbfd976d46c6ac6d444f02055e6e",
+        "pattern": "freetwai.com/*",
+        "script": "freedom-platform-next"
+      },
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "migrations_applied": [
+        "173_supply_structured_terms.sql",
+        "174_supply_offer_photos.sql",
+        "175_storefront_appearance.sql",
+        "176_storefront_seller_policies.sql",
+        "177_storefront_product_gallery.sql",
+        "178_guest_invitation_credit.sql",
+        "179_member_shared_skill_books.sql",
+        "180_member_checkout_order_index.sql",
+        "181_storefront_product_variants.sql",
+        "182_commerce_order_notifications.sql",
+        "183_storefront_categories.sql",
+        "184_public_social_posts.sql",
+        "185_hosted_self_ship.sql"
+      ],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+          "set_id": "cb1981d5-16cb-4cf5-855c-e221b3ba05e0",
+          "created_at": "2026-10-23T09:18:01.863Z",
+          "completed_receipt_sha256": "33cf6b79d963d6f0196297935a71ffae725e1340da5cbb7a3b15853a23dd590a",
+          "pointer_sha256": "4b2347a4ece0e74ea93d988c62b8ff48d354383c582e1855471f60f40df69217",
+          "manifest_sha256": "23e9b9f7c4140b405e11fb72349be0583a532b49b732959d1bf806ee14e53b8b",
+          "dump": {
+            "sha256": "475982cf9d148198eca7a246a810e15a48798673a66bc39bbf1290d1597bdaba",
+            "byteSize": 7068932
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema172_floor": {
+            "status": "passed",
+            "schema": 172,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema172_floor_sha256": "00bc33345c8eb2badbdb9a4b6d8dee8354e6d1de55b92486334411af6b833576",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "25aa4865fab5761f85aa587e66fe734cabb1e018dc56fd895650939604430520",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "a45607514eddf54d89dd4b0a14e538fa10964cf2d73128ea11288a3792e0645b",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "attempt": 2,
+          "operator_source": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+          "basis": "Fresh October 23 before-backup under the copied predecessor operator; source remains cf7e518b, schema172."
+        },
+        "after": {
+          "status": "passed",
+          "source": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+          "set_id": "47a9f8d7-9fad-4a98-9b5a-1dc20e92af5c",
+          "created_at": "2026-10-23T11:13:13.618Z",
+          "completed_receipt_sha256": "2dc8715521c17242cf00701320192937d9530df75668760b99d5194f1e58faa5",
+          "pointer_sha256": "ce0f32ed48d57ada360e777465749614d330d11a7162ace3347e826e1c8eebde",
+          "manifest_sha256": "b513decff24555a40ae4200b5d907460603f6f86555d7e1d8b13b0d0a86a4f9e",
+          "dump": {
+            "sha256": "0349401c0d9555fb73e2d6896ec76addbdfc9b3fbb72878ac6a29c81c576b505",
+            "byteSize": 7313644
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "restored_schema185_floor": {
+            "status": "passed",
+            "schema": 185,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema185_floor_sha256": "798da19a684901f600f87b0164a909bf7c9d80fb2b64f3e3982b63353a560d4a",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "9370d4433163cc07677a7ad6efd9a736c128b19414c6e71218ddaa54835f9594",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "dbaa7f378312302283749f6e1967528b75fe3940962ad02d0749354aa0cc3d99",
+          "limitation": "created_at is the set creation time; full restore and cleanup are supported by the completed receipt, without an invented completion time or a fresh live-ledger observation.",
+          "attempt": 1,
+          "operator_source": "c140a346ba3c8788a3f729919465f46a49ccf99b"
+        }
+      },
+      "acceptance": {
+        "status": "passed",
+        "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
+        "receipt_sha256": "17b6c7cea21f44801b816d9f341623cd557148bf0e76c420a433e9efa60dd2b4",
+        "started_at": "2026-10-23T09:35:02.722Z",
+        "completed_at": "2026-10-23T09:35:12.732Z",
+        "check_count": 14,
+        "checks": [
+          "public health exact release and no-store",
+          "Short videos enabled for everyone",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "homepage CSP permits only youtube-nocookie frame origin",
+          "Cloudflare Access blocks anonymous /admin before the Worker",
+          "Cloudflare Access blocks anonymous /admin/github/callback before the Worker",
+          "protected CSP excludes Short frames /pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "exact deployed source omits Short frames on admin and payment paths",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products",
+          "share script/styles and merchant styles match exact build; unhashed assets no-store",
+          "anonymous catalog introduction exposes purpose/start/source destination"
+        ],
+        "asset_hashes": {
+          "go.js": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644",
+          "go.css": "050e1c886d4965aea7923a5219248babf65c4e0c708e9bcc944efa9a68e4cca7",
+          "shops.css": "03dfebfb52ec4240e521420e83aad2eddafedb411b2ceaa76d0f6fd12f789864"
+        },
+        "protectedPaths": {
+          "/admin": "access_redirect_worker_not_reached",
+          "/admin/github/callback": "access_redirect_worker_not_reached",
+          "/pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA": "worker_csp_verified"
+        },
+        "liveAdminWorkerCsp": "not_observed_access_protected",
+        "adminCspSource": "exact_source_function",
+        "priorFailedAttempt": {
+          "path": "freedom-short-videos-20261020/production-public-smoke.attempt1-failed.json",
+          "sha256": "18c91e14c555af4846791e0504453b618844c6a4621cc281d81e0e3b7bf54773",
+          "status": "failed"
+        },
+        "member_login": false,
+        "human_acceptance": false,
+        "orders_created": 0,
+        "member_ux_acceptance": "not_run",
+        "priorFailedAttempt_scope": "Historical Short release failure and Access-fix background only; not an attempt of this release."
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "dispatcher_sha256": "b76f639d220b52ba3453a51c002ab40cae9f210bdb28bc506eb06b94332dd92d",
+        "installed_receipt_sha256": "96309c60a09f3fb3994e69f2dcf08c20429b3b5930675194f2508c82288fc769",
+        "backup_set_id": "47a9f8d7-9fad-4a98-9b5a-1dc20e92af5c",
+        "completed_receipt_sha256": "2dc8715521c17242cf00701320192937d9530df75668760b99d5194f1e58faa5",
+        "wrapper": "run-after-production-backup",
+        "wrapper_sha256": "ed630f12c20629b2b7457689fb0547c7b9f3fa48ba2c46efd517b0c642069aa3",
+        "adapter": "backup-adapter.after-production.mts",
+        "adapter_sha256": "a0e9ed399a12887d5bee67e9c9ae5dcf6571e83d3378211e82f557ed7073d001",
+        "runtime_pins_sha256": "11a48ada28b1638aea9801cb21d071a476fd32db3173571872a1217ca8ab55d2"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-24T04:31:38Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-23T11:27:17.995Z",
+      "worker_binding_receipt_sha256": "a7ac2ea96774bbf055f43a71661809c45c2f46f5ed21856cad6214fe4e5216ac",
+      "github_deployment": {
+        "at": "2026-10-23T11:27:45.598878+00:00",
+        "environment": "next",
+        "sha": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "deploymentId": 7277016870,
+        "statusId": 20386970127,
+        "state": "success",
+        "environmentUrl": "https://freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+        "target": "production",
+        "pinsSha256": "1b019333d76127105d59cbb04fd4f93707e9f8a69452b1d81cf80a04f9a68a0a",
+        "wrapperSha256": "0f303202c46d570d2e39143ccdf6542a36922c9359fc77d899f8636336c10cb3",
+        "planSha256": "1e11b0c605c28f97319d9e528282681de72957c244da6bb313d307f71b192662",
+        "renderedSha256": "92d7f9d0f831b95260bee56b9d1d26df28e81d4b6d14c9be05f2a42b0f791e9b",
+        "providerMutations": false
+      },
+      "deploy_completed_at_approx": "2026-10-23T09:34:13.506483+00:00",
+      "deploy_completion_time_basis": "Approximate completion from release-receipt.json file modification time; the receipt has no embedded completion timestamp. This is not the health observation time.",
+      "migration": {
+        "status": "passed",
+        "role": "freedom_next_migrator",
+        "schema_before": 172,
+        "schema_after": 185,
+        "ledger_rows": 184,
+        "transaction_id": "793952",
+        "single_transaction": true,
+        "commit_status": "confirmed",
+        "completed_receipt_sha256": "f38a22072ff0a362cc7057c0bb0ba9479a2f8ea7164fe8fe87c499f43031c688",
+        "floor_receipt_sha256": "75c655c93b9211951d6ceba587870b7e15475183d1b8ff96b93dff5b3819b11f",
+        "rollback_floor": {
+          "environment": "production",
+          "minimumSchema": 185,
+          "candidateRelease": "c140a346ba3c8788a3f729919465f46a49ccf99b"
+        },
+        "completed_at_approx": "2026-10-23T09:33:13.552008+00:00",
+        "timestamp_basis": "File modification time of completed.json; no embedded migration completion timestamp.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "82db5b8dce1dd68742f0f09075d4c1e7d06fc9724eb59f4e150826c20e9bc964"
+    }
+  },
+  "attempts_preserved": [
+    {
+      "environment": "production",
+      "phase": "before-backup",
+      "attempt": 1,
+      "status": "failed",
+      "set_id": null,
+      "created_at": null,
+      "source": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+      "manifest_sha256": null,
+      "dump": null,
+      "objects": null,
+      "log": "before-production-backup.attempt1.log",
+      "log_sha256": "5cc4e50bb9502cd138dd50f5b1765fd4f82300746836eee40e71760beac178b2",
+      "code": "daily_backup_installation_or_record_failed",
+      "elapsed_seconds_approx": 11,
+      "run_directory_created": false,
+      "cleanup_verified": false,
+      "cleanup_scope": "No run directory was created; the failure preceded runDailyBackup and DB, R2 or policy access, per the orchestrator observation.",
+      "restore": "not_run",
+      "remote_readback": "not_run",
+      "sealed_set": false,
+      "cause": "before-chain/adapters/backup-adapter.before-production.mts line 2 keeps the original relative import ./capture-boundary-diagnostics.mjs. In N it resolves inside N/commerce-audit; the R copy lives in before-chain/adapters where the module did not exist, so import() threw and media-backup-daily.ts reported its catch-all code. The staging adapter has no relative import. The f4 copy checker accepted the unchanged line, and step 3b imported only the level-1 floor/admission modules, not the adapters.",
+      "fix": {
+        "symlink": "before-chain/adapters/capture-boundary-diagnostics.mjs",
+        "target": "freedom-release-cf7e518b-20261020/commerce-audit/capture-boundary-diagnostics.mjs",
+        "target_sha256": "366a7edcd28781484820863b958df38b141c03b340304cc2ebeef3a0185a95f8",
+        "bound_hashes_changed": false,
+        "dry_import": "both before adapters import under the wrapper env (staging ok, production ok)",
+        "known_gap": "The symlink path itself is not in any pin list, and before-chain/admission.mjs (bind-time only, already passed at 08:37:21Z) would now report before_chain_unreviewed_file. No later RUNBOOK step re-runs that admission."
+      },
+      "observation": "before-production-adapter-import-fix.json",
+      "observation_sha256": "45a116a47cf7a2e6b860f9bc774acd7bdb765b0e3b81011c73e48334541aa459",
+      "replacement_set_id": "cb1981d5-16cb-4cf5-855c-e221b3ba05e0"
+    },
+    {
+      "environment": "production",
+      "phase": "public-smoke",
+      "attempt": 1,
+      "status": "failed",
+      "started_at": "2026-10-23T09:34:28.054Z",
+      "completed_at": "2026-10-23T09:34:29.243Z",
+      "receipt": "production-public-smoke.attempt1-failed.json",
+      "receipt_sha256": "f1bd04bba26d9156aaf8c8f2448a81c0dc8936b398bdacd1c301b67cd7c97a42",
+      "log": "production-public-smoke.attempt1.log",
+      "log_sha256": "5ef4522ed46d4396902a531e10b09bbfccf8a0c7b98ac8ec56c810571518ca98",
+      "code": "ERR_ASSERTION",
+      "actual_release": "cf7e518b129786fb4c8a23d587982a7df06c25bb",
+      "expected_release": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+      "cause": "Health still reported the predecessor shortly after deployment; edge propagation is the operator explanation.",
+      "elapsed_after_deploy_seconds_approx": 12,
+      "retry_basis": "The operator handoff reports six GETs confirming c140a346, then an unchanged smoke rerun. The failed and successful smoke files are retained; the six intermediate GET responses are not in those files.",
+      "replacement_receipt": "production-public-smoke.json",
+      "replacement_completed_at": "2026-10-23T09:35:12.732Z"
+    }
+  ],
+  "daily_operator": {
+    "status": "both_sources_bound_original_timers_restored",
+    "source_by_environment": {
+      "staging": "c140a346ba3c8788a3f729919465f46a49ccf99b",
+      "production": "c140a346ba3c8788a3f729919465f46a49ccf99b"
+    },
+    "dispatcher_sha256": "b76f639d220b52ba3453a51c002ab40cae9f210bdb28bc506eb06b94332dd92d",
+    "installed_receipt_sha256": "96309c60a09f3fb3994e69f2dcf08c20429b3b5930675194f2508c82288fc769",
+    "live_binding_observed_at": "2026-10-23T11:27:17.995Z",
+    "live_binding_receipt_sha256": "a7ac2ea96774bbf055f43a71661809c45c2f46f5ed21856cad6214fe4e5216ac",
+    "timer_observed_at": "2026-10-23T11:27:30.500804+00:00",
+    "timer_receipt_sha256": "d22ba4ba81e778110699446666bb531a17a14b13626a9fa00d47179854da3386",
+    "unit_or_schedule_changed": false,
+    "service_argv_unchanged": true,
+    "restoration": {
+      "staging": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-24T03:30:53Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "production": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-24T04:31:38Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      }
+    },
+    "natural_scheduled_run": "not_observed",
+    "transitions": [
+      {
+        "stage": "staging",
+        "before": "0a478a8491daf6a80f55dcdb0593cb57b4da8293374ab070a2cc71e5f0135fe1",
+        "after": "b4c16179210003787a99c58c368e71d6614a3edf5254bc03444c52d7d16f711f",
+        "materialize_receipt_sha256": "a6f812e2a4e21192f79a93fcdaf8349149d090cc156230c84ca0fde81d3acf2e",
+        "installed_receipt_sha256": "f32c5a562821e8dc864091d95b06f4a9df6a00f1eaaecaf5cb659ba08966a58f",
+        "installed_at_approx": "2026-10-23T09:31:28.320546+00:00",
+        "timestamp_basis": "Approximate installed.json file modification time; the receipt has no embedded installation timestamp."
+      },
+      {
+        "stage": "both",
+        "before": "b4c16179210003787a99c58c368e71d6614a3edf5254bc03444c52d7d16f711f",
+        "after": "b76f639d220b52ba3453a51c002ab40cae9f210bdb28bc506eb06b94332dd92d",
+        "materialize_receipt_sha256": "531ef6112259a12c47bb73237ee150b40c4f04d0b75ebea86ae68b1a3967dc91",
+        "installed_receipt_sha256": "96309c60a09f3fb3994e69f2dcf08c20429b3b5930675194f2508c82288fc769",
+        "installed_at_approx": "2026-10-23T11:27:18.014274+00:00",
+        "timestamp_basis": "Approximate installed.json file modification time; the receipt has no embedded installation timestamp."
+      }
+    ],
+    "cutover": {
+      "original_snapshot_receipt_sha256": "6c4b4138470f8d3e18bb1235fa977507858b7721554af274ce82f17a7d7691e8",
+      "timers_paused": true,
+      "services_quiescent": true,
+      "restored_by": "restore-timers.py"
+    },
+    "preexisting_failures": {
+      "staging_at": "2026-10-23T03:33:01Z",
+      "production_at": "2026-10-23T04:34:01Z",
+      "exit_status": 65,
+      "capture_receipt_sha256": "5f487b410bc961fe56649dd3fe1377010b8026f3928da2b6bde419994d6ca484",
+      "host_node_update": {
+        "at_approx": "2026-10-22T13:33:00Z",
+        "before": "24.21.0",
+        "after": "24.22.1",
+        "basis": "Release operator handoff; service failures are independently retained in capture/journal evidence."
+      },
+      "new_node_sha256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+      "limitation": "Resetting failed service state and restoring timers do not establish a natural scheduled backup under the new dispatcher."
+    }
+  },
+  "historical_evidence_preserved": [
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-2026-10-09.json",
+      "sha256": "229dd95a38a6994b77818ed7e6c1c67642153e9f6130a28fc3683f0df05c7146"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-2026-10-10.json",
+      "sha256": "7b1a808e482d337c96955714fa70ce5a75d797c92bc599c8eeea955fb8fa63aa"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-buyer-2026-10-17.json",
+      "sha256": "8fcceaaa0397572c4cc45ab0630378908174e9d080b9af9ff9f851c05c4f6870"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-cohorts-2026-10-20.json",
+      "sha256": "9abab1958bae6029b0b59d5dd89bc9e833a8e564b42c213ff93c8cc5d3bb19b7"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
+      "sha256": "cea304096119c37d7614a94a3b831acf1fb0c0ab257cefdc3716e5a60cfe99df"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-merchant-readiness-2026-10-19.json",
+      "sha256": "8621955508700e28ce8697d21585b277863f9e683504d2c5281c33a9d66354b5"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r15-2026-10-10.json",
+      "sha256": "d878d75b52023f3fa4286443bb719fac16a8d862992f9f07ae78908b8a7111ec"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r16-2026-10-10.json",
+      "sha256": "ec34b05383fbc65da7ef8f81104daab1fd3eacb77463eab71c234980acea858d"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r17-2026-10-11.json",
+      "sha256": "f7f753d30286292a2ba1792333a5acd535cbbaa6d66f9bcb8405c5aedcd2a28e"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r18-2026-10-11.json",
+      "sha256": "f0dd5edc973b57302bc19b17459e5ffc62b05b2e8ad5c0db30636db898b01098"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r19-2026-10-11.json",
+      "sha256": "9e8944a8e8c3a8d8f5b2940c5963c46d6c690474bf0265304570a352e0151383"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r20-2026-10-12.json",
+      "sha256": "e3ef7985765e99cf70b025a4f146d3bdaf1584eb55b831573a7f15c40e6eaf59"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r21-2026-10-12.json",
+      "sha256": "8dc41ea27eae2dfc397b89a0354f51be187d0fe4d820338a103feb5bf47053a9"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r22-2026-10-12.json",
+      "sha256": "d3694b45bece2edc3c880faf6f8987d2a8afccc102daf46379ee1d9a2503c029"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r23-2026-10-12.json",
+      "sha256": "a4a5ca0b3a4adc4c2886b0c57171d98d95ac15896c07df986cde7b6512eab246"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-r24-2026-10-12.json",
+      "sha256": "f351b7e8b2fc06d71aaf5fb2ad5d30208e9f7ecc9a3fe8512ff287bc4d02a745"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-security-2026-10-14.json",
+      "sha256": "91de5a2e52a634a3da870bf01913c91fe3765faf52ce1d42242db4753380c391"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-short-videos-2026-10-20.json",
+      "sha256": "0154d23b429dd43222f7a503adc6b315ba857400f30b13c4ed9f3165fe2db589"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-three-outcomes-2026-10-19.json",
+      "sha256": "3ebb9bdf353d8dcbfe5e27732ec6218276e8b7fcb48209d5a050b64a128c2235"
+    }
+  ],
+  "limitations": [
+    "Ted authorized main c140a346 at 2026-10-23T06:19:04.087Z; no staging acceptance window was required. Member UX acceptance is not_run; CI and deployment do not establish member acceptance.",
+    "All 27 live flags, routes and cron are unchanged in both environments. Eight new flags are absent and default OFF; migration does not activate their features. Checkout and transaction email remain OFF.",
+    "Real phones, Safari and real-member journeys remain unverified; the production public smoke performed no member login and created no orders.",
+    "The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src.",
+    "Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP.",
+    "The production before-backup first attempt failed before creating a run directory. The retry passed after a symlink fixed the relative import; its target bytes remain pinned, but the symlink path itself is unpinned and bind-time admission would now reject it. No later step reran that admission.",
+    "The production public smoke first attempt saw cf7e518b about 12 seconds after deploy. The unchanged rerun passed 14 checks at 09:35:12.732Z. Its embedded priorFailedAttempt still points to historical Short evidence, distinct from this release failure.",
+    "The step 9a reset script refused with timers_changed_after_reset; the orchestrator observed both services inactive and only derived randomized NextElapseUSecRealtime changed. This is an observation, not a script pass; no retry or reset.json was fabricated.",
+    "The operator reports three post-execution offline absence assertion failures; this is not a gate and assertions were not relaxed. The retained offline-audit.log contains the earlier passed summary, so the later failure count is not independently evidenced by that file.",
+    "Production after-backup waited for the IO gate from 09:35Z until 11:13Z and passed on its first backup run. Gate refusals are preserved and were not bypassed; other local workloads as the load cause are operator-reported.",
+    "Migrations 173-185 committed in a single transaction per environment, with 184 ledger rows and the c140a346/schema185 rollback floor. Migration completion times use file modification times explicitly; isolated restores do not create fresh live-ledger timestamps.",
+    "Restore remains quarantined; retain the full schema185 ledger, prior capabilities, material policy and ten production coordinate constraints. GC, retention and PITR are not enabled; T-047 and the second operator remain unresolved.",
+    "Timer restoration and manual backup success do not establish natural execution of the new dispatcher. The original 168 requirements and human outcomes remain unaccepted where previously unverified."
+  ],
+  "owner_authorization": {
+    "owner": "Ted",
+    "observed_at": "2026-10-23T06:19:04.087Z",
+    "instruction": "要，今天上",
+    "consent_basis": "Release today after #987/#988 merge, staging before production, retaining backup, migrator, health and receipt steps. The intent records #990 as the selected source; the earlier question mentioned only migrations 173-184.",
+    "receipt_sha256": "28f7606aec3dcea0d1fb3e24d5e5f238f13b3bf6893d3d36e741d4846b990d6f",
+    "staging_acceptance_required": false,
+    "member_ux_acceptance": "not_run",
+    "limitation": "The intent state preparing is authorization evidence; completed operations are supported by separate receipts."
+  },
+  "kit_corrections": [
+    {
+      "scope": "production before-adapter relative import",
+      "observation_sha256": "45a116a47cf7a2e6b860f9bc774acd7bdb765b0e3b81011c73e48334541aa459",
+      "change": "Add a symlink to the predecessor pinned diagnostics file without changing any adapter, wrapper, pin list, binding or seal hash.",
+      "known_gap": "The symlink path itself is not in any pin list, and before-chain/admission.mjs (bind-time only, already passed at 08:37:21Z) would now report before_chain_unreviewed_file. No later RUNBOOK step re-runs that admission."
+    }
+  ],
+  "offline_verification": {
+    "attempts_record": "offline-test-attempts.md",
+    "attempts_record_sha256": "2048fc64ca05ca6fdb5d7f095b37c02a4bb8ca7235b089485850a508a9ef9809",
+    "scope": "Preparation-only tests and failures retain their original records. The retained offline-audit.log reports passed; the operator-reported post-execution absence failures are separately recorded under observations, without relaxing assertions or treating that audit as a gate."
+  },
+  "io_gates": [
+    {
+      "path": "io-check-bcd8c35f-3ac3-46a6-af4c-155a3c8887e7.json",
+      "sha256": "3cc22a7233736558ca33b0f7081f162c53fef763026c29c4e4b43e7c8de97fa0",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-23T08:39:09.398855+00:00",
+        "end": "2026-10-23T08:39:39.399251+00:00"
+      }
+    },
+    {
+      "path": "io-check-bc6ea8e4-5546-4da7-bf03-f9aa3ba594d0.json",
+      "sha256": "be7a9bc63a3b2fd091d94446b62b539f4e78fe815e8cc92229d4ecda249deddc",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-23T08:57:24.493760+00:00",
+        "end": "2026-10-23T08:57:54.495920+00:00"
+      }
+    },
+    {
+      "path": "io-check-ecd4fd5d-85b7-4f04-90eb-68dba7e66e76.json",
+      "sha256": "cb6a97c5ea96de017bdd9cb294b6977161a48ffc9b2e185726093e91be9e1ada",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-23T09:12:13.948079+00:00",
+        "end": "2026-10-23T09:12:43.948884+00:00"
+      }
+    },
+    {
+      "path": "io-check-3905d724-6412-4670-91c7-f836934e81d3.json",
+      "sha256": "824c49c9d7beb5ce8dd4c79a6d1dd47f9de936028da560f9aec2359cc5a200c1",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-23T09:17:17.956481+00:00",
+        "end": "2026-10-23T09:17:47.957716+00:00"
+      }
+    },
+    {
+      "path": "io-check-0f7eff68-9be1-4d92-a396-9870bbd70e43.json",
+      "sha256": "007e53493faab40d071a07d95be0a07b5a2a0fe957305fe4c4eca2a83c70b3fa",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:35:16.682506+00:00",
+        "end": "2026-10-23T09:35:46.682940+00:00"
+      }
+    },
+    {
+      "path": "io-check-730b2a53-c0a4-499e-b32a-fc79d0215e52.json",
+      "sha256": "0fce64d4cc6a5ab60326a18c13fc22ea5f32a2690647a815c22c545ae6c95ad1",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:36:05.697085+00:00",
+        "end": "2026-10-23T09:36:05.697085+00:00"
+      }
+    },
+    {
+      "path": "io-check-47009d01-8fac-4ddd-842b-b9009cf26905.json",
+      "sha256": "f861437882f39134e756371c99556f3d1ec2b11ae5ab02e4cbdf4714218feb02",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:37:36.004792+00:00",
+        "end": "2026-10-23T09:37:36.004792+00:00"
+      }
+    },
+    {
+      "path": "io-check-18a388f3-0055-4592-b54d-1b434414d985.json",
+      "sha256": "95caa2e4808555f9f9b4441ee7b4ccfa3934f1351b8c61ac2c15c1a0b8bd81d4",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:39:06.263823+00:00",
+        "end": "2026-10-23T09:39:06.263823+00:00"
+      }
+    },
+    {
+      "path": "io-check-74409b87-c1da-439f-9479-5236f5bb3f14.json",
+      "sha256": "aeb8d9af8fb51ce28716fd2265dd4f28628f80ff363ee4ecd31c7afaec18fd58",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:40:36.518873+00:00",
+        "end": "2026-10-23T09:40:36.518873+00:00"
+      }
+    },
+    {
+      "path": "io-check-45b8b2ef-9866-468e-a46d-a634f8957a0e.json",
+      "sha256": "7e1c22e55ddec33dc884a198bed6661c9842248ac357ab1b107b9f3c089ba9c8",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:42:06.823345+00:00",
+        "end": "2026-10-23T09:42:06.823345+00:00"
+      }
+    },
+    {
+      "path": "io-check-5307c38f-998b-4e5c-8437-192348d43067.json",
+      "sha256": "612182387e622ab8926bb7367cb00bcc4812b389d03ab8f000ae2ec165270d47",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:43:37.036994+00:00",
+        "end": "2026-10-23T09:43:37.036994+00:00"
+      }
+    },
+    {
+      "path": "io-check-42a1acab-856d-4850-9b66-8d874fe3f27f.json",
+      "sha256": "351101b6331ca8ac1c19bf666d45688564fffd0b226cb8100185d69a80bc26fd",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:45:07.304686+00:00",
+        "end": "2026-10-23T09:45:07.304686+00:00"
+      }
+    },
+    {
+      "path": "io-check-11c115fa-5ec1-4b6b-892d-d79a80b7d518.json",
+      "sha256": "7365ccb6b634d202dc790d93aead58ecbec74c0ed01fba4b26bb571b82d6dd1a",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:46:37.641621+00:00",
+        "end": "2026-10-23T09:46:37.641621+00:00"
+      }
+    },
+    {
+      "path": "io-check-9a66edfe-6df9-417d-a48a-e56bd6be8bea.json",
+      "sha256": "0b95af202e2f41598299faec34157fdd3281492b7af5fd77b24d1951c7921d49",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:48:07.961842+00:00",
+        "end": "2026-10-23T09:48:07.961842+00:00"
+      }
+    },
+    {
+      "path": "io-check-b35cc421-09f9-4507-9fd4-3078cf62891d.json",
+      "sha256": "7b1f80d53e062e2ec2196ba73c7522477ca1474de2ca2537950db5b4c33973dc",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:49:39.643045+00:00",
+        "end": "2026-10-23T09:49:39.643045+00:00"
+      }
+    },
+    {
+      "path": "io-check-0a1c8c8a-f092-4344-9526-154c4cd29037.json",
+      "sha256": "6d710b0a1f594861072ba96bd032bbfb829787066890029cd78ee66335d93547",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:51:09.932750+00:00",
+        "end": "2026-10-23T09:51:09.932750+00:00"
+      }
+    },
+    {
+      "path": "io-check-27534155-50dd-4f06-9af5-ceb41795ea37.json",
+      "sha256": "53e04c6cd60d0af0a510d8d7e97792cda2e72d88677226fdd62e9f1cdb7d3630",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:52:40.206100+00:00",
+        "end": "2026-10-23T09:52:40.206100+00:00"
+      }
+    },
+    {
+      "path": "io-check-fdc724c6-9433-430b-bf85-b62f72668f10.json",
+      "sha256": "020e831a3c6ce6818adf37c50f2b1e826df42c4ce59712658291ec119ea08404",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:54:10.444947+00:00",
+        "end": "2026-10-23T09:54:10.444947+00:00"
+      }
+    },
+    {
+      "path": "io-check-3d484060-9c69-4922-8cf2-ea1153f4f7f5.json",
+      "sha256": "904165125a3c9bbcfae0b73a6fa5512168cd86544d291a615a6cb97ba8333a6d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:55:40.650317+00:00",
+        "end": "2026-10-23T09:55:40.650317+00:00"
+      }
+    },
+    {
+      "path": "io-check-591c6303-30cd-476f-9bc4-891ba4fce95c.json",
+      "sha256": "8555cdc91fc40cada46efefea128604648eadd6595a90f75e9a1f3fce07aae94",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:57:10.898329+00:00",
+        "end": "2026-10-23T09:57:10.898329+00:00"
+      }
+    },
+    {
+      "path": "io-check-c32d2d09-1593-4d05-bdd5-22be63ca8f5b.json",
+      "sha256": "fcf75157abde12441dda27fd6d0125cbd15a2f61247561b635f1679459b86865",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T09:58:41.114424+00:00",
+        "end": "2026-10-23T09:58:41.114424+00:00"
+      }
+    },
+    {
+      "path": "io-check-e0017e88-cf4a-4ec4-b78a-04908fba9d14.json",
+      "sha256": "a53e9e14f6cb3cf6c119ab7830f6da59d8172c99e551bcd14aca65d752ab0e86",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:00:11.365160+00:00",
+        "end": "2026-10-23T10:00:11.365160+00:00"
+      }
+    },
+    {
+      "path": "io-check-cf8b6ead-1a29-44ae-8999-fbc00f32cc93.json",
+      "sha256": "fde28bfdbeb310aa5cf0f1648f4f4ee5a81fae85e33f77650924455f0997b591",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:01:41.585040+00:00",
+        "end": "2026-10-23T10:01:41.585040+00:00"
+      }
+    },
+    {
+      "path": "io-check-1e6015a7-b20a-491d-949a-fb78f2f2164d.json",
+      "sha256": "0f5a6b9dd81ac5efe879afef643955aec9dedd0dc104a6e3d16626720f76742d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:03:11.877170+00:00",
+        "end": "2026-10-23T10:03:11.877170+00:00"
+      }
+    },
+    {
+      "path": "io-check-2c2b6e65-bbfc-44dd-b81e-f8c6811caab2.json",
+      "sha256": "f31141d65099d0b6d0d5e93f80fd88dde06179e64b29568afb7d077b7a46b8ce",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:04:42.139152+00:00",
+        "end": "2026-10-23T10:04:42.139152+00:00"
+      }
+    },
+    {
+      "path": "io-check-2ac3a8ea-6040-4fe6-8b36-5eb2bc909f35.json",
+      "sha256": "36a611aab052743e34726dbfcf2229802109eadf65b25bb6e94bb771cf5355a2",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:06:12.387988+00:00",
+        "end": "2026-10-23T10:06:12.387988+00:00"
+      }
+    },
+    {
+      "path": "io-check-fea0e917-ed4a-43b3-93b6-8f858c7c4db9.json",
+      "sha256": "54398ac77392e7728e890fae65c9454dd78f301244d60b2400d03279765abf4d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:07:42.607072+00:00",
+        "end": "2026-10-23T10:07:42.607072+00:00"
+      }
+    },
+    {
+      "path": "io-check-3e6d15b7-98f7-4ba6-a89c-57dff553046a.json",
+      "sha256": "f601f3efef0b1a1b235cde3b082369904eb8afafba587f37d552042b6911bca2",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:09:12.857530+00:00",
+        "end": "2026-10-23T10:09:12.857530+00:00"
+      }
+    },
+    {
+      "path": "io-check-c9cc411a-5bac-4a51-8d84-dbb55cacc0ff.json",
+      "sha256": "06dcc9098961dc66b1aba07c3e720aaa597e8d003bf9d1e6ba2cfcfec3c7f3dd",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:10:43.111391+00:00",
+        "end": "2026-10-23T10:10:43.111391+00:00"
+      }
+    },
+    {
+      "path": "io-check-0962738c-0895-46d3-9d29-4f34cf43c1a3.json",
+      "sha256": "70e69580b39941f2eff7fdc7c2601ca5f75996fe662764e24def90a15b655eb0",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:12:13.336844+00:00",
+        "end": "2026-10-23T10:12:13.336844+00:00"
+      }
+    },
+    {
+      "path": "io-check-684d8669-a574-4d81-9f63-180d39d0a239.json",
+      "sha256": "c01fac79eb14fb3f70ef6ade71e60ec3dc63b97f17eaa29a66d6f01d82718a1d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:13:43.561815+00:00",
+        "end": "2026-10-23T10:13:43.561815+00:00"
+      }
+    },
+    {
+      "path": "io-check-28fce939-a308-4bfa-b9be-61be4ea73268.json",
+      "sha256": "dd3ebcc81aca495ad144254f543b0f05fa1a6963b9bc7220e091de3e4a507b59",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:15:13.811196+00:00",
+        "end": "2026-10-23T10:15:13.811196+00:00"
+      }
+    },
+    {
+      "path": "io-check-3daedb80-529f-4654-81ee-cdc1b9733864.json",
+      "sha256": "4b481c5845bd09b8440dda309e5b3ce7405ed6d4b993130ade9eb8f8ebfe7661",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:16:44.006057+00:00",
+        "end": "2026-10-23T10:16:44.006057+00:00"
+      }
+    },
+    {
+      "path": "io-check-0451975b-e4ee-42a5-af0d-52af95231c71.json",
+      "sha256": "c9dd1191de3c29ac4d945e8feaa13e8a56b4790bf4f6cdc3de7e9c2bd249a724",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:18:14.227227+00:00",
+        "end": "2026-10-23T10:18:14.227227+00:00"
+      }
+    },
+    {
+      "path": "io-check-484d90ad-8c25-4d3e-834d-0d150b4490b9.json",
+      "sha256": "b7c54c44686f4f1740f2c9c7732fa4dcd6713123f3e84a7e74300cd45512f472",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:19:44.446347+00:00",
+        "end": "2026-10-23T10:19:44.446347+00:00"
+      }
+    },
+    {
+      "path": "io-check-8ad974e6-8e86-41c8-bd52-0ecf59978122.json",
+      "sha256": "1d46f84744ead6db4a81f9828be5269e1a31dab8f598071e463c55af2ca7c491",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:21:26.335199+00:00",
+        "end": "2026-10-23T10:21:26.335199+00:00"
+      }
+    },
+    {
+      "path": "io-check-ed3daa92-882c-4402-a6ba-ac4938aa5705.json",
+      "sha256": "83de0fac14e452096ca7c9357125eaa77f9dd5e009ac8d34e58b7d9ae8ac2696",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:22:56.538332+00:00",
+        "end": "2026-10-23T10:22:56.538332+00:00"
+      }
+    },
+    {
+      "path": "io-check-b252fd1e-d47c-4432-a4d9-4101042481ea.json",
+      "sha256": "dd25830196af1533cc5a25e89b0a3ccdb2240e89cf42e13411fa0e45e579d248",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:24:26.778307+00:00",
+        "end": "2026-10-23T10:24:26.778307+00:00"
+      }
+    },
+    {
+      "path": "io-check-06a8968f-7649-4a10-9c5f-b8278e143108.json",
+      "sha256": "9234e5323505f0a4ce00f4ef53f0e7955b65f22fb7bca5bedf0492a48dac136c",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:25:57.008751+00:00",
+        "end": "2026-10-23T10:25:57.008751+00:00"
+      }
+    },
+    {
+      "path": "io-check-dbf16dd7-5c2d-4316-9b29-c9b97c82c3d4.json",
+      "sha256": "da6f541352784a36b0d4edb0120cae41c572b1edbf0d8c9fd04e83a737d35a40",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:27:27.228345+00:00",
+        "end": "2026-10-23T10:27:27.228345+00:00"
+      }
+    },
+    {
+      "path": "io-check-3c55ce39-05a7-47e0-b30e-ab7552c3a268.json",
+      "sha256": "a768ddfb3e3f1a2017579046b2a1fdb1bb7b7ab15ae2c9133c80ac1f804ca47d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:28:57.422349+00:00",
+        "end": "2026-10-23T10:28:57.422349+00:00"
+      }
+    },
+    {
+      "path": "io-check-f0b552af-4ba2-4307-a305-131acfa81a6b.json",
+      "sha256": "ad91c50a20514c244fe4f54b659629902d64813a70892925c34deab5b61e2c20",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:30:27.636289+00:00",
+        "end": "2026-10-23T10:30:27.636289+00:00"
+      }
+    },
+    {
+      "path": "io-check-17dbc1a0-4021-4917-b034-5242f9751357.json",
+      "sha256": "4e2ac77c7648100c3c71b93cb7361f0b7d64aee66db3b734c0031371c7bec2b0",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:31:57.863464+00:00",
+        "end": "2026-10-23T10:31:57.863464+00:00"
+      }
+    },
+    {
+      "path": "io-check-d104cd02-7ebe-4782-822b-e2cf28dacecd.json",
+      "sha256": "c30268aff653924894d3eb85e146162787510ca834a97e78429d3bac18e35ebc",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:33:28.049039+00:00",
+        "end": "2026-10-23T10:33:28.049039+00:00"
+      }
+    },
+    {
+      "path": "io-check-7ad82ef0-1fb2-43d6-8c35-949edfa37047.json",
+      "sha256": "c454c084b77cac487088ac07f51105e6d1c2506383fd5c0ef55fb70d3591a640",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:34:58.272457+00:00",
+        "end": "2026-10-23T10:34:58.272457+00:00"
+      }
+    },
+    {
+      "path": "io-check-1e934d08-e25f-4b82-9cbd-5de85cf5b239.json",
+      "sha256": "931f845a42e3609d19461f8118dfec1eb1216ac0f0ca633cc1b8bc881e21b3b9",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:36:28.489817+00:00",
+        "end": "2026-10-23T10:36:28.489817+00:00"
+      }
+    },
+    {
+      "path": "io-check-a38f206b-ce14-4a0d-ad93-e40f8a861cae.json",
+      "sha256": "bc8d400339abeb145450ede31fa8c331a6205ba9e2b084b0918fa64b4a2d3c5b",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:37:58.729836+00:00",
+        "end": "2026-10-23T10:37:58.729836+00:00"
+      }
+    },
+    {
+      "path": "io-check-47aa94b2-b436-49e0-a242-ca57e569abe0.json",
+      "sha256": "adedabbaa3dfa86cfab9ebe929d5565b11c1ee234db0596e92e2aab6e5048bca",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:39:28.917658+00:00",
+        "end": "2026-10-23T10:39:28.917658+00:00"
+      }
+    },
+    {
+      "path": "io-check-cbc1c70b-f108-44b0-9e74-a435e03741dc.json",
+      "sha256": "377671460fbb4cf0b7c0315666dd2ab4289a5b60c168311eb123a7e4e84f7ecb",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:40:59.114291+00:00",
+        "end": "2026-10-23T10:40:59.114291+00:00"
+      }
+    },
+    {
+      "path": "io-check-a86daefb-a758-4685-98d4-5b2f4efba710.json",
+      "sha256": "c200c2b5d6f152ba87681eb38e63401ce8b899f968a5bee7a0c3e8afca379e9b",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:42:29.336263+00:00",
+        "end": "2026-10-23T10:42:29.336263+00:00"
+      }
+    },
+    {
+      "path": "io-check-3ed54562-b16e-4b5f-8750-4b87c4782ffb.json",
+      "sha256": "e06391fa9761ad3fa7374ce4cfcee69620fb6c778ed6ce8906ea433c39d070bd",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:43:59.516339+00:00",
+        "end": "2026-10-23T10:43:59.516339+00:00"
+      }
+    },
+    {
+      "path": "io-check-5a31995b-7e1d-40a8-9d8e-1136c1885fe0.json",
+      "sha256": "0abb2686896298022d850d6e64645d51621beb93005afda3ca3f381b52775a22",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:45:29.719257+00:00",
+        "end": "2026-10-23T10:45:29.719257+00:00"
+      }
+    },
+    {
+      "path": "io-check-0f08e15b-eb9b-42ab-960d-17b44aefe50f.json",
+      "sha256": "c6ce723c1450da82323adcf8cadacca728a0323031938d5878b8019d7dc8dbc9",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:46:59.954351+00:00",
+        "end": "2026-10-23T10:46:59.954351+00:00"
+      }
+    },
+    {
+      "path": "io-check-f90bc018-f360-4ae8-a7cb-8c31ebda83b9.json",
+      "sha256": "bc861bcc3da6e34cf41540b6474dbe94f91086982d5a5beb5bd55adda96331ad",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:48:30.142363+00:00",
+        "end": "2026-10-23T10:48:30.142363+00:00"
+      }
+    },
+    {
+      "path": "io-check-c8694ee6-0f51-4871-a583-517bcbee2b8c.json",
+      "sha256": "7aae5a58d2ce6289d1c6caf684d08b552f98233e418a383a1b4227832ed13886",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:50:00.344283+00:00",
+        "end": "2026-10-23T10:50:00.344283+00:00"
+      }
+    },
+    {
+      "path": "io-check-1bfcfc36-5f02-4355-866d-5ab8403bed4d.json",
+      "sha256": "33747c8dd092b4f2f80a38adc8faf73ab672a9b24baa78a5d837bf6e6b6c0b23",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:51:30.531524+00:00",
+        "end": "2026-10-23T10:51:30.531524+00:00"
+      }
+    },
+    {
+      "path": "io-check-0ab24002-2a3d-45b5-9054-d81cd9d3ca5d.json",
+      "sha256": "34f9bdbbfd2fe2822d82b9d059f3d5b43a4abb300a6226a31f0fff4f9f53fc97",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:53:00.714551+00:00",
+        "end": "2026-10-23T10:53:00.714551+00:00"
+      }
+    },
+    {
+      "path": "io-check-55c13b79-0b75-4465-a08b-a35a18256d1d.json",
+      "sha256": "c85608db3d21897c64120e1fe4b0014182fff6f7050fc165f8547216eed06648",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:54:30.909246+00:00",
+        "end": "2026-10-23T10:54:30.909246+00:00"
+      }
+    },
+    {
+      "path": "io-check-d24b7804-0082-41ba-8f88-73d10753b9fb.json",
+      "sha256": "968e577cd8fbbedd3970a99d82162988752cf5689c616caf3e9118a32a88f23d",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:56:01.163997+00:00",
+        "end": "2026-10-23T10:56:01.163997+00:00"
+      }
+    },
+    {
+      "path": "io-check-1c9a8318-ec52-4d35-b60a-933ffd1d5fc7.json",
+      "sha256": "73003d988a6138f51e9f3d8a6d9eab9ee37cf4403e63c938f9aa142c9e4ffb6e",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:57:31.342139+00:00",
+        "end": "2026-10-23T10:57:31.342139+00:00"
+      }
+    },
+    {
+      "path": "io-check-b02064aa-feb6-4e5d-8094-847c8cd58b5d.json",
+      "sha256": "bd4839995ac89385c0479051988a5c6a0900bc343e5b93dcda6a8efdc3017011",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T10:59:01.519679+00:00",
+        "end": "2026-10-23T10:59:01.519679+00:00"
+      }
+    },
+    {
+      "path": "io-check-eef57c87-1cfe-4762-92c6-df1b3cc95760.json",
+      "sha256": "1ce68e415c6a6884be847ef6c2a7b3c619820ed3456dcee24df20fac63b61ed9",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:00:31.700268+00:00",
+        "end": "2026-10-23T11:00:31.700268+00:00"
+      }
+    },
+    {
+      "path": "io-check-9466bb75-4871-48b7-aa89-fbe44c23d2f1.json",
+      "sha256": "a720b8b78cbab8d510fe2c46007ca14f914d88e791d8ebd3a55d4cbb5750922b",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:02:01.903418+00:00",
+        "end": "2026-10-23T11:02:01.903418+00:00"
+      }
+    },
+    {
+      "path": "io-check-6c01628c-59f0-49e6-bce8-cbb3285a8681.json",
+      "sha256": "e1f0d121a4bbae28d7ac223628509faaaf8fbadffd1d1f5504cf18524586aded",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:03:32.137558+00:00",
+        "end": "2026-10-23T11:03:32.137558+00:00"
+      }
+    },
+    {
+      "path": "io-check-1fd71a11-ce66-4cc2-96e2-baf66d77f13c.json",
+      "sha256": "dedd764f80c23879edbfd72c818e3c2933ad177ea131cd0a6aa080f0c297aded",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:05:02.341272+00:00",
+        "end": "2026-10-23T11:05:02.341272+00:00"
+      }
+    },
+    {
+      "path": "io-check-050433d2-7577-46ad-87e2-dfbeb7390698.json",
+      "sha256": "db430bbe737f77303ac2fa090d926278fd176f46368503743b8abfcb38b95a71",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:06:32.529414+00:00",
+        "end": "2026-10-23T11:06:32.529414+00:00"
+      }
+    },
+    {
+      "path": "io-check-1717d34b-a58f-41e6-90be-cb3daa00650d.json",
+      "sha256": "9e202e5c37f74247049f3e9ef1d046b585275a926cb5194d87290b295e39bb91",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:08:02.706904+00:00",
+        "end": "2026-10-23T11:08:02.706904+00:00"
+      }
+    },
+    {
+      "path": "io-check-d57e161c-6239-4bc9-bf4e-3c98a81b95c7.json",
+      "sha256": "b450457366a08082707cf7cdb8721e0bba643e88ac35770e3f6a4ad9e5579c34",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:09:32.886504+00:00",
+        "end": "2026-10-23T11:09:32.886504+00:00"
+      }
+    },
+    {
+      "path": "io-check-d5a1eeb5-a222-4df9-b90a-16a494128b1a.json",
+      "sha256": "111de76e3d91352e7b6a637115896a408371bef1c20ba7e779afd10a450d16a3",
+      "status": "failed",
+      "sampled_between": {
+        "start": "2026-10-23T11:11:03.071498+00:00",
+        "end": "2026-10-23T11:11:03.071498+00:00"
+      }
+    },
+    {
+      "path": "io-check-8617c743-5a7c-41a2-9392-c40466de1c0e.json",
+      "sha256": "a795f49a4e0ce1eaea68bdebd0c856bb49065c314116208ae9c874033029b9db",
+      "status": "passed",
+      "sampled_between": {
+        "start": "2026-10-23T11:12:33.248201+00:00",
+        "end": "2026-10-23T11:13:03.248600+00:00"
+      }
+    }
+  ],
+  "evidence_directory": "freedom-release-c140a346-20261023",
+  "observations": [
+    {
+      "phase": "step-9a-reset-preexisting-failed-units",
+      "status": "observation_only_script_refused",
+      "observed_at": "2026-10-23T08:53:58.815555+00:00",
+      "script_result": "RuntimeError timers_changed_after_reset (exit 1); reset-attempt.json written; reset.json NOT written",
+      "services_after": {
+        "freedom-staging-next-backup.service": {
+          "ActiveState": "inactive",
+          "SubState": "dead",
+          "InvocationID": "a9d30b01382040938e4b805016f33e96",
+          "MainPID": "0",
+          "Result": "success",
+          "NRestarts": "0"
+        },
+        "freedom-next-backup.service": {
+          "ActiveState": "inactive",
+          "SubState": "dead",
+          "InvocationID": "7925be9bacca46dca38695f87fb16f5c",
+          "MainPID": "0",
+          "Result": "success",
+          "NRestarts": "0"
+        }
+      },
+      "timer_field_diff": {
+        "freedom-staging-next-backup.timer": {
+          "NextElapseUSecRealtime": {
+            "captured": "Fri 2026-10-23 23:32:49 EDT",
+            "live": "Fri 2026-10-23 23:30:45 EDT"
+          }
+        },
+        "freedom-next-backup.timer": {
+          "NextElapseUSecRealtime": {
+            "captured": "Sat 2026-10-24 00:32:46 EDT",
+            "live": "Sat 2026-10-24 00:30:45 EDT"
+          }
+        }
+      },
+      "review": "systemctl reset-failed of exactly the two services took effect: both inactive/dead, MainPID 0. Timer configuration (OnCalendar, RandomizedDelayUSec=5min, Persistent, UnitFileState, ActiveState/SubState) is unchanged; only the derived NextElapseUSecRealtime differs, because FixedRandomDelay=no re-draws the randomized delay when the triggered unit leaves failed. Both new values lie inside [OnCalendar, OnCalendar+5min]. The post-check compared a derived field and is a false negative. No retry; reset.json intentionally not created; step 9 takes a fresh snapshot.",
+      "retry": false,
+      "reset_receipt_created": false,
+      "receipt_sha256": "7dcac95638703a7064bfaa4f52ab7a782edf6aadc2069698fb6c12fb773d491d",
+      "capture_sha256": "5f487b410bc961fe56649dd3fe1377010b8026f3928da2b6bde419994d6ca484",
+      "reset_attempt_sha256": "9ccf8aae63cecf18fe6eaa89ee9539967a08f8a55a785de2f9b6c581cd6b1816",
+      "step_label_note": "The release handoff calls this step 9a; the retained observation labels it RUNBOOK 8."
+    },
+    {
+      "phase": "offline-audit",
+      "status": "operator_reported_absence_assertion_failures_not_a_gate",
+      "failed_absence_assertions": 3,
+      "assertions_relaxed": false,
+      "observation_basis": "Release operator handoff reports three absence assertions failing after orchestrator evidence was created; this is not a release gate.",
+      "retained_log_status": "passed",
+      "retained_log_sha256": "4e0d45a0e916563715922fcfc892299d3538656b13a693bf8bec7c82c6f1677d",
+      "audit_source_sha256": "032434e112ee51ef588760fbf9892cb8499f5040115c24cdfa127cc5fa26c7e2",
+      "limitation": "The supplied offline-audit.log contains a preparation-time passed summary. A separate post-execution three-failure output was not located in the supplied evidence; the count is operator-reported, not a result observed by this documentation job."
+    }
+  ],
+  "not_run": {
+    "member_ux_acceptance": {
+      "status": "not_run",
+      "reason": "No staging acceptance window per owner instruction; public smoke is not member UX acceptance."
+    },
+    "real_phone_and_safari": {
+      "status": "not_run",
+      "reason": "No real-device or Safari evidence was produced for this rollout."
+    },
+    "production_authenticated_member_journey": {
+      "status": "not_run",
+      "reason": "Production smoke was anonymous and read-only, with no member login or orders."
+    },
+    "live_rollback_drill": {
+      "status": "not_run",
+      "reason": "Isolated database/object restore does not establish live rollback; retain c140a346/schema185 floor and use compatible forward repair."
+    },
+    "second_operator_restore": {
+      "status": "not_run",
+      "reason": "No new authorized second-operator recovery evidence; the prior outstanding item remains."
+    },
+    "original_requirement_and_human_outcome_acceptance": {
+      "status": "not_run",
+      "reason": "This operator receipt does not close the original 168 requirement IDs, T-047 or outstanding human outcomes."
+    }
+  }
+}
