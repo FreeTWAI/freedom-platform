@@ -1,6 +1,6 @@
 import {lstatSync,readFileSync} from 'node:fs';
 import {parseJsonc} from './wrangler.mjs';
-const flags=new Set(['FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_SELF_SHIP_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE']);
+const flags=new Set(['FREEDOM_COMMERCE_DROP_SHIP_ENABLED','FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_SELF_SHIP_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE']);
 /** Local declarations only. Fixed error names never copy config values or keys. */
 export function checkCommerceWranglerConfig(path) {
   const errors=[],blockers=[];
@@ -32,6 +32,8 @@ export function checkCommerceWranglerConfig(path) {
       if(!Array.isArray(block.r2_buckets)||!block.r2_buckets.some(b=>b&&typeof b==='object'&&b.binding==='COMMERCE_JOURNAL'))errors.push('commerce_journal_binding_required');
     }
     if(vars.FREEDOM_COMMERCE_CONSOLE_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')errors.push('commerce_launchpad_required');
+    if(vars.FREEDOM_COMMERCE_DROP_SHIP_ENABLED==='true'&&vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED!=='true')errors.push('commerce_drop_ship_self_ship_required');
+    if(vars.FREEDOM_COMMERCE_DROP_SHIP_ENABLED==='true'&&vars.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true')errors.push('commerce_drop_ship_supplier_console_required');
     if(vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED==='true'&&vars.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true')errors.push('commerce_self_ship_console_required');
     if(vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED==='true'&&vars.FREEDOM_ENV==='public')errors.push('self_ship_retention_not_ready');
     if(vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED==='true'&&vars.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true')errors.push('commerce_console_required');

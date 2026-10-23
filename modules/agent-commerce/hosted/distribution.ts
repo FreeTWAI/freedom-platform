@@ -1,3 +1,4 @@
+import {dropShipCoverage} from '../fulfilment/drop-ship/coverage.js';
 import {objectKey, readVerifiedObject, type ObjectStore} from '../../../packages/asset-storage/index.js';
 import {OpaqueId, Version} from '../../../contracts/guild-launchpad/v1/primitives.js';
 import {currentOfferPhoto, appendCurrentOfferPhoto} from '../supplier-console/offer-photos.js';
@@ -139,7 +140,7 @@ export async function findVisibleSupplyOffer(q: PoolClient, communityId: string,
 
 /** Seller authority stays bound to the seller. Only the existing community offer,
  * selection and profile paths are read here; supplier drafts/stock never enter. */
-export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerId: string, admissionEnabled: boolean, offerPhotosEnabled = false) {
+export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string, instanceId: string, offerId: string, admissionEnabled: boolean, offerPhotosEnabled = false, dropShipEnabled = false) {
   const slugs = await storeRead(pool, actor, tenantId, instanceId, 'store:write', async (q, context) => {
     const p = await profile(q, tenantId, instanceId); ready(p);
     return {supplier: (await findVisibleSupplyOffer(q, context.community_id, p, offerId)).slug as string | null, seller: p.slug};
@@ -184,7 +185,8 @@ export async function readSupplyOffer(pool: Pool, actor: Actor, tenantId: string
         }
       }
     }
-    const checkoutReason = fulfilmentConsentFailure(hostedLineFulfilment(row.instance_id === instanceId));
+    const [covered]=selection?await dropShipCoverage(q,instanceId,[{sku:selection.sku,item_id:row.item_id,selection_id:selection.selection_id,quantity:1,unit_price_minor:selection.retail_price_minor,supplier_shop_id:row.supply_shop_id,own:row.instance_id===instanceId}],dropShipEnabled):[];
+    const checkoutReason = fulfilmentConsentFailure(hostedLineFulfilment(row.instance_id === instanceId,covered?.drop_ship,dropShipEnabled));
     const photo = offerPhotosEnabled && row.state==='offered' ? await currentOfferPhoto(q, offerId) : null;
     return SupplyOfferPageSchema.parse({photo: photo?.asset_id ? {seq:photo.seq,width:photo.width,height:photo.height,read_path:`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/supply-catalog/${offerId}/photo/${photo.seq}`} : null, offer: offerView(row), published_at: row.created_at.toISOString(),
       supplier: {name: row.supplier_name, public_path: publiclyLive ? `/shops/${row.slug}` : null},

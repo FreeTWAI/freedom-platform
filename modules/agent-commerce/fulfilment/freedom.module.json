@@ -44,7 +44,28 @@
   "public_exports": [
     "modules/agent-commerce/fulfilment/rules/index.ts"
   ],
-  "surfaces": [],
+  "surfaces": [
+    {
+      "surface_id": "commerce.drop-ship-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/hosted-drop-ship.ts",
+      "operations": [
+        "storefront.drop-ship.suppliers",
+        "storefront.drop-ship.agreements",
+        "storefront.drop-ship.propose",
+        "storefront.drop-ship.withdraw",
+        "storefront.drop-ship.revoke",
+        "supplier-console.drop-ship.agreements",
+        "supplier-console.drop-ship.accept",
+        "supplier-console.drop-ship.decline",
+        "supplier-console.drop-ship.revoke",
+        "supplier-console.drop-ship.orders",
+        "supplier-console.drop-ship.ship",
+        "supplier-console.drop-ship.unable"
+      ],
+      "auth_profile": "member-session"
+    }
+  ],
   "tests": [
     "runtime.full"
   ]
