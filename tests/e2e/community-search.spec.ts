@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool } from 'pg';
 import { test, expect, type Browser, type Page } from './fixtures.js';
-import { navigate, signOut } from './navigation.js';
+import { navigate } from './navigation.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
 import { communityCatalog } from '../../modules/community/catalog.js';
 
@@ -322,18 +322,33 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await page.reload();
     await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const documentMarker = randomUUID();
+    await page.evaluate(value => Object.defineProperty(window, 'searchHistoryDocumentMarker', { value }), documentMarker);
     for (const email of [logged.member.email, other.email]) {
       // Issue a marker in this document immediately before each session change.
       // The first pass is a direct same-user logout/login, not an account switch.
       await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
       await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
       const old = await page.evaluate(() => history.state);
-      await signOut(page);
+      // Public search remains available after logout. Do not use the shared
+      // signOut helper, which expects the login screen immediately.
+      await page.getByRole('button', { name: '設定', exact: true }).click();
+      const signedOut = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/logout' && response.request().method() === 'POST');
+      await page.getByRole('menu', { name: '個人檔案' }).getByRole('menuitem', { name: '登出', exact: true }).click();
+      expect((await signedOut).status()).toBe(200);
+      await expect(privateList(page)).toHaveCount(0);
+      expect((await page.request.get('/api/v1/session')).status()).toBe(401);
+      await expect(page.getByRole('heading', { level: 1, name: '搜尋社群內容', exact: true })).toBeVisible();
+      await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+      await expect(results(page)).not.toContainText(logged.title);
+      await page.getByRole('link', { name: '返回登入', exact: true }).click();
+      await expect(page.getByRole('heading', { name: '登入', exact: true })).toBeVisible();
       await page.getByLabel('電子郵件', { exact: true }).fill(email);
       await page.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
       await page.getByRole('button', { name: '登入', exact: true }).click();
       await expect(page.locator('.shell')).toBeVisible();
       await search(page, logged.title);
+      expect(await page.evaluate(() => Reflect.get(window, 'searchHistoryDocumentMarker'))).toBe(documentMarker);
       await page.evaluate(value => {
         history.replaceState(value, ''); window.dispatchEvent(new PopStateEvent('popstate', { state: value }));
         window.dispatchEvent(new HashChangeEvent('hashchange'));
