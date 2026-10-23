@@ -19,7 +19,9 @@ export function shipmentInput(raw:unknown) {
     const record=value as Record<string,unknown>,text=record[key];
     if(typeof text==='string') {
       requireCondition(!/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069<>]/u.test(text),422,'validation_failed','出貨資料有誤。');
-      record[key]=text.normalize('NFKC').trim();
+      const normalized=text.normalize('NFKC').trim();
+      if(key==='carrier_name')requireCondition(!/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}<>]/u.test(normalized),422,'validation_failed','出貨資料有誤。');
+      record[key]=normalized;
     }
   }
   const parsed=SelfShipmentInputSchema.parse(value);
