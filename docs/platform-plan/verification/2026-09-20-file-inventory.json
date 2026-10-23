@@ -24634,8 +24634,8 @@
     },
     {
       "path": "tests/e2e/supplier-console.spec.ts",
-      "bytes": 59936,
-      "sha256": "5b9654aab0acd96539a1aefa2d6815e9dc4c1cb15e0e544b221d68349405da80"
+      "bytes": 59961,
+      "sha256": "448ebf60991429bfdc91b5425c19901d785678083a6b1538cd405cf5b654af4d"
     },
     {
       "path": "tests/e2e/task-board-loading.spec.ts",
