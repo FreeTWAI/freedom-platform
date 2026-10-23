@@ -18824,8 +18824,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/freedom.module.json",
-      "bytes": 1911,
-      "sha256": "3c4081900052c9ca21dcd45ab2c08e8066d8a236fa8700821f9cbb80f3fba8a7"
+      "bytes": 2145,
+      "sha256": "9a87ba58c770f997b12af868aa33830daa61370dbb334106adf069b0344522fb"
     },
     {
       "path": "modules/agent-commerce/operations/provider-entry-paths.ts",
