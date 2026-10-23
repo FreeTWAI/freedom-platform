@@ -490,6 +490,19 @@ without inferring historical credit or backfilling existing RSVPs. Existing
 runtime table-level SELECT/INSERT/UPDATE grants cover the added column; no grant
 expansion is required.
 
+## Hosted self-ship shape (schema185)
+
+Migration185 adds the immutable `commerce_self_shipments` table and the
+`self_ship` delivery terms. Schema185 alone adds no reader floor.
+
+Once `commerce.hosted-self-ship.v1` is enabled, written or retained, every active
+and candidate binary must support both `commerce.hosted-self-ship.v1` and
+`commerce.hosted-checkout.v1`, including after self-ship intake is turned off
+again. Restoring below185 cannot erase the retained shape. Exact independently
+approved source, artifact and ledger identities remain required. Acknowledging
+the shape grants no shipping, deployment or restore authority and does not turn
+on `FREEDOM_COMMERCE_SELF_SHIP_ENABLED`.
+
 ## Checkout contact retention schema186 write floor
 
 `commerce.checkout-contact-retention.v1` is mandatory for every candidate and
