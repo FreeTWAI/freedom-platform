@@ -16,6 +16,7 @@ export const DELIVERY_METHODS = [
 ] as const;
 
 export const UNAVAILABLE_REASONS = [
+  'fulfilment_mixed_shippers',
   'fulfilment_not_agreed',
   'shipping_attributes_missing',
   'method_unsupported',
