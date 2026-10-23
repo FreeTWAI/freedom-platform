@@ -5,13 +5,25 @@ export function personView(p:JournalPerson){return {id:p.slug,name:p.display_nam
 export type PersonView=ReturnType<typeof personView>;
 const statusNames={proposed:'提案中',in_progress:'進行中',reported_done:'回報完成',verified_done:'已驗證'};
 type Block={type:'list';items:string[]}|{type:'paragraph'|'quote';text:string};
+export type SourceMessageView={time:string;text:string;timeLabel:string;senderName?:string;senderAvatar?:{url:string;fit:'cover'|'contain';position:string}};
+export function sourceMessagesView(value:unknown):SourceMessageView[]{
+ if(!Array.isArray(value))return [];
+ return value.flatMap(m=>{
+  if(!m||typeof m.text!=='string'||!m.text.trim()||typeof m.time!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(m.time))return [];
+  const instant=new Date(m.time),[year,month,day]=m.time.slice(0,10).split('-').map(Number),[hour,minute,second]=m.time.slice(11,19).split(':').map(Number);
+  if(!Number.isFinite(instant.getTime())||hour>23||minute>59||second>59||month<1||month>12||day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate())return [];
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'}).formatToParts(instant).map(p=>[p.type,p.value]));
+  const avatar=assetUrl(m.sender_avatar?.url);
+  return [{time:m.time,text:m.text,...(typeof m.sender_name==='string'&&m.sender_name?{senderName:m.sender_name}:{}),...(avatar&&typeof m.sender_name==='string'&&m.sender_name?{senderAvatar:{url:avatar,fit:m.sender_avatar.display_fit==='cover'?'cover':'contain',position:/^(100|[0-9]{1,2})(\.[0-9]+)?% (100|[0-9]{1,2})(\.[0-9]+)?%$/.test(m.sender_avatar.object_position)?m.sender_avatar.object_position:'50% 50%'}}:{}),timeLabel:`${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`}];
+ });
+}
 export function journalView(j:JournalEntry){
- const chapters:{id:string;short:string;title:string;label:string;paragraphs:string[];blocks:Block[];points?:string[]}[]=[];
+ const chapters:{id:string;short:string;title:string;label:string;paragraphs:string[];blocks:Block[];points?:string[];sourceMessages:SourceMessageView[]}[]=[];
  for(const [i,b] of j.blocks.entries()){
-  if(b.type==='heading'||!chapters.length)chapters.push({id:'section-'+i,short:b.type==='heading'?b.text:'日誌內容',title:b.type==='heading'?b.text:'',label:'',paragraphs:[],blocks:[]});
+  if(b.type==='heading'||!chapters.length)chapters.push({id:'section-'+i,short:b.type==='heading'?b.text:'日誌內容',title:b.type==='heading'?b.text:'',label:'',paragraphs:[],blocks:[],sourceMessages:sourceMessagesView(b.type==='heading'?b.source_messages:undefined)});
   if(b.type!=='heading')chapters.at(-1)!.blocks.push(b);
  }
- return {issue:String(j.version).padStart(3,'0'),title:j.title,kicker:'',summary:j.excerpt,minutes:Math.max(1,Math.ceil(JSON.stringify(j.blocks).length/450)),scope:j.date,sourceNote:j.coverage.is_partial?'本篇為部分時段紀錄。':'',tags:[] as string[],chapters,heroUrl:assetUrl(j.hero?.url),api:true,published:true,people:j.people.map(personView),decisions:j.decisions.map(d=>({title:d.text,detail:d.scope,state:'已決定'})),topics:j.development_items.map((d,i)=>({name:d.id||String(i),title:d.title,text:d.next_step,state:statusNames[d.status],tag:'開發項目',color:i%2?'lilac':'mint',chapter:'development'}))};
+ return {issue:String(j.version).padStart(3,'0'),title:j.title,kicker:'',summary:j.excerpt,minutes:Math.max(1,Math.ceil(JSON.stringify(j.blocks).length/450)),scope:j.date,sourceNote:j.coverage.is_partial?'本篇為部分時段紀錄。':'',tags:[] as string[],chapters,heroUrl:assetUrl(j.hero?.url),api:true,published:true,people:j.people.map(personView),readingNote:{conclusion:j.reading_note?.conclusion.trim()||'',priorityTodo:j.reading_note?.priority_todo.trim()||'',discussionQuestion:j.reading_note?.discussion_question.trim()||''},decisions:j.decisions.map(d=>({title:d.text,detail:d.scope,state:'已決定'})),topics:j.development_items.map((d,i)=>({name:d.id||String(i),title:d.title,text:d.next_step,state:statusNames[d.status],tag:'開發項目',color:i%2?'lilac':'mint',chapter:'development'}))};
 }
 export type StoryView=ReturnType<typeof journalView>;
 export async function readSnapshot(signal:AbortSignal){
