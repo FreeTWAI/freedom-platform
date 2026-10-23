@@ -1,3 +1,4 @@
+import {applyConfirmedPaymentHeld,cancelPaidOrder} from '../../modules/agent-commerce/checkout/payments.js';
 import {seedStandingAgreement} from './drop-ship-fixture.js';
 import {seedSelfShipment} from './self-ship-fixture.js';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
@@ -507,7 +508,7 @@ async function assertTenantWritePolicy(table: string, column: string) {
 }
 
 /** A card checkout cannot be rewritten into a bank transfer. Clone its frozen terms. */
-async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, principalId: string) {
+async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, principalId: string, refundState?:'pending'|'recorded') {
   const checkoutClone = randomUUID(), contactId = randomUUID(), orderId = randomUUID(), clientOrderId = randomUUID();
   const keyHash = createHash('sha256').update(checkoutClone).digest('hex');
   const requestHash = createHash('sha256').update(orderId).digest('hex');
@@ -537,8 +538,8 @@ async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, princip
     WHERE c.checkout_id=$1`, [checkoutClone, orderId, clientOrderId, requestHash]);
   await q.query(`INSERT INTO commerce_checkout_orders(order_id,tenant_id,instance_id,checkout_id,customer_id,contact_id,display_number,terms,terms_sha256,environment,payment_method)
     SELECT $2,c.tenant_id,c.instance_id,c.checkout_id,c.customer_id,c.current_contact_id,
-      to_char(o.created_at AT TIME ZONE 'Asia/Taipei','YYMMDD')||'-BANK01',c.terms,c.terms_sha256,'sandbox','bank_transfer'
-    FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1`, [checkoutClone, orderId]);
+      to_char(o.created_at AT TIME ZONE 'Asia/Taipei','YYMMDD')||CASE WHEN $3::boolean THEN '-CANC01' ELSE '-BANK01' END,c.terms,c.terms_sha256,'sandbox','bank_transfer'
+    FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1`, [checkoutClone, orderId,refundState!==undefined]);
   await q.query(`INSERT INTO commerce_order_lines(order_id,selection_id,item_id,quantity,snapshot,order_profile,supplier_shop_id,hosted_offer_id,acceptance_id,listing_sha256)
     SELECT $1,(b->>'selection_id')::uuid,(b->>'item_id')::uuid,(b->>'quantity')::int,item.value,'hosted_checkout',(b->>'supplier_shop_id')::uuid,
       (b->>'offer_id')::uuid,(b->>'acceptance_id')::uuid,NULLIF(b->>'listing_sha256','')
@@ -551,11 +552,23 @@ async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, princip
     FROM commerce_order_lines l JOIN commerce_orders o USING(order_id) WHERE l.order_id=$1`, [orderId]);
   await q.query(`UPDATE commerce_items i SET stock=stock+l.quantity, reserved=reserved+l.quantity
     FROM commerce_order_lines l WHERE l.order_id=$1 AND i.item_id=l.item_id`, [orderId]);
-  await q.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
+  if(!refundState)await q.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
     SELECT tenant_id,instance_id,1,$2,$3,$4 FROM commerce_checkouts WHERE checkout_id=$1`, [checkoutClone, document, createHash('sha256').update(canonicalJSON(document)).digest('hex'), principalId]);
   const payment = (await q.query<{ payment_id: string }>(`INSERT INTO commerce_offline_payments(tenant_id,instance_id,order_id,method,amount_minor,currency,received_on,confirmed_by_principal_id)
     SELECT c.tenant_id,c.instance_id,$2,'bank_transfer',o.total_minor,o.currency,(o.created_at AT TIME ZONE 'Asia/Taipei')::date,$3
     FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1 RETURNING payment_id`, [checkoutClone, orderId, principalId])).rows[0];
+  if(refundState){
+    const order=(await q.query('SELECT *,version::text FROM commerce_checkout_orders WHERE order_id=$1',[orderId])).rows[0];
+    await applyConfirmedPaymentHeld(q,{orderId,paymentRef:payment.payment_id,amountMinor:Number(order.terms.total_minor),currency:order.terms.currency,simulated:false},order);
+    const shop=(await q.query('SELECT public_shop_id FROM commerce_orders WHERE order_id=$1',[orderId])).rows[0];
+    await cancelPaidOrder(q,{storefront_shop_id:shop.public_shop_id},{orderId,commandRef:randomUUID()});
+    await q.query(`INSERT INTO commerce_paid_cancellations(order_id,tenant_id,instance_id,payment_id,reason,note,cancelled_by_principal_id,cancelled_at,amount_minor,currency,refund_state,refunded_on,refund_method,refund_recorded_by_principal_id,refund_recorded_at)
+      SELECT p.order_id,p.tenant_id,p.instance_id,p.payment_id,'out_of_stock',NULL,$2,co.cancelled_at,p.amount_minor,p.currency,$3,
+        CASE WHEN $3='recorded' THEN (p.confirmed_at AT TIME ZONE 'Asia/Taipei')::date END,
+        CASE WHEN $3='recorded' THEN 'cash' END,CASE WHEN $3='recorded' THEN $2::uuid END,CASE WHEN $3='recorded' THEN clock_timestamp() END
+      FROM commerce_offline_payments p JOIN commerce_checkout_orders co USING(order_id) WHERE p.payment_id=$1`,[payment.payment_id,principalId,refundState]);
+    return;
+  }
   await q.query(`INSERT INTO commerce_meetup_handovers(tenant_id,instance_id,order_id,offline_payment_id,completed_on,recorded_by_principal_id)
     SELECT tenant_id,instance_id,order_id,payment_id,received_on,confirmed_by_principal_id FROM commerce_offline_payments WHERE payment_id=$1`, [payment.payment_id]);
 }
@@ -585,7 +598,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     'commerce_order_access_grants',
     'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
-    'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments', 'commerce_fulfilment_agreements', 'commerce_fulfilment_agreement_items',
+    'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments', 'commerce_paid_cancellations', 'commerce_fulfilment_agreements', 'commerce_fulfilment_agreement_items',
     'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
   'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',...categoryTables,
   'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
@@ -663,8 +676,9 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     const data=index===0?A:B;
     const offer=(await owner.query('SELECT * FROM commerce_hosted_supply_offers WHERE instance_id=$1',[supplier.instanceId])).rows[0];
     const shop=(await owner.query('SELECT storefront_shop_id FROM commerce_storefront_profiles WHERE instance_id=$1',[seller.instanceId])).rows[0].storefront_shop_id;
-    await owner.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot,hosted_offer_id,hosted_sku)
-      VALUES($1,$2,$3,100,'Synthetic distribution',$4,$5,'P0002')`,[randomUUID(),shop,supplier.itemId,{...offer.terms,sku:'P0002',offer_id:offer.offer_id,offer_sha256:offer.terms_sha256},offer.offer_id]);
+    // The same retained selection also backs the signed standing agreement below.
+    await owner.query(`INSERT INTO commerce_selections(selection_id,shop_id,item_id,retail_price_minor,sale_terms,snapshot,hosted_offer_id,hosted_sku,acceptance_state)
+      VALUES($1,$2,$3,100,'Synthetic distribution',$4,$5,'P0002','sellable')`,[randomUUID(),shop,supplier.itemId,{...offer.terms,sku:'P0002',offer_id:offer.offer_id,offer_sha256:offer.terms_sha256},offer.offer_id]);
     const photo=(await owner.query('SELECT * FROM commerce_product_photo_targets WHERE tenant_id=$1 AND instance_id=$2 AND product_id=$3',[seller.tenantId,seller.instanceId,seller.itemId])).rows[0];
     const source=(await owner.query('SELECT v.* FROM supply_material_versions v WHERE instance_id=$1',[supplier.instanceId])).rows[0];
     await owner.query(`INSERT INTO commerce_distribution_photo_targets(tenant_id,instance_id,product_id,scope_id) VALUES($1,$2,$3,$4)`,[seller.tenantId,seller.instanceId,supplier.itemId,data.scopeId]);
@@ -714,6 +728,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
         VALUES($1,$2,'unmatched_payment','payment_event',$3,'retailer',clock_timestamp()+interval '72 hours','system')`,
       [data.tenantId,data.instanceId,randomUUID()]);
       await seedOfflineBankFixture(q, saved.checkout_id, data.principalId);
+      await seedOfflineBankFixture(q, saved.checkout_id, data.principalId, data.tenantId===A.tenantId?'pending':'recorded');
       await seedSelfShipment(q, saved.checkout_id, data.principalId);
     });
   }

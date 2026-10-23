@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
-import {SelfShipmentSchema} from './hosted-checkout.js';
-const time=z.string().datetime({offset:true});
+import {CheckoutTimeSchema,SelfShipmentSchema} from './hosted-checkout.js';
+const time=CheckoutTimeSchema;
 const digest=z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/);
 const fee=z.number().int().nonnegative().max(9007199254740900);
 const shortNote=z.string().trim().max(200).regex(/^[^\p{Cc}\p{Cf}<>]*$(?![\s\S])/u);

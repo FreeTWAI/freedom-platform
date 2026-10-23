@@ -605,3 +605,20 @@ The integrated supplier `fulfiller_unable` case points to the original order for
 whole-order offline cancellation and refund recording. It has no card-provider
 evidence action. Cancellation resolves the case in the same inventory transaction;
 a later supplier shipment can instead resolve it as shipped.
+
+## Minimal standing drop-ship (2026-10-23)
+
+With drop-ship intake enabled, accepted exact-version consent resolves supplied
+selections once per quote. A checkout contains either only store-owned lines or
+only selections covered by one agreement; mixed shippers require separate
+orders. Manual drop-ship freezes supply unit costs, the per-order fee including
+postage and the weekday promise in private terms. Public terms disclose only
+manual supplier fulfilment and the buyer's store postage; supplier costs and the
+agreement digest stay private. Existing own-line public group keys are preserved.
+
+Only bank transfer paid to the store is available. Revocation or intake off
+blocks new placement, while frozen orders retain their supplier and terms.
+Supplier reads and writes stay in Commerce, through the fulfilment module's
+explicit authorization and strict contact allowlist; no recipient projection,
+read window, read receipt, per-order acceptance, payable, statement, ECPay service or
+email is introduced. The store still owns cancellation, refund and service.
