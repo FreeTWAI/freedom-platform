@@ -1396,6 +1396,10 @@ async function manualScreens(page:Page,info:import('@playwright/test').TestInfo,
   for(const input of metrics.inputs){expect(input.height).toBeGreaterThanOrEqual(44);if(width===390)expect(input.fontSize).toBeGreaterThanOrEqual(16);}
   const scope=portal?page.locator('[data-seller-active="true"]'):page.locator('main');
   expect(await scope.locator('.btn-primary:visible').count()).toBeLessThanOrEqual(1);
+  if(name==='seller-shipment'){
+   const address=await page.getByRole('region',{name:'收件資料',exact:true}).boundingBox(),form=await page.getByRole('form',{name:'登記出貨',exact:true}).boundingBox();expect(address).not.toBeNull();expect(form).not.toBeNull();
+   if(width>=1100){expect(Math.abs(address!.y-form!.y)).toBeLessThanOrEqual(1);expect(address!.x+address!.width).toBeLessThanOrEqual(form!.x);}else expect(address!.y+address!.height).toBeLessThanOrEqual(form!.y);
+  }
   const stem=`selfship-${name}-${theme}-${width}`;
   const {writeFile}=await import('node:fs/promises');await writeFile(info.outputPath(stem+'.json'),JSON.stringify(metrics,null,2)+'\n');
   await page.screenshot({path:info.outputPath(stem+'.png'),fullPage:true});backgrounds.push(metrics.body.background);

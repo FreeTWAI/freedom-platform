@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {SelfShipmentInputSchema,SellerCheckoutOrderSchema,type SellerCheckoutOrder} from '../../../../contracts/guild-launchpad/v1/hosted-seller-checkout';
 import {SELF_SHIP_CARRIER_LABELS} from '../../../../contracts/guild-launchpad/v1/hosted-checkout';
 import {formatIsoLocal} from '../../../../apps/portal-web/src/format';
@@ -38,11 +38,17 @@ function Form({c,order,ready,close}:{c:Controller;order:SellerCheckoutOrder;read
   }}>確認登記出貨</button></div>
  </div></dialog></>;
 }
-export function SelfShipOrder({c,order,ready}:{c:Controller;order:SellerCheckoutOrder;ready:boolean}){
- const [editing,setEditing]=useState(false),ship=order.self_ship;if(!ship)return null;const shipment=ship.shipment;
- return <Axis title="自行寄送"><div className="stack seller-self-ship">{shipment?<><p>已出貨</p><dl className="detail-list"><div><dt>物流業者</dt><dd>{shipment.redacted?SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]:shipment.carrier_name??SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]}</dd></div>{!shipment.redacted&&<div><dt>物流單號</dt><dd>{shipment.tracking_number}</dd></div>}<div><dt>寄出日期</dt><dd>{shipment.sent_on}</dd></div></dl><p>登記時間：{formatIsoLocal(shipment.recorded_at)}</p><p>只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。</p></>:order.lifecycle_state==='cancelled'?<p>訂單已取消，不能登記出貨。</p>:<>
-  <p>{ship.ship_by?'等待出貨':'等待付款確認'}</p><p>{ship.ship_by?`店家承諾於 ${ship.ship_by} 前寄出。`:`店家確認收款後 ${ship.handling_days} 個工作天內寄出。`}</p><p>工作天為週一至週五，不另排除國定假日。</p>{ship.note&&<p className="seller-self-ship-note">{ship.note}</p>}
+export function SelfShipOrder({c,order,ready,contact}:{c:Controller;order:SellerCheckoutOrder;ready:boolean;contact?:ReactNode}){
+ const [editing,setEditing]=useState(false),ship=order.self_ship;if(!ship)return null;const shipment=ship.shipment,pending=!shipment&&order.lifecycle_state!=='cancelled';
+ const stockBlocked=!!ship.ship_by&&order.inventory_state==='unallocated';
+ const fulfilment=shipment?<><dl className="detail-list"><div><dt>物流業者</dt><dd>{shipment.redacted?SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]:shipment.carrier_name??SELF_SHIP_CARRIER_LABELS[shipment.carrier_key]}</dd></div>{!shipment.redacted&&<div><dt>物流單號</dt><dd>{shipment.tracking_number}</dd></div>}<div><dt>寄出日期</dt><dd>{shipment.sent_on}</dd></div></dl><p>登記時間：{formatIsoLocal(shipment.recorded_at)}</p></>:pending&&(order.actions.record_self_shipment||stockBlocked)?<>
   {order.actions.record_self_shipment&&(editing?<Form c={c} order={order} ready={ready} close={()=>setEditing(false)}/>:<div className="actions"><button className="btn btn-ghost btn-small" type="button" disabled={c.locked||!ready} onClick={()=>setEditing(true)}>登記出貨</button></div>)}
-  {ship.ship_by&&order.inventory_state==='unallocated'&&<p role="status">付款已確認，但商品尚未完成配貨，暫時不能登記出貨。</p>}
- </>}</div></Axis>;
+  {stockBlocked&&<p role="status">付款已確認，但商品尚未完成配貨，暫時不能登記出貨。</p>}
+ </>:null;
+ return <Axis title="自行寄送"><div className="stack seller-self-ship">
+  <p>{shipment?'已出貨':pending?ship.ship_by?'等待出貨':'等待付款確認':'訂單已取消，不能登記出貨。'}</p>
+  {pending&&<><p>{ship.ship_by?`店家承諾於 ${ship.ship_by} 前寄出。`:`店家確認收款後 ${ship.handling_days} 個工作天內寄出。`}</p><p>工作天為週一至週五，不另排除國定假日。</p>{ship.note&&<p className="seller-self-ship-note">{ship.note}</p>}</>}
+  <div className={contact&&fulfilment?'seller-self-ship-sections':'stack'}>{contact}{fulfilment&&<div className="stack">{fulfilment}</div>}</div>
+  <p>只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。</p>
+ </div></Axis>;
 }
