@@ -161,13 +161,13 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；顧客記錄在它所有聯絡資料都遮蔽後跟著遮蔽。
 
-**待 Ted 確認：** 第一列「沒有成立訂單的結帳聯絡資料，checkout 到期後 30 天遮蔽」沿用本節原本的提案，已一併實作，但 Ted 沒有對這一列單獨表態，正式開放前要確認。表中其他列仍是提案；人工個資請求的負責人與備份副本的保存窗口也待 Ted 決定。
+**待 Ted 確認：** 第一列「沒有成立訂單的結帳聯絡資料，checkout 到期後 30 天遮蔽」沿用本節原本的提案，已一併實作，但 Ted 沒有對這一列單獨表態。遮蔽排程不受旗標控制，部署後就會開始執行，所以 PR-C 合併前要先確認。下面規則中的「等待條件」也沿用 DC12 原本的提案，同樣待確認。表中其他列仍是提案；人工個資請求的負責人與備份副本的保存窗口也待 Ted 決定。
 
 | 資料 | 位置 | 預設 | 到期時 |
 | --- | --- | --- | --- |
 | 沒有成立訂單的結帳聯絡資料 | `commerce_checkout_contacts`（沒有訂單指向的列） | checkout 到期後 30 天 | 遮罩 |
 | 訂單的聯絡、收件與發票買家資料 | `commerce_checkout_contacts` | 履約登記（面交 `recorded_at`／自行寄送 `recorded_at`）後 180 天；取消單由 `cancelled_at` 後 180 天 | 遮罩：五個個資欄位一起清空（`168` 的規則）；畫面改顯示「收件資料已依保存期限移除」 |
-| 自行寄送的私有物流參考 | `commerce_self_shipments.tracking_number`、`carrier_name` | 與同一訂單 contact 相同（已核准） | 同交易清空，寫一次 `redacted_at`；保留業者 key、寄出日與出貨事實 |
+| 自行寄送的私有物流參考 | `commerce_self_shipments.tracking_number`、`carrier_name` | 與同一訂單 contact 相同（依已核准規則一併處理） | 同交易清空，寫一次 `redacted_at`；保留業者 key、寄出日與出貨事實 |
 | 出貨者的收件投影 | `commerce_fulfilment_recipients` | `access_until`：送達或退回後加同意的天數（預設 14、上限 30） | 遮罩，拒絕新讀取（EC-SPEC-05 §4.4） |
 | 選店 session 的門市暫存 | 選店 session | 到期後 1 天 | 刪除 |
 | 訂單對話 | `commerce_support_messages` | 同訂單的聯絡資料 | 內文改成「（已依保存期限移除）」，保留作者種類與時間 |
@@ -187,7 +187,7 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 - 遮罩由現有 due-work（§2.4）的 `checkout_contact_retention` 執行：每次最多發現 200 間店、領取 200 件工作，每店交易最多 200 contacts／200 customers，工作每 10 分鐘再到期；舊列同樣由有界掃描觸及。租約失效、重播、失敗均不重寫已遮蔽列；checkout 關閉或 quarantine 不停止此種隱私工作。清空五個個資欄位與 salt，與同訂單的單號／自填業者名稱在同交易完成。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
 - 留下的摘要不能被拿來比對猜測的個資：聯絡資料的摘要含一個隨機 salt，salt 存在聯絡資料列、隨遮罩清除；建立 checkout 的請求摘要以冪等鍵為金鑰（HMAC-SHA256），明文的鍵不保存。
-- 已核准的等待條件：同訂單仍有 `commerce_exception_cases.status=open`、未結付款、處理中的退款或未完成履約時不遮蔽；結束後使用原起算日，不重開 180 天。現行退款表只有終態 `recorded`，沒有實作中的退款流程；未來新增非終態必須維持此保護。
+- 等待條件（沿用 DC12 原提案，待 Ted 確認）：同訂單仍有 `commerce_exception_cases.status=open`、未結付款、處理中的退款或未完成履約時不遮蔽；結束後使用原起算日，不重開 180 天。現行退款表只有終態 `recorded`，沒有實作中的退款流程；未來新增非終態必須維持此保護。
 - 未履約也未取消的訂單沒有起算點，不能為了遮蔽而結單、退款或發明備援期限。離線付款未付的期限工作會取消訂單；已付未履約、未定付款、沒有付款期限的舊訂單須另由 Ted 決定處理方式。
 - 衍生副本（搜尋、快取、報表彙總）本來就不放個資；萬一有，依 OPEN-07 先隱藏、7 天內清除。
 - 還原：備份可能含遮蔽前個資。既有 `scripts/media-restore-acl.ts --execute-lockdown` 在 ACL lockdown 後執行有界遮蔽頁；`repeat_page` 重跑同游標，`next_page` 用回傳游標續跑直到 `scan_complete`。全程維持 quarantine，未完成所有頁不得重新開放；工具永遠不宣告 deploymentReady。另須重新套用還原點後的撤銷（T-047，EC-SPEC-10 §8.4）。
