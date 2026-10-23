@@ -205,7 +205,7 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   const noDatabaseEnv=Object.defineProperty({},'FREEDOM_MEDIA_DATABASE_URL',{get(){throw Error('Plan must not read connection secret.');}});
   const plan=await runMediaRestoreAcl(aclArgs,noDatabaseEnv);assert.equal(plan.exitCode,0);assert.equal((plan.report as {execution:string}).execution,'not_run');
   const wrongEnvironment=await runMediaRestoreAcl(['--environment','staging','--expected-database','freedom_next','--schema','public','--expected-role','freedom_next_migrator','--release-sha','a'.repeat(40),'--runtime-role','freedom_next_app'],noDatabaseEnv);assert.equal(wrongEnvironment.exitCode,2);assert.equal((wrongEnvironment.report as {code:string}).code,'invalid_target');
-  for(const modeArgs of [[],['--contact-retention',''],['--contact-retention','true'],['--contact-retention','ALL'],['--contact-retention',' orders']]){
+  for(const modeArgs of [[],['--contact-retention','orders'],['--contact-retention',''],['--contact-retention','true'],['--contact-retention','ALL'],['--contact-retention',' orders']]){
     const invalid=await runMediaRestoreAcl([...aclArgs,'--execute-lockdown',...modeArgs],noDatabaseEnv);
     assert.equal(invalid.exitCode,2);assert.equal((invalid.report as {code:string}).code,'invalid_arguments');
   }
@@ -221,9 +221,9 @@ test('Actual consistent PG dump and nativeR2 restore exclude concurrent addition
   assert((await functionPrivileges()).rows.every(r=>r.allowed===true),'Every refused operation rolls back without masking unsafe restored defaults.');
   const disabled=await runMediaRestoreAcl([...aclArgs,'--execute-lockdown','--contact-retention','off'],{FREEDOM_MEDIA_DATABASE_URL:restoredUrl.href});
   assert.equal(disabled.exitCode,0);assert.deepEqual((disabled.report as {contactRetention:unknown}).contactRetention,{status:'disabled',deploymentReady:false});
-  const ordersOnly=await runMediaRestoreAcl([...aclArgs,'--execute-lockdown','--contact-retention','orders'],{FREEDOM_MEDIA_DATABASE_URL:restoredUrl.href});
-  assert.equal(ordersOnly.exitCode,0);assert.deepEqual((ordersOnly.report as {contactRetention:{status:string;deploymentReady:boolean}}).contactRetention.status,'scan_complete');
-  assert.equal((ordersOnly.report as {contactRetention:{deploymentReady:boolean}}).contactRetention.deploymentReady,false);
+  const active=await runMediaRestoreAcl([...aclArgs,'--execute-lockdown','--contact-retention','all'],{FREEDOM_MEDIA_DATABASE_URL:restoredUrl.href});
+  assert.equal(active.exitCode,0);assert.deepEqual((active.report as {contactRetention:{status:string;deploymentReady:boolean}}).contactRetention.status,'scan_complete');
+  assert.equal((active.report as {contactRetention:{deploymentReady:boolean}}).contactRetention.deploymentReady,false);
   const locked=await runMediaRestoreAcl([...aclArgs,'--execute-lockdown','--contact-retention','all'],{FREEDOM_MEDIA_DATABASE_URL:restoredUrl.href});assert.equal(locked.exitCode,0,JSON.stringify(locked.report));assert.equal((locked.report as {functionsRevoked:number}).functionsRevoked,24);assert.equal((locked.report as {applicationInstalled:boolean}).applicationInstalled,false);
   assert.equal((await lockdownRestoredMediaAcl(restored!,aclOptions)).functionsRevoked,24,'Lockdown can be safely rerun before installation.');
   await grantRuntime(restored!);const closedFunctions=(await functionPrivileges()).rows;assert.equal(closedFunctions.length,24);assert(closedFunctions.every(r=>r.allowed===false));

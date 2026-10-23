@@ -78,7 +78,7 @@ export async function runDueCommerceWork(pool:Pool,deps:DueCommerceWorkDependenc
     handlers.email=row=>deliverCommerceEmail(pool,row.target_id,emailDeps,{dueWorkId:row.due_work_id,leaseToken:row.token,tenantId:row.tenant_id});
   }
   const retentionMode=deps.contactRetention;
-  if(retentionMode==='orders'||retentionMode==='all')handlers.checkout_contact_retention=row=>retainCheckoutContacts(pool,row,retentionMode,{now:deps.now,signal});
+  if(retentionMode==='all')handlers.checkout_contact_retention=row=>retainCheckoutContacts(pool,row,retentionMode,{now:deps.now,signal});
   const kinds=Object.keys(handlers).filter(kind=>!options.kinds||options.kinds.includes(kind as CommerceDueWorkKind));
   if(!kinds.length||signal?.aborted||deadlineMs===0)return counts;
   const rows=await isolatedTransaction(pool,async q=>{

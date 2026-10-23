@@ -5,7 +5,7 @@ import {createPaymentMethodsPort} from '../../modules/agent-commerce/payments/of
 import {freezeCheckout,hashJSON} from '../../modules/agent-commerce/checkout/terms.js';
 import {placeCheckoutOrder} from '../../modules/agent-commerce/checkout/orders.js';
 import {syntheticShippingPort} from '../../scripts/synthetic-shipping-quote.js';
-import {hostedPaymentHarness} from '../e2e/hosted-payment-fixture.js';
+import {seedAdmissionPaymentService} from '../e2e/hosted-payment-fixture.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,beforeEach,after,test} from 'node:test';
@@ -47,9 +47,9 @@ const contact=async(id:string)=>(await x.h.pool.query('SELECT * FROM commerce_ch
 
 test('fulfilment clock is recorded_at +180 days; contact and shipment erase atomically, order remains open',async()=>{
  const f=await fixture(),before=await contact(f.contactId);
- assert.equal((await run(f,days(f.at,180-1/86400))).contacts,1); // only expired abandoned source checkout
+ assert.equal((await run(f,days(f.at,180-1/86400))).contacts,0);
  assert.equal((await contact(f.contactId)).redacted_at,null);
- const due=await run(f,new Date(days(f.at,180).getTime()+1));assert.equal(due.contacts,1);assert.equal(due.customers,1);
+ const due=await run(f,new Date(days(f.at,180).getTime()+1));assert.equal(due.contacts,1);assert.equal(due.customers,0);
  const a=await contact(f.contactId);for(const key of ['contact_name','contact_email','contact_phone','delivery','invoice','contact_salt'])assert.equal(a[key],null,key);
  assert.equal(a.contact_sha256,before.contact_sha256);
  const shipment=(await x.h.pool.query('SELECT * FROM commerce_self_shipments WHERE shipment_id=$1',[f.shipmentId])).rows[0];
@@ -60,25 +60,55 @@ test('fulfilment clock is recorded_at +180 days; contact and shipment erase atom
  const seller=await readSellerCheckoutOrder(x.runtime,owner,f.s.tenantId,f.s.instanceId,f.orderId);assert.equal(seller.self_ship?.shipment?.tracking_number,null);
  assert.equal(view.contact,null);assert.equal(view.self_ship?.shipment?.tracking_number,null);assert.equal(view.self_ship?.shipment?.carrier_name,null);assert.equal(view.lifecycle_state,'open');
  assert.equal((await run(f)).contacts,0);assert.equal((await run(f)).customers,0);
- const u=(await x.h.pool.query('SELECT * FROM commerce_customers WHERE customer_id=(SELECT customer_id FROM commerce_checkouts WHERE checkout_id=$1)',[f.checkoutId])).rows[0];assert.equal(u.email_normalized,'redacted:'+u.customer_id);assert.equal(u.email_verified_at,null);
+ const u=(await x.h.pool.query('SELECT * FROM commerce_customers WHERE customer_id=(SELECT customer_id FROM commerce_checkouts WHERE checkout_id=$1)',[f.checkoutId])).rows[0];assert.equal(u.email_normalized,'synthetic-buyer@example.test');assert.equal(u.redacted_at,null);
 });
 
-test('abandoned rows wait until checkout expiry +30 days and existing rows are discovered without insertion hooks',async()=>{
- const s=await x.store(),c=await x.frozen(s,1),row=(await x.h.pool.query('SELECT expires_at,current_contact_id FROM commerce_checkouts WHERE checkout_id=$1',[c.checkout_id])).rows[0];
+test('an unreferenced contact and its customer stay live 400 days past checkout expiry under all',async()=>{
+ const s=await x.store(),c=await x.frozen(s,1),row=(await x.h.pool.query('SELECT expires_at,current_contact_id,customer_id FROM commerce_checkouts WHERE checkout_id=$1',[c.checkout_id])).rows[0];
  assert.equal((await x.h.pool.query("SELECT 1 FROM commerce_due_work WHERE kind='checkout_contact_retention'")).rowCount,0);
  assert.equal(await discoverContactRetention(x.runtime),1);assert.equal(await discoverContactRetention(x.runtime),0);
- let result=await runContactRetentionWork(x.runtime,'all',{now:()=>days(row.expires_at,30-1/86400)});assert.equal(result.failed,0);assert.equal((await contact(row.current_contact_id)).redacted_at,null);
- await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1,lease_until=NULL WHERE kind='checkout_contact_retention'",[days(row.expires_at,30)]);
- result=await runContactRetentionWork(x.runtime,'all',{now:()=>days(row.expires_at,30)});assert.equal(result.completed,1);assert.ok((await contact(row.current_contact_id)).redacted_at);
+ const result=await runContactRetentionWork(x.runtime,'all',{now:()=>days(row.expires_at,400)});
+ assert.equal(result.completed,1);assert.equal(result.failed,0);assert.equal((await contact(row.current_contact_id)).redacted_at,null);
+ assert.deepEqual((await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[row.customer_id])).rows[0],{redacted_at:null,email_normalized:'synthetic-buyer@example.test'});
 });
 
-test('open exceptions defer an overdue contact without restarting the original clock',async()=>{
- const f=await fixture(),now=days(f.at,181),id=randomUUID();
- await x.h.pool.query(`INSERT INTO commerce_exception_cases(case_id,tenant_id,instance_id,order_id,kind,subject_kind,subject_id,responsible_party,due_at,opened_by_kind)
- VALUES($1,$2,$3,$4,'paid_unallocatable','offline_payment',$5,'retailer',now(),'system')`,[id,f.s.tenantId,f.s.instanceId,f.orderId,randomUUID()]);
- await run(f,now);assert.equal((await contact(f.contactId)).redacted_at,null);
- await x.h.pool.query(`UPDATE commerce_exception_cases SET status='resolved',resolution_code='settled',resolution_note='合成處理完成',resolved_by_principal_id=$2,version=version+1,updated_at=clock_timestamp() WHERE case_id=$1`,[id,f.principal.principal_id]);
- await run(f,now);assert.ok((await contact(f.contactId)).redacted_at);
+test('exceptions, pending payments, unapplied events, unrecorded refunds and unsettled inventory do not defer a fulfilled contact',async()=>{
+ const store=await x.store(100,false);
+ const first=(await x.send(store,'/products',{title:'合成商品甲',price_minor:100,stock:100})).data;
+ const second=(await x.send(store,'/products',{title:'合成商品乙',price_minor:100,stock:100})).data;
+ await x.publish(store);const s={...store,product:first};
+ await seedAdmissionPaymentService(x,s);
+ const c=await x.frozen(s,5,{lines:[{sku:first.sku,quantity:5},{sku:second.sku,quantity:5}]}),o=await x.place(s,c);
+ const principal=await x.tx(q=>mapPersonPrincipal(q,s.owner.user.user_id));
+ const row=await x.tx(async q=>{
+  await bindStore(q,s.tenantId);await lockStore(q,s,[],[o.order_id],false);
+  const attempt=(await q.query(`INSERT INTO commerce_payment_attempts(tenant_id,instance_id,kind,order_id,sequence,account_id,environment,merchant_id,credential_version,merchant_trade_no,amount_minor,currency)
+   SELECT tenant_id,instance_id,'order',$2,1,account_id,environment,merchant_id,1,$3,1000,'TWD' FROM commerce_provider_accounts WHERE instance_id=$1 RETURNING attempt_id`,[s.instanceId,o.order_id,'F'+randomUUID().replaceAll('-','').slice(0,19).toUpperCase()])).rows[0];
+  // A refund that has not been recorded is an unapplied payment application.
+  // commerce_refunds itself only permits the terminal state 'recorded'.
+  const application=(await q.query(`INSERT INTO commerce_checkout_payment_applications(order_id,payment_ref,amount_minor,currency,outcome)
+   VALUES($1,$2,600,'TWD','amount_mismatch') RETURNING application_id`,[o.order_id,attempt.attempt_id])).rows[0];
+  const allocation=(await q.query(`INSERT INTO commerce_checkout_payment_applications(order_id,payment_ref,amount_minor,currency,outcome) VALUES($1,$2,1000,'TWD','unallocatable') RETURNING application_id`,[o.order_id,randomUUID()])).rows[0];
+  const inv=await checkoutInventory(q,o.order_id);await inv.port.convert(inv.lines[0].item_id,allocation.application_id);
+  assert.ok(application.application_id);
+  await openException(q,{tenantId:s.tenantId,instanceId:s.instanceId,orderId:o.order_id,kind:'amount_mismatch',subjectKind:'payment_attempt',subjectId:attempt.attempt_id});
+  for(const source of ['notification','query'])await q.query(`INSERT INTO commerce_hosted_payment_events(tenant_id,instance_id,account_id,attempt_id,source,outcome,dedupe_key,query_trigger,credential_version)
+   SELECT tenant_id,instance_id,account_id,attempt_id,$2,'failed',$3,$4,$5 FROM commerce_payment_attempts WHERE attempt_id=$1`,[attempt.attempt_id,source,source==='notification'?hashJSON(randomUUID()):null,source==='query'?'schedule':null,source==='query'?1:null]);
+  // Retained handover evidence and partially unsettled inventory are independent
+  // facts in this schema. Keep every constraint and inventory balance enabled.
+  return (await q.query(`INSERT INTO commerce_meetup_handovers(tenant_id,instance_id,order_id,completed_on,recorded_by_principal_id)
+   VALUES($1,$2,$3,(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date,$4) RETURNING recorded_at`,[s.tenantId,s.instanceId,o.order_id,principal.principal_id])).rows[0];
+ });
+ const state=(await x.h.pool.query(`SELECT
+  (SELECT count(*)::int FROM commerce_exception_cases WHERE order_id=$1 AND status='open') exceptions,
+  (SELECT count(*)::int FROM commerce_payment_attempts WHERE order_id=$1 AND state='issued') payments,
+  (SELECT count(*)::int FROM commerce_hosted_payment_events e JOIN commerce_payment_attempts p USING(attempt_id) WHERE p.order_id=$1 AND e.applied_at IS NULL) events,
+  (SELECT count(*)::int FROM commerce_refunds WHERE order_id=$1) refunds,
+  (SELECT count(*)::int FROM commerce_inventory_reservations WHERE order_id=$1 AND state='held') holds,
+  (SELECT count(*)::int FROM commerce_inventory_allocations WHERE order_id=$1 AND shipped_quantity+released_quantity<quantity) allocations`,[o.order_id])).rows[0];
+ assert.deepEqual(state,{exceptions:1,payments:1,events:2,refunds:0,holds:1,allocations:1});
+ assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>days(row.recorded_at,181)})).completed,1);
+ assert.ok((await contact(o.contact_id)).redacted_at);
 });
 
 test('a live unfulfilled order has no invented deadline and protects the shared customer',async()=>{
@@ -89,7 +119,7 @@ test('a live unfulfilled order has no invented deadline and protects the shared 
  assert.equal((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[row.customer_id])).rows[0].redacted_at,null);
 });
 
-test('cancelled order uses cancellation +180 days after inventory release, without closing it',async()=>{
+test('cancelled order uses cancellation +180 days without closing it',async()=>{
  const s=await x.store(),c=await x.frozen(s,1),o=await x.place(s,c);
  await x.tx(q=>cancelUnpaidOrder(q,s,o.order_id,'buyer','buyer_cancelled'));
  const row=(await x.h.pool.query('SELECT contact_id,cancelled_at FROM commerce_checkout_orders WHERE order_id=$1',[o.order_id])).rows[0];
@@ -101,7 +131,8 @@ test('cancelled order uses cancellation +180 days after inventory release, witho
 });
 
 test('bounded batches, stale leases, tenant tampering and aborts cannot erase another claim',async()=>{
- const f=await fixture(),now=days(f.at,181),job=await claim(f,now);
+ const f=await fixture(true),now=days(f.at,181),job=await claim(f,now);
+ await x.tx(q=>cancelUnpaidOrder(q,f.s,f.sourceOrder!.order_id,'buyer','buyer_cancelled'));
  await assert.rejects(()=>retainCheckoutContacts(x.runtime,{...job,tenant_id:randomUUID()},'all',{now:()=>now}),/binding_invalid/);
  await assert.rejects(()=>retainCheckoutContacts(x.runtime,{...job,token:new Date(0).toISOString()},'all',{now:()=>now}),/lease_lost/);
  await assert.rejects(()=>retainCheckoutContacts(x.runtime,job,'all',{now:()=>days(now,1)}),/lease_lost/);
@@ -125,7 +156,8 @@ test('a failed same-transaction shipment erasure rolls back contact erasure and 
 });
 
 test('restore privacy pages erase overdue restored references before exposure and require bounded continuation',async()=>{
- const a=await fixture(),b=await fixture(),now=days(b.at,181);
+ const a=await fixture(true),b=await fixture(true),now=days(b.at,181);
+ for(const f of [a,b])await x.tx(q=>cancelUnpaidOrder(q,f.s,f.sourceOrder!.order_id,'buyer','buyer_cancelled'));
  const first=await runRestoredContactRetention(x.runtime,'all',{now:()=>now,limit:1});assert.equal(first.deploymentReady,false);assert.equal(first.status,'repeat_page');
  let cursor:string|undefined;let complete=false;
  for(let i=0;i<8;i++){const page=await runRestoredContactRetention(x.runtime,'all',{now:()=>now,limit:1,afterInstance:cursor});cursor=page.after_instance??undefined;if(page.status==='scan_complete'){complete=true;break;}}
@@ -150,32 +182,23 @@ test('restore privacy pages erase overdue restored references before exposure an
   await discoverContactRetention(x.runtime);assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>days(r.recorded_at,181)})).failed,0);assert.ok((await contact(r.contact_id)).redacted_at);
   assert.equal((await x.h.pool.query('SELECT lifecycle_state FROM commerce_checkout_orders WHERE order_id=$1',[o.order_id])).rows[0].lifecycle_state,'open');
  });
- test('an unsettled payment defers a cancelled contact until settlement without resetting its clock',async()=>{
-  const f=await hostedPaymentHarness('fp_retention_payment');
-  try{await f.reset();const p=await f.placed();await f.x.tx(q=>cancelUnpaidOrder(q,p.s,p.order.order_ref,'buyer','buyer_cancelled'));
-   const r=(await f.x.h.pool.query('SELECT contact_id,cancelled_at FROM commerce_checkout_orders WHERE order_id=$1',[p.order.order_ref])).rows[0],now=days(r.cancelled_at,181);
-   await discoverContactRetention(f.x.runtime);await runContactRetentionWork(f.x.runtime,'all',{now:()=>now});
-   assert.equal((await f.x.h.pool.query('SELECT redacted_at FROM commerce_checkout_contacts WHERE contact_id=$1',[r.contact_id])).rows[0].redacted_at,null);
-   await f.x.h.pool.query("UPDATE commerce_payment_attempts SET state='expired_unpaid',expired_at=clock_timestamp(),version=version+1 WHERE attempt_id=$1",[p.payment.attempt_ref]);
-   await f.x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention'",[now]);
-   assert.equal((await runContactRetentionWork(f.x.runtime,'all',{now:()=>now})).failed,0);assert.ok((await f.x.h.pool.query('SELECT redacted_at FROM commerce_checkout_contacts WHERE contact_id=$1',[r.contact_id])).rows[0].redacted_at);
-  }finally{await f.stop();}
- });
-
- test('customer email left without a checkout reference after revision does not survive all contacts',async()=>{
+ test('a customer without any contact link keeps its email',async()=>{
   const f=await fixture(),id=randomUUID();
   await x.h.pool.query("INSERT INTO commerce_customers(customer_id,tenant_id,instance_id,email_normalized) VALUES($1,$2,$3,'synthetic-old-revision@example.test')",[id,f.s.tenantId,f.s.instanceId]);
-  await run(f);const row=(await x.h.pool.query('SELECT email_normalized,redacted_at FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];assert.equal(row.email_normalized,'redacted:'+id);assert.ok(row.redacted_at);
+  await run(f);const row=(await x.h.pool.query('SELECT email_normalized,redacted_at FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];
+  assert.deepEqual(row,{email_normalized:'synthetic-old-revision@example.test',redacted_at:null});
  });
 
  test('customer linked only through a retained order survives checkout revision until its contact is masked',async()=>{
-  const f=await fixture(),id=(await x.h.pool.query('SELECT customer_id FROM commerce_checkout_orders WHERE order_id=$1',[f.orderId])).rows[0].customer_id,replacement=randomUUID();
+  const f=await fixture(true),id=(await x.h.pool.query('SELECT customer_id FROM commerce_checkout_orders WHERE order_id=$1',[f.orderId])).rows[0].customer_id,replacement=randomUUID();
   await x.tx(async q=>{
    await bindStore(q,f.s.tenantId);
    await q.query("INSERT INTO commerce_customers(customer_id,tenant_id,instance_id,email_normalized) VALUES($1,$2,$3,'synthetic-new-revision@example.test')",[replacement,f.s.tenantId,f.s.instanceId]);
    await q.query('UPDATE commerce_checkouts SET customer_id=$2,version=version+1 WHERE instance_id=$1',[f.s.instanceId,replacement]);
   });
   assert.equal((await x.h.pool.query('SELECT 1 FROM commerce_checkouts WHERE customer_id=$1',[id])).rowCount,0);
+  await run(f,days(f.at,179));assert.equal((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[id])).rows[0].redacted_at,null);
+  await x.tx(q=>cancelUnpaidOrder(q,f.s,f.sourceOrder!.order_id,'buyer','buyer_cancelled'));
   await run(f);const row=(await x.h.pool.query('SELECT email_normalized,redacted_at FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];assert.equal(row.email_normalized,'redacted:'+id);assert.ok(row.redacted_at);
  });
 
@@ -200,14 +223,14 @@ test('off and unset scheduler modes neither discover nor dispatch existing reten
   assert.equal((await contact(f.contactId)).redacted_at,null);
  }
 });
-test('orders masks due order contacts while preserving abandoned contacts and customers; all adds the 30-day rule',async()=>{
+test('all masks due order contacts while preserving abandoned contacts and customers',async()=>{
  const f=await fixture(),now=days(f.at,181);
  const source=(await x.h.pool.query('SELECT customer_id,current_contact_id,expires_at FROM commerce_checkouts WHERE checkout_id=$1',[f.c.checkout_id])).rows[0];
  const other=await x.frozen(f.s,1,{contact:{name:'合成未成單',email:'synthetic-abandoned@example.test',phone:'0000000000'}});
  const abandoned=(await x.h.pool.query('SELECT customer_id,current_contact_id FROM commerce_checkouts WHERE checkout_id=$1',[other.checkout_id])).rows[0];
  const orphan=randomUUID();await x.h.pool.query("INSERT INTO commerce_customers(customer_id,tenant_id,instance_id,email_normalized) VALUES($1,$2,$3,'synthetic-no-contact@example.test')",[orphan,f.s.tenantId,f.s.instanceId]);
  assert.ok(now>days(source.expires_at,31));
- assert.equal((await runContactRetentionWork(x.runtime,'orders',{now:()=>now})).completed,1);
+ assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
  assert.ok((await contact(f.contactId)).redacted_at);
  for(const row of [source,abandoned]){
   assert.equal((await contact(row.current_contact_id)).redacted_at,null);
@@ -215,10 +238,6 @@ test('orders masks due order contacts while preserving abandoned contacts and cu
  }
  const untouched=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[orphan])).rows[0];
  assert.deepEqual(untouched,{redacted_at:null,email_normalized:'synthetic-no-contact@example.test'});
- await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention'",[now]);
- assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
- for(const row of [source,abandoned]){assert.ok((await contact(row.current_contact_id)).redacted_at);assert.ok((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[row.customer_id])).rows[0].redacted_at);}
- assert.ok((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[orphan])).rows[0].redacted_at);
 
 });
 
@@ -256,47 +275,6 @@ test('one contact waits for every referencing order to pass 180 days, then masks
  assert.equal(shipments.length,2);for(const s of shipments){assert.equal(s.tracking_number,null);assert.ok(s.redacted_at);}
 });
 
-for(const source of ['notification','query'] as const)test(`an unapplied ${source} event defers a due contact on its original cancellation clock`,async()=>{
- const f=await hostedPaymentHarness('fp_retention_event');
- try{
-  await f.reset();const p=await f.placed();await f.x.tx(q=>cancelUnpaidOrder(q,p.s,p.order.order_ref,'buyer','buyer_cancelled'));
-  const order=(await f.x.h.pool.query('SELECT contact_id,cancelled_at FROM commerce_checkout_orders WHERE order_id=$1',[p.order.order_ref])).rows[0],now=days(order.cancelled_at,181);
-  await f.x.h.pool.query("UPDATE commerce_payment_attempts SET state='expired_unpaid',expired_at=clock_timestamp(),version=version+1 WHERE attempt_id=$1",[p.payment.attempt_ref]);
-  const event=(await f.x.h.pool.query(`INSERT INTO commerce_hosted_payment_events(tenant_id,instance_id,account_id,attempt_id,source,outcome,dedupe_key,query_trigger,credential_version)
-   SELECT tenant_id,instance_id,account_id,attempt_id,$2,'failed',$3,$4,$5 FROM commerce_payment_attempts WHERE attempt_id=$1 RETURNING event_id`,
-   [p.payment.attempt_ref,source,source==='notification'?hashJSON(randomUUID()):null,source==='query'?'schedule':null,source==='query'?1:null])).rows[0];
-  assert.equal((await runContactRetentionWork(f.x.runtime,'orders',{now:()=>now})).failed,0);
-  assert.equal((await f.x.h.pool.query('SELECT redacted_at FROM commerce_checkout_contacts WHERE contact_id=$1',[order.contact_id])).rows[0].redacted_at,null);
-  await f.x.h.pool.query('UPDATE commerce_hosted_payment_events SET applied_at=clock_timestamp() WHERE event_id=$1',[event.event_id]);
-  await f.x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention'",[now]);
-  assert.equal((await runContactRetentionWork(f.x.runtime,'orders',{now:()=>now})).completed,1);
-  assert.ok((await f.x.h.pool.query('SELECT redacted_at FROM commerce_checkout_contacts WHERE contact_id=$1',[order.contact_id])).rows[0].redacted_at);
- }finally{await f.stop();}
-});
-
-for(const state of ['held','allocated'] as const)test(`unsettled ${state} inventory defers a cancelled contact until the same units are released`,async()=>{
- const s=await x.store(),c=await x.frozen(s,2),o=await x.place(s,c);
- const row=await x.tx(async q=>{
-  await bindStore(q,s.tenantId);await lockStore(q,s,[],[o.order_id],false);
-  if(state==='allocated'){
-   const order=(await q.query<CheckoutOrderRow>('SELECT *,version::text FROM commerce_checkout_orders WHERE order_id=$1',[o.order_id])).rows[0];
-   await applyConfirmedPaymentHeld(q,{orderId:o.order_id,paymentRef:randomUUID(),amountMinor:order.terms.total_minor,currency:order.terms.currency,simulated:false},order);
-  }
-  // Seed a retained cancellation with unsettled inventory; every FK, balance,
-  // immutable movement and terminal-transition constraint remains enabled.
-  return (await q.query("UPDATE commerce_checkout_orders SET lifecycle_state='cancelled',cancel_reason='seller_cancelled',cancelled_at=clock_timestamp(),version=version+1 WHERE order_id=$1 RETURNING contact_id,cancelled_at",[o.order_id])).rows[0];
- });
- const now=days(row.cancelled_at,181);
- assert.equal((await runContactRetentionWork(x.runtime,'orders',{now:()=>now})).failed,0);assert.equal((await contact(row.contact_id)).redacted_at,null);
- await x.tx(async q=>{
-  await bindStore(q,s.tenantId);await lockStore(q,s,[],[o.order_id],false);const inv=await checkoutInventory(q,o.order_id);
-  if(state==='held'){assert.equal(inv.holds[0].state,'held');await inv.releaseHolds();}
-  else{assert.ok(inv.allocations[0].shipped_quantity+inv.allocations[0].released_quantity<inv.allocations[0].quantity);for(const a of inv.allocations)await inv.port.releaseAllocation(a.item_id,a.quantity,randomUUID());}
- });
- await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention'",[now]);
- assert.equal((await runContactRetentionWork(x.runtime,'orders',{now:()=>now})).completed,1);assert.ok((await contact(row.contact_id)).redacted_at);
-});
-
 /** Poll actual server lock state; setImmediate only yields between observations,
  * never substitutes an elapsed-time guess for the lock checkpoint. */
 async function blockedBy(blocker:number,waiter?:number){
@@ -309,15 +287,15 @@ async function blockedBy(blocker:number,waiter?:number){
  assert.fail('expected concurrent transaction to wait on the store lock');
 }
 const exceptionInput=(f:Awaited<ReturnType<typeof fixture>>)=>({tenantId:f.s.tenantId,instanceId:f.s.instanceId,orderId:f.orderId,kind:'paid_unallocatable' as const,subjectKind:'offline_payment' as const,subjectId:randomUUID()});
-test('retention waits for a store-locked exception mutation and sees the committed deferral',async()=>{
+test('retention waits for a store-locked exception mutation, then masks after commit',async()=>{
  const f=await fixture(),now=days(f.at,181),job=await claim(f,now),q=await x.runtime.connect();let work:ReturnType<typeof retainCheckoutContacts>|undefined;
  try{
   await q.query('BEGIN');await bindStore(q,f.s.tenantId);await lockStore(q,f.s,[],[f.orderId],false);
   const pid=(await q.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
   await openException(q,exceptionInput(f));
-  work=retainCheckoutContacts(x.runtime,job,'orders',{now:()=>now});
+  work=retainCheckoutContacts(x.runtime,job,'all',{now:()=>now});
   await blockedBy(pid);assert.equal((await contact(f.contactId)).redacted_at,null);
-  await q.query('COMMIT');assert.equal((await work).contacts,0);assert.equal((await contact(f.contactId)).redacted_at,null);
+  await q.query('COMMIT');assert.equal((await work).contacts,1);assert.ok((await contact(f.contactId)).redacted_at);
   assert.equal((await x.h.pool.query("SELECT count(*)::int n FROM commerce_exception_cases WHERE order_id=$1 AND status='open'",[f.orderId])).rows[0].n,1);
  }finally{await q.query('ROLLBACK');q.release();await work;}
 });
@@ -331,7 +309,7 @@ test('a business mutation waits for retention to commit and can open an exceptio
    PERFORM pg_advisory_xact_lock(hashtextextended('${key}',0)); RETURN NEW; END $$;
    CREATE TRIGGER retention_test_gate BEFORE UPDATE ON commerce_checkout_contacts FOR EACH ROW EXECUTE FUNCTION retention_test_gate()`);
   const gatePid=(await gate.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-  work=retainCheckoutContacts(x.runtime,job,'orders',{now:()=>now});await blockedBy(gatePid);
+  work=retainCheckoutContacts(x.runtime,job,'all',{now:()=>now});await blockedBy(gatePid);
   const retentionPid=(await x.h.pool.query('SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[gatePid])).rows[0].pid;
   await mutation.query('BEGIN');await bindStore(mutation,f.s.tenantId);
   const mutationPid=(await mutation.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
@@ -347,14 +325,14 @@ test('a business mutation waits for retention to commit and can open an exceptio
  }
 });
 
-test('restore orders mode masks due orders and preserves expired unreferenced contacts',async()=>{
+test('restore all mode masks due orders and preserves expired unreferenced contacts',async()=>{
  const f=await fixture(),source=(await x.h.pool.query('SELECT current_contact_id FROM commerce_checkouts WHERE checkout_id=$1',[f.c.checkout_id])).rows[0];
- const page=await runRestoredContactRetention(x.runtime,'orders',{now:()=>days(f.at,181)});
+ const page=await runRestoredContactRetention(x.runtime,'all',{now:()=>days(f.at,181)});
  assert.equal(page.status,'scan_complete');assert.equal(page.deploymentReady,false);assert.equal(page.contacts,1);
  assert.ok((await contact(f.contactId)).redacted_at);assert.equal((await contact(source.current_contact_id)).redacted_at,null);
 });
 
-test('real email revision retains both customers in orders mode until all masks the old contact',async()=>{
+test('real email revision permanently retains the old live contact and both customer emails',async()=>{
  const s=await x.store(),emailA='synthetic-revision-a@example.test',emailB='synthetic-revision-b@example.test';
  const first=await x.frozen(s,1,{contact:{name:'合成買家甲',email:emailA,phone:'0000000000'}});
  const a=(await x.h.pool.query('SELECT customer_id,current_contact_id,expires_at FROM commerce_checkouts WHERE checkout_id=$1',[first.checkout_id])).rows[0];
@@ -366,9 +344,9 @@ test('real email revision retains both customers in orders mode until all masks 
  const order=await x.place(s,revised);await x.tx(q=>cancelUnpaidOrder(q,s,order.order_id,'buyer','buyer_cancelled'));
  const placed=(await x.h.pool.query('SELECT contact_id,cancelled_at FROM commerce_checkout_orders WHERE order_id=$1',[order.order_id])).rows[0];
  assert.equal(placed.contact_id,b.current_contact_id);
- const now=new Date(Math.max(days(placed.cancelled_at,181).getTime(),days(a.expires_at,31).getTime()));
- assert.ok(now>days(placed.cancelled_at,180));assert.ok(now>days(a.expires_at,30));
- assert.equal((await runContactRetentionWork(x.runtime,'orders',{now:()=>now})).completed,1);
+ const now=days(placed.cancelled_at,400);
+ assert.ok(now>days(a.expires_at,180));
+ assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
  assert.ok((await contact(b.current_contact_id)).redacted_at);
  assert.equal((await contact(a.current_contact_id)).redacted_at,null);assert.equal((await contact(a.current_contact_id)).contact_email,emailA);
  // The older live contact still belongs to B's revised checkout and protects B.
@@ -376,11 +354,8 @@ test('real email revision retains both customers in orders mode until all masks 
   const customer=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];
   assert.deepEqual(customer,{redacted_at:null,email_normalized:email});
  }
- await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention' AND instance_id=$2",[now,s.instanceId]);
- assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
- assert.ok((await contact(a.current_contact_id)).redacted_at);assert.equal((await contact(a.current_contact_id)).contact_email,null);
- for(const id of [a.customer_id,b.customer_id]){
-  const customer=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];
-  assert.ok(customer.redacted_at);assert.equal(customer.email_normalized,'redacted:'+id);
- }
+ // A later sweep keeps the same permanent revision limit.
+ assert.equal((await runRestoredContactRetention(x.runtime,'all',{now:()=>days(now,400)})).contacts,0);
+ assert.equal((await contact(a.current_contact_id)).contact_email,emailA);
+ for(const [id,email] of [[a.customer_id,emailA],[b.customer_id,emailB]])assert.deepEqual((await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[id])).rows[0],{redacted_at:null,email_normalized:email});
 });

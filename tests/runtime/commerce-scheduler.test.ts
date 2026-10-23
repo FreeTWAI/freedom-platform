@@ -157,7 +157,7 @@ for(const mode of [undefined,'off','orders','all','','true','ALL',' all','all ',
    authPrune:async()=>{calls.push('auth');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};}});
   const pending:Promise<unknown>[]=[];
   await handler.scheduled({},{FREEDOM_COMMERCE_CONTACT_RETENTION:mode,FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'} as WorkerEnv,{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
-  const active=mode==='orders'||mode==='all',valid=mode===undefined||mode==='off'||active;
+  const active=mode==='all',valid=mode===undefined||mode==='off'||active;
   assert.deepEqual(calls,active?['retention','github','auth','end']:['github','auth','end']);
   assert.deepEqual(logs,valid?[]:[['commerce_contact_retention_invalid'],['commerce_settings_invalid']]);
  }finally{console.error=original;}

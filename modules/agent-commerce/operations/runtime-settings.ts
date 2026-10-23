@@ -1,4 +1,3 @@
-import {resolveFreedomEnv} from '../../../apps/platform-api/src/env.js';
 import {ReadinessError} from '../../../apps/platform-api/src/readiness.js';
 
 export interface CommerceSettings {checkoutEnabled:boolean;consoleEnabled?:boolean;quarantine:boolean;providerProfiles:readonly string[];emailEnabled?:boolean}
@@ -15,22 +14,17 @@ export interface CommerceEnvironment {
   FREEDOM_SUPPLIER_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_PROVIDER_PROFILES?:string;
 }
-export type CommerceContactRetention = 'off'|'orders'|'all';
+export type CommerceContactRetention = 'off'|'all';
 export function readCommerceContactRetention(env:CommerceEnvironment):CommerceContactRetention {
   const value=env.FREEDOM_COMMERCE_CONTACT_RETENTION;
   if(value===undefined||value==='off')return 'off';
-  if(value==='orders'||value==='all')return value;
+  if(value==='all')return value;
   throw new ReadinessError('commerce_contact_retention_invalid');
 }
 export function readCommerceSelfShipEnabled(env:CommerceEnvironment):boolean {
   const value=env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED;
   if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_self_ship_flag_invalid');
   if(value==='true'&&(env.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true'||env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'))throw new ReadinessError('commerce_self_ship_console_required');
-  if(value==='true'){
-    let freedomEnv;
-    try{freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
-    if(freedomEnv==='public'&&readCommerceContactRetention(env)!=='all')throw new ReadinessError('self_ship_retention_not_ready');
-  }
   return value==='true';
 }
 export const IMPLEMENTED_PROVIDER_PROFILES=Object.freeze(['ecpay.aio.credit.v1','offline.bank_transfer.v1','offline.cash_on_meetup.v1']);

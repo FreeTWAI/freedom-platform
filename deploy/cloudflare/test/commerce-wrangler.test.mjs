@@ -121,27 +121,27 @@ test('checkout requires console in its own environment',()=>{
 });
 
 
-test('self ship requires console and public retention readiness',()=>{
+test('self ship requires console',()=>{
   const vars={FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
   for(const FREEDOM_ENV of ['local','staging'])assert.equal(check({vars:{...vars,FREEDOM_ENV}}).structural,true);
-  assert.equal(check({vars:{...vars,FREEDOM_ENV:'public',FREEDOM_COMMERCE_CONTACT_RETENTION:'all'}}).errors.includes('self_ship_retention_not_ready'),false);
+  assert.equal(check({vars:{...vars,FREEDOM_ENV:'public'}}).structural,true);
   assert(check({vars:{...vars,FREEDOM_COMMERCE_CONSOLE_ENABLED:'false'}}).errors.includes('commerce_self_ship_console_required'));
   assert.equal(check({vars:{...vars,FREEDOM_ENV:'public',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'false'}}).structural,true);
 });
 
-for(const value of [undefined,'off','orders','all'])test(`contact retention accepts exact mode ${String(value)}`,()=>{
+for(const value of [undefined,'off','all'])test(`contact retention accepts exact mode ${String(value)}`,()=>{
  assert.deepEqual(check({vars:{FREEDOM_COMMERCE_CONTACT_RETENTION:value}}).errors,[]);
 });
-for(const value of ['',true,false,'true','ALL',' orders','all ',null,1,'synthetic-secret'])test(`contact retention rejects invalid mode ${JSON.stringify(value)}`,()=>{
+for(const value of ['orders','',true,false,'true','ALL',' orders','all ',null,1,'synthetic-secret'])test(`contact retention rejects invalid mode ${JSON.stringify(value)}`,()=>{
  const report=check({vars:{FREEDOM_COMMERCE_CONTACT_RETENTION:value}});
  assert.equal(report.structural,false);assert.deepEqual(report.errors,['commerce_contact_retention_invalid']);
  assert.equal(JSON.stringify(report).includes('synthetic-secret'),false);
 });
-test('public self ship requires all retention in the same environment',()=>{
+test('public self ship accepts every valid retention mode in its own environment',()=>{
  const vars={FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
- for(const FREEDOM_ENV of ['local','staging','public'])for(const mode of [undefined,'off','orders','all']){
+ for(const FREEDOM_ENV of ['local','staging','public'])for(const mode of [undefined,'off','all','orders','','ALL','true']){
   const result=check({env:{next:{vars:{...vars,FREEDOM_ENV,FREEDOM_COMMERCE_CONTACT_RETENTION:mode}}}});
-  assert.deepEqual(result.errors,FREEDOM_ENV==='public'&&mode!=='all'?['self_ship_retention_not_ready']:[]);
+  assert.deepEqual(result.errors,[undefined,'off','all'].includes(mode)?[]:['commerce_contact_retention_invalid']);
  }
- assert(check({vars:{FREEDOM_COMMERCE_CONTACT_RETENTION:'all'},env:{next:{vars:{...vars,FREEDOM_ENV:'public'}}}}).errors.includes('self_ship_retention_not_ready'));
+ assert.deepEqual(check({vars:{FREEDOM_COMMERCE_CONTACT_RETENTION:'all'},env:{next:{vars:{...vars,FREEDOM_ENV:'public'}}}}).errors,[]);
 });

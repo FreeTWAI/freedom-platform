@@ -557,7 +557,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           }
           let contactRetention:CommerceContactRetention|undefined;
           try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}
-          if(contactRetention==='orders'||contactRetention==='all'){
+          if(contactRetention==='all'){
             try{await (deps.commerceRetention??runContactRetentionWork)(pool,contactRetention);}catch{console.error('commerce_contact_retention_failed');}
           }
           let commerce:CommerceSettings|undefined;
