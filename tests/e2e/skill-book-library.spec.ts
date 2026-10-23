@@ -39,7 +39,7 @@ test('guild skill book introduces a real first deliverable before external readi
   await expect(modal).toContainText('一份能讀回自己商品與申請的私人供應端檢視。');
   await expect(modal).toContainText('沒有寫入或付款權限');
   const start=modal.locator('details').filter({has:page.getByText('練習與設定',{exact:true})});
-  await expect(start).not.toHaveAttribute('open');await start.locator('summary').click();
+  await expect(start).toHaveAttribute('open','');
   await expect(start).toContainText('Node.js 24');await expect(start.locator('pre')).toContainText('npm run read -- products');
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
   await expect(modal.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',/github\.com\/FreeTWAI\/freedom-supplier-client\/blob\/[a-f0-9]{40}\/README\.md$/);
@@ -158,7 +158,7 @@ test('book cards credit the original GitHub author and offer direct reading acti
   await expect(modal.getByRole('link',{name:'Fork 原作 ↗',exact:true})).toHaveAttribute('href',`${book.upstream_url}/fork`);
   await expect(modal.getByRole('link',{name:'查看工坊整合版本 ↗',exact:true})).toHaveAttribute('href',book.repository_url);
   const practice=modal.locator('details').filter({has:page.getByText('練習與設定',{exact:true})});
-  await expect(practice).not.toHaveAttribute('open');await practice.locator('summary').click();
+  await expect(practice).toHaveAttribute('open','');
   for(const step of book.guide!.first_steps)await expect(practice.getByText(step,{exact:true})).toBeVisible();
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/social-post');
   const scope=modal.locator('details').filter({has:page.getByText('功能與使用範圍',{exact:true})});
@@ -227,7 +227,8 @@ test('the original repository leads member introductions and public skill pages'
   const website='https://teddashh.github.io/ai-security-scanner/';
   const original='https://github.com/teddashh/ai-security-scanner';
   await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveAttribute('href',original);
-  await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveClass(/btn-primary/);
+  await expect(dialog.getByRole('button',{name:'開始練習 ↓',exact:true})).toHaveClass(/btn-primary/);
+  await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveClass(/btn-ghost/);
   await expect(dialog.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href',website);
   await expect(dialog.getByRole('link',{name:'開啟原作 ↗',exact:true})).toHaveAttribute('href',original);
   await expect(dialog.getByRole('link',{name:'查看工坊整合版本 ↗',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI/ai-security-scanner');
@@ -263,7 +264,11 @@ test('every bookshelf uses compact illustrated rows with full copy, live counts 
     expect(sizes.cover.width).toBeLessThanOrEqual(width<=600?64:80);expect(sizes.cover.height).toBeLessThanOrEqual(60);
     expect(sizes.cover.right).toBeLessThan(sizes.heading.left);expect(Math.abs(sizes.cover.top-sizes.heading.top)).toBeLessThan(35);
     expect(sizes.purposeScroll).toBeLessThanOrEqual(sizes.purposeHeight+1);expect(sizes.titleScroll).toBeLessThanOrEqual(sizes.titleHeight+1);expect(sizes.font).toBeGreaterThanOrEqual(14);
-    expect(sizes.overflow).toBe(false);expect(sizes.cardHeight).toBeLessThan(300);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(sizes.overflow).toBe(false);
+    // Real practice goals may make cards taller: preserve full readable copy rather than clipping to the old 300px cap.
+    await expect(card.locator('.skill-library-result p')).toHaveText(book.guide!.first_result);
+    expect(await card.locator('.skill-library-result p').evaluate(element=>element.scrollHeight<=element.clientHeight+1)).toBe(true);
+    await expect(card.getByRole('button',{name:/^(閱讀|預覽)技能書$/})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     for(const control of [card.getByRole('button',{name:/^(閱讀|預覽)技能書$/}),card.getByRole('button',{name:'分享技能',exact:true})])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   const card=library.locator('article[data-book-id="social-post"]');
@@ -349,7 +354,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await expect(dialog.getByRole('link',{name:'開啟展示 ↗',exact:true})).toHaveAttribute('href','https://example.com/event-form');
   await expect(dialog.getByRole('link',{name:'交給 Agent ↗',exact:true})).toHaveAttribute('href',`${path}/SKILL.md`);
   await expect(dialog).toContainText('分享者自行聲明為推薦／整理者');
-  await dialog.getByText('開始使用',{exact:true}).click();await expect(dialog.locator('pre')).toHaveText('npm create event-form@latest');
+  await expect(dialog.locator('.skill-intro-start')).toHaveAttribute('open','');await expect(dialog.locator('pre')).toHaveText('npm create event-form@latest');
   expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
   await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(trigger).toBeFocused();
   await card.getByRole('button',{name:'分享技能',exact:true}).click();
@@ -419,4 +424,45 @@ test('member-shared maintainer and curator credits stay accurate on cards, dialo
     const response=await request.get(`/development/skills/${id}`);expect(response.status()).toBe(200);
     const html=await response.text();expect(html).toContain(`${role}：${credit}`);expect(html).not.toContain(`作者：${credit}`);
   }
+});
+
+
+test('reading-first library gives newcomers a clear entry and recoverable search',async({page})=>{
+  const library=await openLibrary(page);
+  await expect(page.getByText('找到工具，讀懂做法，動手試試。',{exact:true})).toBeVisible();
+  await expect(page.locator('.skill-shelves>.skill-shelf').first().getByRole('heading',{name:'社群技能書',exact:true})).toBeVisible();
+  const search=library.getByRole('searchbox',{name:'搜尋技能書',exact:true});
+  await search.fill('no-such-skill-unique-fixture');
+  await expect(library.locator('article.skill-library-book')).toHaveCount(0);
+  await library.getByRole('button',{name:'清除篩選',exact:true}).click();
+  await expect(search).toHaveValue('');await expect(search).toBeFocused();
+  await expect(library.locator('article.skill-library-book')).toHaveCount(29);
+  await page.getByRole('link',{name:'探索社群技能書 ↓',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'社群技能書',exact:true})).toBeFocused();
+  const community=page.locator('.community-skill-library'),communitySearch=community.getByRole('searchbox',{name:'搜尋社群技能書',exact:true});
+  await communitySearch.fill('no-such-skill-unique-fixture');
+  await expect(community.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
+  await community.getByRole('button',{name:'清除社群搜尋',exact:true}).click();
+  await expect(communitySearch).toHaveValue('');await expect(communitySearch).toBeFocused();
+  await page.getByRole('link',{name:'查看公會技能書 ↓',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'公會指定技能書',exact:true})).toBeFocused();
+});
+
+test('practice is readable immediately, before supplementary art and collaboration',async({page})=>{
+  const library=await openLibrary(page);
+  await library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Local Workspace MCP 本機工作助手',exact:true}),practice=dialog.locator('.skill-intro-start');
+  await expect(practice).toHaveAttribute('open','');
+  await expect(practice.getByRole('heading',{name:'準備',exact:true})).toBeVisible();
+  expect(await dialog.evaluate(element=>{
+    const reading=element.querySelector('.skill-intro-start')!;
+    return ['.skill-intro-illustration','.skill-intro-collaboration','.github-book-social'].every(selector=>{
+      const next=element.querySelector(selector);return !next||Boolean(reading.compareDocumentPosition(next)&Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+  })).toBe(true);
+  await practice.locator('summary').click();await expect(practice).not.toHaveAttribute('open');
+  await dialog.getByRole('button',{name:'開始練習 ↓',exact:true}).click();await expect(practice).toHaveAttribute('open','');
+  await expect(practice.locator('summary')).toBeFocused();
+  await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
+  await expect(library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
 });
