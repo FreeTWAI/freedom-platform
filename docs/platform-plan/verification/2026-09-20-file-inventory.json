@@ -24259,8 +24259,8 @@
     },
     {
       "path": "tests/e2e/skill-upload.spec.ts",
-      "bytes": 38155,
-      "sha256": "183994bd268c5cbd7e956120fb139ba88f65efdb4fb06ed51e3dbcbf9f08e218"
+      "bytes": 38289,
+      "sha256": "a5358c3cd6f1a39c579c74c7144251bce1ffaaa255f507bbc65bd81bd62c9004"
     },
     {
       "path": "tests/e2e/social-cross-platform-share.spec.ts",
