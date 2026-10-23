@@ -1,10 +1,12 @@
 import sharp from 'sharp';
+import {randomUUID} from 'node:crypto';
+import type {Pool} from 'pg';
 import {test, expect, type Page} from './fixtures.js';
 import {navigate, selectSocialFeed} from './navigation.js';
 
-async function login(page: Page) {
+async function login(page: Page, email = 'maker@local.test') {
   await page.goto('/');
-  await page.getByLabel('電子郵件', {exact: true}).fill('maker@local.test');
+  await page.getByLabel('電子郵件', {exact: true}).fill(email);
   await page.getByLabel('密碼', {exact: true}).fill('freedom-local-demo');
   await page.getByRole('button', {name: '登入', exact: true}).click();
   await expect(page.locator('.shell')).toBeVisible();
@@ -12,6 +14,15 @@ async function login(page: Page) {
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();
 }
 function card(page: Page, text: string) { return page.locator('.social-card').filter({has: page.locator('.social-note').filter({hasText: text})}); }
+
+async function loginCommentAuthor(page: Page, pool: Pool) {
+  const id = randomUUID(), email = `comment-race-${id}@example.test`;
+  // Each regression owns its publishing quota; never reset the shared maker's posts or limits.
+  const inserted = await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    SELECT $1,community_id,$2,'留言交錯測試會員',password_hash,$3,false FROM users WHERE email='maker@local.test'`, [id, email, randomUUID()]);
+  expect(inserted.rowCount).toBe(1);
+  await login(page, email);
+}
 
 test('the phone homepage starts with member posts and one clear composer, with extra controls out of the wall',async({page,e2eAuthPool})=>{
   await page.setViewportSize({width:390,height:844});await login(page);
@@ -299,7 +310,7 @@ test('sending during the first comment page keeps its snapshot, cursor and one c
 });
 
 for (const {action, target} of [{action: 'edit', target: 1}, {action: 'delete', target: 1}, {action: 'edit', target: 26}] as const) test(`a delayed comment refresh cannot undo a confirmed ${action} of comment ${target} or reset pagination`, async ({page, e2eAuthPool}) => {
-  await login(page);
+  await loginCommentAuthor(page, e2eAuthPool);
   const text = `E2E 留言更新交錯 ${action} ${target} ${Date.now()}`;
   await page.getByLabel('貼文內容', {exact: true}).fill(text);
   await page.getByRole('button', {name: '發布貼文', exact: true}).click();
@@ -340,8 +351,9 @@ for (const {action, target} of [{action: 'edit', target: 1}, {action: 'delete', 
     await comment.getByLabel('留言選項', {exact: true}).click();
     if (action === 'edit') {
       await comment.getByRole('button', {name: '編輯留言', exact: true}).click();
-      await comment.getByLabel('編輯留言', {exact: true}).fill('已確認的新版留言');
-      await comment.getByRole('button', {name: '儲存留言', exact: true}).click();
+      // Editing replaces the original body. Locate the one active editor, not its old text.
+      await post.getByLabel('編輯留言', {exact: true}).fill('已確認的新版留言');
+      await post.getByRole('button', {name: '儲存留言', exact: true}).click();
       await expect(post.getByText('已確認的新版留言', {exact: true})).toBeVisible();
     } else {
       await comment.getByRole('button', {name: '刪除留言', exact: true}).click();
@@ -377,7 +389,7 @@ for (const {action, target} of [{action: 'edit', target: 1}, {action: 'delete', 
 });
 
 test('a comment read that captures a newer server revision does not roll back to an earlier local ACK', async ({page, e2eAuthPool}) => {
-  await login(page);
+  await loginCommentAuthor(page, e2eAuthPool);
   const text = `E2E 留言新版回應 ${Date.now()}`;
   await page.getByLabel('貼文內容', {exact: true}).fill(text);
   await page.getByRole('button', {name: '發布貼文', exact: true}).click();
@@ -411,8 +423,8 @@ test('a comment read that captures a newer server revision does not roll back to
   } finally { release(); }
 });
 
-test('a failed comment read does not claim there are no comments and can retry without losing the draft', async ({page}) => {
-  await login(page);
+test('a failed comment read does not claim there are no comments and can retry without losing the draft', async ({page, e2eAuthPool}) => {
+  await loginCommentAuthor(page, e2eAuthPool);
   const text = `E2E 留言讀取失敗 ${Date.now()}`;
   await page.getByLabel('貼文內容', {exact: true}).fill(text);
   await page.getByRole('button', {name: '發布貼文', exact: true}).click();
