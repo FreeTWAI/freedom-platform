@@ -151,7 +151,7 @@ const RLS_TABLES = [
   'tenants', 'tenant_memberships', 'tenant_invitations', 'workspaces', 'tenant_authority_audit', 'module_instances',
   'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
-  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments',
+  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments', 'commerce_fulfilment_agreements', 'commerce_fulfilment_agreement_items',
   'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants',
   'commerce_resource_tenants', 'commerce_order_quotes', 'commerce_hosted_supply_offers', 'commerce_product_photo_targets', 'commerce_publication_photo_refs',
   'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',

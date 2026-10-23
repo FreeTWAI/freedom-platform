@@ -29,7 +29,16 @@
     "tests/runtime/hosted-shipping-quote.test.ts",
     "tests/runtime/hosted-shipping-quote-checkout.test.ts",
     "tests/runtime/hosted-self-ship.test.ts",
-    "tests/runtime/self-ship-fixture.ts"
+    "tests/runtime/self-ship-fixture.ts",
+    "migrations/186_hosted_drop_ship.sql",
+    "apps/platform-api/src/routes/hosted-drop-ship.ts",
+    "contracts/guild-launchpad/v1/hosted-drop-ship.ts",
+    "contracts/guild-launchpad/v1/hosted-drop-ship.schema.json",
+    "tests/runtime/hosted-drop-ship.test.ts",
+    "tests/runtime/drop-ship-fixture.ts",
+    "tests/e2e/storefront-drop-ship.spec.ts",
+    "deploy/cloudflare/test/release-history-floor-adversarial.test.mjs",
+    "docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py"
   ],
   "owner_role": "foundation",
   "public_exports": [
