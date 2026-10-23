@@ -1,0 +1,19 @@
+{
+  "format":"freedom.module/v1",
+  "module_id":"community-journal",
+  "owner_role":"community",
+  "owned_paths":["modules/community-journal/**","apps/portal-web/src/journal/**","apps/portal-web/public/journal-assets/**","apps/platform-api/src/routes/community-journal.ts","migrations/186_community_journal.sql","tests/runtime/community-journal.test.ts","tests/e2e/community-journal.spec.ts","docs/development/community-journal.md"],
+  "public_exports":["modules/community-journal/payload.ts","modules/community-journal/service.ts"],
+  "dependencies":["command-core","shared"],
+  "contract_families":[],
+  "client_profiles":["member"],
+  "instructions":["AGENTS.md","DESIGN.md","docs/platform-plan/execution/unified-foundation/00-baseline-and-decisions.md","docs/platform-plan/execution/unified-foundation/02-principal-command.md"],
+  "invariants":["current-authority-before-replay","no-secrets-in-artifacts"],
+  "tests":["runtime.full"],
+  "surfaces":[
+    {"surface_id":"community-journal.public","kind":"http","entry":"apps/platform-api/src/routes/community-journal.ts","operations":["community-journal.public.read"],"auth_profile":"public-anonymous-read"},
+    {"surface_id":"community-journal.agent","kind":"http","entry":"apps/platform-api/src/routes/community-journal.ts","operations":["community-journal.draft.submit","community-journal.receipt.read"],"auth_profile":"journal-submit-key"},
+    {"surface_id":"community-journal.editor","kind":"http","entry":"apps/platform-api/src/routes/community-journal.ts","operations":["community-journal.key.create","community-journal.key.revoke","community-journal.draft.read","community-journal.draft.discard","community-journal.publish","community-journal.withdraw"],"auth_profile":"assigned-member-session"},
+    {"surface_id":"community-journal.page","kind":"page","entry":"apps/portal-web/src/journal/main.tsx","operations":["community-journal.page.read"],"auth_profile":"public-read-or-assigned-member"}
+  ]
+}
