@@ -16298,6 +16298,11 @@
       "sha256": "46dc8fd62a9357630097ddf0996c71638f1333afa0660b499f7740361a63c55d"
     },
     {
+      "path": "docs/platform-plan/execution/commerce/integration-followup-2026-10-23.json",
+      "bytes": 8820,
+      "sha256": "eb1d374094f6c2f867929bd3cb25ed672e44135124d51c7ef3d8a43758187569"
+    },
+    {
       "path": "docs/platform-plan/execution/commerce/pages.md",
       "bytes": 24190,
       "sha256": "aba8cc216502fcedf584344e795900d44df697de4bfe0dffbe0d399cbfb385fc"
@@ -16309,8 +16314,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 99639,
-      "sha256": "68abd27871dcbe03afd1031e95a6f497b240dcd572756b351fdbe935e21ce19d"
+      "bytes": 101336,
+      "sha256": "23cb6c68cd5da6c8a12426b795ca8ef9eb422148409c9445190612a76378cae4"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
