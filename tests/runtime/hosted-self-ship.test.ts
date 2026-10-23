@@ -82,6 +82,15 @@ test('manual contracts, normalization, consent and Monday–Friday promises are 
   assert.throws(()=>shipmentInput({carrier_key:'post',carrier_name:'extra',tracking_number:'123',sent_on:'2026-10-22'}),code('validation_failed'));
 });
 
+test('shipment input rejects normalized carrier brackets and Unicode controls while preserving ASCII tracking normalization',()=>{
+  const input={carrier_key:'other',carrier_name:'合成物流',tracking_number:'ABC-123',sent_on:'2026-10-22'};
+  assert.deepEqual(shipmentInput(input),input);
+  assert.deepEqual(shipmentInput({...input,carrier_name:'  合成物流  ',tracking_number:'ＡＢＣ－１２３'}),input);
+  for(const carrier_name of ['合成＜物流＞','合成﹤物流﹥','合成\u2028物流','合成\u2029物流','合成\u200B物流','合成\u00AD物流','合成\uFEFF物流','合成\u0085物流','\t合成物流']){
+    assert.throws(()=>shipmentInput({...input,carrier_name}),code('validation_failed'),JSON.stringify(carrier_name));
+  }
+});
+
 test('quote, normalized freeze/replay and place include one fixed fee and only bank transfer',async()=>{
   const f=await prepared(),key=randomUUID();CheckoutTermsSchema.parse(f.order.terms);
   assert.deepEqual(f.order.terms.payment_methods,['bank_transfer']);assert.equal(f.order.terms.shipping_total_minor,6000);assert.equal(f.order.terms.total_minor,6200);
@@ -182,6 +191,34 @@ test('HTTP shipment action requires CSRF and If-Match, and remains usable with i
   const csrf=await app.request(x.h.origin+'/api/v1'+route,{method:'POST',headers:{Origin:x.h.origin,Cookie:f.s.owner.cookie,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"','X-CSRF-Token':'invalid'},body:JSON.stringify(input)});assert.equal(csrf.status,403);
   const sent=await x.h.call('POST',route,f.s.owner,input,{'Idempotency-Key':randomUUID(),'If-Match':'"1"'},app);assert.equal(sent.status,200,JSON.stringify(sent.data));assert.equal(sent.data.self_ship.shipment.tracking_number,input.tracking_number);
   const anonymous=await app.request(x.h.origin+'/api/v1'+route,{method:'POST',headers:{Origin:x.h.origin,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"'},body:JSON.stringify(input)});assert.equal(anonymous.status,401);
+});
+
+test('HTTP invalid normalized carrier names return 422 without shipment effects and the same command can still succeed',async()=>{
+  const f=await paid(),input=await body(),key=randomUUID();
+  const app=createApp(x.runtime,x.h.origin,'local',{registrationCommunityId:DEMO_COMMUNITY,guildLaunchpadEnabled:true,commerceSettings:settings,commerceSelfShipEnabled:true,commerceOrderNotificationsEnabled:true});
+  const route=f.s.root+'/checkout-orders/'+f.order.order_id+'/self-shipments';
+  const state=async()=>({
+    order:(await x.h.pool.query('SELECT version::text FROM commerce_checkout_orders WHERE order_id=$1',[f.order.order_id])).rows[0],
+    stock:await balances(f.s.product.product_id),
+    shipments:(await x.h.pool.query('SELECT * FROM commerce_self_shipments WHERE order_id=$1 ORDER BY shipment_id',[f.order.order_id])).rows,
+    allocations:(await x.h.pool.query('SELECT * FROM commerce_inventory_allocations WHERE order_id=$1 ORDER BY allocation_id',[f.order.order_id])).rows,
+    movements:(await x.h.pool.query('SELECT * FROM commerce_inventory_movements WHERE order_id=$1 ORDER BY movement_id',[f.order.order_id])).rows,
+    receipts:(await x.h.pool.query("SELECT * FROM scoped_command_receipts WHERE operation='commerce.checkout_order.record_self_shipment' AND target_id=$1 ORDER BY idempotency_key",[f.order.order_id])).rows,
+    notifications:(await x.h.pool.query("SELECT * FROM member_notifications WHERE kind='commerce_order_shipped' AND recipient_ref=$1 ORDER BY notification_id",[f.buyer.id])).rows,
+  });
+  const before=await state(),headers={'Idempotency-Key':key,'If-Match':'"'+before.order.version+'"'};
+  assert.deepEqual(before.shipments,[]);assert.deepEqual(before.receipts,[]);assert.deepEqual(before.notifications,[]);
+  assert.ok(before.allocations.length>0);assert.ok(before.allocations.every(row=>row.shipped_quantity===0));
+  for(const carrier_name of ['合成＜物流＞','合成﹤物流﹥','合成\u2028物流','合成\u200B物流']){
+    const response=await x.h.call('POST',route,f.s.owner,{...input,carrier_name},headers,app);
+    assert.equal(response.status,422,JSON.stringify(response.data));assert.equal(response.data.code,'validation_failed');assert.equal(response.data.detail,'出貨資料有誤。');
+    assert.deepEqual(await state(),before,JSON.stringify(carrier_name));
+  }
+  const sent=await x.h.call('POST',route,f.s.owner,input,headers,app);
+  assert.equal(sent.status,200,JSON.stringify(sent.data));assert.equal(sent.data.self_ship.shipment.carrier_name,input.carrier_name);
+  const after=await state();
+  assert.equal(after.shipments.length,1);assert.equal(after.receipts.length,1);assert.equal(after.notifications.length,1);
+  assert.ok(after.allocations.every(row=>row.shipped_quantity===row.quantity));assert.equal(after.movements.filter(row=>row.kind==='ship').length,1);
 });
 
 test('database rejects committing a shipment without matching ship movements',async()=>{

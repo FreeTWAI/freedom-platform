@@ -197,7 +197,7 @@ test('order transactions survive social suppression and the OFF switch filters p
   const offPage=await(await off.request('me/notifications?limit=1')).json() as NotificationList;
   assert.ok(ids.includes(onPage.items[0].notification_id));
   assert.equal(offPage.items[0].notification_id,[...legacy].sort().reverse()[0]);
-  assert.equal(offPage.next_offset,1);assert.equal(onPage.unread_count-offPage.unread_count,6);
+  assert.equal(offPage.next_offset,1);assert.equal(onPage.unread_count-offPage.unread_count,ids.length);
   const second=await(await off.request('me/notifications?limit=1&offset=1')).json() as NotificationList;
   assert.equal(second.items[0].notification_id,[...legacy].sort().reverse()[1]);
   const noCheckout=await member(0,createApp(pool,origin,'local',{...flags,commerceSettings:{...settings,checkoutEnabled:false}}));
@@ -208,12 +208,12 @@ test('order transactions survive social suppression and the OFF switch filters p
   assert.equal((await on.request(path,{},undefined,key,'POST')).status,200);
   assert.equal((await off.request(path,{},undefined,key,'POST')).status,404);
   const before=(await pool.query('SELECT count(*)::int n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[ids])).rows[0].n;
-  assert.equal(before,5);
+  assert.equal(before,ids.length-1);
   assert.equal((await off.request('me/inbox/read-all',{scope:'notifications'},undefined,randomUUID(),'POST')).status,200);
-  assert.equal((await pool.query('SELECT count(*)::int n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[ids])).rows[0].n,5);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM member_notifications WHERE notification_id=ANY($1::uuid[]) AND read_at IS NULL',[ids])).rows[0].n,ids.length-1);
   const offReminders=await(await off.request(endpoint+'/reminders')).json() as NotificationList;
   assert.equal(offReminders.unread_count,0);assert.ok(offReminders.items.every(item=>!ids.includes(item.notification_id)));
   const allKey=randomUUID(),all=await on.request('me/inbox/read-all',{scope:'notifications'},undefined,allKey,'POST');
-  assert.equal(all.status,200);assert.equal((await all.clone().json() as {notifications_updated:number}).notifications_updated,5);
+  assert.equal(all.status,200);assert.equal((await all.clone().json() as {notifications_updated:number}).notifications_updated,ids.length-1);
   assert.deepEqual(await(await off.request('me/inbox/read-all',{scope:'notifications'},undefined,allKey,'POST')).json(),await all.json());
 });
