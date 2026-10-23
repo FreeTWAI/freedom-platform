@@ -111,6 +111,13 @@ export const PaymentOptionSchema=CartQuoteResponseSchema.shape.payment_options.e
 export const PlaceOrderInputSchema=z.object({terms_sha256:sha,client_order_id:OpaqueId,payment_method:PaymentMethodSchema.optional()}).strict();
 export const OfflineInstructionsSchema=z.object({bank_code:z.string().regex(/^[0-9]{3}$(?![\s\S])/),bank_name:text.min(1).max(20),branch_name:text.min(1).max(20).nullable(),
   account_number:z.string().regex(/^[0-9]{6,16}$(?![\s\S])/),account_name:text.min(1).max(40),note:text.min(1).max(200).nullable(),amount_minor:money,pay_by:time}).strict();
+export const PAID_CANCELLATION_REASON_LABELS={out_of_stock:'缺貨',cannot_ship:'無法出貨',buyer_request:'買家要求',other:'其他'} as const;
+export const PaidCancellationReasonSchema=z.enum(['out_of_stock','cannot_ship','buyer_request','other']);
+const paidCancellation=z.object({reason:PaidCancellationReasonSchema,amount_minor:money,currency:CurrencySchema});
+export const PaidCancellationSchema=z.discriminatedUnion('refund_state',[
+  paidCancellation.extend({refund_state:z.literal('pending'),refunded_on:z.null(),refund_method:z.null()}).strict(),
+  paidCancellation.extend({refund_state:z.literal('recorded'),refunded_on:CheckoutDateSchema,refund_method:z.enum(['bank_transfer','cash'])}).strict(),
+]);
 export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.string().regex(/^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\s\S])/),
   store:z.object({slug:StoreSlugSchema,name:z.string().min(1).max(80)}).strict(),created_at:time,pay_by:time,reservation_expired:z.boolean(),
   lifecycle_state:z.enum(['open','cancelled','closed']),cancel_reason:z.enum(['buyer_cancelled','seller_cancelled','payment_not_completed','paid_cancelled']).nullable(),currency:CurrencySchema,
@@ -120,6 +127,7 @@ export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.str
   /** Frozen public meetup notes; optional for older order response producers. */
   meetup_notes:z.array(MeetupNoteSchema).max(50).optional(),
   self_ship:SelfShipOrderSchema.optional(),
+  paid_cancellation:PaidCancellationSchema.nullable().optional(),
   /** Recorded meetup handover; optional for older order response producers. */
   meetup_handover:z.object({completed_on:CheckoutDateSchema}).strict().nullable().optional(),
   latest_payment_attempt:z.object({attempt_ref:OpaqueId,state:z.enum(['ready','awaiting_result','paid','failed','expired']),created_at:time}).strict().nullable(),can_resume_payment:z.boolean(),contact:contact.nullable(),delivery:object.nullable(),invoice:object.nullable(),redacted:z.boolean(),

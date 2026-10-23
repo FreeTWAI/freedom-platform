@@ -1963,6 +1963,112 @@
               ],
               "additionalProperties": false
             },
+            "paid_cancellation": {
+              "anyOf": [
+                {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "out_of_stock",
+                            "cannot_ship",
+                            "buyer_request",
+                            "other"
+                          ]
+                        },
+                        "amount_minor": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "TWD",
+                            "USD"
+                          ]
+                        },
+                        "refund_state": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "refunded_on": {
+                          "type": "null"
+                        },
+                        "refund_method": {
+                          "type": "null"
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "amount_minor",
+                        "currency",
+                        "refund_state",
+                        "refunded_on",
+                        "refund_method"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "out_of_stock",
+                            "cannot_ship",
+                            "buyer_request",
+                            "other"
+                          ]
+                        },
+                        "amount_minor": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "TWD",
+                            "USD"
+                          ]
+                        },
+                        "refund_state": {
+                          "type": "string",
+                          "const": "recorded"
+                        },
+                        "refunded_on": {
+                          "type": "string",
+                          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                        },
+                        "refund_method": {
+                          "type": "string",
+                          "enum": [
+                            "bank_transfer",
+                            "cash"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "amount_minor",
+                        "currency",
+                        "refund_state",
+                        "refunded_on",
+                        "refund_method"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "meetup_handover": {
               "anyOf": [
                 {
@@ -2599,6 +2705,112 @@
           ],
           "additionalProperties": false
         },
+        "paid_cancellation": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "out_of_stock",
+                        "cannot_ship",
+                        "buyer_request",
+                        "other"
+                      ]
+                    },
+                    "amount_minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "TWD",
+                        "USD"
+                      ]
+                    },
+                    "refund_state": {
+                      "type": "string",
+                      "const": "pending"
+                    },
+                    "refunded_on": {
+                      "type": "null"
+                    },
+                    "refund_method": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "amount_minor",
+                    "currency",
+                    "refund_state",
+                    "refunded_on",
+                    "refund_method"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "out_of_stock",
+                        "cannot_ship",
+                        "buyer_request",
+                        "other"
+                      ]
+                    },
+                    "amount_minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "TWD",
+                        "USD"
+                      ]
+                    },
+                    "refund_state": {
+                      "type": "string",
+                      "const": "recorded"
+                    },
+                    "refunded_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    "refund_method": {
+                      "type": "string",
+                      "enum": [
+                        "bank_transfer",
+                        "cash"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "amount_minor",
+                    "currency",
+                    "refund_state",
+                    "refunded_on",
+                    "refund_method"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "meetup_handover": {
           "anyOf": [
             {
@@ -3157,6 +3369,112 @@
             "shipment"
           ],
           "additionalProperties": false
+        },
+        "paid_cancellation": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "out_of_stock",
+                        "cannot_ship",
+                        "buyer_request",
+                        "other"
+                      ]
+                    },
+                    "amount_minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "TWD",
+                        "USD"
+                      ]
+                    },
+                    "refund_state": {
+                      "type": "string",
+                      "const": "pending"
+                    },
+                    "refunded_on": {
+                      "type": "null"
+                    },
+                    "refund_method": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "amount_minor",
+                    "currency",
+                    "refund_state",
+                    "refunded_on",
+                    "refund_method"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "out_of_stock",
+                        "cannot_ship",
+                        "buyer_request",
+                        "other"
+                      ]
+                    },
+                    "amount_minor": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "TWD",
+                        "USD"
+                      ]
+                    },
+                    "refund_state": {
+                      "type": "string",
+                      "const": "recorded"
+                    },
+                    "refunded_on": {
+                      "type": "string",
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+                    },
+                    "refund_method": {
+                      "type": "string",
+                      "enum": [
+                        "bank_transfer",
+                        "cash"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "amount_minor",
+                    "currency",
+                    "refund_state",
+                    "refunded_on",
+                    "refund_method"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "meetup_handover": {
           "anyOf": [

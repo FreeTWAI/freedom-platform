@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {OpaqueId,Version} from './primitives.js';
 import {CurrencySchema} from './storefront.js';
-import {PublicOrderSchema,CheckoutMoneySchema,CheckoutTimeSchema,CheckoutDateSchema,isCheckoutCalendarDate,checkoutTextPattern,PaymentMethodSchema} from './hosted-checkout.js';
+import {PublicOrderSchema,CheckoutMoneySchema,CheckoutTimeSchema,CheckoutDateSchema,isCheckoutCalendarDate,checkoutTextPattern,PaymentMethodSchema,PaidCancellationSchema,PaidCancellationReasonSchema} from './hosted-checkout.js';
 const money=CheckoutMoneySchema,time=CheckoutTimeSchema,integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),text=z.string().regex(checkoutTextPattern);
 const display=PublicOrderSchema.shape.display_number,cursor=z.string().max(512).nullable();
 export const SellerPaymentStateSchema=z.enum(['unpaid','pending','simulated','confirmed','overpaid','refunded']);
@@ -27,18 +27,29 @@ export const SellerRefundSchema=z.object({refund_ref:OpaqueId,application_ref:Op
 export const ExceptionCaseViewSchema=z.object({case_ref:OpaqueId,kind:z.enum(['amount_mismatch','paid_after_cancel','overpaid','paid_unallocatable','payment_unconfirmed','unmatched_payment','contradicting_event']),
   status:z.enum(['open','resolved','dismissed']),responsible_party:z.literal('retailer'),order:z.object({order_ref:OpaqueId,display_number:display}).strict().nullable(),
   subject:z.object({kind:z.enum(['payment_attempt','payment_event','offline_payment']),ref:OpaqueId}).strict(),next_action:z.enum(['refund_payment','allocate_or_refund','check_with_provider','contact_provider']),due_at:time,opened_at:time,updated_at:time,
-  resolution:z.object({code:z.enum(['refunded','allocated','confirmed','checked_with_provider']),note:text.min(1).max(1000),resolved_by:OpaqueId}).strict().nullable(),
+  resolution:z.object({code:z.enum(['refunded','allocated','cancelled','confirmed','checked_with_provider']),note:text.min(1).max(1000),resolved_by:OpaqueId}).strict().nullable(),
   payment_facts:z.object({merchant_trade_no:text.nullable(),trade_no:text.nullable(),expected_amount_minor:money.nullable(),paid_amount_minor:money.nullable(),currency:CurrencySchema,payment_date:time.nullable(),payment_type:text.nullable()}).strict().nullable(),
   allowed_actions:z.array(z.enum(['resolve_with_evidence','retry_allocation'])).max(2),resolution_codes:z.array(z.enum(['refunded','confirmed','checked_with_provider'])).max(3),version:Version}).strict();
 export const ExceptionCasePageSchema=z.object({items:z.array(ExceptionCaseViewSchema).max(50),next_cursor:cursor}).strict();
 const offlinePaymentView=z.object({offline_payment_ref:OpaqueId,method:z.enum(['bank_transfer','cash_on_meetup']),amount_minor:money,currency:CurrencySchema,received_on:SellerDateSchema,
   reference:text.min(1).max(40).nullable(),confirmed_by:OpaqueId,confirmed_at:time}).strict();
+export const SellerPaidCancellationSchema=z.discriminatedUnion('refund_state',[
+  PaidCancellationSchema.options[0].extend({note:z.string().max(200).nullable()}).strict(),
+  PaidCancellationSchema.options[1].extend({note:z.string().max(200).nullable()}).strict(),
+]);
+export const PaidCancellationRefundInputSchema=z.object({refunded_on:SellerDateSchema,refund_method:z.enum(['bank_transfer','cash'])}).strict();
+const cancellationInput=z.object({reason:PaidCancellationReasonSchema,note:z.string().max(200).optional()});
+export const PaidCancellationInputSchema=z.discriminatedUnion('refund_state',[
+  cancellationInput.extend({refund_state:z.literal('pending')}).strict(),
+  cancellationInput.extend({refund_state:z.literal('recorded'),...PaidCancellationRefundInputSchema.shape}).strict(),
+]);
 export const SellerCheckoutOrderSchema=SellerCheckoutOrderSummarySchema.extend({lines:z.array(SellerOrderLineSchema).min(1).max(50),merchandise_total_minor:money,discount_total_minor:money,shipping_total_minor:money,
+  paid_cancellation:SellerPaidCancellationSchema.nullable().optional(),
   payment_grace_until:time.nullable(),self_ship:PublicOrderSchema.shape.self_ship,meetup_handover:z.object({handover_ref:OpaqueId,completed_on:SellerDateSchema,recorded_at:time}).strict().nullable(),
   latest_payment_attempt:PublicOrderSchema.shape.latest_payment_attempt,payment_detail:z.object({attempts:z.array(SellerPaymentAttemptSchema),applications:z.array(SellerPaymentApplicationSchema),
     offline_payments:z.array(offlinePaymentView).max(1),refunds:z.array(SellerRefundSchema)}).strict().nullable(),
   exceptions:z.array(ExceptionCaseViewSchema),actions:z.object({cancel:z.boolean(),query_payment:z.boolean(),record_refund:z.boolean(),view_contact:z.boolean(),view_finance:z.boolean(),
-    confirm_offline_payment:z.boolean(),complete_meetup:z.boolean(),record_meetup_handover:z.boolean(),record_self_shipment:z.boolean().optional()}).strict()}).strict()
+    confirm_offline_payment:z.boolean(),complete_meetup:z.boolean(),record_meetup_handover:z.boolean(),record_self_shipment:z.boolean().optional(),cancel_paid:z.boolean().optional(),record_paid_refund:z.boolean().optional()}).strict()}).strict()
   .refine(v=>(v.payment_grace_until!==null)===(v.payment_method!=='immediate_card'),'Grace follows the payment method.');
 export const SellerOrderContactSchema=z.object({order_ref:OpaqueId,contact_redacted:z.boolean(),contact:PublicOrderSchema.shape.contact,delivery:PublicOrderSchema.shape.delivery,invoice:PublicOrderSchema.shape.invoice}).strict()
   .refine(v=>v.contact_redacted?v.contact===null&&v.delivery===null&&v.invoice===null:v.contact!==null&&v.delivery!==null,'Invalid redaction projection.');
@@ -65,7 +76,7 @@ export const SellerCheckoutErrorCodeSchema=z.enum(['login_required','csrf_invali
   'version_required','version_conflict','invalid_version','idempotency_required','idempotency_conflict','invalid_idempotency_key','invalid_expected_version','receipt_reference_invalid',
   'payment_already_applied','checkout_order_closed','payment_result_pending','resolution_code_invalid','exception_action_unavailable','payment_not_confirmed','stock_unavailable','allocation_retry_unavailable','reservation_inconsistent',
   'offline_amount_mismatch','offline_payment_date_invalid','payment_method_mismatch','order_cancelled','meetup_stock_unavailable','meetup_already_recorded','meetup_not_selected','nothing_to_hand_over','self_ship_not_selected','self_shipment_already_recorded','self_shipment_stock_unavailable','nothing_to_ship','shipment_date_invalid',
-  'refund_not_available','refund_exceeds_payment','refund_date_invalid','invalid_scoped_command','invalid_operation','invalid_target','origin_rejected','host_rejected','json_required','body_too_large','credential_kind_rejected','internal_error']);
+  'order_already_shipped','refund_not_available','refund_exceeds_payment','refund_date_invalid','invalid_scoped_command','invalid_operation','invalid_target','origin_rejected','host_rejected','json_required','body_too_large','credential_kind_rejected','internal_error']);
 export type SellerCheckoutOrder=z.infer<typeof SellerCheckoutOrderSchema>;
 export type SellerCheckoutOrderSummary=z.infer<typeof SellerCheckoutOrderSummarySchema>;
 export type ExceptionCaseView=z.infer<typeof ExceptionCaseViewSchema>;
