@@ -749,8 +749,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/member-communications.ts",
-      "bytes": 9401,
-      "sha256": "768e02065d57d8cdcdb4bb8bb9ee14bea4253602dd64426896445cf7ff501037"
+      "bytes": 9766,
+      "sha256": "f6430009fe3a7bd50c25005f0e6c5e653c0c15a6e74cc01a00c215570fe26245"
     },
     {
       "path": "apps/platform-api/src/routes/member-credential-ingest-http.ts",
@@ -3089,8 +3089,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
-      "bytes": 66421,
-      "sha256": "50f35f4011b6733d54fa3c1a6f83932a29a527f9a42050d137b1dee3408e7634"
+      "bytes": 66695,
+      "sha256": "959eddd1b908c316983feea8068ca535ab3bad15f43e20685aebc5f20d9d4eb8"
     },
     {
       "path": "apps/portal-web/src/modules/MemberPresence.css",
@@ -3529,8 +3529,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/direct-message-receipts.ts",
-      "bytes": 3906,
-      "sha256": "0bfe2149c2c7000a0a3e8a4cf06a6f8de937a2cea7df0555d43c0d935ddaa1ca"
+      "bytes": 5272,
+      "sha256": "511f7f7f5de445486b14b96a3f0454164c28d00b3175ce4b11a3e8000353686d"
     },
     {
       "path": "apps/portal-web/src/modules/event-banner-client.ts",
@@ -14839,8 +14839,8 @@
     },
     {
       "path": "docs/development/member-communications.md",
-      "bytes": 38532,
-      "sha256": "02c68596a8b6a7d7a39975b822daeee63d53d37fcdacee8199c218158b4b713e"
+      "bytes": 40581,
+      "sha256": "f9677fecc90f07c4d6a6302daebf46d88dc119e1b158bd0e52d14e1a7a2519df"
     },
     {
       "path": "docs/development/member-connections.md",
@@ -14864,8 +14864,8 @@
     },
     {
       "path": "docs/development/member-settings-messages.md",
-      "bytes": 13945,
-      "sha256": "e69c094624b6bb65ff7df0e8074c41b4cd2d359239c2ad9d4c99d3941f1f7c26"
+      "bytes": 14247,
+      "sha256": "914974cad1a8005a7628d74d47424959d9e61aad592e5a029d2c4b690bc7dbc6"
     },
     {
       "path": "docs/development/member-shared-skill-books-2026-10-20.md",
@@ -16119,8 +16119,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/README.md",
-      "bytes": 4384,
-      "sha256": "f81496fd17ea5ea60a4a47725da49e7ad63a66ae4c982cbbc42bf8a82ecaaf60"
+      "bytes": 4578,
+      "sha256": "ecb4142a9a1dbf0b49acd8f834d88d754626bf63ff61f89b75c2b6a867333908"
     },
     {
       "path": "docs/platform-plan/execution/commerce/WP-00-baseline.md",
@@ -16146,6 +16146,11 @@
       "path": "docs/platform-plan/execution/commerce/ecpay-logistics-status-map.tsv",
       "bytes": 18726,
       "sha256": "e0c1fd2767a887dc02d4b84dc09da5f05a588b688459b18cecbe4997f08e3e55"
+    },
+    {
+      "path": "docs/platform-plan/execution/commerce/erp-integration-proposal.md",
+      "bytes": 10410,
+      "sha256": "a7e129fb6ed66dd262ebaf79ec12e45a72bcc2d78599572798dafb474771d410"
     },
     {
       "path": "docs/platform-plan/execution/commerce/handoff-2026-10-19-member-cohort-integration.md",
@@ -21114,8 +21119,8 @@
     },
     {
       "path": "modules/member-communications/service.ts",
-      "bytes": 27374,
-      "sha256": "817f30a8366ba71b9c3ff947fb020bbc813955f180b19fc575a9057d5edcc888"
+      "bytes": 28918,
+      "sha256": "acdba67fea6453dacfc2a5a2c8c8c2e883b0c63d73139cf915189c9c692c2336"
     },
     {
       "path": "modules/member-communications/stickers.ts",
@@ -21124,8 +21129,8 @@
     },
     {
       "path": "modules/member-communications/types.ts",
-      "bytes": 5040,
-      "sha256": "788053400b98f04bce90f9fecc90b67b68d9782c08d0f03e5125ed7316c2b783"
+      "bytes": 5294,
+      "sha256": "6bca5f553313f548e818be260670daf910b64bc88fb5fd09d30ebf8a7323e6b7"
     },
     {
       "path": "modules/member-communications/portal/README.md",
@@ -24004,8 +24009,8 @@
     },
     {
       "path": "tests/e2e/message-load-older.spec.ts",
-      "bytes": 15011,
-      "sha256": "86f7237dd8d843b3a4d122567b6ee5c2318dff9e5b7167d7dc934611128f7b68"
+      "bytes": 21881,
+      "sha256": "f3063659c640c87cd2642a17b55ec3a2af1edac3c4b78e4e56665c36cd466281"
     },
     {
       "path": "tests/e2e/message-retraction.spec.ts",
@@ -25084,8 +25089,8 @@
     },
     {
       "path": "tests/runtime/direct-message-receipts.test.ts",
-      "bytes": 9985,
-      "sha256": "3cbf17172a1f00e4819e357427299a8e7fddc0c7d1fc7a5cd4615cd3e4a4c71f"
+      "bytes": 15859,
+      "sha256": "d8629a7ce389b43edd6ae423013354d88d575538fee8e6b558640b347a240753"
     },
     {
       "path": "tests/runtime/distribution-photos-sql.test.ts",
@@ -25874,8 +25879,8 @@
     },
     {
       "path": "tests/runtime/member-communications.test.ts",
-      "bytes": 57450,
-      "sha256": "ac4c8faeac5ec3d329cab7090b5d59c49ed570bacc942676eddbd2e316830ea8"
+      "bytes": 65578,
+      "sha256": "b533bbe59413e71e038f056a96106098104e93f24e0b4d392a7cafd91c5679a8"
     },
     {
       "path": "tests/runtime/member-connections.test.ts",

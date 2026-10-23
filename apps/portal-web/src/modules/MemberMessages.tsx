@@ -25,7 +25,7 @@ import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileErr
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
 import {refreshLoadedMessages} from './message-refresh';
-import {isOrderNotificationAction,type OrderNotificationAction} from '../../../../modules/member-communications/types';
+import {isOrderNotificationAction,type DirectMessageReceiptPage,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
 type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
 type NotificationAction={tab:Exclude<ActionTab,'stores'|'reservations'>;resource_id:string|null}|OrderNotificationAction;
@@ -36,7 +36,7 @@ type Message={message_id:string;sender_ref:string;recipient_ref:string;body:stri
 const newestMessages=(items:Message[])=>[...items].sort((a,b)=>compareDirectMessages(b,a));
 type Conversation={participant:Participant;can_send:boolean;last_message:Message;unread_count:number};
 type ConversationPage={items:Conversation[];unread_count:number;next_offset:number|null};
-type Thread={participant:Participant;can_send:boolean;items:Message[];next_offset:number|null;unread_count:number;retraction_count?:string};
+type Thread={participant:Participant;can_send:boolean;items:Message[];next_offset:number|null;unread_count:number;retraction_count?:string;receipt_lookup?:'ids-v1'};
 type ConversationActivity={last_message_id:string|null;unread_count:number;can_send:boolean;last_outgoing?:{message_id:string;read_at:string|null}|null;retraction_count?:string};
 type MemberPage={items:MemberCardData[];total:number;next_offset:number|null};
 type Props={client:PortalClient;session:SessionPayload;messageImagesEnabled?:boolean;memberBlockingEnabled?:boolean;onNavigate:(id:TabId)=>void;onNotificationPeer?:{id:string;sequence:number};registerLeave?:(guard:(()=>boolean)|null)=>void};
@@ -343,7 +343,8 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
         ()=>alive.current&&current===threadGeneration.current&&currentPeer.current===id):undefined;
       const receipts=quiet&&!changed?await readLoadedDirectMessageReceipts(value,previous?.items??[],me,
         offset=>client.get<Thread>(`/me/conversations/${encodeURIComponent(id)}/messages?limit=${PAGE}&offset=${offset}`,{background:true}),
-        ()=>alive.current&&current===threadGeneration.current&&currentPeer.current===id):undefined;
+        ()=>alive.current&&current===threadGeneration.current&&currentPeer.current===id,
+        value.receipt_lookup==='ids-v1'?ids=>client.get<DirectMessageReceiptPage>(`/me/conversations/${encodeURIComponent(id)}/receipts?${new URLSearchParams({message_ids:ids.join(',')})}`,{background:true}):undefined):undefined;
       if(current!==threadGeneration.current||currentPeer.current!==id||receipts===null||refreshed===null)return;
       threadInFlight.current=null;
       if(receiptRefresh.current.get(id)===receiptVersion)receiptRefresh.current.delete(id);
