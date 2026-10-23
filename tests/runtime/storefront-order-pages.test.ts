@@ -289,3 +289,21 @@ test('formatTaipeiDateTime formats Asia/Taipei 24-hour timestamps including midn
   assert.equal(formatTaipeiDateTime('2026-01-05T01:05:00.000Z'), '2026/01/05 09:05');
   assert.equal(formatTaipeiDateTime('2026-12-31T15:59:00.000Z'), '2026/12/31 23:59');
 });
+
+
+test('self-ship card keeps payment, fulfilment, retained and redacted states distinct without leaking references',async()=>{
+ const {SelfShipCard,selfShipCardState}=await import('../../apps/portal-web/src/storefront/self-ship-card.js');
+ type View=Pick<PublicOrder,'self_ship'|'lifecycle_state'>;
+ const render=(order:View)=>renderToStaticMarkup(createElement(SelfShipCard,{order}));
+ const waiting:View={lifecycle_state:'open',self_ship:{handling_days:3,note:'<合成物流>\n第二行',ship_by:null,shipment:null}};
+ assert.equal(selfShipCardState(waiting),'waiting_payment');assert.match(render(waiting),/等待付款確認/);assert.match(render(waiting),/確認收款後 3 個工作天內寄出/);assert.match(render(waiting),/&lt;合成物流&gt;/);
+ const paid:View={...waiting,self_ship:{...waiting.self_ship!,ship_by:'2026-10-28'}};assert.equal(selfShipCardState(paid),'waiting_ship');assert.match(render(paid),/等待出貨/);assert.match(render(paid),/2026\/10\/28/);
+ const sent:View={...paid,self_ship:{...paid.self_ship!,shipment:{shipment_ref:randomUUID(),carrier_key:'other',carrier_name:'私有合成承運人',tracking_number:'PRIVATE-123',sent_on:'2026-10-23',recorded_at:'2026-10-23T01:00:00.000Z',redacted:false}}};
+ assert.equal(selfShipCardState(sent),'sent');assert.match(render(sent),/已出貨/);assert.match(render(sent),/私有合成承運人/);assert.match(render(sent),/PRIVATE-123/);assert.match(render(sent),/工坊不追蹤物流、不核實簽收/);
+ for(const lifecycle_state of ['open','closed','cancelled'] as const){
+  const redacted:View={lifecycle_state,self_ship:{...sent.self_ship!,shipment:{...sent.self_ship!.shipment!,redacted:true,carrier_name:null,tracking_number:null}}};
+  assert.equal(selfShipCardState(redacted),'redacted');assert.match(render(redacted),/已出貨/);assert.match(render(redacted),/物流業者：其他/);assert.match(render(redacted),/2026\/10\/23/);assert.doesNotMatch(render(redacted),/PRIVATE|私有|物流單號|<button|href=/);
+ }
+ for(const lifecycle_state of ['closed','cancelled'] as const)assert.equal(render({...waiting,lifecycle_state}),'');
+ assert.equal(render({lifecycle_state:'open'}),'');
+});

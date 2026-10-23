@@ -8,7 +8,7 @@ import {readShippingProfile,saveShippingProfile,type ShippingEnvironment} from '
 import {readItemShippingAttributes,saveItemShippingAttributes} from '../../../../modules/agent-commerce/fulfilment/settings/attributes.js';
 import type {PlatformEnv} from '../module-context.js';
 import {commandHeaders,etag,privateCache,singleQuery} from './tenant-http.js';
-export function createHostedShippingRoutes(pool:Pool,{environment}:{environment:ShippingEnvironment}){
+export function createHostedShippingRoutes(pool:Pool,{environment,selfShipEnabled=false}:{environment:ShippingEnvironment;selfShipEnabled?:boolean}){
   const app=new Hono<PlatformEnv>();
   const root='/tenants/:tenant_id/storefronts/:instance_id';
   for(const suffix of ['/ship-from-locations','/ship-from-locations/:location_id','/ship-from-locations/:location_id/retire','/shipping-profile','/products/:product_id/shipping-attributes'])app.use(root+suffix,async(c,next)=>{try{wire.ShippingEmptyInputSchema.parse(singleQuery(c));await next();}finally{privateCache(c);}});
@@ -22,7 +22,7 @@ export function createHostedShippingRoutes(pool:Pool,{environment}:{environment:
   app.post(root+'/ship-from-locations',async c=>{const h=commandHeaders(c,false),[t,i]=ids(c);return c.json(wire.ShipFromLocationSchema.parse(await createShipFromLocation(pool,c.get('actor'),t,i,await c.req.json(),h.key,environment)),201);});
   app.post(root+'/ship-from-locations/:location_id/retire',async c=>{const h=commandHeaders(c,false),[t,i]=ids(c);return c.json(wire.ShipFromLocationSchema.parse(await retireShipFromLocation(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('location_id')),await c.req.json(),h.key)));});
   app.get(root+'/shipping-profile',async c=>{const [t,i]=ids(c),view=wire.ShippingProfileViewSchema.parse(await readShippingProfile(pool,c.get('actor'),t,i,environment));if(view.version)etag(c,view.version);return c.json(view);});
-  app.put(root+'/shipping-profile',async c=>{const h=commandHeaders(c,c.req.header('If-Match')!==undefined),[t,i]=ids(c),view=wire.ShippingProfileViewSchema.parse(await saveShippingProfile(pool,c.get('actor'),t,i,await c.req.json(),h.key,h.expected,environment));if(view.version)etag(c,view.version);return c.json(view,view.version==='1'?201:200);});
+  app.put(root+'/shipping-profile',async c=>{const h=commandHeaders(c,c.req.header('If-Match')!==undefined),[t,i]=ids(c),view=wire.ShippingProfileViewSchema.parse(await saveShippingProfile(pool,c.get('actor'),t,i,await c.req.json(),h.key,h.expected,environment,selfShipEnabled));if(view.version)etag(c,view.version);return c.json(view,view.version==='1'?201:200);});
   app.get(root+'/products/:product_id/shipping-attributes',async c=>{const [t,i]=ids(c),view=wire.ItemShippingAttributesSchema.parse(await readItemShippingAttributes(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id'))));if(view.version)etag(c,view.version);return c.json(view);});
   app.put(root+'/products/:product_id/shipping-attributes',async c=>{const h=commandHeaders(c,c.req.header('If-Match')!==undefined),[t,i]=ids(c),view=wire.ItemShippingAttributesSchema.parse(await saveItemShippingAttributes(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('product_id')),await c.req.json(),h.key,h.expected));if(view.version)etag(c,view.version);return c.json(view,view.version==='1'?201:200);});
   return app;

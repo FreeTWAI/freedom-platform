@@ -10,7 +10,7 @@ function check(config,setup) {
   try{writeFileSync(path,JSON.stringify(config));return checkCommerceWranglerConfig(setup?.(dir,path)??path);}finally{rmSync(dir,{recursive:true,force:true});}
 }
 test('commerce declarations default off in every environment',()=>{assert.equal(check({env:{next:{},'staging-next':{vars:{FREEDOM_COMMERCE_QUARANTINE:'false'}}}}).structural,true);});
-for(const flag of ['FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE'])for(const value of [true,false,'TRUE',' true','false ',1,null]) {
+for(const flag of ['FREEDOM_COMMERCE_SELF_SHIP_ENABLED','FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE'])for(const value of [true,false,'TRUE',' true','false ',1,null]) {
   test(`${flag} rejects invalid flag type/value ${JSON.stringify(value)}`,()=>{
     const result=check({env:{next:{vars:{[flag]:value}}}});assert.equal(result.structural,false);assert(result.errors.includes('commerce_flag_invalid'));
   });
@@ -118,4 +118,13 @@ test('checkout requires console in its own environment',()=>{
   assert(check({vars:{FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true'}}).errors.includes('commerce_console_required'));
   assert(check({vars:{FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'},env:{next:{vars:{FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true'}}}}).errors.includes('commerce_console_required'));
   assert.equal(check({vars:{FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true'}}).structural,true);
+});
+
+
+test('self ship requires console and is refused only for the public environment in PR-A',()=>{
+  const vars={FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+  for(const FREEDOM_ENV of ['local','staging'])assert.equal(check({vars:{...vars,FREEDOM_ENV}}).structural,true);
+  assert(check({vars:{...vars,FREEDOM_ENV:'public'}}).errors.includes('self_ship_retention_not_ready'));
+  assert(check({vars:{...vars,FREEDOM_COMMERCE_CONSOLE_ENABLED:'false'}}).errors.includes('commerce_self_ship_console_required'));
+  assert.equal(check({vars:{...vars,FREEDOM_ENV:'public',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'false'}}).structural,true);
 });

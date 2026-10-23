@@ -82,7 +82,7 @@ describe('shipping profile versions',()=>{
     assert.equal((await h.request(s,'PUT','/shipping-profile',input)).status,409);
     assert.equal((await h.f.x.h.pool.query('SELECT count(*)::int n FROM commerce_shipping_profile_versions')).rows[0].n,0);
   });
-  test('meetup saves alone or mixed, and rejects bad notes, a duplicate and a sixth option',async()=>{
+  test('meetup saves alone or mixed, and rejects bad notes, a duplicate and a seventh option',async()=>{
     const s=await h.store(),meetup={method:'meetup' as const,note:'面交於店門口'};
     const home={method:'home' as const,fee_per_parcel_minor:10000,free_over_minor:null,outlying:{kind:'excluded' as const}};
     const only={...h.document(),services:[],delivery_options:[meetup]};
@@ -100,7 +100,8 @@ describe('shipping profile versions',()=>{
     const methods=['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C'] as const;
     const five={...h.document(),services:[],delivery_options:[...methods.map(method=>({method,fee_per_parcel_minor:10000,free_over_minor:null,outlying:{kind:'excluded'}})),meetup]};
     r=await h.request(s,'PUT','/shipping-profile',five,'4');assert.equal(r.status,200);assert.equal(r.data.profile.delivery_options.length,5);
-    const sixth=await h.request(s,'PUT','/shipping-profile',{...five,delivery_options:[...five.delivery_options,home]},'5');assert.equal(sixth.status,422);assert.equal(sixth.data.code,'validation_failed');
+    const sixth=await h.request(s,'PUT','/shipping-profile',{...five,delivery_options:[...five.delivery_options,home]},'5');assert.equal(sixth.status,422);assert.equal(sixth.data.code,'shipping_input_invalid');assert(sixth.data.fields.some((f:{path:string;code:string})=>f.path==='delivery_options.5.method'&&f.code==='duplicate'));
+    const seventh=await h.request(s,'PUT','/shipping-profile',{...five,delivery_options:[...five.delivery_options,home,home]},'5');assert.equal(seventh.status,422);assert.equal(seventh.data.code,'validation_failed');
     const id=await location(s);await h.provider(s,[SERVICE_KEYS[0]],true);
     const mixed={...h.document(),services:[service(id)],delivery_options:[home,meetup]};
     r=await h.request(s,'PUT','/shipping-profile',mixed,'5');assert.equal(r.status,200);assert.deepEqual(r.data.profile.delivery_options.map((o:{method:string})=>o.method),['home','meetup']);assert.equal(r.data.profile.services.length,1);

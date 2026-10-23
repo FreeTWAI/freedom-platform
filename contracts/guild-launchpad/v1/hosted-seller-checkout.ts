@@ -34,11 +34,11 @@ export const ExceptionCasePageSchema=z.object({items:z.array(ExceptionCaseViewSc
 const offlinePaymentView=z.object({offline_payment_ref:OpaqueId,method:z.enum(['bank_transfer','cash_on_meetup']),amount_minor:money,currency:CurrencySchema,received_on:SellerDateSchema,
   reference:text.min(1).max(40).nullable(),confirmed_by:OpaqueId,confirmed_at:time}).strict();
 export const SellerCheckoutOrderSchema=SellerCheckoutOrderSummarySchema.extend({lines:z.array(SellerOrderLineSchema).min(1).max(50),merchandise_total_minor:money,discount_total_minor:money,shipping_total_minor:money,
-  payment_grace_until:time.nullable(),meetup_handover:z.object({handover_ref:OpaqueId,completed_on:SellerDateSchema,recorded_at:time}).strict().nullable(),
+  payment_grace_until:time.nullable(),self_ship:PublicOrderSchema.shape.self_ship,meetup_handover:z.object({handover_ref:OpaqueId,completed_on:SellerDateSchema,recorded_at:time}).strict().nullable(),
   latest_payment_attempt:PublicOrderSchema.shape.latest_payment_attempt,payment_detail:z.object({attempts:z.array(SellerPaymentAttemptSchema),applications:z.array(SellerPaymentApplicationSchema),
     offline_payments:z.array(offlinePaymentView).max(1),refunds:z.array(SellerRefundSchema)}).strict().nullable(),
   exceptions:z.array(ExceptionCaseViewSchema),actions:z.object({cancel:z.boolean(),query_payment:z.boolean(),record_refund:z.boolean(),view_contact:z.boolean(),view_finance:z.boolean(),
-    confirm_offline_payment:z.boolean(),complete_meetup:z.boolean(),record_meetup_handover:z.boolean()}).strict()}).strict()
+    confirm_offline_payment:z.boolean(),complete_meetup:z.boolean(),record_meetup_handover:z.boolean(),record_self_shipment:z.boolean().optional()}).strict()}).strict()
   .refine(v=>(v.payment_grace_until!==null)===(v.payment_method!=='immediate_card'),'Grace follows the payment method.');
 export const SellerOrderContactSchema=z.object({order_ref:OpaqueId,contact_redacted:z.boolean(),contact:PublicOrderSchema.shape.contact,delivery:PublicOrderSchema.shape.delivery,invoice:PublicOrderSchema.shape.invoice}).strict()
   .refine(v=>v.contact_redacted?v.contact===null&&v.delivery===null&&v.invoice===null:v.contact!==null&&v.delivery!==null,'Invalid redaction projection.');
@@ -58,12 +58,13 @@ export const SellerCheckoutOrderQuerySchema=z.object({lifecycle:z.enum(['open','
 export const OfflinePaymentConfirmInputSchema=z.object({amount_minor:integer,received_on:SellerDateSchema,reference:text.min(1).max(40).optional()}).strict();
 export const MeetupCompletionInputSchema=z.object({amount_minor:integer,completed_on:SellerDateSchema}).strict();
 export const MeetupHandoverInputSchema=z.object({completed_on:SellerDateSchema}).strict();
+export const SelfShipmentInputSchema=z.object({carrier_key:z.enum(['post','tcat','hct','tjoin','other']),carrier_name:z.string().min(1).max(40).regex(checkoutTextPattern).optional(),tracking_number:z.string().regex(/^[0-9A-Za-z-]{1,50}$(?![\s\S])/),sent_on:SellerDateSchema}).strict();
 // Documented codes are an aid to consumers, never a closed runtime error gate.
 export const SellerCheckoutErrorCodeSchema=z.enum(['login_required','csrf_invalid','scope_disabled','membership_inactive','not_found','capability_denied','tenant_not_found','tenant_capability_denied','principal_disabled','session_expired','resource_scope_unavailable',
   'checkout_order_not_found','exception_case_not_found','commerce_quarantined','commerce_rate_limited','storefront_not_set_up','storefront_unavailable','validation_failed','invalid_json','invalid_cursor','tenant_cursor_unavailable',
   'version_required','version_conflict','invalid_version','idempotency_required','idempotency_conflict','invalid_idempotency_key','invalid_expected_version','receipt_reference_invalid',
   'payment_already_applied','checkout_order_closed','payment_result_pending','resolution_code_invalid','exception_action_unavailable','payment_not_confirmed','stock_unavailable','allocation_retry_unavailable','reservation_inconsistent',
-  'offline_amount_mismatch','offline_payment_date_invalid','payment_method_mismatch','order_cancelled','meetup_stock_unavailable','meetup_already_recorded','meetup_not_selected','nothing_to_hand_over',
+  'offline_amount_mismatch','offline_payment_date_invalid','payment_method_mismatch','order_cancelled','meetup_stock_unavailable','meetup_already_recorded','meetup_not_selected','nothing_to_hand_over','self_ship_not_selected','self_shipment_already_recorded','self_shipment_stock_unavailable','nothing_to_ship','shipment_date_invalid',
   'refund_not_available','refund_exceeds_payment','refund_date_invalid','invalid_scoped_command','invalid_operation','invalid_target','origin_rejected','host_rejected','json_required','body_too_large','credential_kind_rejected','internal_error']);
 export type SellerCheckoutOrder=z.infer<typeof SellerCheckoutOrderSchema>;
 export type SellerCheckoutOrderSummary=z.infer<typeof SellerCheckoutOrderSummarySchema>;

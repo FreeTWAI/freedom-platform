@@ -40,7 +40,7 @@ export const StoreReadinessItemSchema=z.discriminatedUnion('key',[
   z.object({key:z.literal('platform'),state:z.enum(['done','paused'])}).strict(),
 ]);
 export const StoreReadinessMethodsSchema=z.object({payment:z.array(z.enum(['bank_transfer','cash_on_meetup','card'])).max(3),
-  delivery:z.array(DeliveryMethodSchema).max(5)}).strict();
+  delivery:z.array(DeliveryMethodSchema).max(6)}).strict();
 export const StoreReadinessSchema=z.object({accepting_orders:z.boolean(),items:z.array(StoreReadinessItemSchema).length(8),methods:StoreReadinessMethodsSchema}).strict();
 const orderCount=z.object({count:z.number().int().min(0).max(99),more:z.boolean()}).strict();
 export const StoreOverviewSchema=StoreReadinessSchema.extend({tenant_id:OpaqueId,instance_id:OpaqueId,environment:ProviderEnvironmentSchema,checked_at:IsoTimeSchema,

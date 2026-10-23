@@ -61,10 +61,12 @@ export async function insertShippingProfile(q:PoolClient,tenantId:string,instanc
   await q.query(`INSERT INTO commerce_shipping_profile_versions(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
     VALUES($1,$2,$3,$4,$5,$6)`,[tenantId,instanceId,version,document,hash,principalId]);
 }
-export function saveShippingProfile(pool:Pool,actor:SettingsActor,tenantId:string,instanceId:string,raw:unknown,key:string,expected:string|undefined,environment:ShippingEnvironment){
+export function saveShippingProfile(pool:Pool,actor:SettingsActor,tenantId:string,instanceId:string,raw:unknown,key:string,expected:string|undefined,environment:ShippingEnvironment,selfShipEnabled=false){
   const input=wire.ShippingProfileInputSchema.parse(raw);
   return shippingSettingsCommand(pool,actor,tenantId,instanceId,'store:manage','commerce.shipping_profile.save',{kind:'commerce_shipping_profile',id:instanceId},input,key,expected,async(q,ctx)=>{
-    const document=await validateShippingProfile(q,tenantId,instanceId,environment,input),old=await currentShippingProfile(q,instanceId);
+    const old=await currentShippingProfile(q,instanceId),manual=input.delivery_options.find(option=>option.method==='self_ship');
+    if(manual&&!selfShipEnabled&&canonicalJSON(manual)!==canonicalJSON(old?.document.delivery_options.find(option=>option.method==='self_ship')??null))throw new ShippingSettingsProblem(409,'self_ship_not_enabled',[{path:'delivery_options',code:'not_activated'}]);
+    const document=await validateShippingProfile(q,tenantId,instanceId,environment,input);
     const version=nextSettingsVersion(old?.version??null,expected);await insertShippingProfile(q,tenantId,instanceId,version,document,ctx.tenant.principal_id);return {id:String(version)};
   },q=>shippingProfileView(q,instanceId,environment));
 }

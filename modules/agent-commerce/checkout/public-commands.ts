@@ -17,7 +17,7 @@ import {chargePaymentQueryOrderBudgets,chargeCommerceBudgets,commerceRateLimitIn
 import type {CommerceSettings} from '../operations/runtime-settings.js';
 import type {CommerceEmailOutbox} from '../operations/notifications/email-port.js';
 import type {OrderNotificationOptions} from './order-notifications.js';
-export interface HostedCheckoutOptions extends CheckoutPorts,OrderNotificationOptions {settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
+export interface HostedCheckoutOptions extends CheckoutPorts,OrderNotificationOptions {selfShipEnabled?:boolean;settings?:CommerceSettings;email?:CommerceEmailOutbox;origin:string;environment?:'sandbox'|'live'}
 export interface BrowserAccess {deviceToken?:string;sessionToken?:string;network:string;expectedBuyer?:wire.CheckoutBuyerIdentity}
 const defaults:CommerceSettings={checkoutEnabled:false,quarantine:false,providerProfiles:[]};
 export function quarantineGate(options:Pick<HostedCheckoutOptions,'settings'>) {requireCondition(!(options.settings??defaults).quarantine,503,'commerce_quarantined','商務服務暫停中。');}
