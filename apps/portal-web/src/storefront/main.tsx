@@ -1,3 +1,4 @@
+import {SelfShipCard} from './self-ship-card.js';
 import {formatOrderLifecycle} from './format.js';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -942,6 +943,7 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       </section>
 
       <MeetupCard order={order} />
+      <SelfShipCard order={order} />
 
       <section className="shop-order-section" aria-labelledby="shop-order-items-heading">
         <h2 id="shop-order-items-heading">商品</h2>

@@ -9,11 +9,11 @@ export function useRead<T>(c:Controller,key:string,path:string,schema:z.ZodType<
  return c.slot<T>(key);
 }
 export function Permission(){return <p role="alert">{NOT_ALLOWED}。{permissionHelp}</p>;}
-export function ReadStatus<T>({c,name,label,slot}:{c:Controller;name:string;label:string;slot?:ReadSlot<T>}){
+export function ReadStatus<T>({c,name,label,slot,small=false}:{c:Controller;name:string;label:string;slot?:ReadSlot<T>;small?:boolean}){
  const r=slot??c.slot(name);
  return <div className="seller-read stack">
   {r.state==='failed'?<p role="alert">{r.status===403?NOT_ALLOWED+'。'+permissionHelp:`無法取得${label}，請稍後重試。${r.error}`}{r.data&&` 保留的資料時間：${formatIsoLocal(r.time)}`}</p>:<p role="status">{r.state==='idle'||r.state==='loading'?`正在讀取${label}…`:`資料時間：${formatIsoLocal(r.time)}`}</p>}
-  <div className="actions"><button type="button" className="btn btn-ghost" disabled={r.state==='loading'} onClick={()=>void c.load(name)}>{r.state==='failed'?'重試':'更新資料'}<span className="sr-only">：{label}</span></button></div>
+  <div className="actions"><button type="button" className={'btn btn-ghost'+(small?' btn-small':'')} disabled={r.state==='loading'} onClick={()=>void c.load(name)}>{r.state==='failed'?'重試':'更新資料'}<span className="sr-only">：{label}</span></button></div>
  </div>;
 }
 export function Axis({title,time,readState,children}:{title:string;time?:string|null;readState?:ReadSlot<unknown>['state'];children:ReactNode}){return <section className="card stack seller-axis" aria-label={title}><h3 tabIndex={-1}>{title}</h3>{time&&<p className="field-hint">資料時間：{formatIsoLocal(time)}</p>}{readState==='failed'&&<p role="status">這個項目的最新狀態尚未確認；以下保留上次讀取的資料。</p>}{readState==='loading'&&<p role="status">正在確認這個項目的最新狀態…</p>}{children}</section>;}
