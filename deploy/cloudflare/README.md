@@ -167,7 +167,7 @@ transport，不會連到綠界。
 見 [EC-SPEC-04](../../docs/platform-plan/execution/commerce/EC-SPEC-04-payment.md)、
 [EC-SPEC-10 §2.2、§4.4、§6.2、§8.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md)。
 
-`FREEDOM_COMMERCE_CONTACT_RETENTION` 預設為 `off`（未設定相同），合併與部署不會啟動聯絡資料遮罩：不發現工作、不領取既有到期列、不掃描顧客。只接受精確的 `off`／`orders`／`all`，其他值以 `commerce_contact_retention_invalid` 拒絕；排程遇無效值只記固定名稱並繼續其餘工作。Ted 逐環境設定，先 local／staging 驗證，正式環境另待驗證及核准。`orders` 只執行已核准的履約登記／取消後 180 天規則；`all` 加入未成單到期後 30 天規則，仍待 Ted 確認。等待條件兩模式都適用、仍待 Ted 確認。啟用後獨立於 checkout／quarantine，改回 `off` 只停止新遮罩、不還原資料。顧客須有已遮罩的連結聯絡資料且沒有 live contact 才遮罩，沒有連結的顧客保留。public 自行寄送開啟時，runtime 與 wrangler 檢查要求 `all`（`self_ship_retention_not_ready`），因未成單郵寄地址只有 30 天規則涵蓋；local／staging 無此相依。schema 186 的 capability floor 仍保留，能力不代表啟用。
+`FREEDOM_COMMERCE_CONTACT_RETENTION` 預設為 `off`（未設定相同），合併與部署不會啟動聯絡資料遮罩：不發現工作、不領取既有到期列、不掃描顧客。只接受精確的 `off`／`orders`／`all`，其他值以 `commerce_contact_retention_invalid` 拒絕；排程遇無效值只記固定名稱並繼續其餘工作。Ted 逐環境設定，先 local／staging 驗證，正式環境另待驗證及核准。`orders` 只執行已核准的履約登記／取消後 180 天規則；`all` 加入未成單到期後 30 天規則，仍待 Ted 確認。等待條件兩模式都適用、仍待 Ted 確認。啟用後獨立於 checkout／quarantine，改回 `off` 只停止新遮罩、不還原資料。`orders` 的顧客須有已遮罩的 checkout／order 連結 contact 且沒有 live contact 才遮罩，沒有連結的顧客保留；`all` 沿用沒有 live contact 即遮罩的原規則，處理修改 Email 後已無參照的舊顧客。`orders` 的已知限制是 checkout 仍有 live、未被訂單參照的舊 contact 時，該 checkout 的顧客僅在 `all` 遮罩舊 contact 後才遮罩。public 自行寄送開啟時，runtime 與 wrangler 檢查要求 `all`（`self_ship_retention_not_ready`），因未成單郵寄地址只有 30 天規則涵蓋；local／staging 無此相依。schema 186 的 capability floor 仍保留，能力不代表啟用。
 
 ## 商務主控台與結帳開關
 

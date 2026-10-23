@@ -9,7 +9,7 @@ import {hostedPaymentHarness} from '../e2e/hosted-payment-fixture.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,beforeEach,after,test} from 'node:test';
-import {checkoutHarness,type CheckoutHarness} from './hosted-checkout-harness.js';
+import {checkoutHarness,ports,type CheckoutHarness} from './hosted-checkout-harness.js';
 import {seedSelfShipment} from './self-ship-fixture.js';
 import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
 import {Pool} from 'pg';
@@ -162,6 +162,12 @@ test('restore privacy pages erase overdue restored references before exposure an
   }finally{await f.stop();}
  });
 
+ test('customer email left without a checkout reference after revision does not survive all contacts',async()=>{
+  const f=await fixture(),id=randomUUID();
+  await x.h.pool.query("INSERT INTO commerce_customers(customer_id,tenant_id,instance_id,email_normalized) VALUES($1,$2,$3,'synthetic-old-revision@example.test')",[id,f.s.tenantId,f.s.instanceId]);
+  await run(f);const row=(await x.h.pool.query('SELECT email_normalized,redacted_at FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];assert.equal(row.email_normalized,'redacted:'+id);assert.ok(row.redacted_at);
+ });
+
  test('customer linked only through a retained order survives checkout revision until its contact is masked',async()=>{
   const f=await fixture(),id=(await x.h.pool.query('SELECT customer_id FROM commerce_checkout_orders WHERE order_id=$1',[f.orderId])).rows[0].customer_id,replacement=randomUUID();
   await x.tx(async q=>{
@@ -207,11 +213,13 @@ test('orders masks due order contacts while preserving abandoned contacts and cu
   assert.equal((await contact(row.current_contact_id)).redacted_at,null);
   assert.equal((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[row.customer_id])).rows[0].redacted_at,null);
  }
+ const untouched=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[orphan])).rows[0];
+ assert.deepEqual(untouched,{redacted_at:null,email_normalized:'synthetic-no-contact@example.test'});
  await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention'",[now]);
  assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
  for(const row of [source,abandoned]){assert.ok((await contact(row.current_contact_id)).redacted_at);assert.ok((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[row.customer_id])).rows[0].redacted_at);}
- const untouched=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[orphan])).rows[0];
- assert.deepEqual(untouched,{redacted_at:null,email_normalized:'synthetic-no-contact@example.test'});
+ assert.ok((await x.h.pool.query('SELECT redacted_at FROM commerce_customers WHERE customer_id=$1',[orphan])).rows[0].redacted_at);
+
 });
 
 /** A second complete self-shipped order deliberately reuses the first contact.
@@ -344,4 +352,35 @@ test('restore orders mode masks due orders and preserves expired unreferenced co
  const page=await runRestoredContactRetention(x.runtime,'orders',{now:()=>days(f.at,181)});
  assert.equal(page.status,'scan_complete');assert.equal(page.deploymentReady,false);assert.equal(page.contacts,1);
  assert.ok((await contact(f.contactId)).redacted_at);assert.equal((await contact(source.current_contact_id)).redacted_at,null);
+});
+
+test('real email revision retains both customers in orders mode until all masks the old contact',async()=>{
+ const s=await x.store(),emailA='synthetic-revision-a@example.test',emailB='synthetic-revision-b@example.test';
+ const first=await x.frozen(s,1,{contact:{name:'合成買家甲',email:emailA,phone:'0000000000'}});
+ const a=(await x.h.pool.query('SELECT customer_id,current_contact_id,expires_at FROM commerce_checkouts WHERE checkout_id=$1',[first.checkout_id])).rows[0];
+ const revised=await x.tx(q=>freezeCheckout(q,s,{...x.input(s.product.sku,1),contact:{name:'合成買家乙',email:emailB,phone:'0000000000'},checkoutId:first.checkout_id,idempotencyKey:randomUUID()},ports));
+ assert.equal(revised.checkout_id,first.checkout_id);
+ const b=(await x.h.pool.query('SELECT customer_id,current_contact_id FROM commerce_checkouts WHERE checkout_id=$1',[revised.checkout_id])).rows[0];
+ assert.notEqual(a.customer_id,b.customer_id);assert.notEqual(a.current_contact_id,b.current_contact_id);
+ assert.equal((await x.h.pool.query('SELECT count(*)::int n FROM commerce_checkout_contacts WHERE checkout_id=$1',[first.checkout_id])).rows[0].n,2);
+ const order=await x.place(s,revised);await x.tx(q=>cancelUnpaidOrder(q,s,order.order_id,'buyer','buyer_cancelled'));
+ const placed=(await x.h.pool.query('SELECT contact_id,cancelled_at FROM commerce_checkout_orders WHERE order_id=$1',[order.order_id])).rows[0];
+ assert.equal(placed.contact_id,b.current_contact_id);
+ const now=new Date(Math.max(days(placed.cancelled_at,181).getTime(),days(a.expires_at,31).getTime()));
+ assert.ok(now>days(placed.cancelled_at,180));assert.ok(now>days(a.expires_at,30));
+ assert.equal((await runContactRetentionWork(x.runtime,'orders',{now:()=>now})).completed,1);
+ assert.ok((await contact(b.current_contact_id)).redacted_at);
+ assert.equal((await contact(a.current_contact_id)).redacted_at,null);assert.equal((await contact(a.current_contact_id)).contact_email,emailA);
+ // The older live contact still belongs to B's revised checkout and protects B.
+ for(const [id,email] of [[a.customer_id,emailA],[b.customer_id,emailB]]){
+  const customer=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];
+  assert.deepEqual(customer,{redacted_at:null,email_normalized:email});
+ }
+ await x.h.pool.query("UPDATE commerce_due_work SET due_at=$1 WHERE kind='checkout_contact_retention' AND instance_id=$2",[now,s.instanceId]);
+ assert.equal((await runContactRetentionWork(x.runtime,'all',{now:()=>now})).completed,1);
+ assert.ok((await contact(a.current_contact_id)).redacted_at);assert.equal((await contact(a.current_contact_id)).contact_email,null);
+ for(const id of [a.customer_id,b.customer_id]){
+  const customer=(await x.h.pool.query('SELECT redacted_at,email_normalized FROM commerce_customers WHERE customer_id=$1',[id])).rows[0];
+  assert.ok(customer.redacted_at);assert.equal(customer.email_normalized,'redacted:'+id);
+ }
 });

@@ -63,20 +63,22 @@ async function redactContactBatch(q:PoolClient,tenantId:string,instanceId:string
       delivery=NULL,invoice=NULL,contact_salt=NULL,redacted_at=$2 WHERE contact_id=ANY($1::uuid[]) AND redacted_at IS NULL`,[ids,now]);
   }
   // The checkout's customer can differ from the placed order's retained customer.
-  // Also protect live contacts with the same normalized email after a revision.
+  // All-mode also sweeps former email customers after checkout revision erased
+  // their last contact link; orders-mode requires an already-redacted linked contact.
+  // Both modes protect live contacts with the same normalized email after a revision.
   const customers=await q.query(`WITH candidates AS (
     SELECT u.customer_id FROM commerce_customers u WHERE u.tenant_id=$1 AND u.instance_id=$2 AND u.redacted_at IS NULL
-    AND EXISTS(SELECT 1 FROM commerce_checkout_contacts a JOIN commerce_checkouts c USING(checkout_id,tenant_id,instance_id)
+    AND ($5::text='all' OR EXISTS(SELECT 1 FROM commerce_checkout_contacts a JOIN commerce_checkouts c USING(checkout_id,tenant_id,instance_id)
       WHERE a.tenant_id=u.tenant_id AND a.instance_id=u.instance_id AND a.redacted_at IS NOT NULL
       AND (c.customer_id=u.customer_id
-        OR EXISTS(SELECT 1 FROM commerce_checkout_orders o WHERE o.contact_id=a.contact_id AND o.customer_id=u.customer_id)))
+        OR EXISTS(SELECT 1 FROM commerce_checkout_orders o WHERE o.contact_id=a.contact_id AND o.customer_id=u.customer_id))))
     AND NOT EXISTS(SELECT 1 FROM commerce_checkout_contacts a JOIN commerce_checkouts c USING(checkout_id,tenant_id,instance_id)
       WHERE a.tenant_id=u.tenant_id AND a.instance_id=u.instance_id AND a.redacted_at IS NULL
       AND (c.customer_id=u.customer_id OR lower(btrim(a.contact_email))=u.email_normalized
         OR EXISTS(SELECT 1 FROM commerce_checkout_orders o WHERE o.contact_id=a.contact_id AND o.customer_id=u.customer_id)))
     ORDER BY u.customer_id LIMIT $4 FOR UPDATE OF u SKIP LOCKED)
     UPDATE commerce_customers u SET email_normalized='redacted:'||u.customer_id::text,email_verified_at=NULL,redacted_at=$3
-    FROM candidates x WHERE u.customer_id=x.customer_id`,[tenantId,instanceId,now,limit]);
+    FROM candidates x WHERE u.customer_id=x.customer_id`,[tenantId,instanceId,now,limit,mode]);
   if(options.signal?.aborted)throw Error('contact_retention_aborted');
   const remaining=(await q.query(`SELECT EXISTS(SELECT 1 FROM commerce_checkout_contacts a
     JOIN commerce_checkouts c USING(checkout_id,tenant_id,instance_id)

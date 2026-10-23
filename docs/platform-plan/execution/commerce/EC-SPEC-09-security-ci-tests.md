@@ -159,7 +159,7 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 **已決定（DC12）：2026-10-22 20:21Z Ted 核准「照B開工ok」。** 訂單的聯絡資料（含收件地址）在履約登記（面交完成或登記自行寄送）後 180 天遮蔽；取消的訂單從取消時起算 180 天。履約只作保存起算，**不是結單，不寫 `closed`，也不是退款**。
 
-依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；顧客至少有一筆經 checkout 或 order 連結的聯絡資料已遮蔽，而且沒有任何仍有效的聯絡資料，才跟著遮蔽。沒有連結聯絡資料的顧客不遮蔽。
+依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；`orders` 模式的顧客至少有一筆經 checkout 或 order 連結的聯絡資料已遮蔽，而且沒有任何 live contact，才跟著遮蔽；沒有連結聯絡資料的顧客保留。`all` 模式沿用原規則：只要沒有 live contact 連結到這位顧客就遮蔽，包含修改 Email 後只靠舊 contact 的 Email 連結、在該 contact 遮蔽後不再有參照的舊顧客。兩模式都以 checkout／order 的顧客連結與尚未遮蔽的正規化 Email 判定 live contact。`orders` 的已知限制：checkout 若仍有 live、沒有訂單參照的舊 contact，即使訂單的目前 contact 已遮蔽，該 checkout 的顧客仍受保護，只有 `all` 遮蔽舊 contact 後才會跟著遮蔽。
 
 **待 Ted 確認：** 第一列「沒有成立訂單的結帳聯絡資料，checkout 到期後 30 天遮蔽」沿用本節原本的提案，已一併實作，但 Ted 沒有對這一列單獨表態。合併與部署都不會開始執行；`FREEDOM_COMMERCE_CONTACT_RETENTION` 未設定或為 `off` 時預設停止，Ted 依環境設定值。`orders` 只啟用已核准的 180 天訂單規則；`all` 才加入未成單的 30 天規則，必須等 Ted 確認這一列後才能設定。先 local 與 staging 驗證，正式環境仍需驗證完成及 Ted 核准。下面規則中的「等待條件」在 `orders` 與 `all` 兩種模式都適用，沿用 DC12 原本的提案，同樣待 Ted 確認。表中其他列仍是提案；人工個資請求的負責人與備份副本的保存窗口也待 Ted 決定。
 
@@ -172,7 +172,7 @@ guest、provider 通知與排程都沒有 principal。規則：
 | 選店 session 的門市暫存 | 選店 session | 到期後 1 天 | 刪除 |
 | 訂單對話 | `commerce_support_messages` | 同訂單的聯絡資料 | 內文改成「（已依保存期限移除）」，保留作者種類與時間 |
 | 發票的買家識別 | 發票文件 | 同訂單的聯絡資料 | 載具號碼遮罩；統編、捐贈碼、發票號碼與金額保留（帳務資料，不是個人資料） |
-| 顧客記錄 | `commerce_customers` | 至少一筆 checkout／order 連結的聯絡資料已遮罩，且沒有 live contact（含未成單 checkout） | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
+| 顧客記錄 | `commerce_customers` | `orders`：至少一筆 checkout／order 連結的 contact 已遮罩，且沒有 live contact；`all`：沒有 live contact 即可，包含修改 Email 後已無參照的舊顧客。checkout 仍有 live、未被訂單參照的舊 contact 時，該顧客僅在 `all` 遮罩舊 contact 後才遮罩 | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
 | 訂單、行項、terms、付款、退款、履約、包裹、發票號碼與金額、供貨帳、provider 事件 | 各領域表 | 隨商店保留（交易與帳務紀錄，不含個資） | 不刪；商店遷出時依 EC-SPEC-08 §5.6 |
 | 卡號片段、授權碼、通知與查詢回應裡的收件人與寄件人欄位、標籤檔 | 不保存 | — | — |
 | 收件資料讀取與列印的紀錄（誰、哪一筆、用途，不含內容） | receipt | 1 年 | 刪除 |
