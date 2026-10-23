@@ -246,7 +246,7 @@ test('retraction during a receipt lookup still refreshes older content and its q
   await db.query('UPDATE member_direct_messages SET retracted_at=clock_timestamp() WHERE message_id=$1',[original]);
   released.resolve();await finished.promise;await expect(reread(page)).toHaveAttribute('aria-disabled','false');
   await reread(page).click();
-  await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('這則訊息已收回。');
+  await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('你已收回這則訊息。');
   await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText('合成：引用仍保留');
   await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);await allMessages(page,ids);
 });
