@@ -641,7 +641,8 @@ test('paid cancellation releases stock, protects refund capability and records a
   await assert.rejects(record(owner,randomUUID(),'2',{...refund,refunded_on:'2099-12-31'}),problem(422,'refund_date_invalid'));
   const refundOnly=await operator(s,['store:refund']);
   const refundKey=randomUUID(),recorded=SellerCheckoutOrderSchema.parse(await record(refundOnly.actor,refundKey));
-  assert.equal(recorded.paid_cancellation?.refund_state,'recorded');assert.equal(recorded.payment_state,'refunded');assert.equal(recorded.paid_cancellation?.amount_minor,order.terms.total_minor);assert.equal(recorded.payment_detail?.applications[0].refunded_minor,order.terms.total_minor);
+  assert.equal(recorded.paid_cancellation?.refund_state,'recorded');assert.equal(recorded.payment_state,'refunded');assert.equal(recorded.paid_cancellation?.amount_minor,order.terms.total_minor);assert.equal(recorded.payment_detail,null);
+  const finance=await readSellerCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id);assert.equal(finance.payment_detail?.applications[0].refunded_minor,order.terms.total_minor);
   assert.deepEqual(await record(refundOnly.actor,refundKey),recorded);await assert.rejects(record(),problem(409,'refund_not_available'));
   await assert.rejects(x.h.pool.query("UPDATE commerce_paid_cancellations SET refund_method='cash' WHERE order_id=$1",[order.order_id]),(e:unknown)=>(e as {code:string}).code==='23514');
   const buyer=await x.tx(async q=>{await bindStore(q,s.tenantId);return publicOrder(q,{tenantId:s.tenantId,instanceId:s.instanceId,projection:{slug:s.slug,name:'合成商店'}},order.order_id);});
