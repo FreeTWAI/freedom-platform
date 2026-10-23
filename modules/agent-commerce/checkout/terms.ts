@@ -121,7 +121,7 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
     const meetup=group.method_ref==='meetup',manual=group.method_ref==='self_ship';
     if((group.meetup!==null)!==meetup||(group.logistics===null)!==(meetup||manual)||(group.self_ship!==undefined)!==manual)invalidShippingQuote();
     if(manual&&(shipping.groups.length!==1||group.parcels.length!==1||group.attribute_versions.length!==0||group.outlying_surcharge_per_parcel_minor!==0||group.amount_minor%100!==0||group.amount_minor>1_000_000))invalidShippingQuote();
-    if(group.fulfilment_mode==='drop_ship'&&(!manual||!group.drop_ship||group.self_ship?.handling_days!==group.drop_ship.promise_working_days))invalidShippingQuote();
+    if(group.fulfilment_mode==='drop_ship'&&manual&&(!group.drop_ship||group.self_ship?.handling_days!==group.drop_ship.promise_working_days))invalidShippingQuote();
     if(group.fulfilment_mode==='self'&&group.drop_ship!==undefined)invalidShippingQuote();
     if((group.agreement===null)!==(group.fulfilment_mode==='self'))invalidShippingQuote();
     if(meetup&&(group.fee_per_parcel_minor!==0||group.outlying_surcharge_per_parcel_minor!==0||group.parcels.length!==1||group.attribute_versions.length!==0))invalidShippingQuote();
@@ -133,7 +133,7 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
         const line=expected.get(part.sku);
         if(!line||line.supplier_shop_id!==group.supplier_shop_id)invalidShippingQuote();
         if(group.fulfilment_mode==='self'&&!line.own)invalidShippingQuote();
-        if(group.fulfilment_mode==='drop_ship'){const a=line.drop_ship;if(line.own||!a||a.agreement_id!==group.agreement?.agreement_id||a.version!==group.agreement.version||a.executor_shop_id!==group.supplier_shop_id||a.fee_per_order_minor!==group.drop_ship?.fee_per_order_minor||a.terms_sha256!==group.drop_ship.terms_sha256)invalidShippingQuote();}
+        if(group.fulfilment_mode==='drop_ship'&&manual){const a=line.drop_ship;if(line.own||!a||a.agreement_id!==group.agreement?.agreement_id||a.version!==group.agreement.version||a.executor_shop_id!==group.supplier_shop_id||a.fee_per_order_minor!==group.drop_ship?.fee_per_order_minor||a.terms_sha256!==group.drop_ship.terms_sha256)invalidShippingQuote();}
         const partValue=line.unit_price_minor*part.quantity;
         if(!Number.isSafeInteger(partValue))invalidShippingQuote();
         declared+=partValue;

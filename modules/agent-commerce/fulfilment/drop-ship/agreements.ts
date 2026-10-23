@@ -1,3 +1,4 @@
+import type {OrderNotificationOptions} from '../../checkout/order-notifications.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import * as wire from '../../../../contracts/guild-launchpad/v1/hosted-drop-ship.js';
@@ -8,7 +9,7 @@ import {requireStoreInstance} from '../../hosted/capabilities.js';
 import {shippingSettingsCommand,shippingSettingsRead,nextSettingsVersion,type SettingsActor,type ShippingSettingsContext} from '../settings/command.js';
 
 export type AgreementSide='store'|'supplier';
-export interface DropShipAgreementOptions {dropShipEnabled?:boolean}
+export interface DropShipAgreementOptions extends OrderNotificationOptions {dropShipEnabled?:boolean}
 const sideSQL=(side:AgreementSide)=>side==='store'?'a.tenant_id=$1 AND a.instance_id=$2':'a.supplier_tenant_id=$1 AND a.supplier_instance_id=$2';
 export async function agreementView(q:PoolClient,context:ShippingSettingsContext,id:string,side:AgreementSide) {
   const a=(await q.query(`SELECT a.*,a.version::text AS version,s.name AS store_name,p.name AS supplier_name
@@ -17,7 +18,7 @@ export async function agreementView(q:PoolClient,context:ShippingSettingsContext
   requireCondition(a,404,'not_found','找不到這份代出貨同意。');
   const items=(await q.query(`SELECT ai.selection_id,ai.item_id,i.title FROM commerce_fulfilment_agreement_items ai JOIN commerce_items i USING(item_id) WHERE ai.agreement_id=$1 ORDER BY ai.selection_id`,[id])).rows;
   const {item_count,...allowed}=a;
-  return wire.DropShipAgreementSchema.parse({...allowed,proposed_at:a.proposed_at.toISOString(),decided_at:a.decided_at?.toISOString()??null,revoked_at:a.revoked_at?.toISOString()??null,items});
+  return wire.DropShipAgreementSchema.parse({...allowed,fee_per_order_minor:Number(a.fee_per_order_minor),proposed_at:a.proposed_at.toISOString(),decided_at:a.decided_at?.toISOString()??null,revoked_at:a.revoked_at?.toISOString()??null,items});
 }
 export async function listDropShipAgreements(pool:Pool,actor:SettingsActor,tenantId:string,instanceId:string,side:AgreementSide) {
   return shippingSettingsRead(pool,actor,tenantId,instanceId,true,async(q,c)=>{
@@ -52,6 +53,7 @@ export async function proposeDropShipAgreement(pool:Pool,actor:SettingsActor,ten
     await q.query(`INSERT INTO commerce_fulfilment_agreements(agreement_id,tenant_id,instance_id,store_shop_id,supplier_tenant_id,supplier_instance_id,supplier_shop_id,version,fee_per_order_minor,promise_working_days,item_count,terms_sha256,proposed_by_principal_id)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[id,tenantId,instanceId,c.profile.storefront_shop_id,supplier.tenant_id,supplier.instance_id,supplier.supply_shop_id,version,input.fee_per_order_minor,input.promise_working_days,items.length,digest,c.tenant.principal_id]);
     for(const item of items)await q.query(`INSERT INTO commerce_fulfilment_agreement_items(agreement_id,tenant_id,instance_id,supplier_tenant_id,selection_id,item_id,state) VALUES($1,$2,$3,$4,$5,$6,'proposed')`,[id,tenantId,instanceId,supplier.tenant_id,item.selection_id,item.item_id]);
+    await options.orderNotifications?.agreement?.(q,{agreementId:id,event:'proposed'});
     return {id};
   },(q,c,id)=>agreementView(q,c,id,'store'));
 }
@@ -73,6 +75,7 @@ export async function decideDropShipAgreement(pool:Pool,actor:SettingsActor,tena
     }
     if(action==='revoke')await q.query(`UPDATE commerce_fulfilment_agreements SET state='revoked',revoked_by_principal_id=$2,revoked_at=clock_timestamp(),revoke_reason=$3 WHERE agreement_id=$1`,[id,c.tenant.principal_id,'reason' in input?input.reason??null:null]);
     else await q.query(`UPDATE commerce_fulfilment_agreements SET state=$2,decided_by_principal_id=$3,decided_at=clock_timestamp(),signed_digest=$4 WHERE agreement_id=$1`,[id,{accept:'accepted',decline:'declined',withdraw:'withdrawn'}[action],c.tenant.principal_id,action==='accept'?a.terms_sha256:null]);
+    if(action!=='withdraw')await options.orderNotifications?.agreement?.(q,{agreementId:id,event:action==='accept'?'accepted':action==='decline'?'declined':'revoked'});
     return {id};
   },(q,c,ref)=>agreementView(q,c,ref,side));
 }

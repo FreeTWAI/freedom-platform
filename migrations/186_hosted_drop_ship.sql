@@ -218,3 +218,11 @@ ALTER TABLE commerce_exception_cases DROP CONSTRAINT commerce_exception_cases_ki
 ALTER TABLE commerce_exception_cases DROP CONSTRAINT commerce_exception_cases_subject_kind_check,
   ADD CONSTRAINT commerce_exception_cases_subject_kind_check CHECK(subject_kind IN ('payment_attempt','payment_event','offline_payment','order'));
 ALTER TABLE commerce_exception_cases ADD CONSTRAINT commerce_exception_fulfiller_subject CHECK(kind<>'fulfiller_unable' OR (subject_kind='order' AND order_id=subject_id));
+
+-- The existing exception owns this report; there is no separate recipient or fulfilment projection.
+ALTER TABLE commerce_exception_cases ADD COLUMN fulfiller_reason text,
+  ADD COLUMN fulfiller_note text,
+  ADD CONSTRAINT commerce_exception_fulfiller_detail CHECK(
+    (kind='fulfiller_unable' AND fulfiller_reason IS NOT NULL AND fulfiller_reason IN ('out_of_stock','cannot_ship','other')
+      AND (fulfiller_note IS NULL OR (char_length(fulfiller_note)<=200 AND fulfiller_note !~ '[[:cntrl:]<>]')))
+    OR (kind<>'fulfiller_unable' AND fulfiller_reason IS NULL AND fulfiller_note IS NULL));
