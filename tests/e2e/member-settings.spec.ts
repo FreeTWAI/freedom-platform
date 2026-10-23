@@ -607,3 +607,52 @@ test('a slow re-read that started before a confirmed send or read never overwrit
   await expect(peerA).not.toContainText('則未讀');await expect(page.getByRole('tab',{name:/私人訊息/})).toContainText('沒有未讀');
   await expect(box).toHaveValue('送出後的新草稿');expect(reads.length).toBe(1);
 });
+
+test.describe('memoized private history',()=>{
+  test.use({timezoneId:'UTC'});
+for(const count of [200,1000])test(`private draft typing does not reformat ${count} loaded history rows`,async({page})=>{
+  await page.clock.setFixedTime(new Date('2026-10-23T12:00:00Z'));
+  const server=await direct(page);
+  server.store[peerA]=Array.from({length:count},(_,i)=>({message_id:`memo-dm-${i}`,sender_ref:i%2?me:peerA,recipient_ref:i%2?peerA:me,body:`歷史訊息 ${i}`,created_at:new Date(Date.UTC(2026,9,23,9,0,count-i)).toISOString(),read_at:i===1?null:'2026-10-23T11:00:00Z'}));
+  await login(page,'#messages');
+  await visibility(page,'hidden'); // Isolate draft work from the independently tested poll/read lane.
+  const panel=page.locator('#messages-panel-direct');
+  await panel.getByRole('list',{name:'對話列表'}).getByRole('button',{name:/合成夥伴甲/}).click();
+  const rows=panel.locator('.messages-bubbles>li'),log=panel.getByRole('log'),input=panel.getByLabel('寫給 合成夥伴甲 的訊息');
+  for(let loaded=20;loaded<count;loaded+=20){await expect(rows).toHaveCount(loaded);await panel.getByRole('button',{name:'載入較早訊息',exact:true}).click();}
+  await expect(rows).toHaveCount(count);
+  const newest=rows.last(),time=newest.locator('time');
+  const before=await time.innerText();
+  // The newest date also appears in the conversation picker; measure only history-only dates.
+  await page.evaluate(values=>{
+    const watched=new Set(values.map(value=>new Date(value).getTime())),original=Date.prototype.toLocaleString;
+    const state={calls:0};Object.assign(window,{__chatHistoryFormats:state});
+    Date.prototype.toLocaleString=function(...args:Parameters<typeof original>){if(watched.has(this.getTime()))state.calls++;return original.apply(this,args);};
+  },server.store[peerA].slice(1).map(message=>message.created_at));
+  await log.evaluate(node=>{node.scrollTop=120;});
+  const top=await log.evaluate(node=>node.scrollTop);
+  await input.fill('未送出的草稿');await input.pressSequentially('abc');
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBe(0);
+  expect(await log.evaluate(node=>node.scrollTop)).toBe(top);expect(server.sends).toHaveLength(0);
+  await input.dispatchEvent('compositionstart');await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true,keyCode:229});await input.dispatchEvent('compositionend');
+  expect(server.sends).toHaveLength(0);await expect(input).toHaveValue('未送出的草稿abc');
+  await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+  await input.fill('跨日草稿');await expect(time).not.toHaveText(before);
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBeGreaterThanOrEqual((count-1)*2);
+  await expect(time).toHaveAttribute('datetime',server.store[peerA][0].created_at);
+  if(count===200){
+    // Explicit refresh must still invalidate the cached receipt, content and retraction rows.
+    const receipt=server.store[peerA][1];receipt.read_at='2026-10-24T12:00:00Z';
+    Object.assign(server.store[peerA][2],{body:'',retracted_at:'2026-10-24T12:00:00Z'});
+    server.store[peerA][3].body='伺服器更新的內容';
+    await panel.getByRole('button',{name:'重新讀取訊息',exact:true}).click();
+    await expect(panel.locator(`[data-message-id="${receipt.message_id}"]`)).toContainText('對方已讀');
+    await expect(panel.locator('[data-message-id="memo-dm-2"]')).toContainText('訊息已收回');
+    await expect(panel.locator('[data-message-id="memo-dm-3"]')).toContainText('伺服器更新的內容');
+    await expect(input).toHaveValue('跨日草稿');
+    await newest.getByRole('button',{name:'回覆合成夥伴甲的訊息',exact:true}).click();
+    await expect(panel.locator('.chat-reply-draft')).toContainText('歷史訊息 0');await expect(input).toBeFocused();
+  }
+});
+
+});
