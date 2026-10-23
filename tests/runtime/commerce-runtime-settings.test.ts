@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {Pool} from 'pg';
-import {readCommerceSettings,readNodeCommerceSettings,readCommerceSelfShipEnabled} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readNodeCommerceSettings,readCommerceSelfShipEnabled,readCommerceContactRetention} from '../../modules/agent-commerce/operations/runtime-settings.js';
 import {ReadinessError} from '../../apps/platform-api/src/readiness.js';
 import {readWorkerConfig,workerRuntime,type WorkerEnv} from '../../apps/platform-api/src/worker.js';
 import {nodeRuntime,createApp} from '../../apps/platform-api/src/app.js';
@@ -91,13 +91,35 @@ test('self ship defaults off and Node/Worker/site agree after retention installa
   for(const invalid of ['TRUE','',' true','true ','synthetic-secret'])assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:invalid}),{message:'commerce_self_ship_flag_invalid'});
   assert.throws(()=>readCommerceSelfShipEnabled({FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true'}),{message:'commerce_self_ship_console_required'});
   for(const freedomEnv of ['local','staging','public'] as const){
-    const bindings={...env(),FREEDOM_ENV:freedomEnv,FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:freedomEnv==='local'?'http://127.0.0.1:4310':'https://staging.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+    const bindings={...env(),FREEDOM_ENV:freedomEnv,FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:freedomEnv==='local'?'http://127.0.0.1:4310':'https://staging.example.test',FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
     const settings=readNodeCommerceSettings(bindings),config=readWorkerConfig(bindings),worker=workerRuntime(bindings,config);
     assert.equal(worker.commerceSelfShipEnabled,true);assert.equal(settings.checkoutEnabled,false);
     const pool={query(){throw new Error('site must not query SQL');}} as unknown as Pool;
     for(const quarantine of [false,true]){const app=createApp(pool,config.origin,freedomEnv,{guildLaunchpadEnabled:true,commerceSettings:{...settings,quarantine},commerceSelfShipEnabled:true});const site=await (await app.request(config.origin+'/api/v1/site')).json();assert.equal(site.commerce_self_ship_enabled,!quarantine);}
   }
-  const publicBindings={...env(),FREEDOM_ENV:'public',FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:'https://synthetic.example.test',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+  const publicBindings={...env(),FREEDOM_ENV:'public',FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:'https://synthetic.example.test',FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
   assert.equal(readNodeCommerceSettings(publicBindings).consoleEnabled,true);assert.equal(workerRuntime(publicBindings,readWorkerConfig(publicBindings)).commerceSelfShipEnabled,true);
   assert.equal(nodeRuntime('public','https://synthetic.example.test',{commerceSelfShipEnabled:true}).commerceSelfShipEnabled,true);
+});
+
+test('contact retention defaults off and uses exact independent modes in Node and Worker readiness',()=>{
+ for(const value of [undefined,'off','orders','all'] as const){
+  const bindings={...env(),FREEDOM_COMMERCE_CONTACT_RETENTION:value,FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'};
+  assert.equal(readCommerceContactRetention(bindings),value??'off');
+  assert.doesNotThrow(()=>readNodeCommerceSettings(bindings));assert.doesNotThrow(()=>readWorkerConfig(bindings));
+ }
+ for(const value of ['',true,'true','ALL',' orders','all ','synthetic-secret'] as const){
+  const bindings={...env(),FREEDOM_COMMERCE_CONTACT_RETENTION:value} as WorkerEnv;
+  for(const read of [()=>readCommerceContactRetention(bindings),()=>readCommerceSettings(bindings),()=>readNodeCommerceSettings(bindings),()=>readWorkerConfig(bindings)])
+   assert.throws(read,{name:'ReadinessError',message:'commerce_contact_retention_invalid'});
+ }
+});
+test('public self ship requires all retention; local and staging accept every valid mode',()=>{
+ for(const freedomEnv of ['local','staging','public'])for(const mode of [undefined,'off','orders','all']){
+  const bindings={FREEDOM_ENV:freedomEnv,FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_COMMERCE_CONTACT_RETENTION:mode};
+  if(freedomEnv==='public'&&mode!=='all'){
+   for(const read of [()=>readCommerceSelfShipEnabled(bindings),()=>readNodeCommerceSettings(bindings),()=>readWorkerConfig({...env(),...bindings,FREEDOM_RELEASE_SHA:'a'.repeat(40),APP_ORIGIN:'https://synthetic.example.test'})])
+    assert.throws(read,{name:'ReadinessError',message:'self_ship_retention_not_ready'});
+  }else assert.equal(readCommerceSelfShipEnabled(bindings),true);
+ }
 });

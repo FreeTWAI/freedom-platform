@@ -14,7 +14,7 @@ import {createEcpayPaymentGateway} from '../../../modules/agent-commerce/payment
 import {CommerceCredentialKeyring} from '../../../modules/agent-commerce/payments/credentials.js';
 import {createStoreAdmissionPort,providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
 import {createShippingQuotePort} from '../../../modules/agent-commerce/fulfilment/quote/index.js';
-import {readCommerceSettings,readCommerceOrderNotificationsEnabled,readCommerceSelfShipEnabled,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readCommerceOrderNotificationsEnabled,readCommerceSelfShipEnabled,readCommerceContactRetention,type CommerceContactRetention,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
 import {sweepCommerceOutboundEmails} from '../../../modules/agent-commerce/operations/notifications/delivery.js';
 import {createWorkerEmailSender} from '../../../modules/agent-commerce/operations/notifications/email-port.js';
 import {commerceEmailOutbox} from '../../../modules/agent-commerce/operations/notifications/outbox.js';
@@ -76,6 +76,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   COMMERCE_CREDENTIAL_KEYS?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
+  FREEDOM_COMMERCE_CONTACT_RETENTION?:string;
   FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED?:string;
   FREEDOM_COMMERCE_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_EMAIL_ENABLED?:string;
@@ -554,9 +555,13 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
           }
-          try{await (deps.commerceRetention??runContactRetentionWork)(pool);}catch{console.error('commerce_contact_retention_failed');}
+          let contactRetention:CommerceContactRetention|undefined;
+          try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}
+          if(contactRetention==='orders'||contactRetention==='all'){
+            try{await (deps.commerceRetention??runContactRetentionWork)(pool,contactRetention);}catch{console.error('commerce_contact_retention_failed');}
+          }
           let commerce:CommerceSettings|undefined;
-          try{commerce=readCommerceSettings(env);}catch{console.error('commerce_settings_invalid');}
+          try{commerce=readCommerceSettings(env);}catch{if(contactRetention!==undefined)console.error('commerce_settings_invalid');}
           if(commerce&&!commerce.quarantine){
             const email=commerce.emailEnabled?commerceEmailOutbox:undefined;
             try{const result=await (deps.commerceApplyDeferred??applyDeferredPaymentEvents)(pool,{limit:200,...(email?{email}:{})});if(result.failed>0)console.error('commerce_payment_deferred_partial',result);}catch{console.error('commerce_payment_deferred_failed');}

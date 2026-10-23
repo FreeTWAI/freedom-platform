@@ -22,7 +22,7 @@ test('quarantine skips before claiming and a missing keyring claims only offline
     if(sql.startsWith('SELECT w.')){const filter=sql.match(/\bkind\s*=\s*ANY\(\$(\d+)::text\[\]\)/);kinds=values[Number(filter![1])-1];return {rows:[]};}
     return {rows:[]};
   }}),query:async()=>({rowCount:0})} as unknown as Pool;
-  assert.equal((await runDueCommerceWork(pool,{transport,freedomEnv:'local',keyring:null})).claimed,0);
+  assert.equal((await runDueCommerceWork(pool,{transport,freedomEnv:'local',keyring:null,contactRetention:'all'})).claimed,0);
   assert.deepEqual(kinds,['offline_payment_window_end','checkout_contact_retention']);
 });
 test('claim filters exactly the handler kinds and leases only the returned rows',async()=>{
@@ -40,7 +40,7 @@ test('claim filters exactly the handler kinds and leases only the returned rows'
     }
     return {rows:[]};
   }}),query:async()=>({rowCount:1})} as unknown as Pool;
-  const result=await runDueCommerceWork(pool,{transport,keyring:ring(),freedomEnv:'local'},{maxExternalCalls:0});
+  const result=await runDueCommerceWork(pool,{transport,keyring:ring(),freedomEnv:'local',contactRetention:'all'},{maxExternalCalls:0});
   assert.equal(claims,1);assert.equal(leases,1);assert.equal(result.claimed,2);assert.equal(result.released,2);assert.equal(result.unknown,0);
 });
 test('Node after-response work runs detached and logs only a fixed error',async()=>{

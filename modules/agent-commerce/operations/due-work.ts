@@ -1,4 +1,4 @@
-import {retainCheckoutContacts} from './contact-retention.js';
+import {retainCheckoutContacts,type ContactRetentionMode} from './contact-retention.js';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import type {Pool,PoolClient} from 'pg';
 import {isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
@@ -40,6 +40,8 @@ export interface DueCommerceWorkDependencies extends OrderNotificationOptions {
   emailSender?:CommerceEmailSender;
   journal?:EffectJournalPort;
   origin?:string;
+  /** Omitted by ordinary business dispatchers: no retention rows are claimed. */
+  contactRetention?:ContactRetentionMode;
 }
 export interface DueCommerceWorkOptions {limit?:number;maxExternalCalls?:number;deadlineMs?:number;targets?:readonly string[];signal?:AbortSignal;trigger?:PaymentQueryTrigger;kinds?:readonly CommerceDueWorkKind[]}
 const afterResponseSignal=new AsyncLocalStorage<AbortSignal>();
@@ -75,7 +77,8 @@ export async function runDueCommerceWork(pool:Pool,deps:DueCommerceWorkDependenc
     const emailDeps={sender:deps.emailSender,journal:deps.journal,origin:deps.origin,now:deps.now,quarantine:deps.quarantine,signal};
     handlers.email=row=>deliverCommerceEmail(pool,row.target_id,emailDeps,{dueWorkId:row.due_work_id,leaseToken:row.token,tenantId:row.tenant_id});
   }
-  handlers.checkout_contact_retention=row=>retainCheckoutContacts(pool,row,{now:deps.now,signal});
+  const retentionMode=deps.contactRetention;
+  if(retentionMode==='orders'||retentionMode==='all')handlers.checkout_contact_retention=row=>retainCheckoutContacts(pool,row,retentionMode,{now:deps.now,signal});
   const kinds=Object.keys(handlers).filter(kind=>!options.kinds||options.kinds.includes(kind as CommerceDueWorkKind));
   if(!kinds.length||signal?.aborted||deadlineMs===0)return counts;
   const rows=await isolatedTransaction(pool,async q=>{

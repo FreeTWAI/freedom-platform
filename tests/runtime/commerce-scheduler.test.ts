@@ -9,7 +9,7 @@ for(const settings of [{},{FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false'},{FREEDOM_C
   const pool={connect:async()=>({on(){},removeListener(){},release(){},query:async()=>({rows:[]})}),end:async()=>{calls.push('end');}} as unknown as Pool;
   try {
     const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('commerce');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
-    await handler.scheduled({},settings as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);
+    await handler.scheduled({},{...settings,FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);
     const skipped='FREEDOM_COMMERCE_QUARANTINE' in settings;
     assert.deepEqual(calls,skipped?['retention','github','end']:['retention','payments','commerce','github','end']);assert.deepEqual(logs,settings.FREEDOM_COMMERCE_QUARANTINE==='synthetic-secret'?['commerce_settings_invalid']:[]);
   }finally{console.error=original;}
@@ -19,7 +19,7 @@ test('commerce sweep failure logs a fixed name, continues later jobs and ends th
   try {
     const pool={end:async()=>{calls.push('end');}} as unknown as Pool;
     const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:idleDueWork,commerceApplyDeferred:async()=>{calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
-    await handler.scheduled({},{} as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);assert.deepEqual(logs,['commerce_sweep_failed']);assert.deepEqual(calls,['retention','payments','holds','github','end']);
+    await handler.scheduled({},{FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);assert.deepEqual(logs,['commerce_sweep_failed']);assert.deepEqual(calls,['retention','payments','holds','github','end']);
   }finally{console.error=original;}
 });
 test('contact retention failure logs only its fixed name, continues later jobs with the same pool and ends it once', async () => {
@@ -58,7 +58,7 @@ test('contact retention failure logs only its fixed name, continues later jobs w
         return { sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 };
       },
     });
-    await handler.scheduled({}, {} as WorkerEnv, { waitUntil: p => pending.push(p) });
+    await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
     assert.deepEqual(logs, ['commerce_contact_retention_failed']);
     assert.equal(logs.join(' ').includes('synthetic-secret'), false);
@@ -71,7 +71,7 @@ test('each commerce backfill has its own failure boundary and quarantine skips a
   const {randomBytes}=await import('node:crypto');
   for(const quarantine of [false,true]){
     const calls:string[]=[],logs:string[]=[],pending:Promise<unknown>[]=[];const original=console.error;console.error=(...args)=>logs.push(args.join(' '));
-    const env={FREEDOM_ENV:'local',FREEDOM_COMMERCE_PROVIDER_PROFILES:'ecpay.aio.credit.v1',COMMERCE_CREDENTIAL_KEYS:'test:'+randomBytes(32).toString('base64'),COMMERCE_JOURNAL:{put:async()=>null,get:async()=>null},FREEDOM_COMMERCE_QUARANTINE:String(quarantine)} as unknown as WorkerEnv;
+    const env={FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_ENV:'local',FREEDOM_COMMERCE_PROVIDER_PROFILES:'ecpay.aio.credit.v1',COMMERCE_CREDENTIAL_KEYS:'test:'+randomBytes(32).toString('base64'),COMMERCE_JOURNAL:{put:async()=>null,get:async()=>null},FREEDOM_COMMERCE_QUARANTINE:String(quarantine)} as unknown as WorkerEnv;
     const pool={end:async()=>{calls.push('end');}} as unknown as Pool;
     try{
       const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:async()=>{calls.push('queries');throw Error('synthetic-secret');},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');throw Error('synthetic-secret');},commerceFlushJournal:async(given,journal,options)=>{assert.equal(given,pool);assert.equal(journal.environment,'local');assert.deepEqual(options,{limit:200});calls.push('journal');throw Error('synthetic-secret');},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
@@ -94,7 +94,7 @@ test('review 3: quarantine recovery applies verified payments before sweeping ho
     syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
     authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 })
   });
-  await handler.scheduled({}, {} as WorkerEnv, { waitUntil: p => pending.push(p) });
+  await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
   await Promise.all(pending);
   assert.deepEqual(calls, ['retention', 'payments', 'holds']);
 });
@@ -113,7 +113,7 @@ test('review 8: deferred partial failure logs only its fixed name and counts bef
       syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
       authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 })
     });
-    await handler.scheduled({}, {} as WorkerEnv, { waitUntil: p => pending.push(p) });
+    await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
     assert.deepEqual(logs, [['commerce_payment_deferred_partial', { applied: 1, failed: 1, skipped: 1 }]]);
   } finally { console.error = original; }
@@ -133,7 +133,7 @@ test('scheduled runs commerceEmailSweep with { limit: 500 } outside quarantine a
       syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
       authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 }),
     });
-    await handler.scheduled({}, { FREEDOM_COMMERCE_QUARANTINE: String(quarantine) } as WorkerEnv, { waitUntil: p => pending.push(p) });
+    await handler.scheduled({}, { FREEDOM_COMMERCE_CONTACT_RETENTION:'all', FREEDOM_COMMERCE_QUARANTINE: String(quarantine) } as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
     assert.deepEqual(retentionCalls, [pool]);
     if (quarantine) {
@@ -144,4 +144,21 @@ test('scheduled runs commerceEmailSweep with { limit: 500 } outside quarantine a
       assert.deepEqual(sweepCalls[0].options, { limit: 500 });
     }
   }
+});
+
+for(const mode of [undefined,'off','orders','all','','true','ALL',' all','all ','synthetic-secret'])test(`scheduler explicitly gates contact retention ${JSON.stringify(mode)}`,async()=>{
+ const calls:string[]=[],logs:unknown[][]=[],original=console.error;
+ console.error=(...args)=>{logs.push(args);};
+ try{
+  const handler=createWorkerHandler({createPool:()=>({end:async()=>{calls.push('end');}} as unknown as Pool),
+   commerceRetention:async(_pool,received)=>{assert.equal(received,mode);calls.push('retention');return idleDueWork();},
+   commerceDueWork:idleDueWork,commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),commerceSweep:async()=>0,commerceEmailSweep:async()=>({expired:0,deleted:0}),
+   syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},
+   authPrune:async()=>{calls.push('auth');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};}});
+  const pending:Promise<unknown>[]=[];
+  await handler.scheduled({},{FREEDOM_COMMERCE_CONTACT_RETENTION:mode,FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'} as WorkerEnv,{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
+  const active=mode==='orders'||mode==='all',valid=mode===undefined||mode==='off'||active;
+  assert.deepEqual(calls,active?['retention','github','auth','end']:['github','auth','end']);
+  assert.deepEqual(logs,valid?[]:[['commerce_contact_retention_invalid']]);
+ }finally{console.error=original;}
 });

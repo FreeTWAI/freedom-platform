@@ -8,7 +8,7 @@ const TOKEN = 'synthetic-metrics-token';
 const empty: GitHubSyncSummary = {requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed'};
 
 function env(): WorkerEnv {
-  return {HYPERDRIVE: {connectionString: 'postgres://unused'}, ASSETS: {fetch: async () => new Response(null)}, GITHUB_METRICS_TOKEN: TOKEN} as WorkerEnv;
+  return {FREEDOM_COMMERCE_CONTACT_RETENTION:'all',HYPERDRIVE: {connectionString: 'postgres://unused'}, ASSETS: {fetch: async () => new Response(null)}, GITHUB_METRICS_TOKEN: TOKEN} as WorkerEnv;
 }
 function context() {
   const pending: Promise<unknown>[] = [];

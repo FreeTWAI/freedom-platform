@@ -5,6 +5,7 @@ export interface CommerceSettings {checkoutEnabled:boolean;consoleEnabled?:boole
 export interface CommerceEnvironment {
   FREEDOM_ENV?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
+  FREEDOM_COMMERCE_CONTACT_RETENTION?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED?:string;
   FREEDOM_COMMERCE_CONSOLE_ENABLED?:string;
@@ -14,12 +15,21 @@ export interface CommerceEnvironment {
   FREEDOM_SUPPLIER_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_PROVIDER_PROFILES?:string;
 }
+export type CommerceContactRetention = 'off'|'orders'|'all';
+export function readCommerceContactRetention(env:CommerceEnvironment):CommerceContactRetention {
+  const value=env.FREEDOM_COMMERCE_CONTACT_RETENTION;
+  if(value===undefined||value==='off')return 'off';
+  if(value==='orders'||value==='all')return value;
+  throw new ReadinessError('commerce_contact_retention_invalid');
+}
 export function readCommerceSelfShipEnabled(env:CommerceEnvironment):boolean {
   const value=env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED;
   if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_self_ship_flag_invalid');
   if(value==='true'&&(env.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true'||env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'))throw new ReadinessError('commerce_self_ship_console_required');
   if(value==='true'){
-    try{resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
+    let freedomEnv;
+    try{freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
+    if(freedomEnv==='public'&&readCommerceContactRetention(env)!=='all')throw new ReadinessError('self_ship_retention_not_ready');
   }
   return value==='true';
 }
@@ -46,6 +56,7 @@ export function readNodeCommerceSettings(env:CommerceEnvironment):CommerceSettin
   return settings;
 }
 export function readCommerceSettings(env:CommerceEnvironment):CommerceSettings {
+  readCommerceContactRetention(env);
   readCommerceOrderNotificationsEnabled(env);
   readCommerceSelfShipEnabled(env);
   for(const flag of [env.FREEDOM_COMMERCE_CHECKOUT_ENABLED,env.FREEDOM_COMMERCE_CONSOLE_ENABLED,env.FREEDOM_COMMERCE_QUARANTINE,env.FREEDOM_COMMERCE_EMAIL_ENABLED]) {

@@ -779,6 +779,6 @@ test('scheduled contact retention runs with checkout OFF and during quarantine w
   commerceDueWork:async()=>{business++;throw Error('business work must stay quarantined');},
   syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'}),
   authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
- const pending:Promise<unknown>[]=[];await handler.scheduled({},stagingEnv({FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'}),{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
+ const pending:Promise<unknown>[]=[];await handler.scheduled({},stagingEnv({FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'}),{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
  assert.equal(privacy,1);assert.equal(business,0);
 });
