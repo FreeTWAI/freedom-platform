@@ -9,6 +9,7 @@ import type {Controller} from '../state/controller';
 import {Axis,Confirm,Editor,ReadStatus,useRead} from './Shared';
 import {amountToMinor,money,words} from './view';
 import {OfflineOrderActions} from './OfflineOrderActions';
+import {PaidCancellation} from './PaidCancellation';
 import {SelfShipOrder} from './SelfShipOrder';
 const paymentMethod={immediate_card:'信用卡',bank_transfer:'銀行匯款',cash_on_meetup:'面交現金付款'} as const;
 const paymentText=(o:SellerCheckoutOrderSummary)=>o.payment_state==='confirmed'&&o.payment_method!=='immediate_card'?'已收款（店家確認）':words.payment[o.payment_state];
@@ -57,7 +58,8 @@ export function Order({c,route,back,canReadContact=false}:{c:Controller;route:Se
   </Axis>
   <Axis title="收款與面交操作" readState={r.state} time={r.time}>{d.meetup_handover&&<p>已登記面交：{d.meetup_handover.completed_on} · 登記時間：{formatIsoLocal(d.meetup_handover.recorded_at)}</p>}<OfflineOrderActions c={c} order={d} ready={r.state==='ready'}/>{!d.actions.confirm_offline_payment&&!d.actions.complete_meetup&&!d.actions.record_meetup_handover&&!d.meetup_handover&&<p>目前沒有可執行的線下收款或面交操作。可用操作依訂單狀態與你的權限決定。</p>}</Axis>
   <SelfShipOrder key={id} c={c} order={d} ready={r.state==='ready'&&!c.refused} contact={d.self_ship&&d.actions.view_contact&&canReadContact&&r.state==='ready'&&!c.refused?<Contact key={id} c={c} id={id} selfShip embedded/>:d.self_ship&&!d.actions.view_contact&&r.state==='ready'?<section className="stack" aria-label="收件資料"><h4>收件資料</h4><p>你目前沒有查看收件資料的權限。</p></section>:null}/>
-  {d.actions.record_refund&&<Axis title="退款紀錄" readState={r.state} time={r.time}><p>只登錄你已在綠界後台完成的退款。平台不執行退款，也不向綠界確認退款結果。</p>{d.payment_detail?d.payment_detail.applications.filter(a=>a.refundable_minor>0).map(a=><RefundForm key={a.application_ref} c={c} order={d} application={a}/>):<p>無法取得可登錄的付款明細，請確認財務讀取權限。</p>}</Axis>}
+  <PaidCancellation c={c} order={d} ready={r.state==='ready'}/>
+  {d.payment_method==='immediate_card'&&d.actions.record_refund&&<Axis title="退款紀錄" readState={r.state} time={r.time}><p>只登錄你已在綠界後台完成的退款。平台不執行退款，也不向綠界確認退款結果。</p>{d.payment_detail?d.payment_detail.applications.filter(a=>a.refundable_minor>0).map(a=><RefundForm key={a.application_ref} c={c} order={d} application={a}/>):<p>無法取得可登錄的付款明細，請確認財務讀取權限。</p>}</Axis>}
   <Axis title="庫存" readState={r.state} time={r.time}><p>{words.inventory[d.inventory_state]}</p><p>商品保留截止：{formatIsoLocal(d.pay_by)}</p><p className="field-hint">庫存變更時間未提供；上方為本次資料讀取時間。</p></Axis>
   <Axis title="商品" readState={r.state} time={r.time}><ul className="seller-list">{d.lines.map(l=><li className="seller-row stack" key={l.sku}><strong>{l.title} · {l.sku}</strong><p>{l.quantity} × {money(l.unit_price_minor,d.currency)} · 小計 {money(l.line_total_minor,d.currency)}</p><p>保留 {l.inventory.held} · 配貨 {l.inventory.allocated} · 出貨 {l.inventory.shipped} · 釋出 {l.inventory.released}</p></li>)}</ul></Axis>
   <Axis title="金額" readState={r.state} time={r.time}><dl className="detail-list">{[['商品',d.merchandise_total_minor],['折扣',d.discount_total_minor],['運費',d.shipping_total_minor],['總額',d.total_minor]].map(([t,a])=><div key={t}><dt>{t}</dt><dd>{money(a,d.currency)}</dd></div>)}</dl></Axis>
