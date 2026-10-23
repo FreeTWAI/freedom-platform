@@ -24944,8 +24944,8 @@
     },
     {
       "path": "tests/runtime/commerce-scheduler.test.ts",
-      "bytes": 8637,
-      "sha256": "44abb60d55fa84fab78deb8fc9a520c140340bfca19aff2ce4d1c950734a4e54"
+      "bytes": 11741,
+      "sha256": "fff028bfcf3548c5bfb3e7f2958b1a6e69a97164e011cd2bf3ddbe466a0ba920"
     },
     {
       "path": "tests/runtime/commerce-store-admissions.test.ts",
@@ -27209,8 +27209,8 @@
     },
     {
       "path": "tests/worker/github-sync-scheduled.test.ts",
-      "bytes": 5253,
-      "sha256": "3172c9b77c05812470f9f122b4c0b5996e5502d5676ed06202085012d9846ed6"
+      "bytes": 5961,
+      "sha256": "7ed60eebd6a415db89e07a690297a591ba19e942c688a6ea9ed638a51ce63749"
     },
     {
       "path": "tests/worker/guide-pack-assets.test.ts",
