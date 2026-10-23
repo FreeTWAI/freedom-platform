@@ -15,18 +15,34 @@ function Agreement({c,a,supplier,writable}:{c:Controller;a:DropShipAgreement;sup
  {a.state==='accepted'&&<Confirm label="撤銷同意" disabled={c.locked||!writable} onConfirm={()=>act('revoke','撤銷同意')}><p>撤銷只影響之後的新訂單，已成立訂單仍須依原版本寄送。</p></Confirm>}</div></article>;
 }
 type Products=z.infer<typeof DropShipSupplierProductsSchema>['items'];
+type ProposalDraft={version:string|undefined;agreementId:string|undefined;selected:string[];fee:string;days:string};
 function Proposal({c,products,agreements,writable}:{c:Controller;products:Products;agreements:DropShipAgreement[];writable:boolean}) {
- const supplierId=products[0].supplier_instance_id,latest=agreements[0],current=agreements.find(a=>a.state==='accepted')??latest,name='drop-proposal:'+supplierId;
- const [selected,setSelected]=useState<string[]>(current?.items.map(i=>i.selection_id)??[]),[fee,setFee]=useState(String((current?.fee_per_order_minor??0)/100)),[days,setDays]=useState(String(current?.promise_working_days??3)),[error,setError]=useState('');
+ const supplierId=products[0].supplier_instance_id,name='drop-proposal:'+supplierId;
+ const latest=agreements.reduce<DropShipAgreement|undefined>((previous,a)=>!previous||BigInt(a.version)>BigInt(previous.version)?a:previous,undefined);
+ const [draft,setDraft]=useState<ProposalDraft|null>(null),[error,setError]=useState('');
+ // Reads can arrive in either order. Only an edit freezes fields and their CAS;
+ // refreshing the directory must never attach a newer version to older input.
+ const initial:ProposalDraft={version:latest?.version,agreementId:latest?.agreement_id,selected:latest?.items.map(i=>i.selection_id)??[],fee:String((latest?.fee_per_order_minor??0)/100),days:String(latest?.promise_working_days??3)};
+ const values=draft??initial,stale=values.version!==initial.version||values.agreementId!==initial.agreementId,locked=c.locked||!writable||stale;
  useEffect(()=>()=>c.markDirty(name,false),[c.markDirty,name]);
- const edit=()=>{c.markDirty(name,true);setError('');};
- return <form className="card stack" aria-label={'代出貨提案：'+products[0].supplier_name} onSubmit={e=>{e.preventDefault();let minor=NaN;try{minor=/^0(?:\.0{1,2})?$/.test(fee.trim())?0:parseMajorToMinor(fee);}catch{}const parsed=DropShipProposalSchema.safeParse({supplier_instance_id:supplierId,selection_ids:selected,fee_per_order_minor:minor,promise_working_days:Number(days)});if(!parsed.success){setError('請選擇商品，填寫非負費用（最多兩位小數）與 1–14 個工作天。');return;}c.command({label:latest?'提出新版本':'提出代出貨',path:c.root+'/drop-ship/agreements',body:parsed.data,ifMatch:latest?.version,schema:DropShipAgreementSchema,success:()=>{c.markDirty(name,false);setError('');}});}}>
- <h3>{products[0].supplier_name}</h3>{current&&<p>目前同意：第 {current.version} 版 · {state[current.state]}</p>}{error&&<p role="alert">{error}</p>}
- <fieldset className="stack" disabled={c.locked||!writable}><legend>{latest?'提出新版本':'提出代出貨'}</legend>
- {products.map(p=><label className="field" key={p.selection_id}><span><input type="checkbox" checked={selected.includes(p.selection_id)} onChange={e=>{setSelected(old=>e.target.checked?[...old,p.selection_id]:old.filter(id=>id!==p.selection_id));edit();}}/> {p.title}</span></label>)}
- <label className="field">每單代出貨費（元，含郵資）<input type="number" min="0" step="0.01" required value={fee} onChange={e=>{setFee(e.target.value);edit();}}/></label>
- <label className="field">寄送承諾（工作天）<input type="number" min="1" max="14" step="1" required value={days} onChange={e=>{setDays(e.target.value);edit();}}/></label>
- <p className="field-hint">費用可為 0 元。工作天為週一至週五，從店家確認收款的次日起算。</p><div className="actions"><button className="btn btn-ghost btn-small" type="submit">{latest?'提出新版本':'提出代出貨'}</button></div></fieldset></form>;
+ const edit=(change:Partial<Pick<ProposalDraft,'selected'|'fee'|'days'>>)=>{setDraft(old=>({...old??initial,...change}));c.markDirty(name,true);setError('');};
+ const reset=()=>{setDraft(null);c.markDirty(name,false);setError('');};
+ return <form className="card stack" aria-label={'代出貨提案：'+products[0].supplier_name} onSubmit={e=>{
+  e.preventDefault();if(locked)return;
+  let minor=NaN;try{minor=/^0(?:\.0{1,2})?$/.test(values.fee.trim())?0:parseMajorToMinor(values.fee);}catch{}
+  const parsed=DropShipProposalSchema.safeParse({supplier_instance_id:supplierId,selection_ids:values.selected,fee_per_order_minor:minor,promise_working_days:Number(values.days)});
+  if(!parsed.success){setError('請選擇商品，填寫非負費用（最多兩位小數）與 1–14 個工作天。');return;}
+  c.command({label:latest?'提出新版本':'提出代出貨',path:c.root+'/drop-ship/agreements',body:parsed.data,ifMatch:values.version,schema:DropShipAgreementSchema,success:reset});
+ }}>
+ <h3>{products[0].supplier_name}</h3>{latest&&<p>最新提案：第 {latest.version} 版 · {state[latest.state]}</p>}{error&&<p role="alert">{error}</p>}
+ {stale&&!c.locked&&writable&&<p role="alert">代出貨提案已更新，輸入仍保留。請捨棄草稿並載入最新提案後再編輯；尚未送出新版本。</p>}
+ <fieldset className="stack" disabled={locked}><legend>{latest?'提出新版本':'提出代出貨'}</legend>
+ {products.map(p=><label className="field" key={p.selection_id}><span><input type="checkbox" checked={values.selected.includes(p.selection_id)} onChange={e=>edit({selected:e.target.checked?[...values.selected,p.selection_id]:values.selected.filter(id=>id!==p.selection_id)})}/> {p.title}</span></label>)}
+ <label className="field">每單代出貨費（元，含郵資）<input type="number" min="0" step="0.01" required value={values.fee} onChange={e=>edit({fee:e.target.value})}/></label>
+ <label className="field">寄送承諾（工作天）<input type="number" min="1" max="14" step="1" required value={values.days} onChange={e=>edit({days:e.target.value})}/></label>
+ <p className="field-hint">費用可為 0 元。工作天為週一至週五，從店家確認收款的次日起算。</p><div className="actions"><button className="btn btn-ghost btn-small" type="submit">{latest?'提出新版本':'提出代出貨'}</button></div></fieldset>
+ {draft&&<div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={c.locked||!writable} onClick={reset}>捨棄草稿並載入最新提案</button></div>}
+ </form>;
 }
 export function DropShipAgreements({c,supplier=false,writable=true}:{c:Controller;supplier?:boolean;writable?:boolean}) {
  const path=supplier?'/supplier-console/drop-ship/agreements':'/drop-ship/agreements',r=useRead(c,'drop-agreements',path,DropShipAgreementsSchema),products=useRead(c,'drop-products','/drop-ship/suppliers',DropShipSupplierProductsSchema,!supplier);
