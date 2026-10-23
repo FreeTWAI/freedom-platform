@@ -287,6 +287,8 @@ const routeTable: Record<string, string> = {
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/contact': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/cancel': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation': 'tenant',
+  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation/refund': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover': 'tenant',
@@ -681,8 +683,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 168, middleware: 32 });
-  assert.equal(selectedRoutes.length, 242);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 170, middleware: 32 });
+  assert.equal(selectedRoutes.length, 244);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
@@ -735,6 +737,8 @@ const routes: Route[] = [
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/contact' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/cancel', body: {}, version: '"1"' },
+  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation', body: {reason:'other',refund_state:'pending'}, version: '"1"' },
+  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation/refund', body: {refunded_on:'2026-01-01',refund_method:'cash'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments', body: {amount_minor:100, received_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion', body: {amount_minor:100, completed_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover', body: {completed_on:'2026-01-01'}, version: '"1"' },

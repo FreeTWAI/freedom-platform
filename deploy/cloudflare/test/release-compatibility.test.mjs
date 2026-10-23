@@ -1755,3 +1755,51 @@ test('schema187 rejects a gap before the unknown future migration', () => {
   f.scan.ledger_digest = compatibilityLedgerDigest(f.scan.ledger);
   assert.deepEqual(codes(evaluate(f)), ['schema_ledger_invalid']);
 });
+
+test('schema188 paid cancellation records recognize exact identity without a new reader floor',()=>{
+  const f=fixtureAt(188),old=prefix(f.scan,187);
+  assert.equal(f.scan.ledger.at(-1).name,'188_paid_order_cancellation.sql');
+  const result=evaluate(f);
+  assert.equal(result.status,'compatible');
+  assert.deepEqual(result.required_capabilities,evaluate(fixtureAt(187)).required_capabilities);
+  for(const flag of ['deployment_authority','execution_authority','restore_proof']) assert.equal(result[flag],false);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed=fixtureAt(188);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed=fixtureAt(188);renamed.scan.ledger.at(-1).name='188_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+  const future=fixtureAt(188);future.scan.ledger.push({name:'189_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
+test('schema188 rejects a gap before the unknown future migration',()=>{
+  const f=fixtureAt(188);f.scan.ledger.at(-1).name='189_unreviewed.sql';
+  f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);
+  assert.deepEqual(codes(evaluate(f)),['schema_ledger_invalid']);
+});
+test('retained paid cancellation schema188 floor refuses a schema187 observation without adding a written shape',()=>{
+  const f=fixtureAt(188);
+  f.host.rollback_floor.schema_ledger=structuredClone(f.scan.ledger);
+  f.host.rollback_floor.schema_ledger_digest=f.scan.ledger_digest;
+  assert.equal(evaluate(f).status,'compatible');
+  const old=prefix(f.scan,187);
+  f.host.observation.schema_ledger=old.ledger;
+  f.host.observation.schema_ledger_digest=old.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);
+  assert.deepEqual(f.host.observation.written_shapes,[]);
+  assert(codes(evaluate(f)).includes('historical_schema_floor_mismatch'));
+});
+
+test('paid-cancellation shape requires an explicitly approved reader and survives retained records',()=>{
+  const f=fixtureAt(188);f.input.enable_shapes=['commerce.paid-cancellation.v1'];
+  assert(codes(evaluate(f)).includes('release_capability_missing'));
+  f.host.release_records[0].capabilities.push('commerce.paid-cancellation.v1');
+  assert.equal(evaluate(f).status,'compatible');
+  f.input.enable_shapes=[];f.host.observation.written_shapes=['commerce.paid-cancellation.v1'];
+  assert(evaluate(f).required_capabilities.includes('commerce.paid-cancellation.v1'));
+  f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(x=>x!=='commerce.paid-cancellation.v1');
+  assert(codes(evaluate(f)).includes('release_capability_missing'));
+  const renamed=fixtureAt(188);renamed.scan.ledger.at(-1).name='188_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert(codes(evaluate(renamed)).includes('schema_unknown'));
+});

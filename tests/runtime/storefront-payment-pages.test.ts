@@ -1,3 +1,7 @@
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {OfflineOrder} from '../../apps/portal-web/src/storefront/offline-order.js';
+import {formatOrderLifecycle} from '../../modules/agent-commerce/hosted/format.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
@@ -772,4 +776,15 @@ test('orderEmailNote returns the off copy for every PaymentView and the pre-paym
   for (const view of postOrTerminalViews) {
     assert.equal(orderEmailNote(view, true), null, `expected null for ${view} when on`);
   }
+});
+
+test('offline buyer copy prioritizes paid cancellation, shows each refund state and rejects merchant notes',()=>{
+  const cancellation={reason:'buyer_request' as const,amount_minor:56000,currency:'TWD' as const,refund_state:'pending' as const,refunded_on:null,refund_method:null};
+  const order=makeOrder({payment_method:'bank_transfer',payment_grace_until:'2026-10-20T00:00:00.000Z',payment_state:'confirmed',lifecycle_state:'cancelled',cancel_reason:'paid_cancelled',paid_cancellation:cancellation});
+  const render=(value:PublicOrder)=>renderToStaticMarkup(createElement(OfflineOrder,{order:value,disabled:false,onCancel:async()=>{},onRefresh:()=>{}}));
+  const pending=render(order);assert.match(pending,/店家已取消這筆訂單/);assert.match(pending,/買家要求/);assert.match(pending,/店家會在平台外退款/);assert.doesNotMatch(pending,/店家已確認收到付款/);
+  const recorded=makeOrder({...order,payment_state:'refunded',paid_cancellation:{...cancellation,refund_state:'recorded',refunded_on:'2026-10-23',refund_method:'cash'}});
+  assert.match(render(recorded),/店家已於 2026-10-23 以現金退款/);assert.doesNotMatch(render(recorded),/店家會在平台外退款/);assert.doesNotMatch(formatOrderLifecycle(recorded),/將退款/);
+  assert.equal(PublicOrderSchema.safeParse({...order,paid_cancellation:{...cancellation,note:'private merchant note'}}).success,false);
+  assert.equal(PublicOrderSchema.safeParse({...order,paid_cancellation:{...cancellation,refunded_on:'2026-10-23'}}).success,false);
 });

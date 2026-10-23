@@ -32,6 +32,8 @@ const NOTIFICATION_CONSOLE_CHANNELS = {
   social_post_liked: 'system',
   squad_join_requested: 'system',
   squad_join_accepted: 'system',
+  commerce_order_paid_cancelled: 'system',
+  commerce_order_refund_recorded: 'system',
   commerce_order_shipped: 'system',
   commerce_order_placed: 'system',
   commerce_order_buyer_cancelled: 'system',
