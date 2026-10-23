@@ -448,21 +448,26 @@ test('reading-first library gives newcomers a clear entry and recoverable search
   await expect(page.getByRole('heading',{name:'公會指定技能書',exact:true})).toBeFocused();
 });
 
-test('practice is readable immediately, before supplementary art and collaboration',async({page})=>{
+for(const width of [1280,390])test(`practice is readable immediately, before supplementary art and collaboration at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:width===390?844:720});
   const library=await openLibrary(page);
   await library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Local Workspace MCP 本機工作助手',exact:true}),practice=dialog.locator('.skill-intro-start');
+  await expect(dialog.getByRole('button',{name:'開始練習 ↓',exact:true})).toBeInViewport();
+  expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+  await test.info().attach(`skillbook-intro-${width}px`,{body:await page.screenshot(),contentType:'image/png'});
   await expect(practice).toHaveAttribute('open','');
   await expect(practice.getByRole('heading',{name:'準備',exact:true})).toBeVisible();
   expect(await dialog.evaluate(element=>{
     const reading=element.querySelector('.skill-intro-start')!;
     return ['.skill-intro-illustration','.skill-intro-collaboration','.github-book-social'].every(selector=>{
-      const next=element.querySelector(selector);return !next||Boolean(reading.compareDocumentPosition(next)&Node.DOCUMENT_POSITION_FOLLOWING);
+      return [...element.querySelectorAll(selector)].every(next=>Boolean(reading.compareDocumentPosition(next)&Node.DOCUMENT_POSITION_FOLLOWING));
     });
   })).toBe(true);
   await practice.locator('summary').click();await expect(practice).not.toHaveAttribute('open');
   await dialog.getByRole('button',{name:'開始練習 ↓',exact:true}).click();await expect(practice).toHaveAttribute('open','');
   await expect(practice.locator('summary')).toBeFocused();
+  await test.info().attach(`skillbook-practice-${width}px`,{body:await page.screenshot(),contentType:'image/png'});
   await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
   await expect(library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
 });
