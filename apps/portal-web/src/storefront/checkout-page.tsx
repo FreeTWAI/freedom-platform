@@ -281,12 +281,12 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     {enhanced && identityNotice && <p role="status" className="shop-order-alert">{IDENTITY_CHANGED_COPY}</p>}
     {enhanced && previousOrder && <p>{PREVIOUS_ORDER_COPY}</p>}
     {enhanced && identityChecking && identityBlocked && <p role="status">正在確認登入狀態…</p>}
-    {enhanced && identityError && <div><p role="alert">{identityError}</p><div className="actions shop-order-actions"><button type="button" className="btn btn-ghost btn-small shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div></div>}
+    {enhanced && identityError && <div><p role="alert">{identityError}</p><button type="button" className="shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div>}
     {error && <p role="alert" className="shop-order-alert">{error}</p>}
     {intent ? <section className="shop-order-section" aria-labelledby="shop-order-retry-heading">
       <h2 id="shop-order-retry-heading">確認下單結果</h2>
       <p>上次下單結果尚未確認。重試會沿用同一筆訂單。</p>
-      <div className="actions shop-order-actions"><button className="btn btn-primary shop-button shop-pay-primary" disabled={busy || identityBlocked} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
+      <div className="shop-order-actions"><button className="shop-button shop-pay-primary" disabled={busy || identityBlocked} type="button" onClick={() => void place()}>{busy ? '正在確認…' : '重試同一筆訂單'}</button><a href={`/shops/${slug}/order-access`}>找回訂單</a></div>
     </section> : cart.lines.length === 0 ? <p>購物車是空的。<a href={`/shops/${slug}`}>回到商店</a></p> : checkout ? <>
       <section className="shop-order-section" aria-labelledby="shop-checkout-summary">
         <h2 id="shop-checkout-summary">2. 核對商品與配送</h2>
@@ -308,8 +308,8 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       </section>
       <section className="shop-order-section" aria-labelledby="shop-checkout-confirm">
         <h2 id="shop-checkout-confirm">4. 最後確認</h2><p>請確認商品、收件資料與付款方式。報價有效至 {formatTaipeiDateTime(checkout.expires_at)}。</p>
-        <div className="actions shop-order-actions"><button className="btn btn-primary shop-button shop-pay-primary" type="button" disabled={busy || identityBlocked || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
-          <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" disabled={busy || identityBlocked} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
+        <div className="shop-order-actions"><button className="shop-button shop-pay-primary" type="button" disabled={busy || identityBlocked || !payment} onClick={() => void place()}>{payment === 'immediate_card' ? '確認並付款' : '確認下單'}</button>
+          <button className="shop-button shop-button-secondary" type="button" disabled={busy || identityBlocked} onClick={() => {setCheckout(null); setPayment(''); setError('');}}>修改資料</button></div>
       </section>
     </> : <form onSubmit={event => {event.preventDefault(); void freeze();}}>
       <fieldset className="shop-checkout-fields" disabled={busy || identityBlocked || freezeUnknown}>
@@ -326,10 +326,10 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           <h2 id={`delivery-blocked-title-${panel.method}`}>以下商品無法使用「{deliveryNames[panel.method]}」：</h2>
           <ul>{panel.lines.map(line => <li key={line.sku}>{deliveryLineTitle(line.sku, quote, cart.lines)}：{SHIPPING_REASON_COPY[line.reason]}</li>)}</ul>
         </section>)}
-        {needsAlternative && (alternatives.length > 0 ? <div className="actions shop-order-actions">
-          {alternatives.map(option => <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" key={option.method} disabled={quoteBusy || identityBlocked} onClick={() => {setDeliveryFailure([]); setMethod(option.method);}}>改用{deliveryNames[option.method]}</button>)}
+        {needsAlternative && (alternatives.length > 0 ? <div className="shop-order-actions">
+          {alternatives.map(option => <button className="shop-button shop-button-secondary" type="button" key={option.method} disabled={quoteBusy || identityBlocked} onClick={() => {setDeliveryFailure([]); setMethod(option.method);}}>改用{deliveryNames[option.method]}</button>)}
           <p>選擇後將重新報價。</p>
-        </div> : <div><p>這些商品目前無法一起配送，請回購物車調整或分開下單。</p><div className="actions shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車調整</a></div></div>)}
+        </div> : <div><p>這些商品目前無法一起配送，請回購物車調整或分開下單。</p><div className="shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車調整</a></div></div>)}
         {(method === 'home' || method === 'self_ship') && <>
           <div className="shop-order-access-field"><label htmlFor="checkout-postal">郵遞區號</label><input {...fieldProps('delivery.postal_code')} id="checkout-postal" className="shop-text-input" autoComplete="postal-code" inputMode="numeric" maxLength={10} required value={postal} onChange={event => setPostal(event.target.value)} />{fieldError('delivery.postal_code')}</div>
           <div className="shop-order-access-field"><label htmlFor="checkout-address">收件地址</label><input {...fieldProps('delivery.address')} id="checkout-address" className="shop-text-input" autoComplete="street-address" maxLength={120} required value={address} onChange={event => setAddress(event.target.value)} />{fieldError('delivery.address')}</div>
@@ -340,14 +340,14 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         {quote?.lines.some(line => line.state === 'revision_changed') && <p>商品內容或價格已更新，請在下一步核對最新報價。</p>}
         {quote?.lines.some(line => line.state === 'insufficient' || line.state === 'unavailable') && <p>商品庫存已改變，請回購物車調整。</p>}
         {paymentOptions.map(option => <p key={option.method}>{methodNames[option.method]}：{option.reason ? unavailable[option.reason] : '可使用'}</p>)}
-        {paymentOptions.some(option => option.reason === 'member_required') && <div className="actions shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
+        {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
       </fieldset>
-      <div className="actions shop-order-actions">
-        <button className="btn btn-primary shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
-        {!freezeUnknown && <button className="btn btn-ghost btn-small shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
+      <div className="shop-order-actions">
+        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
+        {!freezeUnknown && <button className="shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
       </div>
     </form>}
-    {!intent && !freezeUnknown && <div className="actions shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車</a></div>}
+    {!intent && !freezeUnknown && <div className="shop-order-actions"><a href={`/shops/${slug}/cart`}>回購物車</a></div>}
   </>;
 }
 

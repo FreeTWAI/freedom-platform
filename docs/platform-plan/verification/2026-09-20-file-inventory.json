@@ -4114,8 +4114,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 31549,
-      "sha256": "0529e2d9934be89b03242b5e227b61c5d7221cb337e3a9903c51e16f8a6219e4"
+      "bytes": 31299,
+      "sha256": "61e0059d4474a38b98df3847f8f5d8a7afa41bf9e961f34e2c700e1de78eeb83"
     },
     {
       "path": "apps/portal-web/src/storefront/delivery-copy.ts",
@@ -24334,8 +24334,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 140511,
-      "sha256": "a30c81f5f84e8d119d565d8ff4c1fbc4d9bcc86aa8fea84241877afe0a9f358f"
+      "bytes": 140573,
+      "sha256": "502b5e72428e0f81736f0312d7bbe1d17247dcb609f8fddfc59b4aac9a2567ce"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
