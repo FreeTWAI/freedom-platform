@@ -476,9 +476,10 @@ export async function listDelegationCandidates(q: PoolClient, communityId: strin
   return rows.map(row => ({display_name: row.display_name as string, principal_id: (row.principal_id as string | null) ?? null}));
 }
 export async function listRevisionMeta(q: PoolClient, communityId: string, guildKey: string) {
+  // The wire revision is text; order by the stored bigint rather than that alias.
   const rows = (await q.query(`SELECT revision::text AS revision, status, source, created_at, revert_reason, reverted_from_revision::text AS reverted_from_revision
     FROM guild_launchpad_config_revisions WHERE community_id=$1 AND guild_key=$2
-    ORDER BY revision DESC LIMIT 50`, [communityId, guildKey])).rows;
+    ORDER BY guild_launchpad_config_revisions.revision DESC LIMIT 50`, [communityId, guildKey])).rows;
   return rows.map(row => ({
     revision: row.revision as string,
     status: row.status as string,
@@ -495,7 +496,7 @@ export async function readStoredRevision(q: PoolClient, communityId: string, gui
   }
   return (await q.query(`SELECT config_id, revision::text AS revision, schema_version, body, body_sha256, status, source, created_at
     FROM guild_launchpad_config_revisions WHERE community_id=$1 AND guild_key=$2 AND status='draft'
-    ORDER BY revision DESC LIMIT 1`, [communityId, guildKey])).rows[0];
+    ORDER BY guild_launchpad_config_revisions.revision DESC LIMIT 1`, [communityId, guildKey])).rows[0];
 }
 export async function readPublishedRevision(q: PoolClient, communityId: string, guildKey: string): Promise<StoredRevision | undefined> {
   return (await q.query(`SELECT config_id, revision::text AS revision, schema_version, body, body_sha256, status, source, created_at
@@ -511,7 +512,7 @@ export async function resolvePublishedView(q: PoolClient, guild: CatalogGuild, c
   const earlier = (await q.query(`SELECT config_id, revision::text AS revision, schema_version, body, body_sha256, status, source, created_at
     FROM guild_launchpad_config_revisions
     WHERE community_id=$1 AND guild_key=$2 AND status IN ('published','superseded') AND revision < $3::bigint
-    ORDER BY revision DESC LIMIT $4`, [communityId, guild.guild_key, current.revision, EARLIER_REVISION_LIMIT])).rows as StoredRevision[];
+    ORDER BY guild_launchpad_config_revisions.revision DESC LIMIT $4`, [communityId, guild.guild_key, current.revision, EARLIER_REVISION_LIMIT])).rows as StoredRevision[];
   for (const row of earlier) {
     const view = tryView(row, guild.guild_key, pointerVersion);
     if (view) return {view, problem};

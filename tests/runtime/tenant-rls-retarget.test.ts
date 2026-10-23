@@ -1,3 +1,4 @@
+import {seedSelfShipment} from './self-ship-fixture.js';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
 import {seedSellerPolicyRows} from '../helpers/storefront-policies.js';
 import {seedAppearanceRows} from '../helpers/storefront-appearance.js';
@@ -583,7 +584,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
     'commerce_order_access_grants',
     'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
-    'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers',
+    'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments',
     'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
   'commerce_product_groups', 'commerce_product_group_members', 'commerce_product_gallery_photos', 'commerce_publication_galleries', 'commerce_publication_gallery_refs', 'commerce_publication_variants',...categoryTables,
   'commerce_storefront_seller_drafts', 'commerce_storefront_policy_drafts', 'commerce_storefront_seller_versions', 'commerce_storefront_policy_versions', 'commerce_publication_seller_policies', 'commerce_publication_policy_refs',
@@ -712,6 +713,7 @@ test('T-022 8. Discovered RLS tables reject retarget and cross-tenant select', a
         VALUES($1,$2,'unmatched_payment','payment_event',$3,'retailer',clock_timestamp()+interval '72 hours','system')`,
       [data.tenantId,data.instanceId,randomUUID()]);
       await seedOfflineBankFixture(q, saved.checkout_id, data.principalId);
+      await seedSelfShipment(q, saved.checkout_id, data.principalId);
     });
   }
   const record: { table: string; mechanism: 'rls_update' | 'rls_insert' | 'policy_assertion' | 'documented_exception';

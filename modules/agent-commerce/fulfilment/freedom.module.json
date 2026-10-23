@@ -17,6 +17,7 @@
     "tests/runtime/commerce-fulfilment-rules.test.ts",
     "docs/platform-plan/execution/commerce/ecpay-logistics-status-map.tsv",
     "migrations/170_hosted_fulfilment.sql",
+    "migrations/185_hosted_self_ship.sql",
     "apps/platform-api/src/routes/hosted-shipping.ts",
     "contracts/guild-launchpad/v1/hosted-shipping.ts",
     "contracts/guild-launchpad/v1/hosted-shipping.schema.json",
@@ -26,7 +27,9 @@
     "tests/runtime/hosted-shipping-contracts.test.ts",
     "scripts/synthetic-shipping-quote.ts",
     "tests/runtime/hosted-shipping-quote.test.ts",
-    "tests/runtime/hosted-shipping-quote-checkout.test.ts"
+    "tests/runtime/hosted-shipping-quote-checkout.test.ts",
+    "tests/runtime/hosted-self-ship.test.ts",
+    "tests/runtime/self-ship-fixture.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [

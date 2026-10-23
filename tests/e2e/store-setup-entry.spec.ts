@@ -1,12 +1,60 @@
 import type {Pool} from 'pg';
-import {test, expect, type Page} from './fixtures.js';
-import {person, login, post, launchStore} from './hosted-store-fixture.js';
+import {test, expect, type Page, type TestInfo} from './fixtures.js';
+import {person, login, open, post, launchStore, captureOffer} from './hosted-store-fixture.js';
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
+import {TenantPageSchema} from '../../contracts/guild-launchpad/v1/tenant.js';
+import {InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';
+import {SupplyCatalogViewSchema, SupplyProductPageSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';
 
 const commerce = 'guild_commerce_sales';
 const originalGuild = 'guild_commercial_production';
 const setup = (page: Page) => page.getByRole('region', {name: '開始開店', exact: true});
 const flow = (page: Page) => page.getByRole('region', {name: '啟動應用', exact: true});
+const sharedScope = '將共用既有的商品與規格、庫存、訂單、商店設定與公開頁、供貨合作與選品，以及商品照片，不會複製一份。';
+const blockedExplanation = '這個業務空間目前有純供貨商品庫，不能直接轉為零售商店。每個業務空間只能有一間商店；請按上方「另開獨立商店」，建立新的業務空間設定零售。原商品、庫存與供貨合作會維持不變。';
+
+async function launchInventory(page: Page) {
+  const response = await page.request.get('/api/v1/tenants?limit=100');
+  expect(response.status()).toBe(200);
+  const tenants = TenantPageSchema.parse(await response.json());
+  expect(tenants.next_cursor).toBeNull();
+  return Promise.all(tenants.items.map(async tenant => {
+    const response = await page.request.get(`/api/v1/tenants/${tenant.tenant_id}/application-installations?limit=100`);
+    expect(response.status()).toBe(200);
+    const installations = InstallationPageSchema.parse(await response.json());
+    expect(installations.next_cursor).toBeNull();
+    return {tenant_id: tenant.tenant_id, installations: installations.items};
+  }));
+}
+
+async function captureLaunch(page: Page, name: string, info: TestInfo) {
+  for (const {theme, width} of [{theme: 'light', width: 390}, {theme: 'light', width: 768}, {theme: 'light', width: 1440}, {theme: 'dark', width: 390}] as const) {
+    await page.emulateMedia({colorScheme: theme, reducedMotion: 'reduce'});
+    await page.evaluate(value => {
+      localStorage.setItem('freedom-theme', value);
+      document.documentElement.dataset.theme = value;
+      document.documentElement.dataset.experienceProfile = value;
+      window.dispatchEvent(new Event('freedom-theme-changed'));
+    }, theme);
+    await page.setViewportSize({width, height: 900});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(theme === 'dark');
+    const buttons = await flow(page).locator('.btn:visible').evaluateAll(elements => elements.map(element => ({
+      text: element.textContent, width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
+      parentWidth: element.parentElement!.getBoundingClientRect().width,
+    })));
+    for (const button of buttons) {
+      expect(button.width, button.text ?? '').toBeLessThanOrEqual(button.parentWidth);
+      expect(button.height, button.text ?? '').toBeGreaterThanOrEqual(44);
+    }
+    expect(await flow(page).locator('.btn-primary:visible').count()).toBeLessThanOrEqual(1);
+    const shot = `${name}-${theme}-${width}`;
+    await info.attach(`${shot}-buttons`, {body: JSON.stringify(buttons, null, 2), contentType: 'application/json'});
+    const path = info.outputPath(`${shot}.png`);
+    await captureOffer(page, flow(page), path);
+    await info.attach(shot, {path, contentType: 'image/png'});
+  }
+}
 async function member(db: Pool, page: Page, membership: 'active' | 'none' | 'left' = 'none') {
   const user = await person(db);
   await db.query('UPDATE guild_member_preferences SET primary_guild_key=$3 WHERE community_id=$1 AND user_id=$2', [DEMO_COMMUNITY, user.id, originalGuild]);
@@ -63,6 +111,7 @@ test('member starts from stores, explicitly joins inline and continues into the 
   await expect(flow(page).getByRole('heading', {name: '設定商店空間', exact: true})).toBeFocused();
   await expect(page).toHaveURL(/#stores\/setup$/);
   expect(joins).toBe(1);
+  await expect(flow(page).getByRole('link', {name: '建立或選擇業務空間', exact: true})).toHaveAttribute('href', '#business');
   const preference = await e2eAuthPool.query('SELECT primary_guild_key FROM guild_member_preferences WHERE community_id=$1 AND user_id=$2', [DEMO_COMMUNITY, user.id]);
   expect(preference.rows[0].primary_guild_key).toBe(originalGuild);
   await createSpace(page, '直接開店測試');
@@ -116,7 +165,7 @@ test('member qualification and launch eligibility remain separate and can recove
   await expect(page).toHaveURL(/#stores\/setup$/);
 });
 
-test('pure supply stays visibly distinct and an independent store can be created in the same journey', async ({page, e2eAuthPool}) => {
+test('pure supply stays visibly distinct and an independent store can be created in the same journey', async ({page, e2eAuthPool}, info) => {
   await member(e2eAuthPool, page, 'active');
   const supply = await launchStore(page, '保留純供貨空間');
   await post(page, supply.root + '/supply-profile', {name: '原供貨商品庫', currency: 'TWD'}, 201);
@@ -127,16 +176,25 @@ test('pure supply stays visibly distinct and an independent store can be created
   await expect(supplyReuse).toBeChecked();
   await expect(supplyReuse).toBeEnabled();
   await expect(flow(page).getByRole('button', {name: '確認供貨空間', exact: true})).toBeEnabled();
+  await flow(page).getByRole('button', {name: '確認供貨空間', exact: true}).click();
+  const confirmation = flow(page).getByRole('region', {name: '確認啟動方案', exact: true});
+  await expect(confirmation.getByRole('heading', {name: '確認沿用供貨空間', exact: true})).toBeVisible();
+  await expect(confirmation.getByRole('listitem').filter({hasText: sharedScope})).toHaveText(`供貨商品庫：${sharedScope}`);
+  await captureLaunch(page, 'g3-supply-reuse', info);
+  await confirmation.getByRole('button', {name: '修改選擇', exact: true}).click();
   await openSetup(page);
   const pureSupply = flow(page).getByRole('radio', {name: /保留既有的純供貨商品庫/});
   await expect(pureSupply).toBeDisabled();
   await expect(pureSupply).not.toBeChecked();
+  await expect(flow(page).getByRole('radio', {name: /沿用這個安裝/})).toHaveCount(0);
+  await expect(flow(page).getByText(blockedExplanation, {exact: true})).toHaveCount(1);
   await expect(flow(page).getByRole('button', {name: '確認開店空間', exact: true})).toBeDisabled();
   await expect(flow(page)).toContainText('不能直接轉為零售商店');
   await expect(flow(page)).not.toContainText('下一步再設定零售');
   const before = await (await page.request.get('/api/v1/tenants?limit=100')).json();
   await flow(page).getByRole('button', {name: '另開獨立商店', exact: true}).click();
   await expect(flow(page).getByLabel('業務空間名稱', {exact: true})).toBeFocused();
+  await expect(flow(page).getByRole('link', {name: '建立或選擇業務空間', exact: true})).toHaveCount(0);
   await flow(page).getByLabel('業務空間名稱', {exact: true}).fill('暫時取消的名稱');
   await flow(page).getByRole('button', {name: '返回原業務空間', exact: true}).click();
   await expect(flow(page).getByRole('button', {name: '另開獨立商店', exact: true})).toBeFocused();
@@ -150,6 +208,125 @@ test('pure supply stays visibly distinct and an independent store can be created
   const retained = await (await page.request.get('/api/v1' + supply.root + '/supply-profile')).json();
   expect(retained.retail_enabled).toBe(false); expect(retained.product_count).toBe(1);
   expect((await (await page.request.get('/api/v1' + supply.root + '/supply-products')).json()).items[0]).toMatchObject({title: '原供貨商品', stock: 5});
+});
+
+test('commerce guild keeps a supply-only catalog unchanged while opening an independent store inline', async ({page, e2eAuthPool}, info) => {
+  await member(e2eAuthPool, page, 'active');
+  const supply = await launchStore(page, '公會純供貨空間 A');
+  await post(page, supply.root + '/supply-profile', {name: '公會原供貨商品庫', currency: 'TWD'}, 201);
+  await post(page, supply.root + '/supply-products', {title: '公會原供貨商品', cost_minor: 12000, stock: 5}, 201);
+  const catalogBefore = SupplyCatalogViewSchema.parse(await (await page.request.get('/api/v1' + supply.root + '/supply-profile')).json());
+  const productsBefore = SupplyProductPageSchema.parse(await (await page.request.get('/api/v1' + supply.root + '/supply-products')).json());
+  expect(catalogBefore).toMatchObject({setup_state: 'ready', retail_enabled: false, catalog: {name: '公會原供貨商品庫'}, product_count: 1});
+  expect(productsBefore.items).toHaveLength(1);
+  expect(productsBefore.items[0]).toMatchObject({title: '公會原供貨商品', stock: 5});
+  const before = await launchInventory(page);
+  expect(before).toHaveLength(1);
+  expect(before[0].installations).toHaveLength(1);
+
+  await open(page, `guilds/${commerce}`);
+  await page.getByRole('region', {name: '主要動作', exact: true}).getByRole('button', {name: '建立我的商店', exact: true}).click();
+  await expect(flow(page)).toContainText('目前業務空間：公會純供貨空間 A');
+  const installation = flow(page).getByRole('group', {name: '安裝選擇', exact: true});
+  await expect(installation.getByRole('radio')).toHaveCount(0);
+  await expect(installation).toHaveText(`安裝選擇這個安裝已連結純供貨商品庫，會保持不變（${before[0].installations[0].release_ref}，ID 尾碼 ${before[0].installations[0].installation_id.slice(-6)}，版本 ${before[0].installations[0].version}，使用中）。`);
+  await expect(flow(page).getByRole('radio', {name: /保留既有的純供貨商品庫/})).toBeDisabled();
+  await expect(flow(page).getByRole('radio', {name: /保留既有的純供貨商品庫/})).not.toBeChecked();
+  await expect(flow(page).getByText(blockedExplanation, {exact: true})).toHaveCount(1);
+  await expect(flow(page).locator('p.field-hint')).toHaveCount(1);
+  await expect(flow(page)).not.toContainText('選擇另一個工作區');
+  await expect(flow(page).getByRole('button', {name: '產生啟動方案', exact: true})).toBeDisabled();
+  await expect(flow(page).getByRole('button', {name: '另建新的安裝', exact: true})).toHaveCount(0);
+  await expect(flow(page).getByRole('button', {name: '另開獨立商店', exact: true})).toHaveCount(1);
+  await captureLaunch(page, 'g2-guild-supply-blocked', info);
+
+  await flow(page).getByRole('button', {name: '另開獨立商店', exact: true}).click();
+  await expect(flow(page).getByLabel('業務空間名稱', {exact: true})).toBeFocused();
+  await expect(flow(page).locator('a[href="#business"]')).toHaveCount(0);
+  await expect(flow(page).getByRole('button', {name: '返回原業務空間', exact: true})).toBeVisible();
+  expect(await launchInventory(page)).toEqual(before);
+  await createSpace(page, '公會獨立商店空間 B');
+  await expect(page).toHaveURL(new RegExp(`#guilds/${commerce}$`));
+  await expect(flow(page).getByRole('group', {name: '業務空間', exact: true}).getByRole('button', {name: /^公會獨立商店空間 B・/})).toHaveAttribute('aria-current', 'true');
+  const afterSpace = await launchInventory(page);
+  expect(afterSpace).toHaveLength(2);
+  const independent = afterSpace.find(row => row.tenant_id !== before[0].tenant_id)!;
+  expect(independent.installations).toEqual([]);
+  expect(afterSpace.find(row => row.tenant_id === before[0].tenant_id)).toEqual(before[0]);
+
+  await flow(page).getByRole('button', {name: '產生啟動方案', exact: true}).click();
+  const confirmation = flow(page).getByRole('region', {name: '確認啟動方案', exact: true});
+  await expect(confirmation.getByRole('heading', {name: '確認啟動方案', exact: true})).toBeVisible();
+  await expect(confirmation).toContainText('將建立獨立空白資料，使用額外容量。');
+  await confirmation.getByRole('button', {name: '修改選擇', exact: true}).click();
+  await expect(confirmation).toHaveCount(0);
+  expect(await launchInventory(page)).toEqual(afterSpace);
+  await flow(page).getByRole('button', {name: '產生啟動方案', exact: true}).click();
+  await confirmation.getByRole('button', {name: '確認啟動', exact: true}).click();
+  await expect(flow(page).getByRole('region', {name: '啟動進度', exact: true})).toContainText('已啟用');
+  const afterLaunch = await launchInventory(page);
+  expect(afterLaunch).toHaveLength(2);
+  const created = afterLaunch.find(row => row.tenant_id === independent.tenant_id)!;
+  expect(created.installations).toHaveLength(1);
+  expect(created.installations[0].application_key).toBe('hosted-store');
+  const store = created.installations[0].modules.find(link => link.requirement_key === 'storefront')!;
+  expect(store.instance_id).not.toBe(catalogBefore.instance_id);
+  expect(afterLaunch.find(row => row.tenant_id === before[0].tenant_id)).toEqual(before[0]);
+  await flow(page).getByRole('button', {name: '設定我的商店', exact: true}).click();
+  await expect(page).toHaveURL(new RegExp(`#stores/${independent.tenant_id}/${store.instance_id}$`));
+  const storeSetup = page.getByRole('form', {name: '建立商店', exact: true});
+  await storeSetup.getByLabel('商店名稱', {exact: true}).fill('公會獨立零售店');
+  await storeSetup.getByLabel('商店網址', {exact: true}).fill('guild-' + independent.tenant_id.replaceAll('-', '').replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit))));
+  await storeSetup.getByRole('button', {name: '建立商店', exact: true}).click();
+  await expect(page.locator('.hosted-store').getByRole('heading', {level: 2, name: '公會獨立零售店', exact: true})).toBeVisible();
+  const retail = SupplyCatalogViewSchema.parse(await (await page.request.get(`/api/v1/tenants/${independent.tenant_id}/storefronts/${store.instance_id}/supply-profile`)).json());
+  expect(retail).toMatchObject({tenant_id: independent.tenant_id, instance_id: store.instance_id, retail_enabled: true});
+  const retained = SupplyCatalogViewSchema.parse(await (await page.request.get('/api/v1' + supply.root + '/supply-profile')).json());
+  expect(retained).toEqual(catalogBefore);
+  expect(SupplyProductPageSchema.parse(await (await page.request.get('/api/v1' + supply.root + '/supply-products')).json())).toEqual(productsBefore);
+});
+
+test('hosted-store plan conflicts keep the next step inside the retail or supply wizard', async ({page, e2eAuthPool}) => {
+  await member(e2eAuthPool, page, 'active');
+  const existing = await launchStore(page, '衝突提示測試空間');
+  await post(page, existing.root + '/setup', {name: '既有零售店', slug: 'conflict-' + existing.hash.split('/')[1].replaceAll('-', '').slice(0, 24), currency: 'TWD'}, 201);
+  await post(page, '/guilds/guild_product_quality_supply/join', {}, 200);
+  let code = 'installation_selection_required';
+  await page.route('**/api/v1/tenants/*/application-launch-plans', route => route.fulfill({
+    status: 409, contentType: 'application/problem+json', json: {code, detail: '合成方案衝突。'},
+  }));
+  for (const purpose of ['retail', 'supply'] as const) {
+    if (purpose === 'retail') await openSetup(page);
+    else await page.evaluate(() => {window.location.hash = '#stores/supply/setup';});
+    const plan = flow(page).getByRole('button', {name: purpose === 'retail' ? '確認開店空間' : '確認供貨空間', exact: true});
+    const action = purpose === 'retail' ? '另開獨立商店' : '建立另一個獨立商品庫';
+    await expect(flow(page)).toContainText(purpose === 'retail'
+      ? '每個業務空間只能有一間商店。要另外開店，請按「另開獨立商店」建立新的業務空間。'
+      : '每個業務空間只能有一個商品庫。要分開管理，請按「建立另一個獨立商品庫」建立新的業務空間。');
+    await expect(flow(page).getByRole('radio', {name: /沿用這個安裝/})).toBeChecked();
+    for (code of ['installation_selection_required', 'workspace_binding_conflict']) {
+      await expect(plan).toBeEnabled();
+      await plan.click();
+      await expect(flow(page).getByRole('alert')).toContainText(`請按「${action}」建立新的業務空間。`);
+      await expect(flow(page).getByRole('alert')).toContainText(code === 'installation_selection_required'
+        ? '請沿用這個工作區的現有安裝；' : '這個工作區已綁定其他實例；');
+      await expect(flow(page)).not.toContainText('選擇另一個工作區');
+    }
+  }
+  await page.route('**/api/v1/tenants/*/module-instances?*', async route => {
+    const response = await route.fetch();
+    await route.fulfill({response, json: {...await response.json(), items: []}});
+  });
+  for (const purpose of ['retail', 'supply'] as const) {
+    if (purpose === 'retail') await openSetup(page);
+    else await page.evaluate(() => {window.location.hash = '#stores/supply/setup';});
+    await expect(flow(page)).toContainText(`這個安裝連結的${purpose === 'retail' ? '商店' : '供貨商品庫'}目前無法使用`);
+    await expect(flow(page)).toContainText(purpose === 'retail'
+      ? '請按上方「另開獨立商店」建立新的業務空間。'
+      : '請按上方「建立另一個獨立商品庫」建立新的業務空間。');
+    await expect(flow(page)).not.toContainText('選擇另一個工作區');
+    await expect(flow(page).getByRole('button', {name: purpose === 'retail' ? '確認開店空間' : '確認供貨空間', exact: true})).toBeDisabled();
+  }
 });
 
 test('eligibility read failure is retryable and does not invent a join or a new space', async ({page, e2eAuthPool}) => {

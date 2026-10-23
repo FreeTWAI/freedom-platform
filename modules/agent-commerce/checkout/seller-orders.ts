@@ -1,3 +1,4 @@
+import {selfShipOrderView} from './self-ship-view.js';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives.js';
@@ -178,7 +179,8 @@ export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerChec
   for(const c of cases)exceptions.push(await sellerExceptionView(q,context,c,keys));
   const writable=context.tenant.tenant_status==='active'&&!options.settings?.quarantine,open=row.lifecycle_state==='open',manage=keys.includes('store:orders:manage'),fulfil=keys.includes('store:fulfil');
   const remaining=[...base.stock.lines.values()].reduce((n,line)=>n+line.allocated,0),meetupDelivery=t.shipping.groups.length>0&&t.shipping.groups.every(group=>group.method_ref==='meetup');
-  return {...base.value,payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
+  const selfShip=await selfShipOrderView(q,id,t);
+  return {...base.value,...(selfShip?{self_ship:selfShip}:{}),payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
     lines:t.items.map(l=>({sku:l.sku,title:l.title,quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor,inventory:base.stock.lines.get(l.sku)!})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,latest_payment_attempt:payment?.latest_payment_attempt??null,payment_detail,exceptions,
     actions:{cancel:manage&&open&&!row.confirmed&&writable,
@@ -186,6 +188,7 @@ export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerChec
       record_refund:keys.includes('store:refund')&&applications.some(a=>a.refundable_minor>0)&&writable,view_contact:keys.includes('store:customers:read'),view_finance:keys.includes('store:finance:read'),
       confirm_offline_payment:manage&&open&&row.payment_method==='bank_transfer'&&!row.confirmed&&writable,
       complete_meetup:manage&&fulfil&&open&&row.payment_method==='cash_on_meetup'&&!row.confirmed&&writable,
+      ...(selfShip?{record_self_shipment:fulfil&&writable&&open&&row.confirmed&&selfShip.shipment===null&&remaining>0}:{}),
       record_meetup_handover:fulfil&&writable&&open&&row.confirmed&&meetupDelivery&&row.handover_id==null&&remaining>0}};
 }
 export function readSellerCheckoutOrder(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,options:SellerCheckoutReadOptions={}) {

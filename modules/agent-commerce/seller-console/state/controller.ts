@@ -42,7 +42,7 @@ export function useController(client:PortalClient,root:string,registerLeave:Regi
   return !Object.values(dirtyRef.current).some(Boolean)||window.confirm('還有尚未儲存的內容，要離開嗎？');
  };
  useEffect(()=>{registerLeave(next=>guard.current(next));const unload=(e:BeforeUnloadEvent)=>{if(held.current||busy.current||Object.values(dirtyRef.current).some(Boolean)){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>{registerLeave(null);window.removeEventListener('beforeunload',unload);};},[registerLeave]);
- async function refresh(reason:'saved'|'conflict'='saved'){setPendingReason(reason);const keys=[...descriptors.current.keys()].filter(k=>k!=='contact'&&k!=='reservations-probe');setPending(keys);await Promise.all(keys.map(key=>load(key)));}
+ async function refresh(reason:'saved'|'conflict'='saved'){setPendingReason(reason);const keys=[...descriptors.current.keys()].filter(k=>k!=='contact'&&!k.startsWith('contact:')&&k!=='reservations-probe');setPending(keys);await Promise.all(keys.map(key=>load(key)));}
  async function send(a:Attempt,command:Command,recoveryVerificationId=held.current?.recoveryVerificationId){
   if(!live()||busy.current||held.current&&held.current.attempt.key!==a.key)return;
   held.current={attempt:a,command,unresolved:held.current?.unresolved??false,recoveryVerificationId};busy.current=true;setPhase('sending');setError('');setNotice('');

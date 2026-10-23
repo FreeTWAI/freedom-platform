@@ -1,9 +1,9 @@
 import type {DeliveryFieldErrorCode,ShippingMethodRef} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {isOutlyingPostalPrefix} from '../rules/postal.js';
-import {normalizeMobile,validatePostalCode} from '../rules/recipient.js';
+import {normalizeMobile,validatePostalCode,validateHomeRecipient} from '../rules/recipient.js';
 import {validateEcpayCvsRecipient,validateEcpayHomeRecipient} from '../rules/ecpay-recipient.js';
 
-const METHODS=['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup'] as const;
+const METHODS=['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup','self_ship'] as const;
 type Method=(typeof METHODS)[number];
 export interface DeliveryField {readonly path:string;readonly code:DeliveryFieldErrorCode}
 export type ParsedDelivery={ok:true;method:ShippingMethodRef;outlying:boolean}|{ok:false;fields:readonly DeliveryField[]};
@@ -87,7 +87,7 @@ export function parseCheckoutDelivery(raw:unknown):ParsedDelivery {
   if(!isRecord(raw))return fail([{path:'delivery',code:'format'}]);
   const method=readMethod(raw);
   if(!method.ok)return fail(method.fields);
-  const allowed=method.method==='home'?HOME_KEYS:RECIPIENT_KEYS;
+  const allowed=(method.method==='home'||method.method==='self_ship')?HOME_KEYS:RECIPIENT_KEYS;
   const fields:DeliveryField[]=[];
   pushUnknown(raw,allowed,fields);
   const mobileOk=takeString(raw,'mobile',true,fields);
@@ -95,6 +95,12 @@ export function parseCheckoutDelivery(raw:unknown):ParsedDelivery {
   if(method.method==='home') {
     takeString(raw,'name',true,fields);takeString(raw,'postal_code',true,fields);takeString(raw,'address',true,fields);
     const recipient=validateEcpayHomeRecipient(raw);
+    if(!recipient.ok)addRecipient(fields,recipient.errors);
+    else outlying=recipient.recipient.outlying;
+  } else if(method.method==='self_ship') {
+    takeString(raw,'name',true,fields);takeString(raw,'postal_code',true,fields);takeString(raw,'address',true,fields);
+    for(const key of ['name','mobile','postal_code','address'])if(typeof raw[key]==='string'&&/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/u.test(raw[key] as string))fields.push({path:`delivery.${key}`,code:'format'});
+    const recipient=validateHomeRecipient(raw);
     if(!recipient.ok)addRecipient(fields,recipient.errors);
     else outlying=recipient.recipient.outlying;
   } else if(method.method==='meetup') {
@@ -113,11 +119,11 @@ export function parseCartDelivery(raw:unknown):ParsedDelivery {
   if(!isRecord(raw))return fail([{path:'delivery',code:'format'}]);
   const method=readMethod(raw);
   if(!method.ok)return fail(method.fields);
-  const allowed=method.method==='home'?['method','postal_code']:['method'];
+  const allowed=(method.method==='home'||method.method==='self_ship')?['method','postal_code']:['method'];
   const fields:DeliveryField[]=[];
   pushUnknown(raw,allowed,fields);
   let outlying=false;
-  if(method.method==='home'&&Object.prototype.hasOwnProperty.call(raw,'postal_code')&&raw.postal_code!==undefined) {
+  if((method.method==='home'||method.method==='self_ship')&&Object.prototype.hasOwnProperty.call(raw,'postal_code')&&raw.postal_code!==undefined) {
     if(takeString(raw,'postal_code',true,fields)) {
       const postal=validatePostalCode(raw.postal_code);
       if(!postal.ok)fields.push({path:'delivery.postal_code',code:postal.code});

@@ -26,7 +26,7 @@ export function createPaymentMethodsPort(input:{environment:'sandbox'|'live';pro
     async resolve(q,store,request):Promise<PaymentOptionResolution>{
       const settings=await currentOfflineSettings(q,store.instance_id),money=wholeDollars(request.currency,request.totalMinor,request.amountsMinor);
       const options:PaymentOptionResolution['options'][number][]=[];
-      if(profiles.includes(CARD_PROFILE)&&card&&await activeCard(q,store,environment)){
+      if(!request.shippingMethodRefs?.includes('self_ship')&&profiles.includes(CARD_PROFILE)&&card&&await activeCard(q,store,environment)){
         let available=true;
         try{card.assertTermsAvailable({currency:request.currency,totalMinor:request.totalMinor,amountsMinor:request.amountsMinor});}
         catch(error){if(!(error instanceof Problem)||error.code!=='payment_profile_unavailable')throw error;available=false;}
