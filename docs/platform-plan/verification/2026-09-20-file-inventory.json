@@ -19159,8 +19159,8 @@
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SelfShipOrder.tsx",
-      "bytes": 9333,
-      "sha256": "957a01f2100377c1e0a1f692916e1c725be347e4802481a8fb9599b101da9851"
+      "bytes": 10323,
+      "sha256": "5bbc31fceb20a6cab68bf4fe5d1d5f341b624fa7d393a0ee5128d4349f27d9be"
     },
     {
       "path": "modules/agent-commerce/seller-console/ui/SelfShipSettings.tsx",
@@ -24334,8 +24334,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 140573,
-      "sha256": "502b5e72428e0f81736f0312d7bbe1d17247dcb609f8fddfc59b4aac9a2567ce"
+      "bytes": 141020,
+      "sha256": "db874b7d88a1a79f7567292e45f0521ca08deb5dd9739d9c8b3721df1bb2ce44"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -26574,8 +26574,8 @@
     },
     {
       "path": "tests/runtime/seller-console-view.test.ts",
-      "bytes": 11512,
-      "sha256": "04c548b71959d681573ff6ae2440adbbf66b8c89aa0ddb7e21e16fb5957ba12c"
+      "bytes": 15860,
+      "sha256": "886bc29dccea6238019c6ddbfb1cfcb2a9871a625a66f20a93dafd46438d999e"
     },
     {
       "path": "tests/runtime/seller-order-filters.test.ts",
