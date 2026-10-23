@@ -185,7 +185,7 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 規則：
 
-- 保存開關只接受精確的 `off`／`orders`／`all`（未設定等於 `off`）；空字串、布林、大小寫變體與空白都無效，就緒檢查以 `commerce_contact_retention_invalid` 拒絕。`off` 不發現工作、不領取既有 `checkout_contact_retention` 列，也不掃描顧客；既有列留待之後啟用。排程遇無效值只記固定錯誤名稱，不執行遮蔽，其餘工作照原流程繼續。改回 `off` 只停止新的遮蔽，不會還原已清空的資料。
+- 保存開關只接受精確的 `off`／`orders`／`all`（未設定等於 `off`）；空字串、布林、大小寫變體與空白都無效，就緒檢查以 `commerce_contact_retention_invalid` 拒絕。`off` 不發現工作、不領取既有 `checkout_contact_retention` 列，也不掃描顧客；既有列留待之後啟用。排程遇無效值依序記固定名稱 `commerce_contact_retention_invalid`、`commerce_settings_invalid`，不記原設定值；本輪遮蔽、付款套用、hold 清理、commerce due work 與 Email 都停止，GitHub 等其他排程照常。改回 `off` 只停止新的遮蔽，不會還原已清空的資料。
 - 遮罩由現有 due-work（§2.4）的 `checkout_contact_retention` 執行：每次最多發現 200 間店、領取 200 件工作，每店交易最多 200 contacts／200 customers，工作每 10 分鐘再到期；舊列同樣由有界掃描觸及。租約失效、重播、失敗均不重寫已遮蔽列；保存開關為 `orders`／`all` 時，checkout 關閉或 quarantine 不停止此種隱私工作。`orders` 不觸及任何沒有訂單參照的 contact，不論已到期多久。清空五個個資欄位與 salt，與同訂單的單號／自填業者名稱在同交易完成。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
 - 留下的摘要不能被拿來比對猜測的個資：聯絡資料的摘要含一個隨機 salt，salt 存在聯絡資料列、隨遮罩清除；建立 checkout 的請求摘要以冪等鍵為金鑰（HMAC-SHA256），明文的鍵不保存。
 - 等待條件（兩種啟用模式都適用，沿用 DC12 原提案，待 Ted 確認）：同訂單仍有 `commerce_exception_cases.status=open`、未結付款、處理中的退款或未完成履約時不遮蔽；結束後使用原起算日，不重開 180 天。現行退款表只有終態 `recorded`，沒有實作中的退款流程；未來新增非終態必須維持此保護。

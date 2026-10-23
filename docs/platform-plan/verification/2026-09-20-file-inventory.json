@@ -464,8 +464,8 @@
     },
     {
       "path": "apps/platform-api/src/worker.ts",
-      "bytes": 49836,
-      "sha256": "971255b9e7cdfa8f1fd09a43ed59a8239708cdf9a778aabdea66a533aa0c8555"
+      "bytes": 49804,
+      "sha256": "3f9ba5661c0ade5384f76f19eb2187a3d598e492a81282ef5ef9355b957171f6"
     },
     {
       "path": "apps/platform-api/src/features/authentication.ts",
@@ -13984,8 +13984,8 @@
     },
     {
       "path": "deploy/cloudflare/README.md",
-      "bytes": 23024,
-      "sha256": "20d173e11eed8300ae002ddb01d1d3eede5fd1787efc395ac5ca94db4a071062"
+      "bytes": 23439,
+      "sha256": "5941e6ad6ac148ca29cc1569301567953551d4864c03902a650044c1f1408ac6"
     },
     {
       "path": "deploy/cloudflare/broker-preflight.mjs",
@@ -16099,8 +16099,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md",
-      "bytes": 50785,
-      "sha256": "55bdca81f1ccc5f5fec10ff1662916055936951db9fa75a04ad214c7d098d286"
+      "bytes": 51650,
+      "sha256": "cb7b083612d46ad55a22945a03259f18c7e0f8d48a247f502e5d9443ba88b0cc"
     },
     {
       "path": "docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md",
@@ -18609,8 +18609,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/README.md",
-      "bytes": 14731,
-      "sha256": "035d439ba38da280f240d12d798ffae56a49b63b6b24be1bb09a320705507b9c"
+      "bytes": 15377,
+      "sha256": "ab1bf9474d88f934bf6404d2b7c643d41158409d55d13437a44749cdf0173c93"
     },
     {
       "path": "modules/agent-commerce/operations/admissions.ts",
@@ -18619,8 +18619,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/contact-retention.ts",
-      "bytes": 11200,
-      "sha256": "16a03631c825c4ca3f81878bcb612a924e199b9ddb5b1a68ee8829a29c6e0c06"
+      "bytes": 11398,
+      "sha256": "cb228964d2fd317ea218bf5b249d3d47a79f1092c7580917f93e6bdc27e53105"
     },
     {
       "path": "modules/agent-commerce/operations/control-events.ts",
@@ -24879,8 +24879,8 @@
     },
     {
       "path": "tests/runtime/commerce-contact-retention.test.ts",
-      "bytes": 34457,
-      "sha256": "6855dd4149df48f48d57137f02b0c38eab4b96a858ae72442dbd982dd013c4ce"
+      "bytes": 38155,
+      "sha256": "96d0f273bf8c9cfd0cd3dbb049aa525fcfdb69d38b128b256efc79e201332920"
     },
     {
       "path": "tests/runtime/commerce-due-work.test.ts",
@@ -24944,8 +24944,8 @@
     },
     {
       "path": "tests/runtime/commerce-scheduler.test.ts",
-      "bytes": 13572,
-      "sha256": "2a9fd7641b5e78a19b9ddc05f5278712867a4885563e37697565fb60bb4346b6"
+      "bytes": 13602,
+      "sha256": "f02dd104fe132d21e10a254a728937d5471e9fdd1e861b9ab406288c113ec113"
     },
     {
       "path": "tests/runtime/commerce-store-admissions.test.ts",

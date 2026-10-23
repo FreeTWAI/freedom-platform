@@ -561,7 +561,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
             try{await (deps.commerceRetention??runContactRetentionWork)(pool,contactRetention);}catch{console.error('commerce_contact_retention_failed');}
           }
           let commerce:CommerceSettings|undefined;
-          try{commerce=readCommerceSettings(env);}catch{if(contactRetention!==undefined)console.error('commerce_settings_invalid');}
+          try{commerce=readCommerceSettings(env);}catch{console.error('commerce_settings_invalid');}
           if(commerce&&!commerce.quarantine){
             const email=commerce.emailEnabled?commerceEmailOutbox:undefined;
             try{const result=await (deps.commerceApplyDeferred??applyDeferredPaymentEvents)(pool,{limit:200,...(email?{email}:{})});if(result.failed>0)console.error('commerce_payment_deferred_partial',result);}catch{console.error('commerce_payment_deferred_failed');}
