@@ -512,7 +512,12 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         ready = true;
     }
     function resize() { if (disposed)
-        return; renderer.setSize(Math.max(1, host.clientWidth), Math.max(1, host.clientHeight), false); if (lastView)
+        return;
+        // Bound software rendering/readback work without shrinking the CSS scene.
+        // At maxDpr this is at most 960 x 720, matching the capture dimensions.
+        const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
+        const scale = Math.min(1, 640 / width, 480 / height);
+        renderer.setSize(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)), false); if (lastView)
         update(lastView); }
     observer = new ResizeObserver(() => { try { resize(); } catch { if (!disposed) onLost(); } });
     observer.observe(host);

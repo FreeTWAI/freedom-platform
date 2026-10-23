@@ -2494,8 +2494,8 @@
     },
     {
       "path": "apps/portal-web/src/games/stage.ts",
-      "bytes": 34557,
-      "sha256": "0e9cc5d31aa465edc0cb88076af54da074da1331700985683afb7eb008daef55"
+      "bytes": 34903,
+      "sha256": "ae7e9ed4965bc155650b7c221300c180bc2d05a6fdf9d82ea31d96975071e968"
     },
     {
       "path": "apps/portal-web/src/games/toy-theme.css",
