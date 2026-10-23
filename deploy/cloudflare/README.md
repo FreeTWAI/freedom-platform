@@ -167,6 +167,8 @@ transport，不會連到綠界。
 見 [EC-SPEC-04](../../docs/platform-plan/execution/commerce/EC-SPEC-04-payment.md)、
 [EC-SPEC-10 §2.2、§4.4、§6.2、§8.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md)。
 
+`FREEDOM_COMMERCE_CONTACT_RETENTION` 預設為 `off`（未設定相同），不發現工作、不領取既有到期列、不掃描顧客。只接受精確的 `off`／`all`；其他值（含 `orders`）以 `commerce_contact_retention_invalid` 拒絕。排程遇無效值依序記固定名稱 `commerce_contact_retention_invalid`、`commerce_settings_invalid`，不記原值；本輪遮蔽與 commerce 工作停止，其他排程繼續。`all` 只執行訂單履約登記／取消後 180 天規則及顧客掃描；每個 contact 至少一張訂單參照，且每張都滿自己的 180 天。Ted 2026-10-23「不要再設什麼30天規則」，沒有訂單參照的 contact 永不遮蔽；「別在那邊搞一堆遮蔽 很無聊」，不因例外、付款、退款、provider 事件或庫存延後；「all, all」指定 staging／production 均 `all`，由發布操作者設定。啟用後獨立於 checkout／quarantine，改回 `off` 只停止新遮罩、不還原資料。顧客須有經 checkout／order 顧客連結的已遮罩 contact，且沒有經 checkout 顧客、正規化 Email 或 order 顧客連結的 live contact；沒有已遮罩連結的顧客保留。永久限制：Email 修改後仍 live 的舊 contact 繼續保護該 checkout 的顧客。無履約／取消起點的訂單保留個資，人工個資請求由店主處理，備份保存 30 天（Ted，同日）。public 自行寄送不再依賴保存開關，既有 console／launchpad 等檢查保留；正式自行寄送旗標仍由 Ted 決定。schema 187 的 capability floor 保留，能力不代表啟用；本輪不改任何環境旗標。
+
 ## 商務主控台與結帳開關
 
 `FREEDOM_COMMERCE_CONSOLE_ENABLED` 預設關閉，只有明確的 `true` 才安裝新的賣家訂單、付款例外、人工退款紀錄與付款查詢路由；關閉時這些路由回傳 404。它需要同一環境的 `FREEDOM_GUILD_LAUNCHPAD_ENABLED=true`。賣家與供應商共用頁框元件，開關各自獨立；自有庫存離線試用可以保留 Supplier console 關閉。`FREEDOM_COMMERCE_CHECKOUT_ENABLED=true` 則需要主控台開關同時開啟，確保店家可以處理新訂單。兩者都只接受 `true`／`false`；就緒與安裝檢查分別以 `commerce_launchpad_required`、`commerce_console_required` 拒絕缺少的依賴。關閉結帳不會關閉既有訂單的賣家服務。詳見 [EC-SPEC-10 §2.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md#22-主機設定提議)。

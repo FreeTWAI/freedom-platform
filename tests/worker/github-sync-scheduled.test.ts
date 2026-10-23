@@ -8,7 +8,7 @@ const TOKEN = 'synthetic-metrics-token';
 const empty: GitHubSyncSummary = {requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed'};
 
 function env(): WorkerEnv {
-  return {HYPERDRIVE: {connectionString: 'postgres://unused'}, ASSETS: {fetch: async () => new Response(null)}, GITHUB_METRICS_TOKEN: TOKEN} as WorkerEnv;
+  return {FREEDOM_COMMERCE_CONTACT_RETENTION:'all',HYPERDRIVE: {connectionString: 'postgres://unused'}, ASSETS: {fetch: async () => new Response(null)}, GITHUB_METRICS_TOKEN: TOKEN} as WorkerEnv;
 }
 function context() {
   const pending: Promise<unknown>[] = [];
@@ -24,10 +24,15 @@ async function capture(run: () => Promise<void>) {
 
 test('the platform worker exposes scheduled and runs one bounded sync for events, repositories and metrics', async () => {
   const pool = {ended: 0, async end() { this.ended += 1; }};
+  let retained = 0;
   let seen: {budget?: number; token?: string; pool?: unknown} = {};
   let pruned: unknown;
   const handler = createWorkerHandler({
     createPool: () => pool as unknown as Pool,
+    commerceRetention: async given => {
+      assert.equal(given, pool); retained++;
+      return {claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0};
+    },
     commerceDueWork:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
@@ -47,6 +52,7 @@ test('the platform worker exposes scheduled and runs one bounded sync for events
   assert.equal(seen.token, TOKEN);
   assert.equal(seen.pool, pool);
   assert.equal(pruned, pool, 'the scheduled run prunes expired auth records with the same pool');
+  assert.equal(retained, 1);
   assert.equal(pool.ended, 1);
   assert.equal(pending.length, 1);
   await Promise.all(pending);
@@ -54,8 +60,13 @@ test('the platform worker exposes scheduled and runs one bounded sync for events
 
 test('a scheduled sync failure is logged without the token and still ends the pool', async () => {
   const pool = {ended: 0, async end() { this.ended += 1; }};
+  let retained = 0;
   const handler = createWorkerHandler({
     createPool: () => pool as unknown as Pool,
+    commerceRetention: async given => {
+      assert.equal(given, pool); retained++;
+      return {claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0};
+    },
     commerceDueWork:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
@@ -69,14 +80,20 @@ test('a scheduled sync failure is logged without the token and still ends the po
   });
   assert.deepEqual(logged, ['github_sync_failed Error']);
   assert.equal(logged.join(' ').includes(TOKEN), false);
+  assert.equal(retained, 1);
   assert.equal(pool.ended, 1);
   await Promise.all(pending);
 });
 
 test('a failing auth prune logs one line and still ends the pool', async () => {
   const pool = {ended: 0, async end() { this.ended += 1; }};
+  let retained = 0;
   const handler = createWorkerHandler({
     createPool: () => pool as unknown as Pool,
+    commerceRetention: async given => {
+      assert.equal(given, pool); retained++;
+      return {claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0};
+    },
     commerceDueWork:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
@@ -89,6 +106,7 @@ test('a failing auth prune logs one line and still ends the pool', async () => {
     await handler.scheduled({cron: '*/10 * * * *'}, env(), ctx);
   });
   assert.deepEqual(logged, ['auth_prune_failed']);
+  assert.equal(retained, 1);
   assert.equal(pool.ended, 1);
   await Promise.all(pending);
 });
