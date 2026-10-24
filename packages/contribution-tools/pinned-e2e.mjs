@@ -10,7 +10,7 @@ import { GUILD_PRESENTATION_PROFILE } from './guild-presentation-profile.mjs';
 // from the next central pin upgrade, and the old file must stay until then.
 
 export const E2E_BASELINE = Object.freeze(`
-admin-credentials.spec.ts admin-guilds.spec.ts admin-review-center.spec.ts admin.spec.ts
+core-services.spec.ts admin-credentials.spec.ts admin-guilds.spec.ts admin-review-center.spec.ts admin.spec.ts
 agent-shops.spec.ts ai-sister-guides.spec.ts audit-identity-final.spec.ts audit-identity.spec.ts
 audit-operations.spec.ts audit-shell.spec.ts audit-skills.spec.ts avatar.spec.ts benefits.spec.ts
 calm-experience.spec.ts campaign-draft-newlines.spec.ts chat-stickers.spec.ts
