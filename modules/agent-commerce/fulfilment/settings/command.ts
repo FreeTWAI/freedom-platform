@@ -17,11 +17,11 @@ export class ShippingSettingsProblem extends Problem {
   constructor(status:number,code:string,fields:ShippingFieldError[]){super(status,code,'配送設定無法儲存，請檢查標示的欄位。');this.fields=fields.slice(0,20);}
 }
 export interface ShippingSettingsContext {tenant:TenantScopeContext;profile:Profile}
-type Operation='commerce.ship_from_location.create'|'commerce.ship_from_location.retire'|'commerce.shipping_profile.save'|'commerce.item_shipping_attributes.save';
+type Operation='commerce.drop_ship.propose'|'commerce.drop_ship.decide'|'commerce.ship_from_location.create'|'commerce.ship_from_location.retire'|'commerce.shipping_profile.save'|'commerce.item_shipping_attributes.save';
 /** Reference-only receipts; current projections, including replays, use this
  * transaction. The store row serializes saves without the order advisory lock. */
 export async function shippingSettingsCommand<T>(pool:Pool,actor:SettingsActor,tenantId:string,instanceId:string,capability:string,
-  operation:Operation,target:{kind:'commerce_ship_from_location'|'commerce_shipping_profile'|'commerce_item_shipping_attributes';id:string},
+  operation:Operation,target:{kind:'commerce_fulfilment_agreement'|'commerce_ship_from_location'|'commerce_shipping_profile'|'commerce_item_shipping_attributes';id:string},
   body:unknown,key:string,expected:string|undefined,run:(q:PoolClient,context:ShippingSettingsContext)=>Promise<{id:string}>,
   project:(q:PoolClient,context:ShippingSettingsContext,id:string)=>Promise<T>):Promise<T>{
   OpaqueId.parse(tenantId);OpaqueId.parse(instanceId);OpaqueId.parse(target.id);

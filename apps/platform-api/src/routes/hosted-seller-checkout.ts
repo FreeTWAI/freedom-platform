@@ -6,7 +6,7 @@ import type {Pool} from 'pg';
 import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives.js';
 import * as wire from '../../../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
 import {requireCondition} from '../../../../packages/shared/problem.js';
-import {listSellerCheckoutOrders,readSellerCheckoutOrder,readSellerOrderContact,cancelSellerCheckoutOrder,querySellerPayment,type SellerCheckoutReadOptions} from '../../../../modules/agent-commerce/checkout/seller-orders.js';
+import {listSellerCheckoutOrders,readSellerCheckoutOrder,readSellerOrderContact,cancelSellerCheckoutOrder,cancelSellerPaidCheckoutOrder,recordSellerPaidCancellationRefund,querySellerPayment,type SellerCheckoutReadOptions} from '../../../../modules/agent-commerce/checkout/seller-orders.js';
 import {listSellerExceptions,readSellerException,actOnSellerException} from '../../../../modules/agent-commerce/checkout/seller-exceptions.js';
 import type {PlatformEnv} from '../module-context.js';
 import {commandHeaders,etag,privateCache,singleQuery} from './tenant-http.js';
@@ -25,6 +25,14 @@ export function createHostedSellerCheckoutRoutes(pool:Pool,options:SellerCheckou
   app.post(orders+'/:order_id/cancel',async c=>{
     const h=commandHeaders(c,true),[t,i]=ids(c);wire.SellerCheckoutEmptyInputSchema.parse(await c.req.json());
     const view=wire.SellerCheckoutOrderSchema.parse(await cancelSellerCheckoutOrder(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('order_id')),h.key,h.expected!,options));etag(c,view.version);return c.json(view);
+  });
+  app.post(orders+'/:order_id/paid-cancellation',async c=>{
+    const h=commandHeaders(c,true),[t,i]=ids(c),id=OpaqueId.parse(c.req.param('order_id'));
+    const view=wire.SellerCheckoutOrderSchema.parse(await cancelSellerPaidCheckoutOrder(pool,c.get('actor'),t,i,id,await c.req.json(),h.key,h.expected!,options));etag(c,view.version);return c.json(view);
+  });
+  app.post(orders+'/:order_id/paid-cancellation/refund',async c=>{
+    const h=commandHeaders(c,true),[t,i]=ids(c),id=OpaqueId.parse(c.req.param('order_id'));
+    const view=wire.SellerCheckoutOrderSchema.parse(await recordSellerPaidCancellationRefund(pool,c.get('actor'),t,i,id,await c.req.json(),h.key,h.expected!,options));etag(c,view.version);return c.json(view);
   });
   app.post(orders+'/:order_id/offline-payments',async c=>{
     const h=commandHeaders(c,true),[t,i]=ids(c),id=OpaqueId.parse(c.req.param('order_id'));

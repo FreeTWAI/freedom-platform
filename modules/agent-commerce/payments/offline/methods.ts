@@ -35,7 +35,8 @@ export function createPaymentMethodsPort(input:{environment:'sandbox'|'live';pro
       const bank=Boolean(profiles.includes(BANK_PROFILE)&&settings?.document.bank_transfer);
       const meetup=Boolean(profiles.includes(MEETUP_PROFILE)&&settings?.document.cash_on_meetup);
       if(bank)options.push({method:'bank_transfer',available:money,reason:money?null:'payment_profile_unavailable'});
-      const meetupOk=money&&meetupSelected(request.shippingMethodRefs);
+      // A manual shipment (including supplier drop-ship) offers bank transfer only.
+      const meetupOk=!request.shippingMethodRefs?.includes('self_ship')&&money&&meetupSelected(request.shippingMethodRefs);
       if(meetup)options.push({method:'cash_on_meetup',available:meetupOk,reason:meetupOk?null:!money?'payment_profile_unavailable':'meetup_required'});
       const bankAvailable=options.some(option=>option.method==='bank_transfer'&&option.available);
       const meetupAvailable=options.some(option=>option.method==='cash_on_meetup'&&option.available);
