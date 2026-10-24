@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
 import {openChat,closeChat} from './navigation.js';
 
@@ -22,8 +23,8 @@ async function login(page:Page,language:Language=languages[0]){
 
 async function selectLanguage(page:Page,language:Language){
   await page.locator('.settings-menu-button').click();
-  await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();
-  await page.keyboard.press('Escape');
+  await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();
+  await closeSettingsMenu(page);
   await expect(page.locator('html')).toHaveAttribute('lang',language.id);
 }
 
@@ -88,7 +89,7 @@ for(const [index,language] of languages.entries()){
       const page=await context.newPage();await login(page,language);await expect(page.locator('.request-feedback')).toHaveCount(0);
       await context.setOffline(true);const feedback=page.locator('.request-feedback');await expect(feedback).toHaveText(language.offline);
       for(const [theme,name] of ['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生'].entries()){
-        await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');
+        await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);
         for(const width of [320,390,1280]){
           await page.setViewportSize({width,height:844});await contained(page,feedback);
           const style=await feedback.evaluate(element=>({background:getComputedStyle(element).backgroundColor,pointerEvents:getComputedStyle(element).pointerEvents}));

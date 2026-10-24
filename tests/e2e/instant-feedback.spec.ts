@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {openChat,closeChat,navigate} from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 import {mkdirSync} from 'node:fs';
@@ -68,7 +69,7 @@ test('offline feedback follows all three themes at 320px and leaves local naviga
   try{
     await expect(page.locator('.request-feedback')).toContainText('目前離線');
     for(const name of ['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生']){
-      await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();
+      await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
       await page.getByRole('button',{name:'設定',exact:true}).click();
       const feedback=page.locator('.request-feedback');await expect(feedback).toBeVisible();
       const colors=await feedback.evaluate(element=>({color:getComputedStyle(element).color,background:getComputedStyle(element).backgroundColor}));

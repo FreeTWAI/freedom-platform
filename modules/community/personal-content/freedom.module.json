@@ -19,7 +19,13 @@
     "apps/portal-web/src/modules/promotional-content/**",
     "apps/portal-web/promo-preview/**",
     "docs/platform-plan/contracts/promotional-content-v1.md",
-    "tests/runtime/promotional-content.test.ts"
+    "tests/runtime/promotional-content.test.ts",
+    "apps/portal-web/src/modules/PersonalSpace.tsx",
+    "apps/portal-web/src/modules/PersonalSpace.css",
+    "apps/portal-web/src/modules/personal-space-model.ts",
+    "tests/runtime/personal-space.test.ts",
+    "tests/e2e/personal-space.spec.ts",
+    "docs/development/personal-space.md"
   ],
   "public_exports": [],
   "dependencies": [
@@ -29,7 +35,10 @@
     "scoped-commands",
     "skill-submissions",
     "work",
-    "member-communications"
+    "member-communications",
+    "member-card",
+    "portal-shell",
+    "assets"
   ],
   "contract_families": [],
   "client_profiles": [
@@ -39,7 +48,8 @@
     "AGENTS.md",
     "docs/development/share-promotion.md",
     "docs/platform-plan/execution/unified-foundation/02-principal-command.md",
-    "docs/platform-plan/execution/unified-foundation/03-assets-private-work.md"
+    "docs/platform-plan/execution/unified-foundation/03-assets-private-work.md",
+    "docs/development/personal-space.md"
   ],
   "invariants": [
     "current-authority-before-replay",
@@ -73,6 +83,15 @@
       "entry": "apps/portal-web/src/modules/FirstParticipation.tsx",
       "operations": [
         "community.first-participation.view"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "community.personal-space-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/PersonalSpace.tsx",
+      "operations": [
+        "community.personal-space-page.view"
       ],
       "auth_profile": "member-session"
     }

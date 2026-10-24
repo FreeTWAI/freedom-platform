@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import { mkdirSync } from 'node:fs';
 import type { MemberCardData } from '../../apps/portal-web/src/modules/Membership.js';
 import { test, expect, type Page } from './fixtures.js';
@@ -457,7 +458,7 @@ test('the home action stays compact, readable and reachable in all themes on des
   await expect(prompt).not.toContainText('不應顯示的任務標題');
   for (const [theme, label] of [['light', '自由工坊－明亮'], ['dark', '自由工坊－夜航'], ['versefolk', '自由工坊－敘生']] as const) {
     await page.getByRole('button', { name: '設定', exact: true }).click();
-    await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio', { name: label, exact: true }).click();
     await page.getByRole('button', { name: '設定', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     for (const width of [1440, 820, 390, 320]) {

@@ -65,7 +65,7 @@ export async function navigate(page: Page, name: string) {
   if (['我的名片', '待辦清單'].includes(name)) {
     const settings = page.getByRole('button', { name: '設定', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
-    await page.getByRole('menuitem', { name, exact: true }).click();
+    await page.getByRole('menuitem', { name:name==='我的名片'?'資料與帳號設定':name, exact: true }).click();
     return;
   }
   const menu = page.getByRole('button', { name: '開啟選單', exact: true });
