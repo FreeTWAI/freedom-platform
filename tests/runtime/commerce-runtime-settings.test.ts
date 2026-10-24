@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {Pool} from 'pg';
-import {readCommerceSettings,readNodeCommerceSettings,readCommerceSelfShipEnabled,readCommerceContactRetention} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readNodeCommerceSettings,readCommerceSelfShipEnabled,readCommerceContactRetention,readCommerceDropShipEnabled} from '../../modules/agent-commerce/operations/runtime-settings.js';
 import {ReadinessError} from '../../apps/platform-api/src/readiness.js';
 import {readWorkerConfig,workerRuntime,type WorkerEnv} from '../../apps/platform-api/src/worker.js';
 import {nodeRuntime,createApp} from '../../apps/platform-api/src/app.js';
@@ -126,4 +126,22 @@ test('public self ship accepts off, unset and all retention with the existing co
   assert.equal(readCommerceSelfShipEnabled(bindings),true);
   for(const read of [()=>readNodeCommerceSettings(bindings),()=>readWorkerConfig(bindings)])assert.throws(read,{name:'ReadinessError',message:'commerce_contact_retention_invalid'});
  }
+});
+
+
+test('drop ship defaults off and requires self ship plus the supplier console on every host',async()=>{
+  assert.equal(readCommerceDropShipEnabled({}),false);
+  const bindings={...env(),FREEDOM_COMMERCE_DROP_SHIP_ENABLED:'true',FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true'};
+  for(const value of ['TRUE','',' true','false '])assert.throws(()=>readCommerceDropShipEnabled({...bindings,FREEDOM_COMMERCE_DROP_SHIP_ENABLED:value}),new ReadinessError('commerce_drop_ship_flag_invalid'));
+  for(const host of [readNodeCommerceSettings,readWorkerConfig]){
+    assert.throws(()=>host({...bindings,FREEDOM_COMMERCE_SELF_SHIP_ENABLED:'false'}),new ReadinessError('commerce_drop_ship_self_ship_required'));
+    assert.throws(()=>host({...bindings,FREEDOM_SUPPLIER_CONSOLE_ENABLED:'false'}),new ReadinessError('commerce_drop_ship_supplier_console_required'));
+  }
+  const config=readWorkerConfig(bindings);assert.equal(workerRuntime(bindings,config).commerceDropShipEnabled,true);
+  const pool={query(){throw new Error('site must not query SQL');}} as unknown as Pool;
+  for(const enabled of [false,true])for(const quarantine of [false,true]){
+    const settings={checkoutEnabled:true,consoleEnabled:true,quarantine,providerProfiles:[]};
+    const site=await (await createApp(pool,'http://127.0.0.1:4310','local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,commerceSelfShipEnabled:true,commerceDropShipEnabled:enabled,commerceSettings:settings}).request('http://127.0.0.1:4310/api/v1/site')).json();
+    assert.equal(site.commerce_drop_ship_enabled,enabled&&!quarantine);
+  }
 });

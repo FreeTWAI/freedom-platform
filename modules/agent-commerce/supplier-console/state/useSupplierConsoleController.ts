@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import type {z} from 'zod';
 import {ApiError,type PortalClient} from '../../../../apps/portal-web/src/api';
 import {SupplyCatalogViewSchema,SupplyCatalogSetupInputSchema,SupplyProductInputSchema,SupplyProductUpdateInputSchema,type SupplyCatalogView} from '../../../../contracts/guild-launchpad/v1/hosted-supply-catalog';
@@ -122,8 +122,10 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  const materialBlocking=Object.entries(materialStates).some(([id,s])=>s.blocking||!!heldMaterialUpload(client,userId,{...scope,materialId:id}))||materialUploadTargets(client,userId,scope).length>0;
  const dirty=Object.values(drafts).some(d=>Object.keys(d.fields).length>0)||Object.values(photoStates).some(s=>s.dirty)||Object.values(materialStates).some(s=>s.dirty);
  const locked=phase!=='idle'||photoBlocking||materialBlocking||pendingReads.length>0||revoked||refusalMark.current!==null||!profile?.writable||slot('profile').state!=='ready';
+ const extensionGuard=useRef<((next:string|null)=>boolean)|null>(null);
+ const registerExtension=useCallback<RegisterLeave>(guard=>{extensionGuard.current=guard;},[]);
  const guardRef=useRef<(next:string|null)=>boolean>(()=>true);
- guardRef.current=next=>{const result=leaveDecision(next,scope,{sending:busyRef.current,held:attemptRef.current!==null,photoBlocking,materialBlocking,dirty});if(!result.allow){setNotice(result.message);return false;}return !result.confirm||window.confirm(result.message);};
+ guardRef.current=next=>{if(extensionGuard.current&&!extensionGuard.current(next))return false;const result=leaveDecision(next,scope,{sending:busyRef.current,held:attemptRef.current!==null,photoBlocking,materialBlocking,dirty});if(!result.allow){setNotice(result.message);return false;}return !result.confirm||window.confirm(result.message);};
  useEffect(()=>{registerLeave(next=>guardRef.current(next));return()=>registerLeave(null);},[registerLeave]);
  const unloadRef=useRef(false);unloadRef.current=dirty||photoBlocking||materialBlocking||phase!=='idle';
  useEffect(()=>{const unload=(e:BeforeUnloadEvent)=>{if(unloadRef.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>window.removeEventListener('beforeunload',unload);},[]);
@@ -189,7 +191,7 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  function reapply(name:string,current:Fields,version:string){const a=conflicts[name],d=drafts[name];if(!a||!d||locked)return;try{const next=reapplyAttempt(a,{...d,fields:commandFields(a.kind,d.fields)},commandFields(a.kind,current),version);if(!next){discard(name);setNotice('目前資料已包含你的修改。');return;}void send(next);}catch(cause){setError(cause instanceof Error?cause.message:'請檢查欄位格式。');}}
  const position=(name:string):ListPosition=>positions[name]??{search:'',filter:'',sort:'sku',scroll:0,lastId:null};
  const remember=(name:string,changes:Partial<ListPosition>)=>setPositions(old=>({...old,[name]:{...position(name),...changes}}));
- return {client,userId,scope,root,route,photosEnabled,reservationFilters,reportPeriod,reads,slot,read,profile,owner,ownerAllowed,can,locked,refused:revoked,phase,attempt,notice,error,rejected,pendingReads,drafts,conflicts,sectionStatus,updateDraft,discard,reapply,save,command,
+ return {registerExtension,client,userId,scope,root,route,photosEnabled,reservationFilters,reportPeriod,reads,slot,read,profile,owner,ownerAllowed,can,locked,refused:revoked,phase,attempt,notice,error,rejected,pendingReads,drafts,conflicts,sectionStatus,updateDraft,discard,reapply,save,command,
   retry:()=>attempt&&void send(attempt),position,remember,cursors,nextPage:(next:string)=>setPaging({filterKey,cursors:[...cursors,next]}),previousPage:()=>setPaging({filterKey,cursors:cursors.length>1?cursors.slice(0,-1):cursors}),
   materialBegin:(id:string)=>{if(busyRef.current||attemptRef.current||pendingReads.length||!can('store:write')||slot('profile').state!=='ready'||Object.values(photoRef.current).some(s=>s.blocking)||Object.entries(materialRef.current).some(([key,s])=>key!==id&&s.blocking)||materialUploadTargets(client,userId,scope).some(key=>key!==id))return false;materialRef.current={...materialRef.current,[id]:{dirty:true,blocking:true}};setMaterialStates(materialRef.current);return true;},
   materialStates,materialCreated,materialFocused:()=>setMaterialCreated(null),materialState:(id:string,dirty:boolean,blocking:boolean)=>{const pending=!!heldMaterialUpload(client,userId,{...scope,materialId:id});materialRef.current={...materialRef.current,[id]:{dirty:dirty||pending,blocking:blocking||pending}};setMaterialStates(materialRef.current);},
