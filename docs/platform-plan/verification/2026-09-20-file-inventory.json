@@ -21649,8 +21649,8 @@
     },
     {
       "path": "modules/platform-host/freedom.module.json",
-      "bytes": 1310,
-      "sha256": "03cf4c996cbc032f6a410e656e73ab58d98b79abd9f9e43bbc456ce13df6a632"
+      "bytes": 1346,
+      "sha256": "a51f33d16a562b9a08d39c6265cb57726997ef62795de33e29ae46931ce2e062"
     },
     {
       "path": "modules/portal-features/README.md",
@@ -27624,8 +27624,8 @@
     },
     {
       "path": "tests/worker/workerd.test.ts",
-      "bytes": 25717,
-      "sha256": "6b9e7ce903c381e49228eb8cacf2c3fa7df3c0755b28a49777742063e4010d77"
+      "bytes": 26098,
+      "sha256": "985835151d482ef16dc2f503070eef8f05d15b132a9408a5905bc7fc39c210db"
     },
     {
       "path": "tests/worker/broker-fixtures/bundle-modules.ts",
