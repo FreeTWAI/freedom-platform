@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useId, useState, type FormEvent} from 'react'
+import {useCallback, useEffect, useId, useRef, useState, type FormEvent} from 'react'
 import {accessAwareFetch} from '../access-fetch'
 import {ApiError, type PortalClient} from '../api'
 import {SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS, SERVICE_COVER_INPUT_BYTES, SERVICE_LIMIT, SERVICE_MODE_LABELS, SERVICE_MODES, validateMemberService, type ServiceCategory, type ServiceMode} from '../../../../packages/shared/member-service'
@@ -24,6 +24,10 @@ type CoverOperation = {stage: 'cover'; service: Service; file: File; key: string
 type Operation = SaveOperation | CoverOperation
 
 const BLANK: Draft = {title: '', category: '', summary: '', description: '', price_text: '', area_text: '', service_mode: 'online', contacts: [{label: '', url: ''}]}
+const draftOf = (service: Service): Draft => ({title: service.title, category: service.category, summary: service.summary, description: service.description ?? '', price_text: service.price_text ?? '', area_text: service.area_text ?? '', service_mode: service.service_mode, contacts: service.contacts.map(row => ({...row}))})
+// An unsent form closed in this page is kept per target ('new' or a service id) until it is saved or cleared.
+type Kept = {draft: Draft; file: File | null; version: number | null; generation: number}
+type FormIdentity = {readonly target: string; readonly generation: number}
 
 // No response, a 5xx or an unreadable success body leaves a write's outcome unknown.
 const unknownOutcome = (cause: unknown) => !(cause instanceof ApiError) || cause.network
@@ -54,6 +58,11 @@ export function MemberServices({client}: {client: PortalClient}) {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Service | null>(null)
   const [draft, setDraft] = useState<Draft>(BLANK)
+  const kept = useRef(new Map<string, Kept>()), origin = useRef('new'), generation = useRef(0)
+  const inFlight = useRef<{identity: FormIdentity; target: string; operation: Operation} | null>(null)
+  const boundOperation = useRef<FormIdentity | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [restored, setRestored] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
   const [pending, setPending] = useState<Operation | null>(null)
@@ -84,11 +93,33 @@ export function MemberServices({client}: {client: PortalClient}) {
   }, [client])
   useEffect(() => { void load(category) }, [load, category])
   useEffect(() => { void refreshMine().catch(() => {}) }, [refreshMine])
-  function openCreate() { setEditing(null); setDraft(BLANK); setFile(null); setIssues([]); setError(''); setFormOpen(true) }
+  function keep() {
+    if (!formOpen || pending) return
+    const base = editing ? draftOf(editing) : BLANK
+    if (file || JSON.stringify(draft) !== JSON.stringify(base)) kept.current.set(origin.current, {draft, file, version: editing?.aggregate_version ?? null, generation: generation.current})
+    else kept.current.delete(origin.current)
+  }
+  function openCreate() {
+    keep()
+    const saved = kept.current.get('new'), running = inFlight.current?.target === 'new' ? inFlight.current : null
+    boundOperation.current = running?.identity ?? null; setPending(running?.operation ?? null)
+    generation.current++; if (fileInput.current) fileInput.current.value = ''
+    origin.current = 'new'; setEditing(null); setDraft(saved?.draft ?? BLANK); setFile(saved?.file ?? null); setRestored(Boolean(saved))
+    setIssues([]); setError(''); setFormOpen(true)
+  }
   function openEdit(service: Service) {
-    setEditing(service)
-    setDraft({title: service.title, category: service.category, summary: service.summary, description: service.description ?? '', price_text: service.price_text ?? '', area_text: service.area_text ?? '', service_mode: service.service_mode, contacts: service.contacts.map(row => ({...row}))})
-    setFile(null); setIssues([]); setError(''); setFormOpen(true)
+    keep()
+    boundOperation.current = null; setPending(null)
+    // A draft for an older version of this service is dropped rather than applied to newer content.
+    const saved = kept.current.get(service.service_id), current = saved?.version === service.aggregate_version ? saved : undefined
+    if (saved && !current) kept.current.delete(service.service_id)
+    generation.current++; if (fileInput.current) fileInput.current.value = ''
+    origin.current = service.service_id; setEditing(service); setDraft(current?.draft ?? draftOf(service)); setFile(current?.file ?? null); setRestored(Boolean(current))
+    setIssues([]); setError(''); setFormOpen(true)
+  }
+  function clearDraft() {
+    if (fileInput.current) fileInput.current.value = ''
+    kept.current.delete(origin.current); setDraft(editing ? draftOf(editing) : BLANK); setFile(null); setRestored(false); setIssues([])
   }
   function patch(partial: Partial<Draft>) { setDraft(current => ({...current, ...partial})) }
   async function write(method: 'PUT' | 'DELETE', path: string, body: BodyInit, headers: Record<string, string>, fallback: string) {
@@ -108,12 +139,28 @@ export function MemberServices({client}: {client: PortalClient}) {
   function uploadCover(op: CoverOperation) {
     return write('PUT', `/member-services/${op.service.service_id}/cover`, op.file, {'Content-Type': op.file.type, 'Idempotency-Key': op.key, 'If-Match': `"${op.version}"`}, '封面未能換上。')
   }
-  async function finish(created: boolean) {
-    setPending(null); setFormOpen(false); setFile(null); setNotice(created ? '已新增服務。' : '已更新服務。')
+  function dropSavedDraft(identity: FormIdentity, target = identity.target) {
+    if (kept.current.get(target)?.generation === identity.generation) kept.current.delete(target)
+  }
+  function ownsOperation(identity: FormIdentity) {
+    return generation.current === identity.generation || boundOperation.current === identity
+  }
+  async function finish(created: boolean, identity: FormIdentity, target: string) {
+    dropSavedDraft(identity); dropSavedDraft(identity, target)
+    // A response belongs to the form that submitted it, even if another draft is now open.
+    if (ownsOperation(identity)) {
+      setRestored(false); setPending(null); setFormOpen(false); setFile(null)
+    }
+    setNotice(created ? '已新增服務。' : '已更新服務。')
     await Promise.all([load(category), refreshMine()])
   }
   function closeForm() {
-    setFormOpen(false); setIssues([]); setConflict(null)
+    // Abandoning an operation whose outcome is unknown also drops its draft, so a later save cannot repeat it under a new key.
+    if (pending && !saving) kept.current.delete(origin.current)
+    else keep()
+    boundOperation.current = null
+    generation.current++
+    setFormOpen(false); setIssues([]); setConflict(null); setRestored(false)
     if (pending) { setPending(null); void Promise.all([load(category), refreshMine().catch(() => null)]) }
   }
   async function reloadLatest() {
@@ -137,6 +184,7 @@ export function MemberServices({client}: {client: PortalClient}) {
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     let op = pending
     if (!op) {
       const payload = {...draft, category: draft.category, contacts: draft.contacts.map(row => ({label: row.label, url: row.url}))}
@@ -145,7 +193,13 @@ export function MemberServices({client}: {client: PortalClient}) {
       op = {stage: 'save', method: editing ? 'PUT' : 'POST', path: editing ? `/member-services/${editing.service_id}` : '/member-services', body: parsed.value,
         key: crypto.randomUUID(), version: editing ? editing.aggregate_version : null, file, coverKey: crypto.randomUUID()}
     }
+    const identity: FormIdentity = pending && boundOperation.current ? boundOperation.current : {target: origin.current, generation: generation.current}
+    const current = () => ownsOperation(identity)
+    keep()
     const created = op.stage === 'save' && op.method === 'POST', retried = pending
+    // A reopened target rejoins this operation; another target keeps its own form identity.
+    inFlight.current = {identity, target: origin.current, operation: op}
+    boundOperation.current = identity; setPending(op)
     setIssues([]); setSaving(true); setError(''); setNotice(''); setConflict(null)
     try {
       if (op.stage === 'save') {
@@ -157,6 +211,12 @@ export function MemberServices({client}: {client: PortalClient}) {
             : await client.post<Service>(save.path, save.body, {idempotencyKey: save.key})
         } catch (cause) {
           const open = !settled(cause, retried?.stage === 'save')
+          if (!current()) {
+            // Closing an in-flight unknown write abandons its draft, just like 放棄並關閉.
+            if (open) dropSavedDraft(identity)
+            await Promise.all([load(category), refreshMine().catch(() => null)])
+            return
+          }
           setPending(open ? save : null)
           if (conflictOf(cause)) setConflict('save')
           setError(open ? `${unknownOutcome(cause) ? '' : (cause as Error).message}儲存結果還沒確認。${unknownOutcome(cause) ? '' : '稍後'}按「重試儲存」會用同一份內容和同一個請求再送一次，不會重複建立，也不會覆蓋別人的修改。`
@@ -164,25 +224,35 @@ export function MemberServices({client}: {client: PortalClient}) {
             : cause instanceof Error ? cause.message : '服務未能儲存。')
           return
         }
-        setEditing(saved)
-        if (!save.file) { await finish(created); return }
+        // Once text is committed, any cover recovery belongs to this service, never to 'new'.
+        const retained = kept.current.get(identity.target)
+        if (retained?.generation === identity.generation) {
+          kept.current.delete(identity.target)
+          kept.current.set(saved.service_id, {...retained, version: saved.aggregate_version})
+        }
+        if (current()) { origin.current = saved.service_id; setEditing(saved) }
+        if (!save.file) { await finish(created, identity, saved.service_id); return }
         op = {stage: 'cover', service: saved, file: save.file, key: save.coverKey, version: saved.aggregate_version}
+        inFlight.current = {identity, target: saved.service_id, operation: op}
+        if (current()) setPending(op)
       }
       const cover = op
       try { await uploadCover(cover) }
       catch (cause) {
         const open = !settled(cause, retried?.stage === 'cover')
-        setPending(open ? cover : null)
+        if (current()) setPending(open ? cover : null)
+        else if (open) dropSavedDraft(identity, cover.service.service_id)
         await Promise.all([load(category), refreshMine().catch(() => null)])
+        if (!current()) return
         if (conflictOf(cause)) setConflict('cover')
         setError(open ? `${unknownOutcome(cause) ? '' : (cause as Error).message}封面上傳結果還沒確認，服務已儲存。${unknownOutcome(cause) ? '' : '稍後'}按「重試封面」會用同一張圖片和同一個請求再送一次。`
           : conflictOf(cause) ? '這項服務已在其他地方更新，這次的封面沒有換上。你選的圖片還在；按「載入最新內容」確認後，再儲存一次即可換上。'
           : `${cause instanceof Error ? cause.message : '封面未能換上。'}服務已儲存。`)
         return
       }
-      await finish(created)
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '服務未能儲存。') }
-    finally { setSaving(false) }
+      await finish(created, identity, cover.service.service_id)
+    } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : '服務未能儲存。') }
+    finally { inFlight.current = null; setSaving(false) }
   }
   async function act(service: Service, action: 'pause' | 'resume' | 'hide' | 'delete' | 'remove-cover') {
     setSaving(true); setError('')
@@ -243,6 +313,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     {formOpen && <form className="card service-form" onSubmit={event => void submit(event)} aria-busy={saving}>
       <h2>{editing ? '編輯服務' : '新增服務'}</h2>
       <p className="service-public-note">服務頁會公開，任何拿到連結的人都看得到。</p>
+      {restored && !pending && <p className="field-hint service-draft-note" role="status">已還原上次未送出的內容，還沒有儲存。<button type="button" className="btn btn-ghost btn-small" disabled={saving} onClick={clearDraft}>清除重填</button></p>}
       <fieldset className="service-form-fields" disabled={pending !== null}>
       <label className="field">標題<input required maxLength={80} value={draft.title} aria-invalid={Boolean(issue('title'))} onChange={event => patch({title: event.target.value})}/>{issue('title') && <span className="field-error">{issue('title')}</span>}</label>
       <label className="field">分類<select required value={draft.category} aria-invalid={Boolean(issue('category'))} onChange={event => patch({category: event.target.value as ServiceCategory | ''})}>
@@ -268,12 +339,12 @@ export function MemberServices({client}: {client: PortalClient}) {
         {issue('contacts') && <span className="field-error">{issue('contacts')}</span>}
         <button type="button" className="btn btn-ghost" disabled={draft.contacts.length >= 3} onClick={() => patch({contacts: [...draft.contacts, {label: '', url: ''}]})}>再加一個聯絡方式</button>
       </div>
-      <label className="field">封面（選填，JPEG／PNG／WebP，4 MiB 以下）<input type="file" accept="image/jpeg,image/png,image/webp" aria-invalid={Boolean(issue('cover'))} onChange={event => {
+      <label className="field">封面（選填，JPEG／PNG／WebP，4 MiB 以下）<input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" aria-invalid={Boolean(issue('cover'))} onChange={event => {
         const next = event.target.files?.[0] ?? null
         setIssues(current => current.filter(item => item.field !== 'cover'))
         if (next && next.size > SERVICE_COVER_INPUT_BYTES) { event.target.value = ''; setFile(null); setIssues(current => [...current, {field: 'cover', message: '封面需為 4 MiB 以下，請換一張較小的圖片。'}]); return }
         setFile(next)
-      }}/>{issue('cover') && <span className="field-error">{issue('cover')}</span>}</label>
+      }}/>{file && <span className="field-hint">已選圖片：{file.name}</span>}{issue('cover') && <span className="field-error">{issue('cover')}</span>}</label>
       {editing?.cover_url && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(editing, 'remove-cover')}>移除封面</button>}
       </fieldset>
       {error && <div className="banner banner-error" role="alert"><p>{error}</p></div>}

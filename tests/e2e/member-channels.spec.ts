@@ -283,7 +283,9 @@ test('an empty guild or squad membership offers the real page instead of a made-
   await tab(page,'小隊閒聊').click();
   await expect(panel(page,'小隊閒聊').getByText('你還沒有加入任何小隊，加入後會出現該小隊的閒聊頻道。')).toBeVisible();
   await panel(page,'小隊閒聊').getByRole('button',{name:'前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
-  await page.goBack();await expect(page).toHaveURL(/#messages$/);
+  await page.goBack();await expect(page).toHaveURL(/#home$/);
+  // The full-screen overlay no longer persists across page navigation.
+  await expect(page.locator('#floating-message-panel')).toBeHidden();await openChat(page);
   await tab(page,'公會閒聊').click();await panel(page,'公會閒聊').getByRole('button',{name:'前往職業公會',exact:true}).click();await expect(page).toHaveURL(/#guilds$/);
   expect(server.log.reads).toEqual([]);
 });
@@ -491,7 +493,10 @@ test('leaving a channel clears its history and composer at once, and a late answ
   const alerts:string[]=[];page.once('dialog',async dialog=>{alerts.push(dialog.message());await dialog.accept();});
   await squad.getByRole('button',{name:'回到小隊集合',exact:true}).click();
   await expect(page).toHaveURL(/#squads$/);expect(alerts).toHaveLength(0);await expect(thread).toBeHidden();
-  await expect(page.locator('.floating-message-panel')).toBeVisible();expect(server.log.sends).toEqual([original]);
+  await expect(page.locator('.floating-message-panel')).toBeHidden();expect(server.log.sends).toEqual([original]);
+  // Page navigation collapses the modal but must not discard the blocked
+  // operation. Reopen it before the read-only authority recheck.
+  await openChat(page);
 
   // Restore only this synthetic membership. A read-only authority recheck must
   // not submit the pending command; confirmation remains an explicit action.
@@ -512,7 +517,8 @@ test('leaving a channel clears its history and composer at once, and a late answ
   await guild.getByRole('button',{name:'← 返回公會列表',exact:true}).click();
   await tab(page,'小隊閒聊').click();
   await squad.getByRole('button',{name:'回到小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
-  await page.goBack();await tab(page,'公會閒聊').click();
+  await page.goBack();await expect(page.locator('#floating-message-panel')).toBeHidden();
+  await openChat(page);await tab(page,'公會閒聊').click();
   await panel(page,'公會閒聊').getByRole('button',{name:'合成公會乙',exact:true}).click();await expect(panel(page,'公會閒聊').locator('.messages-bubbles .messages-body')).toHaveCount(1);
   await expect(panel(page,'公會閒聊').getByRole('button',{name:/職業公會/})).toHaveCount(0);
 });
