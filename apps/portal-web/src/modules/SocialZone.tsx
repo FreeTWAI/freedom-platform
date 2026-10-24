@@ -102,6 +102,14 @@ const FILTERS = [
   {id: 'other', label: '其他'},
 ] as const;
 
+const FEED_MESSAGES={
+  'zh-Hant':{note:'社群貼文',all:'全部動態',filters:'動態分類',options:'動態選項',close:'關閉',closeOptions:'關閉動態選項',refresh:'更新動態',link:'分享外部連結',closeLink:'關閉外部分享'},
+  en:{note:'Community posts',all:'All posts',filters:'Feed categories',options:'Feed options',close:'Close',closeOptions:'Close feed options',refresh:'Refresh feed',link:'Share an external link',closeLink:'Close external sharing'},
+  ja:{note:'コミュニティ投稿',all:'すべての投稿',filters:'フィードの分類',options:'フィード設定',close:'閉じる',closeOptions:'フィード設定を閉じる',refresh:'フィードを更新',link:'外部リンクを共有',closeLink:'外部共有を閉じる'},
+  ko:{note:'커뮤니티 게시물',all:'모든 게시물',filters:'피드 분류',options:'피드 옵션',close:'닫기',closeOptions:'피드 옵션 닫기',refresh:'피드 새로고침',link:'외부 링크 공유',closeLink:'외부 공유 닫기'},
+  es:{note:'Comunidad',all:'Todas las publicaciones',filters:'Categorías del feed',options:'Opciones del feed',close:'Cerrar',closeOptions:'Cerrar opciones del feed',refresh:'Actualizar feed',link:'Compartir un enlace externo',closeLink:'Cerrar enlace externo'},
+} as const;
+
 function tone(platform: SocialPlatform) {
   return platform === 'youtube' || platform === 'instagram' || platform === 'facebook' ? platform : 'other';
 }
@@ -148,7 +156,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const observer = new ResizeObserver(size); observer.observe(header); size();
     return () => observer.disconnect();
   }, []);
-  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null);
+  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null), linkTrigger = useRef<HTMLButtonElement>(null);
   const [optionsOpen, setOptionsOpen] = useState(false), [linkOpen, setLinkOpen] = useState(false);
   const linkVersion = useRef(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -383,8 +391,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
-  function closeLink() { ++linkVersion.current; linkComposer.current?.close(); setLinkOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
-  function openLink() { closeOptions(); ++linkVersion.current; setError(''); setNotice(''); setLinkOpen(true); }
+  function closeLink() { ++linkVersion.current; linkComposer.current?.close(); setLinkOpen(false); linkTrigger.current?.focus({preventScroll: true}); }
+  function openLink() { ++linkVersion.current; setError(''); setNotice(''); setLinkOpen(true); }
   async function publish(event: FormEvent) {
     event.preventDefault();
     if (publishing || preparingImage) return;
@@ -514,6 +522,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       setNotice(cause instanceof Error ? cause.message : '尚未確認按讚結果，請再按一次重試。');
     } finally { setShortLiking(null); }
   }
+  const feedText=FEED_MESSAGES[language];
+  const filterLabel=(id:string,label:string)=>id==='note'?feedText.note:id===''?feedText.all:label;
   const renderCard = (post: Post, view: {inline?: boolean; commentsOpen?: boolean} = {inline: true}) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
@@ -546,6 +556,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/>
         <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label={composerText('title')} aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? composerText('resumePending') : text ? composerText('resume') : composerText('prompt')}</span></button>
       </div>
+      <div className="social-composer-entry-actions"><button ref={linkTrigger} type="button" className="btn btn-ghost social-link-entry" aria-haspopup="dialog" aria-expanded={linkOpen} onClick={openLink}><SocialIcon name="share"/>{feedText.link}</button></div>
     </div>
     <dialog ref={composer} className="social-publish-dialog" aria-labelledby={composerId} onCancel={event => {if(event.target!==event.currentTarget)return;event.preventDefault(); closeComposer();}} onClose={() => setComposerOpen(false)}>
       {composerOpen && <div className="stack">
@@ -570,14 +581,13 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     </dialog>
     <dialog ref={options} className="social-publish-dialog social-options-dialog" aria-labelledby={`${composerId}-options`} onCancel={event=>{event.preventDefault();closeOptions();}} onClose={()=>setOptionsOpen(false)}>
       {optionsOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={`${composerId}-options`}>動態選項</h2><button type="button" className="btn btn-ghost" aria-label="關閉動態選項" onClick={closeOptions}>關閉</button></header>
-        <div className="social-view-options" role="group" aria-label="查看貼文">{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{item.label}</button>)}</div>
-        <button type="button" className="btn btn-ghost social-link-entry" onClick={openLink}>分享外部連結</button>
+        <header className="social-publish-head"><h2 id={`${composerId}-options`}>{feedText.options}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeOptions} onClick={closeOptions}>{feedText.close}</button></header>
+        <div className="social-view-options" role="group" aria-label={feedText.filters}>{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{filterLabel(item.id,item.label)}</button>)}</div>
       </div>}
     </dialog>
     <dialog ref={linkComposer} className="social-publish-dialog" aria-labelledby={`${composerId}-link`} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();closeLink();}} onClose={()=>setLinkOpen(false)}>
       {linkOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={`${composerId}-link`}>分享外部連結</h2><button type="button" className="btn btn-ghost" aria-label="關閉外部分享" onClick={closeLink}>關閉</button></header>
+        <header className="social-publish-head"><h2 id={`${composerId}-link`}>{feedText.link}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeLink} onClick={closeLink}>{feedText.close}</button></header>
         <form className="social-link-composer stack" onSubmit={event=>void submit(event)} aria-busy={saving}>
           <label className="field">連結<input required type="url" inputMode="url" maxLength={2048} value={url} disabled={saving} onChange={event=>setUrl(event.target.value)} placeholder="https://"/></label>
           {youtubeLinkHint(url, shortVideos) && <p className="field-hint" role="status">{youtubeLinkHint(url, shortVideos)}</p>}
@@ -603,8 +613,11 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {notice && !linkOpen && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
     {error && !linkOpen && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
-      <h2>{directPost?'這則貼文':platform==='note'?'最新貼文':FILTERS.find(item=>item.id===platform)?.label}</h2>
-      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label="更新動態" disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control" aria-label="動態選項" aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}>⋯</button></div>
+      <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
+      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
+    </div>
+    <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
+      {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
