@@ -487,10 +487,19 @@ function LoginView({
   }
 
   const accessExpired = Boolean(bootError?.accessExpired || errorDetails?.accessExpired)
+  // A plain visitor entry starts with existing public reading, not an account gate.
+  // Dedicated return/reset/role journeys retain their current form and destination.
+  const visitorFirst = !discoveryEnabled && !resetToken && !returnPath && !skillReturn
+    && !storefrontReturn && !postReturnPath && !memberPostPath && !entryIntent
+    && !onReturnToGuild && !onReturnToEvent && !accessExpired
   return (
-    <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}`}>
+    <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}${visitorFirst ? ' visitor-first-layout' : ''}`}>
       <div className="login-entry-tools"><LanguagePicker className="login-language-row"/><InstallAppButton/></div>
-      {discoveryEnabled ? <section className="login-story discovery-story"><BrandPoster/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><BrandPoster/><div className="login-story-copy"><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p><PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
+      {visitorFirst && <section className="visitor-first-step" aria-labelledby="visitor-heading">
+        <h1 id="visitor-heading">{t('auth.headline')}</h1>
+        <EntryResources client={client} communitySearchEnabled={site?.community_search_enabled===true} compact/>
+      </section>}
+      {discoveryEnabled ? <section className="login-story discovery-story"><BrandPoster/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><BrandPoster/><div className="login-story-copy">{!visitorFirst&&<><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p></>}<PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
         if(target!=='supplier'&&target!=='showcase'&&target!=='tasks')return
         onChooseEntry(target);setMode(site?.registration_enabled?'register':'login');setError(null);setResetNotice('')
         requestAnimationFrame(()=>emailInput.current?.focus())
@@ -579,7 +588,7 @@ function LoginView({
         </aside>}
       </section></div>
       <p className="login-language-scope field-hint">{t('language.scope')}</p>
-      <div className="login-public-resources"><EntryResources client={client} communitySearchEnabled={!resetToken&&site?.community_search_enabled===true}/></div>
+      {!visitorFirst&&<div className="login-public-resources"><EntryResources client={client} communitySearchEnabled={!resetToken&&site?.community_search_enabled===true}/></div>}
       <CommunityLinks/>
     </main>
   )
