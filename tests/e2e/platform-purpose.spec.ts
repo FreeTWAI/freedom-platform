@@ -190,3 +190,12 @@ test('the visitor first step uses all five existing interface languages at phone
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
 });
+
+test('compact visitor entry leaves breathing room below the email field on a short phone',async({page})=>{
+  await page.setViewportSize({width:320,height:640});await page.goto('/');
+  await expect(page.locator('.visitor-first-step')).toBeVisible();
+  const email=page.getByLabel('電子郵件',{exact:true});await expect(email).toBeVisible();
+  const box=(await email.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(624);
+  await expect(page.locator('.entry-resources > details > summary')).toHaveText('先看免費資源，不用註冊 · 搜尋社群內容');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

@@ -64,3 +64,13 @@
  .login-layout.visitor-first-layout>.community-footer{order:6}
  .visitor-first-step .entry-resources>details>summary{width:100%}
 }
+
+/* Short narrow phones still expose the original email field without scrolling.
+   Keep the 44px controls and original public-role choices, not a second auth UI. */
+@media(max-width:360px){
+ .login-layout.visitor-first-layout>.visitor-first-step{gap:4px}
+ .login-layout.visitor-first-layout .login-story .brand-poster{width:56px}
+ .login-layout.visitor-first-layout .login-card{padding:12px}
+ .visitor-first-layout .login-card-heading{margin-bottom:4px}
+ .visitor-first-layout .login-card .auth-switch{margin-bottom:8px}
+}

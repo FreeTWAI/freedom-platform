@@ -35,7 +35,7 @@ export function EntryResources({client,communitySearchEnabled=false,compact=fals
   const books=state.value??[];
   const benefits=<ul className="entry-benefits"><li>{t('resources.learning')}</li><li>{t('resources.partners')}</li><li>{t('resources.opportunities')}</li></ul>;
   return <div className="entry-resources">{!compact&&<><p>{t('resources.intro')}</p>{benefits}</>}
-    <details onToggle={event=>setOpened(event.currentTarget.open)}><summary>{t('resources.open')}{!compact&&communitySearchEnabled&&` · ${t('nav.community-search')}`}</summary>
+    <details onToggle={event=>setOpened(event.currentTarget.open)}><summary>{t('resources.open')}{communitySearchEnabled&&` · ${t('nav.community-search')}`}</summary>
       <div className="entry-resource-list" aria-busy={loading}>
         {compact&&benefits}
         {communitySearchEnabled&&<a className="btn btn-secondary btn-small community-search-action" href="#community-search">{t('nav.community-search')}</a>}
