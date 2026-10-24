@@ -20,6 +20,8 @@ import {socialPostJobForSession} from '../social-post-task';
 import {newTextHistory,recordText,breakTextGroup,undoText,redoText} from './text-edit-history';
 import {useLanguage} from '../language';
 import {shareModuleRetryUrl} from '../share-module-loader';
+import {GameDraftNotice,useGameDraftInbox} from '../games/GameDraftInbox';
+import {clearGameDraft,gameDraftFile,type GameDraft} from '../games/result-bridge';
 const optimizerPanelLoader=(retryUrl?:string)=>lazy(async()=>{
   const module=retryUrl?await import(/* @vite-ignore */ retryUrl) as typeof import('./SocialPostOptimizer'):await import('./SocialPostOptimizer');
   if(typeof module.SocialPostOptimizer!=='function')throw Error('Optimizer unavailable');
@@ -156,6 +158,34 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [originalDraft,setOriginalDraft]=useState<{before:string;after:string}|null>(null);
   useEffect(()=>{setTextHistory(newTextHistory());setOriginalDraft(null);},[client,client.sessionGeneration]);
   const pending = useRef<{text: string; topic?:string;location_name?:string;mention_ids?:string[]; key: string; image?: {mime_type: string; data_base64: string}} | null>(null);
+  const gameInbox=useGameDraftInbox(client.sessionGeneration);
+  const importedGame=useRef<{createdAt:number;generation:number}|null>(null);
+  const importingGame=useRef(false),[gameImportError,setGameImportError]=useState('');
+  const latestDraft=useRef({text,file:composeFile});latestDraft.current={text,file:composeFile};
+  useEffect(()=>{importedGame.current=null;importingGame.current=false;setGameImportError('');},[client,client.sessionGeneration]);
+  async function importGame(draft:GameDraft){
+    if(importingGame.current||publishing||preparingImage||pending.current||composeFile)return;
+    const merged=[text.trim(),draft.text].filter(Boolean).join('\n\n');
+    if(merged.length>2000)return;
+    const generation=client.sessionGeneration,sequence=++imageSequence.current,original=text;
+    importingGame.current=true;setPreparingImage(true);setGameImportError('');
+    try{
+      const prepared=await prepareSocialImage(gameDraftFile(draft));
+      if(generation!==client.sessionGeneration||sequence!==imageSequence.current)return;
+      if(latestDraft.current.text!==original||latestDraft.current.file){setGameImportError('你正在編輯草稿。請確認後再帶入成果。');return;}
+      setText(merged,'replace');setComposeFile(prepared);
+      importedGame.current={createdAt:draft.createdAt,generation};gameInbox.setDraft(null);openComposer();
+    }catch(cause){
+      if(generation===client.sessionGeneration&&sequence===imageSequence.current)setGameImportError(cause instanceof Error?cause.message:'成果圖片未能處理，請重試。');
+    }finally{
+      if(generation===client.sessionGeneration&&sequence===imageSequence.current){importingGame.current=false;setPreparingImage(false);}
+    }
+  }
+  useEffect(()=>{
+    const draft=gameInbox.draft;
+    // Only an empty editor opens automatically; existing drafts require the import action.
+    if(draft&&!text&&!composeFile&&!publishing&&!preparingImage&&!pending.current&&!gameImportError&&importedGame.current?.createdAt!==draft.createdAt)void importGame(draft);
+  },[gameInbox.draft,text,composeFile,publishing,preparingImage,gameImportError]);
   const [shortPostId, setShortPostId] = useState<string | null>(null), [shortComments, setShortComments] = useState(false);
   const [shortLiking, setShortLiking] = useState<string | null>(null), shortLikeCommands = useRef(new Map<string, {liked: boolean; key: string}>());
   const shortPost = platform === 'shorts' ? items.find(item => item.post_id === shortPostId) : undefined;
@@ -318,6 +348,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       if (generation !== client.sessionGeneration) return;
       pending.current = command;
       const created = await client.post<Post>('/social-posts/notes', {text: command.text,topic:command.topic,location_name:command.location_name,mention_ids:command.mention_ids, ...(command.image ? {image: command.image} : {})}, {idempotencyKey: command.key});
+      if(generation!==client.sessionGeneration)return;
       newPosts.current = [created, ...newPosts.current.filter(post => post.post_id !== created.post_id)];
       const currentSelection = selection.current;
       if(directPost&&currentSelection.version===selectedVersion)clearDirectPost();
@@ -328,12 +359,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         // while the acknowledgement was in flight.
         setItems([created]); setCursor(null); selectPlatform('note');
       }
+      if(importedGame.current?.generation===generation){
+        try{clearGameDraft(sessionStorage,importedGame.current.createdAt);}catch{/* Acknowledged publication remains successful if browser storage fails. */}
+        importedGame.current=null;
+      }
       pending.current = null; setTextHistory(newTextHistory());setMentions([]);setLocationName('');setCheckIn(false); selectComposeImage(null); setOriginalDraft(null);setNotice('貼文已發布。');
       if (composerVersion.current === interactionVersion) closeComposer();
     } catch (cause) {
+      if(generation!==client.sessionGeneration)return;
       if (cause instanceof ApiError && !cause.network) pending.current = null;
       setPublishError(cause instanceof Error ? cause.message : '尚未確認發布結果，請重試。');
-    } finally { setPublishing(false); }
+    } finally { if(generation===client.sessionGeneration)setPublishing(false); }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -456,6 +492,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         </div>
       </article>;
   return <section className="social-zone stack" aria-label="社群媒體分享專區" data-feed={platform || 'all'} aria-busy={loading||more}>
+    {gameInbox.draft&&<GameDraftNotice draft={gameInbox.draft} busy={preparingImage||publishing||!!pending.current} hasImage={!!composeFile} tooLong={[text.trim(),gameInbox.draft.text].filter(Boolean).join('\n\n').length>2000} error={gameImportError} onImport={()=>void importGame(gameInbox.draft!)} onDiscard={gameInbox.discard}/>}
     <div ref={composerStart} className="card social-composer-start" data-guide-anchor="social:composer">
       <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/>
         <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label="建立貼文" aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? '繼續確認剛才的貼文…' : text ? '繼續編輯你的貼文…' : '想分享什麼？'}</span></button>
@@ -465,6 +502,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       {composerOpen && <div className="stack">
         <header className="social-publish-head"><h2 id={composerId}>建立貼文</h2><button type="button" className="btn btn-ghost" aria-label="關閉發文" onClick={closeComposer}>關閉</button></header>
         <p className="social-publish-identity"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/><span>{viewer?.name ?? '我'}<small>社群會員可見</small></span></p>
+        {importedGame.current?.generation===client.sessionGeneration&&<p className="field-hint">剛才的離譜成果已帶入。確認圖片、文案與作者後，再按發布。</p>}
         <form className="social-native-composer stack" onSubmit={event => void publish(event)} aria-busy={publishing}>
           <label className="field"><span className="sr-only">貼文內容</span><textarea aria-label="貼文內容" autoFocus required rows={6} maxLength={2000} placeholder="分享近況、作品，或找夥伴一起做點事…" value={text} disabled={publishing || !!pending.current} onChange={event => setText(event.target.value, (event.nativeEvent as InputEvent).inputType?.startsWith('insertFrom') ? 'replace' : 'typing')} onBlur={() => setTextHistory(breakTextGroup)} onKeyDown={event=>{if(event.nativeEvent.isComposing||event.altKey||!(event.ctrlKey||event.metaKey)||!['z','y'].includes(event.key.toLowerCase()))return;event.preventDefault();if(!publishing&&!pending.current)setTextHistory(event.key.toLowerCase()==='y'||event.shiftKey?redoText:undoText);}} onPaste={event=>{const photo=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(photo&&!publishing&&!pending.current){event.preventDefault();void selectComposeImage(photo);}}}/></label>
           <div className="social-compose-toolbar"><label className="social-topic-select">主題<select aria-label="貼文主題" value={topic} disabled={publishing||!!pending.current} onChange={e=>setTopic(e.target.value as keyof typeof SOCIAL_TOPICS)}>{Object.entries(SOCIAL_TOPICS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><button type="button" className="social-icon-button" aria-label="加入貼文照片" title="加入貼文照片" disabled={publishing||preparingImage||!!pending.current} onClick={()=>composeInput.current?.click()}><SocialIcon name="camera"/></button><SocialTextTools client={client} text={text} onChange={setText} mentions={mentions} onMentions={setMentions} disabled={publishing||!!pending.current} maxLength={2000}/><button type="button" className="social-icon-button" title="打卡" aria-label="打卡" aria-expanded={checkIn} disabled={publishing||!!pending.current} onClick={()=>setCheckIn(v=>!v)}><SocialIcon name="pin"/></button></div>
