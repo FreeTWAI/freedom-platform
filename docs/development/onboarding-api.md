@@ -82,6 +82,17 @@ The catalog currently has 20 capability categories / 170 unique options and 8 eq
 
 `GET /guilds/directory` sorts the current member’s primary guild first, their other active guild memberships next, then all remaining guilds. Each group uses stable `guild_key` ordering; a left membership is treated as not joined.
 
+### Member guild search projection
+
+`GET /guilds/directory?view=search&q=資安` is a separate, opt-in metadata projection. Both existing `community_search_enabled` and `guild_launchpad_enabled` gates must be exactly enabled; missing/OFF returns 404 after the existing member boundary. It requires a current active member/session and current onboarding eligibility (`NOT onboarding_required OR onboarding_completed_at IS NOT NULL`). The no-view directory, including its onboarding allowance, rich DTO and membership-first ordering, is unchanged. There is no anonymous guild-search fallback.
+
+- Only `view`, `q`, `limit`, `cursor` are accepted, each once. `view` must be `search`. `q` is required, nonblank after trimming, at most 80 UTF-16 code units before trimming, with no C0/DEL controls. Missing/invalid query is 422 `invalid_guild_search`, never a full-directory response. `limit` is a canonical integer 1–20 (default 20).
+- Match the literal substring of the current catalog's real `name` or `purpose`, case-insensitively. `%`, `_` and backslash are escaped, not wildcard syntax. No fabricated aliases, private guild data, provider scans or additional tenant projections. SQL returns at most `limit + 1` rows, ordered by `guild_key`, with a five-second transaction-local statement timeout. This is bounded output, not a claim of an indexed substring search or verified query plan.
+- Response: `{items:[{kind:"guild",guild_key,name,purpose,path}],next_cursor:string|null}`. `purpose` is at most 500 Unicode code points; `path` is the canonical `#guilds/<guild_key>` launchpad. No membership, officer, book, answer, contact or private-announcement fields. Finding/opening a result does not join the guild, grant a book or authorize private work.
+- The opaque cursor is at most 512 base64url characters and binds the last guild key to normalized query, member, community and current session through a domain-separated SHA-256 digest. It includes no raw session/cookie/identity/query values. It is correlation state, not a signed credential or authority. Every page rechecks locked current user/session/onboarding on the same native transaction client, validates its canonical cursor, then rechecks `clock_timestamp()` after the final domain read, including empty results. A malformed or different-query/session cursor is 422 `invalid_cursor`; restart from page one.
+- Success and handler errors carry `private, no-store`, `Vary: Cookie`; earlier member-boundary denials retain the existing global `no-store` and contain only a generic error. Conditional requests never bypass current authorization or return a cached projection.
+- The member content-search page issues this read only for the same committed nonblank keyword, with neither content-kind nor topic filters selected. It displays a separately labelled guild section with independent empty/error/retry/pagination state. Private bookmarks/following tabs do not filter guilds, as the section explicitly explains. Content kinds, topic/bookmark contracts and participation metrics stay unchanged; guild links never record a content-result open. Query/session changes and leaving the page discard pending guild responses and pagination.
+
 
 ## Skill books for administrator-approved guilds
 

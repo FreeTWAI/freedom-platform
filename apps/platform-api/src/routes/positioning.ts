@@ -5,10 +5,12 @@ import { readWithMemberSession } from '../../../../packages/db/member-session.js
 import { positioningView,saveProfile,listTracks,listGuilds,changeGuildMembership,leaveGuildV2 } from '../../../../modules/positioning/service.js';
 import {quickStartOnboarding} from '../../../../modules/positioning/onboarding.js';
 import { communitySwitched, getPreferenceView, setCategoryPreference } from '../../../../modules/positioning/guild-categories.js';
+import { searchGuildDirectory } from '../../../../modules/positioning/guild-search.js';
+import { requireCondition } from '../../../../packages/shared/problem.js';
 
 import { assessmentDefinition,onboardingView,saveAssessmentAnswers,evaluateSavedAssessment,completeOnboarding,guildDirectory,guildPreferences,setSecondaryGuilds,setPrimaryGuild,listSkillBooks,createGuildApplication,listGuildApplications,listGuildAnswers,saveGuildAnswers } from '../../../../modules/positioning/onboarding.js';
 
-export function createPositioningRoutes(pool:Pool,options:{guildLaunchpadEnabled?:boolean}={}) {
+export function createPositioningRoutes(pool:Pool,options:{guildLaunchpadEnabled?:boolean;communitySearchEnabled?:boolean}={}) {
   const app=new Hono<PlatformEnv>();
   app.get('/me/positioning',async c=>c.json(await positioningView(pool,c.get('actor'))));
   app.post('/me/positioning',async c=>{
@@ -33,7 +35,15 @@ export function createPositioningRoutes(pool:Pool,options:{guildLaunchpadEnabled
     const result=await fn(pool,await moduleCommand(c));
     if(result.draft)c.header('ETag',`"${result.draft.aggregate_version}"`);return c.json(result);
   });
-  app.get('/guilds/directory',async c=>c.json({items:await guildDirectory(pool,c.get('actor'))}));
+  app.get('/guilds/directory',async c=>{
+    const params=new URL(c.req.url).searchParams;
+    if(params.has('view')){
+      c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');c.header('X-Robots-Tag','noindex, nofollow');
+      requireCondition(options.communitySearchEnabled===true&&options.guildLaunchpadEnabled===true,404,'not_found','找不到這個頁面。');
+      return c.json(await searchGuildDirectory(pool,c.get('actor'),params));
+    }
+    return c.json({items:await guildDirectory(pool,c.get('actor'))});
+  });
   app.get('/me/guild-preferences',async c=>{
     const actor=c.get('actor');
     const prefs=await readWithMemberSession(pool,actor,async q=>{

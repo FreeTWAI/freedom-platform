@@ -451,3 +451,227 @@ test('SEARCH-010 list selection belongs to its own search history entry without 
     await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue('history');
   } finally { await logged.context.close(); }
 });
+
+const guildResults = (page: Page) => page.getByRole('region', { name: '會員公會搜尋結果', exact: true });
+const isGuildSearch = (url: URL) => url.pathname === '/api/v1/guilds/directory' && url.searchParams.has('view');
+const guildPage = (name: string, next_cursor: string | null = null) => ({items: [{kind: 'guild', guild_key: 'guild_security', name, purpose: '合成公會簡介', path: '#guilds/guild_security'}], next_cursor});
+
+test('SEARCH-GUILD-001 real member search finds security guild and opens the existing launchpad without joining or recording content opens', async ({ browser, baseURL, e2eAuthPool }, testInfo) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  const opens: string[] = [];
+  page.on('request', request => {if (/\/community-search\/operations\/[^/]+\/open$/.test(new URL(request.url()).pathname)) opens.push(request.url());});
+  try {
+    await search(page, '資安');
+    await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toHaveAttribute('href', '#guilds/guild_security');
+    await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
+    await expect(results(page).getByRole('link', {name: '資安公會', exact: true})).toHaveCount(0);
+    for (const skin of ['light', 'dark', 'versefolk']) for (const width of [390, 1440]) {
+      await page.evaluate(value => {
+        localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value;
+        document.documentElement.dataset.experienceProfile = value; window.dispatchEvent(new Event('freedom-theme-changed'));
+      }, skin);
+      await page.setViewportSize({width, height: 900});
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await guildResults(page).screenshot({path: testInfo.outputPath(`guild-search-${skin}-${width}.png`)});
+    }
+    await guildResults(page).getByRole('link', {name: '資安公會', exact: true}).click();
+    await expect(page).toHaveURL(/#guilds\/guild_security$/);
+    await expect(page.getByRole('button', {name: '加入資安公會', exact: true})).toBeVisible();
+    expect((await e2eAuthPool.query('SELECT 1 FROM positioning_profession_memberships WHERE user_id=$1', [member.id])).rowCount).toBe(0);
+    expect(opens).toEqual([]);
+    await page.goBack();
+    await expect(page.getByRole('searchbox', {name: '關鍵字', exact: true})).toHaveValue('資安');
+    await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+  } finally {await logged.context.close();}
+});
+
+test('SEARCH-GUILD-002 anonymous, empty query and disabled launchpad never read guild search; content filters hide its independent results', async ({ browser, page: anonymous, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  const anonymousReads: string[] = [], reads: string[] = [];
+  anonymous.on('request', request => {if (isGuildSearch(new URL(request.url()))) anonymousReads.push(request.url());});
+  page.on('request', request => {if (isGuildSearch(new URL(request.url()))) reads.push(request.url());});
+  try {
+    await anonymous.goto('/#community-search?q=資安');
+    await expect(results(anonymous)).toHaveAttribute('aria-busy', 'false');
+    await expect(guildResults(anonymous)).toHaveCount(0); expect(anonymousReads).toEqual([]);
+    await search(page, ''); await expect(guildResults(page)).toHaveCount(0); expect(reads).toEqual([]);
+    await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安');
+    await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    for (const label of ['作品', '工具資源']) {
+      const count = reads.length;
+      await page.getByRole('checkbox', {name: label, exact: true}).check();
+      await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+      await expect(guildResults(page)).toHaveCount(0); expect(reads.length).toBe(count);
+      await page.getByRole('checkbox', {name: label, exact: true}).uncheck();
+      await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    }
+    const beforeTabs = reads.length;
+    for (const name of ['追蹤清單', '追蹤更新', '私人書籤']) {
+      await privateList(page).getByRole('button', {name, exact: true}).click();
+      await expect(privateList(page).getByRole('button', {name, exact: true})).toHaveAttribute('aria-pressed', 'true');
+      await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
+    }
+    expect(reads.length).toBe(beforeTabs);
+    await page.getByRole('button', {name: '清除搜尋條件', exact: true}).click();
+    await expect(guildResults(page)).toHaveCount(0); expect(reads.length).toBe(beforeTabs);
+    // Synthetic site response changes this browser's display only, never flags.
+    await page.route(url => url.pathname === '/api/v1/site', async route => {
+      const response = await route.fetch(); await route.fulfill({response, json: {...await response.json(), guild_launchpad_enabled: false}});
+    });
+    await page.reload();
+    await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+    await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安');
+    await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+    await expect(guildResults(page)).toHaveCount(0); expect(reads.length).toBe(beforeTabs);
+  } finally {await logged.context.close();}
+});
+
+test('SEARCH-GUILD-003 independent loading, empty, retry and pagination do not change content metrics or query cursor', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  let fail = true; const cursors: (string | null)[] = [];
+  const contentReads: string[] = [];
+  page.on('request', request => {if (new URL(request.url()).pathname.startsWith('/api/v1/community-search')) contentReads.push(request.url());});
+  await page.route(isGuildSearch, async route => {
+    const query = new URL(route.request().url()).searchParams; cursors.push(query.get('cursor'));
+    if (fail) return route.fulfill({status: 503, json: {code: 'unavailable', detail: '合成公會搜尋失敗'}});
+    if (query.get('q') === '沒有') return route.fulfill({json: {items: [], next_cursor: null}});
+    return route.fulfill({json: guildPage(query.has('cursor') ? '合成第二個公會' : '合成第一個公會', query.has('cursor') ? null : 'synthetic-next')});
+  });
+  try {
+    await search(page, '資安');
+    await expect(guildResults(page).getByRole('alert')).toContainText('服務暫時無法回應（503）');
+    await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+    await expect(guildResults(page).getByText('沒有符合關鍵字的公會。', {exact: true})).toHaveCount(0);
+    const initialContentReads = contentReads.length;
+    fail = false;
+    await guildResults(page).getByRole('button', {name: '重試公會搜尋', exact: true}).click();
+    await expect(guildResults(page).getByRole('link', {name: '合成第一個公會', exact: true})).toBeVisible();
+    fail = true; await guildResults(page).getByRole('button', {name: '公會下一頁', exact: true}).click();
+    await expect(guildResults(page)).toBeFocused(); await expect(guildResults(page).getByRole('alert')).toBeVisible();
+    fail = false; await guildResults(page).getByRole('button', {name: '重試公會搜尋', exact: true}).click();
+    await expect(guildResults(page).getByRole('link', {name: '合成第二個公會', exact: true})).toBeVisible();
+    expect(cursors.slice(-2)).toEqual(['synthetic-next', 'synthetic-next']);
+    expect(new URLSearchParams(page.url().split('?')[1]).has('cursor')).toBe(false);
+    const first = guildResults(page).getByRole('button', {name: '公會回第一頁', exact: true});
+    expect((await first.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await first.click(); await expect(guildResults(page).getByRole('link', {name: '合成第一個公會', exact: true})).toBeVisible();
+    expect(cursors.at(-1)).toBeNull();
+    expect(contentReads.length).toBe(initialContentReads);
+    await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('沒有');
+    await expect(guildResults(page).getByText('沒有符合關鍵字的公會。', {exact: true})).toBeVisible();
+    expect(cursors.at(-1)).toBeNull();
+  } finally {await logged.context.close();}
+});
+
+test('SEARCH-GUILD-006 slow guild reads never block content and content errors do not hide usable guild results or retry', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  let release!: () => void, started!: () => void, first = true, failContent = false, failGuild = false, contentReads = 0;
+  const held = new Promise<void>(resolve => {release = resolve;});
+  const waiting = new Promise<void>(resolve => {started = resolve;});
+  await page.route(url => url.pathname === '/api/v1/community-search', async route => {
+    contentReads++;
+    if (failContent) await route.fulfill({status: 503, json: {detail: '合成內容搜尋故障'}});
+    else await route.continue();
+  });
+  await page.route(isGuildSearch, async route => {
+    if (first) {
+      first = false; const response = await route.fetch(); started(); await held;
+      try {await route.fulfill({response});} catch (error) {if (!route.request().failure()) throw error;}
+    } else if (failGuild) await route.fulfill({status: 503, json: {detail: '合成公會搜尋故障'}});
+    else await route.continue();
+  });
+  try {
+    await search(page, '資安'); await waiting;
+    await expect(results(page)).toHaveAttribute('aria-busy', 'false');
+    await expect(results(page).getByRole('status')).toBeVisible();
+    await expect(guildResults(page)).toHaveAttribute('aria-busy', 'true');
+    release(); await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    failContent = true;
+    await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安公會');
+    await expect(results(page).getByRole('alert')).toContainText('服務暫時無法回應（503）');
+    await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    failGuild = true;
+    await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安');
+    await expect(guildResults(page).getByRole('alert')).toContainText('服務暫時無法回應（503）');
+    const beforeRetry = contentReads; failGuild = false;
+    await guildResults(page).getByRole('button', {name: '重試公會搜尋', exact: true}).click();
+    await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    await expect(results(page).getByRole('alert')).toBeVisible(); expect(contentReads).toBe(beforeRetry);
+  } finally {release(); await logged.context.close();}
+});
+
+test('SEARCH-GUILD-004 IME and rapid query changes share the committed content query; late guild success and failure cannot replace it', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  const queries: string[] = [], contentQueries: string[] = [];
+  page.on('request', request => {const url = new URL(request.url()); if (url.pathname === '/api/v1/community-search') contentQueries.push(url.searchParams.get('q') ?? '');});
+  let release = () => {}, finished = () => {};
+  try {
+    await search(page, '');
+    for (const lateFailure of [false, true]) {
+      let started!: () => void; const waiting = new Promise<void>(resolve => {started = resolve;});
+      const held = new Promise<void>(resolve => {release = resolve;});
+      const done = new Promise<void>(resolve => {finished = resolve;});
+      await page.route(isGuildSearch, async route => {
+        const q = new URL(route.request().url()).searchParams.get('q')!; queries.push(q);
+        if (q === '舊查詢') {
+          started(); await held;
+          try {await route.fulfill(lateFailure ? {status: 503, json: {detail: '舊錯誤'}} : {json: guildPage('舊公會')});}
+          catch (error) {if (!route.request().failure()) throw error;}
+          finally {finished();}
+        } else await route.fulfill({json: guildPage('新公會')});
+      });
+      const input = page.getByRole('searchbox', {name: '關鍵字', exact: true});
+      await input.dispatchEvent('compositionstart'); await input.fill('舊查詢');
+      await expect(results(page).getByText('選字完成後會自動搜尋。', {exact: true})).toBeVisible();
+      const before = queries.length;
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(queries.length).toBe(before);
+      await input.dispatchEvent('compositionend', {data: '舊查詢'}); await waiting;
+      await expect(guildResults(page)).toHaveAttribute('aria-busy', 'true');
+      await input.fill('新查詢'); await expect(guildResults(page).getByRole('link', {name: '新公會', exact: true})).toBeVisible();
+      release(); await done;
+      await expect(guildResults(page)).not.toContainText('舊公會'); await expect(guildResults(page).getByRole('alert')).toHaveCount(0);
+      expect(contentQueries).toContain('舊查詢'); expect(contentQueries).toContain('新查詢');
+      await page.unroute(isGuildSearch); await input.fill(''); await expect(guildResults(page)).toHaveCount(0);
+    }
+  } finally {release(); await logged.context.close();}
+});
+
+test('SEARCH-GUILD-005 leaving and same-member logout/login discard pending guild pages and session cursors', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  let release = () => {}; const cursors: (string | null)[] = [];
+  try {
+    for (const logout of [false, true]) {
+      let started!: () => void, finished!: () => void;
+      const waiting = new Promise<void>(resolve => {started = resolve;});
+      const held = new Promise<void>(resolve => {release = resolve;});
+      const done = new Promise<void>(resolve => {finished = resolve;});
+      await page.route(isGuildSearch, async route => {
+        const cursor = new URL(route.request().url()).searchParams.get('cursor'); cursors.push(cursor);
+        if (cursor) {
+          started(); await held;
+          try {await route.fulfill({json: guildPage('舊 session 公會')});}
+          catch (error) {if (!route.request().failure()) throw error;}
+          finally {finished();}
+        } else await route.fulfill({json: guildPage('目前公會', 'old-session-cursor')});
+      });
+      await search(page, '資安'); await expect(guildResults(page).getByRole('link', {name: '目前公會', exact: true})).toBeVisible();
+      await guildResults(page).getByRole('button', {name: '公會下一頁', exact: true}).click(); await waiting;
+      if (logout) {
+        await page.getByRole('button', {name: '設定', exact: true}).click();
+        const signedOut = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/logout');
+        await page.getByRole('menu', {name: '個人檔案'}).getByRole('menuitem', {name: '登出', exact: true}).click();
+        expect((await signedOut).status()).toBe(200); await expect(guildResults(page)).toHaveCount(0);
+        await page.getByRole('link', {name: '返回登入', exact: true}).click();
+        await page.getByLabel('電子郵件', {exact: true}).fill(member.email);
+        await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
+        await page.getByRole('button', {name: '登入', exact: true}).click(); await expect(page.locator('.shell')).toBeVisible();
+      } else {
+        await navigate(page, '職業公會'); await expect(guildResults(page)).toHaveCount(0);
+      }
+      await search(page, '資安'); await expect(guildResults(page).getByRole('link', {name: '目前公會', exact: true})).toBeVisible();
+      expect(cursors.at(-1)).toBeNull(); release(); await done;
+      await expect(guildResults(page)).not.toContainText('舊 session 公會'); await page.unroute(isGuildSearch);
+    }
+  } finally {release(); await logged.context.close();}
+});
