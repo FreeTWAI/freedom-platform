@@ -3,6 +3,14 @@ import {navigate,openPageTools} from './navigation.js';
 
 type CapabilityWindow=Window&{localCapabilities:{kind:'copy'|'share';value:string|ShareData;active:boolean;resolve:()=>void;reject:(error:Error)=>void}[]};
 const languages=[['zh-Hant','繁體中文','複製中…'],['en','English','Copying…'],['ja','日本語','コピー中…'],['ko','한국어','복사 중…'],['es','Español','Copiando…']] as const;
+// Independent expectations for the localized composer, not the deferred optimizer's copy.
+const composerLabels={
+  'zh-Hant':{title:'建立貼文',content:'貼文內容',optimize:'✦ Social Post 優化'},
+  en:{title:'Create post',content:'Post content',optimize:'✦ Social Post optimize'},
+  ja:{title:'投稿を作成',content:'投稿内容',optimize:'✦ Social Post 文章改善'},
+  ko:{title:'게시물 작성',content:'게시물 내용',optimize:'✦ Social Post 다듬기'},
+  es:{title:'Crear publicación',content:'Contenido de la publicación',optimize:'✦ Social Post optimizar'},
+} as const;
 
 // Controlled browser capabilities, not an OS clipboard or a real social post.
 async function holdCapabilities(page:Page,nativeShare=false){
@@ -43,10 +51,12 @@ async function capture(page:Page,dialog:Locator,name:string){
   }
 }
 async function pageHelp(page:Page){await openPageTools(page);await page.getByRole('button',{name:'頁面說明',exact:true}).click();return page.getByRole('dialog',{name:'會員首頁：頁面說明',exact:true});}
-async function optimization(page:Page){
-  await page.getByRole('button',{name:'建立貼文',exact:true}).click();const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true});
-  await dialog.getByLabel('貼文內容',{exact:true}).fill('本週展示自己的作品，尋找一起做事的夥伴。');
-  await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();return dialog;
+async function optimization(page:Page,language:typeof languages[number][0]='zh-Hant'){
+  const labels=composerLabels[language];
+  await page.getByRole('button',{name:labels.title,exact:true}).click();const dialog=page.getByRole('dialog',{name:labels.title,exact:true});
+  await expect(dialog.getByRole('heading',{name:labels.title,exact:true})).toBeVisible();
+  await dialog.getByLabel(labels.content,{exact:true}).fill('本週展示自己的作品，尋找一起做事的夥伴。');
+  await dialog.getByRole('button',{name:labels.optimize,exact:true}).click();await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();return dialog;
 }
 async function promotion(page:Page){
   await navigate(page,'推廣排行榜');await page.getByRole('button',{name:'分享自由工坊',exact:true}).click();const dialog=page.getByRole('dialog',{name:'分享「自由工坊」',exact:true});
@@ -86,7 +96,7 @@ test('closing and reopening page tools ignores the old copy ACK and keeps one pe
 for(const [id,name,pending] of languages)test(`${id}: Social Post handoff shows localized pending feedback and exports once`,async({page})=>{
   await page.setViewportSize({width:320,height:844});await holdCapabilities(page);await login(page);
   await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('lang',id);
-  const dialog=await optimization(page),button=dialog.locator('.social-post-optimizer > button').filter({hasText:'複製文案優化任務'});
+  const dialog=await optimization(page,id),button=dialog.locator('.social-post-optimizer > button').filter({hasText:'複製文案優化任務'});
   await button.click();await capture(page,dialog,`optimizer-${id}-pending`);const pendingButton=dialog.getByRole('button',{name:pending,exact:true});
   await expect(pendingButton).toBeDisabled();await expect(pendingButton).toHaveAttribute('aria-busy','true');await pendingButton.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);
   expect((await calls(page))[0].value).toContain('本週展示自己的作品');await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toHaveCount(0);
