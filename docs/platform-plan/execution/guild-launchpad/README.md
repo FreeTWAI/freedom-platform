@@ -6,7 +6,9 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=185 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的保留政策草稿後續使用 187；這不代表人像或部署核准。
+
+<!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=186 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 截至 2026-10-20 22:28 UTC，兩環境都已部署 `cf7e518b`／schema172，發布供貨／零售公會首次設定資格（#916）、會員服務恢復（#903）、供貨條件按鈕位置（#922）及 Short 鍵盤焦點（#926）修正。27個旗標維持，沒有 migration；四組成功 before／after 備份還原與清理通過，dispatcher `0a478a84` 已綁定兩環境，原 timers 已恢復。詳見[供貨／零售公會發布收據](../unified-foundation/rollout-commerce-cohorts-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
 

@@ -116,7 +116,8 @@
 .skill-library-book .skill-intro-trigger{border-color:var(--line);background:var(--green-soft);color:var(--ink);font-weight:650}
 .skill-intro-outcome{padding:16px 20px;background:var(--green-soft);border-left:3px solid var(--green);border-radius:0 12px 12px 0}.skill-intro-outcome .skill-intro-example{margin:8px 0 0;color:var(--ink)}
 .skill-intro-start{border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);padding:0 20px}.skill-intro-start>div{padding-bottom:20px}.skill-intro-start ol{padding-left:24px}.skill-intro-start li{padding-left:4px;margin:10px 0}.skill-intro-start li::marker{font-weight:700;color:var(--ink)}
-.skill-intro-illustration img{height:auto;max-height:280px;aspect-ratio:auto;object-fit:contain}.skill-intro-illustration figcaption{font-size:.875rem;color:var(--muted);text-align:center;margin-top:8px}
+.skill-intro-illustration img{height:auto;max-height:280px;aspect-ratio:auto;object-fit:contain}/* The illustration surface stays dark in every theme: use DESIGN.md dark auxiliary ink. */
+.skill-intro-illustration figcaption{font-size:.875rem;color:#aeb5c2;text-align:center;margin-top:8px}
 .skill-intro-collaboration{border-top:1px solid var(--line);padding-top:20px}.skill-intro-collaboration>.btn{margin-bottom:12px}
 @media(max-width:600px){.skill-library-welcome{align-items:stretch;flex-direction:column;padding:18px;gap:16px}.skill-library-lead{font-size:1.125rem}.skill-library-jumps{align-self:flex-start;flex-direction:row;flex-wrap:wrap}.skill-intro-start{padding:0 14px}.skill-intro-outcome{padding:14px}.skill-intro-illustration img{max-height:200px}}
 @media(prefers-reduced-motion:reduce){.skill-library-book{transition:none}}

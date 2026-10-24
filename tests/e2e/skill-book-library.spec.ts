@@ -471,3 +471,71 @@ for(const width of [1280,390])test(`practice is readable immediately, before sup
   await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
   await expect(library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
 });
+
+
+// Measure the rendered caption and its actual painted surface, not theme token strings.
+function illustrationCaptionContrast(element: Element) {
+  const rgba = (value: string) => {
+    const match = /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*([\d.]+))?\)$/.exec(value);
+    if (!match) throw new Error(`Unsupported computed color: ${value}`);
+    return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 1)];
+  };
+  const style = getComputedStyle(element), foreground = rgba(style.color);
+  let background: number[] | null = null;
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const paint = getComputedStyle(node), color = rgba(paint.backgroundColor);
+    if (Number(paint.opacity) !== 1) throw new Error('Caption ancestor is translucent');
+    if (!background) {
+      if (paint.backgroundImage !== 'none') throw new Error('Caption background image needs explicit contrast analysis');
+      if (color[3] === 1) background = color;
+      else if (color[3] !== 0) throw new Error('Caption background needs alpha compositing');
+    }
+  }
+  if (!background || foreground[3] !== 1) throw new Error('Caption needs opaque foreground and an opaque surface');
+  const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, value, index) => {
+    const channel = value / 255;
+    return sum + [0.2126, 0.7152, 0.0722][index] * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  }, 0);
+  const a = luminance(foreground), b = luminance(background);
+  return { foreground, background, fontSize: Number.parseFloat(style.fontSize), fontWeight: style.fontWeight,
+    ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+}
+
+for (const theme of ['light', 'dark', 'versefolk'] as const) {
+  for (const width of [390, 1280]) {
+    test(`catalog and member illustration captions have readable contrast in ${theme} at ${width}px`, async ({ page }) => {
+      await page.addInitScript(value => localStorage.setItem('freedom-theme', value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      const id = '11111111-1111-4111-8111-111111111111';
+      const item = { submission_id: id, title: '圖說對比測試作品', description: '合成的技能書圖說驗證。', relationship: 'curator',
+        cover_url: '/art/community-skills/default.webp', illustration_url: '/art/community-skills/default.webp',
+        source: { repository_full_name: 'example/caption-fixture', repository_url: 'https://github.com/example/caption-fixture',
+          commit_sha: 'a'.repeat(40), license_spdx: 'MIT', license_evidence_url: null, archived: false } };
+      await page.route('**/api/v1/skill-submissions/published', route => route.fulfill({ json: { items: [item] } }));
+      await page.route(`**/api/v1/skill-submissions/${id}`, route => route.fulfill({ json: { ...item, use_notes: '先閱讀原作說明。', demo_url: null } }));
+      const library = await openLibrary(page);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      const entries = [
+        { trigger: library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button', { name: '預覽技能書', exact: true }),
+          dialog: page.locator('dialog.skill-intro-dialog[data-book-id="local-workspace-mcp"]') },
+        { trigger: page.locator(`article[data-submission-id="${id}"]`).getByRole('button', { name: '閱讀技能書', exact: true }),
+          dialog: page.locator(`dialog.skill-intro-dialog[data-submission-id="${id}"]`) },
+      ];
+      for (const { trigger, dialog } of entries) {
+        await trigger.click();
+        const caption = dialog.locator('.skill-intro-illustration > figcaption');
+        await expect(caption).toHaveText('功能示意圖，非實際操作截圖。');
+        await caption.scrollIntoViewIfNeeded();
+        await expect(caption).toBeInViewport();
+        await expect.poll(() => dialog.locator('.skill-intro-illustration > img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+        const contrast = await caption.evaluate(illustrationCaptionContrast);
+        expect(contrast.fontSize).toBeGreaterThanOrEqual(14);
+        expect(contrast.ratio, JSON.stringify(contrast)).toBeGreaterThanOrEqual(4.5);
+        expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        await dialog.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
+        await expect(dialog).toBeHidden();
+        await expect(trigger).toBeFocused();
+      }
+    });
+  }
+}
