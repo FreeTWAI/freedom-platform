@@ -1,5 +1,6 @@
 import {test,expect,type Page} from './fixtures.js';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
+import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 const owner='20000000-0000-4000-8000-000000000001';
 const id=(n:number)=>`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const inventory=(n:number)=>({kind:'social_post',id:id(n),title:`我的創作 ${n}`,status:'active',version:null,path:`/?social-post=${id(n)}#social`,visibility:'community',actions:['view','withdraw']});
@@ -76,10 +77,19 @@ test('PERSONAL-SPACE-UI-06: real owner inventory/exact post respects hidden, del
  try{await page.getByRole('button',{name:'重新整理',exact:true}).click();const card=page.getByRole('article',{name:'貼文：PERSONAL_SPACE_REAL_PRIVATE_NOTE',exact:true});await expect(card).toContainText('真實來源的本人正文');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toHaveAttribute('href',`/?social-post=${post.post_id}#social`);
  const anon=await guest.newPage();await anon.goto(`${origin}/posts/${post.post_id}`);await expect(anon.locator('body')).not.toContainText('PERSONAL_SPACE_REAL_PRIVATE_NOTE');
  for(const state of ['hidden','deleted']){await e2eAuthPool.query('UPDATE community_social_posts SET state=$1 WHERE post_id=$2',[state,post.post_id]);await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(card).toBeVisible();await expect(card.getByRole('link')).toHaveCount(0);await expect(card).not.toContainText('真實來源的本人正文');}
- }finally{await guest.close();await e2eAuthPool.query('UPDATE community_social_posts SET state=\'deleted\' WHERE post_id=$1',[post.post_id]);}
+ }finally{
+  try{await guest.close();}finally{
+   // Deleted posts still consume the daily budget. Remove only this case's row
+   // from the validated disposable Playwright schema, never reset global limits.
+   const schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
+   expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(schema);
+   const removed=await e2eAuthPool.query(`DELETE FROM "${schema}".community_social_posts WHERE post_id=$1 AND author_user_id=$2 AND note=$3 RETURNING post_id`,[post.post_id,session.user.user_id,'PERSONAL_SPACE_REAL_PRIVATE_NOTE\n真實來源的本人正文']);
+   expect(removed.rows.map(row=>row.post_id)).toEqual([post.post_id]);
+  }
+ }
 });
 
-for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner content and menu remain reachable in all themes with reduced motion`,async({page})=>{
+for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner content and menu remain reachable in all themes with reduced motion`,async({page},testInfo)=>{
  await page.setViewportSize({width,height:640});await page.emulateMedia({reducedMotion:'reduce'});await synthetic(page,1);await login(page);
  for(const [theme,label] of [['light','自由工坊－明亮'],['dark','自由工坊－夜航'],['versefolk','自由工坊－敘生'],['dragon','新手導覽－龍娘'],['ai-sister','新手導覽－AI Sister']]){
   await openSettingsPanel(page,'appearance');const choice=page.getByRole('menuitemradio',{name:label,exact:true});await choice.click();await expect(choice).toBeFocused();await closeSettingsMenu(page);await expect(page.locator('.settings-menu-button')).toBeFocused();
@@ -93,7 +103,9 @@ for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner c
    });expect(ratio,`${theme} ${selector} contrast`).toBeGreaterThanOrEqual(4.5);
   }
   await page.locator('.settings-menu-button').click();const logout=page.getByRole('menuitem',{name:'登出',exact:true});await logout.scrollIntoViewIfNeeded();const box=(await logout.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(640);await closeSettingsMenu(page);
-  await page.screenshot({path:`test-results/personal-space-${theme}-${width}.png`,fullPage:true});
+  const screenshot=testInfo.outputPath(`personal-space-${theme}-${width}.png`);
+  await page.screenshot({path:screenshot,fullPage:true});
+  await testInfo.attach(`personal-space-${theme}-${width}`,{path:screenshot,contentType:'image/png'});
  }
 });
 
