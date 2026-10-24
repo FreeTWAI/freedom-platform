@@ -38,6 +38,8 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
     return()=>{active=false;};
   },[client,directory]);
   useEffect(()=>{if(scope==='blocked')setVisitedBlocked(true);},[scope]);
+  // A confirmation belongs to the rows it was opened on; a new result set (search, page, reload) closes it.
+  useEffect(()=>{setConfirming(null);},[page]);
   useEffect(()=>{
     if(view.focusRevision===focusedRevision.current)return;
     focusedRevision.current=view.focusRevision;
