@@ -2,7 +2,7 @@ import {openChat,closeChat} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {DEMO_USERS,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
-import {navigate,openFeatureSearch,openHomeGuide} from './navigation.js';
+import {navigate,openFeatureSearch,openHomeGuide,openHomeLearning} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 import {chatPollClock} from './chat-poll-clock.js';
 
@@ -42,10 +42,11 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
   await openHomeGuide(page);
+  await openHomeLearning(page);
   const next=page.getByRole('region',{name:'公會與技能書建議',exact:true});
   await expect(next).toHaveCount(1);await expect(page.locator('.guild-next-steps')).toHaveCount(0);
   await expect(next.getByText('到技能書架選一本技能書閱讀，開始練習。',{exact:true})).toBeVisible();
-  await expect(next.getByRole('button',{name:'閱讀第一本技能書',exact:true})).toBeVisible();
+  await expect(next.getByRole('button',{name:'閱讀技能書',exact:true})).toBeVisible();
   const milliseconds=Date.now()-start;expect(milliseconds).toBeLessThan(30000);await test.info().attach('synthetic-entry-budget',{body:JSON.stringify({milliseconds,typing_delay_ms:100,email_length:email.length,password_length:'freedom-entry-2026'.length,scope:'local isolated schema; excludes human reading and thinking'}),contentType:'application/json'});
   await expect(page.locator('.home-member-name')).toContainText('新夥伴');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await expect(next.getByRole('button',{name:'進入AI 開發公會聊天室',exact:true})).toBeVisible();
@@ -55,6 +56,7 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   // Wait for the responsive disclosure state before opening it through the UI.
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
   await openHomeGuide(page);
+  await openHomeLearning(page);
   await next.getByRole('button',{name:'進入AI 開發公會聊天室',exact:true}).click();await expect(page.getByRole('heading',{name:'AI 開發公會・公會閒聊',exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'在 AI 開發公會 發言'})).toBeVisible();
 });
 test('feature search finds chat and selling functions, and all themes work at 320 pixels',async({page})=>{

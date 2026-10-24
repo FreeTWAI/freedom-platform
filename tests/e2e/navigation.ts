@@ -34,8 +34,17 @@ export async function openHomeGuide(page:Page){
   await expect(guide).toHaveJSProperty('open',true);
 }
 
+/** Learning is optional at every width; exercise the visible native disclosure. */
+export async function openHomeLearning(page:Page){
+  const exploration=page.locator('.home-participation-disclosure');
+  await expect(exploration).toBeAttached();
+  if(!await exploration.evaluate(element=>(element as HTMLDetailsElement).open))await exploration.locator(':scope > summary').click();
+  await expect(exploration).toHaveJSProperty('open',true);
+}
+
 /** Reach the original profile/recommendation and module cards on the simple home. */
 export async function expandHomeSections(page:Page){
+  await openHomeLearning(page);
   await openHomeGuide(page);
   await expect(page.locator('.home-personal')).toBeVisible();
   for(const selector of ['.home-personal']){
