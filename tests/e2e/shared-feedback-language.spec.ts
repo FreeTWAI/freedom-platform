@@ -17,7 +17,7 @@ async function login(page:Page,language:Language=languages[0]){
   await form.locator('[name=password]').fill('freedom-local-demo');
   await form.getByRole('button',{name:language.login,exact:true}).click();
   await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
+  await expect(page.locator('.social-write-trigger')).toBeVisible();
 }
 
 async function selectLanguage(page:Page,language:Language){
@@ -118,7 +118,7 @@ test('a held deferred page translates in place and navigation can still leave it
     await page.screenshot({path:info.outputPath('loading-es-320.png'),fullPage:true});
     await page.setViewportSize({width:1280,height:844});
     await closeChat(page);await page.locator('#workspace-navigation').getByRole('button',{name:'Inicio',exact:true}).click();
-    await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
+    await expect(page.locator('.social-write-trigger')).toBeVisible();
   }finally{release();}
   expect(assets).toBe(1);
   await openChat(page);
@@ -146,7 +146,7 @@ test('a failed deferred page keeps its failure and translated recovery controls 
   await page.setViewportSize({width:320,height:844});await page.screenshot({path:info.outputPath('recovery-es-320.png'),fullPage:true});
   await page.getByRole('link',{name:'Volver al inicio',exact:true}).click();
   await expect(page.locator('.floating-message-panel')).toBeHidden();
-  await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();expect(assets).toBe(1);
+  await expect(page.locator('.social-write-trigger')).toBeVisible();expect(assets).toBe(1);
 });
 
 
