@@ -505,6 +505,8 @@ on `FREEDOM_COMMERCE_SELF_SHIP_ENABLED`.
 
 ## Checkout contact retention schema187 write floor
 
+Renumbered to 187 because #985 took migration 186.
+
 `commerce.checkout-contact-retention.v1` is mandatory for every candidate and
 active binary when the planned schema or retained historical floor reaches
 migration187, even when checkout is disabled or quarantine is on. A binary

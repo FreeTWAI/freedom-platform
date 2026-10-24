@@ -1,0 +1,47 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "absurd-daily",
+  "owner_role": "community",
+  "owned_paths": [
+    "modules/absurd-daily/**",
+    "apps/portal-web/src/games/**",
+    "tests/runtime/absurd-daily.test.ts",
+    "tests/e2e/absurd-daily.spec.ts",
+    "docs/development/absurd-daily.md",
+    "apps/portal-web/public/games/absurd-daily/**"
+  ],
+  "public_exports": [
+    "apps/portal-web/src/games/AbsurdDaily.tsx",
+    "apps/portal-web/src/games/result-bridge.ts",
+    "apps/portal-web/src/games/GameDraftInbox.tsx"
+  ],
+  "dependencies": [],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "modules/absurd-daily/README.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "absurd-daily.game-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/games/AbsurdDaily.tsx",
+      "operations": [
+        "absurd-daily.game-page.view"
+      ],
+      "auth_profile": "public-anonymous-read"
+    }
+  ]
+}

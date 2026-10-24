@@ -40,3 +40,92 @@ test('body bounds and malformed JSON are rejected before storage',async()=>{cons
 test('journal deep links use a native same-origin page without an iframe or external host',async()=>{for(const path of ['/journal','/journal/entries/2026-10-22','/journal/people/demo','/journal/manage']){const r=await app.request(origin+path);assert.equal(r.status,200);const html=await r.text();assert.match(html,/\/assets\/journal.js/);assert.equal(html.includes('<iframe'),false);assert.equal(html.includes('freetwai.evitina.tw'),false);}});
 test('null public introductions remain null and invalid Unicode is rejected',()=>{const p=payload() as any;p.people[0].intro=null;p.journals[0].people[0].intro=null;assert.equal(snapshotSchema.parse(p).people[0].intro,null);p.journals[0].excerpt='\ud800';assert.equal(snapshotSchema.safeParse(p).success,false);});
 test('a new snapshot cannot change public content before approval and obsolete drafts can be discarded',async()=>{const s=await editor(),k=await key(s),first=await agent(k.token);await api('/me/community-journal/submissions/'+first.data.submission_id+'/publish',s,{consent_to_publish:true,payload_sha256:first.data.payload_sha256},'1');const next=payload();next.journals[0].title='尚未核准的新版';const draft=await agent(k.token,next);assert.equal((await api('/public/journal')).data.data.journals[0].title,payload().journals[0].title);assert.equal((await api('/me/community-journal/submissions/'+draft.data.submission_id+'/discard',s,{})).status,200);assert.equal((await api('/me/community-journal/submissions/'+draft.data.submission_id+'/publish',s,{consent_to_publish:true,payload_sha256:draft.data.payload_sha256},'2')).status,409);});
+
+// The source relationship is publisher-supplied data, never inferred from a name.
+import {journalActivity} from '../../modules/community-journal/activity.js';
+import {journalView,sourceMessagesView} from '../../apps/portal-web/src/journal/journal-api.js';
+import {githubParts,relatedRepositories} from '../../apps/portal-web/src/journal/github-repos.js';
+import {linkParts} from '../../apps/portal-web/src/journal/link-parts.js';
+import {activityView,paginateMessages} from '../../apps/portal-web/src/journal/activity-data.js';
+function withSources(day='2026-10-24'){
+ const p=payload() as any;p.journals[0].date=day;
+ const source={time:day+'T12:00:00+08:00',text:'合成討論 https://github.com/example/demo.git?tracking=fixture#readme',sender_name:'合成測試人物',sender_avatar:{url:p.people[0].avatar.url,display_fit:'contain',object_position:'50% 50%'},source_key:'b'.repeat(64),person_slug:'demo'};
+ p.journals[0].blocks=[{type:'heading',text:'合成話題',source_messages:[source]},{type:'paragraph',text:'查閱 https://example.org/reference ，再共同確認。'}];
+ p.journals[0].reading_note={conclusion:'合成結論',priority_todo:'核對來源',discussion_question:''};
+ return p;
+}
+test('new source and note fields round trip, old snapshots remain valid and private source fields fail closed',()=>{
+ const p=withSources();assert.deepEqual(snapshotSchema.parse(p),p);assert.equal(snapshotSchema.safeParse(payload()).success,true);
+ for(const field of ['source_refs','actor_subject','line_uid']){const bad=withSources();bad.journals[0].blocks[0].source_messages[0][field]='private';assert.equal(snapshotSchema.safeParse(bad).success,false);}
+ const bad=withSources();bad.journals[0].blocks[1].source_messages=[];assert.equal(snapshotSchema.safeParse(bad).success,false);
+});
+test('source references require known identity and opaque stable keys, reject conflicts and invalid dates/media',()=>{
+ for(const change of [(m:any)=>delete m.source_key,(m:any)=>m.source_key='line-123456',(m:any)=>m.person_slug='unknown',(m:any)=>m.time='2026-02-30T12:00:00+08:00',(m:any)=>m.time='2026-10-23T12:00:00+08:00',(m:any)=>m.sender_avatar.url='https://foreign.invalid/track.png',(m:any)=>delete m.sender_name]){
+  const bad=withSources();change(bad.journals[0].blocks[0].source_messages[0]);assert.equal(snapshotSchema.safeParse(bad).success,false);
+ }
+ const p=withSources(),b=p.journals[0].blocks[0];p.journals[0].blocks.push({...b,text:'另一章',source_messages:[{...b.source_messages[0],text:'同key不同內容'}]});assert.equal(snapshotSchema.safeParse(p).success,false);
+});
+test('published activity deduplicates stable sources, excludes AI and never matches display names',()=>{
+ const p=withSources(),ai={...p.people[0],slug:'assistant',kind:'assistant'};p.people.push(ai);const b=p.journals[0].blocks[0],m=b.source_messages[0];
+ b.source_messages.push({...m,source_key:'c'.repeat(64),person_slug:'assistant'},{time:m.time,text:'相同名字仍不猜身分',sender_name:m.sender_name});p.journals[0].blocks.push({...b,text:'同一原話重複引用'});
+ const result=journalActivity(snapshotSchema.parse(p),'week',new Date('2026-10-24T04:00:00Z'));assert.equal(result.messages.length,1);assert.deepEqual(result.people,[{slug:'demo',count:1}]);assert.equal(result.messages[0].chapter_id,'section-0');assert.equal(result.unattributed_count,2);
+ assert.equal(activityView(result).messages[0].person,'demo');const broken={...result,people:[{slug:'demo',count:9}]};assert.throws(()=>activityView(broken),/invalid_data/);
+});
+test('activity uses Taipei calendar days and only the requested week or month, including zero-count humans',()=>{
+ const p=withSources(),base=p.journals[0];p.journals=[];
+ for(const [i,day] of ['2026-09-24','2026-09-25','2026-10-17','2026-10-18','2026-10-24','2026-10-25'].entries()){
+  const j=structuredClone(base);j.date=day;j.blocks[0].source_messages[0].time=day+'T01:00:00+08:00';j.blocks[0].source_messages[0].source_key=String(i).repeat(64);p.journals.push(j);
+ }
+ const parsed=snapshotSchema.parse(p),now=new Date('2026-10-23T16:30:00Z');
+ const week=journalActivity(parsed,'week',now),month=journalActivity(parsed,'month',now);
+ assert.deepEqual(week.range,{start:'2026-10-18',end:'2026-10-24',time_zone:'Asia/Taipei'});assert.equal(week.messages.length,2);assert.equal(month.messages.length,4);
+ assert.equal(journalActivity(parsed,'week',new Date('2027-01-01T00:00:00Z')).people[0].count,0);
+});
+test('source rendering keeps safe same-origin avatars and optional notes, rejects invalid dates and does not invent sources',()=>{
+ const p=snapshotSchema.parse(withSources()),view=journalView(p.journals[0]);assert.equal(view.chapters[0].sourceMessages.length,1);assert.match(view.chapters[0].sourceMessages[0].senderAvatar!.url,/^\/journal-assets\//);assert.equal(view.readingNote.conclusion,'合成結論');assert.equal(view.readingNote.discussionQuestion,'');
+ assert.equal(journalView(snapshotSchema.parse(payload()).journals[0]).chapters[0].sourceMessages.length,0);
+ assert.deepEqual(sourceMessagesView([{time:'2026-02-30T12:00:00+08:00',text:'bad'},{time:'2026-10-24T12:00:00',text:'missing zone'}]),[]);
+});
+test('repository links are canonical, deduplicated, clickable only for real repository-shaped URLs',()=>{
+ const text='參考 https://github.com/example/demo.git?tracking=1#readme)、 https://github.com/EXAMPLE/demo';
+ assert.deepEqual(relatedRepositories([{text}]),['https://github.com/example/demo']);assert.equal(githubParts(text).filter(p=>p.href).length,2);
+ for(const url of ['https://github.com.evil.invalid/example/demo','https://user:secret@github.com/example/demo','https://github.com:443/example/demo','https://github.com/example','https://github.com/example/demo/issues','https://github.com/settings/profile','javascript:alert(1)'])assert.equal(githubParts(url).some(p=>p.href),false,url);
+ assert.equal(linkParts('https://user:secret@example.org/path javascript:alert(1)').some(p=>p.href),false);
+ assert.equal(linkParts('來源 https://example.org/reference。')[1]?.href,'https://example.org/reference');
+ assert.deepEqual(paginateMessages([1,2,3,4,5,6],2),{pages:2,currentPage:2,pageMessages:[6]});
+});
+test('source and note fields persist through real submit/review/publish; drafts and withdrawal do not appear in activity',async()=>{
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date()),p=withSources(day),s=await editor(),k=await key(s),draft=await agent(k.token,p);
+ assert.equal(draft.status,201,JSON.stringify(draft.data));assert.equal((await api('/public/journal/activity?period=week')).data.data.messages.length,0);
+ const read=await api('/me/community-journal/submissions/'+draft.data.submission_id,s);assert.deepEqual(read.data.payload,p);
+ const pub=await api('/me/community-journal/submissions/'+draft.data.submission_id+'/publish',s,{consent_to_publish:true,payload_sha256:draft.data.payload_sha256},'1');assert.equal(pub.status,200);
+ assert.deepEqual((await api('/public/journal')).data.data,p);const active=await api('/public/journal/activity?period=week');assert.equal(active.status,200);assert.equal(active.response.headers.get('cache-control'),'no-store');assert.equal(active.data.data.messages.length,1);
+ assert.equal((await api('/public/journal/activity?period=year')).status,422);assert.equal((await api('/public/journal/activity?period=week&period=month')).status,422);assert.equal((await api('/public/journal/activity?private=1')).status,422);
+ await api('/me/community-journal/withdraw',s,{},pub.data.aggregate_version);assert.equal((await api('/public/journal/activity?period=month')).data.data.messages.length,0);
+});
+
+test('activity orders timestamps by instant across different UTC offsets',()=>{
+ const p=withSources(),m=p.journals[0].blocks[0].source_messages[0];
+ p.journals[0].blocks[0].source_messages=[{...m,time:'2026-10-24T12:00:00+08:00'},{...m,time:'2026-10-24T05:00:00Z',source_key:'c'.repeat(64)}];
+ const result=journalActivity(snapshotSchema.parse(p),'week',new Date('2026-10-24T12:00:00Z'));
+ assert.deepEqual(result.messages.map(m=>m.time),['2026-10-24T05:00:00Z','2026-10-24T12:00:00+08:00']);
+});
+
+
+test('article links exclude enclosing punctuation while preserving balanced URL parentheses and all text',()=>{
+ const cases:[string,string[]][]=[
+  ['See (https://example.org/reference).',['https://example.org/reference']],
+  ['((https://example.org/reference))',['https://example.org/reference']],
+  ['https://example.org/reference).',['https://example.org/reference']],
+  ['https://example.org/reference.)',['https://example.org/reference']],
+  ['https://example.org/wiki/Topic_(detail)',['https://example.org/wiki/Topic_(detail)']],
+  ['(https://example.org/wiki/Topic_(detail)).',['https://example.org/wiki/Topic_(detail)']],
+  ['https://example.org/a_(b_(c)))',['https://example.org/a_(b_(c))']],
+  ['https://example.org/search?q=(detail)#section_(one)',['https://example.org/search?q=(detail)#section_(one)']],
+  ['(https://example.org/a%28b%29)',['https://example.org/a%28b%29']],
+  ['來源（https://example.org/reference）。',['https://example.org/reference']],
+  ['(https://example.org/one), (http://example.org/two).',['https://example.org/one','http://example.org/two']],
+  ['(https://user:secret@example.org/private) javascript:alert(1)',[]],
+ ];
+ for(const [text,hrefs] of cases){const parts=linkParts(text);assert.deepEqual(parts.filter(p=>p.href).map(p=>p.href),hrefs,text);assert.equal(parts.map(p=>p.text).join(''),text);}
+});

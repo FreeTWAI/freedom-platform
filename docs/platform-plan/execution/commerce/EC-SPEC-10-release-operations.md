@@ -519,6 +519,8 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 
 `FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。2026-10-23 依 Ted「不要再設什麼30天規則」與移除等待條件的決定，public 自行寄送不再要求保存開關 `all`，runtime 與 wrangler 均移除此相依；console／launchpad 等既有檢查保留。schema 187 仍強制 `commerce.checkout-contact-retention.v1`，表示 binary 包含執行器並遵守開關；預設 `off`，改回 `off` 不還原資料。Ted 同日「all, all」指定 staging／production 的保存值由發布操作者設為 `all`。正式自行寄送的旗標仍由 Ted 決定，沒有本輪 flag 或部署操作。
 
+因 #985 已使用 migration 186，本案改編為 187。
+
 新增 retained shape/capability `commerce.hosted-self-ship.v1`，不能只因 intake OFF 就退回不認得 self_ship 的 reader。migration 185 名稱與 ledger 必須精確相符。使用既有 `20-runtime-grants.psql` 的獨立 marker，清掉 stale table/column grants 後僅 SELECT/INSERT；隔離測試執行實際 block 並驗 ACL 與二次套用。通用 `30-verify-readonly.psql` 不在本案修改範圍。此切片只有站內通知，沒有交易 email 模板或排信。
 
 還原的 commerce 個資前置：既有 media ACL lockdown 執行入口必須附 `--contact-retention <off|all>`，由操作者聲明環境設定。`off` 只鎖 ACL、回報 disabled 與 `deploymentReady:false`、exit 0；`all` 於 lockdown 後呼叫 contact retention。先從無 `--after-instance` 開始；`repeat_page` 保留原游標重跑，`next_page` 用回傳 `after_instance` 續跑，最後 `scan_complete` 才完成本輪。期間必須維持 quarantine 並禁止 runtime 流量；此結果只表示該次掃描完成，不是重新開放授權。中斷可由第一頁重跑，任何頁都以原履約／取消時間判定，不重設期限。Ted 2026-10-23 決定備份副本保存 30 天（「好」），人工個資請求由店主處理自己的客戶（「一樣」），平台不建流程。

@@ -844,4 +844,4 @@ Claude 達到額度上限後，Ted 授權 Codex 接手，並可使用 Grok CLI `
 
 | 工作 | 範圍 | 驗收 | 相依與開放 |
 | --- | --- | --- | --- |
-| wp-self-ship-retention（PR-C） | migration 187；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；每張參照訂單從履約登記或取消滿 180 天（2026-10-22 已核准）；Ted 2026-10-23「不要再設什麼30天規則」，未成單保留，移除等待條件；無起點保留、人工請求由店主處理、備份 30 天；顧客只在有已遮蔽連結且沒有 live 連結時遮蔽，舊 live contact 的 Email 修改限制永久保留；不結單 | PR-A → PR-C；預設 `off`，只接受 `off`／`all`；Ted 2026-10-23「all, all」指定 staging／production 都 `all`，由發布操作者設定。public 自行寄送不再依賴保存開關；正式自行寄送旗標仍由 Ted 決定，UI PR-B 另批 |
+| wp-self-ship-retention（PR-C） | migration 187（因 #985 已使用 186 而改編）；DC12 聯絡資料／物流參考遮蔽 | 每店有界、可重跑 due work，舊列掃描、租約保護與還原前補跑；每張參照訂單從履約登記或取消滿 180 天（2026-10-22 已核准）；Ted 2026-10-23「不要再設什麼30天規則」，未成單保留，移除等待條件；無起點保留、人工請求由店主處理、備份 30 天；顧客只在有已遮蔽連結且沒有 live 連結時遮蔽，舊 live contact 的 Email 修改限制永久保留；不結單 | PR-A → PR-C；預設 `off`，只接受 `off`／`all`；Ted 2026-10-23「all, all」指定 staging／production 都 `all`，由發布操作者設定。public 自行寄送不再依賴保存開關；正式自行寄送旗標仍由 Ted 決定，UI PR-B 另批 |
