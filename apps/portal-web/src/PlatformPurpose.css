@@ -70,7 +70,7 @@
 @media(max-width:360px){
  .login-layout.visitor-first-layout>.visitor-first-step{gap:4px}
  .login-layout.visitor-first-layout .login-story .brand-poster{width:56px}
- .login-layout.visitor-first-layout .login-card{padding:12px}
+ .login-layout.visitor-first-layout .login-card{padding:8px 12px}
  .visitor-first-layout .login-card-heading{margin-bottom:4px}
- .visitor-first-layout .login-card .auth-switch{margin-bottom:8px}
+ .visitor-first-layout .login-card .auth-switch{margin-bottom:4px}
 }

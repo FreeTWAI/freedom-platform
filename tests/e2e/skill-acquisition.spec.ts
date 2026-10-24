@@ -64,6 +64,8 @@ test('join opens the registration form even when general discovery is off, with 
   await expect(page.getByRole('link',{name:'返回技能書繼續閱讀',exact:true})).toHaveAttribute('href',path+'?intro=7#skill-use-title');
   await page.getByRole('link',{name:'返回技能書繼續閱讀',exact:true}).click();
   await expect(page).toHaveURL(new RegExp('/development/skills/social-post\\?intro=7#skill-use-title$'));
+  // The return navigation starts a site read; finish its handler before context teardown.
+  await page.unrouteAll({behavior:'wait'});
 });
 
 test('successful registration returns to the same public book without forcing guild selection',async({page})=>{
