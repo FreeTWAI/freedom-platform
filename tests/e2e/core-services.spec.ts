@@ -25,9 +25,10 @@ test.describe.serial('freedom-platform core services', () => {
 
   test.afterAll(async () => {
     // Ensure shutdown is always called even if the shutdown test itself was skipped/failed
-    if (server) {
+    const listener = server;
+    if (listener) {
       await new Promise<void>((resolve) => {
-        server.close(() => resolve());
+        listener.close(() => resolve());
       });
     }
   });
