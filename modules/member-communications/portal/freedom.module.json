@@ -9,7 +9,8 @@
     "apps/portal-web/src/modules/adaptive-chat-poll.ts",
     "apps/portal-web/src/modules/chat-entry.ts",
     "apps/portal-web/src/modules/chat-leave-guards.ts",
-    "tests/e2e/chat-leave-guards.spec.ts"
+    "tests/e2e/chat-leave-guards.spec.ts",
+    "tests/runtime/notification-read-state.test.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/adaptive-chat-poll.ts",

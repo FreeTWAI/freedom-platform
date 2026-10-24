@@ -24,11 +24,15 @@ test('bell overlap uses one transport and collapse makes no additional request',
     await bell.click();await expect(page.getByRole('region',{name:'最近通知'})).toBeVisible();
     await expect.poll(()=>waiting.length).toBeGreaterThanOrEqual(1);
     await bell.click();await expect(page.getByRole('region',{name:'最近通知'})).toBeHidden();
-    await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('freedom-inbox-updated'));});
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await frameBarrier(page);
     const measured={initial,overlap_requests:requests-initial,collapsed:true,completed_before_release:completed};
     await info.attach('notification-overlap-count',{body:JSON.stringify(measured),contentType:'application/json'});
     expect(measured.overlap_requests).toBe(1);
+    // A confirmed inbox change is a separate snapshot boundary, not a normal overlapping read.
+    await page.evaluate(()=>{window.dispatchEvent(new Event('freedom-inbox-updated'));window.dispatchEvent(new Event('focus'));});
+    await expect.poll(()=>waiting.length).toBe(2);await frameBarrier(page);
+    expect(requests-initial).toBe(2);
   }finally{hold=false;for(const route of waiting)await route.fulfill({json:payload()});await (await updated).finished();await frameBarrier(page);}
   // A settled response is never a freshness cache: the next opening re-reads.
   const settled=requests;await bell.click();await expect.poll(()=>requests).toBe(settled+1);
@@ -149,3 +153,124 @@ for(const [id,recent,title,loading] of [['zh-Hant','最近通知','通知','正�
     finally{hold=false;for(const route of waiting)await route.fulfill({json:payload()});}
   });
 }
+
+test('an unconfirmed single read remains visible after navigation and retries only that command',async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000001',action:{tab:'guilds',resource_id:null}};
+  const keys:string[]=[],paths:string[]=[];let confirmed=false,retryRequest:Route|undefined;
+  await page.route(preview,route=>route.fulfill({json:{items:[{...target,read_at:confirmed?'2026-01-02T00:00:00Z':null}],unread_count:confirmed?1:2}}));
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,async route=>{
+    keys.push(route.request().headers()['idempotency-key']);paths.push(route.request().url());
+    if(keys.length===1)return route.abort();retryRequest=route;
+  });
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.locator('.notification-bell-item').click();
+  await expect(page).toHaveURL(/#guilds$/);await expect(page.getByRole('region',{name:'最近通知'})).toBeHidden();
+  const alert=page.locator('.notification-bell-read-error');await expect(alert).toBeVisible();await expect(alert).toContainText('尚未確認這則通知已讀');
+  await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，2 則未讀');
+  await navigate(page,'技能書架');const destination=page.url();await alert.getByRole('button',{name:'再試一次',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect.poll(()=>Boolean(retryRequest)).toBe(true);const retry=alert.getByRole('button',{name:'標記中…',exact:true});await expect(retry).toBeDisabled();await expect(retry).toBeFocused();
+  confirmed=true;await retryRequest!.fulfill({json:{notification_id:target.notification_id,read_at:'2026-01-02T00:00:00Z'}});
+  await expect(alert).toHaveCount(0);await expect(page.locator('.notification-bell-trigger')).toBeFocused();await expect(page).toHaveURL(destination);
+  await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，1 則未讀');
+  expect(keys).toHaveLength(2);expect(keys[1]).toBe(keys[0]);expect(new Set(paths).size).toBe(1);
+});
+
+test('an acknowledged read keeps the badge honest while a fresh count waits and older reads arrive',async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000002',action:{tab:'guilds',resource_id:null}};
+  let phase='initial',old:Route|undefined,fresh:Route|undefined,writes=0;
+  await page.route(preview,async route=>{
+    if(phase==='old'){old=route;return;}if(phase==='fresh'){fresh=route;return;}
+    await route.fulfill({json:{items:[target],unread_count:1}});
+  });
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,async route=>{writes++;phase='fresh';await route.fulfill({json:{notification_id:target.notification_id,read_at:'2026-01-02T00:00:00Z'}});});
+  await login(page);await page.locator('.notification-bell-trigger').click();await expect(page.locator('.notification-bell-item')).toBeVisible();
+  phase='old';await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect.poll(()=>Boolean(old)).toBe(true);
+  try{
+    await page.locator('.notification-bell-item').click();await expect.poll(()=>Boolean(fresh)).toBe(true);
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，1 則未讀');
+    // Two newer notices arrived while the one clicked notification was acknowledged.
+    phase='settled';await fresh!.fulfill({json:{items:[{...target,read_at:'2026-01-02T00:00:00Z'}],unread_count:2}});fresh=undefined;
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，2 則未讀');
+    await old!.fulfill({json:{items:[target],unread_count:1}});old=undefined;await frameBarrier(page);
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，2 則未讀');expect(writes).toBe(1);
+  }finally{phase='settled';if(old)await old.fulfill({json:{items:[target],unread_count:1}});if(fresh)await fresh.fulfill({json:{items:[],unread_count:2}});}
+});
+
+for(const outcome of ['ack','failure'] as const)test(`full notification history ignores an old login's late ${outcome}`,async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000003',kind:'guild_approved',action:{tab:'guilds',resource_id:null}};
+  let pending:Route|undefined;
+  await page.route(/\/api\/v1\/me\/notifications\?/,route=>route.fulfill({json:{items:[target],unread_count:1,next_offset:null}}));
+  const path=`/me/notifications/${target.notification_id}/read`;
+  await page.route('**/api/v1'+path,route=>{pending=route;});
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.getByRole('button',{name:'查看所有通知',exact:true}).click();
+  await page.getByRole('button',{name:'前往職業公會',exact:true}).click();await expect.poll(()=>Boolean(pending)).toBe(true);
+  await signOut(page);await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await login(page,'reviewer@local.test',false);
+  await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，1 則未讀');
+  await page.evaluate(()=>{const w=window as typeof window&{oldHistoryEvents:number};w.oldHistoryEvents=0;window.addEventListener('freedom-inbox-updated',()=>w.oldHistoryEvents++);});
+  const url=page.url();
+  if(outcome==='ack')await pending!.fulfill({json:{notification_id:target.notification_id,read_at:'2026-01-02T00:00:00Z'}});else await pending!.fulfill({status:503,json:{title:'Old account failure'}});
+  await frameBarrier(page);expect(await page.evaluate(()=>(window as typeof window&{oldHistoryEvents:number}).oldHistoryEvents)).toBe(0);
+  await expect(page).toHaveURL(url);await expect(page.locator('.notification-bell-read-error')).toHaveCount(0);await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，1 則未讀');
+});
+
+ test('a full-history response started earlier cannot replace a newer bell count',async({page})=>{
+  let history:Route|undefined,count=1;
+  await page.route(preview,route=>route.fulfill({json:{items:[notice],unread_count:count}}));
+  await page.route('**/api/v1/me/notifications?limit=20&offset=0',route=>{history=route;});
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.getByRole('button',{name:'查看所有通知',exact:true}).click();await expect.poll(()=>Boolean(history)).toBe(true);
+  try{
+    count=2;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，2 則未讀');
+    await history!.fulfill({json:{items:[notice],unread_count:1,next_offset:null}});history=undefined;await expect(page.getByRole('heading',{name:'最新通知',exact:true})).toBeVisible();
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知，2 則未讀');
+  }finally{if(history)await history.fulfill({json:{items:[],unread_count:1,next_offset:null}});}
+});
+
+test('a fresh server record resolves a lost read acknowledgement without another manual read',async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000004',action:{tab:'guilds',resource_id:null}};
+  let committed=false,writes=0;
+  await page.route(preview,route=>route.fulfill({json:{items:[{...target,read_at:committed?'2026-01-02T00:00:00Z':null}],unread_count:committed?0:1}}));
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,route=>{writes++;committed=true;return route.abort();});
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.locator('.notification-bell-item').click();
+  await expect(page).toHaveURL(/#guilds$/);await expect(page.locator('.notification-bell-read-error')).toBeVisible();
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.notification-bell-read-error')).toHaveCount(0);await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知');expect(writes).toBe(1);
+});
+
+test('opening a full-history notification keeps the shell count producer after the list closes',async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000005',kind:'guild_approved',action:{tab:'guilds',resource_id:null}};
+  let committed=false,writes=0,shell:Route|undefined,history:Route|undefined;
+  await page.route(preview,route=>{if(committed){shell=route;return;}return route.fulfill({json:{items:[target],unread_count:1}});});
+  await page.route('**/api/v1/me/notifications?limit=20&offset=0',route=>route.fulfill({json:{items:[target],unread_count:1,next_offset:null}}));
+  await page.route('**/api/v1/me/notifications?limit=1&offset=0',route=>{history=route;});
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,route=>{writes++;committed=true;return route.fulfill({json:{notification_id:target.notification_id,read_at:'2026-01-02T00:00:00Z'}});});
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.getByRole('button',{name:'查看所有通知',exact:true}).click();
+  try{
+    await page.getByRole('button',{name:'前往職業公會',exact:true}).click();await expect(page).toHaveURL(/#guilds$/);
+    await expect(page.getByRole('region',{name:'最近通知'})).toBeHidden();await expect.poll(()=>Boolean(shell)&&Boolean(history)).toBe(true);
+    await shell!.fulfill({json:{items:[{...target,read_at:'2026-01-02T00:00:00Z'}],unread_count:0}});shell=undefined;
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知');
+    await history!.fulfill({json:{items:[],unread_count:99,next_offset:null}});history=undefined;await frameBarrier(page);
+    await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知');expect(writes).toBe(1);
+  }finally{if(shell)await shell.fulfill({json:{items:[],unread_count:0}});if(history)await history.fulfill({json:{items:[],unread_count:0,next_offset:null}});}
+});
+
+for(const recovery of ['refresh','pending retry'] as const)test(`full history clears a confirmed read error through ${recovery} without an extra write`,async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000006',kind:'guild_approved',action:{tab:'guilds',resource_id:null}};
+  let committed=false,writes=0,retry:Route|undefined;const keys:string[]=[];
+  await page.route(/\/api\/v1\/me\/notifications\?/,route=>route.fulfill({json:{items:[{...target,read_at:committed?'2026-01-02T00:00:00Z':null}],unread_count:committed?0:1,next_offset:null}}));
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,route=>{
+    writes++;keys.push(route.request().headers()['idempotency-key']);committed=true;
+    if(writes===1)return route.abort();retry=route;
+  });
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.getByRole('button',{name:'查看所有通知',exact:true}).click();
+  const row=page.locator(`[data-notification="${target.notification_id}"]`),url=page.url();
+  try{
+    await row.getByRole('button',{name:'標為已讀',exact:true}).click();await expect(row.locator('.banner-error')).toBeVisible();
+    if(recovery==='pending retry'){await row.getByRole('button',{name:'重試標為已讀',exact:true}).click();await expect.poll(()=>Boolean(retry)).toBe(true);}
+    await page.getByRole('button',{name:'重新整理通知',exact:true}).click();
+    await expect(row.locator('.messages-meta')).toContainText('已讀');await expect(row.locator('.banner-error')).toHaveCount(0);
+    await expect(row.getByRole('button',{name:'標為已讀',exact:true})).toHaveCount(0);
+    if(retry){await retry.abort();retry=undefined;await frameBarrier(page);}
+    await expect(row.locator('.banner-error')).toHaveCount(0);await expect(row.getByRole('button',{name:'前往職業公會',exact:true})).toBeEnabled();
+    await expect(page).toHaveURL(url);expect(writes).toBe(recovery==='refresh'?1:2);if(keys.length===2)expect(keys[1]).toBe(keys[0]);
+  }finally{if(retry)await retry.abort();}
+});
