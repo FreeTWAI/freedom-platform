@@ -3,7 +3,6 @@ import {commerceEmailOutbox} from '../../../modules/agent-commerce/operations/no
 import {createCheckoutPaymentPorts} from '../../../modules/agent-commerce/payments/attempts.js';
 import {createPaymentMethodsPort} from '../../../modules/agent-commerce/payments/offline/methods.js';
 import {createStoreAdmissionPort,providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
-import {assertSelfShipReadiness} from '../../../modules/agent-commerce/operations/runtime-settings.js';
 import {createShippingQuotePort} from '../../../modules/agent-commerce/fulfilment/quote/index.js';
 import { createTenantListCursorCodec } from '../../../packages/shared/tenant-list-cursor.js';
 import type { Context } from 'hono';
@@ -41,7 +40,6 @@ function authNetwork(c:Context) {
 
 /** Node runtime: settings are read from process configuration when used, as before. */
 export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<NodeAppOptions,'privateAiProduct'>={}):PlatformRuntime {
-  assertSelfShipReadiness(options.commerceSelfShipEnabled===true,freedomEnv);
   const environment=providerEnvironment(freedomEnv),settingsProfiles=options.commerceSettings?.providerProfiles??[];
   const admission=options.commercePorts?.admission??createStoreAdmissionPort(environment,settingsProfiles);
   const email=options.commerceSettings?.emailEnabled?(options.commercePorts?.email??commerceEmailOutbox):undefined;

@@ -1,3 +1,4 @@
+import {runRestoredContactRetention} from '../../modules/agent-commerce/operations/contact-retention.js';
 import {seedSelfShipment} from '../runtime/self-ship-fixture.js';
 import sharp from 'sharp';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
@@ -730,6 +731,8 @@ before(async () => {
     return pg.code === 'P0001' && pg.message === 'Unsafe runtime operator media privileges';
   });
   await lockdownRestoredMediaAcl(restoredPool, { target: { environment: 'local', database: restoredDatabase, schema, role: superuser, releaseSha: 'a'.repeat(40) }, runtimeRole });
+  const retention=await runRestoredContactRetention(restoredPool,'all');
+  assert.equal(retention.status,'scan_complete');assert.equal(retention.deploymentReady,false);
   await applyTemplate(restoredPool);
   // No runtime session exists during lockdown. Open it only after grants succeed.
   runtimePool = poolFor(runtimeRole, restoredDatabase, 1);

@@ -20,7 +20,9 @@
     "tests/runtime/commerce-email-templates.test.ts",
     "tests/runtime/commerce-effect-journal.test.ts",
     "tests/runtime/commerce-email-outbox.test.ts",
-    "tests/runtime/commerce-email-delivery.test.ts"
+    "tests/runtime/commerce-email-delivery.test.ts",
+    "migrations/187_checkout_contact_retention.sql",
+    "tests/runtime/commerce-contact-retention.test.ts"
   ],
   "public_exports": [
     "modules/agent-commerce/operations/runtime-settings.ts"
@@ -44,7 +46,9 @@
       "surface_id": "commerce.hosted-store-overview-api",
       "kind": "http",
       "entry": "apps/platform-api/src/routes/hosted-store-overview.ts",
-      "operations": ["store.overview"],
+      "operations": [
+        "store.overview"
+      ],
       "auth_profile": "member-session"
     }
   ]
