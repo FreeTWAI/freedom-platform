@@ -6,9 +6,17 @@
 
 ## 目前狀態
 
-本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的聯絡資料保留使用 187；這不代表人像或部署核准。
+本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=c140a346ba3c8788a3f729919465f46a49ccf99b release.staging=c140a346ba3c8788a3f729919465f46a49ccf99b flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=185 applied_migration.staging=185 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=54961dd83fbfba721ae54bcddd8e759b7a06915f release.staging=54961dd83fbfba721ae54bcddd8e759b7a06915f flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=187 applied_migration.staging=187 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-24 21:26 UTC，兩環境已部署 `54961dd8`／schema187，migrations186–187各以單一交易COMMIT，ledger186列；回退下限為 `54961dd8`／187。27個既有旗標維持，唯一新增contact retention `all`；其他不存在旗標仍OFF。四組成功before／after備份讀回、隔離還原與清理通過，dispatcher `4dba0c67` 已綁定兩環境，原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-54961dd8-2026-10-24.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Seal首試、staging after前兩次、production發布後readback及reconcile首試拒絕均保留；kit權限與readback順序修正另記觀察，180秒dump預算尚未修正。Production receipt由GET-only reconciliation簽發，沒有redeploy。公開smoke通過14項，admin僅驗Access302與精確來源CSP；會員UX、真實手機／Safari與新wrapper自然排程未驗，M1／完整計畫與真人成果未接受狀態維持。
+
+### 2026-10-23 11:28 歷史發布
+
+以下保留 `c140a346` 當時觀察；最新部署以上方10月24日收據為準。
 
 截至2026-10-23 11:28 UTC，兩環境已部署 `c140a346`／schema185，migrations173–185各以單一交易COMMIT，ledger184列；回退下限為 `c140a346`／185。27個旗標、路由與cron維持，8個新旗標不存在、預設OFF。四組成功before／after備份讀回、隔離還原與清理通過，dispatcher `b76f639d` 已綁定兩環境，原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-c140a346-2026-10-23.json)及[現況快照](../unified-foundation/current-state.json)。
 

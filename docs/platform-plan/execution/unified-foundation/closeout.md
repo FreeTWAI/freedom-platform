@@ -10,6 +10,30 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-24 main 54961dd8 發布完成（共創誌、遊戲與聯絡資料保存）
+
+截至21:26 UTC，兩環境已部署 `54961dd8`／schema187，接續 `c140a346`／185；完整證據見[發布收據](rollout-main-54961dd8-2026-10-24.json)。
+會員取得共創誌模板／投稿 API、原話閱讀／排行／成員頁、3D 遊戲與成果分享、手機 PWA 聊天修正、關閉服務表單保留草稿。
+自前版共5個 first-parent merges：#991、#985、#1002、#1007、#1003（含 #989／#984／#973／#986／#992）；文件不算會員驗收。
+Main Verify 40100005287 的17個 jobs、CodeQL 40100005270 的3個 jobs 全部成功；migrations186／187各由環境 `_migrator` 單一交易COMMIT。
+Staging交易870002、production交易873627，ledger各186列；**兩環境回退下限升為 `54961dd8`／187，只能相容前進修復**。
+27個既有旗標、路由與cron維持；唯一新增 plain var `FREEDOM_COMMERCE_CONTACT_RETENTION=all`，各37 vars。
+Ted於10月23日06:21Z在 #989 決定「4. all, all」；其他不存在旗標仍預設OFF，checkout／交易Email仍OFF。
+Ted於10月24日18:08:00.318Z授權：「當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了」。
+無staging acceptance window，會員UX為 `not_run`；production公開唯讀smoke於21:25:09.946Z通過14項，health首試符合來源，未登入會員或建單。
+`/` 線上CSP允許youtube-nocookie frame；`/pay/ecpay/`加43個A無frame-src；admin兩路徑被Access302攔截，未觀察線上admin Worker CSP，僅驗精確來源函式。
+四組成功備份皆通過遠端讀回、隔離DB／物件還原與清理：staging before `64667475`／after `d68f2715`，production before `f66c3abb`／after `7e0ea7c6`。
+Before皆於本日以舊kit的after wrapper新擷取，保留 `c140a346`／185；after為 `54961dd8`／187，production after pointer約21:14Z記錄；還原不授權公開資料。
+Seal首試兩環境exit65拒絕、未寫seal；Follow-up2只修expected var順序、render bytes不變，重新釘選helper並重跑steps4／6。
+Follow-up3在materialize拒絕前改成忽略readback key順序的精確值比對；record-backup staging before首試因0664拒絕，169個kit檔僅移除group／other位元後重試通過。
+Staging after首試 `201d5358`於restore遇EOF，第二次 `6df7dfe5`於capture失敗，皆清理通過、未留下maintenance；第三次才成功。
+180秒dump預算／SIGTERM後docker CLI退出0為kit限制，**未修正**；第二次AWS東京路徑Cogent掉包及恢復為操作者觀察，與失敗收據分開。
+Production step15於20:54:15Z退出1，但Worker已發布；provider listing延遲，沒有redeploy。Follow-up4新增GET-only reconciliation。
+Reconcile首試21:10Z因把含runtime驗證首行的log當單份JSON而拒絕；Follow-up5修parse／加preflight，操作者記錄 `local_inputs_ok`，第二次21:24:41.936Z簽發receipt，**不是deploy helper成功收據**。
+兩環境dispatcher已綁定 `4dba0c67`；21:25:57Z恢復原timers，03:30／04:30 UTC、5分鐘隨機延遲、Persistent及service argv未改。
+Deployments staging-next／next皆記success（7304702552／20509123861、7304703178／20509126735）；新wrapper自然排程仍為 `not_observed_for_new_wrapper`。
+真人手機／Safari、會員旅程、第二操作者、live rollback、原168項需求與T-047未驗項保留；不以CI、部署或備份還原推定完成。
+
 ## 2026-10-23 main c140a346 發布完成（商店／供貨、公開閱讀與 migration 173–185）
 
 **截至11:28 UTC，staging 與 production 都已部署 `c140a346`／schema185，
