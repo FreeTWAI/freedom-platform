@@ -2544,8 +2544,8 @@
     },
     {
       "path": "apps/portal-web/src/journal/Editor.tsx",
-      "bytes": 7482,
-      "sha256": "8cb7c0ba63d36048d543a71a863bf73acc9904c8f346827a9cb07f280a192c89"
+      "bytes": 7537,
+      "sha256": "086ae9c79e5aa5801de47758b66dece090c072db940dae46c501b6578014793b"
     },
     {
       "path": "apps/portal-web/src/journal/activity-data.ts",
@@ -2584,8 +2584,8 @@
     },
     {
       "path": "apps/portal-web/src/journal/routes.ts",
-      "bytes": 2885,
-      "sha256": "7d0254cfc136528ea4af1cd8f239a85c5abb820d08c36b757d1b1167219d601e"
+      "bytes": 2917,
+      "sha256": "9164e5697d4a602a354f810da1dfd2f9c4b3ff666cd0f5b56a74a232240b9fa2"
     },
     {
       "path": "apps/portal-web/src/journal/use-journal-data.ts",

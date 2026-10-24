@@ -1,7 +1,7 @@
 import type {JournalCommunity} from '../../../../modules/community-journal/community.js';
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const validSlug = (value:string) => value.length <= 64 && slug.test(value);
-export const communityUrl = (community:JournalCommunity='freedom') => community==='freedom'?'/journal':'/journal/'+community;
+export const communityUrl = (community:JournalCommunity='freedom') => community==='claude'?'/journal/claude':community==='codex'?'/journal/codex':'/journal';
 export const journalUrl = (date:string, chapter = '',community:JournalCommunity='freedom') => `${communityUrl(community)}/entries/${encodeURIComponent(date)}${chapter ? '#' + encodeURIComponent(chapter) : ''}`;
 export const personUrl = (id:string,community:JournalCommunity='freedom') => `${communityUrl(community)}/people/${encodeURIComponent(id)}`;
 
