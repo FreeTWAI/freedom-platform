@@ -1,4 +1,5 @@
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
+import {activateHomeLink} from './brand-home-link';
 import {PasswordField} from './modules/auth/PasswordField';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
@@ -487,10 +488,19 @@ function LoginView({
   }
 
   const accessExpired = Boolean(bootError?.accessExpired || errorDetails?.accessExpired)
+  // A plain visitor entry starts with existing public reading, not an account gate.
+  // Dedicated return/reset/role journeys retain their current form and destination.
+  const visitorFirst = !discoveryEnabled && !resetToken && !returnPath && !skillReturn
+    && !storefrontReturn && !postReturnPath && !memberPostPath && !entryIntent
+    && !onReturnToGuild && !onReturnToEvent && !accessExpired
   return (
-    <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}`}>
+    <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}${visitorFirst ? ' visitor-first-layout' : ''}`}>
       <div className="login-entry-tools"><LanguagePicker className="login-language-row"/><InstallAppButton/></div>
-      {discoveryEnabled ? <section className="login-story discovery-story"><BrandPoster/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><BrandPoster/><div className="login-story-copy"><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p><PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
+      {visitorFirst && <section className="visitor-first-step" aria-labelledby="visitor-heading">
+        <h1 id="visitor-heading">{t('auth.headline')}</h1>
+        <EntryResources client={client} communitySearchEnabled={site?.community_search_enabled===true} compact/>
+      </section>}
+      {discoveryEnabled ? <section className="login-story discovery-story"><BrandPoster/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><BrandPoster/><div className="login-story-copy">{!visitorFirst&&<><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p></>}<PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
         if(target!=='supplier'&&target!=='showcase'&&target!=='tasks')return
         onChooseEntry(target);setMode(site?.registration_enabled?'register':'login');setError(null);setResetNotice('')
         requestAnimationFrame(()=>emailInput.current?.focus())
@@ -579,7 +589,7 @@ function LoginView({
         </aside>}
       </section></div>
       <p className="login-language-scope field-hint">{t('language.scope')}</p>
-      <div className="login-public-resources"><EntryResources client={client} communitySearchEnabled={!resetToken&&site?.community_search_enabled===true}/></div>
+      {!visitorFirst&&<div className="login-public-resources"><EntryResources client={client} communitySearchEnabled={!resetToken&&site?.community_search_enabled===true}/></div>}
       <CommunityLinks/>
     </main>
   )
@@ -907,17 +917,20 @@ function Workspace({
         <div className="shell">
           <header className="community-header">
           <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
-            <div className="sidebar-heading"><div className="brand">
-              <img className="sidebar-brand-art" src="/brand/freedom-workshop.webp" alt="" width="1280" height="720"/>
-              <div>
-                <p className="eyebrow">FREEDOM WORKSHOP</p>
-                <strong>自由工坊</strong>
-              </div>
-            </div>
+            <div className="sidebar-heading"><a className="brand brand-home" href="/#home" aria-label={`自由工坊 · ${t('nav.home')}`} onClick={event => activateHomeLink(event, () => {
+              selectTab('home');
+              // The existing leave guard must accept before changing the canonical URL or scroll.
+              if (acceptedHash.current !== '#home') return;
+              if (window.location.pathname !== '/' || window.location.search) {
+                window.history.replaceState(window.history.state, '', '/#home');
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+              }
+              workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
+            })}><strong>自由工坊</strong></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
           </aside>
-          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
+          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">

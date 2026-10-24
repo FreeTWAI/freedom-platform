@@ -5,7 +5,7 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 // Synthetic data only. Messages/notifications follow the root-confirmed DTO in
 // the coordinator contract; they are route fixtures until the backend API lands.
 const me='20000000-0000-4000-8000-000000000001',peerA='20000000-0000-4000-8000-000000000002',peerB='20000000-0000-4000-8000-000000000003';
-const settingsItems=['我的名片','待辦清單','加入主畫面','登出'];
+const settingsItems=['我的個人空間','我的內容','待辦清單','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
 
 test.beforeEach(async({page})=>{
   // Nothing in these cases may leave the isolated local server.
@@ -29,14 +29,14 @@ async function openPage(page:Page,name:string){
     await openChat(page);
     return;
   }
-  await settings(page).click();await page.getByRole('menuitem',{name,exact:true}).click();
+  await settings(page).click();await page.getByRole('menuitem',{name:name==='我的名片'?'資料與帳號設定':name,exact:true}).click();
 }
 async function inbox(page:Page,notices:number|'fail',direct:number){
   await page.route(/\/api\/v1\/me\/notifications\?limit=(1|6)&offset=0$/,route=>notices==='fail'?route.fulfill({status:503,json:{}}):route.fulfill({json:{items:[],unread_count:notices,next_offset:null}}));
   await page.route(/\/api\/v1\/me\/conversations\?limit=1&offset=0$/,route=>route.fulfill({json:{items:[],unread_count:direct,next_offset:null}}));
 }
 async function expectExactItems(page:Page){
-  await expect(page.getByRole('menuitem')).toHaveCount(4);
+  await expect(page.getByRole('menuitem')).toHaveCount(settingsItems.length);
   for(const name of settingsItems)await expect(page.getByRole('menuitem',{name,exact:true})).toHaveCount(1);
 }
 async function github(page:Page,value:{configured:boolean;connected:boolean;login?:string}|'fail'){
@@ -64,24 +64,24 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   const menu=page.getByRole('menu',{name:'個人檔案'});
   await expectExactItems(page);
   await expect(menu.getByRole('menuitem',{name:'我的訊息',exact:true})).toHaveCount(0);
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
+  await expect(menu.getByRole('menuitemradio')).toHaveCount(0);
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的內容',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'待辦清單',exact:true})).toBeFocused();
-  // 登出 is the last item, after the theme choices.
   await page.keyboard.press('End');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('Home');await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
+  await page.keyboard.press('Enter');await expect(menu.getByRole('menuitem',{name:'返回個人選單',exact:true})).toBeFocused();
+  await page.keyboard.press('End');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(toggle).toBeFocused();await expect(toggle).toHaveAttribute('aria-expanded','false');
 
   // Keyboard opening from the toggle, then selecting a page moves focus into main.
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('待辦清單');
   await expect(page.locator('#main-content')).toBeFocused();await expect(menu).toHaveCount(0);
 
@@ -100,9 +100,9 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   // On the card page the item names stay exact and the current page is marked.
   await openPage(page,'我的名片');await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
   await toggle.click();await expectExactItems(page);
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true})).toHaveAttribute('aria-current','page');
   // Choosing the page that is already open by keyboard still closes the menu and lands in main.
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();await page.keyboard.press('Enter');
+  await menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(menu).toHaveCount(0);await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
   await openPage(page,'我的訊息');
   await expect(page).toHaveURL(/#account$/);await expect(page.locator('#floating-message-title')).toHaveText('我的訊息');await expect(page.locator('#floating-message-title')).toBeFocused();await closeChat(page);
@@ -608,4 +608,53 @@ test('a slow re-read that started before a confirmed send or read never overwrit
   await expect(threadRegion.getByRole('button',{name:'標為已讀',exact:true})).toHaveCount(0);await expect(threadRegion.getByText(' · 未讀')).toHaveCount(0);
   await expect(peerA).not.toContainText('則未讀');await expect(page.getByRole('tab',{name:/私人訊息/})).toContainText('沒有未讀');
   await expect(box).toHaveValue('送出後的新草稿');expect(reads.length).toBe(1);
+});
+
+test.describe('memoized private history',()=>{
+  test.use({timezoneId:'UTC'});
+for(const count of [200,1000])test(`private draft typing does not reformat ${count} loaded history rows`,async({page})=>{
+  await page.clock.setFixedTime(new Date('2026-10-23T12:00:00Z'));
+  const server=await direct(page);
+  server.store[peerA]=Array.from({length:count},(_,i)=>({message_id:`memo-dm-${i}`,sender_ref:i%2?me:peerA,recipient_ref:i%2?peerA:me,body:`歷史訊息 ${i}`,created_at:new Date(Date.UTC(2026,9,23,9,0,count-i)).toISOString(),read_at:i===1?null:'2026-10-23T11:00:00Z'}));
+  await login(page,'#messages');
+  await visibility(page,'hidden'); // Isolate draft work from the independently tested poll/read lane.
+  const panel=page.locator('#messages-panel-direct');
+  await panel.getByRole('list',{name:'對話列表'}).getByRole('button',{name:/合成夥伴甲/}).click();
+  const rows=panel.locator('.messages-bubbles>li'),log=panel.getByRole('log'),input=panel.getByLabel('寫給 合成夥伴甲 的訊息');
+  for(let loaded=20;loaded<count;loaded+=20){await expect(rows).toHaveCount(loaded);await panel.getByRole('button',{name:'載入較早訊息',exact:true}).click();}
+  await expect(rows).toHaveCount(count);
+  const newest=rows.last(),time=newest.locator('time');
+  const before=await time.innerText();
+  // The newest date also appears in the conversation picker; measure only history-only dates.
+  await page.evaluate(values=>{
+    const watched=new Set(values.map(value=>new Date(value).getTime())),original=Date.prototype.toLocaleString;
+    const state={calls:0};Object.assign(window,{__chatHistoryFormats:state});
+    Date.prototype.toLocaleString=function(...args:Parameters<typeof original>){if(watched.has(this.getTime()))state.calls++;return original.apply(this,args);};
+  },server.store[peerA].slice(1).map(message=>message.created_at));
+  await log.evaluate(node=>{node.scrollTop=120;});
+  const top=await log.evaluate(node=>node.scrollTop);
+  await input.fill('未送出的草稿');await input.pressSequentially('abc');
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBe(0);
+  expect(await log.evaluate(node=>node.scrollTop)).toBe(top);expect(server.sends).toHaveLength(0);
+  await input.dispatchEvent('compositionstart');await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true,keyCode:229});await input.dispatchEvent('compositionend');
+  expect(server.sends).toHaveLength(0);await expect(input).toHaveValue('未送出的草稿abc');
+  await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+  await input.fill('跨日草稿');await expect(time).not.toHaveText(before);
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBeGreaterThanOrEqual((count-1)*2);
+  await expect(time).toHaveAttribute('datetime',server.store[peerA][0].created_at);
+  if(count===200){
+    // Explicit refresh must still invalidate the cached receipt, content and retraction rows.
+    const receipt=server.store[peerA][1];receipt.read_at='2026-10-24T12:00:00Z';
+    Object.assign(server.store[peerA][2],{body:'',retracted_at:'2026-10-24T12:00:00Z'});
+    server.store[peerA][3].body='伺服器更新的內容';
+    await panel.getByRole('button',{name:'重新讀取訊息',exact:true}).click();
+    await expect(panel.locator(`[data-message-id="${receipt.message_id}"]`)).toContainText('對方已讀');
+    await expect(panel.locator('[data-message-id="memo-dm-2"]')).toContainText('訊息已收回');
+    await expect(panel.locator('[data-message-id="memo-dm-3"]')).toContainText('伺服器更新的內容');
+    await expect(input).toHaveValue('跨日草稿');
+    await newest.getByRole('button',{name:'回覆合成夥伴甲的訊息',exact:true}).click();
+    await expect(panel.locator('.chat-reply-draft')).toContainText('歷史訊息 0');await expect(input).toBeFocused();
+  }
+});
+
 });

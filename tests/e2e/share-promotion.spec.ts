@@ -246,8 +246,7 @@ test('the home share button stays as compact as the profile button', async ({ pa
 
 async function sharePost(page: Page, url: string, title?: string) {
   await selectSocialFeed(page,'全部動態');
-  await page.getByRole('button',{name:'動態選項',exact:true}).click();
-  await page.getByRole('dialog',{name:'動態選項',exact:true}).getByRole('button',{name:'分享外部連結',exact:true}).click();
+  await page.locator('.social-composer-start').getByRole('button',{name:'分享外部連結',exact:true}).click();
   await page.getByLabel('連結',{exact:true}).fill(url);
   await page.getByLabel('標題（選填）').fill(title ?? '');
   const before = await page.locator('article.social-card').count();
@@ -386,8 +385,7 @@ test('share pages stay inside the viewport and stay readable in every theme', as
   await login(page);
   await navigate(page, '社群分享');
   await selectSocialFeed(page,'全部動態');
-  await page.getByRole('button',{name:'動態選項',exact:true}).click();
-  await page.getByRole('dialog',{name:'動態選項',exact:true}).getByRole('button',{name:'分享外部連結',exact:true}).click();
+  await page.locator('.social-composer-start').getByRole('button',{name:'分享外部連結',exact:true}).click();
   await expect(page.getByLabel('連結',{exact:true})).toHaveCSS('font-size', '16px');
   await page.getByRole('button',{name:'關閉外部分享',exact:true}).click();
   for (const width of [390, 820, 1280]) {

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { communitySearchKinds, communitySearchKindLabels, communitySearchTopics, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
 import type { PortalClient } from '../api';
+import type {CommunityListHistory, CommunityListTab} from './community-search-controller';
 
 type ContentKind = typeof communitySearchKinds[number];
 type FollowKind = 'author' | 'topic';
@@ -107,12 +108,23 @@ export function CommunityAuthorFollowButton({ client, authorId }: { client: Port
   return <RelationToggle client={client} group="follows" kind="author" id={authorId} selected={selected} label={selected ? '取消追蹤作者' : '追蹤作者'} />;
 }
 
-export function CommunityRelations({ client }: { client: PortalClient }) {
+export function CommunityRelations({ client, navigation }: { client: PortalClient; navigation: CommunityListHistory }) {
   const state = useContext(RelationsContext);
-  const [tab, setTab] = useState<'bookmarks' | 'follows' | 'updates'>('bookmarks');
+  const [tab, setTab] = useState<CommunityListTab>(() => navigation.read(window.history.state));
+  const selectedTab = useRef(tab); selectedTab.current = tab;
   const [bookmarkPage, setBookmarkPage] = useState(0);
   const [cursor, setCursor] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const restore = () => {
+      if (!/^#community-search(?:\?|$)/.test(window.location.hash)) return;
+      const next = navigation.read(window.history.state);
+      if (next === selectedTab.current) return;
+      selectedTab.current = next; setTab(next); setCursor(null); setBookmarkPage(0);
+    };
+    window.addEventListener('popstate', restore); window.addEventListener('hashchange', restore);
+    return () => { window.removeEventListener('popstate', restore); window.removeEventListener('hashchange', restore); };
+  }, [navigation]);
   const [updates, setUpdates] = useState<{ key: string; page: CommunitySearchPage } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const requestKey = JSON.stringify([tab, cursor, state?.follows, retry]);
@@ -134,7 +146,17 @@ export function CommunityRelations({ client }: { client: PortalClient }) {
   const page = updates?.key === requestKey ? updates.page : null;
   const updateError = failure?.key === requestKey ? failure.message : '';
   const savedPage = Math.min(bookmarkPage, Math.max(0, Math.ceil((state.bookmarks?.length ?? 0) / 20) - 1));
-  function select(next: typeof tab) { setTab(next); setCursor(null); setBookmarkPage(0); }
+  function select(next: CommunityListTab) {
+    if (!navigation.current()) return;
+    if (/^#community-search(?:\?|$)/.test(window.location.hash)) {
+      const saved = navigation.write(window.history.state, next);
+      if (saved) {
+        // A restricted history API must not prevent the current local selection.
+        try { window.history.replaceState(saved, ''); } catch { /* Navigation recovery is best effort. */ }
+      }
+    }
+    selectedTab.current = next; setTab(next); setCursor(null); setBookmarkPage(0);
+  }
   return <section className="card stack" aria-label="我的私人書籤與追蹤" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
     <h2>我的書籤與追蹤</h2>
     <p className="field-hint">只有你能查看。追蹤是自行選擇，不會發送通知，也不會增加內容存取權；取消追蹤不會移除書籤。</p>

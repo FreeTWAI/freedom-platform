@@ -147,3 +147,85 @@ test('read boundaries compare exact instants across precision and UTC second rol
   assert.ok(compareDirectMessages(legacy, {...legacy, created_at: '2026-10-04T00:00:00.123001Z'}) < 0);
   assert.ok(compareDirectMessages(legacy, {...legacy, message_id: '0002'}) < 0);
 });
+
+for (const count of [200, 1000]) test(`bounded receipts avoid scanning ${count} loaded messages for one older pending row`, async t => {
+  const loaded = Array.from({length: count}, (_, i) => message(count - i, i === count - 1 ? 'sender' : 'peer', i === count - 1 ? null : readAt));
+  const latest = page(loaded.slice(0, 20), 20);
+  let legacyReads = 1;
+  await readLoadedDirectMessageReceipts(latest, loaded, 'sender', async offset => {
+    legacyReads++; return page(loaded.slice(offset, offset + 20), offset + 20 < count ? offset + 20 : null);
+  }, () => true);
+  assert.equal(legacyReads, count / 20, 'retain the old-server request-count baseline');
+  let receiptReads = 0;
+  const receipts = await readLoadedDirectMessageReceipts(latest, loaded, 'sender', async () => {
+    assert.fail('advertised receipt lookup must not reread intermediate message bodies');
+  }, () => true, async ids => {
+    receiptReads++; assert.deepEqual(ids, [loaded[count - 1].message_id]);
+    return {items: [{message_id: ids[0], read_at: readAt}]};
+  });
+  assert.equal(receiptReads, 1);
+  assert.equal(receipts!.get(loaded[count - 1].message_id), readAt);
+  assert.equal(loaded[count - 1].read_at, null, 'the original snapshot stays immutable');
+  t.diagnostic(JSON.stringify({loaded: count, pending_outgoing: 1, legacy_history_gets: legacyReads, candidate_history_gets: 1, candidate_receipt_gets: receiptReads, scope: 'actual helper with synthetic transport; not latency'}));
+});
+
+test('bounded receipts batch at 50, preserve actual nulls and do not insert intermediate history', async () => {
+  const loaded = Array.from({length: 121}, (_, i) => message(121 - i));
+  const latest = page(loaded.slice(0, 20).map(item => ({...item, read_at: readAt})), 20), batches: string[][] = [];
+  const receipts = await readLoadedDirectMessageReceipts(latest, loaded, 'sender', async () => { assert.fail('history lookup'); }, () => true, async ids => {
+    batches.push(ids);
+    return {items: [...ids].reverse().map(message_id => ({message_id, read_at: message_id === '0001' ? null : readAt}))};
+  });
+  assert.deepEqual(batches.map(ids => ids.length), [50, 50, 1]);
+  assert.equal(new Set(batches.flat()).size, 101);
+  const merged = mergeDirectMessagePage(latest.items, loaded, receipts!);
+  assert.equal(merged.length, 121); assert.equal(merged.find(item => item.message_id === '0001')!.read_at, null);
+  assert.ok(merged.filter(item => item.message_id !== '0001').every(item => item.read_at === readAt));
+});
+
+test('bounded receipts skip known tombstones, incoming, already-read and latest-page rows', async () => {
+  const tombstone = {...message(1), body: '', retracted_at: readAt};
+  const loaded = [message(4), message(3, 'peer'), message(2, 'sender', readAt), tombstone];
+  const receipts = await readLoadedDirectMessageReceipts(page([{...loaded[0], read_at: readAt}], 20), loaded, 'sender', async () => { assert.fail('history lookup'); }, () => true, async () => { assert.fail('receipt lookup'); });
+  assert.deepEqual([...receipts!], [['0004', readAt]]);
+  assert.equal(directMessageReceiptRefreshDue([tombstone], 'sender', 0, 8000), false);
+});
+
+test('bounded receipts reconcile an older commit without a newest-message receipt change', async () => {
+  const older = message(1), newer = message(2), shown = page([newer, older]);
+  const latest = page([newer], 20); let committed = false;
+  const read = () => readLoadedDirectMessageReceipts(latest, shown.items, 'sender', async () => { assert.fail('history lookup'); }, () => true,
+    async ids => ({items: ids.map(message_id => ({message_id, read_at: committed ? readAt : null}))}));
+  assert.equal((await read())!.get(older.message_id), null);
+  committed = true;
+  const receipts = await read();
+  assert.equal(receipts!.get(older.message_id), readAt); assert.equal(receipts!.get(newer.message_id), null);
+});
+
+test('bounded receipts fence peer or generation changes before and after a batch', async () => {
+  const loaded = Array.from({length: 51}, (_, i) => message(i + 1)); let current = false, calls = 0;
+  const read = () => readLoadedDirectMessageReceipts(page([], 20), loaded, 'sender', async () => { assert.fail('history lookup'); }, () => current, async ids => {
+    calls++; current = false; return {items: ids.map(message_id => ({message_id, read_at: readAt}))};
+  });
+  assert.equal(await read(), null); assert.equal(calls, 0);
+  current = true;
+  assert.equal(await read(), null); assert.equal(calls, 1, 'the second batch never starts after switching peers');
+});
+
+test('bounded receipts reject incomplete, duplicate, unrelated or malformed responses', async () => {
+  const receipt = {message_id: '0001', read_at: readAt};
+  const invalid: unknown[] = [null, {}, {items: []}, {items: [receipt, receipt]}, {items: [{...receipt, message_id: 'other'}]},
+    {items: [{message_id: '0001'}]}, {items: [{...receipt, read_at: 'not a date'}]}, {items: [null]}];
+  for (const response of invalid) await assert.rejects(readLoadedDirectMessageReceipts(page([], 20), [message(1)], 'sender', async () => { assert.fail('history fallback'); }, () => true,
+    async () => response as {items: {message_id: string; read_at: string | null}[]}), /已讀狀態尚未確認/);
+});
+
+test('bounded receipts do not apply a partial batch or fall back after a lookup failure', async () => {
+  const loaded = Array.from({length: 51}, (_, i) => message(i + 1)), before = structuredClone(loaded), failure = new Error('synthetic authorization revoked');
+  let calls = 0;
+  await assert.rejects(readLoadedDirectMessageReceipts(page([], 20), loaded, 'sender', async () => { assert.fail('history fallback'); }, () => true, async ids => {
+    if (++calls === 2) throw failure;
+    return {items: ids.map(message_id => ({message_id, read_at: readAt}))};
+  }), error => error === failure);
+  assert.equal(calls, 2); assert.deepEqual(loaded, before);
+});

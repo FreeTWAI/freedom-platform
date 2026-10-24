@@ -26,7 +26,8 @@
     "apps/portal-web/src/modules/GuildDesign.css",
     "apps/portal-web/src/modules/GuildWorkspace.tsx",
     "apps/portal-web/src/modules/GuildWorkspace.css",
-    "apps/portal-web/src/modules/guild-launchpad-route.ts"
+    "apps/portal-web/src/modules/guild-launchpad-route.ts",
+    "tests/e2e/guild-organization.spec.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-categories.ts",

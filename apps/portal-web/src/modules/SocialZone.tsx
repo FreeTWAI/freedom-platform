@@ -18,10 +18,54 @@ import './SocialPostOptimizer.css';
 import {prepareSocialImage} from './social-image';
 import {socialPostJobForSession} from '../social-post-task';
 import {newTextHistory,recordText,breakTextGroup,undoText,redoText} from './text-edit-history';
-import {useLanguage} from '../language';
+import {useLanguage,type InterfaceLanguage} from '../language';
 import {shareModuleRetryUrl} from '../share-module-loader';
 import {GameDraftNotice,useGameDraftInbox} from '../games/GameDraftInbox';
 import {clearGameDraft,gameDraftFile,type GameDraft} from '../games/result-bridge';
+// Presentation-only copy: changing language must not reset a draft or its pending command.
+const composerMessages={
+  title:['建立貼文','Create post','投稿を作成','게시물 작성','Crear publicación'],
+  closeLabel:['關閉發文','Close composer','投稿画面を閉じる','게시 작성기 닫기','Cerrar editor'],
+  close:['關閉','Close','閉じる','닫기','Cerrar'],
+  me:['我','Me','自分','나','Yo'],
+  visibility:['社群會員可見','Visible to community members','コミュニティのメンバーに公開','커뮤니티 회원에게 공개','Visible para miembros de la comunidad'],
+  resumePending:['繼續確認剛才的貼文…','Continue confirming your post…','投稿結果の確認を続ける…','게시 결과 계속 확인…','Continuar confirmando tu publicación…'],
+  resume:['繼續編輯你的貼文…','Continue editing your post…','投稿の編集を続ける…','게시물 계속 편집…','Seguir editando tu publicación…'],
+  prompt:['想分享什麼？','What would you like to share?','何を共有しますか？','무엇을 공유하고 싶나요?','¿Qué te gustaría compartir?'],
+  content:['貼文內容','Post content','投稿内容','게시물 내용','Contenido de la publicación'],
+  placeholder:['分享近況、作品，或找夥伴一起做點事…','Share an update, your work, or find people to create with…','近況や作品を共有したり、一緒に活動する仲間を探したり…','근황이나 작품을 공유하거나 함께할 동료를 찾아보세요…','Comparte novedades, tu trabajo o busca personas con quienes crear…'],
+  topic:['主題','Topic','テーマ','주제','Tema'],
+  topicLabel:['貼文主題','Post topic','投稿のテーマ','게시물 주제','Tema de la publicación'],
+  mood:['近況心情','Updates and thoughts','近況・気持ち','근황과 생각','Novedades y reflexiones'],
+  event:['社群活動','Community events','コミュニティ活動','커뮤니티 활동','Eventos de la comunidad'],
+  work:['作品分享','Share your work','作品紹介','작품 공유','Compartir trabajos'],
+  photo:['加入貼文照片','Add post photo','投稿に写真を追加','게시물 사진 추가','Añadir foto a la publicación'],
+  image:['貼文圖片（選填）','Post image (optional)','投稿画像（任意）','게시물 이미지 (선택)','Imagen de la publicación (opcional)'],
+  checkIn:['打卡','Check in','チェックイン','체크인','Registrar ubicación'],
+  location:['打卡地點','Location','場所','장소','Ubicación'],
+  locationExample:['例如：台北松菸、線上聚會','For example: a local workshop or an online meetup','例：近くの工房、オンライン交流会','예: 동네 공방, 온라인 모임','Por ejemplo: un taller local o una reunión en línea'],
+  locationHint:['自行填寫地點名稱，與貼文一起顯示。','Enter a place name to display with your post.','入力した場所の名前が投稿に表示されます。','입력한 장소 이름이 게시물과 함께 표시됩니다.','Escribe el nombre del lugar para mostrarlo con tu publicación.'],
+  imageHint:['直接選擇照片，系統會自動調整大小。支援 JPEG、PNG、WebP。','Choose a photo; it will be resized automatically. JPEG, PNG and WebP are supported.','写真を選ぶと自動でサイズ調整されます。JPEG、PNG、WebPに対応。','사진을 선택하면 크기가 자동 조정됩니다. JPEG, PNG, WebP를 지원합니다.','Elige una foto; su tamaño se ajustará automáticamente. Se admiten JPEG, PNG y WebP.'],
+  preparing:['正在處理圖片…','Preparing image…','画像を処理中…','이미지 처리 중…','Preparando imagen…'],
+  preview:['待發布圖片預覽','Post image preview','投稿画像のプレビュー','게시할 이미지 미리보기','Vista previa de la imagen'],
+  removeImage:['移除圖片','Remove image','画像を削除','이미지 제거','Quitar imagen'],
+  optimize:['✦ Social Post 優化','✦ Social Post optimize','✦ Social Post 文章改善','✦ Social Post 다듬기','✦ Social Post optimizar'],
+  restore:['復原原稿','Restore original draft','元の下書きに戻す','원래 초안 복원','Restaurar borrador original'],
+  publish:['發布貼文','Publish post','投稿する','게시','Publicar'],
+  publishing:['發布中…','Publishing…','投稿中…','게시 중…','Publicando…'],
+  retry:['重試發布','Retry publish','投稿を再試行','게시 다시 시도','Reintentar publicación'],
+  published:['貼文已發布。','Post published.','投稿しました。','게시되었습니다.','Publicación enviada.'],
+  imageType:['請選擇 JPEG、PNG 或 WebP 圖片。','Choose a JPEG, PNG or WebP image.','JPEG、PNG、WebPの画像を選んでください。','JPEG, PNG 또는 WebP 이미지를 선택하세요.','Elige una imagen JPEG, PNG o WebP.'],
+  imageEmpty:['圖片是空的，請重新選取。','The image is empty. Select it again.','画像が空です。選び直してください。','이미지가 비어 있습니다. 다시 선택하세요.','La imagen está vacía. Vuelve a seleccionarla.'],
+  imageSize:['這張圖片超過 20 MB，請選擇較小的原始照片。','This image exceeds 20 MB. Choose a smaller original photo.','画像が20 MBを超えています。小さい元画像を選んでください。','이미지가 20 MB를 초과합니다. 더 작은 원본 사진을 선택하세요.','La imagen supera los 20 MB. Elige una foto original más pequeña.'],
+  imageInvalid:['圖片無法讀取，請選擇完整的靜態 JPEG、PNG 或 WebP 圖片。','The image could not be read. Choose a complete, still JPEG, PNG or WebP image.','画像を読み込めません。完全な静止画のJPEG、PNG、WebPを選んでください。','이미지를 읽을 수 없습니다. 온전한 JPEG, PNG 또는 WebP 정지 이미지를 선택하세요.','No se pudo leer la imagen. Elige una imagen estática JPEG, PNG o WebP completa.'],
+  imageResolution:['這張圖片的解析度過高，請選擇一般照片版本。','The image resolution is too high. Choose a standard photo version.','画像の解像度が高すぎます。通常の写真を選んでください。','이미지 해상도가 너무 높습니다. 일반 사진 버전을 선택하세요.','La resolución es demasiado alta. Elige una versión normal de la foto.'],
+  imageProcess:['這張圖片暫時無法處理，請重新選取或換一張照片。','This image could not be processed. Select it again or choose another photo.','画像を処理できません。選び直すか別の写真を選んでください。','이미지를 처리할 수 없습니다. 다시 선택하거나 다른 사진을 선택하세요.','No se pudo procesar la imagen. Vuelve a seleccionarla o elige otra foto.'],
+  imageRead:['圖片未能讀取，請重新選取。','The image could not be read. Select it again.','画像を読み込めません。選び直してください。','이미지를 읽을 수 없습니다. 다시 선택하세요.','No se pudo leer la imagen. Vuelve a seleccionarla.'],
+  imageFallback:['圖片未能處理，文字草稿仍保留。','The image could not be processed. Your text draft is retained.','画像を処理できません。文章の下書きは保持されています。','이미지를 처리하지 못했습니다. 작성한 초안은 유지됩니다.','No se pudo procesar la imagen. Se conserva tu borrador de texto.'],
+  uncertain:['尚未確認發布結果，請重試。','Publication is unconfirmed. Retry to confirm the same post.','投稿結果を確認できません。同じ投稿を再試行して確認してください。','게시 결과가 확인되지 않았습니다. 같은 게시물을 다시 시도해 확인하세요.','La publicación no está confirmada. Reintenta para confirmar la misma publicación.'],
+} as const satisfies Record<string,readonly [string,string,string,string,string]>;
+const composerLanguageIndex:Record<InterfaceLanguage,number>={'zh-Hant':0,en:1,ja:2,ko:3,es:4};
 const optimizerPanelLoader=(retryUrl?:string)=>lazy(async()=>{
   const module=retryUrl?await import(/* @vite-ignore */ retryUrl) as typeof import('./SocialPostOptimizer'):await import('./SocialPostOptimizer');
   if(typeof module.SocialPostOptimizer!=='function')throw Error('Optimizer unavailable');
@@ -57,6 +101,14 @@ const FILTERS = [
   {id: 'facebook', label: 'Facebook'},
   {id: 'other', label: '其他'},
 ] as const;
+
+const FEED_MESSAGES={
+  'zh-Hant':{note:'社群貼文',all:'全部動態',filters:'動態分類',options:'動態選項',close:'關閉',closeOptions:'關閉動態選項',refresh:'更新動態',link:'分享外部連結',closeLink:'關閉外部分享'},
+  en:{note:'Community posts',all:'All posts',filters:'Feed categories',options:'Feed options',close:'Close',closeOptions:'Close feed options',refresh:'Refresh feed',link:'Share an external link',closeLink:'Close external sharing'},
+  ja:{note:'コミュニティ投稿',all:'すべての投稿',filters:'フィードの分類',options:'フィード設定',close:'閉じる',closeOptions:'フィード設定を閉じる',refresh:'フィードを更新',link:'外部リンクを共有',closeLink:'外部共有を閉じる'},
+  ko:{note:'커뮤니티 게시물',all:'모든 게시물',filters:'피드 분류',options:'피드 옵션',close:'닫기',closeOptions:'피드 옵션 닫기',refresh:'피드 새로고침',link:'외부 링크 공유',closeLink:'외부 공유 닫기'},
+  es:{note:'Comunidad',all:'Todas las publicaciones',filters:'Categorías del feed',options:'Opciones del feed',close:'Cerrar',closeOptions:'Cerrar opciones del feed',refresh:'Actualizar feed',link:'Compartir un enlace externo',closeLink:'Cerrar enlace externo'},
+} as const;
 
 function tone(platform: SocialPlatform) {
   return platform === 'youtube' || platform === 'instagram' || platform === 'facebook' ? platform : 'other';
@@ -104,7 +156,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const observer = new ResizeObserver(size); observer.observe(header); size();
     return () => observer.disconnect();
   }, []);
-  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null);
+  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null), linkTrigger = useRef<HTMLButtonElement>(null);
   const [optionsOpen, setOptionsOpen] = useState(false), [linkOpen, setLinkOpen] = useState(false);
   const linkVersion = useRef(0);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -145,6 +197,11 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [shareLoader,setShareLoader]=useState(()=>({component:sharePanelLoader(),attempt:0}));
   const CrossPlatformShare=shareLoader.component;
   const {language}=useLanguage();
+  const composerText=(key:keyof typeof composerMessages)=>composerMessages[key][composerLanguageIndex[language]];
+  const composerFeedback=(message:string)=>{
+    const key=(Object.keys(composerMessages) as (keyof typeof composerMessages)[]).find(key=>composerMessages[key][0]===message);
+    return key?composerText(key):message; // Preserve server-provided validation detail.
+  };
   const historyText={
     'zh-Hant':['復原上一步','重做','正在開啟文案優化…','文案優化未能開啟，草稿仍保留。','重試開啟文案優化'],
     en:['Undo','Redo','Opening copy tools…','Copy tools could not open. Your draft is retained.','Retry copy tools'],
@@ -334,8 +391,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
-  function closeLink() { ++linkVersion.current; linkComposer.current?.close(); setLinkOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
-  function openLink() { closeOptions(); ++linkVersion.current; setError(''); setNotice(''); setLinkOpen(true); }
+  function closeLink() { ++linkVersion.current; linkComposer.current?.close(); setLinkOpen(false); linkTrigger.current?.focus({preventScroll: true}); }
+  function openLink() { ++linkVersion.current; setError(''); setNotice(''); setLinkOpen(true); }
   async function publish(event: FormEvent) {
     event.preventDefault();
     if (publishing || preparingImage) return;
@@ -465,6 +522,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       setNotice(cause instanceof Error ? cause.message : '尚未確認按讚結果，請再按一次重試。');
     } finally { setShortLiking(null); }
   }
+  const feedText=FEED_MESSAGES[language];
+  const filterLabel=(id:string,label:string)=>id==='note'?feedText.note:id===''?feedText.all:label;
   const renderCard = (post: Post, view: {inline?: boolean; commentsOpen?: boolean} = {inline: true}) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
@@ -494,41 +553,41 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   return <section className="social-zone stack" aria-label="社群媒體分享專區" data-feed={platform || 'all'} aria-busy={loading||more}>
     {gameInbox.draft&&<GameDraftNotice draft={gameInbox.draft} busy={preparingImage||publishing||!!pending.current} hasImage={!!composeFile} tooLong={[text.trim(),gameInbox.draft.text].filter(Boolean).join('\n\n').length>2000} error={gameImportError} onImport={()=>void importGame(gameInbox.draft!)} onDiscard={gameInbox.discard}/>}
     <div ref={composerStart} className="card social-composer-start" data-guide-anchor="social:composer">
-      <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/>
-        <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label="建立貼文" aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? '繼續確認剛才的貼文…' : text ? '繼續編輯你的貼文…' : '想分享什麼？'}</span></button>
+      <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/>
+        <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label={composerText('title')} aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? composerText('resumePending') : text ? composerText('resume') : composerText('prompt')}</span></button>
       </div>
+      <div className="social-composer-entry-actions"><button ref={linkTrigger} type="button" className="btn btn-ghost social-link-entry" aria-haspopup="dialog" aria-expanded={linkOpen} onClick={openLink}><SocialIcon name="share"/>{feedText.link}</button></div>
     </div>
     <dialog ref={composer} className="social-publish-dialog" aria-labelledby={composerId} onCancel={event => {if(event.target!==event.currentTarget)return;event.preventDefault(); closeComposer();}} onClose={() => setComposerOpen(false)}>
       {composerOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={composerId}>建立貼文</h2><button type="button" className="btn btn-ghost" aria-label="關閉發文" onClick={closeComposer}>關閉</button></header>
-        <p className="social-publish-identity"><MemberAvatar nickname={viewer?.name ?? '我'} avatarUrl={viewer?.avatarUrl}/><span>{viewer?.name ?? '我'}<small>社群會員可見</small></span></p>
+        <header className="social-publish-head"><h2 id={composerId}>{composerText('title')}</h2><button type="button" className="btn btn-ghost" aria-label={composerText('closeLabel')} onClick={closeComposer}>{composerText('close')}</button></header>
+        <p className="social-publish-identity"><span aria-hidden="true"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/></span><span>{viewer?.name ?? composerText('me')}<small>{composerText('visibility')}</small></span></p>
         {importedGame.current?.generation===client.sessionGeneration&&<p className="field-hint">剛才的離譜成果已帶入。確認圖片、文案與作者後，再按發布。</p>}
         <form className="social-native-composer stack" onSubmit={event => void publish(event)} aria-busy={publishing}>
-          <label className="field"><span className="sr-only">貼文內容</span><textarea aria-label="貼文內容" autoFocus required rows={6} maxLength={2000} placeholder="分享近況、作品，或找夥伴一起做點事…" value={text} disabled={publishing || !!pending.current} onChange={event => setText(event.target.value, (event.nativeEvent as InputEvent).inputType?.startsWith('insertFrom') ? 'replace' : 'typing')} onBlur={() => setTextHistory(breakTextGroup)} onKeyDown={event=>{if(event.nativeEvent.isComposing||event.altKey||!(event.ctrlKey||event.metaKey)||!['z','y'].includes(event.key.toLowerCase()))return;event.preventDefault();if(!publishing&&!pending.current)setTextHistory(event.key.toLowerCase()==='y'||event.shiftKey?redoText:undoText);}} onPaste={event=>{const photo=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(photo&&!publishing&&!pending.current){event.preventDefault();void selectComposeImage(photo);}}}/></label>
-          <div className="social-compose-toolbar"><label className="social-topic-select">主題<select aria-label="貼文主題" value={topic} disabled={publishing||!!pending.current} onChange={e=>setTopic(e.target.value as keyof typeof SOCIAL_TOPICS)}>{Object.entries(SOCIAL_TOPICS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><button type="button" className="social-icon-button" aria-label="加入貼文照片" title="加入貼文照片" disabled={publishing||preparingImage||!!pending.current} onClick={()=>composeInput.current?.click()}><SocialIcon name="camera"/></button><SocialTextTools client={client} text={text} onChange={setText} mentions={mentions} onMentions={setMentions} disabled={publishing||!!pending.current} maxLength={2000}/><button type="button" className="social-icon-button" title="打卡" aria-label="打卡" aria-expanded={checkIn} disabled={publishing||!!pending.current} onClick={()=>setCheckIn(v=>!v)}><SocialIcon name="pin"/></button></div>
-          <input ref={composeInput} className="sr-only" tabIndex={-1} aria-label="貼文圖片（選填）" type="file" accept="image/jpeg,image/png,image/webp" disabled={publishing||preparingImage||!!pending.current} onChange={event=>{void selectComposeImage(event.target.files?.[0]??null);}}/>
-          {checkIn&&<label className="field">打卡地點<input aria-label="打卡地點" placeholder="例如：台北松菸、線上聚會" maxLength={120} value={locationName} disabled={publishing||!!pending.current} onChange={e=>setLocationName(e.target.value)}/><small className="muted">自行填寫地點名稱，與貼文一起顯示。</small></label>}
-          <p className="muted">直接選擇照片，系統會自動調整大小。支援 JPEG、PNG、WebP。</p>
-          {preparingImage && <p role="status">正在處理圖片…</p>}
-          {composeFile && <div className="social-compose-attachment">{composePreview && <img className="social-compose-preview" src={composePreview} alt="待發布圖片預覽"/>}<span className="muted">{composeFile.name}</span><button type="button" className="btn btn-ghost" disabled={publishing || !!pending.current} onClick={() => selectComposeImage(null)}>移除圖片</button></div>}
-          <div className="social-composer-tools"><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.past.length} onClick={()=>{setTextHistory(undoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[0]}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.future.length} onClick={()=>{setTextHistory(redoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[1]}</button><button type="button" className="btn btn-ghost" aria-pressed={optimizerEnabled} aria-expanded={optimizerEnabled} aria-controls={`${composerId}-optimizer`} disabled={publishing||!!pending.current||optimization.phase==='busy'} onClick={()=>setOptimizerEnabled(value=>!value)}>✦ Social Post 優化</button><button ref={shareTrigger} type="button" className="btn btn-ghost" aria-expanded={shareOpen} aria-controls={`${composerId}-share`} disabled={publishing||!!pending.current} onClick={()=>setShareOpen(value=>!value)}>{shareText[0]}</button>{originalDraft&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||text!==originalDraft.after} onClick={()=>{setText(originalDraft.before,'replace');setOriginalDraft(null);}}>復原原稿</button>}</div>
+          <label className="field"><span className="sr-only">{composerText('content')}</span><textarea aria-label={composerText('content')} autoFocus required rows={6} maxLength={2000} placeholder={composerText('placeholder')} value={text} disabled={publishing || !!pending.current} onChange={event => setText(event.target.value, (event.nativeEvent as InputEvent).inputType?.startsWith('insertFrom') ? 'replace' : 'typing')} onBlur={() => setTextHistory(breakTextGroup)} onKeyDown={event=>{if(event.nativeEvent.isComposing||event.altKey||!(event.ctrlKey||event.metaKey)||!['z','y'].includes(event.key.toLowerCase()))return;event.preventDefault();if(!publishing&&!pending.current)setTextHistory(event.key.toLowerCase()==='y'||event.shiftKey?redoText:undoText);}} onPaste={event=>{const photo=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(photo&&!publishing&&!pending.current){event.preventDefault();void selectComposeImage(photo);}}}/></label>
+          <div className="social-compose-toolbar"><label className="social-topic-select">{composerText('topic')}<select aria-label={composerText('topicLabel')} value={topic} disabled={publishing||!!pending.current} onChange={e=>setTopic(e.target.value as keyof typeof SOCIAL_TOPICS)}>{(Object.keys(SOCIAL_TOPICS) as (keyof typeof SOCIAL_TOPICS)[]).map(key=><option key={key} value={key}>{composerText(key)}</option>)}</select></label><button type="button" className="social-icon-button" aria-label={composerText('photo')} title={composerText('photo')} disabled={publishing||preparingImage||!!pending.current} onClick={()=>composeInput.current?.click()}><SocialIcon name="camera"/></button><SocialTextTools client={client} text={text} onChange={setText} mentions={mentions} onMentions={setMentions} disabled={publishing||!!pending.current} maxLength={2000}/><button type="button" className="social-icon-button" title={composerText('checkIn')} aria-label={composerText('checkIn')} aria-expanded={checkIn} disabled={publishing||!!pending.current} onClick={()=>setCheckIn(v=>!v)}><SocialIcon name="pin"/></button></div>
+          <input ref={composeInput} className="sr-only" tabIndex={-1} aria-label={composerText('image')} type="file" accept="image/jpeg,image/png,image/webp" disabled={publishing||preparingImage||!!pending.current} onChange={event=>{void selectComposeImage(event.target.files?.[0]??null);}}/>
+          {checkIn&&<label className="field">{composerText('location')}<input aria-label={composerText('location')} placeholder={composerText('locationExample')} maxLength={120} value={locationName} disabled={publishing||!!pending.current} onChange={e=>setLocationName(e.target.value)}/><small className="muted">{composerText('locationHint')}</small></label>}
+          <p className="muted">{composerText('imageHint')}</p>
+          {preparingImage && <p role="status">{composerText('preparing')}</p>}
+          {composeFile && <div className="social-compose-attachment">{composePreview && <img className="social-compose-preview" src={composePreview} alt={composerText('preview')}/>}<span className="muted">{composeFile.name}</span><button type="button" className="btn btn-ghost" disabled={publishing || !!pending.current} onClick={() => selectComposeImage(null)}>{composerText('removeImage')}</button></div>}
+          <div className="social-composer-tools"><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.past.length} onClick={()=>{setTextHistory(undoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[0]}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.future.length} onClick={()=>{setTextHistory(redoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[1]}</button><button type="button" className="btn btn-ghost" aria-pressed={optimizerEnabled} aria-expanded={optimizerEnabled} aria-controls={`${composerId}-optimizer`} disabled={publishing||!!pending.current||optimization.phase==='busy'} onClick={()=>setOptimizerEnabled(value=>!value)}>{composerText('optimize')}</button><button ref={shareTrigger} type="button" className="btn btn-ghost" aria-expanded={shareOpen} aria-controls={`${composerId}-share`} disabled={publishing||!!pending.current} onClick={()=>setShareOpen(value=>!value)}>{shareText[0]}</button>{originalDraft&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||text!==originalDraft.after} onClick={()=>{setText(originalDraft.before,'replace');setOriginalDraft(null);}}>{composerText('restore')}</button>}</div>
           {optimizerEnabled&&<div id={`${composerId}-optimizer`}><ShareLoadBoundary key={optimizerLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,optimizerLoader.attempt+1,'SocialPostOptimizer');return <div className="banner banner-error"><p role="alert">{historyText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setOptimizerLoader(current=>({component:optimizerPanelLoader(retryUrl),attempt:current.attempt+1}))}>{historyText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{historyText[2]}</p>}><Optimizer client={client} job={optimizationJob} draft={text} disabled={publishing||!!pending.current} onRecoverDraft={draft=>{setOriginalDraft({before:text,after:draft});setText(draft,'replace');}} onApply={result=>{setOriginalDraft({before:text,after:result});setText(result,'replace');optimizationJob.adopt();}}/></Suspense></ShareLoadBoundary></div>}
           {shareOpen&&<div id={`${composerId}-share`}><ShareLoadBoundary key={shareLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,shareLoader.attempt+1);return <div className="banner banner-error"><p role="alert">{shareText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setShareLoader(current=>({component:sharePanelLoader(retryUrl),attempt:current.attempt+1}))}>{shareText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{shareText[1]}</p>}><CrossPlatformShare client={client} draft={text} disabled={publishing||!!pending.current} onRestore={value=>{setOriginalDraft({before:text,after:value});setText(value,'replace');}} onClose={()=>{setShareOpen(false);shareTrigger.current?.focus({preventScroll:true});}}/></Suspense></ShareLoadBoundary></div>}
-          <div className="social-composer-footer"><span className="muted">{text.length}/2000</span><button className="btn btn-primary" disabled={publishing || preparingImage || !text.trim()}>{publishing ? '發布中…' : pending.current ? '重試發布' : shareOpen?shareText[2]:'發布貼文'}</button></div>
-          {publishError && <p className="banner banner-error" role="alert">{publishError}</p>}
+          <div className="social-composer-footer"><span className="muted">{text.length}/2000</span><button className="btn btn-primary" disabled={publishing || preparingImage || !text.trim()}>{publishing ? composerText('publishing') : pending.current ? composerText('retry') : shareOpen?shareText[2]:composerText('publish')}</button></div>
+          {publishError && <p className="banner banner-error" role="alert">{pending.current&&language!=='zh-Hant'?composerText('uncertain'):composerFeedback(publishError)}</p>}
         </form>
       </div>}
     </dialog>
     <dialog ref={options} className="social-publish-dialog social-options-dialog" aria-labelledby={`${composerId}-options`} onCancel={event=>{event.preventDefault();closeOptions();}} onClose={()=>setOptionsOpen(false)}>
       {optionsOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={`${composerId}-options`}>動態選項</h2><button type="button" className="btn btn-ghost" aria-label="關閉動態選項" onClick={closeOptions}>關閉</button></header>
-        <div className="social-view-options" role="group" aria-label="查看貼文">{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{item.label}</button>)}</div>
-        <button type="button" className="btn btn-ghost social-link-entry" onClick={openLink}>分享外部連結</button>
+        <header className="social-publish-head"><h2 id={`${composerId}-options`}>{feedText.options}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeOptions} onClick={closeOptions}>{feedText.close}</button></header>
+        <div className="social-view-options" role="group" aria-label={feedText.filters}>{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{filterLabel(item.id,item.label)}</button>)}</div>
       </div>}
     </dialog>
     <dialog ref={linkComposer} className="social-publish-dialog" aria-labelledby={`${composerId}-link`} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();closeLink();}} onClose={()=>setLinkOpen(false)}>
       {linkOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={`${composerId}-link`}>分享外部連結</h2><button type="button" className="btn btn-ghost" aria-label="關閉外部分享" onClick={closeLink}>關閉</button></header>
+        <header className="social-publish-head"><h2 id={`${composerId}-link`}>{feedText.link}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeLink} onClick={closeLink}>{feedText.close}</button></header>
         <form className="social-link-composer stack" onSubmit={event=>void submit(event)} aria-busy={saving}>
           <label className="field">連結<input required type="url" inputMode="url" maxLength={2048} value={url} disabled={saving} onChange={event=>setUrl(event.target.value)} placeholder="https://"/></label>
           {youtubeLinkHint(url, shortVideos) && <p className="field-hint" role="status">{youtubeLinkHint(url, shortVideos)}</p>}
@@ -538,7 +597,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {file && <p className="muted">已選擇：{file.name}</p>}
           <button className="btn btn-primary" type="submit" disabled={saving || preparingLinkImage}>{preparingLinkImage?'正在處理圖片…':saving?'正在讀取預覽…':'分享貼文'}</button>
           {error && <p className="banner banner-error" role="alert">{error}</p>}
-          {notice && <p className="social-feedback" role="status">{notice}</p>}
+          {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
         </form>
       </div>}
     </dialog>
@@ -551,11 +610,14 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       </div>}
     </dialog>
     <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id?{...item,...saved,thumbnail_url:item.thumbnail_url}:item));setNotice('貼文已更新。');}}/>
-    {notice && !linkOpen && <p className="social-feedback" role="status">{notice}</p>}
+    {notice && !linkOpen && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
     {error && !linkOpen && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
-      <h2>{directPost?'這則貼文':platform==='note'?'最新貼文':FILTERS.find(item=>item.id===platform)?.label}</h2>
-      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label="更新動態" disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control" aria-label="動態選項" aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}>⋯</button></div>
+      <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
+      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
+    </div>
+    <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
+      {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}

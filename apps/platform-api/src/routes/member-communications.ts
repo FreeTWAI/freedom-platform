@@ -2,7 +2,7 @@ import { Hono,type Context } from 'hono';
 import type { Pool } from 'pg';
 import { moduleCommand,type PlatformEnv } from '../module-context.js';
 import {
-  listNotifications,markNotificationRead,markAllInboxRead,listConversations,conversationMessages,conversationActivity,sendDirectMessage,markConversationRead,searchConversationMessages,retractDirectMessage,
+  listNotifications,markNotificationRead,markAllInboxRead,listConversations,conversationMessages,conversationReceipts,conversationActivity,sendDirectMessage,markConversationRead,searchConversationMessages,retractDirectMessage,
 } from '../../../../modules/member-communications/service.js';
 import {authRateLimit} from '../../../../modules/identity-membership/members.js';
 import {MESSAGE_IMAGE_INPUT_BYTES,MESSAGE_IMAGE_MIME_TYPES} from '../../../../modules/assets/message-image.js';
@@ -71,6 +71,11 @@ export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,
   app.get('/me/conversations',async c=>c.json(await listConversations(pool,c.get('actor'),c.req.query())));
   app.get('/me/conversations/:userId/activity',async c=>c.json(await conversationActivity(pool,c.get('actor'),c.req.param('userId'),c.req.query())));
   app.get('/me/conversations/:userId/messages',async c=>c.json(await conversationMessages(pool,c.get('actor'),c.req.param('userId'),c.req.query())));
+  app.get('/me/conversations/:userId/receipts',async c=>{
+    c.header('Cache-Control','private, no-store');
+    requireCondition(c.req.queries('message_ids')?.length===1,422,'invalid_receipt_query','請提供一組訊息代碼。');
+    return c.json(await conversationReceipts(pool,c.get('actor'),c.req.param('userId'),c.req.query()));
+  });
   app.get('/me/conversations/:userId/messages/search',async c=>c.json(await searchConversationMessages(pool,c.get('actor'),c.req.param('userId'),c.req.query())));
   app.post('/me/conversations/:userId/messages',async c=>c.json(await sendDirectMessage(pool,await canonicalCommand(c,`/me/conversations/${uuidParam(c,'userId')}/messages`),c.req.param('userId'),{messageImages:messagesImagesOn()}),201));
   // Direct-message images: bytes in, bytes out. No public URL, no signed URL.

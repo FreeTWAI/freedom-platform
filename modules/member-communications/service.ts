@@ -11,13 +11,18 @@ import {notificationVisibilitySQL} from './notifications.js';
 import {markAllMemberChannelsRead} from './channels.js';
 import {MessageSearchQuery,messageSearchPattern,boundedMessageSearch,type MessageSearchPage} from './message-search.js';
 import {
-  COMMUNICATION_PAGE_DEFAULT_LIMIT,COMMUNICATION_PAGE_MAX_LIMIT,DIRECT_MESSAGE_BODY_MAX,
-  type ConversationActivity,type ConversationPage,type Message,type MessagePage,type Notification,type NotificationList,type Participant,
+  COMMUNICATION_PAGE_DEFAULT_LIMIT,COMMUNICATION_PAGE_MAX_LIMIT,DIRECT_MESSAGE_BODY_MAX,DIRECT_MESSAGE_RECEIPT_BATCH_MAX,
+  type ConversationActivity,type ConversationPage,type DirectMessageReceiptPage,type Message,type MessagePage,type Notification,type NotificationList,type Participant,
 } from './types.js';
 
 export const CommunicationPageQuery=z.object({
   limit:z.coerce.number().int().min(1).max(COMMUNICATION_PAGE_MAX_LIMIT).default(COMMUNICATION_PAGE_DEFAULT_LIMIT),
   offset:z.coerce.number().int().min(0).max(10000).default(0),
+}).strict();
+const DirectMessageReceiptQuery=z.object({
+  message_ids:z.string().max(DIRECT_MESSAGE_RECEIPT_BATCH_MAX*37-1).transform(value=>value.split(','))
+    .pipe(z.array(z.uuid().transform(id=>id.toLowerCase())).min(1).max(DIRECT_MESSAGE_RECEIPT_BATCH_MAX))
+    .refine(ids=>new Set(ids).size===ids.length,'訊息代碼不可重複。'),
 }).strict();
 const Empty=z.object({}).strict();
 const ConversationReadInput=z.object({through_message_id:z.uuid().optional()}).strict();
@@ -179,7 +184,23 @@ export async function conversationMessages(pool:Pool,actor:Actor,rawPeer:string,
       WHERE community_id=$1 AND least(sender_ref,recipient_ref)=least($2::uuid,$3::uuid) AND greatest(sender_ref,recipient_ref)=greatest($2::uuid,$3::uuid)
       ORDER BY created_at DESC,message_id DESC LIMIT $4 OFFSET $5`,[actor.community_id,actor.user_id,id,limit+1,offset])).rows;
     const page=pageOf(rows,limit,offset),contents=await messageContents(q,page.items,'direct',actor.user_id);
-    return {participant:peer.participant,can_send:peer.ready&&peer.viewer_ready&&!peer.blocked,items:page.items.map((row,index)=>({...message(row),...contents[index]})),unread_count:unread,next_offset:page.next_offset,retraction_count:await directRetractionCount(q,actor,id)};
+    return {participant:peer.participant,can_send:peer.ready&&peer.viewer_ready&&!peer.blocked,items:page.items.map((row,index)=>({...message(row),...contents[index]})),unread_count:unread,next_offset:page.next_offset,retraction_count:await directRetractionCount(q,actor,id),receipt_lookup:'ids-v1'};
+  });
+}
+
+/** A bounded primary-key read under the same live authority as history. A
+ * withdrawn row retains its receipt, but no body/quote/media is projected here. */
+export async function conversationReceipts(pool:Pool,actor:Actor,rawPeer:string,raw:unknown):Promise<DirectMessageReceiptPage>{
+  const {message_ids}=DirectMessageReceiptQuery.parse(raw),id=peerId(actor,rawPeer);
+  return snapshot(pool,actor,async q=>{
+    await resolvePeer(q,actor,id);
+    const rows=(await q.query<{message_id:string;read_at:Date|null}>(`SELECT message_id,read_at FROM member_direct_messages
+      WHERE community_id=$1 AND sender_ref=$2 AND recipient_ref=$3 AND message_id=ANY($4::uuid[])`,
+      [actor.community_id,actor.user_id,id,message_ids])).rows;
+    // Never return a partial batch or distinguish a foreign pair from an absent ID.
+    requireCondition(rows.length===message_ids.length,404,'message_not_found','找不到這則訊息。');
+    const receipts=new Map(rows.map(row=>[row.message_id,iso(row.read_at)]));
+    return {items:message_ids.map(message_id=>({message_id,read_at:receipts.get(message_id)!}))};
   });
 }
 
