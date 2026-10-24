@@ -1,5 +1,6 @@
 import {test,expect,type Page} from './fixtures.js';
 import {signOut} from './navigation.js';
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
@@ -23,8 +24,9 @@ const composerLanguages=[
 ] as const;
 async function selectComposerLanguage(page:Page,language:typeof composerLanguages[number]){
   await page.locator('.settings-menu-button').click();
+  await openSettingsPanel(page,'language');
   await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();
-  await page.keyboard.press('Escape');
+  await closeSettingsMenu(page);
   await expect(page.locator('html')).toHaveAttribute('lang',language.id);
 }
 async function composerImage(page:Page){
