@@ -1,5 +1,6 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate,openFeatureSearch} from './navigation.js';
+import {navigate,openFeatureSearch,reachByKeyboard} from './navigation.js';
 import {DEMO_USERS} from '../../packages/testing/seed.js';
 
 async function login(page:Page){
@@ -35,10 +36,10 @@ test('simple mobile home fits 320px and keeps every theme and original brand',as
   await page.setViewportSize({width:320,height:800});await login(page);
   for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','rpg'],['自由工坊－敘生','versefolk']]){
     await page.getByRole('button',{name:'設定',exact:true}).click();
-    await page.getByRole('menuitemradio',{name,exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
     await page.getByRole('button',{name:'設定',exact:true}).click();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await expect(page.locator('.sidebar-brand-art')).toHaveAttribute('src','/brand/freedom-workshop.webp');
+    await expect(page.locator('.brand-home')).toHaveAttribute('href','/#home');
     await page.screenshot({path:`test-results/simple-home-${theme}-320.png`,fullPage:true});
   }
 });
@@ -76,4 +77,38 @@ test('lost bulk-read acknowledgement retries the same command and keeps newly ar
   await expect(page.locator('.notification-bell-count')).toHaveText('1');
   expect(keys).toHaveLength(2);expect(keys[0]).toBe(keys[1]);
   expect((await e2eAuthPool.query('SELECT read_at FROM member_notifications WHERE source_key=$1',[`${prefix}/after`])).rows[0].read_at).toBeNull();
+});
+
+
+
+for(const language of [
+  {id:'zh-Hant',locale:'zh-TW',login:'登入',home:'會員首頁',explore:'探索學習與公會',expand:'展開',collapse:'收合'},
+  {id:'en',locale:'en-US',login:'Sign in',home:'Home',explore:'Explore learning and guilds',expand:'Expand',collapse:'Collapse'},
+  {id:'ja',locale:'ja-JP',login:'ログイン',home:'ホーム',explore:'学びとギルドを探す',expand:'開く',collapse:'閉じる'},
+  {id:'ko',locale:'ko-KR',login:'로그인',home:'홈',explore:'학습과 길드 둘러보기',expand:'펼치기',collapse:'접기'},
+  {id:'es',locale:'es-ES',login:'Iniciar sesión',home:'Inicio',explore:'Explorar aprendizaje y gremios',expand:'Expandir',collapse:'Contraer'},
+])test(`${language.id}: optional home exploration is readable and keyboard reachable at 320px`,async({browser})=>{
+  const context=await browser.newContext({locale:language.locale,viewport:{width:320,height:844}});
+  try{
+    const page=await context.newPage();await page.goto('/');
+    const form=page.locator('.login-card form');
+    await form.locator('[name=email]').fill('maker@local.test');
+    await form.locator('[name=password]').fill('freedom-local-demo');
+    await form.getByRole('button',{name:language.login,exact:true}).click();
+    await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
+    await expect(page.locator('.brand-home')).toHaveAccessibleName(`自由工坊 · ${language.home}`);
+    const disclosure=page.locator('.home-participation-disclosure'),toggle=disclosure.locator(':scope > summary');
+    await expect(disclosure).toHaveJSProperty('open',false);
+    await expect(toggle).toHaveAccessibleName(language.explore);
+    await expect(toggle.locator('.home-explore-open')).toHaveText(`${language.expand} ＋`);
+    await expect(toggle).toBeInViewport();
+    expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await reachByKeyboard(page,toggle);
+    await page.keyboard.press('Enter');
+    await expect(disclosure).toHaveJSProperty('open',true);
+    await expect(toggle.locator('.home-explore-close')).toHaveText(`${language.collapse} −`);
+    await expect(page.getByRole('navigation',{name:'參與自由工坊',exact:true}).getByRole('button')).toHaveCount(4);
+    await toggle.press('Space');await expect(disclosure).toHaveJSProperty('open',false);
+  }finally{await context.close();}
 });

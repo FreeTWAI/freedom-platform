@@ -129,3 +129,66 @@ test('article links exclude enclosing punctuation while preserving balanced URL 
  ];
  for(const [text,hrefs] of cases){const parts=linkParts(text);assert.deepEqual(parts.filter(p=>p.href).map(p=>p.href),hrefs,text);assert.equal(parts.map(p=>p.text).join(''),text);}
 });
+
+
+import {communitySnapshot,communityOf} from '../../modules/community-journal/community.js';
+import {parseRoute,canonicalPath,journalUrl,personUrl} from '../../apps/portal-web/src/journal/routes.js';
+function multipleCommunities(day='2026-10-24'){
+ const combined=withSources(day);combined.people=[];combined.journals=[];
+ for(const community of ['freedom','claude','codex']){
+  const source=withSources(day),person={...source.people[0],community,display_name:community+' 合成人物'};
+  const entry={...source.journals[0],community,title:community+' 合成日誌',people:[person]};
+  entry.blocks[0].source_messages[0].text=community+' 合成原話';
+  combined.people.push(person);combined.journals.push(entry);
+ }
+ return combined;
+}
+test('same date and same slug coexist across source communities without sharing identity or source keys',()=>{
+ const p=multipleCommunities();assert.deepEqual(snapshotSchema.parse(p),p);
+ for(const community of ['freedom','claude','codex'] as const){
+  const scoped=communitySnapshot(p,community);assert.equal(scoped.journals.length,1);assert.equal(scoped.people.length,1);
+  assert.equal(scoped.people[0].display_name,community+' 合成人物');
+  const activity=journalActivity(snapshotSchema.parse(p),'week',new Date('2026-10-24T04:00:00Z'),community);
+  assert.equal(activity.messages.length,1);assert.equal(activity.messages[0].text,community+' 合成原話');assert.deepEqual(activity.people,[{slug:'demo',count:1}]);
+ }
+ const duplicate=multipleCommunities();duplicate.journals.push(duplicate.journals[1]);assert.equal(snapshotSchema.safeParse(duplicate).success,false);
+ const repeatedPerson=multipleCommunities();repeatedPerson.people.push(repeatedPerson.people[1]);assert.equal(snapshotSchema.safeParse(repeatedPerson).success,false);
+ const legacyAlias=multipleCommunities();delete legacyAlias.journals[0].community;legacyAlias.journals.push({...legacyAlias.journals[0],community:'freedom'});assert.equal(snapshotSchema.safeParse(legacyAlias).success,false);
+ assert.equal(communityOf({}),'freedom');assert.deepEqual(snapshotSchema.parse(payload()),payload());
+});
+test('community identity cannot fall back to another stream or infer identity from a shared slug',()=>{
+ const unknown=multipleCommunities();unknown.journals[0].community='unknown';assert.equal(snapshotSchema.safeParse(unknown).success,false);
+ const wrongPerson=multipleCommunities();wrongPerson.journals[1].people=[wrongPerson.people[2]];assert.equal(snapshotSchema.safeParse(wrongPerson).success,false);
+ const wrongSource=multipleCommunities();wrongSource.people=wrongSource.people.filter((p:any)=>p.community!=='claude');wrongSource.journals[1].people=[];assert.equal(snapshotSchema.safeParse(wrongSource).success,false);
+ const conflict=multipleCommunities();const block=conflict.journals[1].blocks[0];block.source_messages.push({...block.source_messages[0],text:'same stream changed source'});assert.equal(snapshotSchema.safeParse(conflict).success,false);
+});
+test('community deep links and legacy bookmarks keep stream, date, person and chapter',()=>{
+ assert.deepEqual(parseRoute('/journal/entries/2026-10-24'),{page:'journal',date:'2026-10-24'});
+ for(const community of ['claude','codex'] as const){
+  assert.deepEqual(parseRoute('/journal/'+community),{page:'home',community});
+  assert.deepEqual(parseRoute(journalUrl('2026-10-24','',community)),{page:'journal',date:'2026-10-24',community});
+  assert.deepEqual(parseRoute(personUrl('demo',community)),{page:'people',person:'demo',community});
+  assert.equal(canonicalPath('https://example.test/journal/'+community+'/people?person=demo'),personUrl('demo',community));
+  assert.equal(canonicalPath('https://example.test/journal/'+community+'/entries/2026-10-24?chapter=section-0'),journalUrl('2026-10-24','section-0',community));
+ }
+ for(const path of ['/journal/unknown/entries/2026-10-24','/journal/claude/codex','/journal/codex/entries/2026-02-30'])assert.equal(parseRoute(path).page,'not-found');
+});
+test('multi-community immutable snapshot submits, reviews and publishes atomically with isolated public reads',async()=>{
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date()),p=multipleCommunities(day),s=await editor(),k=await key(s),idem=randomUUID();
+ const draft=await agent(k.token,p,idem);assert.equal(draft.status,201,JSON.stringify(draft.data));
+ assert.equal((await agent(k.token,p,idem)).data.submission_id,draft.data.submission_id);
+ assert.deepEqual((await api('/public/journal?community=claude')).data.data,{people:[],journals:[]});
+ assert.deepEqual((await api('/me/community-journal/submissions/'+draft.data.submission_id,s)).data.payload,p);
+ const publish=await api('/me/community-journal/submissions/'+draft.data.submission_id+'/publish',s,{consent_to_publish:true,payload_sha256:draft.data.payload_sha256},'1');assert.equal(publish.status,200);
+ assert.deepEqual((await api('/public/journal')).data.data,p);
+ for(const community of ['freedom','claude','codex'] as const){
+  const read=await api('/public/journal?community='+community);assert.equal(read.status,200);assert.deepEqual(read.data.data,communitySnapshot(p,community));assert.equal(read.data.payload_sha256,draft.data.payload_sha256);
+  const active=await api('/public/journal/activity?period=week&community='+community);assert.equal(active.status,200);assert.equal(active.data.data.messages.length,1);assert.equal(active.data.data.messages[0].text,community+' 合成原話');
+ }
+ assert.equal((await api('/public/journal/activity')).data.data.messages[0].text,'freedom 合成原話');
+ for(const query of ['community=unknown','community=','community=claude&community=codex','private=1'])for(const endpoint of ['/public/journal?','/public/journal/activity?'])assert.equal((await api(endpoint+query)).status,422);
+ assert.deepEqual((await api('/public/journal/media-manifest')).data.communities,['freedom','claude','codex']);
+ const receiptRead=await receipt(k.token,idem);assert.equal(receiptRead.data.status,'published');
+ await api('/me/community-journal/withdraw',s,{},publish.data.aggregate_version);
+ for(const community of ['claude','codex'])assert.equal((await api('/public/journal?community='+community)).data.data.journals.length,0);
+});

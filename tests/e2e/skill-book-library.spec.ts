@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import { randomUUID } from 'node:crypto';
 import { navigate } from './navigation.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
@@ -39,7 +40,7 @@ test('guild skill book introduces a real first deliverable before external readi
   await expect(modal).toContainText('一份能讀回自己商品與申請的私人供應端檢視。');
   await expect(modal).toContainText('沒有寫入或付款權限');
   const start=modal.locator('details').filter({has:page.getByText('練習與設定',{exact:true})});
-  await expect(start).not.toHaveAttribute('open');await start.locator('summary').click();
+  await expect(start).toHaveAttribute('open','');
   await expect(start).toContainText('Node.js 24');await expect(start.locator('pre')).toContainText('npm run read -- products');
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
   await expect(modal.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',/github\.com\/FreeTWAI\/freedom-supplier-client\/blob\/[a-f0-9]{40}\/README\.md$/);
@@ -158,7 +159,7 @@ test('book cards credit the original GitHub author and offer direct reading acti
   await expect(modal.getByRole('link',{name:'Fork 原作 ↗',exact:true})).toHaveAttribute('href',`${book.upstream_url}/fork`);
   await expect(modal.getByRole('link',{name:'查看工坊整合版本 ↗',exact:true})).toHaveAttribute('href',book.repository_url);
   const practice=modal.locator('details').filter({has:page.getByText('練習與設定',{exact:true})});
-  await expect(practice).not.toHaveAttribute('open');await practice.locator('summary').click();
+  await expect(practice).toHaveAttribute('open','');
   for(const step of book.guide!.first_steps)await expect(practice.getByText(step,{exact:true})).toBeVisible();
   await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/social-post');
   const scope=modal.locator('details').filter({has:page.getByText('功能與使用範圍',{exact:true})});
@@ -227,7 +228,8 @@ test('the original repository leads member introductions and public skill pages'
   const website='https://teddashh.github.io/ai-security-scanner/';
   const original='https://github.com/teddashh/ai-security-scanner';
   await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveAttribute('href',original);
-  await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveClass(/btn-primary/);
+  await expect(dialog.getByRole('button',{name:'開始練習 ↓',exact:true})).toHaveClass(/btn-primary/);
+  await expect(dialog.locator('.skill-intro-primary-actions > a').first()).toHaveClass(/btn-ghost/);
   await expect(dialog.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href',website);
   await expect(dialog.getByRole('link',{name:'開啟原作 ↗',exact:true})).toHaveAttribute('href',original);
   await expect(dialog.getByRole('link',{name:'查看工坊整合版本 ↗',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI/ai-security-scanner');
@@ -263,7 +265,11 @@ test('every bookshelf uses compact illustrated rows with full copy, live counts 
     expect(sizes.cover.width).toBeLessThanOrEqual(width<=600?64:80);expect(sizes.cover.height).toBeLessThanOrEqual(60);
     expect(sizes.cover.right).toBeLessThan(sizes.heading.left);expect(Math.abs(sizes.cover.top-sizes.heading.top)).toBeLessThan(35);
     expect(sizes.purposeScroll).toBeLessThanOrEqual(sizes.purposeHeight+1);expect(sizes.titleScroll).toBeLessThanOrEqual(sizes.titleHeight+1);expect(sizes.font).toBeGreaterThanOrEqual(14);
-    expect(sizes.overflow).toBe(false);expect(sizes.cardHeight).toBeLessThan(300);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(sizes.overflow).toBe(false);
+    // Real practice goals may make cards taller: preserve full readable copy rather than clipping to the old 300px cap.
+    await expect(card.locator('.skill-library-result p')).toHaveText(book.guide!.first_result);
+    expect(await card.locator('.skill-library-result p').evaluate(element=>element.scrollHeight<=element.clientHeight+1)).toBe(true);
+    await expect(card.getByRole('button',{name:/^(閱讀|預覽)技能書$/})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     for(const control of [card.getByRole('button',{name:/^(閱讀|預覽)技能書$/}),card.getByRole('button',{name:'分享技能',exact:true})])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   const card=library.locator('article[data-book-id="social-post"]');
@@ -281,7 +287,7 @@ test('cards in one shelf row share a height and keep the GitHub footer on one li
   const library=await openLibrary(page);
   for(const [theme,label] of [['dark','自由工坊－夜航'],['light','自由工坊－明亮'],['versefolk','自由工坊－敘生']] as const){
     await page.getByRole('button',{name:'設定',exact:true}).click();
-    await page.getByRole('menuitemradio',{name:label,exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();
     await page.getByRole('button',{name:'設定',exact:true}).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
     // 1440px is three columns, 820px two; 390px is a single column, so no card shares a row there.
@@ -349,7 +355,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await expect(dialog.getByRole('link',{name:'開啟展示 ↗',exact:true})).toHaveAttribute('href','https://example.com/event-form');
   await expect(dialog.getByRole('link',{name:'交給 Agent ↗',exact:true})).toHaveAttribute('href',`${path}/SKILL.md`);
   await expect(dialog).toContainText('分享者自行聲明為推薦／整理者');
-  await dialog.getByText('開始使用',{exact:true}).click();await expect(dialog.locator('pre')).toHaveText('npm create event-form@latest');
+  await expect(dialog.locator('.skill-intro-start')).toHaveAttribute('open','');await expect(dialog.locator('pre')).toHaveText('npm create event-form@latest');
   expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
   await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(trigger).toBeFocused();
   await card.getByRole('button',{name:'分享技能',exact:true}).click();
@@ -420,3 +426,117 @@ test('member-shared maintainer and curator credits stay accurate on cards, dialo
     const html=await response.text();expect(html).toContain(`${role}：${credit}`);expect(html).not.toContain(`作者：${credit}`);
   }
 });
+
+
+test('reading-first library gives newcomers a clear entry and recoverable search',async({page})=>{
+  const library=await openLibrary(page);
+  await expect(page.getByText('找到工具，讀懂做法，動手試試。',{exact:true})).toBeVisible();
+  await expect(page.locator('.skill-shelves>.skill-shelf').first().getByRole('heading',{name:'社群技能書',exact:true})).toBeVisible();
+  const search=library.getByRole('searchbox',{name:'搜尋技能書',exact:true});
+  await search.fill('no-such-skill-unique-fixture');
+  await expect(library.locator('article.skill-library-book')).toHaveCount(0);
+  await library.getByRole('button',{name:'清除篩選',exact:true}).click();
+  await expect(search).toHaveValue('');await expect(search).toBeFocused();
+  await expect(library.locator('article.skill-library-book')).toHaveCount(29);
+  await page.getByRole('link',{name:'探索社群技能書 ↓',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'社群技能書',exact:true})).toBeFocused();
+  const community=page.locator('.community-skill-library'),communitySearch=community.getByRole('searchbox',{name:'搜尋社群技能書',exact:true});
+  await communitySearch.fill('no-such-skill-unique-fixture');
+  await expect(community.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
+  await community.getByRole('button',{name:'清除社群搜尋',exact:true}).click();
+  await expect(communitySearch).toHaveValue('');await expect(communitySearch).toBeFocused();
+  await page.getByRole('link',{name:'查看公會技能書 ↓',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'公會指定技能書',exact:true})).toBeFocused();
+});
+
+for(const width of [1280,390])test(`practice is readable immediately, before supplementary art and collaboration at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:width===390?844:720});
+  const library=await openLibrary(page);
+  await library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Local Workspace MCP 本機工作助手',exact:true}),practice=dialog.locator('.skill-intro-start');
+  await expect(dialog.getByRole('button',{name:'開始練習 ↓',exact:true})).toBeInViewport();
+  expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+  await test.info().attach(`skillbook-intro-${width}px`,{body:await page.screenshot(),contentType:'image/png'});
+  await expect(practice).toHaveAttribute('open','');
+  await expect(practice.getByRole('heading',{name:'準備',exact:true})).toBeVisible();
+  expect(await dialog.evaluate(element=>{
+    const reading=element.querySelector('.skill-intro-start')!;
+    return ['.skill-intro-illustration','.skill-intro-collaboration','.github-book-social'].every(selector=>{
+      return [...element.querySelectorAll(selector)].every(next=>Boolean(reading.compareDocumentPosition(next)&Node.DOCUMENT_POSITION_FOLLOWING));
+    });
+  })).toBe(true);
+  await practice.locator('summary').click();await expect(practice).not.toHaveAttribute('open');
+  await dialog.getByRole('button',{name:'開始練習 ↓',exact:true}).click();await expect(practice).toHaveAttribute('open','');
+  await expect(practice.locator('summary')).toBeFocused();
+  await test.info().attach(`skillbook-practice-${width}px`,{body:await page.screenshot(),contentType:'image/png'});
+  await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
+  await expect(library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
+});
+
+
+// Measure the rendered caption and its actual painted surface, not theme token strings.
+function illustrationCaptionContrast(element: Element) {
+  const rgba = (value: string) => {
+    const match = /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*([\d.]+))?\)$/.exec(value);
+    if (!match) throw new Error(`Unsupported computed color: ${value}`);
+    return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 1)];
+  };
+  const style = getComputedStyle(element), foreground = rgba(style.color);
+  let background: number[] | null = null;
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const paint = getComputedStyle(node), color = rgba(paint.backgroundColor);
+    if (Number(paint.opacity) !== 1) throw new Error('Caption ancestor is translucent');
+    if (!background) {
+      if (paint.backgroundImage !== 'none') throw new Error('Caption background image needs explicit contrast analysis');
+      if (color[3] === 1) background = color;
+      else if (color[3] !== 0) throw new Error('Caption background needs alpha compositing');
+    }
+  }
+  if (!background || foreground[3] !== 1) throw new Error('Caption needs opaque foreground and an opaque surface');
+  const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, value, index) => {
+    const channel = value / 255;
+    return sum + [0.2126, 0.7152, 0.0722][index] * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  }, 0);
+  const a = luminance(foreground), b = luminance(background);
+  return { foreground, background, fontSize: Number.parseFloat(style.fontSize), fontWeight: style.fontWeight,
+    ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+}
+
+for (const theme of ['light', 'dark', 'versefolk'] as const) {
+  for (const width of [390, 1280]) {
+    test(`catalog and member illustration captions have readable contrast in ${theme} at ${width}px`, async ({ page }) => {
+      await page.addInitScript(value => localStorage.setItem('freedom-theme', value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      const id = '11111111-1111-4111-8111-111111111111';
+      const item = { submission_id: id, title: '圖說對比測試作品', description: '合成的技能書圖說驗證。', relationship: 'curator',
+        cover_url: '/art/community-skills/default.webp', illustration_url: '/art/community-skills/default.webp',
+        source: { repository_full_name: 'example/caption-fixture', repository_url: 'https://github.com/example/caption-fixture',
+          commit_sha: 'a'.repeat(40), license_spdx: 'MIT', license_evidence_url: null, archived: false } };
+      await page.route('**/api/v1/skill-submissions/published', route => route.fulfill({ json: { items: [item] } }));
+      await page.route(`**/api/v1/skill-submissions/${id}`, route => route.fulfill({ json: { ...item, use_notes: '先閱讀原作說明。', demo_url: null } }));
+      const library = await openLibrary(page);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      const entries = [
+        { trigger: library.locator('[data-book-id="local-workspace-mcp"]').getByRole('button', { name: '預覽技能書', exact: true }),
+          dialog: page.locator('dialog.skill-intro-dialog[data-book-id="local-workspace-mcp"]') },
+        { trigger: page.locator(`article[data-submission-id="${id}"]`).getByRole('button', { name: '閱讀技能書', exact: true }),
+          dialog: page.locator(`dialog.skill-intro-dialog[data-submission-id="${id}"]`) },
+      ];
+      for (const { trigger, dialog } of entries) {
+        await trigger.click();
+        const caption = dialog.locator('.skill-intro-illustration > figcaption');
+        await expect(caption).toHaveText('功能示意圖，非實際操作截圖。');
+        await caption.scrollIntoViewIfNeeded();
+        await expect(caption).toBeInViewport();
+        await expect.poll(() => dialog.locator('.skill-intro-illustration > img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+        const contrast = await caption.evaluate(illustrationCaptionContrast);
+        expect(contrast.fontSize).toBeGreaterThanOrEqual(14);
+        expect(contrast.ratio, JSON.stringify(contrast)).toBeGreaterThanOrEqual(4.5);
+        expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        await dialog.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
+        await expect(dialog).toBeHidden();
+        await expect(trigger).toBeFocused();
+      }
+    });
+  }
+}

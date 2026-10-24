@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
 import {test,expect,type Page} from './fixtures.js';
@@ -79,7 +80,7 @@ async function noOverflow(page:Page,label:string){
 async function shellTheme(page:Page,name:string,theme:string){
   const settings=page.getByRole('button',{name:'設定',exact:true});
   if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();
-  await page.getByRole('menuitemradio',{name,exact:true}).click();
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await settings.click();
   await expect(settings).toHaveAttribute('aria-expanded','false');

@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
 import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
@@ -135,7 +136,7 @@ const themes=[['自由工坊－明亮','light'],['自由工坊－夜航','dark']
 async function applyTheme(page:Page,label:string,id:string){
   const menu=page.getByRole('button',{name:'設定',exact:true});
   if(await menu.getAttribute('aria-expanded')!=='true')await menu.click();
-  await page.getByRole('menuitemradio',{name:label,exact:true}).click();
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
   if(await menu.getAttribute('aria-expanded')==='true')await menu.click();
   await expect(menu).toHaveAttribute('aria-expanded','false');
