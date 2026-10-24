@@ -21,6 +21,7 @@ type Entry={kind:'submission';item:Submission}|{kind:'book';book:CatalogBook};
 export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:PortalClient;revision?:number;guildIds?:readonly string[]}){
   const [books,setBooks]=useState<CatalogBook[]|null>(null),[bookError,setBookError]=useState(false);
   const [items,setItems]=useState<Submission[]|null>(null),[itemError,setItemError]=useState(false);
+  const searchInput=useRef<HTMLInputElement>(null);
   const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),discovery=useSkillDiscovery();
   useEffect(()=>{
     let active=true;setBookError(false);
@@ -42,7 +43,7 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
   return <div className="stack community-skill-library">
     {(bookError||itemError)&&<div role="alert"><p>{bookError&&itemError?'社群技能書暫時無法載入。':'部分社群技能書暫時無法載入。'}</p><button type="button" className="btn btn-ghost" onClick={()=>setRetry(value=>value+1)}>重新載入社群技能書</button></div>}
     {loading?<p role="status">正在載入社群技能書…</p>:entries.length>0?<>
-      <div className="skill-library-filters"><label className="field">搜尋社群技能書<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label></div>
+      <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label>{search&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');searchInput.current?.focus();}}>清除社群搜尋</button>}</div>
       <p className="skill-library-count" role="status">顯示 {shown.length} / {entries.length} 本社群技能書</p>
       <div className="card-grid community-book-grid">{shown.map(entry=>entry.kind==='submission'
         ?<SubmissionBookCard key={`submission:${entry.item.submission_id}`} item={entry.item}/>
@@ -65,6 +66,7 @@ function SubmissionBookCard({item}:{item:Submission}){
 // Mirrors SkillBookIntro: the published page, SKILL.md and share content are the same public projection.
 function SubmissionIntro({item}:{item:Submission}){
   const [open,setOpen]=useState(false),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
+  const practice=useRef<HTMLDetailsElement>(null);
   const [detail,setDetail]=useState<Detail|null>(null),[detailError,setDetailError]=useState(''),[reload,setReload]=useState(0),[illustration,setIllustration]=useState(true);
   const repository=httpsLink(item.source.repository_url),page=submissionSharePath(item.submission_id),license=item.source.license_spdx;
   const current=detail?.submissionId===item.submission_id?detail:null,demo=httpsLink(current?.demoUrl),evidence=httpsLink(item.source.license_evidence_url);
@@ -85,14 +87,14 @@ function SubmissionIntro({item}:{item:Submission}){
     <dialog ref={dialog} className="skill-intro-dialog" aria-labelledby={id} aria-describedby={`${id}-purpose`} data-submission-id={item.submission_id} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();close();}} onClose={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
       <div className="stack"><header className="skill-intro-header"><div><p className="eyebrow">自由工坊 · 社群技能書</p><h2 id={id}>{item.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
         <div className="skill-intro-cover"><div className="skill-intro-cover-copy">{open&&<div className="skill-book-badges" aria-label="技能書徽章"><CommunityBadge/></div>}<p className="skill-intro-purpose multiline-text" id={`${id}-purpose`}>{item.description}</p></div>{open&&<SkillBookCover book={{cover_url:item.cover_url}} className="skill-intro-art"/>}</div>
-        {open&&illustration&&isSkillIllustrationUrl(item.illustration_url)&&<figure className="skill-intro-illustration"><img src={item.illustration_url} alt={`${item.title}功能示意圖`} width="1200" height="630" decoding="async" onError={()=>setIllustration(false)}/></figure>}
         <p className="field-hint">分享者自行聲明為{relationshipLabels[item.relationship]??'推薦／整理者'} · 原作：{item.source.repository_full_name}</p>
-        <div className="actions skill-intro-primary-actions">{repository&&<a className="btn btn-primary" href={repository} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{demo&&<a className="btn btn-ghost" href={demo} target="_blank" rel="noopener noreferrer">開啟展示 ↗</a>}<a className="btn btn-ghost" href={page} target="_blank" rel="noopener noreferrer">開啟介紹頁 ↗</a></div>
+        <div className="actions skill-intro-primary-actions"><button type="button" className="btn btn-primary" aria-controls={`${id}-practice`} onClick={()=>{if(practice.current){practice.current.open=true;practice.current.scrollIntoView({block:'start'});practice.current.querySelector('summary')?.focus();}}}>閱讀使用說明 ↓</button>{repository&&<a className="btn btn-ghost" href={repository} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{demo&&<a className="btn btn-ghost" href={demo} target="_blank" rel="noopener noreferrer">開啟展示 ↗</a>}<a className="btn btn-ghost" href={page} target="_blank" rel="noopener noreferrer">開啟介紹頁 ↗</a></div>
+        <details ref={practice} id={`${id}-practice`} className="skill-intro-details skill-intro-start" open><summary>開始使用</summary><div className="stack">{current?<pre className="skill-intro-command"><code>{current.useNotes}</code></pre>:detailError?<div role="alert"><p>{detailError}</p><button type="button" className="btn btn-ghost" onClick={()=>setReload(value=>value+1)}>重新載入使用說明</button></div>:<p role="status">正在載入使用說明…</p>}</div></details>
+        {open&&illustration&&isSkillIllustrationUrl(item.illustration_url)&&<figure className="skill-intro-illustration"><img src={item.illustration_url} alt={`${item.title}功能示意圖`} width="1200" height="630" decoding="async" onError={()=>setIllustration(false)}/><figcaption>功能示意圖，非實際操作截圖。</figcaption></figure>}
         {repository&&<GitHubSourceLinks repositoryUrl={repository}/>}
         <SkillShare submissionId={item.submission_id} title={item.title}/>
         {open&&<EventOutcomeBacklinks client={sessionClient} kind="skill_book" sourceId={item.submission_id} publicRead={!sessionClient.csrfToken}/>}
         {repository&&<section className="skill-intro-collaboration"><h3>一起開發</h3><p>查看專案任務，認領一項修改並提交 PR。</p><div className="actions"><a className="btn btn-primary" href={`${repository}/issues`} target="_blank" rel="noopener noreferrer">查看專案任務 ↗</a><a className="btn btn-ghost" href={`${page}/SKILL.md`} target="_blank" rel="noopener noreferrer">交給 Agent ↗</a><a className="btn btn-ghost" href={`${repository}/pulls`} target="_blank" rel="noopener noreferrer">查看原作 PR ↗</a><a className="btn btn-ghost" href={`${repository}/fork`} target="_blank" rel="noopener noreferrer">Fork 原作 ↗</a></div><p className="field-hint">修改以 PR 回饋原作，由原作維護者審查；Fork 不會自動回饋原作。</p></section>}
-        <details className="skill-intro-details"><summary>開始使用</summary><div className="stack">{current?<pre className="skill-intro-command"><code>{current.useNotes}</code></pre>:detailError?<div role="alert"><p>{detailError}</p><button type="button" className="btn btn-ghost" onClick={()=>setReload(value=>value+1)}>重新載入使用說明</button></div>:<p role="status">正在載入使用說明…</p>}</div></details>
         <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><p>分享者與來源的關係為自行聲明，尚未核實作者身分；收錄不代表公會指定。</p><p>{license==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${license}。素材與引用內容請另外查看專案說明。`}</p>{evidence&&<a href={evidence} target="_blank" rel="noopener noreferrer">閱讀授權 ↗</a>}{item.source.archived&&<p className="field-hint">來源 Repo 已封存。</p>}{/^[0-9a-f]{40}$/.test(item.source.commit_sha)&&<p className="field-hint">收錄版本：<code>{item.source.commit_sha.slice(0,12)}</code></p>}</div></details>
       </div>
     </dialog>

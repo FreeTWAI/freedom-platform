@@ -83,6 +83,8 @@ export type RequestOptions = {
   signal?: AbortSignal
   /** Opt in only for reads whose callers permit the same in-flight snapshot. */
   coalesce?: boolean
+  /** Caller-owned snapshot epoch; only partitions in-flight GETs, never sent on the wire. */
+  coalesceScope?: string
   /** Small, explicit signals that may finish after document navigation. */
   keepalive?: boolean
 }
@@ -191,7 +193,7 @@ export class PortalClient {
     // Share only concurrent identical reads, never retained data or writes.
     // A caller-owned abort signal must retain its independent lifetime.
     if (options.coalesce !== true || options.signal || options.idempotencyKey !== undefined || options.ifMatch !== undefined || options.preferenceVersion !== undefined) return this.request<T>('GET', path, options)
-    const key = JSON.stringify([this.authGeneration, path, !!options.skipAuthHandler, !!options.background, !!options.suppressConsole])
+    const key = JSON.stringify([this.authGeneration, path, !!options.skipAuthHandler, !!options.background, !!options.suppressConsole, options.coalesceScope ?? null])
     const existing = this.reads.get(key)
     if (existing) return existing.then(value => structuredClone(value) as T)
     const operation = this.request<T>('GET', path, options)

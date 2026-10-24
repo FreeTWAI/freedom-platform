@@ -1,6 +1,6 @@
 import {ReportButton} from './MemberReporting';
 import {refreshLoadedMessages} from './message-refresh';
-import {useEffect,useLayoutEffect,useId,useRef,useState,type FormEvent} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useId,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import type {SessionPayload,TabId} from '../types';
@@ -10,7 +10,7 @@ import {consoleChannel} from '../game-console-routing';
 import type {MessageContent,MessageContentInput} from '../../../../modules/member-communications/content-types';
 import {findChatSticker} from '../../../../modules/member-communications/stickers';
 import {ChatBody,ChatQuote,ChatExtras,ChatRetracted,RetractMessageDialog,chatPayload,quoteMessage,useRichChatDraft,type RetractTarget} from './ChatContent';
-import {ChatInput,ChatTime,useChatViewport,useVisibleChatRead} from './ChatWorkspace';
+import {ChatInput,ChatTime,chatCalendarKey,useChatViewport,useVisibleChatRead} from './ChatWorkspace';
 import {ChatSearch} from './ChatSearch';
 import {matchesChannelMessageAck} from './message-image-client';
 import './MemberSettings.css';
@@ -391,6 +391,17 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
 
   const key=selected?.key,draft=key?drafts[key]??'':'',attempt=key?pending[key]:undefined,sendError=key?sendErrors[key]:undefined;
   const richDraft=richDrafts.get(key??'');
+  const changeRichDraft=richDrafts.change,calendarKey=chatCalendarKey();
+  // Only history/control changes invalidate these rows, not the composer draft.
+  // Keep the local calendar key so cached ChatTime labels still roll over.
+  const messageHistory=useMemo(()=>history&&key?(history.items.length===0?<p className="empty">這個頻道還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="頻道訊息">
+            {[...history.items].reverse().map(message=>{const mine=message.sender_ref===me;return <li key={message.message_id} className={mine?'is-mine':undefined} data-message-id={message.message_id}>
+              <p className="messages-meta">{mine?'你':message.sender_name} · <ChatTime value={message.created_at}/>{mine?' · 已送出':''}</p>
+              {message.retracted_at?<ChatRetracted mine={mine}/>:<>{message.reply_to&&<ChatQuote reply={message.reply_to}/>}<ChatBody message={message}/><ReportButton kind="channel_message" id={message.message_id} label="頻道訊息"/>
+              <div className="chat-message-actions"><button className="btn btn-ghost" type="button" aria-label={`回覆${mine?'你':message.sender_name}的訊息`} disabled={Boolean(attempt)} onClick={()=>{if(held.current[key])return;changeRichDraft(key,{reply:quoteMessage(message,mine?'你':message.sender_name)});document.getElementById(`${uid}-compose`)?.focus();}}>回覆</button>{mine&&<button className="btn btn-ghost chat-retract" type="button" aria-label="收回你的訊息" disabled={retracting} onClick={event=>{retractTrigger.current=event.currentTarget;setRetractError('');setRetractTarget({message_id:message.message_id,label:message.sticker?`[貼圖] ${message.sticker.label}`:[...message.body].slice(0,160).join('')});}}>收回</button>}</div></>}
+            </li>;})}
+          </ol>):null,
+    [history,key,me,Boolean(attempt),retracting,changeRichDraft,uid,calendarKey]);
   const ids={list:`${uid}-list`,title:`${uid}-title`,error:`${uid}-send-error`};
   function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
   function returnFromWorld(){setPicking(true);onReturnToChats?.();}
@@ -444,13 +455,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
           <div className="messages-scroll" ref={scroll} role="log" aria-live="polite" aria-relevant="additions" tabIndex={0} aria-label={`${history.channel.name}對話紀錄`} onScroll={()=>{if(scroll.current){stick.current=scroll.current.scrollHeight-scroll.current.scrollTop-scroll.current.clientHeight<80;if(stick.current)setHasNew(false);}}}>
           {history.next_offset!==null&&<button className="btn btn-ghost" type="button" disabled={more.loading||refresh.loading} onClick={()=>void earlier()}>{more.loading?'正在讀取…':more.error?'重試載入較早訊息':'載入較早訊息'}</button>}
           {more.error&&<p className="banner banner-error" role="alert">較早訊息讀取失敗：{more.error}</p>}
-          {history.items.length===0?<p className="empty">這個頻道還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="頻道訊息">
-            {[...history.items].reverse().map(message=>{const mine=message.sender_ref===me;return <li key={message.message_id} className={mine?'is-mine':undefined} data-message-id={message.message_id}>
-              <p className="messages-meta">{mine?'你':message.sender_name} · <ChatTime value={message.created_at}/>{mine?' · 已送出':''}</p>
-              {message.retracted_at?<ChatRetracted mine={mine}/>:<>{message.reply_to&&<ChatQuote reply={message.reply_to}/>}<ChatBody message={message}/><ReportButton kind="channel_message" id={message.message_id} label="頻道訊息"/>
-              <div className="chat-message-actions"><button className="btn btn-ghost" type="button" aria-label={`回覆${mine?'你':message.sender_name}的訊息`} disabled={Boolean(attempt)} onClick={()=>{if(held.current[selected.key])return;richDrafts.change(selected.key,{reply:quoteMessage(message,mine?'你':message.sender_name)});document.getElementById(`${uid}-compose`)?.focus();}}>回覆</button>{mine&&<button className="btn btn-ghost chat-retract" type="button" aria-label="收回你的訊息" disabled={retracting} onClick={event=>{retractTrigger.current=event.currentTarget;setRetractError('');setRetractTarget({message_id:message.message_id,label:message.sticker?`[貼圖] ${message.sticker.label}`:[...message.body].slice(0,160).join('')});}}>收回</button>}</div></>}
-            </li>;})}
-          </ol>}
+          {messageHistory}
           {attempt&&<div className="messages-pending" role="status" aria-label="傳送狀態"><ChatBody message={{body:attempt.body,...(attempt.payload.sticker_id?{sticker:{id:findChatSticker(attempt.payload.sticker_id)!.id,label:findChatSticker(attempt.payload.sticker_id)!.label}}:{})}}/><p className="messages-meta">{attempt.status==='sending'?'傳送中…':'尚未確認送出，可用下方按鈕重試'}</p></div>}
           </div>
           {hasNew&&<button className="btn btn-ghost messages-new" type="button" onClick={()=>{stick.current=true;scroll.current?.scrollTo({top:scroll.current.scrollHeight});setHasNew(false);}}>有新訊息 · 回到最新</button>}

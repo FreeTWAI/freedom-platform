@@ -27,6 +27,8 @@
     "docs/development/member-participation-plan.md",
     "apps/portal-web/src/modules/SocialCrossPlatformShare.tsx",
     "apps/portal-web/src/modules/SocialInteractions.tsx",
+    "apps/portal-web/src/modules/SocialPostLike.tsx",
+    "tests/e2e/social-post-like.spec.ts",
     "apps/portal-web/src/modules/SocialPostEditor.tsx",
     "apps/portal-web/src/modules/SocialPostShare.tsx",
     "apps/portal-web/src/modules/SocialTools.tsx",
@@ -56,7 +58,9 @@
     "apps/portal-web/src/modules/SocialPostOptimizer.tsx",
     "apps/portal-web/src/modules/SocialPostOptimizer.css",
     "apps/portal-web/src/social-post-task.ts",
-    "apps/portal-web/src/modules/social-sharing.css"
+    "apps/portal-web/src/modules/social-sharing.css",
+    "apps/portal-web/src/modules/SocialPostBookmark.tsx",
+    "tests/e2e/social-post-bookmark.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
@@ -66,8 +70,7 @@
     "skill-submissions",
     "asset-storage",
     "execution-runs",
-    "absurd-daily",
-    "personal-content"
+    "absurd-daily"
   ],
   "contract_families": [],
   "client_profiles": [

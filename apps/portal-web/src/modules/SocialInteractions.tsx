@@ -10,6 +10,7 @@ import {ChatExtras,ChatSticker} from './ChatContent';
 import {MemberAvatar} from './MemberAvatar';
 import {SocialIcon,SocialTextTools,SocialRichText,SocialMemberLink,type Mention} from './SocialTools';
 import {SocialPostShare} from './SocialPostShare';
+import {SocialPostLike} from './SocialPostLike';
 
 type Comment = {image_url?:string|null;sticker_id?:string|null;mentions?:Mention[];like_count?:number;liked?:boolean;comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: {user_id: string; display_name: string}; mine: boolean};
 type Comments = {items: Comment[]; next_cursor: string | null};
@@ -28,9 +29,9 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [liking, setLiking] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<{id: string; text: string} | null>(null);
   const [mentions,setMentions]=useState<Mention[]>([]),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState(''),[preparing,setPreparing]=useState(false);
@@ -59,35 +60,34 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   function closePeople(){++peopleSeq.current;peopleDialog.current?.close();peopleTrigger.current?.focus();}
   async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
 
-  const pendingLike = useRef<{liked: boolean; key: string} | null>(null);
   const confirmedComments = useRef<Comment[]>([]);
   const sequence = useRef(0);
-  useEffect(() => () => { ++sequence.current; }, []);
+  const pendingReadChanges = useRef<Map<string, Comment | null> | null>(null);
+  useEffect(() => () => { ++sequence.current; pendingReadChanges.current = null; }, []);
   // Opened from a Short's comment button: the panel starts expanded and loads once.
   useEffect(() => { if (initialOpen) void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   async function load(next?: string) {
-    const token = ++sequence.current;
-    setLoading(true); setError('');
+    const token = ++sequence.current, generation = client.sessionGeneration;
+    // Only ACKs that arrive during this read supersede its older snapshot.
+    // A later read gets a new map and remains authoritative for remote changes.
+    const changes = new Map<string, Comment | null>();
+    pendingReadChanges.current = changes;
+    setLoading(true); setLoadError('');
     try {
       const page = await client.get<Comments>(`/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`);
-      if (token !== sequence.current) return;
+      if (token !== sequence.current || !current(generation)) return;
+      const items = mergeComments(
+        [...changes.values()].filter((comment): comment is Comment => comment !== null),
+        page.items.filter(comment => {
+          const changed = changes.get(comment.comment_id);
+          return changed !== null && (!changed || comment.revision >= changed.revision);
+        }),
+      );
       const fresh = confirmedComments.current.filter(comment => !page.items.some(item => item.comment_id === comment.comment_id));
-      setComments(current => mergeComments(next ? current : fresh, page.items)); setCursor(page.next_cursor);
+      setComments(current => mergeComments(next ? current : fresh, items)); setCursor(page.next_cursor);
       confirmedComments.current = fresh;
-    } catch (cause) { if (token === sequence.current) setError(cause instanceof Error ? cause.message : '留言暫時無法載入。'); }
-    finally { if (token === sequence.current) setLoading(false); }
-  }
-  async function like() {
-    if (liking) return;
-    const command = pendingLike.current ?? {liked: !post.liked, key: crypto.randomUUID()};
-    pendingLike.current = command; setLiking(true); setError('');
-    try {
-      const value = await client.post<{liked: boolean; like_count: number}>(`/social-posts/${post.post_id}/like`, {liked: command.liked}, {idempotencyKey: command.key});
-      onUpdate(value); pendingLike.current = null;
-    } catch (cause) {
-      if (cause instanceof ApiError && !cause.network) pendingLike.current = null;
-      setError(cause instanceof Error ? cause.message : '尚未確認按讚結果，請重試。');
-    } finally { setLiking(false); }
+    } catch (cause) { if (token === sequence.current && current(generation)) setLoadError(cause instanceof Error ? cause.message : '留言暫時無法載入。'); }
+    finally { if (token === sequence.current) { pendingReadChanges.current = null; if (current(generation)) setLoading(false); } }
   }
   async function send(event?:FormEvent,stickerId?:string) {
     event?.preventDefault();
@@ -122,41 +122,48 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   }
   async function remove(comment: Comment) {
     if (sending) return;
+    const generation = client.sessionGeneration;
     setSending(true); setError('');
     try {
       await client.delete(`/social-posts/${post.post_id}/comments/${comment.comment_id}`, {});
+      if (!current(generation)) return;
+      pendingReadChanges.current?.set(comment.comment_id, null);
       confirmedComments.current = confirmedComments.current.filter(item => item.comment_id !== comment.comment_id);
       setComments(current => current.filter(item => item.comment_id !== comment.comment_id));
       onUpdate({comment_count: Math.max(0, (post.comment_count ?? 0) - 1)}); setConfirmDelete(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '留言未能刪除。'); }
-    finally { setSending(false); }
+    } catch (cause) { if (current(generation)) setError(cause instanceof Error ? cause.message : '留言未能刪除。'); }
+    finally { if (current(generation)) setSending(false); }
   }
   async function saveEdit(event: FormEvent, comment: Comment) {
     event.preventDefault();
     if (!editing || sending) return;
+    const generation = client.sessionGeneration;
     setSending(true); setError('');
     try {
       const saved = await client.post<Comment>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/edit`, {text: editing.text.trim()}, {ifMatch: comment.revision});
+      if (!current(generation)) return;
+      pendingReadChanges.current?.set(saved.comment_id, saved);
       confirmedComments.current = confirmedComments.current.map(item => item.comment_id === saved.comment_id ? saved : item);
       setComments(current => current.map(item => item.comment_id === saved.comment_id ? saved : item));
       setEditing(null);
     } catch (cause) {
-      setError(cause instanceof ApiError && cause.status === 412 ? '這則留言已在別處更新，請重新載入留言後再編輯。' : cause instanceof Error ? cause.message : '留言未能更新。');
-    } finally { setSending(false); }
+      if (current(generation)) setError(cause instanceof ApiError && cause.status === 412 ? '這則留言已在別處更新，請重新載入留言後再編輯。' : cause instanceof Error ? cause.message : '留言未能更新。');
+    } finally { if (current(generation)) setSending(false); }
   }
   return <div ref={root} className="social-interactions stack">
     <div className="social-interaction-summary"><button ref={peopleTrigger} type="button" className="social-text-link" aria-label="查看按讚名單" onClick={()=>{peopleDialog.current?.showModal();void loadPeople();}}><SocialIcon name="like"/>{post.like_count??0} 人按讚</button><span title="在前景停留觀看的會員，每人只計一次"><SocialIcon name="eye"/>已讀 {post.read_count??0} 人</span></div>
     <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
     <div className="social-actions">
-      <button type="button" className="btn btn-ghost" aria-pressed={post.liked ?? false} disabled={liking} onClick={() => void like()}><SocialIcon name="like"/>{liking ? '處理中…' : pendingLike.current ? '重試按讚' : post.liked ? '已讚' : '讚'} · {post.like_count ?? 0}</button>
-      <button type="button" className="btn btn-ghost" aria-expanded={open} aria-controls={`social-comments-${post.post_id}`} onClick={() => { setOpen(!open); if (!open) void load(); else { ++sequence.current; setLoading(false); } }}><SocialIcon name="comment"/>留言 · {post.comment_count ?? 0}</button>
+      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={onUpdate}/>
+      <button type="button" className="btn btn-ghost" aria-expanded={open} aria-controls={`social-comments-${post.post_id}`} onClick={() => { setOpen(!open); if (!open) void load(); else { ++sequence.current; pendingReadChanges.current = null; setLoading(false); } }}><SocialIcon name="comment"/>留言 · {post.comment_count ?? 0}</button>
       <SocialPostShare client={client} post={post}/>
       <ReportButton kind="post" id={post.post_id} label="貼文"/>
     </div>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {open && <section id={`social-comments-${post.post_id}`} className="social-comments stack" aria-label="貼文留言">
+      {loadError && <p className="banner banner-error" role="alert">{loadError}</p>}
       {loading && <p role="status">正在載入留言…</p>}
-      {!loading && comments.length === 0 && <p className="muted">還沒有留言，聊聊你的想法。</p>}
+      {!loading && !loadError && comments.length === 0 && <p className="muted">還沒有留言，聊聊你的想法。</p>}
       {comments.map(comment => <article className="social-comment" key={comment.comment_id}>
         <div className="social-comment-meta"><MemberAvatar nickname={comment.author.display_name}/><strong>{comment.author.display_name}</strong><time dateTime={comment.created_at}>{formatIsoLocal(comment.created_at)}</time>{comment.edited_at && <span className="social-edited" title={formatIsoLocal(comment.edited_at)}>已編輯</span>}</div>
         {editing?.id === comment.comment_id ? <form className="stack" onSubmit={event => void saveEdit(event, comment)} aria-busy={sending}>
@@ -170,7 +177,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
         </> : <>{comment.mine && <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => { setConfirmDelete(null); setEditing({id: comment.comment_id, text: comment.body}); }}>編輯留言</button>}<button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(comment.comment_id)}>刪除留言</button></>}</div></details>}
       </article>)}
       {cursor && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => void load(cursor)}>載入更多留言</button>}
-      {error && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => void load()}>重新載入留言</button>}
+      {(error || loadError) && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => { setError(''); void load(); }}>重新載入留言</button>}
       <form className="social-comment-composer" onSubmit={event=>void send(event)} aria-busy={sending||preparing}>
         <label className="field"><span className="sr-only">寫留言</span><textarea aria-label="寫留言" rows={2} maxLength={1000} value={text} disabled={sending||!!pendingComment.current} onChange={event=>setText(event.target.value)} onPaste={event=>{const pasted=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(pasted&&!sending&&!pendingComment.current){event.preventDefault();void selectImage(pasted);}}} placeholder="留下你的想法，輸入 @ 標註夥伴…"/></label>
         {preview&&<div className="social-compose-attachment"><img className="social-compose-preview" src={preview} alt="留言圖片預覽"/><button type="button" className="social-text-link" disabled={sending||!!pendingComment.current} onClick={()=>void selectImage(null)}>移除留言圖片</button></div>}

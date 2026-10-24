@@ -245,11 +245,18 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
     } else {
       await expect(nav).toBeVisible();
-      // Keyboard from a fresh load: skip link, then the primary destinations in order.
+      // Keyboard from a fresh load: skip link, brand home link, then primary destinations.
       await page.reload();
       await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
       await page.keyboard.press('Tab');
       await expect(page.getByRole('link', { name: '跳到主要內容', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      const brandHome = page.locator('.brand-home');
+      await expect(brandHome).toBeFocused();
+      await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
+      await expect(brandHome).toHaveAttribute('href', '/#home');
+      await expect(brandHome).toBeInViewport();
+      expect(await focusedIsVisiblyOutlined(page)).toBe(true);
       await page.keyboard.press('Tab');
       await expect(nav.getByRole('button',{name:'會員首頁',exact:true})).toBeFocused();
       for (const name of ['我的內容', '職業公會', '技能書架', '搜尋社群內容']) {

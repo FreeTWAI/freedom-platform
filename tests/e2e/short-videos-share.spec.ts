@@ -44,7 +44,9 @@ test.describe('sharing around Short, feature ON', () => {
     try {
       await page.reload();
       await navigate(page, '社群分享');
-      await selectSocialFeed(page, 'Short');
+      const shortEntry=page.locator('.social-feed-navigation').getByRole('button',{name:'Short',exact:true});
+      await shortEntry.focus();await page.keyboard.press('Enter');
+      await expect(shortEntry).toHaveAttribute('aria-pressed','true');await expect(shortEntry).toBeFocused();
       const feed = page.getByRole('region', {name: '短影音', exact: true});
       await expect(feed).toBeVisible();
       for (const control of await feed.locator('.short-video-actions button').all()) expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -208,8 +210,7 @@ test.describe('sharing around Short, feature ON', () => {
   test('the link composer says what it recognised before the member shares', async ({page}) => {
     await prepare(page);
     await navigate(page, '社群分享');
-    await page.getByRole('button', {name: '動態選項', exact: true}).click();
-    await page.getByRole('dialog', {name: '動態選項', exact: true}).getByRole('button', {name: '分享外部連結', exact: true}).click();
+    await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
     const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
     const field = dialog.getByLabel('連結', {exact: true});
     await field.fill('https://www.youtube.com/shorts/dQw4w9WgXcQ');
@@ -242,7 +243,9 @@ test.describe('sharing around Short, feature OFF (default)', () => {
       await page.getByRole('button', {name: '動態選項', exact: true}).click();
       const options = page.getByRole('dialog', {name: '動態選項', exact: true});
       await expect(options.getByRole('button', {name: 'Short', exact: true})).toHaveCount(0);
-      await options.getByRole('button', {name: '分享外部連結', exact: true}).click();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.social-feed-navigation').getByRole('button', {name: 'Short', exact: true})).toHaveCount(0);
+      await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
       const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
       await dialog.getByLabel('連結', {exact: true}).fill('https://www.youtube.com/shorts/dQw4w9WgXcQ');
       await expect(dialog.getByRole('status')).toHaveText('這是 YouTube Short 連結。');
