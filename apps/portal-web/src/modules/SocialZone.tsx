@@ -1,3 +1,4 @@
+import {SocialPostBookmark} from './SocialPostBookmark';
 import {SocialIcon,SocialTextTools,SocialRichText,SOCIAL_TOPICS,type Mention} from './SocialTools';
 import {Component,lazy,Suspense,useCallback, useEffect, useId, useRef, useState,useSyncExternalStore, type FormEvent,type ReactNode} from 'react';
 import {accessAwareFetch} from '../access-fetch';
@@ -93,7 +94,7 @@ function sharedPostFromLocation():string|null {
   const id=new URLSearchParams(window.location.search).get('social-post');
   return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:null;
 }
-export function SocialZone({client, canReview = false, viewer, focusPost, shortVideos = false}: {client: PortalClient; canReview?: boolean; shortVideos?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
+export function SocialZone({client, canReview = false, viewer, focusPost, shortVideos = false, bookmarksEnabled = false}: {client: PortalClient; canReview?: boolean; shortVideos?: boolean; bookmarksEnabled?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
   const composerId = useId();
   const composer = useRef<HTMLDialogElement>(null), composerTrigger = useRef<HTMLButtonElement>(null), composerStart = useRef<HTMLDivElement>(null);
   // The sticky community header wraps on narrow screens, so the composer sticks below its measured height.
@@ -485,6 +486,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
           <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
+          {bookmarksEnabled && <SocialPostBookmark client={client} postId={post.post_id}/>}
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
             {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}

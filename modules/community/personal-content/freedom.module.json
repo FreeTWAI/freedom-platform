@@ -19,7 +19,9 @@
     "apps/portal-web/src/modules/promotional-content/**",
     "apps/portal-web/promo-preview/**",
     "docs/platform-plan/contracts/promotional-content-v1.md",
-    "tests/runtime/promotional-content.test.ts"
+    "tests/runtime/promotional-content.test.ts",
+    "apps/portal-web/src/modules/SocialPostBookmark.tsx",
+    "tests/e2e/social-post-bookmark.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
