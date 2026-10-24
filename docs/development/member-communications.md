@@ -15,12 +15,32 @@
 | `POST /api/v1/me/inbox/read-all` `{}` 或 `{scope:"notifications"}` | `{notifications_updated, direct_messages_updated, channels_updated}`；省略 scope 保留舊行為；通知鈴傳 `scope:"notifications"` 只標通知，聊天更新數為 0 |
 | `GET /api/v1/me/conversations` | `{items:[{participant, can_send, last_message, unread_count}], unread_count, next_offset}`，依最後一則訊息排序 |
 | `GET /api/v1/me/conversations/:userId/messages` | `{participant, can_send, items: Message[], unread_count, next_offset}`；還沒對話時回空陣列，可直接開始撰寫 |
+| `GET /api/v1/me/conversations/:userId/receipts?message_ids=<UUID,...>` | `{items:[{message_id,read_at}]}`；一次 1–50 個不重複 UUID，只查本人傳給此對象的確切已讀狀態，不回正文、不標已讀 |
 | `POST /api/v1/me/conversations/:userId/messages` `{body}` | `201 Message` |
 | `POST /api/v1/me/conversations/:userId/read` `{}` 或 `{through_message_id}` | `{user_id, read_at, updated_count}`；只標對方傳給自己的未讀訊息，有邊界時只標到該則 |
 | `POST /api/v1/me/conversations/:userId/messages/:messageId/retract` `{}` | `{message_id, retracted_at}`；只有傳送者可收回（#398） |
 | `POST /api/v1/me/channels/:kind/:key/messages/:messageId/retract` `{}` | `{message_id, retracted_at}`；只有傳送者、且仍是該頻道成員可收回 |
 
 DTO 定義在 `modules/member-communications/types.ts`。時間是 ISO 字串；`avatar_url` 只在對方目前可見且有頭像時給既有的 `/api/v1/members/:id/avatar?v=` 路徑。回應不含 email、聯絡方式或任何 token。
+
+私訊歷史的新增選填欄位 `receipt_lookup:"ids-v1"` 表示同一伺服器提供有界已讀查詢。
+新版前端先採用最新頁已包含的回條，再以每批最多 50 個已載入、尚未確認已讀的本人
+訊息 ID 查詢其餘回條；不再為了一則較早回條逐頁下載中間正文。舊伺服器沒有此欄位時，
+仍走原訊息分頁；已宣告支援後的 404、撤權或讀取失敗不會悄悄降級。舊前端仍可使用
+既有歷史路由。這是來源相容性設計，不表示已部署或完成混版環境驗收。
+
+`message_ids` 僅能出現一次，UUID 大小寫正規化後不可重複，未知參數、空值、格式錯誤
+或超過 50 個回 422。查詢沿用歷史的會員／session 鎖、REPEATABLE READ 快照、同社群
+對象規則與提交前 session 真實時鐘檢查；封鎖或不可聯絡對象的既有歷史仍可讀。
+任何 ID 不屬於本人傳給指定對象的訊息時，整批回通用 404，不回局部資料，也不區分
+不存在、其他對象或收到的訊息。回應為 `private, no-store`，只投影既有 `read_at`；
+不依較新訊息、時間戳或 cursor 推論較早訊息已讀，晚提交的訊息仍可能是 null。
+
+每批結果必須完整且只含所要求的 ID；全部成功且仍是同一對象／世代才一次套用。
+已知收回的訊息不要求回條。收回計數或舊時間精度變動仍先走原本完整歷史刷新，
+包含引用內容；回條查詢不回傳或消耗新的收回 revision。查詢期間才提交的收回，
+仍由下一次既有 activity 核對觸發完整刷新，不承諾即時撤回已顯示的內容。
+每 8 秒回條核對、activity 退避、較早分頁等待、草稿及所有 POST 語意均不變。
 
 私訊 `Message.created_at` 在歷史分頁、對話的 `last_message`、搜尋、送出及同 key
 重播讀回中，統一直接投影 PostgreSQL 的 UTC 六位微秒時間（#783），不經
@@ -56,7 +76,7 @@ PostgreSQL 仍可能在等待該列之前就算好 expression。`COALESCE` 保�
 
 路由仍掛在共用的 session、Origin、CSRF 與加入資格 middleware 之後，但服務函式不信任傳進來的 `Actor`：直接呼叫、或驗證後才被撤銷的請求，也會在服務層重新以資料庫目前狀態判斷。
 
-- **讀取**（`listNotifications`、`listConversations`、`conversationMessages`、`conversationActivity`）：在 `BEGIN ISOLATION LEVEL REPEATABLE READ` 交易的第一步先 `FOR SHARE` 鎖會員列（`user_id`＋`community_id`＋`active`），再 `FOR SHARE` 鎖 session 列（未撤銷、未過期），順序與 `command()` 相同（先 users 再 sessions，不反向）。停用、跨社群、撤銷或過期回 `401 session_expired`；加入資格改由剛鎖住的會員列判斷，未完成目前加入資格回 `403 onboarding_required`。計數與分頁仍在同一快照內，GET 不寫任何領域資料。因為 `FOR SHARE` 不能在 `READ ONLY` 交易執行，所以拿掉了 `READ ONLY`，快照不變。
+- **讀取**（`listNotifications`、`listConversations`、`conversationMessages`、`conversationReceipts`、`conversationActivity`）：在 `BEGIN ISOLATION LEVEL REPEATABLE READ` 交易的第一步先 `FOR SHARE` 鎖會員列（`user_id`＋`community_id`＋`active`），再 `FOR SHARE` 鎖 session 列（未撤銷、未過期），順序與 `command()` 相同（先 users 再 sessions，不反向）。停用、跨社群、撤銷或過期回 `401 session_expired`；加入資格改由剛鎖住的會員列判斷，未完成目前加入資格回 `403 onboarding_required`。計數與分頁仍在同一快照內，GET 不寫任何領域資料。因為 `FOR SHARE` 不能在 `READ ONLY` 交易執行，所以拿掉了 `READ ONLY`，快照不變。
 - **與撤銷同時發生**：讀取若先拿到鎖，會排在撤銷之前完成（撤銷等它提交）。若撤銷已提交或先拿到鎖，讀取等待後，快照看到的是舊列而 PostgreSQL 回 `40001`；整個讀取以新交易重跑（最多 3 次，只限這三個讀取），重跑時看到撤銷而拒絕。不會回傳內容，也不會把原始 `40001` 丟出；3 次都衝突時回 `503 communications_busy`。
 - **指令**（`markNotificationRead`、`markConversationRead`、`sendDirectMessage`）：`command()` 已先鎖會員列、再鎖 session 列；授權 callback 在同一交易內用目前會員列重新確認加入資格，之後才查 receipt。私訊傳送先取得雙方無序 pair advisory lock，再鎖收件者並確認可聯絡；等待 pair 或收據後重新核對 session 真實時鐘、加入資格與聯絡限制。加入資格重設或封鎖已生效後，舊 key 也不能繞過現況授權。
 - 對方停用、未完成加入或任一方封鎖時，自己仍能讀取既有對話與標已讀（只檢查「自己」的資格）；封鎖不刪除歷史。
@@ -236,7 +256,7 @@ node --import tsx --test --test-concurrency=1 tests/runtime/member-blocking.test
 
 ## 目前限制
 
-- 沒有即時推送。前端對可見、選定的對話保留每秒 timer tick，但連續無變化的輕量 activity 讀取逐步放慢（1、1、2、3、5 秒，上限 5 秒）。偵測變化、本人送出、切換對話、輸入、手動重讀、focus／恢復可見／online 都重設閒置間隔；既有失敗退避優先，隱藏分頁不輪詢。待確認的已載入私訊 outgoing receipts 另每 8 秒以原授權訊息分頁核對，保留手動重讀。詳見[訊息介面](member-settings-messages.md)；這些週期性核對不會自動標已讀。
+- 沒有即時推送。前端對可見、選定的對話保留每秒 timer tick，但連續無變化的輕量 activity 讀取逐步放慢（1、1、2、3、5 秒，上限 5 秒）。偵測變化、本人送出、切換對話、輸入、手動重讀、focus／恢復可見／online 都重設閒置間隔；既有失敗退避優先，隱藏分頁不輪詢。待確認的已載入私訊 outgoing receipts 另每 8 秒以有界回條查詢核對（舊伺服器仍走原授權訊息分頁），保留手動重讀。詳見[訊息介面](member-settings-messages.md)；這些週期性核對不會自動標已讀。
 - 尚未提供檢舉、刪除或編輯訊息；也沒有通知「全部標為已讀」。獨立封鎖候選的預設 OFF 與部署邊界見上節，不代表檢舉／政策已完成。
 - 會員因退出公會而自動解除的專家或公會長身分不發通知，只有管理員操作與提名確認會發。
 - 分頁使用 offset；有新訊息寫入時，翻頁可能看到重複或跳過的項目，前端應以 id 去重。

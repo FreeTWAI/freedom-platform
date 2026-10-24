@@ -179,3 +179,74 @@ test('a superseded quiet response still in flight cannot overlap queued paging',
   await expect(pending(page)).toBeDisabled();expect(watch.requests).toEqual([0,0]);
   first.release();await allMessages(page,ids);expect(watch.requests).toEqual([0,0,20]);
 });
+
+for(const advertised of [true,false])test(`one pending receipt in 200 loaded messages uses ${advertised?'the bounded lookup':'legacy history on an older server'}`,async({browser,baseURL},info)=>{
+  const ids=await history(1,200),ordered=await orderedMessages(),oldest=ordered[0];
+  await db.query('UPDATE member_direct_messages SET read_at=NULL WHERE message_id=$1',[oldest]);
+  const page=await member(browser,baseURL!),root=`/api/v1/me/conversations/${accounts[1].id}`,historyReads:number[]=[],receiptReads:string[][]=[];
+  await page.route(url=>url.pathname===root+'/messages',async route=>{
+    const response=await route.fetch(),body=await response.json();
+    if(!advertised)delete body.receipt_lookup;
+    historyReads.push(Number(new URL(route.request().url()).searchParams.get('offset')));
+    await route.fulfill({response,json:body});
+  });
+  page.on('request',request=>{const url=new URL(request.url());if(request.method()==='GET'&&url.pathname===root+'/receipts')receiptReads.push((url.searchParams.get('message_ids')??'').split(','));});
+  const panel=await openDirect(page);
+  // Pause only after the genuine login and first thread render, not during initial Suspense.
+  await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  for(let count=40;count<=200;count+=20){await older(page).click();await expect(panel.locator('.messages-bubbles li')).toHaveCount(count);}
+  await allMessages(page,ids);const draft=panel.locator('.messages-compose textarea');await draft.fill('回條核對保留草稿');
+  const historyBefore=historyReads.length,receiptBefore=receiptReads.length;
+  const completedRead=page.waitForResponse(response=>{const url=new URL(response.url());return advertised?url.pathname===root+'/receipts':url.pathname===root+'/messages'&&url.searchParams.get('offset')==='180';});
+  await reread(page).click();await (await completedRead).finished();await expect(reread(page)).toHaveAttribute('aria-disabled','false');
+  const observedHistory=historyReads.slice(historyBefore),observedReceipts=receiptReads.slice(receiptBefore);
+  expect(observedHistory).toEqual(advertised?[0]:Array.from({length:10},(_,i)=>i*20));
+  expect(observedReceipts).toEqual(advertised?[[oldest]]:[]);
+  await expect(panel.locator(`[data-message-id="${oldest}"]`)).toContainText('已送出');
+  await expect(panel.locator(`[data-message-id="${oldest}"]`)).not.toContainText('對方已讀');
+  await db.query('UPDATE member_direct_messages SET read_at=clock_timestamp() WHERE message_id=$1',[oldest]);
+  await reread(page).click();await expect(panel.locator(`[data-message-id="${oldest}"]`)).toContainText('對方已讀');
+  await expect(draft).toHaveValue('回條核對保留草稿');await allMessages(page,ids);
+  await info.attach('receipt-request-counts',{body:JSON.stringify({loaded:200,pending_outgoing:1,advertised,history_gets:observedHistory.length,receipt_gets:observedReceipts.length,history_offsets:observedHistory,receipt_ids:observedReceipts,scope:'isolated real API; manual refresh; not production latency'}),contentType:'application/json'});
+});
+
+test('a held receipt lookup cannot apply its late failure to a newly selected peer',async({browser,baseURL})=>{
+  await history();const oldest=(await orderedMessages())[0];await db.query('UPDATE member_direct_messages SET read_at=NULL WHERE message_id=$1',[oldest]);
+  await history(1,1,2);
+  const page=await member(browser,baseURL!),panel=await openDirect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  await older(page).click();await expect(panel.locator('.messages-bubbles li')).toHaveCount(25);
+  const entered=signal(),released=signal(),finished=signal();releaseHeld.push(released.resolve);
+  await page.route(url=>url.pathname===`/api/v1/me/conversations/${accounts[1].id}/receipts`,async route=>{
+    entered.resolve();await released.promise;
+    try{await route.fulfill({status:404,json:{code:'message_not_found',message:'synthetic late receipt failure'}});}finally{finished.resolve();}
+  });
+  await reread(page).click();await entered.promise;
+  await openDirect(page,2);await expect(panel.locator('.messages-bubbles li')).toHaveCount(1);
+  const draft=panel.locator('.messages-compose textarea');await draft.fill('另一位夥伴的草稿');
+  const completedRead=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/v1/me/conversations/${accounts[1].id}/receipts`);
+  released.resolve();await finished.promise;await (await completedRead).finished();await page.clock.runFor(1);
+  await expect(panel.locator('.messages-thread')).not.toContainText('synthetic late receipt failure');
+  await expect(panel.locator('.messages-bubbles li')).toHaveCount(1);await expect(draft).toHaveValue('另一位夥伴的草稿');
+});
+
+test('retraction during a receipt lookup still refreshes older content and its quote on the next reread',async({browser,baseURL})=>{
+  const ids=await history(),original=(await orderedMessages())[0],reply=randomUUID(),privateBody='合成：回條讀取期間收回的內容';
+  await db.query('UPDATE member_direct_messages SET body=$2,read_at=NULL WHERE message_id=$1',[original,privateBody]);
+  await db.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,reply_to_message_id,created_at,read_at)
+    VALUES($1,$2,$3,$4,'合成：引用仍保留',$5,timestamptz '2026-09-01T00:00:01.500Z',now())`,[reply,DEMO_COMMUNITY,accounts[1].id,accounts[0].id,original]);ids.push(reply);
+  const page=await member(browser,baseURL!),panel=await openDirect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  await older(page).click();await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText(privateBody);
+  const entered=signal(),released=signal(),finished=signal();releaseHeld.push(released.resolve);
+  await page.route(url=>url.pathname===`/api/v1/me/conversations/${accounts[1].id}/receipts`,async route=>{
+    const response=await route.fetch();entered.resolve();await released.promise;
+    try{await route.fulfill({response});}finally{finished.resolve();}
+  });
+  await reread(page).click();await entered.promise;
+  // Commit a synthetic concurrent retraction after the old receipt snapshot was captured.
+  await db.query('UPDATE member_direct_messages SET retracted_at=clock_timestamp() WHERE message_id=$1',[original]);
+  released.resolve();await finished.promise;await expect(reread(page)).toHaveAttribute('aria-disabled','false');
+  await reread(page).click();
+  await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('你已收回這則訊息。');
+  await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText('合成：引用仍保留');
+  await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);await allMessages(page,ids);
+});

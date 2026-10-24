@@ -10,7 +10,7 @@ import {createApp} from '../../apps/platform-api/src/app.js';
 import {login,type Actor} from '../../modules/identity-membership/service.js';
 import {notifyMember,type NotifyMemberInput} from '../../modules/member-communications/notifications.js';
 import {
-  listNotifications,markNotificationRead,listConversations,conversationMessages,conversationActivity,sendDirectMessage,markConversationRead,
+  listNotifications,markNotificationRead,listConversations,conversationMessages,conversationReceipts,conversationActivity,sendDirectMessage,markConversationRead,
 } from '../../modules/member-communications/service.js';
 
 const origin='http://127.0.0.1:4310',databaseUrl=process.env.TEST_DATABASE_URL??LOCAL_DATABASE_URL;
@@ -557,6 +557,7 @@ const privateReads=(actor:Actor)=>({
   listConversations:()=>listConversations(pool,actor,{}),
   conversationMessages:()=>conversationMessages(pool,actor,B,{}),
   conversationActivity:()=>conversationActivity(pool,actor,B,{}),
+  conversationReceipts:()=>conversationReceipts(pool,actor,B,{message_ids:"00000000-0000-4000-8000-000000000099"}),
 });
 async function rejectsWith(run:()=>Promise<unknown>,status:number,code:string,label:string){
   let resolved=false;
@@ -660,4 +661,95 @@ test('private reads that wait behind a committing revocation retry on a fresh sn
     }
   }
   const a=await actorOf(DEMO_USERS[0].email);assert.equal((await listConversations(pool,a,{})).items.length,1,'a fresh valid session reads again');
+});
+
+// Bounded, body-free receipt reads are GETs, not mark-read commands.
+const receiptPath=(peer:string,ids:string[])=>`/me/conversations/${peer}/receipts?${new URLSearchParams({message_ids:ids.join(',')})}`;
+test('bounded receipt HTTP lookup returns exact outgoing timestamps without bodies or writes',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),ids=Array.from({length:50},()=>randomUUID());
+  await pool.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,read_at)
+    SELECT id,$2,$3,$4,'synthetic receipt private body',CASE WHEN ordinal=1 THEN NULL ELSE timestamptz '2026-10-04T06:00:00Z' END
+    FROM unnest($1::uuid[]) WITH ORDINALITY AS fixture(id,ordinal)`,[ids,DEMO_COMMUNITY,A,B]);
+  const before={messages:await count('member_direct_messages'),read:await count('member_direct_messages WHERE read_at IS NOT NULL'),commands:await count('command_receipts')};
+  const result=await request(receiptPath(B.toUpperCase(),ids.map(id=>id.toUpperCase())),a);
+  assert.equal(result.status,200,JSON.stringify(result.data));
+  assert.deepEqual(result.data,{items:ids.map((message_id,i)=>({message_id,read_at:i===0?null:'2026-10-04T06:00:00.000Z'}))});
+  assert.ok(!JSON.stringify(result.data).includes('private body'));noPrivate(result.data);
+  assert.deepEqual({messages:await count('member_direct_messages'),read:await count('member_direct_messages WHERE read_at IS NOT NULL'),commands:await count('command_receipts')},before);
+  const latest=await request(`/me/conversations/${B}/messages?limit=1`,a);assert.equal(latest.data.receipt_lookup,'ids-v1');
+  const response=await app.request(origin+'/api/v1'+receiptPath(B,[ids[0]]),{headers:{Origin:origin,Cookie:a.cookie}});
+  assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+});
+
+test('bounded receipt lookup rejects malformed and oversized queries before disclosure',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),id=randomUUID(),root=`/me/conversations/${B}/receipts`;
+  for(const query of ['', '?message_ids=', '?message_ids=not-a-uuid',`?message_ids=${id},${id.toUpperCase()}`,
+    `?message_ids=${Array.from({length:51},()=>randomUUID()).join(',')}`,`?message_ids=${id}&actor=${C}`,`?message_ids=${id},`,`?message_ids=${id}&message_ids=${randomUUID()}`]){
+    const result=await request(root+query,a);assert.equal(result.status,422,query);assert.ok(!('items' in result.data));
+  }
+  assert.equal((await request(receiptPath(A,[id]),a)).status,422);
+  assert.equal((await request(receiptPath('invalid-peer',[id]),a)).status,422);
+  assert.equal((await request(receiptPath(B,[id]))).status,401);
+});
+
+test('bounded receipt lookup never discloses incoming, foreign-pair, unknown or cross-community IDs',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),own=randomUUID(),incoming=randomUUID(),other=randomUUID();
+  await pool.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body)
+    VALUES($1,$4,$5,$6,'own'),($2,$4,$6,$5,'incoming'),($3,$4,$5,$7,'other pair')`,[own,incoming,other,DEMO_COMMUNITY,A,B,C]);
+  const outsider=await extraMember('receipt-outsider',randomUUID());
+  for(const [peer,ids] of [[B,[own,incoming]],[B,[own,other]],[B,[own,randomUUID()]],[C,[own]],[outsider.id,[own]],[randomUUID(),[own]]] as [string,string[]][]){
+    const result=await request(receiptPath(peer,ids),a);assert.equal(result.status,404);assert.ok(!('items' in result.data));assert.ok(!JSON.stringify(result.data).includes(own));
+  }
+  assert.equal((await request(receiptPath(B,[own]),a)).status,200);
+});
+
+test('bounded receipts preserve historical access for blocked or unavailable peers and include no withdrawn content',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),id=randomUUID();
+  await pool.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,retracted_at)
+    VALUES($1,$2,$3,$4,'withdrawn private body',clock_timestamp())`,[id,DEMO_COMMUNITY,A,B]);
+  for(const [owner,target] of [[A,B],[B,A]]){
+    await pool.query("INSERT INTO member_interaction_blocks(community_id,owner_ref,target_ref,state) VALUES($1,$2,$3,'active')",[DEMO_COMMUNITY,owner,target]);
+    const result=await request(receiptPath(B,[id]),a);assert.equal(result.status,200);assert.deepEqual(result.data,{items:[{message_id:id,read_at:null}]});
+  }
+  await pool.query('UPDATE users SET active=false WHERE user_id=$1',[B]);
+  assert.equal((await request(receiptPath(B,[id]),a)).status,200);
+  await pool.query('UPDATE users SET active=true,onboarding_required=true,onboarding_completed_at=NULL WHERE user_id=$1',[B]);
+  assert.equal((await request(receiptPath(B,[id]),a)).status,200);
+});
+
+test('bounded receipts never infer a late-committing older message was read with the newer sentinel',async()=>{
+  const [a,b]=await signInAll(),older=randomUUID(),newer=randomUUID(),late=await pool.connect();
+  try{
+    await late.query('BEGIN');
+    await late.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,created_at)
+      VALUES($1,$2,$3,$4,'late older','2026-10-04T00:00:00Z')`,[older,DEMO_COMMUNITY,A,B]);
+    await pool.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,created_at)
+      VALUES($1,$2,$3,$4,'newer','2026-10-04T00:01:00Z')`,[newer,DEMO_COMMUNITY,A,B]);
+    const read=await request(`/me/conversations/${A}/read`,b,{through_message_id:newer});assert.equal(read.status,200);assert.equal(read.data.updated_count,1);
+    await late.query('COMMIT');
+    const result=await request(receiptPath(B,[older,newer]),a);assert.equal(result.status,200);
+    assert.deepEqual(result.data,{items:[{message_id:older,read_at:null},{message_id:newer,read_at:read.data.read_at}]});
+    await late.query('BEGIN');await late.query('UPDATE member_direct_messages SET read_at=clock_timestamp() WHERE message_id=$1',[older]);
+    assert.equal((await request(receiptPath(B,[older]),a)).data.items[0].read_at,null,'uncommitted receipts stay invisible');
+    await late.query('COMMIT');
+    const stored=(await pool.query('SELECT read_at FROM member_direct_messages WHERE message_id=$1',[older])).rows[0].read_at.toISOString();
+    assert.equal((await request(receiptPath(B,[older]),a)).data.items[0].read_at,stored);
+  }finally{await late.query('ROLLBACK');late.release();}
+});
+
+test('bounded receipt service rejects natural session expiry after a real domain-query wait',async()=>{
+  const actor=await actorOf(DEMO_USERS[0].email),id=randomUUID(),blocker=await pool.connect();let pending:Promise<unknown>|undefined;
+  await pool.query('INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body) VALUES($1,$2,$3,$4,$5)',[id,DEMO_COMMUNITY,A,B,'synthetic expiry']);
+  try{
+    await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '3 seconds' WHERE token_hash=$1",[actor.session_hash]);
+    await blocker.query('BEGIN');await blocker.query('LOCK TABLE member_direct_messages IN ACCESS EXCLUSIVE MODE');
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    pending=conversationReceipts(pool,actor,B,{message_ids:id});pending.catch(()=>{});
+    await waitUntilBlocked(pid,1,[pending]);
+    assert.equal((await pool.query('SELECT expires_at>clock_timestamp() AS active FROM sessions WHERE token_hash=$1',[actor.session_hash])).rows[0].active,true);
+    await pool.query('SELECT pg_sleep(greatest(0,extract(epoch FROM expires_at-clock_timestamp())::double precision)+0.04) FROM sessions WHERE token_hash=$1',[actor.session_hash]);
+    assert.equal((await pool.query('SELECT expires_at<=clock_timestamp() AS expired FROM sessions WHERE token_hash=$1',[actor.session_hash])).rows[0].expired,true);
+    await blocker.query('COMMIT');
+    await rejectsWith(()=>pending!,401,'session_expired','receipt lookup after SQL wait');
+  }finally{await blocker.query('ROLLBACK');blocker.release();if(pending)await pending.catch(()=>{});}
 });
