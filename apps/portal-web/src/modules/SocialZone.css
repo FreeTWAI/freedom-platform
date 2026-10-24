@@ -9,7 +9,18 @@
 .social-feed-control:focus-visible,.social-post-menu>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .social-view-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .social-view-options .btn{width:100%;min-height:44px;white-space:normal}
-.social-link-entry{min-height:44px;width:auto;border-top:1px solid var(--line)}
+.social-link-entry{display:inline-flex;align-items:center;gap:6px;min-height:44px;width:auto;max-width:100%;white-space:normal;text-align:start}
+.social-composer-entry-actions{display:flex;justify-content:flex-start;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.social-composer-entry-actions .social-link-entry{border-color:transparent;padding:6px 8px;font-size:.875rem}
+.social-feed-navigation{display:flex;gap:4px;min-width:0;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--bg-elev)}
+.social-feed-category{flex:1;min-width:0;min-height:44px;padding:8px;border:0;border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:.875rem;cursor:pointer;overflow-wrap:anywhere}
+.social-feed-category[aria-pressed="true"]{background:var(--green-soft);color:var(--ink);font-weight:700;box-shadow:inset 0 -3px var(--green)}
+.social-feed-category:hover{background:var(--green-soft);color:var(--ink)}
+.social-feed-category:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.social-feed-more{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:auto;padding:6px 8px;font-size:.875rem}
+.social-feed-more>span:first-child{font-size:1.5rem;line-height:1}
+.social-feed-heading{flex-wrap:wrap}
+.social-feed-heading>div{flex-wrap:wrap;max-width:100%}
 .social-feedback{margin:0;color:var(--blue-ink);font-size:.875rem;padding-inline:4px}
 .social-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.8rem}
 .social-card{min-width:0;overflow:hidden;padding:0}
