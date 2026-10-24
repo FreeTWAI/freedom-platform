@@ -1,6 +1,8 @@
 # 會員通知、閒聊頻道與站內私訊
 
-會員右下角訊息泡泡裡的閒聊頻道與私訊，以及右上角鈴鐺裡的通知，資料存放在中央 PostgreSQL（migration 035、037），由 `modules/member-communications/` 負責。這裡只有站內紀錄：不寄 email、不推播、不連外部服務，也不回填歷史事件。四個分區與完整路徑見 [會員設定、待辦與訊息](member-settings-messages.md)。
+會員右下角訊息泡泡開啟的聊天面板承接閒聊頻道與私訊，右上角鈴鐺承接通知；資料存放在中央 PostgreSQL（migration 035、037），由 `modules/member-communications/` 負責。這裡只有站內紀錄：不寄 email、不推播、不連外部服務，也不回填歷史事件。聊天面板在桌面為可調寬高的浮窗，760px 以下為配合 visualViewport、安全區、離線狀態列與鍵盤的對話框；手機開啟時隱藏泡泡，以外層「收合聊天室」按鈕或上一頁收合。四個分區與完整操作契約見 [會員設定、待辦與訊息](member-settings-messages.md)。
+
+`#messages` 與 `#messages?guild=<key>` 的冷啟動及站內 hash 導覽都進入同一聊天面板，頻道 key 不授予存取權。聊天的 Back／Forward 步驟收合或重開面板，保留目前登入且未重載頁面中的草稿與原待確認操作；聊天只在瀏覽器 history state 記錄開關布林值，不寫入私訊 ID 或正文。離線與重新連線也不自動傳送、重試或把未知結果改成成功，既有資格核對、command receipt 與離開守衛保留。
 
 ## API（全部需要會員登入，並完成目前加入資格）
 
@@ -301,12 +303,13 @@ pending 正文，保留其他草稿及離開守衛。重新取得存取權後仍
 保留真實瀏覽器／DB 的驗收入口，不能用 pure 測試取代 browser／HTTP／DB 證據。
 
 
-訊息頁與 Console 分別用 `useChatLeaveGuards` 聚合私訊、公會、小隊與世界四個子元件。
+會員聊天面板與管理頁 Console 分別用 `useChatLeaveGuards` 聚合私訊、公會、小隊與世界四個子元件。
 每個子元件只登記／移除自己的守衛，其他子元件有 pending 時仍阻擋離開；頻道的
 layout 註冊與 beforeunload 直接讀同步 held ref，不等 React 下一次 render。既有
 App 的頁面導覽／hash／登出，以及 Console 的 session-end 檢查沿用同一父守衛。
-只保留普通文字／圖片／回覆草稿時不提示離開。隱藏分區、收合 Console、切換房間
-保留原掛載；頻道列表另有「回到待確認訊息」入口，原房間被移出可用列表也能返回。
+只保留普通文字／圖片／回覆草稿時不提示離開。隱藏分區、收合聊天面板或 Console、
+切換房間保留原掛載；聊天的上一頁／下一頁也不清除 pending 或解除登出／unload 守衛。
+頻道列表另有「回到待確認訊息」入口，原房間被移出可用列表也能返回。
 
 撤權後仍不顯示 cached history／pending 正文；「重新檢查頻道存取」只呼叫既有 GET，
 成功恢復可讀歷史後才開放手動重試原 key，不自動送出。若存取永久撤銷，原結果

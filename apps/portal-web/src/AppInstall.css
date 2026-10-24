@@ -21,7 +21,6 @@ html[data-device-offline=true]{--chat-safe-top:0px}
   .login-entry-tools .language-picker label{flex-wrap:nowrap}
   .login-entry-tools .language-picker select{flex:1;min-width:0;width:100%;font-size:16px;padding-right:16px}
   html .app-frame.social-layout .community-header{padding-top:calc(10px + var(--chat-safe-top));padding-left:max(12px,var(--app-safe-left));padding-right:max(12px,var(--app-safe-right))}
-  html .app-frame.social-layout:has(.messages-hub>[role=tabpanel]:not([hidden]) .messages-thread[data-chat-open=true]){top:calc(var(--chat-viewport-offset,0px) + var(--connection-status-height,0px));height:calc(var(--chat-viewport-height,100dvh) - var(--connection-status-height,0px))}
   html .messages-hub .messages-thread[data-chat-open=true]>.chat-header{padding-top:calc(10px + var(--chat-safe-top));padding-left:max(8px,var(--app-safe-left));padding-right:calc(60px + var(--app-safe-right))}
   html .messages-hub .messages-thread[data-chat-open=true]>.chat-header:has(.chat-search-trigger){padding-right:calc(110px + var(--app-safe-right))}
   html .messages-hub .messages-thread[data-chat-open=true] .chat-search-trigger{top:calc(10px + var(--chat-safe-top));right:calc(60px + var(--app-safe-right))}
