@@ -27624,8 +27624,8 @@
     },
     {
       "path": "tests/worker/workerd.test.ts",
-      "bytes": 26098,
-      "sha256": "985835151d482ef16dc2f503070eef8f05d15b132a9408a5905bc7fc39c210db"
+      "bytes": 26103,
+      "sha256": "b382c7b7d52b49796d685303c52530d110ac07686e716df3c25037ac32163a19"
     },
     {
       "path": "tests/worker/broker-fixtures/bundle-modules.ts",

@@ -128,7 +128,7 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
   const security = await fetch('/guilds');
   const homeSecurity = await fetch('/');
   const baseCsp = security.headers.get('content-security-policy') ?? '';
-  assert.ok(!baseCsp.includes('https://aisns.evitina.tw'));
+  assert.doesNotMatch(baseCsp, /(?:^|;)\s*frame-src(?:\s|;|$)/);
   assert.equal(homeSecurity.headers.get('content-security-policy'),
     baseCsp.replace("; base-uri", "; frame-src 'self' https://aisns.evitina.tw; base-uri"));
   const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
