@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PortalClient } from '../api';
 import type { TabId } from '../types';
 import { SkillBookCard, type IntroBook } from './SkillBookIntro';
@@ -46,6 +46,7 @@ export function matchesSkillSearch(term: string, values: (string | null | undefi
 }
 
 export function RepositoryLibrary({ client, ids, excludeIds, access, title = '社群技能書', compact = false, shelf, headingLevel }: { client: PortalClient; ids?: string[]; excludeIds?:string[]; access?:'unlocked'|'locked'; title?: string; compact?: boolean; shelf?: 'guild'; headingLevel?: 2|3|4 }) {
+  const searchInput=useRef<HTMLInputElement>(null);
   const [catalog, setCatalog] = useState<CommunityCatalog | null>(null), [error, setError] = useState('');
   const [search,setSearch]=useState(''),[category,setCategory]=useState(''),[reload,setReload]=useState(0),[view,setView]=useState<SkillDiscoveryView>('all');
   const discovery=useSkillDiscovery();
@@ -76,7 +77,7 @@ export function RepositoryLibrary({ client, ids, excludeIds, access, title = '�
     {error && <div role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={()=>setReload(value=>value+1)}>重新載入技能書</button></div>}
     {!catalog && !error && <p role="status">正在載入技能書…</p>}
     {catalog&&available.length===0&&<p className="muted">目前沒有可顯示的技能書。</p>}
-    {catalog&&available.length>0&&<><SkillDiscoveryFilters value={view} onChange={setView} official={shelf!=='guild'}/><div className="skill-library-filters"><label className="field">搜尋技能書<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：貼文、商店、剪輯、找方向…"/></label><label className="field">依工坊用途篩選<select value={category} onChange={event=>setCategory(event.target.value)}><option value="">全部用途</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label></div><p className="skill-library-count" role="status">顯示 {books.length} / {available.length} 本技能書</p></>}
+    {catalog&&available.length>0&&<><SkillDiscoveryFilters value={view} onChange={setView} official={shelf!=='guild'}/><div className="skill-library-filters"><label className="field">搜尋技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：貼文、商店、剪輯、找方向…"/></label><label className="field">依工坊用途篩選<select value={category} onChange={event=>setCategory(event.target.value)}><option value="">全部用途</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>{(search||category||view!=='all')&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setView('all');searchInput.current?.focus();}}>清除篩選</button>}</div><p className="skill-library-count" role="status">顯示 {books.length} / {available.length} 本技能書</p></>}
     <div className="card-grid community-book-grid">{books.map(book=><SkillBookCard key={book.id} book={book} className="community-book" access={access} headingLevel={headingLevel}/>)}</div>
     {catalog&&available.length>0&&!books.length&&<p className="muted">{view!=='all'&&discovery.error?'請重讀徽章與榜單，或先查看全部技能。':view!=='all'&&discovery.loading&&!discovery.data?'正在載入技能書…':(view==='week'||view==='month')&&!discovered.length?'目前還沒有上榜的技能書。連結 GitHub，Star 你喜歡的技能。':view==='today'&&!discovered.length?'今天尚未收錄新技能。':view==='official'&&!discovered.length?'目前尚未指定官方公會技能。':'沒有符合的技能書。試試另一個關鍵字或用途。'}</p>}
   </section>;
