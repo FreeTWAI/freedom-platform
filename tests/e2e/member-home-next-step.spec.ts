@@ -48,22 +48,77 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   }
 }
 
-for (const width of [1440, 390]) {
-  test(`journal entry opens the native platform journal at ${width}px`, async ({page}) => {
-    await page.setViewportSize({width,height:900});
-    await login(page,false);await openHomeGuide(page);
-    const entry=page.getByRole('region',{name:'共創日誌',exact:true});
+for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932],[390,420]]) {
+  test(`journal iframe keeps reading inside the homepage at ${width}x${height}`, async ({ page, context }) => {
+    await page.setViewportSize({width, height});
+    const outbound: {authorization: string | undefined; cookie: string | undefined; referer: string | undefined}[] = [];
+    await context.route('https://aisns.evitina.tw/**', async route => {
+      const headers = route.request().headers();
+      outbound.push({authorization: headers.authorization, cookie: headers.cookie, referer: headers.referer});
+      const article = new URL(route.request().url()).pathname !== '/';
+      await route.fulfill({contentType: 'text/html; charset=utf-8', headers: {'Referrer-Policy': 'no-referrer'}, body: article
+        ? `<h1>測試日誌文章</h1><button onclick="top.location.href='https://escape.invalid/'">嘗試離開主站</button>`
+        : '<h1>合成共創日誌</h1><form onsubmit="event.preventDefault();document.getElementById(&quot;search-result&quot;).hidden=false"><input aria-label="搜尋日誌"><button>搜尋測試</button></form><p id="search-result" hidden>合成搜尋結果</p><a href="/journal/2026-10-22">閱讀測試文章</a><script>addEventListener("keydown", e => {if(e.key === "Escape") parent.postMessage("freedom-journal:close", "*")})</script>'});
+    });
+    await login(page, false);
+    await openHomeGuide(page);
+    const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
-    const destination=resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
-    if(destination){
-      const link=entry.getByRole('link',{name:'閱讀共創誌',exact:true});
-      await expect(link).toHaveAttribute('href','/journal');
-      await link.click();await expect(page).toHaveURL(/\/journal$/);
-      await expect(page.getByRole('heading',{name:'還沒有日誌。'})).toBeVisible();
-      await expect(page.locator('iframe')).toHaveCount(0);
-    }else await expect(entry.getByRole('status')).toHaveText('日誌尚未公開');
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await page.screenshot({path:`${shots}/journal-entry-${width}.png`,fullPage:true});
+    expect(outbound).toHaveLength(0);
+    await expect(entry.locator('iframe')).toHaveCount(0);
+    const url = resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
+    if (url) {
+      const homeUrl = page.url(), pageCount = context.pages().length;
+      const trigger = entry.getByRole('button', {name: '閱讀共創誌', exact: true});
+      await trigger.click();
+      const dialog = page.getByRole('dialog', {name: '共創日誌', exact: true});
+      await expect(dialog).toBeVisible();
+      await page.evaluate(() => window.postMessage('freedom-journal:close', location.origin));
+      await expect(dialog).toBeVisible();
+      const iframe = dialog.locator('iframe');
+      await expect(iframe).toHaveAttribute('src', url);
+      await expect(iframe).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+      await expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
+      const content = page.frameLocator('iframe[title="共創日誌內容"]');
+      await expect(content.getByRole('heading', {name: '合成共創日誌'})).toBeVisible();
+      await content.getByRole('textbox',{name:'搜尋日誌'}).fill('合成');
+      await content.getByRole('button',{name:'搜尋測試',exact:true}).click();
+      await expect(content.getByText('合成搜尋結果',{exact:true})).toBeVisible();
+      await content.getByRole('link', {name: '閱讀測試文章'}).click();
+      await expect(content.getByRole('heading', {name: '測試日誌文章'})).toBeVisible();
+      await content.getByRole('button', {name: '嘗試離開主站'}).click();
+      await expect(page).toHaveURL(homeUrl);
+      expect(context.pages()).toHaveLength(pageCount);
+      expect(outbound).toEqual([
+        {authorization: undefined, cookie: undefined, referer: undefined},
+        {authorization: undefined, cookie: undefined, referer: undefined},
+      ]);
+      const bounds = await dialog.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      expect(bounds!.y).toBeGreaterThanOrEqual(0);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height);
+      await expect(dialog.getByRole('link',{name:'另開共創誌'})).toHaveAttribute('href','https://aisns.evitina.tw/');
+      await expect(dialog.getByRole('link',{name:'另開共創誌'})).toHaveAttribute('rel','noopener noreferrer');
+      await page.screenshot({path: `${shots}/journal-iframe-${width}-${height}.png`});
+      await dialog.getByRole('button', {name: '關閉共創日誌'}).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(entry.locator('iframe')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await expect(content.getByRole('heading', {name: '合成共創日誌'})).toBeVisible();
+      await content.getByRole('link', {name: '閱讀測試文章'}).focus();
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+      await expect(trigger).toBeFocused();
+      await expect(page).toHaveURL(homeUrl);
+    } else {
+      await expect(entry.getByRole('status')).toHaveText('日誌尚未公開');
+      await expect(entry.getByRole('button')).toHaveCount(0);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({path: `${shots}/journal-entry-${width}-${height}.png`, fullPage: true});
   });
 }
 

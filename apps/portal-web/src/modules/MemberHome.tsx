@@ -1,5 +1,5 @@
 import {FirstParticipation} from './FirstParticipation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ModulePanelProps } from './shared';
 import type { TabId } from '../types';
 import { WorkshopIcon } from '../WorkshopIcon';
@@ -17,9 +17,39 @@ import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, resolveHomeJournalUrl, type HomeRefreshReason} from './member-home-loading';
 
-// The independently maintained journal module is hosted by this platform.
+// Open the public aiSNS journal only when the member asks to read it.
 const journalEnv = (import.meta as ImportMeta & {env?: Record<string, string | undefined>}).env;
 const journalUrl = resolveHomeJournalUrl(journalEnv?.VITE_COMMUNITY_JOURNAL_URL);
+
+function HomeJournal() {
+  const [open, setOpen] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), frame = useRef<HTMLIFrameElement>(null), titleId = useId();
+  useEffect(() => {
+    if (open && !dialog.current?.open) dialog.current?.showModal();
+    else if (!open && dialog.current?.open) dialog.current.close();
+  }, [open]);
+  function close() { dialog.current?.close(); setOpen(false); trigger.current?.focus({preventScroll: true}); }
+  useEffect(() => {
+    if (!open || !journalUrl) return;
+    const origin = new URL(journalUrl).origin;
+    function onMessage(event: MessageEvent) {
+      if (event.origin === origin && event.source === frame.current?.contentWindow && event.data === 'freedom-journal:close') close();
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [open]);
+  return <section className="home-journal-entry" aria-label="共創日誌">
+    <h2>共創日誌</h2>
+    <p>閱讀工坊討論整理、開發進展與決策。</p>
+    {journalUrl ? <>
+      <button ref={trigger} type="button" className="btn btn-ghost" aria-haspopup="dialog" onClick={() => setOpen(true)}>閱讀共創誌</button>
+      <dialog ref={dialog} className="home-journal-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}>
+        <header><h2 id={titleId}>共創日誌</h2><a className="btn btn-ghost" href={journalUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">另開共創誌</a><button type="button" className="btn btn-ghost" onClick={close} autoFocus aria-label="關閉共創日誌">關閉</button></header>
+        {open && <iframe ref={frame} title="共創日誌內容" src={journalUrl} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer"/>}
+      </dialog>
+    </> : <p role="status">日誌尚未公開</p>}
+  </section>;
+}
 
 const shortcuts: { id: TabId; title: string }[] = [
   { id: 'messages', title: '開始聊天' },
@@ -220,13 +250,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       </section>
     </nav>
 
-    <section className="home-journal-entry" aria-label="共創日誌">
-      <h2>共創日誌</h2>
-      <p>閱讀工坊討論整理、開發進展與決策。</p>
-      {journalUrl
-        ? <a className="btn btn-ghost" href={journalUrl}>閱讀共創誌</a>
-        : <p role="status">日誌尚未公開</p>}
-    </section>
+    <HomeJournal/>
 
     <section className="card stack" aria-label="離譜日常遊樂場">
       <h2>休息一下，做點離譜的事。</h2>

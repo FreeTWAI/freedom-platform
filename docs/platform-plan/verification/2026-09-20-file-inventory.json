@@ -404,8 +404,8 @@
     },
     {
       "path": "apps/platform-api/src/platform-app.ts",
-      "bytes": 51516,
-      "sha256": "952d5b225073c21e40704e5b976e14dab86f6b95903990811a610b9681e27082"
+      "bytes": 51664,
+      "sha256": "159aab48349fd6f9ad4590f790362fe4f0d623bbf8b2bda93bf14082bc4fc537"
     },
     {
       "path": "apps/platform-api/src/private-ai-path.ts",
@@ -2319,8 +2319,8 @@
     },
     {
       "path": "apps/portal-web/src/SocialLayout.css",
-      "bytes": 17820,
-      "sha256": "cd689f5ca975a8f3a03ef2d9a34f4e3a18032ae92052e0a959b9b90ef1ba942d"
+      "bytes": 18597,
+      "sha256": "2b00406da3cf6883be95588c66e6cf1aebc51ab26821496efdb87e016659f3b5"
     },
     {
       "path": "apps/portal-web/src/WorkshopIcon.tsx",
@@ -3269,8 +3269,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 18695,
-      "sha256": "b20727e76fda7d2383bfe3932f948b0741e2e5dc0b35f8a8c424184aaf0fbd7b"
+      "bytes": 20437,
+      "sha256": "47c0a38f994fe669913bb5d9022f868f86ba936b4d193c3d26c26479816ad5a7"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -3799,8 +3799,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/member-home-loading.ts",
-      "bytes": 6870,
-      "sha256": "5b8d38ec3b16337e579aebbab9457c979eee40245c4e0fcdd9af64c37775a5ba"
+      "bytes": 6933,
+      "sha256": "a17edeb5e34b4920f5419a42ec893896f4841fbc173adffd5ad59d2bf4c0fb5d"
     },
     {
       "path": "apps/portal-web/src/modules/member-inbox.ts",
@@ -14904,8 +14904,8 @@
     },
     {
       "path": "docs/development/community-journal.md",
-      "bytes": 9766,
-      "sha256": "f4321a505e0d1f281a2f5e31a35c75828dd95e5257f2664ea06d7538daa4ed8a"
+      "bytes": 11596,
+      "sha256": "6649f244464ec1df32a4d60b82f22ed00fef18bc3b749cd3a0cea49402b3c476"
     },
     {
       "path": "docs/development/contribution-cooperation.md",
@@ -21649,8 +21649,8 @@
     },
     {
       "path": "modules/platform-host/freedom.module.json",
-      "bytes": 1310,
-      "sha256": "03cf4c996cbc032f6a410e656e73ab58d98b79abd9f9e43bbc456ce13df6a632"
+      "bytes": 1346,
+      "sha256": "a51f33d16a562b9a08d39c6265cb57726997ef62795de33e29ae46931ce2e062"
     },
     {
       "path": "modules/portal-features/README.md",
@@ -24224,8 +24224,8 @@
     },
     {
       "path": "tests/e2e/member-home-next-step.spec.ts",
-      "bytes": 31711,
-      "sha256": "64a81379233027a5275cd6ee270773890606046d28254c511be4453b5fd4821c"
+      "bytes": 35759,
+      "sha256": "3be5706c424b9e3dcda67f12c082aa8210be93c2dfe1b0762fde44d3255321b8"
     },
     {
       "path": "tests/e2e/member-navigation-hierarchy.spec.ts",
@@ -26224,8 +26224,8 @@
     },
     {
       "path": "tests/runtime/member-home-loading.test.ts",
-      "bytes": 14821,
-      "sha256": "846703c1ef973779d57cc559558386e3ac82bf2d2593a70b37daf4529e1f3430"
+      "bytes": 15033,
+      "sha256": "02259d6fe4a08e1f45fa13ede0485b44846a557a9fc28370fedfba0f9dc09940"
     },
     {
       "path": "tests/runtime/member-model-http-adversarial.test.ts",
@@ -26909,13 +26909,13 @@
     },
     {
       "path": "tests/runtime/short-video-embed.test.ts",
-      "bytes": 5952,
-      "sha256": "a9a885f2e241587547ecefcb8085a2e872eb2a3ecffb851a1220f77d1d1a9e4e"
+      "bytes": 6236,
+      "sha256": "aa0647c399d65b92db6aee764d53d0c7683bf5ae416b67f8ae2cb34d201eff1c"
     },
     {
       "path": "tests/runtime/short-video-flag.test.ts",
-      "bytes": 1451,
-      "sha256": "42032e92e279760118c1ce5d7afb2b55526a42153d80f9adb60756b6300c1931"
+      "bytes": 1621,
+      "sha256": "0350f0c38cfefc265f10a344ceed0c19ebc7babc97af6606e2951f5714bca9aa"
     },
     {
       "path": "tests/runtime/showcase-drafts.test.ts",
@@ -27624,8 +27624,8 @@
     },
     {
       "path": "tests/worker/workerd.test.ts",
-      "bytes": 25717,
-      "sha256": "6b9e7ce903c381e49228eb8cacf2c3fa7df3c0755b28a49777742063e4010d77"
+      "bytes": 26103,
+      "sha256": "b382c7b7d52b49796d685303c52530d110ac07686e716df3c25037ac32163a19"
     },
     {
       "path": "tests/worker/broker-fixtures/bundle-modules.ts",
