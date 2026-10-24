@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
@@ -85,7 +86,7 @@ test('home recommends a shared-guild member and guild topic filtering works in a
     const settingsButton=page.getByRole('button',{name:'設定',exact:true});
     for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
       if(await settingsButton.getAttribute('aria-expanded')!=='true')await settingsButton.click();
-      await page.getByRole('menuitemradio',{name,exact:true}).click();
+      await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
     }
     await settingsButton.click();

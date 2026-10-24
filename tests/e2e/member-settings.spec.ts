@@ -5,7 +5,7 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 // Synthetic data only. Messages/notifications follow the root-confirmed DTO in
 // the coordinator contract; they are route fixtures until the backend API lands.
 const me='20000000-0000-4000-8000-000000000001',peerA='20000000-0000-4000-8000-000000000002',peerB='20000000-0000-4000-8000-000000000003';
-const settingsItems=['我的名片','待辦清單','加入主畫面','登出'];
+const settingsItems=['我的個人空間','我的內容','待辦清單','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
 
 test.beforeEach(async({page})=>{
   // Nothing in these cases may leave the isolated local server.
@@ -29,14 +29,14 @@ async function openPage(page:Page,name:string){
     await openChat(page);
     return;
   }
-  await settings(page).click();await page.getByRole('menuitem',{name,exact:true}).click();
+  await settings(page).click();await page.getByRole('menuitem',{name:name==='我的名片'?'資料與帳號設定':name,exact:true}).click();
 }
 async function inbox(page:Page,notices:number|'fail',direct:number){
   await page.route(/\/api\/v1\/me\/notifications\?limit=(1|6)&offset=0$/,route=>notices==='fail'?route.fulfill({status:503,json:{}}):route.fulfill({json:{items:[],unread_count:notices,next_offset:null}}));
   await page.route(/\/api\/v1\/me\/conversations\?limit=1&offset=0$/,route=>route.fulfill({json:{items:[],unread_count:direct,next_offset:null}}));
 }
 async function expectExactItems(page:Page){
-  await expect(page.getByRole('menuitem')).toHaveCount(4);
+  await expect(page.getByRole('menuitem')).toHaveCount(settingsItems.length);
   for(const name of settingsItems)await expect(page.getByRole('menuitem',{name,exact:true})).toHaveCount(1);
 }
 async function github(page:Page,value:{configured:boolean;connected:boolean;login?:string}|'fail'){
@@ -64,24 +64,24 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   const menu=page.getByRole('menu',{name:'個人檔案'});
   await expectExactItems(page);
   await expect(menu.getByRole('menuitem',{name:'我的訊息',exact:true})).toHaveCount(0);
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
+  await expect(menu.getByRole('menuitemradio')).toHaveCount(0);
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的內容',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'待辦清單',exact:true})).toBeFocused();
-  // 登出 is the last item, after the theme choices.
   await page.keyboard.press('End');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('Home');await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
+  await page.keyboard.press('Enter');await expect(menu.getByRole('menuitem',{name:'返回個人選單',exact:true})).toBeFocused();
+  await page.keyboard.press('End');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(toggle).toBeFocused();await expect(toggle).toHaveAttribute('aria-expanded','false');
 
   // Keyboard opening from the toggle, then selecting a page moves focus into main.
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('待辦清單');
   await expect(page.locator('#main-content')).toBeFocused();await expect(menu).toHaveCount(0);
 
@@ -100,9 +100,9 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   // On the card page the item names stay exact and the current page is marked.
   await openPage(page,'我的名片');await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
   await toggle.click();await expectExactItems(page);
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true})).toHaveAttribute('aria-current','page');
   // Choosing the page that is already open by keyboard still closes the menu and lands in main.
-  await expect(menu.getByRole('menuitem',{name:'我的名片',exact:true})).toBeFocused();await page.keyboard.press('Enter');
+  await menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(menu).toHaveCount(0);await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
   await openPage(page,'我的訊息');
   await expect(page).toHaveURL(/#account$/);await expect(page.locator('#floating-message-title')).toHaveText('我的訊息');await expect(page.locator('#floating-message-title')).toBeFocused();await closeChat(page);

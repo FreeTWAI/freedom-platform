@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
 
 const image={name:'原始作品.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')};
@@ -188,7 +189,7 @@ test('five sharing languages preserve selected logos and original captions acros
   await dialog.getByLabel('貼文內容',{exact:true}).fill('不翻譯會員自己的文字。');await initial.panel.getByRole('button',{name:'X',exact:true}).click();
   let current:typeof sharingLanguages[number]=sharingLanguages[0];
   for(const language of [...sharingLanguages.slice(1),sharingLanguages[0]]){
-    await dialog.getByRole('button',{name:current.close,exact:true}).click();await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await page.keyboard.press('Escape');
+    await dialog.getByRole('button',{name:current.close,exact:true}).click();await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await closeSettingsMenu(page);
     await expect(page.locator('html')).toHaveAttribute('lang',language.id);
     await page.getByRole('button',{name:language.title,exact:true}).click();dialog=page.getByRole('dialog',{name:language.title,exact:true});
     const translated=dialog.getByRole('region',{name:language.panel,exact:true});

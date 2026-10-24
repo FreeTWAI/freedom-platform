@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
 import {navigate,openFeatureSearch} from './navigation.js';
 import {DEMO_USERS} from '../../packages/testing/seed.js';
@@ -35,7 +36,7 @@ test('simple mobile home fits 320px and keeps every theme and original brand',as
   await page.setViewportSize({width:320,height:800});await login(page);
   for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','rpg'],['自由工坊－敘生','versefolk']]){
     await page.getByRole('button',{name:'設定',exact:true}).click();
-    await page.getByRole('menuitemradio',{name,exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
     await page.getByRole('button',{name:'設定',exact:true}).click();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect(page.locator('.sidebar-brand-art')).toHaveAttribute('src','/brand/freedom-workshop.webp');

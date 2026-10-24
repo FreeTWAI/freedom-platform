@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import { randomUUID } from 'node:crypto';
 import { navigate } from './navigation.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
@@ -281,7 +282,7 @@ test('cards in one shelf row share a height and keep the GitHub footer on one li
   const library=await openLibrary(page);
   for(const [theme,label] of [['dark','自由工坊－夜航'],['light','自由工坊－明亮'],['versefolk','自由工坊－敘生']] as const){
     await page.getByRole('button',{name:'設定',exact:true}).click();
-    await page.getByRole('menuitemradio',{name:label,exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();
     await page.getByRole('button',{name:'設定',exact:true}).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
     // 1440px is three columns, 820px two; 390px is a single column, so no card shares a row there.

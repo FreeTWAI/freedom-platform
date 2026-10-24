@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
 import {navigate,openPageTools} from './navigation.js';
 
@@ -95,7 +96,7 @@ test('closing and reopening page tools ignores the old copy ACK and keeps one pe
 
 for(const [id,name,pending] of languages)test(`${id}: Social Post handoff shows localized pending feedback and exports once`,async({page})=>{
   await page.setViewportSize({width:320,height:844});await holdCapabilities(page);await login(page);
-  await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('lang',id);
+  await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);await expect(page.locator('html')).toHaveAttribute('lang',id);
   const dialog=await optimization(page,id),button=dialog.locator('.social-post-optimizer > button').filter({hasText:'複製文案優化任務'});
   await button.click();await capture(page,dialog,`optimizer-${id}-pending`);const pendingButton=dialog.getByRole('button',{name:pending,exact:true});
   await expect(pendingButton).toBeDisabled();await expect(pendingButton).toHaveAttribute('aria-busy','true');await pendingButton.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);

@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {openChat,closeChat} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -141,7 +142,7 @@ test('supplied pack previews before sending, preserves text and reply drafts, an
 test('supplied sticker picker scrolls at 320px in every base theme and falls back to its text label when an image fails',async({browser,baseURL})=>{
   const page=await member(browser,baseURL!,0,320);
   for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
-    await returnToList(page);await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+    await returnToList(page);await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
     const panel=await group(page);await panel.getByRole('button',{name:'選擇貼圖',exact:true}).click();await expect(panel.locator('.chat-sticker-choice')).toHaveCount(48);
     const grid=panel.locator('.chat-sticker-grid');expect(await grid.evaluate(node=>node.scrollHeight>node.clientHeight)).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await panel.getByLabel('搜尋貼圖',{exact:true}).fill('人工智慧');const choice=panel.getByRole('button',{name:'預覽貼圖：AI 不是這樣用的吧',exact:true});await expect(choice).toBeVisible();expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -347,7 +348,7 @@ test('world and squad chat use the same real sticker flow, and the picker fits a
     await choose(panel,'加油');await expect(panel.locator('.messages-bubbles [data-sticker-id="workshop-v1-cheer"]')).toHaveCount(1);
     for(const [theme,value] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
       await panel.getByRole('button',{name:'← 返回小隊列表',exact:true}).click();
-      await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name:theme,exact:true}).click();
+      await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:theme,exact:true}).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme',value);if(await page.getByRole('button',{name:'設定',exact:true}).getAttribute('aria-expanded')==='true')await page.getByRole('button',{name:'設定',exact:true}).click();
       await openChat(page);await panel.locator(`[data-channel-key="${squad}"]`).click();
       await panel.getByRole('button',{name:'選擇貼圖',exact:true}).click();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

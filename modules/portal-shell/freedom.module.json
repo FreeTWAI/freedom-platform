@@ -43,11 +43,17 @@
     "apps/portal-web/src/modules/SettingsMenu.tsx",
     "tests/runtime/game-console-routing.test.ts",
     "tests/runtime/portal-client-recovery.test.ts",
+    "tests/runtime/page-tools-notification.test.ts",
     "tests/e2e/audit-shell.spec.ts",
     "tests/e2e/page-tools.spec.ts",
     "tests/e2e/mobile-install.spec.ts",
     "tests/e2e/shared-feedback-language.spec.ts",
-    "apps/portal-web/src/features/metadata.ts"
+    "apps/portal-web/src/features/metadata.ts",
+    "tests/e2e/settings-menu-helpers.ts",
+    "tests/e2e/account-language.spec.ts",
+    "tests/e2e/connection-feedback-layout.spec.ts",
+    "tests/e2e/local-action-feedback.spec.ts",
+    "tests/e2e/page-tools-notification.spec.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/api.ts",

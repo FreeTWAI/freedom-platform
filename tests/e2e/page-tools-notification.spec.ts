@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
 import {openPageTools} from './navigation.js';
 
@@ -15,7 +16,7 @@ async function signIn(page:Page){
 async function selectTheme(page:Page,id:(typeof themes)[number][0],label:(typeof themes)[number][1]){
   if(await page.locator('html').getAttribute('data-theme')===id)return;
   await page.getByRole('button',{name:'設定'}).click();
-  await page.getByRole('menuitemradio',{name:label}).click();
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
   await page.getByRole('button',{name:'設定'}).click();
   await expect(page.getByRole('menu',{name:'個人檔案'})).toBeHidden();
