@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './fixtures.js';
 import {navigate, selectSocialFeed} from './navigation.js';
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 
 async function login(page: Page, email = 'maker@local.test') {
   await page.goto('/');
@@ -571,7 +572,7 @@ for(const language of [
   {id:'es',name:'Español',note:'Comunidad',all:'Todas las publicaciones',group:'Categorías del feed',link:'Compartir un enlace externo',options:'Opciones del feed'},
 ])test(`${language.id}: feed entry labels fit narrow screens and retain accessible selection`,async({page})=>{
   await login(page);await page.keyboard.press('Escape');
-  await page.locator('.settings-menu-button').click();await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await page.keyboard.press('Escape');
+  await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await closeSettingsMenu(page);
   await expect(page.locator('html')).toHaveAttribute('lang',language.id);
   const feed=page.locator('.social-zone'),categories=feed.getByRole('group',{name:language.group,exact:true}),linkEntry=feed.locator('.social-composer-start').getByRole('button',{name:language.link,exact:true});
   const notes=categories.getByRole('button',{name:language.note,exact:true}),all=categories.getByRole('button',{name:language.all,exact:true});

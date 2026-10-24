@@ -24549,8 +24549,8 @@
     },
     {
       "path": "tests/e2e/social-feed.spec.ts",
-      "bytes": 46297,
-      "sha256": "5189969f6edbd4e297d4c72fd8477f79ab7f7533477af0efac62ab8fca5675f8"
+      "bytes": 46360,
+      "sha256": "ad61c7be30b12ef8d72c81b03b2e017e4fc603c38911919619ab38acce681869"
     },
     {
       "path": "tests/e2e/social-image.spec.ts",
