@@ -104,3 +104,47 @@ test('removing a friend and declining a request ask first, and cancelling writes
   }
   expect(await state(e2eAuthPool, owner, third)).toEqual({ state: 'accepted', v: 2 });
 });
+
+test('an open confirmation closes when the visible result set changes by search or paging', async ({ page, e2eAuthPool }) => {
+  test.setTimeout(120_000);
+  const owner = await member(e2eAuthPool, '本人');
+  const friends: Member[] = [];
+  for (let n = 0; n < 21; n++) {
+    const friend = await member(e2eAuthPool, `分頁好友${String(n).padStart(2, '0')}`);
+    await friendship(e2eAuthPool, friend, owner, 'accepted');
+    friends.push(friend);
+  }
+  const writes: string[] = [];
+  page.on('request', request => { if (request.method() === 'POST' && /\/api\/v1\/friends\//.test(request.url())) writes.push(request.url()); });
+  await login(page, owner.email);
+  await navigate(page, '我的好友');
+  const rows = page.locator('.friends-panel .directory-member');
+  await expect(rows.first()).toBeVisible();
+  const openConfirmation = async () => {
+    const remove = rows.first().getByRole('button', { name: '移除好友', exact: true });
+    await remove.click();
+    await expect(remove).toHaveAttribute('aria-expanded', 'true');
+    return (await rows.first().getByRole('heading').first().textContent())!.trim();
+  };
+  const anyOpen = () => page.locator('.friends-panel [aria-expanded="true"]');
+
+  // Paging away and back: the confirmation does not reappear on the same person.
+  const first = await openConfirmation();
+  await page.getByRole('button', { name: '下一頁好友', exact: true }).click();
+  await expect(page.getByText('第 2 頁')).toBeVisible();
+  await expect(anyOpen()).toHaveCount(0);
+  await page.getByRole('button', { name: '上一頁好友', exact: true }).click();
+  await expect(page.getByText('第 1 頁')).toBeVisible();
+  await expect(rows.filter({ has: page.getByRole('heading', { name: first, exact: true }) })).toBeVisible();
+  await expect(anyOpen()).toHaveCount(0);
+
+  // A search that still shows the same person also starts closed.
+  const named = await openConfirmation();
+  await page.getByLabel('搜尋好友名稱', { exact: true }).fill(named);
+  await page.getByRole('button', { name: '搜尋好友', exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(anyOpen()).toHaveCount(0);
+  expect(writes).toEqual([]);
+  const [low, high] = [owner.id, friends[0].id].sort();
+  expect((await e2eAuthPool.query('SELECT state FROM member_friendships WHERE low_ref=$1 AND high_ref=$2', [low, high])).rows[0].state).toBe('accepted');
+});
