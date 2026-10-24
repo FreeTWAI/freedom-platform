@@ -1,3 +1,4 @@
+import type {JournalCommunity} from '../../../../modules/community-journal/community.js';
 import {DataError,sourceMessagesView,type SourceMessageView} from './journal-api.js';
 import type {ActivityPeriod,JournalActivity} from '../../../../modules/community-journal/activity.js';
 export type ActivityView={range:JournalActivity['range'];people:{id:string;count:number}[];messages:(SourceMessageView&{key:string;person:string;date:string;chapter:string;topic:string})[];unattributedCount:number};
@@ -14,8 +15,8 @@ export function activityView(data:JournalActivity):ActivityView{
  if(ids.size!==people.length||messages.some(m=>!ids.has(m.person))||people.some(p=>p.count!==(counts.get(p.id)||0))||!Number.isSafeInteger(data.unattributed_count)||data.unattributed_count<0)throw new DataError('invalid_data');
  return {range:data.range,people,messages,unattributedCount:data.unattributed_count};
 }
-export async function loadActivity(period:ActivityPeriod,signal:AbortSignal,fetcher:typeof fetch=fetch){
- const response=await fetcher('/api/v1/public/journal/activity?period='+period,{signal,credentials:'same-origin',cache:'no-store',referrerPolicy:'no-referrer',headers:{Accept:'application/json'}});
+export async function loadActivity(period:ActivityPeriod,signal:AbortSignal,fetcher:typeof fetch=fetch,community:JournalCommunity='freedom'){
+ const response=await fetcher('/api/v1/public/journal/activity?period='+period+(community==='freedom'?'':'&community='+community),{signal,credentials:'same-origin',cache:'no-store',referrerPolicy:'no-referrer',headers:{Accept:'application/json'}});
  if(!response.ok)throw new DataError('unavailable');return activityView((await response.json()).data);
 }
 export function topicCounts(messages:ActivityView['messages']){const counts=new Map<string,number>();for(const m of messages)counts.set(m.topic,(counts.get(m.topic)||0)+1);return [...counts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));}

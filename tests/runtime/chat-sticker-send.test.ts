@@ -138,14 +138,14 @@ test('channel ACK binds sender, room, kind, sequence, sticker and absence of uns
   for(const patch of [{sender_ref:peer},{channel_key:'other'},{kind:'world'},{sequence:'0'},{sequence:'-1'},{sequence:'1.5'},{sequence:'9223372036854775808'},{sequence:1},{created_at:'invalid'},{message_id:'invalid'},{body:'other'},{sticker:{id:second,label:'謝謝'}},{sticker:{id:first,label:'wrong'}},{reply_to:{message_id:randomUUID()}},{image:{content_type:'image/webp',byte_size:1}}])assert.equal(matchesChannelMessageAck({...value,...patch},expected),false,JSON.stringify(patch));
 });
 
-test('picker invokes the send callback directly and preserves quote state',()=>{
+test('picker only selects a preview and preserves quote state',()=>{
   let index=0;const states:any[]=[true,'','workshop-v1'],sent:string[]=[],changes:unknown[]=[];
   const jsx=(type:any,props:any,...children:any[])=>({type,props:props??{},children});
   const render=runInNewContext(`${sourceFunction('ChatContent.tsx','ChatExtras')};ChatExtras`,{React:{createElement:jsx},useState:(initial:unknown)=>{const i=index++;return [states[i]??initial,(value:unknown)=>{states[i]=value;}];},useId:()=>':picker:',useRef:()=>({current:null}),useEffect:()=>{},CHAT_STICKERS:[{id:first,label:'你好',keywords:'你好',pack:'workshop-v1'}],ChatSticker:()=>{},ChatQuote:()=>{},findChatSticker});
   const tree=render({draft:{reply:{message_id:randomUUID()}},onChange:(value:unknown)=>changes.push(value),onSendSticker:(id:string)=>sent.push(id),disabled:false,target:peer});
   const nodes:any[]=[];function walk(value:any){if(!value)return;if(Array.isArray(value)){value.forEach(walk);return;}if(typeof value==='object'){nodes.push(value);walk(value.children);}}walk(tree);
-  const button=nodes.find(value=>value.props?.['aria-label']==='傳送貼圖：你好');assert.ok(button);button.props.onClick();
-  assert.deepEqual(sent,[first]);assert.deepEqual(changes,[]);assert.equal(states[0],false);
+  const button=nodes.find(value=>value.props?.['aria-label']==='預覽貼圖：你好');assert.ok(button);button.props.onClick({currentTarget:{focus:()=>{}}});
+  assert.deepEqual(sent,[]);assert.deepEqual(changes,[]);assert.equal(states[0],true);assert.equal(states[3].id,first);assert.equal(states[3].target,peer);
 });
 
 test('channel leave guards observe the held command before the first await and ignore ordinary drafts',async()=>{

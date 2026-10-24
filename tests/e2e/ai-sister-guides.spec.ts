@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {openPageTools} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
@@ -32,7 +33,7 @@ async function openGuide(page:Page){
 async function selectTheme(page:Page,label:string){
   const settings=page.getByRole('button',{name:'設定',exact:true});
   if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();
-  await page.getByRole('menuitemradio',{name:label,exact:true}).click();await page.keyboard.press('Escape');
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await closeSettingsMenu(page);
 }
 async function imageReady(image:Locator){
   await expect(image).toBeVisible();

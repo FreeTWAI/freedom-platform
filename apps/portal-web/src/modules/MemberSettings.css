@@ -101,3 +101,11 @@ html .chat-workspace .messages-compose.has-image-controls>.banner{grid-row:6}
 /* The open channel is marked by an inset bar as well as colour, and wins over the unread border. */
 .member-channel-list>li .messages-peer[aria-current=true]{border-color:#c4ff20;box-shadow:inset 4px 0 0 #c4ff20}
 @media(max-width:760px){.messages-layout{grid-template-columns:1fr}.messages-bubbles>li{max-width:100%}}
+
+/* Keep preferences secondary and every control reachable on short phones. */
+.settings-menu-compact{width:min(19rem,calc(100vw - 24px));max-height:calc(100dvh - 90px);overflow-y:auto;overscroll-behavior:contain;scroll-padding:6px;box-sizing:border-box}
+.settings-menu-compact .settings-menu-identity{display:block;font-size:.875rem}
+.settings-menu-compact .settings-menu-item{min-height:44px;overflow-wrap:anywhere;font-size:.9375rem}
+.settings-panel-chevron{margin-left:auto}
+.settings-menu-compact .settings-menu-logout{border-top:1px solid var(--line);margin-top:4px}
+@media(prefers-reduced-motion:reduce){.settings-menu-chevron{transition:none}}

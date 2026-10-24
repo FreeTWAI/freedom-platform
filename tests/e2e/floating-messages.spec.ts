@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 
@@ -61,7 +62,7 @@ test('chat launcher counts chat sources only, does not open history or mark anyt
 test('one bubble toggles the persistent inbox across pages and themes at phone, tablet and desktop widths',async({page})=>{
   await login(page);const homeUrl=page.url(),bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
   for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
-    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);
     for(const width of [320,390,768,1440]){
       await page.setViewportSize({width,height:900});await expect(bubble).toBeVisible();await expect(bubble).toBeInViewport();await bubble.click();await expect(panel).toBeVisible();await expect(bubble).toHaveAttribute('aria-expanded','true');
       const inbox=(await panel.boundingBox())!;

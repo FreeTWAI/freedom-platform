@@ -1,8 +1,10 @@
 import type {JournalEntry,JournalPerson} from './payload.js';
+import {communitySnapshot,type JournalCommunity} from './community.js';
 export type ActivityPeriod='week'|'month';
 export type ActivityMessage={key:string;person_slug:string;text:string;time:string;journal_date:string;chapter_id:string;topic:string};
 // Only call with the currently published snapshot. Drafts are never queried here.
-export function journalActivity(snapshot:{people:JournalPerson[];journals:JournalEntry[]},period:ActivityPeriod,now=new Date()){
+export function journalActivity(snapshot:{people:JournalPerson[];journals:JournalEntry[]},period:ActivityPeriod,now=new Date(),community:JournalCommunity='freedom'){
+ snapshot=communitySnapshot(snapshot,community);
  const end=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
  const first=new Date(end+'T00:00:00Z');first.setUTCDate(first.getUTCDate()-(period==='week'?6:29));
  const start=first.toISOString().slice(0,10),people=snapshot.people.filter(p=>p.kind==='person'),ids=new Set(people.map(p=>p.slug)),seen=new Set<string>();

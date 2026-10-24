@@ -82,8 +82,7 @@ test('EXIF orientation, transparent small images, and invalid replacement preser
 
 test('external link thumbnails accept normal photos and replacements use the same automatic preparation', async ({page}) => {
   await login(page); await page.keyboard.press('Escape');
-  await page.getByRole('button', {name: '動態選項', exact: true}).click();
-  await page.getByRole('button', {name: '分享外部連結', exact: true}).click();
+  await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
   const title = `E2E 連結原始照片 ${Date.now()}`;
   await dialog.getByLabel('連結', {exact: true}).fill(`https://example.org/photo-${Date.now()}`);
