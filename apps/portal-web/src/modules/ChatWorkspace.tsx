@@ -79,6 +79,12 @@ export function ChatInput({id,label,value,onChange,onSend,sending,hidden,errorId
   </>;
 }
 
+/** Invalidate cached history timestamps on the next render after a local day or timezone change. */
+export function chatCalendarKey(){
+  const today=new Date();
+  return `${today.toDateString()}:${today.getTimezoneOffset()}:${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+}
+
 export function ChatTime({value}:{value:string}){
   const date=new Date(value),today=new Date();
   const sameDay=date.toDateString()===today.toDateString();

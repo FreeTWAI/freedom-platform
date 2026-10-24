@@ -820,3 +820,45 @@ test('quick start join bar is unobscured without the retired console at 390px',a
   expect(gap.covered).toBe(false);
   await page.screenshot({path:`${selectionShots}/quick-start-light-390.png`,fullPage:false});
 });
+
+test.describe('memoized channel history',()=>{
+  test.use({timezoneId:'UTC'});
+for(const count of [200,1000])test(`channel draft typing does not reformat ${count} loaded history rows`,async({page})=>{
+  await page.clock.setFixedTime(new Date('2026-10-23T12:00:00Z'));
+  const server=await channelServer(page,{guild:[['memo-room','歷史測試頻道',count]]}),channel=server.get('guild','memo-room');
+  channel.messages.forEach((message,i)=>{message.created_at=new Date(Date.UTC(2026,9,23,9,0,count-i)).toISOString();});
+  channel.read=BigInt(channel.messages[0].sequence);
+  await open(page,server);await visibility(page,'hidden');
+  await tab(page,'公會閒聊').click();await page.getByRole('button',{name:'歷史測試頻道',exact:true}).click();
+  const room=panel(page,'公會閒聊'),rows=room.locator('.messages-bubbles>li'),log=room.getByRole('log'),input=room.getByLabel('在 歷史測試頻道 發言');
+  for(let loaded=20;loaded<count;loaded+=20){await expect(rows).toHaveCount(loaded);await room.getByRole('button',{name:'載入較早訊息',exact:true}).click();}
+  await expect(rows).toHaveCount(count);
+  const newest=rows.last(),time=newest.locator('time'),before=await time.innerText();
+  await page.evaluate(values=>{
+    const watched=new Set(values.map(value=>new Date(value).getTime())),original=Date.prototype.toLocaleString;
+    const state={calls:0};Object.assign(window,{__chatHistoryFormats:state});
+    Date.prototype.toLocaleString=function(...args:Parameters<typeof original>){if(watched.has(this.getTime()))state.calls++;return original.apply(this,args);};
+  },channel.messages.map(message=>message.created_at));
+  await log.evaluate(node=>{node.scrollTop=120;});const top=await log.evaluate(node=>node.scrollTop);
+  await input.fill('未送出的頻道草稿');await input.pressSequentially('abc');
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBe(0);
+  expect(await log.evaluate(node=>node.scrollTop)).toBe(top);expect(server.log.sends).toHaveLength(0);
+  await input.dispatchEvent('compositionstart');await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true,keyCode:229});await input.dispatchEvent('compositionend');
+  expect(server.log.sends).toHaveLength(0);await expect(input).toHaveValue('未送出的頻道草稿abc');
+  await page.clock.setFixedTime(new Date('2026-10-24T12:00:00Z'));
+  await input.fill('跨日頻道草稿');await expect(time).not.toHaveText(before);
+  expect(await page.evaluate(()=>(window as unknown as {__chatHistoryFormats:{calls:number}}).__chatHistoryFormats.calls)).toBeGreaterThanOrEqual(count*2);
+  await expect(time).toHaveAttribute('datetime',channel.messages[0].created_at);
+  if(count===200){
+    channel.messages[0].body='更新後的頻道內容';channel.messages[0].sender_name='改名後的夥伴';
+    Object.assign(channel.messages[1],{body:'',retracted_at:'2026-10-24T12:00:00Z'});
+    await room.getByRole('button',{name:'重新讀取訊息',exact:true}).click();
+    await expect(newest).toContainText('更新後的頻道內容');await expect(newest).toContainText('改名後的夥伴');
+    await expect(room.locator(`[data-message-id="${channel.messages[1].message_id}"]`)).toContainText('訊息已收回');
+    await expect(input).toHaveValue('跨日頻道草稿');
+    await newest.getByRole('button',{name:'回覆改名後的夥伴的訊息',exact:true}).click();
+    await expect(room.locator('.chat-reply-draft')).toContainText('更新後的頻道內容');await expect(input).toBeFocused();
+  }
+});
+
+});

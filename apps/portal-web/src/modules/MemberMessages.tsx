@@ -1,6 +1,6 @@
 import {ReportButton} from './MemberReporting';
 import {MemberBlockingAction} from './MemberBlocking';
-import {useCallback,useEffect,useId,useLayoutEffect,useRef,useState,type FormEvent,type KeyboardEvent} from 'react';
+import {useCallback,useEffect,useId,useLayoutEffect,useMemo,useRef,useState,type FormEvent,type KeyboardEvent} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import type {SessionPayload,TabId} from '../types';
@@ -17,7 +17,7 @@ import type {ChatEntry} from './chat-entry';
 import type {MessageContent,MessageContentInput} from '../../../../modules/member-communications/content-types';
 import {findChatSticker} from '../../../../modules/member-communications/stickers';
 import {ChatBody,ChatQuote,ChatExtras,ChatRetracted,RetractMessageDialog,chatPayload,quoteMessage,useRichChatDraft,type RetractTarget} from './ChatContent';
-import {ChatInput,ChatTime,useChatViewport,usePhoneChatBounds,useVisibleChatRead} from './ChatWorkspace';
+import {ChatInput,ChatTime,chatCalendarKey,useChatViewport,usePhoneChatBounds,useVisibleChatRead} from './ChatWorkspace';
 import {ChatSearch} from './ChatSearch';
 import {WorkshopIcon} from '../WorkshopIcon';
 import {compareDirectMessages,directMessageReceiptRefreshDue,hasDirectMessageChanges,mergeDirectMessagePage,readLoadedDirectMessageReceipts} from './direct-message-receipts';
@@ -553,6 +553,22 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
 
   const participant=thread?.participant??conversations.find(item=>item.participant.user_id===peer)?.participant,draft=peer?drafts[peer]??'':'',attempt=peer?pending[peer]:undefined,sendError=peer?sendErrors[peer]:undefined;
   const richDraft=richDrafts.get(peer??'');
+  const changeRichDraft=richDrafts.change,calendarKey=chatCalendarKey();
+  // Only history/control changes invalidate these rows, not the composer draft.
+  // Keep the local calendar key so cached ChatTime labels still roll over.
+  const messageHistory=useMemo(()=>thread&&peer?(thread.items.length===0?<p className="empty">還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="訊息">
+            {[...thread.items].reverse().map(message=>{const mine=message.sender_ref!==thread.participant.user_id;return <li key={message.message_id} className={mine?'is-mine':undefined} data-message-id={message.message_id}>
+              <p className="messages-meta">{mine?'你':thread.participant.display_name} · <ChatTime value={message.created_at}/>{message.retracted_at?'':mine?message.read_at?' · 對方已讀':' · 已送出':!message.read_at?' · 未讀':''}</p>
+              {message.retracted_at?<ChatRetracted mine={mine}/>:<>
+              {message.reply_to&&<ChatQuote reply={message.reply_to}/>}
+              {messageImagesEnabled===true&&message.image&&<DirectMessageImage peer={peer} messageId={message.message_id}/>}
+              {!(messageImagesEnabled===true&&message.image&&message.body==='[圖片]')&&<ChatBody message={message}/>}
+              <ReportButton kind="direct_message" id={message.message_id} label="私人訊息"/>
+              {(thread.can_send||mine)&&<div className="chat-message-actions">{thread.can_send&&<button className="btn btn-ghost" type="button" aria-label={`回覆${mine?'你':thread.participant.display_name}的訊息`} disabled={Boolean(attempt)} onClick={()=>{if(held.current[peer])return;changeRichDraft(peer,{reply:quoteMessage(message,mine?'你':thread.participant.display_name)});document.getElementById(`${uid}-compose`)?.focus();}}>回覆</button>}{mine&&<button className="btn btn-ghost chat-retract" type="button" aria-label="收回你的訊息" disabled={retracting} onClick={event=>{retractTrigger.current=event.currentTarget;setRetractError('');setRetractTarget({message_id:message.message_id,label:message.sticker?`[貼圖] ${message.sticker.label}`:message.image&&message.body==='[圖片]'?'[圖片]':[...message.body].slice(0,160).join('')});}}>收回</button>}</div>}
+              </>}
+            </li>;})}
+          </ol>):null,
+    [thread,peer,Boolean(attempt),retracting,messageImagesEnabled,changeRichDraft,uid,calendarKey]);
   function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
   return <div className={`messages-layout chat-workspace${compact?' is-compact':''}`}>
     {singlePane&&peer&&picking&&<button type="button" className="btn btn-ghost messages-switch" aria-expanded={picking} aria-controls={`${uid}-picker`} onClick={switchPane}>回到目前對話</button>}
@@ -595,18 +611,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
           <div ref={scroll} className="messages-scroll" role="log" aria-live="polite" aria-relevant="additions" tabIndex={0} aria-label={`與${thread.participant.display_name}的對話紀錄`} onScroll={()=>{if(scroll.current){stick.current=scroll.current.scrollHeight-scroll.current.scrollTop-scroll.current.clientHeight<80;if(stick.current)setHasNew(false);}}}>
           {thread.next_offset!==null&&<button className="btn btn-ghost" type="button" disabled={threadMore.loading} onClick={()=>void earlier()}>{threadMore.loading?'正在讀取…':threadMore.error?'重試載入較早訊息':'載入較早訊息'}</button>}
           {threadMore.error&&<p className="banner banner-error" role="alert">較早訊息讀取失敗：{threadMore.error}</p>}
-          {thread.items.length===0?<p className="empty">還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="訊息">
-            {[...thread.items].reverse().map(message=>{const mine=message.sender_ref!==thread.participant.user_id;return <li key={message.message_id} className={mine?'is-mine':undefined} data-message-id={message.message_id}>
-              <p className="messages-meta">{mine?'你':thread.participant.display_name} · <ChatTime value={message.created_at}/>{message.retracted_at?'':mine?message.read_at?' · 對方已讀':' · 已送出':!message.read_at?' · 未讀':''}</p>
-              {message.retracted_at?<ChatRetracted mine={mine}/>:<>
-              {message.reply_to&&<ChatQuote reply={message.reply_to}/>}
-              {messageImagesEnabled===true&&message.image&&<DirectMessageImage peer={peer} messageId={message.message_id}/>}
-              {!(messageImagesEnabled===true&&message.image&&message.body==='[圖片]')&&<ChatBody message={message}/>}
-              <ReportButton kind="direct_message" id={message.message_id} label="私人訊息"/>
-              {(thread.can_send||mine)&&<div className="chat-message-actions">{thread.can_send&&<button className="btn btn-ghost" type="button" aria-label={`回覆${mine?'你':thread.participant.display_name}的訊息`} disabled={Boolean(attempt)} onClick={()=>{if(held.current[peer])return;richDrafts.change(peer,{reply:quoteMessage(message,mine?'你':thread.participant.display_name)});document.getElementById(`${uid}-compose`)?.focus();}}>回覆</button>}{mine&&<button className="btn btn-ghost chat-retract" type="button" aria-label="收回你的訊息" disabled={retracting} onClick={event=>{retractTrigger.current=event.currentTarget;setRetractError('');setRetractTarget({message_id:message.message_id,label:message.sticker?`[貼圖] ${message.sticker.label}`:message.image&&message.body==='[圖片]'?'[圖片]':[...message.body].slice(0,160).join('')});}}>收回</button>}</div>}
-              </>}
-            </li>;})}
-          </ol>}
+          {messageHistory}
           {attempt&&<div className="messages-pending" role="status" aria-label="傳送狀態"><ChatBody message={{body:attempt.body,...(attempt.payload.sticker_id?{sticker:{id:findChatSticker(attempt.payload.sticker_id)!.id,label:findChatSticker(attempt.payload.sticker_id)!.label}}:{})}}/><p className="messages-meta">{attempt.status==='sending'?attempt.stage==='upload'?'上傳圖片中…':attempt.stage==='message'?'傳送訊息中…':'傳送中…':'尚未確認送出，可用下方按鈕重試'}</p></div>}
           </div>
           {hasNew&&<button className="btn btn-ghost messages-new" type="button" onClick={()=>{stick.current=true;scroll.current?.scrollTo({top:scroll.current.scrollHeight});setHasNew(false);}}>有新訊息 · 回到最新</button>}
