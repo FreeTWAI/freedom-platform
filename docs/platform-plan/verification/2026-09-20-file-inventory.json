@@ -2969,8 +2969,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/FriendsPanel.tsx",
-      "bytes": 11223,
-      "sha256": "811f0e3b7d9795f50be22a7e6e250706873abbe83de341dc4a63b1f6fe9b32b2"
+      "bytes": 11380,
+      "sha256": "39a3c4e315067632ee813ee93ca4aa915712dcf783dd27782409523b799999a3"
     },
     {
       "path": "apps/portal-web/src/modules/GitHubAuthorFollow.tsx",
@@ -23954,8 +23954,8 @@
     },
     {
       "path": "tests/e2e/friends-confirm.spec.ts",
-      "bytes": 6779,
-      "sha256": "bca44bf9ed5cdba4797be881cbaa2f6f6f1533c5c313615a7477fb92ffbbb502"
+      "bytes": 9183,
+      "sha256": "0acdb790df551ddd686818f56f7beaafa34fe3c4c37d248ee60a151be11af0f6"
     },
     {
       "path": "tests/e2e/friends-directory-interaction.spec.ts",
