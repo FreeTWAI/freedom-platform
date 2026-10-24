@@ -1,4 +1,4 @@
-import type { ConversationActivity, Message, MessagePage } from '../../../../modules/member-communications/types.js';
+import { DIRECT_MESSAGE_RECEIPT_BATCH_MAX, type ConversationActivity, type DirectMessageReceiptPage, type Message, type MessagePage } from '../../../../modules/member-communications/types.js';
 
 /** Compare server UTC ISO times without losing microseconds; older pages may still use milliseconds. */
 export function compareDirectMessages(a: Pick<Message, 'created_at' | 'message_id'>, b: Pick<Message, 'created_at' | 'message_id'>): number {
@@ -38,6 +38,7 @@ export async function readLoadedDirectMessageReceipts(
   sender: string,
   readPage: (offset: number) => Promise<MessagePage>,
   isCurrent: () => boolean,
+  readReceipts?: (ids: string[]) => Promise<DirectMessageReceiptPage>,
 ): Promise<Map<string, string | null> | null> {
   const remaining = new Set(loaded.filter(item => item.sender_ref === sender && item.read_at === null && !item.retracted_at).map(item => item.message_id));
   const receipts = new Map<string, string | null>();
@@ -45,6 +46,26 @@ export async function readLoadedDirectMessageReceipts(
     for (const item of page.items) if (remaining.delete(item.message_id)) receipts.set(item.message_id, item.read_at);
   };
   observe(latest);
+  if (readReceipts) {
+    const pending = [...remaining];
+    for (let offset = 0; offset < pending.length; offset += DIRECT_MESSAGE_RECEIPT_BATCH_MAX) {
+      if (!isCurrent()) return null;
+      const ids = pending.slice(offset, offset + DIRECT_MESSAGE_RECEIPT_BATCH_MAX), expected = new Set(ids);
+      const result = await readReceipts(ids);
+      if (!isCurrent()) return null;
+      const invalid = () => new Error('較早訊息的已讀狀態尚未確認，請重讀對話。');
+      if (!result || !Array.isArray(result.items) || result.items.length !== ids.length) throw invalid();
+      for (const item of result.items) {
+        if (!item || !expected.delete(item.message_id)
+          || !(item.read_at === null || typeof item.read_at === 'string' && Number.isFinite(Date.parse(item.read_at)) && new Date(item.read_at).toISOString() === item.read_at)) throw invalid();
+        receipts.set(item.message_id, item.read_at);
+      }
+    }
+    // The caller applies this map only once every batch succeeds. Failures never
+    // downgrade to history reads or turn missing receipts into an inferred null.
+    return receipts;
+  }
+  // Older servers do not advertise the additive lookup; retain their pagination.
   let offset = latest.next_offset;
   const visited = new Set<number>();
   while (remaining.size && offset !== null) {

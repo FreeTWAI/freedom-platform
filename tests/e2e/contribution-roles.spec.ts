@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
@@ -82,8 +83,8 @@ test('three real members declare, confirm, amend and withdraw roles; cooperation
     for(const [profile,theme,label,width] of [['light','light','自由工坊－明亮',390],['dark','dark','自由工坊－夜航',320],['versefolk','versefolk','自由工坊－敘生',1280],['guide-dragon','dark','新手導覽－龍娘',320],['guide-ai-sister','light','新手導覽－AI Sister',390]] as const){
       await page.setViewportSize({width,height:900});
       await page.getByRole('button',{name:'設定',exact:true}).click();
-      await page.getByRole('menuitemradio',{name:label,exact:true}).click();
-      await page.keyboard.press('Escape');
+      await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();
+      await closeSettingsMenu(page);
       await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
       await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile);
       await expect(outcomes).toBeVisible();

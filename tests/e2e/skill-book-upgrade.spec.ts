@@ -519,13 +519,19 @@ test('the upload dialog keeps the same type on the skill shelf and the open-sour
     await navigate(page, '技能書架');
     await expect(page.getByRole('heading', { name: '公會指定技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
     await expect(page.getByRole('heading', { name: '社群技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
-    await expect(page.locator('.skill-shelf-heading p.muted')).toHaveCSS('font-size', '14px');
+    for (const title of ['社群技能書', '公會指定技能書']) {
+      const shelfHeading = page.getByRole('heading', { name: title, level: 2, exact: true });
+      await expect(shelfHeading.locator('..').locator('p.muted')).toHaveCSS('font-size', '14px');
+    }
     await page.getByRole('button', { name: '上傳技能', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
     await expect(dialog.getByRole('heading', { name: '交給 Agent 讀取專案', exact: true })).toBeVisible();
     const fromShelf = await dialogTypography(dialog);
     await expect(page.getByRole('heading', { name: '社群技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
-    await expect(page.locator('.skill-shelf-heading p.muted')).toHaveCSS('font-size', '14px');
+    for (const title of ['社群技能書', '公會指定技能書']) {
+      const shelfHeading = page.getByRole('heading', { name: title, level: 2, exact: true });
+      await expect(shelfHeading.locator('..').locator('p.muted')).toHaveCSS('font-size', '14px');
+    }
     await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
     await expect(dialog).toBeHidden();
 

@@ -992,7 +992,11 @@ test('order bell tells an eligible seller reader about placement and opening it 
     const panel=readerPage.getByRole('region',{name:'最近通知'}),item=panel.locator('.notification-bell-item').filter({hasText:'新訂單待確認收款'});
     await expect(item).toBeVisible();await expect(item).toContainText(`「山邊小店」收到訂單 ${order.display_number}，等待銀行匯款；請至訂單頁查看。`);
     for(const hidden of ['000000123456','合成測試銀行','合成買家甲','offline-buyer@example.test','0900123456','350.00'])await expect(item).not.toContainText(hidden);
-    await expect(readerPage.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    const brandHome = readerPage.locator('.brand-home');
+    await expect(brandHome).toBeVisible();
+    await expect(brandHome).toHaveAttribute('href', '/#home');
+    await expect(brandHome).toHaveText('自由工坊');
+    await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
     const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
     await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
@@ -1034,7 +1038,11 @@ test('buyer order notices open a fresh authorized B07 and the full history keeps
     await expect(item.getByRole('heading',{name:'店家已確認收款',exact:true})).toBeVisible();
     const action=item.getByRole('button',{name:'查看我的訂單',exact:true});await expect(action).toHaveClass(/btn-primary/);
     await portal.setViewportSize({width:390,height:900});const bounds=await action.boundingBox();expect(bounds).not.toBeNull();expect(bounds!.height).toBeGreaterThanOrEqual(44);expect(bounds!.width).toBeLessThan(300);
-    await expect(portal.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    const brandHome = portal.locator('.brand-home');
+    await expect(brandHome).toBeVisible();
+    await expect(brandHome).toHaveAttribute('href', '/#home');
+    await expect(brandHome).toHaveText('自由工坊');
+    await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(portal,[390,768,1440],width=>info.outputPath(`notify-history-${width}.png`));
     await action.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
     await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();

@@ -8,6 +8,7 @@ import {readWithMemberSession} from '../../../../packages/db/member-session.js';
 import {moduleCommand,type PlatformEnv} from '../module-context.js';
 import {authRateLimit} from '../../../../modules/identity-membership/members.js';
 import {snapshotSchema} from '../../../../modules/community-journal/payload.js';
+import {communitySnapshot,journalCommunities,type JournalCommunity} from '../../../../modules/community-journal/community.js';
 import * as journal from '../../../../modules/community-journal/service.js';
 const base='/agent-api/v1/journal-submissions';
 export const isAgentJournalPath=(method:string,path:string)=>method==='POST'&&path===base;
@@ -38,4 +39,25 @@ export function createJournalMemberRoutes(pool:Pool){
  app.post(path+'/withdraw',async c=>c.json(await journal.withdraw(pool,await moduleCommand(c))));return app;
 }
 const shell='<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>自由工坊共創誌</title><link rel="stylesheet" href="/journal-assets/journal.css"><script type="module" src="/assets/journal.js"></script></head><body><div id="journal-root"></div></body></html>';
-export function createJournalPublicRoutes(pool:Pool){const app=new Hono();app.get('/api/v1/public/journal/media-manifest',c=>c.json({filenames:[...journalMedia]}));app.get('/api/v1/public/journal/activity',async c=>{const params=new URL(c.req.url).searchParams,period=params.get('period')||'week';requireCondition([...params.keys()].every(k=>k==='period')&&params.getAll('period').length<=1&&(period==='week'||period==='month'),422,'invalid_period','請選擇近 7 天或近 30 天。');c.header('Cache-Control','no-store');const snapshot=await journal.publicSnapshot(pool);return c.json({data:journalActivity(snapshot.data,period)});});app.get('/api/v1/public/journal',async c=>c.json(await journal.publicSnapshot(pool)));app.get('/journal',c=>c.html(shell));app.get('/journal/*',c=>c.html(shell));return app;}
+function publicQuery(c:Context,activity=false){
+ const params=new URL(c.req.url).searchParams,community=params.get('community'),period=params.get('period')??'week';
+ requireCondition([...params.keys()].every(k=>k==='community'||activity&&k==='period')&&params.getAll('community').length<=1&&params.getAll('period').length<=1,422,'invalid_query','查詢參數不正確。');
+ requireCondition(community===null||journalCommunities.includes(community as JournalCommunity),422,'invalid_community','請選擇自由工坊、Claude 或 Codex。');
+ requireCondition(!activity||period==='week'||period==='month',422,'invalid_period','請選擇近 7 天或近 30 天。');
+ return {community:community as JournalCommunity|null,period:period as 'week'|'month'};
+}
+export function createJournalPublicRoutes(pool:Pool){
+ const app=new Hono();
+ app.get('/api/v1/public/journal/media-manifest',c=>c.json({filenames:[...journalMedia],communities:journalCommunities}));
+ app.get('/api/v1/public/journal/activity',async c=>{
+  const {community,period}=publicQuery(c,true);c.header('Cache-Control','no-store');
+  const snapshot=await journal.publicSnapshot(pool);
+  return c.json({data:journalActivity(snapshot.data,period,new Date(),community??'freedom')});
+ });
+ app.get('/api/v1/public/journal',async c=>{
+  const {community}=publicQuery(c);c.header('Cache-Control','no-store');
+  const snapshot=await journal.publicSnapshot(pool);
+  return c.json(community?{...snapshot,data:communitySnapshot(snapshot.data,community)}:snapshot);
+ });
+ app.get('/journal',c=>c.html(shell));app.get('/journal/*',c=>c.html(shell));return app;
+}

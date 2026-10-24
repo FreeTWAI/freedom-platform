@@ -43,12 +43,26 @@ test('logo stays whole and RPG modules remain navigable across desktop and narro
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
       await openPageTools(page);
       await expect(page.locator('.topbar').getByRole('button',{name:'參與編修'})).toBeVisible();
+      // Finish inspecting the tools before interacting with the page beneath
+      // their popover. Dismiss through the same visible control a member uses.
+      const pageTools=page.locator('.page-tools-menu');
+      await pageTools.locator(':scope > summary').click();
+      await expect(pageTools).toHaveJSProperty('open',false);
       await expect(page.locator('.development-context')).toHaveCount(0);
       await expect(page.locator('.expedition-banner-art,.positioning-heading,.home-direction,.home-cooperation')).toHaveCount(0);
       if (['開源投稿','我的名片','自由工坊社群'].includes(button)) await expect(page.locator('.community-library')).toHaveCount(0);
       await expect(page.getByRole('main').getByRole('status').filter({ hasText: /載入|讀取/ })).toHaveCount(0);
       await expect(page.getByRole('alert')).toHaveCount(0);
       if(button==='會員首頁'){
+        // Closing tools must leave discovery reachable below the sticky brand
+        // header without forced clicks or manually changing disclosure state.
+        const discovery=page.locator('.home-participation-disclosure > summary');
+        await expect(discovery).toBeInViewport();
+        await expect.poll(async()=>{
+          const summary=await discovery.boundingBox();
+          const header=await page.locator('.community-header').boundingBox();
+          return !!summary&&!!header&&summary.y>=header.y+header.height;
+        }).toBe(true);
         await expandHomeSections(page);
         await expect(page.locator('.home-destinations button')).toHaveCount(4);
         for(const label of await page.locator('.home-member-skills > span,.home-next-eyebrow,.home-member-name > .positioning-title,.home-partner-heading h2,.home-partner-swap').all()){
