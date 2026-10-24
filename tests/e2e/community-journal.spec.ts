@@ -127,3 +127,15 @@ test('activity clears stale counts while a different period loads and fails',asy
  release();await expect(page.getByRole('alert')).toContainText('暫時讀不到發言');await expect(page.locator('.member-quote')).toHaveCount(0);
  await page.getByRole('button',{name:'近 7 天',exact:true}).click();await expect(page.locator('.member-quote')).toHaveCount(5);await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+
+browserTest('article anchors omit enclosing parentheses and preserve balanced URL parentheses',async({page})=>{
+ const content='參考 (https://example.org/reference). 詳情 (https://example.org/wiki/Topic_(detail)).';
+ const entry={...journal('2026-10-22'),blocks:[{type:'heading',text:'連結測試'},{type:'paragraph',text:content},{type:'quote',text:content},{type:'list',items:[content]}]};
+ await page.route('**/api/v1/public/journal',r=>r.fulfill({json:{data:{people:[person],journals:[entry]}}}));
+ await page.goto('/journal/entries/2026-10-22');
+ const links=page.locator('.chapter a.source-link');await expect(links).toHaveCount(6);
+ for(let i=0;i<6;i++)await expect(links.nth(i)).toHaveAttribute('href',i%2?'https://example.org/wiki/Topic_(detail)':'https://example.org/reference');
+ for(const selector of ['.chapter p:not(.eyebrow)','.chapter blockquote','.chapter li'])await expect(page.locator(selector)).toHaveText(content);
+ for(const link of await links.all()){await expect(link).toHaveAttribute('target','_blank');await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');}
+});
