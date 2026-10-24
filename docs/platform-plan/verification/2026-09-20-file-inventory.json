@@ -2839,13 +2839,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/GuildCard.tsx",
-      "bytes": 8273,
-      "sha256": "b9233e9a3b15970b79338a817d82e781ed2b4c1412f391d0ddd7028f99091a31"
+      "bytes": 12580,
+      "sha256": "b4b466070b58e41039c06a60aa42ab67210ff913a2094583fddbfadd61b9a7d4"
     },
     {
       "path": "apps/portal-web/src/modules/GuildDesign.css",
-      "bytes": 28818,
-      "sha256": "c4b4906c7bcdbda3af1c37eb4868e70afadf231926eb1e4e66dad6cd925946e6"
+      "bytes": 29828,
+      "sha256": "d46da8e5321896908cdd89dd0362b7aa4fc13b4712f3516b4aef2ee1cbb5cd21"
     },
     {
       "path": "apps/portal-web/src/modules/GuildDiscoveryReport.tsx",
@@ -15103,6 +15103,11 @@
       "sha256": "223d1ebefc9f0af6d4025d712e2c206f19d69c8a682f7fd7890cb3933632892e"
     },
     {
+      "path": "docs/development/public-card-featured-posts-proposal.md",
+      "bytes": 15400,
+      "sha256": "742ddd611d70dbf1663b8bc2d530a916b7f9e99b647bb624522b9ab83850a79a"
+    },
+    {
       "path": "docs/development/public-guide-assets.md",
       "bytes": 10207,
       "sha256": "1a5bd32d4fec4428e29be5024b352c56196bff28aabd318957e36ab3210979fb"
@@ -21644,8 +21649,8 @@
     },
     {
       "path": "modules/positioning/freedom.module.json",
-      "bytes": 1952,
-      "sha256": "5d955c4a665fbddd7e8ab0b160dfc791fea9fb55e074a5f1a28af77bc89f3eb8"
+      "bytes": 1996,
+      "sha256": "5a78d983ac3dabeb424029e7dfdbbbbc407edf875962f7c0ee72cedfb49021e1"
     },
     {
       "path": "modules/positioning/guild-categories.ts",
@@ -24014,8 +24019,8 @@
     },
     {
       "path": "tests/e2e/guild-organization.spec.ts",
-      "bytes": 16256,
-      "sha256": "a166344f80b12a80cd5fd0340af63c9eb04bab9d08468a2423c073cf44504584"
+      "bytes": 24978,
+      "sha256": "2765810aaf6936ca218cbb3b909c9dc1b54b5be82a9c55e055553933a698afe7"
     },
     {
       "path": "tests/e2e/guild-reviews.spec.ts",
@@ -24569,8 +24574,8 @@
     },
     {
       "path": "tests/e2e/social-text-history.spec.ts",
-      "bytes": 18992,
-      "sha256": "fa8fbb94cb22f0e99c4bbb5d5c3bf7fb28e22de0a9059b184b010de10da228f4"
+      "bytes": 19110,
+      "sha256": "75dabde033736770ff5b16c51e3aa06ee4b587af6f343888d005f5d1e08cd7b3"
     },
     {
       "path": "tests/e2e/social-wall.spec.ts",
