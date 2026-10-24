@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState} from 'react';
+import {useCallback,useEffect,useId,useRef,useState} from 'react';
 import type {MessageContent,MessageContentInput,MessageReply} from '../../../../modules/member-communications/content-types';
 import {CHAT_STICKERS,CHAT_STICKER_ATLAS,findChatSticker} from '../../../../modules/member-communications/stickers';
 import './ChatContent.css';
@@ -8,9 +8,11 @@ const EMPTY:RichChatDraft={};
 /** Conversation drafts live only in this mounted chat, never in browser storage. */
 export function useRichChatDraft(){
   const [drafts,setDrafts]=useState<Record<string,RichChatDraft>>({});
+  // A reply handler in a memoized history must not change on every draft keystroke.
+  const change=useCallback((key:string,value:Partial<RichChatDraft>)=>setDrafts(current=>({...current,[key]:{...current[key],...value}})),[]);
   return {
     get:(key:string)=>drafts[key]??EMPTY,
-    change:(key:string,value:Partial<RichChatDraft>)=>setDrafts(current=>({...current,[key]:{...current[key],...value}})),
+    change,
     clear:(key:string,expected?:RichChatDraft)=>setDrafts(current=>{if(expected&&(current[key]??EMPTY)!==expected)return current;const {[key]:_,...rest}=current;return rest;}),
   };
 }
