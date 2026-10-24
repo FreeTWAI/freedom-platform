@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { navigate } from './navigation.js';
@@ -172,7 +173,7 @@ test('typed multi-line text keeps its line breaks on the pages that show it', as
     for (const theme of [{ id: 'light', label: '自由工坊－明亮' }, { id: 'dark', label: '自由工坊－夜航' }] as const) {
       const settings = page.getByRole('button', { name: '設定', exact: true });
       if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
-      await page.getByRole('menuitemradio', { name: theme.label, exact: true }).click();
+      await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio', { name: theme.label, exact: true }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id);
       if (await settings.getAttribute('aria-expanded') === 'true') await settings.click();
       for (const size of [{ width: 1440, height: 900, label: '1440' }, { width: 390, height: 844, label: '390' }] as const) {

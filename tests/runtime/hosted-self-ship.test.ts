@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -17,7 +18,7 @@ import {cancelPaidOrder,retryAllocation} from '../../modules/agent-commerce/chec
 import {bindStore,lockStore} from '../../modules/agent-commerce/checkout/authority.js';
 import {publicOrder} from '../../modules/agent-commerce/checkout/public-order.js';
 import {selfShipBy} from '../../modules/agent-commerce/checkout/self-ship-view.js';
-import {readSellerCheckoutOrder,readSellerOrderContact,cancelSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
+import {readSellerCheckoutOrder,readSellerOrderContact,cancelSellerPaidCheckoutOrder,cancelSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
 import {createOrderNotifications} from '../../modules/agent-commerce/checkout/order-notifications.js';
 import {createShippingQuotePort} from '../../modules/agent-commerce/fulfilment/quote/index.js';
 import {selfShipQuote} from '../../modules/agent-commerce/fulfilment/quote/self-ship.js';
@@ -264,4 +265,39 @@ test('a notification database failure rolls back the shipment, receipt and stock
   await assert.rejects(recordSelfShipment(x.runtime,f.owner,f.s.tenantId,f.s.instanceId,f.order.order_id,input,randomUUID(),'1',{orderNotifications:{emit:async q=>{await q.query("SELECT 1/0");}}}),code('22012'));
   assert.deepEqual(await balances(f.s.product.product_id),before);assert.equal((await x.h.pool.query('SELECT count(*)::int n FROM commerce_self_shipments')).rows[0].n,0);
   assert.equal((await x.h.pool.query("SELECT count(*)::int n FROM scoped_command_receipts WHERE operation='commerce.checkout_order.record_self_shipment'")).rows[0].n,0);
+});
+
+async function waitForTwoContenders(pid:number){
+  const deadline=performance.now()+15000;
+  while(performance.now()<deadline){
+    const row=(await x.h.pool.query<{n:number}>(`WITH RECURSIVE blocked(pid) AS (
+      SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a JOIN blocked b ON b.pid=ANY(pg_blocking_pids(a.pid)) WHERE a.datname=current_database())
+      SELECT count(*)::int-1 n FROM blocked`,[pid])).rows[0];
+    if(row.n>=2)return;
+  }
+  assert.fail('both real commands must reach the PostgreSQL lock barrier');
+}
+for(const first of ['cancel','ship','cancel_again'] as const)test(`paid cancellation races a real ${first==='cancel_again'?'second cancellation':'self-shipment'} with ${first} queued first`,async()=>{
+  const f=await paid(),blocker=await x.h.pool.connect(),input=await body();
+  const cancel=()=>cancelSellerPaidCheckoutOrder(x.runtime,f.owner,f.s.tenantId,f.s.instanceId,f.order.order_id,{reason:'buyer_request',refund_state:'pending'},randomUUID(),'1',notices);
+  const shipment=()=>ship(f,input),commands=first==='cancel_again'?[cancel,cancel]:first==='cancel'?[cancel,shipment]:[shipment,cancel];
+  let contenders!:Promise<({value:unknown}|{error:unknown})[]>;
+  try{
+    await blocker.query('BEGIN');await lockStore(blocker,f.s,[],[f.order.order_id],false);
+    const pid=(await blocker.query('SELECT pg_backend_pid() pid')).rows[0].pid;
+    contenders=Promise.all(commands.map(run=>run().then(value=>({value}),error=>({error}))));
+    await waitForTwoContenders(pid);await blocker.query('COMMIT');
+  }finally{await blocker.query('ROLLBACK');blocker.release();}
+  const results=await contenders;assert.equal(results.filter(r=>'value' in r).length,1);
+  const refused=results.find((r):r is {error:unknown}=>'error' in r);assert.ok(refused);assert.equal((refused.error as {status:number}).status,409);
+  const shipments=(await x.h.pool.query('SELECT count(*)::int n FROM commerce_self_shipments WHERE order_id=$1',[f.order.order_id])).rows[0].n;
+  const cancellations=(await x.h.pool.query('SELECT count(*)::int n FROM commerce_paid_cancellations WHERE order_id=$1',[f.order.order_id])).rows[0].n;
+  assert.equal(shipments+cancellations,1);if(first==='cancel_again')assert.equal(cancellations,1);
+  assert.equal((await balances(f.s.product.product_id)).reserved,0);
+});
+
+test('paid cancellation refuses registered self-shipment and all shipped quantities',async()=>{
+  const f=await paid();await ship(f,await body());
+  await denied(()=>cancelSellerPaidCheckoutOrder(x.runtime,f.owner,f.s.tenantId,f.s.instanceId,f.order.order_id,{reason:'other',refund_state:'pending'},randomUUID(),'1'),'order_already_shipped');
+  assert.equal((await x.h.pool.query('SELECT count(*)::int n FROM commerce_paid_cancellations WHERE order_id=$1',[f.order.order_id])).rows[0].n,0);
 });

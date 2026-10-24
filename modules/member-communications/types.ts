@@ -3,7 +3,9 @@
 
 import type {MessageContent} from './content-types.js';
 export const ORDER_NOTIFICATION_KINDS=[
-  'commerce_order_shipped','commerce_order_placed','commerce_order_buyer_cancelled','commerce_order_payment_confirmed',
+  'commerce_drop_ship_proposed','commerce_drop_ship_accepted','commerce_drop_ship_declined','commerce_drop_ship_revoked',
+  'commerce_drop_ship_payment_confirmed','commerce_drop_ship_shipped','commerce_drop_ship_unable',
+  'commerce_order_paid_cancelled','commerce_order_refund_recorded','commerce_order_shipped','commerce_order_placed','commerce_order_buyer_cancelled','commerce_order_payment_confirmed',
   'commerce_order_handed_over','commerce_order_seller_cancelled','commerce_order_payment_expired',
 ] as const;
 export const NOTIFICATION_KINDS=[
@@ -31,7 +33,7 @@ export type OrderNotificationAction=
   |{tab:'reservations';resource_id:string};
 
 const compactOrderUuid='[0-9a-f]{12}[1-8][0-9a-f]{3}[89ab][0-9a-f]{15}';
-const sellerOrderLocator=new RegExp(`^${compactOrderUuid}_${compactOrderUuid}_${compactOrderUuid}$(?![\\s\\S])`);
+const sellerOrderLocator=new RegExp(`^[asg]?${compactOrderUuid}_${compactOrderUuid}_${compactOrderUuid}$(?![\\s\\S])`);
 const buyerOrderLocator=/^[a-z][a-z0-9-]{1,38}[a-z0-9]\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/;
 
 /** Browser-safe wire guard. No URL, token, extra field or partial order selector is an action. */
@@ -69,7 +71,10 @@ export type Conversation={participant:Participant;can_send:boolean;last_message:
 /** unread_count: total unread direct messages for the viewer. */
 export type ConversationPage={items:Conversation[];unread_count:number;next_offset:number|null};
 /** unread_count: unread messages from this participant to the viewer. */
-export type MessagePage={participant:Participant;can_send:boolean;items:Message[];unread_count:number;next_offset:number|null;retraction_count?:string};
+export type MessagePage={participant:Participant;can_send:boolean;items:Message[];unread_count:number;next_offset:number|null;retraction_count?:string;receipt_lookup?:'ids-v1'};
+/** Exact outgoing receipts only; no message content or inferred read-through boundary. */
+export type DirectMessageReceiptPage={items:{message_id:string;read_at:string|null}[]};
+export const DIRECT_MESSAGE_RECEIPT_BATCH_MAX=50;
 /** Body-free update check for one conversation, under the same access rules as its history. */
 export type ConversationActivity={last_message_id:string|null;unread_count:number;can_send:boolean;last_outgoing:{message_id:string;read_at:string|null}|null;retraction_count?:string};
 /** The portal supplies the latest displayed message of this pair; newer arrivals stay unread. Empty body remains compatible with older clients. */

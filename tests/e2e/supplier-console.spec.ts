@@ -116,6 +116,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await expect(nav.getByRole('link')).toHaveCount(0);
     // Before setup every page this member may use is listed but disabled. 預留與訂單 is absent: the owner check runs after setup.
     await expect(nav.locator('[aria-disabled="true"]')).toHaveText([
+      '代出貨訂單',
       '營運概覽',
       '商品與庫存',
       '合作店家',

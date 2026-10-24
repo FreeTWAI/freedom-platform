@@ -1,7 +1,7 @@
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {SelfShipmentInputSchema,SellerCheckoutOrderSchema,type SellerCheckoutOrder} from '../../../../contracts/guild-launchpad/v1/hosted-seller-checkout';
 import {SELF_SHIP_CARRIER_LABELS} from '../../../../contracts/guild-launchpad/v1/hosted-checkout';
-import {formatIsoLocal} from '../../../../apps/portal-web/src/format';
+import {formatIsoLocal,formatMinor} from '../../../../apps/portal-web/src/format';
 import {ApiError} from '../../../../apps/portal-web/src/api';
 import type {Controller} from '../state/controller';
 import {Axis} from './Shared';
@@ -60,10 +60,11 @@ export function SelfShipOrder({c,order,ready,contact}:{c:Controller;order:Seller
   {order.actions.record_self_shipment&&(editing?<Form c={c} order={order} ready={ready} close={()=>setEditing(false)}/>:<div className="actions"><button className="btn btn-ghost btn-small" type="button" disabled={c.locked||!ready} onClick={()=>setEditing(true)}>登記出貨</button></div>)}
   {stockBlocked&&<p role="status">付款已確認，但商品尚未完成配貨，暫時不能登記出貨。</p>}
  </>:null;
- return <Axis title="自行寄送"><div className="stack seller-self-ship">
+ return <Axis title={order.drop_ship?'供應商代出貨':'自行寄送'}><div className="stack seller-self-ship">
+  {order.drop_ship&&<><p>出貨者：{order.drop_ship.supplier_name}（代出貨）</p><p>供應成本：{formatMinor(order.drop_ship.supply_cost_minor,order.currency)}；代出貨費（含郵資）：{formatMinor(order.drop_ship.fee_per_order_minor,order.currency)}。由店家於平台外支付。</p>{order.drop_ship.unable&&<p role="status">供應商回報無法出貨：{{out_of_stock:'缺貨',cannot_ship:'無法寄送',other:'其他'}[order.drop_ship.unable.reason]}{order.drop_ship.unable.note?' · '+order.drop_ship.unable.note:''}</p>}</>}
   <p>{shipment?'已出貨':pending?ship.ship_by?'等待出貨':'等待付款確認':'訂單已取消，不能登記出貨。'}</p>
   {pending&&<><p>{ship.ship_by?`店家承諾於 ${ship.ship_by} 前寄出。`:`店家確認收款後 ${ship.handling_days} 個工作天內寄出。`}</p><p>工作天為週一至週五，不另排除國定假日。</p>{ship.note&&<p className="seller-self-ship-note">{ship.note}</p>}</>}
   <div className={contact&&fulfilment?'seller-self-ship-sections':'stack'}>{contact}{fulfilment&&<div className="stack">{fulfilment}</div>}</div>
-  <p>只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。</p>
+  <p>只記錄{order.drop_ship?'供應商':'店家'}填寫的資訊，工坊不追蹤物流、不核實簽收。</p>
  </div></Axis>;
 }

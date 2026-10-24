@@ -145,7 +145,7 @@
 .app-frame.social-layout .home-destinations button strong,.app-frame.social-layout .home-destinations button span{grid-column:1}
 .app-frame.social-layout .home-destinations button .home-destination-arrow{grid-column:2;grid-row:1/3;align-self:center;color:var(--muted)}
 
-/* Participation collapses on phones; real next steps stay open before the feed. */
+/* Optional exploration preserves all real next steps before the feed. */
 .app-frame.social-layout .freedom-home .home-main{display:grid;gap:16px}
 .app-frame.social-layout .home-participation{display:grid;gap:14px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--bg-elev)}
 .app-frame.social-layout .home-participation header{display:grid;gap:4px}
@@ -162,7 +162,7 @@
 .app-frame.social-layout .home-return .btn{min-height:44px;padding:6px 10px;font-size:.875rem;white-space:normal}
 .app-frame.social-layout .home-return-heading .btn{border:0;text-decoration:underline;text-underline-offset:3px}
 .app-frame.social-layout .home-return-actions{display:flex;flex-wrap:wrap;gap:6px}
-.app-frame.social-layout .home-main>.home-next-step{order:0;padding:14px 16px}
+.app-frame.social-layout .home-participation-disclosure .home-next-step{order:0;padding:14px 16px}
 .app-frame.social-layout .home-main .home-next-copy{min-width:0;display:grid;gap:8px}
 .app-frame.social-layout .home-main .home-next-copy>.home-next-eyebrow{margin:0}
 .app-frame.social-layout .freedom-home .home-main #home-next-step-description{margin:0}
@@ -177,3 +177,14 @@
 .home-journal-dialog>iframe{display:block;width:100%;flex:1;min-height:0;border:0;background:var(--bg-elev)}
 .home-journal-dialog>header h2{margin:0 auto 0 0;font-size:1rem}
 .home-journal-dialog>header .btn{min-height:44px;flex-shrink:0}
+/* Member home stays content-first at every width. Exploration opens only by choice. */
+.app-frame.social-layout .sidebar .brand-home { min-height:44px; width:fit-content; color:var(--ink); text-decoration:none; }
+.app-frame.social-layout .sidebar .brand-home:focus-visible { outline:2px solid var(--focus); outline-offset:4px; border-radius:4px; }
+.app-frame.social-layout .home-participation-disclosure > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px; list-style:none; }
+.app-frame.social-layout .home-participation-disclosure > summary::-webkit-details-marker { display:none; }
+.app-frame.social-layout .home-participation-disclosure > summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+.app-frame.social-layout .home-explore-indicator { flex-shrink:0; font-size:.875rem; }
+.app-frame.social-layout .home-explore-close, .app-frame.social-layout .home-participation-disclosure[open] .home-explore-open { display:none; }
+.app-frame.social-layout .home-participation-disclosure[open] .home-explore-close { display:inline; }
+.app-frame.social-layout .home-participation-disclosure:not([open]) > :not(summary) { display:none; }
+.app-frame.social-layout .home-exploration-content { display:grid; gap:16px; padding-top:12px; }

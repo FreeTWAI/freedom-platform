@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import sharp from 'sharp';
@@ -154,7 +155,7 @@ test.describe('isolated authored outcomes',()=>{
     for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
       const settings=page.getByRole('button',{name:'設定',exact:true});
       await settings.click();
-      await page.getByRole('menuitemradio',{name,exact:true}).click();
+      await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
       await settings.click();
       await expect(settings).toHaveAttribute('aria-expanded','false');

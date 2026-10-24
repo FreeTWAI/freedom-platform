@@ -31,7 +31,7 @@ test('owner settings remain separate from unavailable work and retain the brand 
   for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
     await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await expect(page.locator('.sidebar-brand-art')).toBeVisible();
+    await expect(page.locator('.brand-home')).toBeVisible();
     await page.screenshot({path:info.outputPath(`model-settings-after-${width}.png`),fullPage:true});
     await page.screenshot({path:info.outputPath(`model-settings-after-viewport-${width}.png`)});
   }

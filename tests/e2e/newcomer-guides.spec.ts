@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {openChat,closeChat} from './navigation.js';
 import {openPageTools} from './navigation.js';
 // Browser regressions adapted from mars-tw PR #106 (46a4034) and inline follow-up 99b9045, plus opt-in/release isolation.
@@ -392,9 +393,9 @@ test('opt-in NPC input and gallery button keep readable contrast', async ({page}
   for (const [label, theme] of [['新手導覽－龍娘','dark']] as const) {
     const settings = page.getByRole('button',{name:'設定',exact:true});
     if (await settings.getAttribute('aria-expanded')!=='true') await settings.click();
-    await page.getByRole('menuitemradio',{name:label,exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
-    await page.keyboard.press('Escape');
+    await closeSettingsMenu(page);
     await openSpirit(page);
     await panel(page).getByRole('textbox',{name:'問本頁問題',exact:true}).fill('本頁文字對比測試');
     const metrics = await panel(page).evaluate(element => {
@@ -715,8 +716,8 @@ for(const [profile,label] of [['light','自由工坊－明亮'],['dark','自由�
 test('selecting the fourth profile persists one choice; switching back cancels guide, tabindex, gallery and late release',async({page})=>{
   await registerJoined(page,'light');
   await page.getByRole('button',{name:'設定',exact:true}).click();
-  await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();
-  await page.keyboard.press('Escape');
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();
+  await closeSettingsMenu(page);
   await expect(widget(page)).toHaveAttribute('data-page-id','home');
   await expect(page.locator('html')).toHaveAttribute('data-guide-skin','dragon');
   await page.reload();await expect(widget(page)).toHaveAttribute('data-page-id','home');
@@ -725,16 +726,16 @@ test('selecting the fourth profile persists one choice; switching back cancels g
   await openSpirit(page);await useInstantText(page);await ask(page,home.topics[0].label);
   await panel(page).getByRole('button',{name:getSpiritGuide('home',home.topics[0].id)!.label,exact:true}).click();
   const highlighted=page.locator('[data-page-spirit-guide-target="true"]');await expect(highlighted).toHaveCount(1);
-  await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();
+  await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();
   await expect(widget(page)).toHaveCount(0);await expect(highlighted).toHaveCount(0);
   expect(await page.locator('[data-guide-anchor="home:member-summary"]').getAttribute('tabindex')).toBe(originalHomeTabIndex);
   await expect(page.locator('html')).not.toHaveAttribute('data-guide-skin','dragon');
-  await page.keyboard.press('Escape');await navigate(page,'工坊夥伴');
+  await closeSettingsMenu(page);await navigate(page,'工坊夥伴');
   const search=page.getByLabel('搜尋夥伴',{exact:true}),raw=`private-profile-switch-${randomUUID()}`;
   await search.fill(raw);const originalSearch=await search.elementHandle();
   for(const label of ['新手導覽－龍娘','自由工坊－夜航','新手導覽－龍娘']) {
     await page.getByRole('button',{name:'設定',exact:true}).click();
-    await page.getByRole('menuitemradio',{name:label,exact:true}).click();await page.keyboard.press('Escape');
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await closeSettingsMenu(page);
     if(label==='新手導覽－龍娘')await expect(widget(page)).toHaveAttribute('data-page-id','members');
     else await expect(widget(page)).toHaveCount(0);
     expect(await originalSearch!.evaluate(element=>element.isConnected)).toBe(true);
@@ -766,17 +767,17 @@ test('default-off or mismatched release never imports the engine or requests art
   for(const reply of [{enabled:false},{...DRAGON_RELEASE_PIN,enabled:true,version:'synthetic-mismatched-version'}]) {
     releaseReply=reply;
     const checked=page.waitForResponse('**/api/v1/guide-packs/release');
-    await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();await checked;
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();await checked;
     await expect(widget(page)).toHaveCount(0);expect(requests).toEqual([]);expect(engineRequests).toEqual([]);
-    await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();
   }
   await page.unroute('**/api/v1/guide-packs/release');
   let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve});
   let finished!:()=>void;const settled=new Promise<void>(resolve=>{finished=resolve});
   await page.route('**/api/v1/guide-packs/release',async route=>{try{await held;await route.fulfill({json:{...DRAGON_RELEASE_PIN,enabled:true}}).catch(()=>{})}finally{finished()}});
   const pending=page.waitForRequest('**/api/v1/guide-packs/release');
-  await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();await pending;
-  await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();release();await settled;
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true}).click();await pending;
+  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－明亮',exact:true}).click();release();await settled;
   await expect(widget(page)).toHaveCount(0);expect(requests).toEqual([]);expect(engineRequests).toEqual([]);
 });
 

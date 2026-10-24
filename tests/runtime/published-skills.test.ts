@@ -81,3 +81,16 @@ test('published member skills receive the same optional signup without hiding th
  assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
  assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
 });
+
+
+test('shared submission reading and real source destinations precede optional illustration and acquisition',()=>{
+ const html=submittedSkillHtml(skill,'17');
+ const reading=html.indexOf('<section class="public-skill-introduction"');
+ const destinations=html.indexOf('<section class="public-skill-next"');
+ const illustration=html.indexOf('<figure class="public-skill-illustration"');
+ assert.ok(reading>0&&destinations>reading&&illustration>destinations);
+ assert.ok(html.indexOf('id="join-workshop"')>destinations);
+ assert.ok(html.includes(skill.use_notes));
+ assert.ok(html.includes('href="#skill-use-title"'));
+ assert.ok(html.includes('href="#skill-next-title"'));
+});

@@ -21,7 +21,7 @@ export const CheckoutBuyerIdentitySchema=z.union([z.literal('guest'),z.string().
 export type CheckoutBuyerIdentity=z.infer<typeof CheckoutBuyerIdentitySchema>;
 export const ShippingMethodRefSchema=z.enum(['home','cvs:UNIMARTC2C','cvs:FAMIC2C','cvs:HILIFEC2C','meetup','self_ship']);
 export const DeliveryFieldErrorCodeSchema=z.enum(['required','format','too_short','too_long','unknown_postal_code','blocked_term']);
-export const ShippingUnavailableReasonSchema=z.enum(['fulfilment_not_agreed','shipping_attributes_missing','method_unsupported','temperature_unsupported','too_large','cvs_value_limit','outlying_unsupported']);
+export const ShippingUnavailableReasonSchema=z.enum(['fulfilment_mixed_shippers','fulfilment_not_agreed','shipping_attributes_missing','method_unsupported','temperature_unsupported','too_large','cvs_value_limit','outlying_unsupported']);
 /** Seller meetup note: trimmed, 1–200 code points, controls forbidden except LF. */
 export const MeetupNoteSchema=z.string().trim().regex(/^(?:[^\uD800-\uDFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]){1,200}$(?![\s\S])/).regex(/^[^\u0000-\u0009\u000B-\u001F\u007F-\u009F]*$(?![\s\S])/);
 const groupRef=z.string().regex(/^g(?:[1-9]|[1-4][0-9]|50)$(?![\s\S])/);
@@ -31,16 +31,17 @@ const frozenLogistics=z.object({service_key:logisticsServiceKey,logistics_sub_ty
 export const SELF_SHIP_CARRIER_LABELS={post:'中華郵政',tcat:'黑貓宅急便',hct:'新竹物流',tjoin:'嘉里大榮',other:'其他'} as const;
 export const SelfShipTermsSchema=z.object({service_key:z.literal('seller.self_ship.v1'),fee_basis:z.literal('order'),handling_days:z.number().int().min(1).max(14),working_days:z.tuple([z.literal(1),z.literal(2),z.literal(3),z.literal(4),z.literal(5)]),note:MeetupNoteSchema.nullable()}).strict();
 export const SelfShipmentSchema=z.object({shipment_ref:OpaqueId,carrier_key:z.enum(['post','tcat','hct','tjoin','other']),carrier_name:z.string().min(1).max(40).nullable(),tracking_number:z.string().regex(/^[0-9A-Za-z-]{1,50}$(?![\s\S])/).nullable(),sent_on:z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/),recorded_at:time,redacted:z.boolean()}).strict().refine(v=>v.redacted?v.tracking_number===null&&v.carrier_name===null:v.tracking_number!==null&&(v.carrier_key==='other'?v.carrier_name!==null:v.carrier_name===null),'Shipment redaction and carrier must agree.');
-export const SelfShipOrderSchema=z.object({handling_days:z.number().int().min(1).max(14),note:MeetupNoteSchema.nullable(),ship_by:z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).nullable(),shipment:SelfShipmentSchema.nullable()}).strict();
+export const SelfShipOrderSchema=z.object({fulfilment_mode:z.enum(['self','drop_ship']).optional(),handling_days:z.number().int().min(1).max(14),note:MeetupNoteSchema.nullable(),ship_by:z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\s\S])/).nullable(),shipment:SelfShipmentSchema.nullable()}).strict();
 const frozenParcel=z.object({parcel_ref:z.string().regex(/^g(?:[1-9]|[1-4][0-9]|50)-p[1-9][0-9]{0,3}$(?![\s\S])/),lines:z.array(z.object({sku,quantity}).strict()).min(1).max(50),weight_g:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),declared_value_minor:money}).strict();
-const frozenGroup=z.object({group_ref:groupRef,supplier_shop_id:OpaqueId,method_ref:ShippingMethodRefSchema,fulfilment_mode:z.enum(['self','drop_ship']),agreement:z.object({agreement_id:OpaqueId,version:Version}).strict().nullable(),profile_version:Version,logistics:frozenLogistics.nullable(),meetup:z.object({note:MeetupNoteSchema}).strict().nullable(),self_ship:SelfShipTermsSchema.optional(),parcels:z.array(frozenParcel).min(1).max(4950),attribute_versions:z.array(z.object({sku,version:Version}).strict()).max(50),fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,amount_minor:money}).strict();
+export const DropShipFrozenTermsSchema=z.object({supplier_name:z.string(),fee_per_order_minor:money,promise_working_days:z.number().int().min(1).max(14),terms_sha256:sha,supply_cost_minor:money,items:z.array(z.object({sku,selection_id:OpaqueId,unit_supply_cost_minor:money}).strict()).min(1).max(50)}).strict();
+const frozenGroup=z.object({group_ref:groupRef,supplier_shop_id:OpaqueId,method_ref:ShippingMethodRefSchema,fulfilment_mode:z.enum(['self','drop_ship']),agreement:z.object({agreement_id:OpaqueId,version:Version}).strict().nullable(),profile_version:Version,logistics:frozenLogistics.nullable(),meetup:z.object({note:MeetupNoteSchema}).strict().nullable(),self_ship:SelfShipTermsSchema.optional(),drop_ship:DropShipFrozenTermsSchema.optional(),parcels:z.array(frozenParcel).min(1).max(4950),attribute_versions:z.array(z.object({sku,version:Version}).strict()).max(50),fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,amount_minor:money}).strict();
 /** Frozen delivery terms. Invariants that relate groups to the quoted lines live in validateShippingQuote. */
 export const CheckoutShippingSchema=z.object({delivery_profile_version:Version,destination_state:z.enum(['complete','store_required']),groups:z.array(frozenGroup).min(1).max(50)}).strict();
-const publicGroup=z.object({group_ref:groupRef,method:ShippingMethodRefSchema,amount_minor:money,fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,parcel_count:z.number().int().min(1).max(4950),handling_days:z.number().int().min(1).max(14).nullable(),items:z.array(z.object({sku,quantity}).strict()).min(1).max(50),meetup_note:MeetupNoteSchema.nullable(),self_ship:SelfShipTermsSchema.pick({handling_days:true,note:true}).optional()}).strict();
+const publicGroup=z.object({group_ref:groupRef,fulfilment_mode:z.enum(['self','drop_ship']).optional(),method:ShippingMethodRefSchema,amount_minor:money,fee_per_parcel_minor:money,outlying_surcharge_per_parcel_minor:money,parcel_count:z.number().int().min(1).max(4950),handling_days:z.number().int().min(1).max(14).nullable(),items:z.array(z.object({sku,quantity}).strict()).min(1).max(50),meetup_note:MeetupNoteSchema.nullable(),self_ship:SelfShipTermsSchema.pick({handling_days:true,note:true}).optional()}).strict();
 const publicShipping=z.object({destination_state:z.enum(['complete','store_required']),groups:z.array(publicGroup).min(1).max(50)}).strict();
 const cartOutlying=z.discriminatedUnion('kind',[z.object({kind:z.literal('excluded')}).strict(),z.object({kind:z.literal('surcharge'),surcharge_per_parcel_minor:money}).strict()]);
 /** available ⇔ no unavailable lines ⇔ both totals are present. */
-export const CartDeliveryOptionSchema=z.object({method:ShippingMethodRefSchema,available:z.boolean(),shipping_total_minor:money.nullable(),parcel_count:z.number().int().nonnegative().max(4950).nullable(),free_over_minor:money.nullable(),outlying:cartOutlying.nullable(),note:MeetupNoteSchema.nullable(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).max(50)}).strict().superRefine((value,ctx)=>{
+export const CartDeliveryOptionSchema=z.object({fulfilment_mode:z.enum(['self','drop_ship']).optional(),method:ShippingMethodRefSchema,available:z.boolean(),shipping_total_minor:money.nullable(),parcel_count:z.number().int().nonnegative().max(4950).nullable(),free_over_minor:money.nullable(),outlying:cartOutlying.nullable(),note:MeetupNoteSchema.nullable(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).max(50)}).strict().superRefine((value,ctx)=>{
   const both=value.shipping_total_minor!==null&&value.parcel_count!==null;
   const neither=value.shipping_total_minor===null&&value.parcel_count===null;
   if(!both&&!neither||value.available!==(value.lines.length===0)||(value.lines.length===0)!==both)ctx.addIssue({code:'custom',message:'Cart delivery option availability does not match its lines and totals.'});
@@ -111,6 +112,13 @@ export const PaymentOptionSchema=CartQuoteResponseSchema.shape.payment_options.e
 export const PlaceOrderInputSchema=z.object({terms_sha256:sha,client_order_id:OpaqueId,payment_method:PaymentMethodSchema.optional()}).strict();
 export const OfflineInstructionsSchema=z.object({bank_code:z.string().regex(/^[0-9]{3}$(?![\s\S])/),bank_name:text.min(1).max(20),branch_name:text.min(1).max(20).nullable(),
   account_number:z.string().regex(/^[0-9]{6,16}$(?![\s\S])/),account_name:text.min(1).max(40),note:text.min(1).max(200).nullable(),amount_minor:money,pay_by:time}).strict();
+export const PAID_CANCELLATION_REASON_LABELS={out_of_stock:'缺貨',cannot_ship:'無法出貨',buyer_request:'買家要求',other:'其他'} as const;
+export const PaidCancellationReasonSchema=z.enum(['out_of_stock','cannot_ship','buyer_request','other']);
+const paidCancellation=z.object({reason:PaidCancellationReasonSchema,amount_minor:money,currency:CurrencySchema});
+export const PaidCancellationSchema=z.discriminatedUnion('refund_state',[
+  paidCancellation.extend({refund_state:z.literal('pending'),refunded_on:z.null(),refund_method:z.null()}).strict(),
+  paidCancellation.extend({refund_state:z.literal('recorded'),refunded_on:CheckoutDateSchema,refund_method:z.enum(['bank_transfer','cash'])}).strict(),
+]);
 export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.string().regex(/^[0-9]{6}-[0-9A-HJKMNP-TV-Z]{6}$(?![\s\S])/),
   store:z.object({slug:StoreSlugSchema,name:z.string().min(1).max(80)}).strict(),created_at:time,pay_by:time,reservation_expired:z.boolean(),
   lifecycle_state:z.enum(['open','cancelled','closed']),cancel_reason:z.enum(['buyer_cancelled','seller_cancelled','payment_not_completed','paid_cancelled']).nullable(),currency:CurrencySchema,
@@ -120,6 +128,7 @@ export const PublicOrderSchema=z.object({order_ref:OpaqueId,display_number:z.str
   /** Frozen public meetup notes; optional for older order response producers. */
   meetup_notes:z.array(MeetupNoteSchema).max(50).optional(),
   self_ship:SelfShipOrderSchema.optional(),
+  paid_cancellation:PaidCancellationSchema.nullable().optional(),
   /** Recorded meetup handover; optional for older order response producers. */
   meetup_handover:z.object({completed_on:CheckoutDateSchema}).strict().nullable().optional(),
   latest_payment_attempt:z.object({attempt_ref:OpaqueId,state:z.enum(['ready','awaiting_result','paid','failed','expired']),created_at:time}).strict().nullable(),can_resume_payment:z.boolean(),contact:contact.nullable(),delivery:object.nullable(),invoice:object.nullable(),redacted:z.boolean(),

@@ -1,3 +1,4 @@
+import {personalPostPath} from './personal-space-model';
 import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { requireItems } from '../api';
 import { accessAwareFetch } from '../access-fetch';
@@ -14,7 +15,8 @@ const statuses: Record<string, string> = { draft: '私人草稿', withdrawn: '�
 const visibility: Record<string, string> = { private: '僅本人可見', community: '本社群會員可見', public: '公開可索引', workshop: '工坊會員可見', guild: '指定公會可見', referral: '活動頁公開；報名需推薦連結', open: '公開活動頁' };
 const actionLabels: Record<string, string> = { manage: '管理作品', continue: '繼續', edit: '編輯', view: '查看', withdraw: '撤下', cancel: '取消活動', cancel_review: '取消審核', publish: '檢查並發布' };
 const selectedShowcase = () => /^#my-content\/showcases\/([^/?]+)$/.exec(window.location.hash)?.[1] ?? null;
-function actionPath(item: PersonalContentItem, action: string): string | null {
+export function personalContentActionPath(item: PersonalContentItem, action: string): string | null {
+  if (item.kind === 'social_post') return action === 'view' ? personalPostPath(item) : null;
   const id = encodeURIComponent(item.id);
   if (item.kind === 'showcase') return action === 'view' ? `#showcase/${id}` : `#my-content/showcases/${id}`;
   if (item.kind === 'skill_submission' && action === 'manage') return /^#opensource\?project=[0-9a-f-]{36}$/.test(item.manage_path ?? '') ? item.manage_path! : null;
@@ -56,7 +58,7 @@ export function MyContent() {
     {!error && shown.map(item => <article className="card stack" key={`${item.kind}:${item.id}`} aria-label={`${kinds[item.kind]}：${item.title}`}>
       <div className="card-head"><h3 className="work-sharing-preview">{item.title || '未命名內容'}</h3><span className="pill">{kinds[item.kind]}</span></div>
       <dl className="meta"><div><dt>狀態</dt><dd>{statuses[item.status] ?? item.status}</dd></div><div><dt>可見範圍</dt><dd>{visibility[item.visibility] ?? item.visibility}</dd></div>{item.version !== null && <div><dt>來源版本</dt><dd>{item.version}</dd></div>}</dl>
-      <div className="actions">{item.actions.map(action => { if (item.kind === 'social_post' && action === 'withdraw') return <SocialWithdrawal key={action} item={item} onChanged={() => void load()}/>; const path = actionPath(item, action); return path && actionLabels[action] ? <a className="btn btn-secondary btn-small" key={action} href={path}>{actionLabels[action]}</a> : null; })}</div>
+      <div className="actions">{item.actions.map(action => { if (item.kind === 'social_post' && action === 'withdraw') return <SocialWithdrawal key={action} item={item} onChanged={() => void load()}/>; const path = personalContentActionPath(item, action); return path && actionLabels[action] ? <a className="btn btn-secondary btn-small" key={action} href={path}>{actionLabels[action]}</a> : null; })}</div>
     </article>)}
   </div>;
 }

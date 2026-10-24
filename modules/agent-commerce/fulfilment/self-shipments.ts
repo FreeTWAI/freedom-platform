@@ -24,7 +24,9 @@ export function shipmentInput(raw:unknown) {
       record[key]=normalized;
     }
   }
-  const parsed=SelfShipmentInputSchema.parse(value);
+  const result=SelfShipmentInputSchema.safeParse(value);
+  requireCondition(result.success,422,'validation_failed','出貨資料有誤。');
+  const parsed=result.data;
   requireCondition(parsed.carrier_key==='other'?parsed.carrier_name!==undefined:parsed.carrier_name===undefined,422,'validation_failed','物流業者資料有誤。');
   return parsed;
 }
@@ -33,10 +35,11 @@ export async function recordSelfShipment(pool:Pool,actor:Actor,tenantId:string,i
   quarantineGate(options);const body=shipmentInput(raw);
   return sellerCheckoutCommand(pool,actor,tenantId,instanceId,'store:fulfil','commerce.checkout_order.record_self_shipment',{kind:'hosted_checkout_order',id},body,key,expected,async(q,context)=>{
     await sellerCheckoutOrderRow(q,context,id);const store={storefront_shop_id:context.profile.storefront_shop_id};
-    await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);checkVersion(order.version,expected);
+    await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);
+    requireCondition(order.lifecycle_state!=='cancelled',409,'order_cancelled','訂單已取消。');
+    checkVersion(order.version,expected);
     requireCondition(order.terms.shipping.groups.length===1&&order.terms.shipping.groups.every(group=>group.method_ref==='self_ship'&&group.fulfilment_mode==='self')&&order.terms.bindings.every(line=>line.supplier_instance_id===instanceId),409,'self_ship_not_selected','這筆訂單不是店家自行寄送。');
     requireCondition(order.payment_method==='bank_transfer'&&order.terms.currency==='TWD',409,'payment_method_mismatch','訂單的付款方式不符。');
-    requireCondition(order.lifecycle_state!=='cancelled',409,'order_cancelled','訂單已取消。');
     requireCondition(order.lifecycle_state==='open',409,'checkout_order_closed','訂單已結束。');
     requireCondition(await hasConfirmedPayment(q,id),409,'payment_not_confirmed','訂單尚未確認付款。');
     requireCondition(!(await q.query('SELECT 1 FROM commerce_self_shipments WHERE order_id=$1',[id])).rowCount,409,'self_shipment_already_recorded','出貨已經登記。');

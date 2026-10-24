@@ -16,7 +16,17 @@ before(async()=>{f=await hostedPaymentHarness('fp_seller_exceptions',{randomCont
 beforeEach(async()=>{await f.reset();f.install({tenantListCursors:createTenantListCursorCodec(randomBytes(32).toString('base64url'),{environment:'local',origin:f.origin})});});
 after(async()=>f?.stop());
 async function fixture(){const p=await f.placed(),actor=await authenticate(f.x.runtime,p.s.owner.cookie.split('=')[1].split(';')[0]);return {...p,actor};}
-async function open(p:Awaited<ReturnType<typeof fixture>>,kind:PaymentExceptionKind,order=true,subject=p.payment.attempt_ref){return f.x.tx(async q=>{await bindStore(q,p.s.tenantId);return openException(q,{tenantId:p.s.tenantId,instanceId:p.s.instanceId,orderId:order?p.order.order_ref:null,kind,subjectKind:'payment_attempt',subjectId:subject});});}
+async function open(p:Awaited<ReturnType<typeof fixture>>,kind:PaymentExceptionKind,order=true,subject=p.payment.attempt_ref){
+  if(kind==='fulfiller_unable'){
+    const supplier=await f.x.store();
+    return f.x.tx(async q=>{
+      await bindStore(q,p.s.tenantId);
+      return (await q.query(`INSERT INTO commerce_exception_cases(tenant_id,instance_id,order_id,kind,subject_kind,subject_id,responsible_party,executor_tenant_id,due_at,opened_by_kind,fulfiller_reason)
+        VALUES($1,$2,$3,'fulfiller_unable','order',$3,'retailer',$4,clock_timestamp()+interval '72 hours','system','cannot_ship') RETURNING *`,[p.s.tenantId,p.s.instanceId,p.order.order_ref,supplier.tenantId])).rows[0];
+    });
+  }
+  return f.x.tx(async q=>{await bindStore(q,p.s.tenantId);return openException(q,{tenantId:p.s.tenantId,instanceId:p.s.instanceId,orderId:order?p.order.order_ref:null,kind,subjectKind:'payment_attempt',subjectId:subject});});
+}
 const read=(p:Awaited<ReturnType<typeof fixture>>,id:string)=>readSellerException(f.x.runtime,p.actor,p.s.tenantId,p.s.instanceId,id);
 const act=(p:Awaited<ReturnType<typeof fixture>>,id:string,action:'resolve_with_evidence'|'retry_allocation',body:unknown,version='1',key=randomUUID())=>actOnSellerException(f.x.runtime,p.actor,p.s.tenantId,p.s.instanceId,id,action,body,key,version,{settings:f.settings});
 async function today(){return (await f.x.h.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') today")).rows[0].today;}
@@ -24,7 +34,13 @@ test('all payment kinds expose only their legal actions and resolution codes; fi
   const p=await fixture();
   for(const kind of Object.keys(CASE_RESOLUTION_CODES) as PaymentExceptionKind[]){
     const c=await open(p,kind),v=await read(p,c.case_id);
-    assert.deepEqual(v.allowed_actions,kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']);assert.deepEqual(v.resolution_codes,CASE_RESOLUTION_CODES[kind]);
+    assert.deepEqual(v.allowed_actions,kind==='fulfiller_unable'?[]:kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']);assert.deepEqual(v.resolution_codes,CASE_RESOLUTION_CODES[kind]);
+    if(kind==='fulfiller_unable'){
+      assert.equal(v.next_action,'cancel_and_refund');
+      await assert.rejects(act(p,c.case_id,'resolve_with_evidence',{code:'refunded',provider_date:await today(),provider_reference:'F1'}),code('exception_action_unavailable'));
+      await assert.rejects(act(p,c.case_id,'retry_allocation',{}),code('exception_action_unavailable'));
+      continue;
+    }
     if(kind==='paid_unallocatable') {await assert.rejects(act(p,c.case_id,'resolve_with_evidence',{code:'confirmed'}),code('exception_action_unavailable'));continue;}
     await assert.rejects(act(p,c.case_id,'retry_allocation',{}),code('exception_action_unavailable'));
     const good=CASE_RESOLUTION_CODES[kind].includes('refunded')?'refunded':'checked_with_provider',wrong=good==='refunded'?'checked_with_provider':'refunded',evidence={provider_date:await today(),provider_reference:'fixture_'+randomBytes(8).toString('hex')};

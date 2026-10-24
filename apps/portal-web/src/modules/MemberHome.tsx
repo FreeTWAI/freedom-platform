@@ -1,3 +1,4 @@
+import {useLanguage} from '../language';
 import {FirstParticipation} from './FirstParticipation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ModulePanelProps } from './shared';
@@ -71,6 +72,7 @@ type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
 type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
 export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
+  const {t} = useLanguage();
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const sessionGeneration = client.sessionGeneration;
@@ -206,10 +208,9 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     </div>}
     <div className="home-layout">
     <div className="home-main">
-    <details className="home-participation-disclosure" open={wide}>
-    <summary>一起學、一起做</summary>
-    <HomeParticipation key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
-    </details>
+    <details className="home-participation-disclosure" key={`${session.user.user_id}:${client.sessionGeneration}`}>
+    <summary><span>{t('home.explore')}</span><span className="home-explore-indicator" aria-hidden="true"><span className="home-explore-open">{t('home.expand')} ＋</span><span className="home-explore-close">{t('home.collapse')} −</span></span></summary>
+    <div className="home-exploration-content">
     {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
       <div className="home-next-copy">
       <h2 className="home-next-eyebrow">公會與學習</h2>
@@ -218,7 +219,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       {primaryGuild && taskAction && taskActions[taskAction].hint && <p id="home-next-task-hint">{taskActions[taskAction].hint}</p>}
       {primaryGuild ? <div className="home-next-actions">
         {guideBook
-          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label="閱讀第一本技能書" describedBy="home-next-step-description"/>
+          ? <SkillBookIntro key={guideBook.id ?? guideBook.book_id} book={guideBook} label={t('home.readBook')} describedBy="home-next-step-description"/>
           : <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => onNavigate?.('skills')}>前往技能書架</button>}
         <button type="button" className="btn btn-ghost" aria-describedby="home-next-step-description" onClick={() => openMemberChat('guild', primaryGuild.guild_key)}>進入{primaryGuild.name}聊天室</button>
         {taskAction && <button type="button" className="btn btn-ghost" aria-describedby={taskActions[taskAction].hint ? 'home-next-step-description home-next-task-hint' : 'home-next-step-description'} onClick={() => onNavigate?.(taskActions[taskAction].tab)}>{taskActions[taskAction].label}</button>}
@@ -228,6 +229,9 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
     </section>}
 
+    <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
+    </div>
+    </details>
     <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>

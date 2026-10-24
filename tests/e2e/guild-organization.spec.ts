@@ -7,7 +7,7 @@ const keys = names.map((_, index) => `synthetic-guild-${index}`);
 const books = ['social-post', 'video-autopilot', 'security-scanner'].map(id => communityCatalog.skill_books.find(book => book.id === id)!);
 
 type Preferences = { primary_guild_key: string; secondary_guild_keys: string[]; aggregate_version: number };
-async function setupGuilds(page: Page) {
+async function setupGuilds(page: Page, masterId?: string) {
   let preferences: Preferences = { primary_guild_key: keys[0], secondary_guild_keys: [keys[1], keys[2]], aggregate_version: 7 };
   const writes: { body: unknown; headers: Record<string, string> }[] = [];
   let memberReads = 0, announcementReads = 0;
@@ -18,7 +18,7 @@ async function setupGuilds(page: Page) {
     is_secondary: preferences.secondary_guild_keys.includes(keys[index]),
     secondary_position: preferences.secondary_guild_keys.indexOf(keys[index]) + 1,
     membership: index < 5 ? { membership_id: `membership-${index}`, state: 'active', aggregate_version: 1 } : null,
-    guild_master: index === 5 ? null : { user_id: `master-${index}`, display_name: index === 1 ? '一位名字很長的影像自動剪輯公會長' : `測試會長 ${index}`, avatar_url: null },
+    guild_master: index === 5 ? null : { user_id: index === 0 && masterId ? masterId : `master-${index}`, display_name: index === 1 ? '一位名字很長的影像自動剪輯公會長' : `測試會長 ${index}`, avatar_url: null },
     guild_experts: Array.from({ length: [0, 3, 1, 2, 3, 0][index] }, (_, expert) => ({ user_id: `expert-${index}-${expert}`, display_name: expert === 2 ? '專注跨領域音樂影像與內容共創的測試專家' : `測試專家 ${index}-${expert}`, avatar_url: null })),
     skill_books: index === 0 ? books : [books[index % books.length]],
   }));
@@ -187,4 +187,135 @@ test('a joined guild card sets or clears a secondary guild with the existing pre
   await expect(group(page, '主要與次要公會').locator('.guild-card')).toHaveCount(3);
   expect(await guildIds(page, '主要與次要公會')).toEqual([keys[0], keys[1], keys[3]]);
   expect(await guildIds(page, '其他已加入公會')).toEqual([keys[2], keys[4]]);
+});
+
+test('the joined guild overview connects existing sections lazily and keeps roster search across navigation', async ({ page }) => {
+  const fixture = await setupGuilds(page); await login(page);
+  const card = page.getByRole('article', { name: names[0], exact: true });
+  const entry = card.getByRole('button', { name: '進入公會', exact: true });
+  await entry.focus(); await page.keyboard.press('Enter');
+  const dialog = card.locator('.guild-detail-dialog');
+  await expect(dialog).toHaveAccessibleName(`${names[0]} · 社群總覽`);
+  await expect(dialog.getByRole('heading', { name: '我們一起做什麼' })).toBeVisible();
+  await expect(dialog).toContainText('交流專長，一起完成作品。');
+  expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 0 });
+  const nav = dialog.getByRole('navigation', { name: '公會內容' });
+  await nav.getByRole('button', { name: '公告', exact: true }).click();
+  await expect(dialog).toContainText('帶一份可以公開的合成素材。');
+  expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 1 });
+  await nav.getByRole('button', { name: '成員', exact: true }).click();
+  await expect(dialog).toContainText('目前沒有可顯示的公會成員。');
+  const search = dialog.getByRole('searchbox', { name: '搜尋公會成員' });
+  await search.fill('合成專長');
+  await expect(dialog).toContainText('沒有符合的公會成員。');
+  const reads = fixture.reads().memberReads;
+  await nav.getByRole('button', { name: '社群總覽', exact: true }).click();
+  await expect(search).toBeHidden();
+  await nav.getByRole('button', { name: '成員', exact: true }).click();
+  await expect(search).toHaveValue('合成專長');
+  expect(fixture.reads().memberReads).toBe(reads);
+  await nav.getByRole('button', { name: '技能書庫', exact: true }).click();
+  await expect(dialog.locator('.guild-library-entry')).toHaveCount(3);
+  await page.keyboard.press('Escape'); await expect(dialog).toBeHidden(); await expect(entry).toBeFocused();
+  expect(fixture.writes).toHaveLength(0);
+});
+
+test('guild overview chat hands off the exact guild after closing the modal; unjoined cards keep public detail only', async ({ page }) => {
+  const fixture = await setupGuilds(page); await login(page);
+  const unjoined = page.getByRole('article', { name: names[5], exact: true });
+  await expect(unjoined.getByRole('button', { name: '進入公會', exact: true })).toHaveCount(0);
+  await expect(unjoined.getByRole('button', { name: '公會公告', exact: true })).toHaveCount(0);
+  await unjoined.getByRole('button', { name: /公會技能書庫/ }).click();
+  await expect(unjoined.getByRole('navigation', { name: '公會內容' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 0 });
+  await page.evaluate(() => {
+    (window as unknown as { guildEntries: unknown[] }).guildEntries = [];
+    window.addEventListener('freedom-open-channel', event => {
+      (window as unknown as { guildEntries: unknown[] }).guildEntries.push({
+        detail: (event as CustomEvent).detail,
+        guildModalOpen: Boolean(document.querySelector('.guild-detail-dialog[open]')),
+      });
+    });
+  });
+  const card = page.getByRole('article', { name: names[0], exact: true });
+  await card.getByRole('button', { name: '進入公會', exact: true }).click();
+  await card.locator('.guild-detail-dialog').getByRole('button', { name: '進入公會聊天室', exact: true }).click();
+  await expect(card.locator('.guild-detail-dialog')).toBeHidden();
+  expect(await page.evaluate(() => (window as unknown as { guildEntries: unknown[] }).guildEntries)).toEqual([
+    { detail: { kind: 'guild', key: keys[0] }, guildModalOpen: false },
+  ]);
+  expect(fixture.writes).toHaveLength(0);
+});
+
+test('guild overview navigation translates without remounting and fits narrow screens in every experience', async ({ page }) => {
+  await setupGuilds(page); await login(page);
+  const card = page.getByRole('article', { name: names[1], exact: true });
+  await card.getByRole('button', { name: '進入公會', exact: true }).click();
+  const dialog = card.locator('.guild-detail-dialog');
+  for (const [language, overview] of [['en', 'Community overview'], ['ja', 'コミュニティ概要'], ['ko', '커뮤니티 개요'], ['es', 'Vista de la comunidad'], ['zh-Hant', '社群總覽']]) {
+    await page.evaluate(value => {
+      localStorage.setItem('freedom-interface-language-v1', value);
+      window.dispatchEvent(new StorageEvent('storage', { key: 'freedom-interface-language-v1', newValue: value }));
+    }, language);
+    await expect(dialog).toHaveAccessibleName(`${names[1]} · ${overview}`);
+    await expect(dialog.getByRole('button', { name: overview, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog).toContainText('把很長的協作專業說明、不同人數的公會幹部與技能書排成一致的卡片。');
+  }
+  for (const theme of ['light', 'dark', 'versefolk', 'guide-dragon', 'guide-ai-sister']) {
+    await page.evaluate(value => {
+      localStorage.setItem('freedom-theme', value);
+      window.dispatchEvent(new StorageEvent('storage', { key: 'freedom-theme', newValue: value }));
+    }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-experience-profile', theme);
+    for (const width of [1280, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(dialog).toBeVisible();
+      expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      for (const button of await dialog.getByRole('button').all()) {
+        const box = await button.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44);
+      }
+      await page.screenshot({ path: `test-results/guild-community-${theme}-${width}.png` });
+    }
+  }
+});
+
+test('switching guild sections preserves a pending roster command and its unknown-result retry key', async ({ page }) => {
+  await setupGuilds(page, '20000000-0000-4000-8000-000000000001');
+  let full = false, release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const commands: { key: string; body: unknown; version: string }[] = [];
+  await page.route('**/api/v1/members?*', route => route.fulfill({ json: { items: [{
+    user_id: '20000000-0000-4000-8000-000000000099', nickname: '合成測試夥伴', last_seen_at: null, is_online: false,
+    positioning_title: null, primary_guild: null, secondary_guilds: [], capabilities: [], equipment: [], contacts: {}, is_self: false,
+    friendship: { state: 'none' }, guild_roster: { member_tier: full ? 'full' : 'intern', aggregate_version: full ? 2 : 1, expert_aggregate_version: null, expert_active: false },
+  }], total: 1, next_offset: null } }));
+  await page.route('**/api/v1/guilds/*/members/*/tier', async route => {
+    commands.push({ key: route.request().headers()['idempotency-key'], body: route.request().postDataJSON(), version: route.request().headers()['if-match'] });
+    if (commands.length === 1) { await pending; await route.abort('failed'); }
+    else { full = true; await route.fulfill({ json: { aggregate_version: 2 } }); }
+  });
+  await login(page);
+  const card = page.getByRole('article', { name: names[0], exact: true });
+  await card.getByRole('button', { name: '進入公會', exact: true }).click();
+  const dialog = card.locator('.guild-detail-dialog');
+  const nav = dialog.getByRole('navigation', { name: '公會內容' });
+  await nav.getByRole('button', { name: '成員', exact: true }).click();
+  const promote = dialog.getByRole('button', { name: '設為正式成員', exact: true });
+  await promote.click(); await expect.poll(() => commands.length).toBe(1);
+  await nav.getByRole('button', { name: '社群總覽', exact: true }).click();
+  await nav.getByRole('button', { name: '成員', exact: true }).click();
+  await expect(promote).toBeDisabled();
+  release(); await expect(promote).toBeEnabled();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await nav.getByRole('button', { name: '社群總覽', exact: true }).click();
+  await nav.getByRole('button', { name: '成員', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await promote.click();
+  await expect(dialog.getByRole('button', { name: '改回實習成員', exact: true })).toBeVisible();
+  expect(commands).toHaveLength(2);
+  expect(commands[0].key).toMatch(/^[0-9a-f-]{36}$/);
+  expect(commands[1]).toEqual(commands[0]);
+  expect(commands[0].body).toEqual({ member_tier: 'full' });
+  expect(commands[0].version).toBe('"1"');
 });

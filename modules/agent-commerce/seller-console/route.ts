@@ -1,7 +1,7 @@
 import {SELLER_ORDER_FILTER_KEYS,SELLER_PAYMENT_METHODS,type SellerQuery} from './order-filters';
 import {OpaqueId} from '../../../contracts/guild-launchpad/v1/primitives';
 export type SellerScope={tenantId:string;instanceId:string};
-export type SellerPage='overview'|'orders'|'order'|'reservations'|'payments'|'case'|'settings'|'settings-payments';
+export type SellerPage='drop-ship'|'overview'|'orders'|'order'|'reservations'|'payments'|'case'|'settings'|'settings-payments';
 export {displayNumberPattern} from './order-filters';
 export type {SellerQuery} from './order-filters';
 export type SellerConsoleRoute=SellerScope & {page:SellerPage;titleKey:`sellerConsole.${SellerPage}`;id?:string;query:SellerQuery};
@@ -10,7 +10,7 @@ function scope(p:string[]):SellerScope|null{return p[0]==='#stores'&&OpaqueId.sa
 export function parseSellerConsoleRoute(hash:string):SellerConsoleRoute|null {
  const {p,q}=parts(hash),s=scope(p);if(!s)return null;
  let page:SellerPage,id:string|undefined;
- if(p.length===4&&['overview','orders','payments','settings'].includes(p[3]))page=p[3] as SellerPage;
+ if(p.length===4&&['drop-ship','overview','orders','payments','settings'].includes(p[3]))page=p[3] as SellerPage;
  else if(p.length===5&&p[3]==='orders'&&p[4]==='reservations')page='reservations';
  else if(p.length===5&&p[3]==='settings'&&p[4]==='payments')page='settings-payments';
  else if(p.length===5&&['orders','payments'].includes(p[3])&&OpaqueId.safeParse(p[4]).success){page=p[3]==='orders'?'order':'case';id=p[4];}
@@ -37,12 +37,13 @@ export function sellerConsoleHref(s:SellerScope,page:SellerPage,options:{id?:str
  return `${sellerRootHref(s)}/${suffix}${query.size?'?'+query:''}`;
 }
 export const SELLER_NAVIGATION=[
+ {key:'drop-ship',label:'代出貨',group:'設定',capability:'store:manage'},
  {key:'overview',label:'開店準備',group:'營運',capability:'store:read'},
  {key:'orders',label:'訂單',group:'營運',capability:'store:orders:read'},
  {key:'payments',label:'收款與對帳',group:'帳務',capability:'store:finance:read'},
  {key:'settings',label:'商店設定',group:'設定',capability:'store:manage'},
 ] as const;
-export function sellerNavigation(capabilities:readonly string[]){return SELLER_NAVIGATION.filter(p=>capabilities.includes(p.capability));}
+export function sellerNavigation(capabilities:readonly string[],dropShipEnabled=false){return SELLER_NAVIGATION.filter(p=>(p.key!=='drop-ship'||dropShipEnabled)&&capabilities.includes(p.capability));}
 export function sellerPageCapability(page:SellerPage){return page==='overview'?'store:read':page==='reservations'?null:page==='orders'||page==='order'?'store:orders:read':page==='payments'||page==='case'?'store:finance:read':'store:manage';}
 const slugs=['overview','fulfilment','shipments','customers','support','storefront','products','sourcing','promotions','payments','invoices','reports','settings'];
 /** Dispatch only: never rewrites the hash or enters Supplier Console paths. */

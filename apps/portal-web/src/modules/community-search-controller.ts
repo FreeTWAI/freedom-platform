@@ -183,3 +183,59 @@ export function createCommunitySearch<Page>(options: {
     },
   };
 }
+
+export type CommunityListTab = 'bookmarks' | 'follows' | 'updates';
+export type CommunityListHistory = {
+  current: () => boolean;
+  read: (state: unknown) => CommunityListTab;
+  write: (state: unknown, tab: CommunityListTab) => Record<string, unknown> | undefined;
+};
+const listHistoryKey = 'freedomCommunityList';
+const listSessions = new WeakMap<object, {authKey: string; generation: number; history: CommunityListHistory}>();
+const listTab = (value: unknown): value is CommunityListTab => value === 'bookmarks' || value === 'follows' || value === 'updates';
+function historyRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+}
+const ownValue = (value: object, key: string): unknown => Object.getOwnPropertyDescriptor(value, key)?.value;
+
+/**
+ * Navigation only, never a private-data cache or an authorization credential.
+ * History carries just a closed tab enum and a random marker issued for that tab.
+ * The issuing client/authentication lifetime stays in memory. Reload, a different
+ * client or a new login cannot revive old markers, even for the same user ID.
+ */
+export function communityListHistoryForSession(client: {readonly sessionGeneration: number}, authKey: string): CommunityListHistory {
+  const previous = listSessions.get(client);
+  if (previous?.authKey === authKey && previous.generation === client.sessionGeneration) return previous.history;
+  const generation = client.sessionGeneration;
+  // At most three markers per current client lifetime, not a growing history cache.
+  const issued = new Map<CommunityListTab, string>();
+  const current = () => Boolean(authKey) && client.sessionGeneration === generation && listSessions.get(client)?.history === history;
+  const history: CommunityListHistory = {
+    current,
+    read(state) {
+      if (!current() || !historyRecord(state)) return 'bookmarks';
+      const saved = ownValue(state, listHistoryKey);
+      if (!historyRecord(saved) || Reflect.ownKeys(saved).length !== 3) return 'bookmarks';
+      const version = ownValue(saved, 'version'), tab = ownValue(saved, 'tab'), epoch = ownValue(saved, 'epoch');
+      if (version !== 1 || !listTab(tab) || typeof epoch !== 'string' || issued.get(tab) !== epoch) return 'bookmarks';
+      return tab;
+    },
+    write(state, tab) {
+      if (!current() || !listTab(tab)) return undefined;
+      let epoch = issued.get(tab);
+      if (!epoch) { epoch = crypto.randomUUID(); issued.set(tab, epoch); }
+      // history.state is structured-cloned by the browser. Preserve other owners'
+      // ordinary data fields, without invoking accessors on synthetic input.
+      const next: Record<string, unknown> = {};
+      if (historyRecord(state)) for (const key of Object.keys(state)) {
+        const field = Object.getOwnPropertyDescriptor(state, key);
+        if (field && 'value' in field) Object.defineProperty(next, key, {...field, configurable: true, writable: true});
+      }
+      next[listHistoryKey] = {version: 1, tab, epoch};
+      return next;
+    },
+  };
+  listSessions.set(client, {authKey, generation, history});
+  return history;
+}

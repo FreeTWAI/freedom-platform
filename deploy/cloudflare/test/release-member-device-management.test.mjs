@@ -21,7 +21,7 @@ function fixture() {
     observation:{evidence_id:'synthetic-device-observation',observed_at_ms:9999,target,schema_ledger:scan.ledger,schema_ledger_digest:scan.ledger_digest,
       enabled_shapes:[],written_shapes:[],active_releases:[active],complete:true},
     release_records:[active,candidate].map(identity=>({...identity,evidence_id:'synthetic-device-approval',status:'approved',environments:['next'],
-      schema_ledger_digests:[scan.ledger_digest],capabilities:['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1',shape,...prerequisites],approved_at_ms:9000,expires_at_ms:11000}))};
+      schema_ledger_digests:[scan.ledger_digest],capabilities:['commerce.checkout-contact-retention.v1', 'commerce.hosted-drop-ship.v1','commerce.hosted-self-ship.v1','commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1',shape,...prerequisites],approved_at_ms:9000,expires_at_ms:11000}))};
   return {input:{schema:'freedom.release-compatibility-request/v1',environment:'next',candidate,enable_shapes:[]},scan,host};
 }
 function run(f) {

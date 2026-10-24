@@ -992,7 +992,11 @@ test('order bell tells an eligible seller reader about placement and opening it 
     const panel=readerPage.getByRole('region',{name:'最近通知'}),item=panel.locator('.notification-bell-item').filter({hasText:'新訂單待確認收款'});
     await expect(item).toBeVisible();await expect(item).toContainText(`「山邊小店」收到訂單 ${order.display_number}，等待銀行匯款；請至訂單頁查看。`);
     for(const hidden of ['000000123456','合成測試銀行','合成買家甲','offline-buyer@example.test','0900123456','350.00'])await expect(item).not.toContainText(hidden);
-    await expect(readerPage.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    const brandHome = readerPage.locator('.brand-home');
+    await expect(brandHome).toBeVisible();
+    await expect(brandHome).toHaveAttribute('href', '/#home');
+    await expect(brandHome).toHaveText('自由工坊');
+    await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
     const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
     await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
@@ -1034,7 +1038,11 @@ test('buyer order notices open a fresh authorized B07 and the full history keeps
     await expect(item.getByRole('heading',{name:'店家已確認收款',exact:true})).toBeVisible();
     const action=item.getByRole('button',{name:'查看我的訂單',exact:true});await expect(action).toHaveClass(/btn-primary/);
     await portal.setViewportSize({width:390,height:900});const bounds=await action.boundingBox();expect(bounds).not.toBeNull();expect(bounds!.height).toBeGreaterThanOrEqual(44);expect(bounds!.width).toBeLessThan(300);
-    await expect(portal.locator('img[src*="freedom-workshop.webp"]').first()).toBeVisible();
+    const brandHome = portal.locator('.brand-home');
+    await expect(brandHome).toBeVisible();
+    await expect(brandHome).toHaveAttribute('href', '/#home');
+    await expect(brandHome).toHaveText('自由工坊');
+    await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(portal,[390,768,1440],width=>info.outputPath(`notify-history-${width}.png`));
     await action.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);
     await expect(portal.getByText('店家已確認收到付款。',{exact:true})).toBeVisible();
@@ -1468,4 +1476,53 @@ test('SELFSHIP flag-off settings preserve saved option and late recipient reads 
   const bp=await buyer.newPage();await start(bp,store,'合成唯讀旗標仍保留自行寄送。');await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await bp.getByLabel('郵遞區號',{exact:true}).fill('100');await bp.getByLabel('收件地址',{exact:true}).fill('不應保留的合成地址');const next=await member(e2eAuthPool);await apiLogin(buyer,store.origin,next.email);await bp.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(bp.getByLabel('收件人姓名',{exact:true})).toHaveValue('');await expect(bp.getByLabel('收件人手機',{exact:true})).toHaveValue('');await bp.getByRole('radio',{name:'宅配（店家自行寄送）',exact:true}).check();await expect(bp.getByLabel('收件地址',{exact:true})).toHaveValue('');await expect(bp.getByLabel('郵遞區號',{exact:true})).toHaveValue('');
 
  }finally{releasePending();await offContext?.close();await off?.close();await seller.close();await buyer.close();await store.close();}
+});
+
+test('paid offline cancellation stays pending until the owner records the full refund, with buyer notices at every state',async({browser,e2eAuthPool},info)=>{
+  const store=await setupCartFixtureStore(e2eAuthPool,browser,true,true,{commerceOrderNotificationsEnabled:true});
+  const buyer=await browser.newContext({baseURL:store.origin}),seller=await browser.newContext({baseURL:store.origin});
+  try{
+    await buyer.route(url=>url.origin!==store.origin,route=>route.abort());await seller.route(url=>url.origin!==store.origin,route=>route.abort());
+    await openBuyer(e2eAuthPool,buyer,store);const bp=await buyer.newPage(),sp=await seller.newPage();
+    await start(bp,store);await freeze(bp,store);const order=await place(bp,'銀行匯款'),orderPath=`/shops/${store.slug}/orders/${order.order_ref}`;
+    const date=(await e2eAuthPool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
+    await buyerLogin(sp,store.seller.email,sellerHash(store,'orders/'+order.order_ref),store.origin);await sellerOrder(sp,store,order);
+    const console=sp.locator('.seller-console'),cancel=console.getByRole('button',{name:'取消訂單並退款',exact:true});
+    await expect(console.getByRole('region',{name:'退款紀錄',exact:true})).toHaveCount(0);
+    await expect(cancel).toHaveCount(0);
+    await store.sellerPost(`${store.root}/checkout-orders/${order.order_ref}/offline-payments`,{amount_minor:order.total_minor,received_on:date},200,'1');
+    await sp.reload();await sellerOrder(sp,store,order);
+    await expect(cancel).toHaveClass(/btn-small/);await cancel.click();
+    const dialog=sp.getByRole('dialog',{name:'取消訂單並退款',exact:true});await expect(dialog).toBeVisible();
+    await dialog.getByLabel('取消原因',{exact:true}).selectOption('out_of_stock');
+    await dialog.getByLabel('店家備註（選填）',{exact:true}).fill('合成店家備註，不向買家顯示');
+    await expect(dialog).toContainText('請勿填寫買家的個人資料');await dialog.getByRole('radio',{name:'稍後登記退款',exact:true}).check();
+    const screenshots=async(page:Page,prefix:string)=>{
+      for(const width of [1280,768,390]){
+        await page.setViewportSize({width,height:900});await page.evaluate(()=>document.fonts.ready);
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+        const buttons=page.locator('.seller-console .btn-small:visible');
+        for(const bounds of await buttons.evaluateAll(elements=>elements.map(el=>({height:el.getBoundingClientRect().height,width:el.getBoundingClientRect().width,parent:el.parentElement!.getBoundingClientRect().width})))){
+          expect(bounds.height).toBeGreaterThanOrEqual(44);expect(bounds.width).toBeLessThan(bounds.parent);
+        }
+        await page.screenshot({path:info.outputPath(`${prefix}-${width}.png`),fullPage:true});
+      }
+    };
+    await screenshots(sp,'paid-cancel-dialog');
+    await dialog.getByRole('button',{name:'確認取消訂單',exact:true}).click();
+    const refunds=console.getByRole('region',{name:'退款紀錄',exact:true});await expect(refunds).toContainText('待退款');await expect(refunds).toContainText('缺貨');
+    await expect(refunds.getByRole('button',{name:'登記退款',exact:true})).toHaveClass(/btn-small/);await screenshots(sp,'paid-cancel-pending-seller');
+    await bp.reload();await expect(bp.getByText('店家已取消這筆訂單',{exact:true})).toBeVisible();await expect(bp.getByText('取消原因：缺貨',{exact:true})).toBeVisible();await expect(bp.getByText('店家會在平台外退款',{exact:true})).toBeVisible();
+    await expect(bp.getByText('店家已確認收到付款。',{exact:true})).toHaveCount(0);await expect(bp.locator('body')).not.toContainText('合成店家備註，不向買家顯示');await screenshots(bp,'paid-cancel-pending-buyer');
+    const portal=await buyer.newPage();await portal.goto('/#home');await openNotifications(portal);
+    const pendingNotice=portal.getByRole('region',{name:'最近通知'}).locator('li[data-notification]').filter({hasText:'店家已取消訂單'}).filter({hasText:order.display_number});
+    await expect(pendingNotice).toContainText('待退款');await pendingNotice.getByRole('button',{name:'查看我的訂單',exact:true}).click();await expect(portal).toHaveURL(store.origin+orderPath);await expect(portal.getByText('店家會在平台外退款',{exact:true})).toBeVisible();
+    await refunds.getByRole('button',{name:'登記退款',exact:true}).click();const record=sp.getByRole('dialog',{name:'登記退款',exact:true});
+    await record.getByLabel('退款日期',{exact:true}).fill(date);await record.getByLabel('退款方式',{exact:true}).selectOption('bank_transfer');await screenshots(sp,'paid-cancel-refund-dialog');
+    await record.getByRole('button',{name:'確認登記退款',exact:true}).click();await expect(refunds).toContainText(`已於 ${date} 以銀行轉帳退款`);await expect(refunds.getByRole('button',{name:'登記退款',exact:true})).toHaveCount(0);
+    await bp.reload();await expect(bp.getByText(`店家已於 ${date} 以銀行轉帳退款`,{exact:true})).toBeVisible();await expect(bp.getByText('店家會在平台外退款',{exact:true})).toHaveCount(0);await screenshots(bp,'paid-cancel-recorded-buyer');
+    await portal.goto('/#home');await openNotifications(portal);const recordedNotice=portal.getByRole('region',{name:'最近通知'}).locator('li[data-notification]').filter({hasText:'店家已登記退款'}).filter({hasText:order.display_number});
+    await expect(recordedNotice).toContainText('已退款');await recordedNotice.getByRole('button',{name:'查看我的訂單',exact:true}).click();await expect(portal).toHaveURL(store.origin+orderPath);await expect(portal.getByText(`店家已於 ${date} 以銀行轉帳退款`,{exact:true})).toBeVisible();
+    const row=(await e2eAuthPool.query('SELECT amount_minor::int,refund_state,refund_method FROM commerce_paid_cancellations WHERE order_id=$1',[order.order_ref])).rows[0];expect(row).toEqual({amount_minor:order.total_minor,refund_state:'recorded',refund_method:'bank_transfer'});
+  }finally{await buyer.close();await seller.close();await store.close();}
 });

@@ -196,13 +196,14 @@ test('native social notes inventory existing lifecycle without inventing draft o
   const created=await owner.request('social-posts/notes',{text:'原生社群內容254\n第二行'});
   assert.equal(created.status,201,await created.clone().text());
   const post=z.object({post_id:z.string()}).parse(await created.json());
-  const inventory=z.object({items:z.array(z.object({kind:z.string(),id:z.string(),status:z.string(),version:z.string().nullable(),actions:z.array(z.string())}))});
+  const inventory=z.object({items:z.array(z.object({kind:z.string(),id:z.string(),status:z.string(),path:z.string(),version:z.string().nullable(),actions:z.array(z.string())}))});
   const active=inventory.parse(await (await owner.request('me/content')).json()).items.find(item=>item.id===post.post_id);
   assert.ok(active);
   assert.equal(active.kind,'social_post');
   assert.equal(active.status,'active');
   assert.equal(active.version,null);
   assert.deepEqual(active.actions,['view','withdraw']);
+  assert.equal(active.path,`/?social-post=${post.post_id}#social`);
   const removed=await owner.request('social-posts/'+post.post_id,{},undefined,randomUUID(),'DELETE');
   assert.equal(removed.status,200,await removed.clone().text());
   const closed=inventory.parse(await (await owner.request('me/content')).json()).items.find(item=>item.id===post.post_id);

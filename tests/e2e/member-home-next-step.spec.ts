@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import { mkdirSync } from 'node:fs';
 import type { MemberCardData } from '../../apps/portal-web/src/modules/Membership.js';
 import { test, expect, type Page } from './fixtures.js';
@@ -43,6 +44,7 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
   // These cases inspect the optional member summary, reached through its visible disclosure.
   if (expand) {
+    await openParticipation(page);
     await openHomeGuide(page);
     await page.locator('.home-personal > summary').click();
   }
@@ -130,7 +132,7 @@ async function openParticipation(page: Page) {
   const disclosure = page.locator('.home-participation-disclosure');
   await expect(disclosure).toBeAttached();
   if (!await disclosure.evaluate(element => (element as HTMLDetailsElement).open))
-    await disclosure.locator('summary').click();
+    await disclosure.locator(':scope > summary').click();
   await expect(disclosure).toHaveJSProperty('open', true);
 }
 
@@ -188,6 +190,7 @@ test('a changed guild fact updates the home guidance when home is revisited', as
   await expect(page.getByRole('heading', { name: '職業公會', level: 1, exact: true })).toBeVisible();
   card = memberCard({ joined_guilds: [guild] });
   await navigate(page, '會員首頁');
+  await openParticipation(page);
   await expect(suggestion(page)).toContainText(choosePrimaryMessage);
   await checkGuidance(page, choosePrimaryMessage, 'guilds');
   await suggestion(page).getByRole('button', { name: '設定主要公會', exact: true }).click();
@@ -195,6 +198,7 @@ test('a changed guild fact updates the home guidance when home is revisited', as
   // Leaving the only joined guild returns to an earlier state in this same login.
   card = memberCard();
   await navigate(page, '會員首頁');
+  await openParticipation(page);
   await expect(suggestion(page)).toContainText(noGuildMessage);
   await checkGuidance(page, noGuildMessage, 'guilds');
 });
@@ -256,7 +260,7 @@ test('a granted primary-guild book opens from the same next-step region', async 
   await expect(prompt.getByRole('button', { name: '進入測試資安公會聊天室', exact: true })).toBeVisible();
   await expect(prompt.getByRole('button', { name: '分享作品與需求', exact: true })).toBeVisible();
   await expect(prompt).not.toContainText('尚未授權的技能書');
-  const open = prompt.getByRole('button', { name: '閱讀第一本技能書', exact: true });
+  const open = prompt.getByRole('button', { name: '閱讀技能書', exact: true });
   await expect(open).toHaveAttribute('aria-describedby', 'home-next-step-description');
   await open.click();
   const dialog = page.locator('dialog.skill-intro-dialog');
@@ -269,6 +273,7 @@ test('a granted primary-guild book opens from the same next-step region', async 
   await expect(page).toHaveURL(/#showcase$/);
   await expect(page.getByRole('heading', { name: '作品與需求', level: 1, exact: true })).toBeVisible();
   await navigate(page, '會員首頁');
+  await openParticipation(page);
   await page.evaluate(() => {
     const seen: { kind: string; key: string }[] = [];
     window.addEventListener('freedom-open-channel', event => seen.push((event as CustomEvent<{ kind: string; key: string }>).detail));
@@ -360,16 +365,18 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await stubJson(page, '/api/v1/task-board/preview', { items: [] });
   await stubJson(page, '/api/v1/dashboard', { now: [unfinishedClaim] });
   await stubJson(page, '/api/v1/engagements/summary', { has_engagements: true, needs_response: true });
+  // Other journeys retain this shared member's cooperation records; this layout case owns its empty-history read.
+  await stubJson(page, '/api/v1/engagements', { items: [] });
   await login(page, false);
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
   const disclosure = page.locator('.home-participation-disclosure');
   const toggle = disclosure.locator('summary');
   await expect(disclosure).toHaveJSProperty('open', false);
-  await expect(toggle).toHaveText('一起學、一起做');
+  await expect(toggle).toContainText('探索學習與公會');
   await expect(toggle).toBeInViewport();
   expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(disclosure.locator('.home-participation')).toBeHidden();
-  await expect(suggestion(page).getByRole('button', { name: '回到我的工作', exact: true })).toBeVisible();
+  await expect(page.locator('.home-next-step')).toBeHidden();
   const composer = page.getByRole('region', { name: '首頁社群動態', exact: true }).getByRole('button', { name: '建立貼文', exact: true });
   await page.evaluate(() => scrollTo(0, 0));
   await expect(composer).toBeInViewport();
@@ -424,6 +431,7 @@ test('cooperation summary distinguishes a failed read from empty data and retrie
     return route.fulfill({ json: { has_engagements: true, needs_response: false } });
   });
   await login(page, false);
+  await openParticipation(page);
   const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
   await expect(progress).toContainText('合作進度暫時無法載入');
   await expect(progress).not.toContainText('還沒有合作紀錄');
@@ -461,12 +469,14 @@ test('leaving home cancels its late summary and returning reads current facts wi
   });
   try {
     await login(page, false);
+    await openParticipation(page);
     const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
     await expect(progress).toContainText('正在讀取合作進度');
     await expect(progress.getByRole('button', { name: '接續我的內容', exact: true })).toHaveCount(0);
     await page.getByRole('navigation', { name: '參與自由工坊', exact: true }).getByRole('button', { name: '合作夥伴', exact: true }).click();
     await expect(page).toHaveURL(/#members$/);
     await page.goBack();
+    await openParticipation(page);
     await expect(progress).toContainText('還沒有合作紀錄');
     release();
     await expect(progress).not.toContainText('有合作等你接續處理');
@@ -484,12 +494,15 @@ test('switching accounts cannot apply the prior account cooperation response', a
   });
   try {
     await login(page, false);
+    await openParticipation(page);
     const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
     await expect(progress).toContainText('正在讀取合作進度');
     await page.getByRole('button', { name: '設定', exact: true }).click();
     await page.getByRole('menuitem', { name: '登出', exact: true }).click();
     await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
     await login(page, false, 'client@local.test');
+    await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', false);
+    await openParticipation(page);
     await expect(progress).toContainText('還沒有合作紀錄');
     release();
     await expect(progress).not.toContainText('有合作等你接續處理');
@@ -512,17 +525,13 @@ test('the home action stays compact, readable and reachable in all themes on des
   await expect(prompt).not.toContainText('不應顯示的任務標題');
   for (const [theme, label] of [['light', '自由工坊－明亮'], ['dark', '自由工坊－夜航'], ['versefolk', '自由工坊－敘生']] as const) {
     await page.getByRole('button', { name: '設定', exact: true }).click();
-    await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+    await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio', { name: label, exact: true }).click();
     await page.getByRole('button', { name: '設定', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     for (const width of [1440, 820, 390, 320]) {
-      const wasWide = await page.evaluate(() => window.matchMedia('(min-width:861px)').matches);
       await page.setViewportSize({ width, height: 900 });
-      if (wasWide !== (width > 860)) await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', width > 860);
-      if (width > 860) {
-        await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', true);
-        await expect(page.locator('.home-participation-disclosure > summary')).toBeHidden();
-      }
+      await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', true);
+      await expect(page.locator('.home-participation-disclosure > summary')).toBeVisible();
       await openParticipation(page);
       const entries = page.getByRole('navigation', { name: '參與自由工坊', exact: true });
       for (const button of await entries.getByRole('button').all()) {
