@@ -77,7 +77,7 @@ async function readPersonalContent(pool: PoolClient, actor: Actor): Promise<{ it
   for (const row of posts.rows) entries.push({ created: new Date(row.created_at).getTime(), item: {
     kind: 'social_post', id: row.post_id, title: row.title, status: row.state,
     // Social removal has no lifecycle version; media_version is not that version.
-    version: null, path: '#social', visibility: row.state === 'active' ? 'community' : 'private',
+    version: null, path: `/?social-post=${row.post_id}#social`, visibility: row.state === 'active' ? 'community' : 'private',
     actions: row.state === 'active' ? ['view', 'withdraw'] : row.state === 'hidden' ? ['withdraw'] : [],
   } });
   entries.sort((a, b) => b.created - a.created || a.item.kind.localeCompare(b.item.kind) || a.item.id.localeCompare(b.item.id));

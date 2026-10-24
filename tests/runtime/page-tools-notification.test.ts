@@ -25,8 +25,12 @@ test('all three page tools show their name inside the same accessible name; 提�
 
 test('登出 sits in the profile menu, not as a separate top-bar button',()=>{
   assert.doesNotMatch(app,/登出/);
-  assert.match(settingsMenu,/className="settings-menu-item settings-menu-logout"/);
-  assert.match(settingsMenu,/\{t\('settings\.logout'\)\}<\/button>/);
+  // The compact menu renders its root actions from data, not separate buttons.
+  assert.match(settingsMenu,/key:'logout',label:t\('settings\.logout'\),disabled:logoutDisabled,run:\(\)=>\{if\(!logoutDisabled\)\{close\(true\);onLogout\(\);\}\}/);
+  assert.match(settingsMenu,/item\.key==='logout'\?' settings-menu-logout':''/);
+  assert.match(settingsMenu,/aria-disabled=\{item\.disabled\|\|undefined\}/);
+  assert.match(settingsMenu,/onClick=\{item\.run\}/);
+  assert.match(settingsMenu,/\{item\.label\}/);
 });
 
 test('top-bar icon buttons share one 44px box and the profile avatar stays 36px',()=>{

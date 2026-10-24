@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './member-feature-fixture.js';
 import {person,login,launchStore,post,open,storeArea,captureOffer} from './hosted-store-fixture.js';
@@ -26,7 +27,7 @@ for(const width of [390,768,1440])test(`POL-E2E-responsive-${width} editor About
 });
 test('POL-E2E-themes editor at 390 in bright night and RPG themes',async({page,e2eAuthPool},info)=>{
  await page.setViewportSize({width:390,height:900});await setup(page,e2eAuthPool);
- for(const [theme,label] of [['light','自由工坊－明亮'],['dark','自由工坊－夜航'],['versefolk','自由工坊－敘生']]){await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name:label,exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('data-theme',theme);await expect(section(page)).toBeVisible();await captureOffer(page,section(page),info.outputPath('policies-editor-theme-'+theme+'.png'));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ for(const [theme,label] of [['light','自由工坊－明亮'],['dark','自由工坊－夜航'],['versefolk','自由工坊－敘生']]){await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await closeSettingsMenu(page);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);await expect(section(page)).toBeVisible();await captureOffer(page,section(page),info.outputPath('policies-editor-theme-'+theme+'.png'));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 });
 test('POL-E2E-01 owner saves drafts, previews and publishes immutable policy history then withdraws contact',async({page,e2eAuthPool})=>{
  const s=await setup(page,e2eAuthPool,false);await section(page).getByLabel('營業名稱',{exact:true}).fill('合成測試商行');await section(page).getByLabel('地址',{exact:true}).fill('測試市範例路 1 號');await section(page).getByLabel('配送政策內容',{exact:true}).fill('合成第一版配送\n下一行');await section(page).getByRole('button',{name:'儲存賣方資訊與商店政策',exact:true}).click();await expect(section(page)).toContainText('已儲存賣方資訊與商店政策。');

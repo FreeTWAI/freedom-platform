@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
 
 const image={name:'原始作品.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')};
@@ -97,7 +98,7 @@ test('five sharing languages preserve selected logos and original captions acros
   const languages=[['English','Settings','Multi','Share to platforms','1 platforms selected'],['日本語','設定','','複数のサービスに共有','1件選択中'],['한국어','설정','','여러 플랫폼에 공유','플랫폼 1개 선택'],['Español','Ajustes','','Compartir en plataformas','1 plataformas seleccionadas'],['繁體中文','設定','','多平台分享','已選 1 個平台']] as const;
   let settings='設定';
   for(const [name,nextSettings,,title,selected] of languages){
-    await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();await page.getByRole('button',{name:settings,exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');settings=nextSettings;
+    await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();await page.getByRole('button',{name:settings,exact:true}).click();await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);settings=nextSettings;
     await page.getByRole('button',{name:'建立貼文',exact:true}).click();const translated=dialog.getByRole('region',{name:title,exact:true});await expect(translated.locator('.social-share-selection')).toHaveText(selected);await expect(translated.getByRole('button',{name:'X',exact:true})).toHaveAttribute('aria-pressed','true');await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue('不翻譯會員自己的文字。');
   }
 });
