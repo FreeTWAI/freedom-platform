@@ -139,3 +139,56 @@ browserTest('article anchors omit enclosing parentheses and preserve balanced UR
  for(const selector of ['.chapter p:not(.eyebrow)','.chapter blockquote','.chapter li'])await expect(page.locator(selector)).toHaveText(content);
  for(const link of await links.all()){await expect(link).toHaveAttribute('target','_blank');await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');}
 });
+
+
+const streamSnapshot={data:{people:['claude','codex'].map(community=>({...person,community,display_name:community+' 合成人物'})),journals:['claude','codex'].map(community=>({...enriched('2026-10-22'),community,title:community+' 同日合成日誌',people:[{...person,community,display_name:community+' 合成人物'}]}))}};
+for(const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932],[390,420]]){
+ test(`community navigation keeps same-date articles and same-slug people isolated ${width}x${height}`,async({page})=>{
+  await page.setViewportSize({width,height});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/api/v1/public/journal',r=>r.fulfill({json:streamSnapshot}));
+  await page.route('**/api/v1/public/journal/activity?*',r=>{const community=new URL(r.request().url()).searchParams.get('community');return r.fulfill({json:{data:{...activity.data,messages:activity.data.messages.map(m=>({...m,text:community+' 合成原話'}))}}});});
+  await page.goto('/journal/claude');await expect(page.locator('.story-feature h2')).toHaveText('claude 同日合成日誌');await expect(page.locator('.activity-rank')).toContainText('claude 合成人物');
+  await page.getByRole('link',{name:'走進這一天'}).click();await expect(page).toHaveURL(/\/journal\/claude\/entries\/2026-10-22$/);
+  await expect(page.locator('h1')).toHaveText('claude 同日合成日誌');await expect(page.locator('.article-members a')).toHaveAttribute('href','/journal/claude/people/demo');
+  await page.locator('.article-members a').click();await expect(page.locator('h1')).toHaveText('claude 合成人物');await expect(page.locator('.member-quote').first()).toContainText('claude 合成原話');
+  await expect(page.locator('.member-quote a').last()).toHaveAttribute('href','/journal/claude/entries/2026-10-22#section-0');
+  const menu=page.getByRole('button',{name:'展開導覽'});if(await menu.isVisible())await menu.click();
+  await page.getByRole('navigation',{name:'主導覽'}).getByRole('link',{name:'Codex',exact:true}).click();
+  await expect(page.locator('.story-feature h2')).toHaveText('codex 同日合成日誌');await expect(page.locator('.activity-rank')).toContainText('codex 合成人物');
+  await expect(page.getByText('claude 合成人物',{exact:true})).toHaveCount(0);
+  await page.goBack();await expect(page).toHaveURL(/\/journal\/claude\/people\/demo$/);await expect(page.locator('h1')).toHaveText('claude 合成人物');
+  await page.goto('/journal/codex/entries/2026-10-22#section-0');await expect(page.locator('h1')).toHaveText('codex 同日合成日誌');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:`${shots}/community-${width}-${height}.png`,fullPage:true});
+  await page.goto('/journal');await expect(page.getByRole('heading',{name:'還沒有日誌。'})).toBeVisible();expect(errors).toEqual([]);
+ });
+}
+test('editor reviews both same-date communities before publishing the full snapshot',async({page,e2eAuthPool})=>{
+ const base=String(test.info().project.use.baseURL);
+ const login=await page.request.post('/api/v1/auth/login',{headers:{Origin:base,'Idempotency-Key':randomUUID()},data:{email:'maker@local.test',password:'freedom-local-demo'}});expect(login.status()).toBe(200);
+ const session=await login.json(),owner=(await e2eAuthPool.query('SELECT user_id,community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0];
+ await e2eAuthPool.query('DELETE FROM community_journal_publisher');await e2eAuthPool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[owner.community_id,owner.user_id]);
+ try{
+  await page.goto('/journal/manage');await page.getByRole('button',{name:'建立 30 天投稿金鑰'}).click();
+  const secret=await page.locator('code').filter({hasText:/^fjp_/}).innerText();await page.getByRole('button',{name:'已保存，隱藏金鑰'}).click();
+  const people=streamSnapshot.data.people.map(p=>({...p,avatar:{...p.avatar,url:'/media/public/'+[...journalMedia][0],alt:'合成人物',width:null,height:null}}));
+  const body={schema_version:1,source_revision:'c'.repeat(64),people,journals:streamSnapshot.data.journals.map(j=>({...j,people:people.filter(p=>p.community===j.community)}))};
+  const sent=await page.request.post('/agent-api/v1/journal-submissions',{headers:{Authorization:'Bearer '+secret,'Idempotency-Key':randomUUID()},data:body});expect(sent.status()).toBe(201);const receipt=await sent.json();
+  expect((await(await page.request.get('/api/v1/public/journal')).json()).data.journals).toHaveLength(0);
+  await page.reload();await page.getByRole('listitem').filter({hasText:receipt.created_at}).getByRole('button',{name:'查看內容',exact:true}).click();
+  await expect(page.locator('.article-head h1')).toHaveText('claude 同日合成日誌');
+  await page.getByRole('combobox',{name:'文章'}).selectOption('codex:2026-10-22');await expect(page.locator('.article-head h1')).toHaveText('codex 同日合成日誌');
+  await expect(page.getByRole('button',{name:'發布這個版本'})).toBeDisabled();
+  await page.getByRole('checkbox').check();await page.getByRole('button',{name:'發布這個版本'}).click();await expect(page.getByRole('button',{name:'撤回目前公開版本'})).toBeVisible();
+  expect((await(await page.request.get('/api/v1/public/journal')).json()).data.journals).toHaveLength(2);
+  for(const community of ['claude','codex']){await page.goto('/journal/'+community+'/entries/2026-10-22');await expect(page.locator('h1')).toHaveText(community+' 同日合成日誌');}
+ }finally{await e2eAuthPool.query('DELETE FROM community_journal_publisher');}
+});
+test('switching community ignores an old pending snapshot response',async({page})=>{
+ let release!:()=>void,started!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;}),waiting=new Promise<void>(resolve=>{started=resolve;});let reads=0;
+ await page.route('**/api/v1/public/journal',async r=>{if(++reads===1){started();await pending;await r.fulfill({json:snapshot});}else await r.fulfill({json:streamSnapshot});});
+ await page.route('**/api/v1/public/journal/activity?*',r=>r.fulfill({json:activity}));
+ await page.goto('/journal/claude');await waiting;await page.getByRole('navigation',{name:'主導覽'}).getByRole('link',{name:'Codex',exact:true}).click();
+ await expect(page.locator('.story-feature h2')).toHaveText('codex 同日合成日誌');release();
+ await expect(page.locator('.story-feature h2')).toHaveText('codex 同日合成日誌');await expect(page.getByText('合成測試人物',{exact:true})).toHaveCount(0);
+});

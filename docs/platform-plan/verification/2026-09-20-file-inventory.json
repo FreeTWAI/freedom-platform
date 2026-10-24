@@ -589,8 +589,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/community-journal.ts",
-      "bytes": 5375,
-      "sha256": "a8f1c2fa4aaf142ff994d3d9ac701e175180c4252f2f8fa312e84272347a5067"
+      "bytes": 6302,
+      "sha256": "fa0ef759ced7b74392985afd742d1603f2388bbc7cf681b8cb0d7f10fb5db86c"
     },
     {
       "path": "apps/platform-api/src/routes/contribution-roles.ts",
@@ -2534,23 +2534,23 @@
     },
     {
       "path": "apps/portal-web/src/journal/Activity.tsx",
-      "bytes": 6737,
-      "sha256": "35a4ad57d44d50522e3fe8c9b4a80fc4c62f7309bd073f8f83c8d751e621a3d7"
+      "bytes": 7336,
+      "sha256": "b9e20e5db20f2caf3ddfcc66d8147bdd3430f280f6b0672e17bf766cfde4caf7"
     },
     {
       "path": "apps/portal-web/src/journal/App.tsx",
-      "bytes": 22846,
-      "sha256": "b948590d1dafd8c5447501eb3bb3ddff0914a98db9b7cc93050d676aa0380464"
+      "bytes": 24297,
+      "sha256": "9bc807681ae5300f2284614220ef59b83bb4b9da523b1cf5f7e01abb3d6b371c"
     },
     {
       "path": "apps/portal-web/src/journal/Editor.tsx",
-      "bytes": 6882,
-      "sha256": "6de7ab08df61a9fb5033cf071ed73622459285f6af730585b074ddf9a7a45036"
+      "bytes": 7482,
+      "sha256": "8cb7c0ba63d36048d543a71a863bf73acc9904c8f346827a9cb07f280a192c89"
     },
     {
       "path": "apps/portal-web/src/journal/activity-data.ts",
-      "bytes": 2813,
-      "sha256": "29d915d2c23bd1c92ffe8b28d0f1fc26760e52259d97a1393962cd8f8a7ae1fd"
+      "bytes": 2991,
+      "sha256": "f2fc528bf767a3dad0985e9803e18feba0c37655f51c8ff5570b5a7e51ef1ed4"
     },
     {
       "path": "apps/portal-web/src/journal/calendar-dates.ts",
@@ -2584,13 +2584,13 @@
     },
     {
       "path": "apps/portal-web/src/journal/routes.ts",
-      "bytes": 2177,
-      "sha256": "5f10af869d6e24188881d3e74c41c6d01aa630ac525a484881e517e834fd0679"
+      "bytes": 2885,
+      "sha256": "7d0254cfc136528ea4af1cd8f239a85c5abb820d08c36b757d1b1167219d601e"
     },
     {
       "path": "apps/portal-web/src/journal/use-journal-data.ts",
-      "bytes": 986,
-      "sha256": "cd41d85c4eba0b5b36ee94700102825839b56b469cbdc2d0b34f6c0de3f632d0"
+      "bytes": 1180,
+      "sha256": "3c5899d11b1b0fa235cb39d0b13b32cd9c14a5e18c6af739bb3e30387dc684fe"
     },
     {
       "path": "apps/portal-web/src/journal/use-route.ts",
@@ -14844,8 +14844,8 @@
     },
     {
       "path": "docs/development/community-journal.md",
-      "bytes": 9766,
-      "sha256": "f4321a505e0d1f281a2f5e31a35c75828dd95e5257f2664ea06d7538daa4ed8a"
+      "bytes": 12953,
+      "sha256": "1cf3f7fc25e30f228780a2589c3bcf15820b9359465a9d29ae36eadbb5c7dadd"
     },
     {
       "path": "docs/development/contribution-cooperation.md",
@@ -20889,8 +20889,13 @@
     },
     {
       "path": "modules/community-journal/activity.ts",
-      "bytes": 1986,
-      "sha256": "9c57dc7dc1548fb4765f71b082b55c9181e1a0e21aeb49eeefc02666d1756099"
+      "bytes": 2144,
+      "sha256": "663a29d054674784de7de018387883b2efd4f475ba1cca37d16e1063b20ce34e"
+    },
+    {
+      "path": "modules/community-journal/community.ts",
+      "bytes": 799,
+      "sha256": "10e6c2d48ae0cc6882a6fcf595f05562ca85a9bed9a9eb0707ff094628df01ac"
     },
     {
       "path": "modules/community-journal/freedom.module.json",
@@ -20904,8 +20909,8 @@
     },
     {
       "path": "modules/community-journal/payload.ts",
-      "bytes": 4914,
-      "sha256": "b9b84d677fc4fa82ca13d0ce7089b1696fd5a23be69791a6f5c5a916f5df65f3"
+      "bytes": 5288,
+      "sha256": "8896e27f1935f1dc374a6294e1c69542623bc553af2d097151291e9b0d6774a8"
     },
     {
       "path": "modules/community-journal/service.ts",
@@ -23749,8 +23754,8 @@
     },
     {
       "path": "tests/e2e/community-journal.spec.ts",
-      "bytes": 18027,
-      "sha256": "e771b926454e319256503541a2eb7b2d92902a421394cd928f276b2696ac4433"
+      "bytes": 24703,
+      "sha256": "266580dba261030c8ce39f64e2a27d4bbd31eb805312895d26ffa34f2c043d8b"
     },
     {
       "path": "tests/e2e/community-search-interaction.spec.ts",
@@ -25159,8 +25164,8 @@
     },
     {
       "path": "tests/runtime/community-journal.test.ts",
-      "bytes": 21225,
-      "sha256": "284d1aaf82c075c8c3d064b967cd2efb290033123c62f40350e7c93a00a93661"
+      "bytes": 27469,
+      "sha256": "ef7f5cc6a474f64e7de235336e8dd31048c3ddaef628365b0b1eacd2f68b1ccf"
     },
     {
       "path": "tests/runtime/community-relations.test.ts",
