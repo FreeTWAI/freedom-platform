@@ -297,11 +297,13 @@ React state 只負責畫面。頁面離開、Console 自身的 session-end 與 b
 重試，或已進入 message 階段的同碼 422，仍保留原 file／upload key／message key 與
 離開保護。這不擴大到其他 4xx，不清理已上傳素材，也不承諾重新整理後恢復記憶體草稿。
 
-### 貼圖點選即傳送（#303）
+### 貼圖預覽後明確傳送（#1009，沿用 #303 sender）
 
-私訊與公會／小隊／世界頻道的貼圖選單顯示「點選即傳送，保留其他草稿」。
-點選直接傳入該貼圖 ID，沿既有 message POST 與 idempotency key 送出，
-不先更新 React sticker state。該次 payload 只有 `sticker_id`；尚未送出的文字、
+留言、私訊與公會／小隊／世界頻道共用的貼圖選單先顯示完整預覽，
+點格子不傳送、不改原文字／圖片／引用草稿；按「送出這張貼圖」才直接傳入該貼圖 ID。
+取消返回原搜尋結果並還原焦點；關閉或切換目標清掉未確認預覽，不建立待送指令。
+確認以同步 ref 消耗該次選取，避免連點或舊 handler 傳送；沿既有 message POST
+與 idempotency key 送出，不把預覽當作原 rich draft。該次 payload 只有 `sticker_id`；尚未送出的文字、
 圖片 bytes／預覽與回覆目標保留，成功後也不清除。圖片仍需預覽後明確送出。
 
 兩入口都在第一個 await 前同步保存 key、body、payload 與目標；sending／unknown
