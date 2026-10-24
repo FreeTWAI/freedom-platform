@@ -1,4 +1,4 @@
-import { expect, type Page } from './fixtures.js';
+import { expect, type Page, type Locator } from './fixtures.js';
 
 /** Member tools are secondary; open their visible disclosure before choosing one.
  * Sign-in and the admin header use the same disclosure. */
@@ -34,8 +34,17 @@ export async function openHomeGuide(page:Page){
   await expect(guide).toHaveJSProperty('open',true);
 }
 
+/** Learning is optional at every width; exercise the visible native disclosure. */
+export async function openHomeLearning(page:Page){
+  const exploration=page.locator('.home-participation-disclosure');
+  await expect(exploration).toBeAttached();
+  if(!await exploration.evaluate(element=>(element as HTMLDetailsElement).open))await exploration.locator(':scope > summary').click();
+  await expect(exploration).toHaveJSProperty('open',true);
+}
+
 /** Reach the original profile/recommendation and module cards on the simple home. */
 export async function expandHomeSections(page:Page){
+  await openHomeLearning(page);
   await openHomeGuide(page);
   await expect(page.locator('.home-personal')).toBeVisible();
   for(const selector of ['.home-personal']){
@@ -166,4 +175,17 @@ export async function navigateAdmin(page:Page,name:string){
   await expect(workspace).toBeVisible();
   if(changed)await expect(workspace).toBeFocused();
   await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
+}
+
+/** Traverse real tab stops rather than programmatically forcing focus-visible. */
+export async function reachByKeyboard(page:Page,target:Locator){
+  await page.getByRole('link',{name:'跳到主要內容',exact:true}).focus();
+  for(let steps=0;steps<40;steps++){
+    await page.keyboard.press('Tab');
+    if(await target.evaluate(element=>element===document.activeElement))break;
+  }
+  await expect(target).toBeFocused();
+  expect(await target.evaluate(element=>element.matches(':focus-visible'))).toBe(true);
+  expect(await target.evaluate(element=>getComputedStyle(element).outlineStyle)).not.toBe('none');
+  expect(await target.evaluate(element=>parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
 }

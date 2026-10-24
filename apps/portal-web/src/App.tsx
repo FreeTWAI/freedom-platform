@@ -1,4 +1,5 @@
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
+import {activateHomeLink} from './brand-home-link';
 import {PasswordField} from './modules/auth/PasswordField';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
@@ -916,13 +917,16 @@ function Workspace({
         <div className="shell">
           <header className="community-header">
           <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
-            <div className="sidebar-heading"><div className="brand">
-              <img className="sidebar-brand-art" src="/brand/freedom-workshop.webp" alt="" width="1280" height="720"/>
-              <div>
-                <p className="eyebrow">FREEDOM WORKSHOP</p>
-                <strong>自由工坊</strong>
-              </div>
-            </div>
+            <div className="sidebar-heading"><a className="brand brand-home" href="/#home" aria-label={`自由工坊 · ${t('nav.home')}`} onClick={event => activateHomeLink(event, () => {
+              selectTab('home');
+              // The existing leave guard must accept before changing the canonical URL or scroll.
+              if (acceptedHash.current !== '#home') return;
+              if (window.location.pathname !== '/' || window.location.search) {
+                window.history.replaceState(window.history.state, '', '/#home');
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+              }
+              workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
+            })}><strong>自由工坊</strong></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
           </aside>
