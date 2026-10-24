@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
 import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
+import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();}
 function card(page:Page,text:string){return page.locator('.social-card').filter({has:page.locator('.social-note').filter({hasText:text})});}
 
@@ -152,8 +153,16 @@ test('removing mention text removes its selected identity from new post and comm
 });
 
 test('sticker previews can be cancelled without publishing, and explicit lost-ACK retry preserves text and image drafts',async({page,e2eAuthPool},testInfo)=>{
- await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const text=`貼圖先預覽 ${Date.now()}`;
- await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);
+ await login(page);const sessionResponse=await page.request.get('/api/v1/session');expect(sessionResponse.status()).toBe(200);const session=await sessionResponse.json();
+ const schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA),fixturePostId=crypto.randomUUID(),text=`貼圖先預覽 ${fixturePostId}`;
+ expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(schema);
+ // This case exercises comments, not publishing. An exact historical fixture
+ // avoids consuming another journey's daily post budget. Linked image targets
+ // are immutable, so the normal run-schema teardown owns their cleanup.
+ const seeded=await e2eAuthPool.query(`INSERT INTO "${schema}".community_social_posts(post_id,community_id,author_user_id,kind,platform,title,note,state,created_at,updated_at)
+  SELECT $1,community_id,user_id,'note','other',$3,$3,'active',timestamptz '2000-01-01',timestamptz '2000-01-01' FROM "${schema}".users WHERE user_id=$2 RETURNING post_id`,[fixturePostId,session.user.user_id,text]);
+ expect(seeded.rows.map(row=>row.post_id)).toEqual([fixturePostId]);await page.goto(`/?social-post=${fixturePostId}#social`);const post=card(page,text);
+ await expect(post).toHaveCount(1);await expect(page.locator('.social-card')).toHaveCount(1);await expect(post).toHaveAttribute('id',`social-post-${fixturePostId}`);
  await post.getByRole('button',{name:'留言 · 0',exact:true}).click();await post.getByLabel('寫留言',{exact:true}).fill('文字和照片都還沒送');
  const png=await sharp({create:{width:96,height:64,channels:3,background:'#539db8'}}).png().toBuffer();
  await post.getByLabel('留言圖片',{exact:true}).setInputFiles({name:'保留草稿.png',mimeType:'image/png',buffer:png});
