@@ -177,3 +177,19 @@ test('catalog skill CTA follows readable content and preserves the selected intr
  assert.ok(html.includes('href="/#skills">登入工坊 Star'), 'original author-support entry remains available');
  assert.ok(html.includes('到 GitHub 看原始碼'));assert.equal(meta(html,'og:url'),base+'?intro=7');
 });
+
+
+test('every public skill prioritizes real instructions and destinations over supplementary art and social counts',()=>{
+ for(const item of communityCatalog.skill_books){
+  const html=render(undefined,item.id);
+  const reading=html.indexOf('<section class="public-skill-introduction"');
+  const destinations=html.indexOf('<section class="public-skill-next"');
+  const illustration=html.indexOf('<figure class="public-skill-illustration"');
+  const social=html.indexOf('<section class="public-github-social"');
+  assert.ok(reading>0&&destinations>reading,item.id);
+  assert.ok(illustration>destinations&&social>destinations,item.id);
+  assert.ok(html.indexOf('href="#skill-use-title"')<reading,item.id);
+  assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
+  assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
+ }
+});

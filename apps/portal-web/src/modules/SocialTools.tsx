@@ -1,6 +1,20 @@
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import type {PortalClient} from '../api';
 import {MemberAvatar} from './MemberAvatar';
+import {useLanguage,type InterfaceLanguage} from '../language';
+
+const textToolMessages={
+ emoji:['插入 emoji','Insert emoji','絵文字を挿入','이모지 삽입','Insertar emoji'],
+ insert:['插入 {emoji}','Insert {emoji}','{emoji}を挿入','{emoji} 삽입','Insertar {emoji}'],
+ mention:['標註會員','Mention a member','メンバーをメンション','회원 멘션','Mencionar a un miembro'],
+ search:['搜尋會員','Search members','メンバーを検索','회원 검색','Buscar miembros'],
+ searchLabel:['搜尋標註會員','Search members to mention','メンションするメンバーを検索','멘션할 회원 검색','Buscar miembros para mencionar'],
+ searching:['搜尋中…','Searching…','検索中…','검색 중…','Buscando…'],
+ empty:['沒有符合的會員。','No matching members.','該当するメンバーはいません。','일치하는 회원이 없습니다.','No se encontraron miembros.'],
+ limit:['文字或標註人數已達上限。','The text or mention limit has been reached.','文字数またはメンション数の上限に達しました。','글자 수 또는 멘션 수 제한에 도달했습니다.','Se alcanzó el límite de texto o menciones.'],
+ unavailable:['會員暫時無法載入。','Members could not be loaded.','メンバーを読み込めません。','회원을 불러올 수 없습니다.','No se pudieron cargar los miembros.'],
+} as const satisfies Record<string,readonly [string,string,string,string,string]>;
+const textToolLanguageIndex:Record<InterfaceLanguage,number>={'zh-Hant':0,en:1,ja:2,ko:3,es:4};
 
 export type Mention={user_id:string;display_name:string};
 export const SOCIAL_TOPICS={mood:'近況心情',event:'社群活動',work:'作品分享'} as const;
@@ -32,6 +46,9 @@ export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalCli
  return <>{text.split(pattern).map((part,index)=>names.has(part)?<SocialMemberLink key={index} client={client} member={names.get(part)!}>{part}</SocialMemberLink>:part.startsWith('#')&&/^#[\p{L}\p{N}_]{1,50}$/u.test(part)&&onTag?<button type="button" className="social-text-link" key={index} onClick={()=>onTag(part.slice(1))}>{part}</button>:part)}</>;
 }
 export function SocialTextTools({client,text,onChange,mentions,onMentions,disabled,maxLength=1000}:{client:PortalClient;text:string;onChange:(s:string)=>void;mentions:Mention[];onMentions:(v:Mention[])=>void;disabled:boolean;maxLength?:number}){
+ const {language}=useLanguage();
+ const t=(key:keyof typeof textToolMessages)=>textToolMessages[key][textToolLanguageIndex[language]];
+ const localizedError=()=>error===textToolMessages.limit[0]?t('limit'):error===textToolMessages.unavailable[0]?t('unavailable'):error;
  const [mode,setMode]=useState<'emoji'|'mention'|null>(null),[dismissed,setDismissed]=useState<string|null>(null),[search,setSearch]=useState(''),[items,setItems]=useState<Mention[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const id=useId(),trigger=useRef<HTMLButtonElement>(null);
  const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);
@@ -39,9 +56,9 @@ export function SocialTextTools({client,text,onChange,mentions,onMentions,disabl
  useEffect(()=>{if(!showMention||disabled)return;let active=true;setBusy(true);setError('');const timer=setTimeout(()=>{void client.get<{items:{user_id:string;nickname:string}[]}>(`/members?limit=6&search=${encodeURIComponent(query??'')}`).then(page=>{if(active)setItems(page.items.map(item=>({user_id:item.user_id,display_name:item.nickname})));}).catch(e=>{if(active)setError(e instanceof Error?e.message:'會員暫時無法載入。');}).finally(()=>{if(active)setBusy(false);});},200);return()=>{active=false;clearTimeout(timer);};},[client,showMention,query,disabled]);
  function choose(member:Mention){const value=at?text.slice(0,text.lastIndexOf('@'))+`@${member.display_name} `:`${text}${text&&!text.endsWith(' ')?' ':''}@${member.display_name} `;if(value.length>maxLength||mentions.length>=10&&!mentions.some(m=>m.user_id===member.user_id)){setError('文字或標註人數已達上限。');return;}onChange(value);onMentions([...new Map([...mentions,member].map(m=>[m.user_id,m])).values()]);setMode(null);setSearch('');setDismissed(value);const area=trigger.current?.closest('form')?.querySelector('textarea');area?.focus();}
  return <div className="social-text-tools">
- <div className="social-tool-buttons"><button ref={trigger} type="button" className="social-icon-button" aria-label="插入 emoji" title="插入 emoji" disabled={disabled} aria-expanded={mode==='emoji'} aria-controls={id} onClick={()=>setMode(mode==='emoji'?null:'emoji')}><SocialIcon name="smile"/></button><button type="button" className="social-icon-button" disabled={disabled} aria-label="標註會員" title="標註會員" aria-expanded={showMention} aria-controls={id} onClick={()=>setMode(mode==='mention'?null:'mention')}>@</button></div>
- {!disabled&&(mode==='emoji'||showMention)&&<section className="social-text-picker" id={id} aria-label={mode==='emoji'?'emoji':'標註會員'} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setMode(null);setDismissed(text);trigger.current?.focus();}}}>
- {mode==='emoji'?<div className="social-emoji-grid">{['😀','😂','😍','🥰','👍','👏','🎉','❤️','🙏','💪','🔥','✨'].map(emoji=><button key={emoji} type="button" aria-label={`插入 ${emoji}`} disabled={text.length+emoji.length>maxLength} onClick={()=>{onChange(text+emoji);setMode(null);trigger.current?.focus();}}>{emoji}</button>)}</div>:<><label className="field">搜尋會員<input type="search" aria-label="搜尋標註會員" maxLength={40} value={query??''} onChange={e=>{setMode('mention');setSearch(e.target.value);}}/></label>{busy?<p role="status">搜尋中…</p>:items.map(member=><button className="social-mention-choice" type="button" key={member.user_id} onClick={()=>choose(member)}><MemberAvatar nickname={member.display_name}/><span>{member.display_name}</span></button>)}{!busy&&!items.length&&!error&&<p>沒有符合的會員。</p>}{error&&<p role="alert">{error}</p>}</>}
+ <div className="social-tool-buttons"><button ref={trigger} type="button" className="social-icon-button" aria-label={t('emoji')} title={t('emoji')} disabled={disabled} aria-expanded={mode==='emoji'} aria-controls={id} onClick={()=>setMode(mode==='emoji'?null:'emoji')}><SocialIcon name="smile"/></button><button type="button" className="social-icon-button" disabled={disabled} aria-label={t('mention')} title={t('mention')} aria-expanded={showMention} aria-controls={id} onClick={()=>setMode(mode==='mention'?null:'mention')}>@</button></div>
+ {!disabled&&(mode==='emoji'||showMention)&&<section className="social-text-picker" id={id} aria-label={mode==='emoji'?'emoji':t('mention')} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setMode(null);setDismissed(text);trigger.current?.focus();}}}>
+ {mode==='emoji'?<div className="social-emoji-grid">{['😀','😂','😍','🥰','👍','👏','🎉','❤️','🙏','💪','🔥','✨'].map(emoji=><button key={emoji} type="button" aria-label={t('insert').replace('{emoji}',emoji)} disabled={text.length+emoji.length>maxLength} onClick={()=>{onChange(text+emoji);setMode(null);trigger.current?.focus();}}>{emoji}</button>)}</div>:<><label className="field">{t('search')}<input type="search" aria-label={t('searchLabel')} maxLength={40} value={query??''} onChange={e=>{setMode('mention');setSearch(e.target.value);}}/></label>{busy?<p role="status">{t('searching')}</p>:items.map(member=><button className="social-mention-choice" type="button" key={member.user_id} onClick={()=>choose(member)}><MemberAvatar nickname={member.display_name}/><span>{member.display_name}</span></button>)}{!busy&&!items.length&&!error&&<p>{t('empty')}</p>}{error&&<p role="alert">{localizedError()}</p>}</>}
  </section>}
  </div>;
 }

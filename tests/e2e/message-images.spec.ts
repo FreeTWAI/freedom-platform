@@ -269,7 +269,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     await expect(bubble.getByAltText('傳送的圖片')).toBeVisible();await expect.poll(()=>bubble.getByAltText('傳送的圖片').evaluate((node:HTMLImageElement)=>node.naturalWidth)).toBeGreaterThan(0);
   });
 
-  for(const outcome of ['success','lost-ack'] as const)test(`one-click sticker ${outcome} preserves the image, caption and reply until their separate send`,async({page,e2eAuthPool})=>{
+  for(const outcome of ['success','lost-ack'] as const)test(`confirmed sticker ${outcome} preserves the image, caption and reply until their separate send`,async({page,e2eAuthPool})=>{
     const thread=await openDirect(page),original=`回覆原文 ${crypto.randomUUID()}`,caption=`圖片草稿 ${crypto.randomUUID()}`;
     await thread.getByRole('textbox').fill(original);await thread.getByRole('button',{name:'送出',exact:true}).click();
     const quote=thread.locator('.messages-bubbles>li').filter({hasText:original});await expect(quote).toHaveCount(1);
@@ -289,8 +289,8 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
       if(sends.length===1){stickerMessage=(await response.json()).message_id;if(outcome==='lost-ack')return route.abort();}
       await route.fulfill({response});
     });
-    await thread.getByRole('button',{name:'選擇貼圖',exact:true}).click();await expect(thread.getByText('點選即傳送，保留其他草稿。')).toBeVisible();
-    await thread.getByRole('button',{name:'工坊夥伴',exact:true}).click();await thread.getByRole('button',{name:'傳送貼圖：你好',exact:true}).click();
+    await thread.getByRole('button',{name:'選擇貼圖',exact:true}).click();await expect(thread.getByText('先點選預覽，確認後再送出。其他草稿會保留。')).toBeVisible();
+    await thread.getByRole('button',{name:'工坊夥伴',exact:true}).click();await thread.getByRole('button',{name:'預覽貼圖：你好',exact:true}).click();expect(sends.length).toBe(0);await thread.getByRole('button',{name:'送出這張貼圖',exact:true}).click();
     if(outcome==='lost-ack'){
       await expect(thread.getByRole('alert')).toContainText('傳送結果未確認');await expect(thread.getByRole('note')).toContainText('重試只會確認原貼圖');
       await expect(thread.getByRole('button',{name:'選擇貼圖',exact:true})).toBeDisabled();await expect(thread.getByRole('button',{name:'移除',exact:true})).toBeDisabled();
@@ -373,7 +373,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     });
     if(kind==='sticker'){
       await thread.getByRole('button',{name:'選擇貼圖',exact:true}).click();await thread.getByRole('button',{name:'工坊夥伴',exact:true}).click();
-      await thread.getByRole('button',{name:'傳送貼圖：你好',exact:true}).click();
+      await thread.getByRole('button',{name:'預覽貼圖：你好',exact:true}).click();expect(keys).toHaveLength(0);await thread.getByRole('button',{name:'送出這張貼圖',exact:true}).click();
     }else await thread.getByRole('button',{name:'送出',exact:true}).click();
     await expect(thread.getByRole('alert')).toContainText('訊息回應未能核對');
     await thread.getByRole('button',{name:'重試送出',exact:true}).click();await expect(thread.getByRole('alert')).toContainText('Synthetic definite retry rejection');

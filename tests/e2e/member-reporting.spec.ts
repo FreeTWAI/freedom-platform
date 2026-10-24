@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type BrowserContext,type Page} from './member-feature-fixture.js';
 import {navigate} from './navigation.js';
@@ -18,7 +19,7 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
       const page=await context.newPage();await page.goto('/#home');
       await page.getByLabel('電子郵件',{exact:true}).fill(emails[index]);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
       await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();
-      const settings=page.getByRole('button',{name:'設定',exact:true});await settings.click();await page.getByRole('menuitemradio',{name:themeName,exact:true}).click();
+      const settings=page.getByRole('button',{name:'設定',exact:true});await settings.click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:themeName,exact:true}).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
       if(await settings.getAttribute('aria-expanded')==='true')await settings.click();
       await page.locator('.floating-messages').click();

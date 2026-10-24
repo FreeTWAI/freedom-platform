@@ -1,5 +1,5 @@
 import {test, expect, type Page} from './fixtures.js';
-import {expandHomeSections, openHomeGuide} from './navigation.js';
+import {expandHomeSections, openHomeGuide,openHomeLearning} from './navigation.js';
 
 const memberId = '20000000-0000-4000-8000-000000000001';
 const guild = {guild_key: 'guild_security', name: '測試資安公會'};
@@ -43,6 +43,7 @@ async function login(page: Page) {
   expect((await authenticated).status()).toBe(200);
   await expect(page.getByRole('heading', {name: '會員首頁', level: 1, exact: true})).toBeVisible();
   await openHomeGuide(page);
+  await openHomeLearning(page);
 }
 const guidance = (page: Page) => page.getByRole('region', {name: '公會與技能書建議', exact: true});
 async function returnAfterStale(page: Page) {
@@ -70,7 +71,7 @@ test('home shows the granted book while work and task requests remain held', asy
   try {
     await login(page);
     await expect.poll(() => waiting).toBeGreaterThanOrEqual(2);
-    await expect(guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true})).toBeVisible();
+    await expect(guidance(page).getByRole('button', {name: '閱讀技能書', exact: true})).toBeVisible();
     await expect(guidance(page).getByRole('button', {name: '分享作品與需求', exact: true})).toHaveCount(0);
   } finally { held.release(); }
   await expect(guidance(page).getByRole('button', {name: '分享作品與需求', exact: true})).toBeVisible();
@@ -93,7 +94,7 @@ test('home resumes unfinished work without waiting for grants or task board', as
     await login(page);
     await expect.poll(() => waiting).toBeGreaterThanOrEqual(2);
     await expect(guidance(page).getByRole('button', {name: '回到我的工作', exact: true})).toBeVisible();
-    await expect(guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true})).toHaveCount(0);
+    await expect(guidance(page).getByRole('button', {name: '閱讀技能書', exact: true})).toHaveCount(0);
   } finally { held.release(); }
   await expect(guidance(page).getByRole('button', {name: '回到我的工作', exact: true})).toBeVisible();
 });
@@ -106,7 +107,7 @@ test('failed grant lookup leaves ordinary navigation and confirmed tasks availab
   await login(page);
   await expect(guidance(page).getByRole('button', {name: '前往技能書架', exact: true})).toBeVisible();
   await expect(guidance(page).getByRole('button', {name: '查看社群任務', exact: true})).toBeVisible();
-  await expect(guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true})).toHaveCount(0);
+  await expect(guidance(page).getByRole('button', {name: '閱讀技能書', exact: true})).toHaveCount(0);
 });
 
 test('automatic same-guild refresh keeps the open book, claim draft, focus and work button mounted', async ({page}) => {
@@ -136,7 +137,7 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
   const resume = guidance(page).getByRole('button', {name: '回到我的工作', exact: true});
   await expect(resume).toBeVisible();
   const originalResume = await resume.elementHandle();
-  await guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true}).click();
+  await guidance(page).getByRole('button', {name: '閱讀技能書', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
   const statement = dialog.getByRole('textbox', {name: '聲明', exact: true});
   const draft = '這是尚未送出的原作認領聲明，返回分頁後應保留。';
@@ -190,7 +191,7 @@ test('automatic same-guild refresh to a different guide book discards the old cl
     });
   }
   await login(page);
-  const trigger = guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true});
+  const trigger = guidance(page).getByRole('button', {name: '閱讀技能書', exact: true});
   await trigger.click();
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
   const draft = '這是只屬於第一本技能書、尚未送出的原作認領聲明。';
@@ -305,7 +306,7 @@ test('leaving and returning to the primary guild discards the old suggestions un
   }
   await stub(page, '/api/v1/task-board/preview', {items: []});
   await login(page);
-  const openBook = guidance(page).getByRole('button', {name: '閱讀第一本技能書', exact: true});
+  const openBook = guidance(page).getByRole('button', {name: '閱讀技能書', exact: true});
   const resume = guidance(page).getByRole('button', {name: '回到我的工作', exact: true});
   await expect(openBook).toBeVisible();
   await expect(resume).toBeVisible();

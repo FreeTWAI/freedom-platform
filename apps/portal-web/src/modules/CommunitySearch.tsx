@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
 import { CommunityRelationsProvider, CommunityRelations, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
-import {createCommunitySearch} from './community-search-controller';
+import {createCommunitySearch, communityListHistoryForSession, type CommunityListHistory} from './community-search-controller';
 
 type Kind = typeof communitySearchKinds[number];
 type Topic = typeof communitySearchTopics[number];
@@ -13,12 +13,13 @@ const message = (error: unknown) => error instanceof Error ? error.message : '�
 
 export function CommunitySearch({ client, authKey, relationsEnabled = false }: { client: PortalClient; authKey: string | null; relationsEnabled?: boolean }) {
   const lifetime = `${authKey ?? 'anonymous'}:${client.sessionGeneration}`;
+  const navigation = authKey && relationsEnabled ? communityListHistoryForSession(client, authKey) : undefined;
   return authKey && relationsEnabled
-    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled /></CommunityRelationsProvider>
+    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled navigation={navigation} /></CommunityRelationsProvider>
     : <SearchContent key={lifetime} client={client} authKey={authKey} relationsEnabled={false}/>;
 }
 
-function SearchContent({ client, authKey, relationsEnabled }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean }) {
+function SearchContent({ client, authKey, relationsEnabled, navigation }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean; navigation?: CommunityListHistory }) {
   const generation = client.sessionGeneration;
   const search = useMemo(() => createCommunitySearch<CommunitySearchPage>({
     query: readQuery(),
@@ -28,8 +29,8 @@ function SearchContent({ client, authKey, relationsEnabled }: { client: PortalCl
     writeQuery: (query, mode) => {
       if (!onSearchPage()) return;
       const hash = `#community-search${query ? `?${query}` : ''}`;
-      if (mode === 'push') window.history.pushState(null, '', hash);
-      else window.history.replaceState(null, '', hash);
+      if (mode === 'push') window.history.pushState(window.history.state, '', hash);
+      else window.history.replaceState(window.history.state, '', hash);
     },
   }), [client, authKey, generation]);
   const state = useSyncExternalStore(search.subscribe, search.getSnapshot, search.getSnapshot);
@@ -62,7 +63,7 @@ function SearchContent({ client, authKey, relationsEnabled }: { client: PortalCl
   const failed = state.status === 'error';
   const busy = !state.composing && ['idle', 'waiting', 'loading'].includes(state.status);
   return <div className="stack community-content-search">
-    {relationsEnabled && <CommunityRelations client={client}/>}
+    {relationsEnabled && navigation && <CommunityRelations client={client} navigation={navigation}/>}
     <section className="card stack" aria-label="社群內容搜尋條件">
       <p className="muted">搜尋貼文、作品、技能書與活動；只顯示目前可閱讀的內容。這不是導覽的「搜尋功能」。</p>
       <form className="stack" onSubmit={event => {event.preventDefault(); search.submit();}}>

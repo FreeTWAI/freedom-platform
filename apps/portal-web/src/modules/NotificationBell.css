@@ -15,3 +15,6 @@
 .notification-bell-item span{display:block;margin:.3rem 0;line-height:1.45;overflow-wrap:anywhere}
 .notification-bell-item small{display:block;color:var(--muted)}
 .notification-bell-all{width:100%;margin-top:.4rem}
+/* A failed acknowledgement must remain visible after navigation closes the list. */
+.notification-bell-read-error{position:fixed;right:max(.75rem,env(safe-area-inset-right));bottom:max(.75rem,env(safe-area-inset-bottom));z-index:95;box-sizing:border-box;width:min(380px,calc(100vw - 1.5rem));max-height:50vh;overflow:auto;padding:.8rem;background:var(--bg-elev);border:1px solid var(--danger);border-radius:12px;box-shadow:0 12px 34px #0003;color:var(--ink)}
+.notification-bell-read-error p{margin:0 0 .5rem;overflow-wrap:anywhere}

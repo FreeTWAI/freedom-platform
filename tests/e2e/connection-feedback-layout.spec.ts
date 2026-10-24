@@ -1,3 +1,4 @@
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect} from './fixtures.js';
 
 for(const width of [320,1280])test(`offline ${width}px has one announcement at the top without covering content`,async({page,context},info)=>{
@@ -12,7 +13,7 @@ for(const width of [320,1280])test(`offline ${width}px has one announcement at t
     await expect(banner).toBeVisible();await expect(feedback).toBeVisible();
     for(const name of ['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生']){
       await page.getByRole('button',{name:'設定',exact:true}).click();
-      await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');
+      await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);
       await expect(page.locator('.app-connection-status[role=status], .request-feedback.is-offline[role=status]')).toHaveCount(1);
       await expect(banner).toContainText('草稿保留在此頁。');
       await expect(banner).toHaveAttribute('aria-live','polite');await expect(banner).toHaveAttribute('aria-atomic','true');

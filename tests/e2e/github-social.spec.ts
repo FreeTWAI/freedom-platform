@@ -252,6 +252,8 @@ test('public skill counts are actionable: a connected member stars in place and 
   await context.route('https://github.com/**',route=>route.fulfill({contentType:'text/html',body:'<h1>Synthetic GitHub destination</h1>'}));
   await login(page);await page.goto('/development/skills/social-post');
   const social=page.locator('[data-skill-social="social-post"]');
+  // Optional GitHub controls load when reached, after the public reading content.
+  await social.locator('[data-github-book="social-post"]').scrollIntoViewIfNeeded();
   await expect(social.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toEqual([]);
   await social.locator('.github-star-count').click();await expect(social.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page).toHaveURL(/\/development\/skills\/social-post$/);await expect(social.locator('.github-star-count')).toHaveText('127');
@@ -274,9 +276,11 @@ test('public skill OAuth returns to the same book and connecting never submits a
   await page.route('https://github.com/login/oauth/authorize?*',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic authorization</p>'}));
   await page.route('**/api/v1/me/github/complete',route=>{expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=true;return route.fulfill({json:{return_to:'/development/skills/social-post'}});});
   await login(page);await page.goto('/development/skills/social-post');
+  await page.locator('[data-skill-social="social-post"] [data-github-book="social-post"]').scrollIntoViewIfNeeded();
   await page.getByRole('button',{name:'連結 GitHub 後 Star',exact:true}).click();await expect(page).toHaveURL(/^https:\/\/github.com\/login\/oauth\/authorize/);
   expect(connects).toEqual([{return_to:'/development/skills/social-post'}]);expect(writes).toBe(0);
   await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/development\/skills\/social-post$/);
+  await page.locator('[data-skill-social="social-post"] [data-github-book="social-post"]').scrollIntoViewIfNeeded();
   await expect(page.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toBe(0);
 });
 

@@ -11,7 +11,8 @@
     "apps/portal-web/src/modules/MemberRecommendations.tsx",
     "apps/portal-web/src/modules/MemberSocialLinks.tsx",
     "apps/portal-web/src/modules/MemberSocialLinks.css",
-    "apps/portal-web/src/modules/MemberSettings.css"
+    "apps/portal-web/src/modules/MemberSettings.css",
+    "tests/e2e/member-connections.spec.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/CapabilityTree.tsx",
