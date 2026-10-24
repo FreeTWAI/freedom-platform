@@ -50,16 +50,13 @@
 .visitor-first-step .entry-resources>p{margin:0;color:var(--muted);line-height:1.6}
 .visitor-first-step .entry-resources>details>summary{display:inline-flex;justify-content:center;max-width:100%;min-height:48px;padding:10px 18px;border:1px solid transparent;border-radius:999px;background:var(--green);color:#12180a;text-decoration:none;font-weight:700;line-height:1.5;text-align:center}
 .visitor-first-step .entry-resources>details>summary:hover{background:var(--green-2)}
-.visitor-first-step .entry-resources>details>summary:focus-visible,.visitor-account-links>a:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
-.visitor-account-links{display:flex;flex-wrap:wrap;gap:8px 20px}
-.visitor-account-links>a{display:inline-flex;align-items:center;min-height:44px;color:var(--blue-ink);text-underline-offset:4px}
-.visitor-account-links>a[aria-disabled="true"]{opacity:.6;cursor:default}
+.visitor-first-step .entry-resources>details>summary:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 .login-layout.visitor-first-layout .login-story{align-self:start}
 .login-layout.visitor-first-layout .login-story .brand-poster{width:min(100%,420px);justify-self:start}
 .login-layout.visitor-first-layout .login-form-area{align-self:start}
 @media(max-width:860px){
  .login-layout.visitor-first-layout>.login-entry-tools{order:0}
- .login-layout.visitor-first-layout>.visitor-first-step{order:1;grid-column:auto;gap:8px;margin-block:8px 12px}
+ .login-layout.visitor-first-layout>.visitor-first-step{order:1;grid-column:auto;gap:8px;margin-block:0}
  .login-layout.visitor-first-layout .login-story .brand-poster{order:2;width:80px;margin:0;justify-self:start}
  .login-layout.visitor-first-layout .login-story-copy{order:3}
  .login-layout.visitor-first-layout>.login-form-area{order:4}

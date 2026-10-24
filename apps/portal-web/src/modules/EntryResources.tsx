@@ -22,7 +22,7 @@ function previewBooks(value:unknown):IntroBook[]{
   return books;
 }
 
-export function EntryResources({client,communitySearchEnabled=false,showIntroduction=true}:{client:PortalClient;communitySearchEnabled?:boolean;showIntroduction?:boolean}){
+export function EntryResources({client,communitySearchEnabled=false,compact=false}:{client:PortalClient;communitySearchEnabled?:boolean;compact?:boolean}){
   const {t,language}=useLanguage(),generation=client.sessionGeneration;
   const [opened,setOpened]=useState(false);
   const lane=useMemo(()=>createTaskRead<IntroBook[]>(()=>client.sessionGeneration),[client,generation]);
@@ -33,9 +33,11 @@ export function EntryResources({client,communitySearchEnabled=false,showIntroduc
   useEffect(()=>{if(opened)void reload();return()=>lane.reset();},[opened,reload,lane]);
   const loading=opened&&(state.status==='idle'||state.status==='loading');
   const books=state.value??[];
-  return <div className="entry-resources">{showIntroduction&&<p>{t('resources.intro')}</p>}<ul className="entry-benefits"><li>{t('resources.learning')}</li><li>{t('resources.partners')}</li><li>{t('resources.opportunities')}</li></ul>
-    <details onToggle={event=>setOpened(event.currentTarget.open)}><summary>{t('resources.open')}{communitySearchEnabled&&` · ${t('nav.community-search')}`}</summary>
+  const benefits=<ul className="entry-benefits"><li>{t('resources.learning')}</li><li>{t('resources.partners')}</li><li>{t('resources.opportunities')}</li></ul>;
+  return <div className="entry-resources">{!compact&&<><p>{t('resources.intro')}</p>{benefits}</>}
+    <details onToggle={event=>setOpened(event.currentTarget.open)}><summary>{t('resources.open')}{!compact&&communitySearchEnabled&&` · ${t('nav.community-search')}`}</summary>
       <div className="entry-resource-list" aria-busy={loading}>
+        {compact&&benefits}
         {communitySearchEnabled&&<a className="btn btn-secondary btn-small community-search-action" href="#community-search">{t('nav.community-search')}</a>}
         {opened&&books.map(book=><article key={book.id??book.book_id}><strong>{book.title}</strong><SkillBookIntro book={book} label={t('resources.preview')}/></article>)}
         {loading&&<p role="status">{t('resources.loading')}</p>}

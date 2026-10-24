@@ -145,18 +145,21 @@ test('visitor preview is keyboard accessible, remains anonymous and returns focu
   await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);await expect(preview).toBeFocused();
   await toggle.focus();await page.keyboard.press('Space');
-  await expect(first.locator('details')).not.toHaveAttribute('open','');
+  await expect(first.locator('.entry-resources > details')).not.toHaveAttribute('open','');
   await expect(toggle).toBeFocused();expect(page.url()).toBe(before);expect(writes).toEqual([]);
   expect((await page.request.get('/api/v1/session')).status()).toBe(401);
 });
 
-test('visitor account shortcuts focus the existing form without navigation or losing its draft',async({page})=>{
-  await page.goto('/');const originalUrl=page.url(),first=page.locator('.visitor-first-step'),email=page.getByLabel('電子郵件',{exact:true});
+test('visitor account choices reuse the existing keyboard-operable form without losing its draft',async({page})=>{
+  await page.goto('/');const originalUrl=page.url(),email=page.getByLabel('電子郵件',{exact:true});
+  const switcher=page.getByRole('group',{name:'登入或建立帳號',exact:true});
   await email.fill('visitor-draft@example.test');
-  await first.getByRole('link',{name:'建立帳號',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();await expect(email).toBeFocused();await expect(email).toHaveValue('visitor-draft@example.test');
-  await first.getByRole('link',{name:'會員登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(email).toBeFocused();await expect(email).toHaveValue('visitor-draft@example.test');
+  await switcher.getByRole('button',{name:'建立帳號',exact:true}).focus();await page.keyboard.press('Space');
+  await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
+  await page.keyboard.press('Tab');await expect(page.getByLabel('頁面工具',{exact:true})).toBeFocused();
+  await page.keyboard.press('Tab');await expect(email).toBeFocused();
+  await switcher.getByRole('button',{name:'會員登入',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
   expect(page.url()).toBe(originalUrl);
 });
 
@@ -181,8 +184,8 @@ test('the visitor first step uses all five existing interface languages at phone
     await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(language);
     const first=page.locator('.visitor-first-step'),toggle=first.locator('.entry-resources > details > summary');
     await expect(toggle).toContainText(explore);
-    await expect(first.getByRole('link',{name:login,exact:true})).toBeVisible();
-    await expect(first.getByRole('link',{name:register,exact:true})).toBeVisible();
+    await expect(page.locator('.auth-switch').getByRole('button',{name:login,exact:true})).toBeVisible();
+    await expect(page.locator('.auth-switch').getByRole('button',{name:register,exact:true})).toBeVisible();
     const box=(await toggle.boundingBox())!;expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(844);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
