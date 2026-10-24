@@ -109,19 +109,22 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpe
   // inFlight is the quietness of the full read that is still out, or null.
   const sessionGeneration=client.sessionGeneration;
   const scope=useRef({client,session:sessionGeneration});scope.current={client,session:sessionGeneration};
+  const readProofs=useRef(new Map<string,string>()),readRequests=useRef(0),readIntents=useRef(new Map<string,{key:string;after:number}>());
   const unknownReads=useRef(new Set<string>()),readLocks=useRef(new Set<string>()),unreadGeneration=useRef(0),lifetime=useRef(0);
   const generation=useRef(0),inFlight=useRef<boolean|null>(null),keys=useRef(new Map<string,string>()),alive=useRef(true);
   // Late responses after leaving the page must not navigate or overwrite anything.
-  useLayoutEffect(()=>{alive.current=true;keys.current.clear();unknownReads.current.clear();readLocks.current=new Set();setBusy({});setItemErrors({});setItems([]);setStatus('loading');return()=>{alive.current=false;lifetime.current++;generation.current++;unreadGeneration.current++;};},[client,sessionGeneration]);
+  useLayoutEffect(()=>{alive.current=true;keys.current.clear();unknownReads.current.clear();readIntents.current.clear();readProofs.current.clear();readLocks.current=new Set();setBusy({});setItemErrors({});setItems([]);setStatus('loading');return()=>{alive.current=false;lifetime.current++;generation.current++;unreadGeneration.current++;};},[client,sessionGeneration]);
   const load=useCallback(async(quiet=false)=>{
-    const current=++generation.current,countRequest=++unreadGeneration.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
+    // Older page responses cannot undo proof; a new full read starts after all retained proof.
+    readProofs.current.clear();
+    const current=++generation.current,countRequest=++unreadGeneration.current,readRequest=++readRequests.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
     const valid=()=>alive.current&&epoch===lifetime.current&&scope.current.client===client&&scope.current.session===session&&session===client.sessionGeneration&&current===generation.current;
     inFlight.current=quiet;setMore({loading:false,error:''});
     if(quiet)setRefresh({loading:true,error:''});else{setStatus('loading');setError('');setRefresh({loading:false,error:''});}
     try{
       const page=await client.get<NoticePage>(`/me/notifications?limit=${PAGE}&offset=0`);
       if(!valid())return;
-      inFlight.current=null;setItems(page.items);setNextOffset(page.next_offset);if(countRequest===unreadGeneration.current)reportUnread(page.unread_count,page.items);setStatus('ready');setRefresh({loading:false,error:''});
+      inFlight.current=null;setItems(keepReadProofs(page.items));setNextOffset(page.next_offset);if(countRequest===unreadGeneration.current){reconcileReads(page.items,readRequest);reportUnread(page.unread_count,page.items);}setStatus('ready');setRefresh({loading:false,error:''});
     }catch(cause){
       if(!valid())return;
       inFlight.current=null;
@@ -133,20 +136,37 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpe
   useEffect(()=>{const update=()=>void load(true);window.addEventListener(INBOX_ALL_READ,update);window.addEventListener(NOTIFICATIONS_READ,update);return()=>{window.removeEventListener(INBOX_ALL_READ,update);window.removeEventListener(NOTIFICATIONS_READ,update)}},[load]);
   async function loadMore(){
     if(nextOffset===null||more.loading)return;
-    const current=generation.current,countRequest=++unreadGeneration.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
+    const current=generation.current,countRequest=++unreadGeneration.current,readRequest=++readRequests.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
     const valid=()=>alive.current&&epoch===lifetime.current&&scope.current.client===client&&scope.current.session===session&&session===client.sessionGeneration&&current===generation.current;
     setMore({loading:true,error:''});
     try{
       const page=await client.get<NoticePage>(`/me/notifications?limit=${PAGE}&offset=${nextOffset}`);
       if(!valid())return;
-      setItems(value=>merge(value,page.items,item=>item.notification_id));setNextOffset(page.next_offset);if(countRequest===unreadGeneration.current)reportUnread(page.unread_count,page.items);setMore({loading:false,error:''});
+      setItems(value=>merge(value,keepReadProofs(page.items),item=>item.notification_id));setNextOffset(page.next_offset);if(countRequest===unreadGeneration.current){reconcileReads(page.items,readRequest);reportUnread(page.unread_count,page.items);}setMore({loading:false,error:''});
     }catch(cause){if(valid()){setMore({loading:false,error:fail(cause)});if(countRequest===unreadGeneration.current)reportUnread(null);}}
   }
   async function refreshUnread(){
-    const current=++unreadGeneration.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
+    const current=++unreadGeneration.current,readRequest=++readRequests.current,reportUnread=onUnread(),session=client.sessionGeneration,epoch=lifetime.current;
     const valid=()=>alive.current&&epoch===lifetime.current&&scope.current.client===client&&scope.current.session===session&&session===client.sessionGeneration&&current===unreadGeneration.current;
     // This read must not join a snapshot taken before the acknowledgement.
-    try{const page=await client.get<NoticePage>('/me/notifications?limit=1&offset=0');if(valid())reportUnread(page.unread_count,page.items);}catch{if(valid())reportUnread(null);}
+    try{const page=await client.get<NoticePage>('/me/notifications?limit=1&offset=0');if(valid()){reconcileReads(page.items,readRequest);reportUnread(page.unread_count,page.items);}}catch{if(valid())reportUnread(null);}
+  }
+  function keepReadProofs(records:Notice[]){
+    return records.map(item=>readProofs.current.has(item.notification_id)?{...item,read_at:readProofs.current.get(item.notification_id)!}:item);
+  }
+  function reconcileReads(records:ReadonlyArray<{notification_id:string;read_at:string|null}>,request:number){
+    if(!alive.current||scope.current.client!==client||scope.current.session!==client.sessionGeneration)return;
+    const confirmed=new Map<string,string>();
+    for(const record of records){
+      const intent=readIntents.current.get(record.notification_id);
+      if(!intent||request<=intent.after||typeof record.read_at!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(record.read_at)||!Number.isFinite(Date.parse(record.read_at)))continue;
+      readIntents.current.delete(record.notification_id);keys.current.delete(record.notification_id);unknownReads.current.delete(record.notification_id);
+      confirmed.set(record.notification_id,record.read_at);readProofs.current.set(record.notification_id,record.read_at);
+    }
+    if(!confirmed.size)return;
+    // A count-only read can confirm an already loaded row without another write or navigation.
+    setItems(current=>current.map(item=>confirmed.has(item.notification_id)?{...item,read_at:confirmed.get(item.notification_id)!}:item));
+    setItemErrors(current=>{const next={...current};for(const id of confirmed.keys())delete next[id];return next;});
   }
   function go(action:NotificationAction){
     if(action.tab==='stores'||action.tab==='reservations'){if(isOrderNotificationAction(action))onOrder?.(action);return;}
@@ -161,12 +181,13 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpe
     const valid=()=>alive.current&&epoch===lifetime.current&&sameSession();
     locks.add(id);setBusy(value=>({...value,[id]:true}));setItemErrors(({[id]:_,...rest})=>rest);
     const key=keys.current.get(id)??crypto.randomUUID();keys.current.set(id,key);
+    const previous=readIntents.current.get(id),intent=previous?.key===key?previous:{key,after:readRequests.current};readIntents.current.set(id,intent);
     try{
       const result=await client.post<{notification_id:string;read_at:string}>(`/me/notifications/${encodeURIComponent(id)}/read`,{},{idempotencyKey:key});
       // A same-session acknowledgement still refreshes the shell after this list closes.
       if(!sameSession())return;
       if(!result||typeof result.read_at!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(result.read_at)||!Number.isFinite(Date.parse(result.read_at))||result.notification_id!==undefined&&result.notification_id!==id)throw new Error();
-      keys.current.delete(id);unknownReads.current.delete(id);announceInboxChange();
+      keys.current.delete(id);unknownReads.current.delete(id);readIntents.current.delete(id);announceInboxChange();
       if(!valid())return;
       setItems(value=>value.map(entry=>entry.notification_id===id?{...entry,read_at:result.read_at}:entry));
       // Invalidate both full-page and pagination snapshots taken before the write.
@@ -175,7 +196,8 @@ export function Notifications({client,onUnread,onNavigate,onSocial,onOrder,onOpe
       void refreshUnread();
       if(then)go(then);
     }catch(cause){
-      if(!valid())return;
+      if(!valid()||readIntents.current.get(id)!==intent)return;
+      intent.after=readRequests.current;
       if(unconfirmed(cause))unknownReads.current.add(id);else if(!unknownReads.current.has(id))keys.current.delete(id);
       setItemErrors(value=>({...value,[id]:{message:`標為已讀未完成：${fail(cause,'請重試。')}`,navigate:Boolean(then)}}));
     }finally{locks.delete(id);if(valid())setBusy(({[id]:_,...rest})=>rest);}

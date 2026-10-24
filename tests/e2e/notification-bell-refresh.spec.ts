@@ -252,3 +252,25 @@ test('opening a full-history notification keeps the shell count producer after t
     await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName('通知');expect(writes).toBe(1);
   }finally{if(shell)await shell.fulfill({json:{items:[],unread_count:0}});if(history)await history.fulfill({json:{items:[],unread_count:0,next_offset:null}});}
 });
+
+for(const recovery of ['refresh','pending retry'] as const)test(`full history clears a confirmed read error through ${recovery} without an extra write`,async({page})=>{
+  const target={...notice,notification_id:'10000000-0000-4000-8000-000000000006',kind:'guild_approved',action:{tab:'guilds',resource_id:null}};
+  let committed=false,writes=0,retry:Route|undefined;const keys:string[]=[];
+  await page.route(/\/api\/v1\/me\/notifications\?/,route=>route.fulfill({json:{items:[{...target,read_at:committed?'2026-01-02T00:00:00Z':null}],unread_count:committed?0:1,next_offset:null}}));
+  await page.route(`**/api/v1/me/notifications/${target.notification_id}/read`,route=>{
+    writes++;keys.push(route.request().headers()['idempotency-key']);committed=true;
+    if(writes===1)return route.abort();retry=route;
+  });
+  await login(page);await page.locator('.notification-bell-trigger').click();await page.getByRole('button',{name:'查看所有通知',exact:true}).click();
+  const row=page.locator(`[data-notification="${target.notification_id}"]`),url=page.url();
+  try{
+    await row.getByRole('button',{name:'標為已讀',exact:true}).click();await expect(row.locator('.banner-error')).toBeVisible();
+    if(recovery==='pending retry'){await row.getByRole('button',{name:'重試標為已讀',exact:true}).click();await expect.poll(()=>Boolean(retry)).toBe(true);}
+    await page.getByRole('button',{name:'重新整理通知',exact:true}).click();
+    await expect(row.locator('.messages-meta')).toContainText('已讀');await expect(row.locator('.banner-error')).toHaveCount(0);
+    await expect(row.getByRole('button',{name:'標為已讀',exact:true})).toHaveCount(0);
+    if(retry){await retry.abort();retry=undefined;await frameBarrier(page);}
+    await expect(row.locator('.banner-error')).toHaveCount(0);await expect(row.getByRole('button',{name:'前往職業公會',exact:true})).toBeEnabled();
+    await expect(page).toHaveURL(url);expect(writes).toBe(recovery==='refresh'?1:2);if(keys.length===2)expect(keys[1]).toBe(keys[0]);
+  }finally{if(retry)await retry.abort();}
+});

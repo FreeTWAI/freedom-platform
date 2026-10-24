@@ -18,7 +18,7 @@ const ack={notification_id:item.notification_id,read_at:'2026-10-24T06:00:00Z'};
 type Call={path:string;key?:string;options:any;resolve:(value:any)=>void;reject:(error:Error)=>void};
 function harness(mode:'bell'|'history'){
   const calls:Call[]=[],events:string[]=[],navigations:any[]=[],counts:any[]=[];
-  const state:any={readScope:{current:{id:"synthetic-preview",epoch:0}},keys:{current:new Map()},lifetime:{current:0},writeLock:{current:null},unknownReads:{current:new Set()},readLocks:{current:new Set()},generation:{current:0},badgeGeneration:{current:0},readGeneration:{current:0},readFailure:{current:null},unreadGeneration:{current:0},alive:{current:true},busy:mode==='bell'?null:{},inFlight:{current:null},crypto:{randomUUID},preferencesEnabled:false,
+  const state:any={readProofs:{current:new Map()},keepReadProofs:(records:any)=>records,readRequests:{current:0},readIntents:{current:new Map()},reconcileReads:()=>{},readScope:{current:{id:"synthetic-preview",epoch:0}},keys:{current:new Map()},lifetime:{current:0},writeLock:{current:null},unknownReads:{current:new Set()},readLocks:{current:new Set()},generation:{current:0},badgeGeneration:{current:0},readGeneration:{current:0},readFailure:{current:null},unreadGeneration:{current:0},alive:{current:true},busy:mode==='bell'?null:{},inFlight:{current:null},crypto:{randomUUID},preferencesEnabled:false,
     unread:1,page:{items:[item],unread_count:1},items:[item],actionError:null,itemErrors:{},loading:false,error:false,
     reconcileRead:()=>{},dismissReadError:()=>{state.actionError=null;state.readFailure.current=null;},setBusy:(next:any)=>{state.busy=typeof next==='function'?next(state.busy):next},setActionError:(value:any)=>state.actionError=value,
     setPage:(fn:any)=>state.page=typeof fn==='function'?fn(state.page):fn,setItems:(fn:any)=>state.items=typeof fn==='function'?fn(state.items):fn,setItemErrors:(fn:any)=>state.itemErrors=fn(state.itemErrors),
@@ -304,4 +304,45 @@ test('bell: fresh read proof before a lost initial acknowledgement preserves the
   h.calls[0].reject(new Error('initial response lost'));await write;
   assert.equal(h.navigations.length,1);assert.equal(h.state.actionError,null);assert.equal(h.state.unread,0);
   assert.equal(h.calls.filter(call=>call.key).length,1);
+});
+
+function historyReconciliation(){
+  const h=harness('history');Object.assign(h.state,{PAGE:20,nextOffset:20,more:{loading:false},setNextOffset:()=>{},setStatus:()=>{},setRefresh:()=>{},merge:(a:any[],b:any[],id:(x:any)=>string)=>[...a,...b.filter(x=>!a.some(y=>id(x)===id(y)))]});
+  h.state.reconcileReads=runInNewContext(`${sourceFunction('MemberMessages.tsx','reconcileReads')};reconcileReads`,h.state);
+  h.state.keepReadProofs=runInNewContext(`${sourceFunction('MemberMessages.tsx','keepReadProofs')};keepReadProofs`,h.state);
+  return {...h,load:historyLoad(h.state),more:runInNewContext(`${sourceFunction('MemberMessages.tsx','loadMore')};loadMore`,h.state),count:runInNewContext(`${sourceFunction('MemberMessages.tsx','refreshUnread')};refreshUnread`,h.state)};
+}
+for(const read of ['load','more','count'] as const)for(const unknown of [true,false])test(`history: fresh ${read} exact proof clears ${unknown?'unknown':'definite'} failure without another command`,async()=>{
+  const h=historyReconciliation();h.state.unconfirmed=()=>unknown;
+  const write=h.invoke(item);h.calls[0].reject(new Error('read result unavailable'));await write;assert.ok(h.state.itemErrors[item.notification_id]);
+  const pending=h[read]();h.calls[1].resolve({items:[{...item,read_at:ack.read_at}],unread_count:0,next_offset:null});await pending;
+  assert.equal(h.state.itemErrors[item.notification_id],undefined);assert.equal(h.state.items.find((entry:any)=>entry.notification_id===item.notification_id)?.read_at,ack.read_at);
+  assert.equal(h.state.keys.current.has(item.notification_id),false);assert.equal(h.state.unknownReads.current.has(item.notification_id),false);assert.equal(h.state.readIntents.current.has(item.notification_id),false);
+  assert.equal(h.calls.filter(call=>call.key).length,1);assert.equal(h.navigations.length,0);assert.equal(h.events.length,0);
+});
+for(const proof of ['old','missing','invalid','unread','different','session','client','unmounted'] as const)test(`history: ${proof} read cannot clear an unconfirmed failure`,async()=>{
+  const h=historyReconciliation();let read:Promise<void>|undefined;
+  const write=h.invoke(item);if(proof==='old')read=h.load(true);
+  h.calls[0].reject(new Error('lost acknowledgement'));await write;
+  if(proof!=='old')read=h.load(true);
+  if(proof==='session')h.state.client.sessionGeneration++;
+  if(proof==='client')h.state.scope.current={client:{sessionGeneration:1},session:1};
+  if(proof==='unmounted'){h.state.alive.current=false;h.state.lifetime.current++;}
+  const record={...item,notification_id:proof==='different'?'other':item.notification_id,read_at:proof==='invalid'?'invalid':proof==='unread'?null:ack.read_at};
+  h.calls[1].resolve({items:proof==='missing'?[]:[record],unread_count:0,next_offset:null});await read;
+  assert.ok(h.state.itemErrors[item.notification_id]);assert.ok(h.state.keys.current.has(item.notification_id));assert.ok(h.state.readIntents.current.has(item.notification_id));assert.equal(h.calls.filter(call=>call.key).length,1);
+});
+test('history: fresh proof during retry prevents a late failure from resurrecting errors or intent',async()=>{
+  const h=historyReconciliation(),first=h.invoke(item);h.calls[0].reject(new Error('lost'));await first;
+  const retry=h.invoke(item);assert.equal(h.calls[1].key,h.calls[0].key);const read=h.count();h.calls[2].resolve({items:[{...item,read_at:ack.read_at}],unread_count:0});await read;
+  h.calls[1].reject(new Error('late response failure'));await retry;
+  assert.equal(h.state.itemErrors[item.notification_id],undefined);assert.equal(h.state.items[0].read_at,ack.read_at);assert.equal(h.state.readIntents.current.size,0);assert.equal(h.state.keys.current.size,0);assert.equal(h.state.unknownReads.current.size,0);assert.equal(h.navigations.length,0);
+});
+
+for(const stale of ['load','more'] as const)test(`history: delayed ${stale} cannot undo a newer exact-record proof`,async()=>{
+  const h=historyReconciliation(),write=h.invoke(item);h.calls[0].reject(new Error('lost'));await write;
+  const older=h[stale](),fresh=h.count();h.calls[2].resolve({items:[{...item,read_at:ack.read_at}],unread_count:0});await fresh;
+  h.calls[1].resolve({items:[item],unread_count:1,next_offset:null});await older;
+  assert.equal(h.state.items.find((entry:any)=>entry.notification_id===item.notification_id)?.read_at,ack.read_at);assert.equal(h.state.itemErrors[item.notification_id],undefined);
+  assert.equal(h.state.inFlight.current,null);assert.equal(h.calls.filter(call=>call.key).length,1);assert.equal(h.navigations.length,0);
 });
