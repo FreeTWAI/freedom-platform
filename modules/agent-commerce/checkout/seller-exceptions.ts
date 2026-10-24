@@ -51,7 +51,7 @@ export async function closeSellerException(q:PoolClient,id:string,principalId:st
   await q.query(`UPDATE commerce_exception_cases SET status='resolved',resolution_code=$2,resolution_note=$3,resolved_by_principal_id=$4,updated_at=clock_timestamp(),version=version+1 WHERE case_id=$1 AND status='open'`,[id,code,note,principalId]);
 }
 function available(row:Awaited<ReturnType<typeof caseRow>>,action:'resolve_with_evidence'|'retry_allocation') {
-  requireCondition(row.status==='open'&&(action==='retry_allocation'?row.kind==='paid_unallocatable':row.kind!=='paid_unallocatable'),409,'exception_action_unavailable','目前無法處理這個例外。');
+  requireCondition(row.status==='open'&&row.kind!=='fulfiller_unable'&&(action==='retry_allocation'?row.kind==='paid_unallocatable':row.kind!=='paid_unallocatable'),409,'exception_action_unavailable','目前無法處理這個例外。');
 }
 export async function actOnSellerException(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,action:'resolve_with_evidence'|'retry_allocation',raw:unknown,key:string,expected:string,options:SellerCheckoutReadOptions={}) {
   quarantineGate(options);

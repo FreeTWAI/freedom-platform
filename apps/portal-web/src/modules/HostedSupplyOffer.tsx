@@ -1,3 +1,4 @@
+import {sellableLabel} from '../../../../modules/agent-commerce/hosted-ui/SupplyOfferText';
 import {useEffect,useState} from 'react';
 import type {z} from 'zod';
 import {SupplyOfferPageSchema} from '../../../../contracts/guild-launchpad/v1/hosted-distribution';
@@ -40,10 +41,10 @@ export function HostedSupplyOffer({client,root,offerId,refresh,busy,writable,onD
       <section className="supply-offer-section stack"><h3>目前可以怎麼賣</h3>
         <div className="sale-path stack"><h4>展示：{!data.selection&&data.offer.state==='offered'?'供應商同意後可加入':displayReady?'可加入展示頁':'目前無法加入展示頁'}</h4><p>{data.offer.state==='withdrawn'?'這份供貨版本已撤回。':displayReady?'供應商已同意；下次發布後，商品會出現在你的商店。':'取得供應商同意，並在你的商店發布後，商品才會出現在展示頁。'}</p></div>
         <div className="sale-path stack"><h4>預留：{data.sale_paths.reservation.available?'可接受預留':'目前無法預留'}</h4><p>{data.sale_paths.reservation.available?'雙方已開放庫存預留；買家送出時仍會重新確認供貨狀態與可用庫存。':reservationReasons[data.sale_paths.reservation.reason??'']??'目前無法確認預留條件，請重新讀取。'}</p></div>
-        <div className="sale-path stack"><h4>結帳購買：{data.sale_paths.checkout.available?'可結帳購買':'目前無法結帳購買'}</h4><p>{data.sale_paths.checkout.reason==='fulfilment_not_agreed'?'供貨商品需要供應商的代出貨同意，這項功能尚未開放。':data.sale_paths.checkout.available?'買家可依你的店面設定結帳。':'目前無法確認結帳條件，請重新讀取。'}</p></div>
+        <div className="sale-path stack"><h4>結帳購買：{data.sale_paths.checkout.available?'可結帳購買':'目前無法結帳購買'}</h4><p>{data.sale_paths.checkout.reason==='fulfilment_not_agreed'?'供貨商品需要有效的供應商代出貨同意，目前尚不能結帳購買。':data.sale_paths.checkout.available?'買家可依你的店面設定結帳。':'目前無法確認結帳條件，請重新讀取。'}</p></div>
         <p>若你先向供應商批發買入並自行持有商品，可作為自己的商品上架，使用自己的庫存、收款與面交設定。</p>
       </section>
-      {data.selection&&<section className="supply-offer-section stack"><h3>我的選品</h3><p>{data.selection.offer.state==='withdrawn'?'供貨版本已撤回':distributionStateWord[data.selection.state]}</p><p>我的零售價：{formatMinor(data.selection.retail_price_minor,data.offer.terms.currency)}</p>{data.decision_note&&<p className="supply-offer-text">供應商回覆：{data.decision_note}</p>}
+      {data.selection&&<section className="supply-offer-section stack"><h3>我的選品</h3><p>{data.selection.offer.state==='withdrawn'?'供貨版本已撤回':data.selection.state==='sellable'?sellableLabel(data.sale_paths.checkout.available):distributionStateWord[data.selection.state]}</p><p>我的零售價：{formatMinor(data.selection.retail_price_minor,data.offer.terms.currency)}</p>{data.decision_note&&<p className="supply-offer-text">供應商回覆：{data.decision_note}</p>}
         {data.selection.state!=='revoked'&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={locked} onClick={()=>void onCommand(distributionWithdrawal(root,data.selection!))}>停止採用</button></div>}
       </section>}
       {data.offer.state==='offered'&&<section className="supply-offer-section stack"><h3>設定我的售價</h3>{data.selection||editing?<PriceForm key={data.selection?.version??'new'} offer={data.offer} selection={data.selection??undefined} busy={locked} onDirty={onDirty} onSubmit={body=>onCommand(distributionProposal(root,body,data.selection??undefined,()=>{onDirty(false);setEditing(false);} ))}/>:<div className="actions"><button type="button" className="btn btn-ghost" disabled={locked} onClick={()=>setEditing(true)}>設定我的售價</button></div>}</section>}

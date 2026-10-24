@@ -1,4 +1,6 @@
 import {runRestoredContactRetention} from '../../modules/agent-commerce/operations/contact-retention.js';
+import {applyConfirmedPaymentHeld,cancelPaidOrder} from '../../modules/agent-commerce/checkout/payments.js';
+import {seedStandingAgreement} from '../runtime/drop-ship-fixture.js';
 import {seedSelfShipment} from '../runtime/self-ship-fixture.js';
 import sharp from 'sharp';
 import {galleryTables,seedGalleryRows,seedVariantsRows,seedCategoriesRows,categoryTables} from '../helpers/storefront-gallery.js';
@@ -152,7 +154,7 @@ const RLS_TABLES = [
   'tenants', 'tenant_memberships', 'tenant_invitations', 'workspaces', 'tenant_authority_audit', 'module_instances',
   'commerce_provider_accounts', 'commerce_provider_account_services', 'commerce_provider_credentials',
   'commerce_ship_from_locations', 'commerce_logistics_services',
-  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments',
+  'commerce_offline_payment_settings', 'commerce_offline_payments', 'commerce_meetup_handovers', 'commerce_self_shipments', 'commerce_paid_cancellations', 'commerce_fulfilment_agreements', 'commerce_fulfilment_agreement_items',
   'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants',
   'commerce_resource_tenants', 'commerce_order_quotes', 'commerce_hosted_supply_offers', 'commerce_product_photo_targets', 'commerce_publication_photo_refs',
   'commerce_distribution_photo_copies', 'commerce_distribution_photo_targets', 'commerce_hosted_offer_photos',
@@ -339,7 +341,7 @@ async function insertHostedQuote(q: PoolClient, data: { tenantId: string; princi
 }
 
 /** A card checkout cannot be rewritten into a bank transfer. Clone its frozen terms. */
-async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, principalId: string) {
+async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, principalId: string, refundState?:'pending'|'recorded') {
   const checkoutClone = randomUUID(), contactId = randomUUID(), orderId = randomUUID(), clientOrderId = randomUUID();
   const keyHash = createHash('sha256').update(checkoutClone).digest('hex');
   const requestHash = createHash('sha256').update(orderId).digest('hex');
@@ -369,8 +371,8 @@ async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, princip
     WHERE c.checkout_id=$1`, [checkoutClone, orderId, clientOrderId, requestHash]);
   await q.query(`INSERT INTO commerce_checkout_orders(order_id,tenant_id,instance_id,checkout_id,customer_id,contact_id,display_number,terms,terms_sha256,environment,payment_method)
     SELECT $2,c.tenant_id,c.instance_id,c.checkout_id,c.customer_id,c.current_contact_id,
-      to_char(o.created_at AT TIME ZONE 'Asia/Taipei','YYMMDD')||'-BANK01',c.terms,c.terms_sha256,'sandbox','bank_transfer'
-    FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1`, [checkoutClone, orderId]);
+      to_char(o.created_at AT TIME ZONE 'Asia/Taipei','YYMMDD')||CASE WHEN $3::boolean THEN '-CANC01' ELSE '-BANK01' END,c.terms,c.terms_sha256,'sandbox','bank_transfer'
+    FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1`, [checkoutClone, orderId,refundState!==undefined]);
   await q.query(`INSERT INTO commerce_order_lines(order_id,selection_id,item_id,quantity,snapshot,order_profile,supplier_shop_id,hosted_offer_id,acceptance_id,listing_sha256)
     SELECT $1,(b->>'selection_id')::uuid,(b->>'item_id')::uuid,(b->>'quantity')::int,item.value,'hosted_checkout',(b->>'supplier_shop_id')::uuid,
       (b->>'offer_id')::uuid,(b->>'acceptance_id')::uuid,NULLIF(b->>'listing_sha256','')
@@ -383,11 +385,23 @@ async function seedOfflineBankFixture(q: PoolClient, checkoutId: string, princip
     FROM commerce_order_lines l JOIN commerce_orders o USING(order_id) WHERE l.order_id=$1`, [orderId]);
   await q.query(`UPDATE commerce_items i SET stock=stock+l.quantity, reserved=reserved+l.quantity
     FROM commerce_order_lines l WHERE l.order_id=$1 AND i.item_id=l.item_id`, [orderId]);
-  await q.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
+  if(!refundState)await q.query(`INSERT INTO commerce_offline_payment_settings(tenant_id,instance_id,version,document,document_sha256,created_by_principal_id)
     SELECT tenant_id,instance_id,1,$2,$3,$4 FROM commerce_checkouts WHERE checkout_id=$1`, [checkoutClone, document, createHash('sha256').update(canonicalJSON(document)).digest('hex'), principalId]);
   const payment = (await q.query<{ payment_id: string }>(`INSERT INTO commerce_offline_payments(tenant_id,instance_id,order_id,method,amount_minor,currency,received_on,confirmed_by_principal_id)
     SELECT c.tenant_id,c.instance_id,$2,'bank_transfer',o.total_minor,o.currency,(o.created_at AT TIME ZONE 'Asia/Taipei')::date,$3
     FROM commerce_checkouts c JOIN commerce_orders o ON o.order_id=$2 WHERE c.checkout_id=$1 RETURNING payment_id`, [checkoutClone, orderId, principalId])).rows[0];
+  if(refundState){
+    const order=(await q.query('SELECT *,version::text FROM commerce_checkout_orders WHERE order_id=$1',[orderId])).rows[0];
+    await applyConfirmedPaymentHeld(q,{orderId,paymentRef:payment.payment_id,amountMinor:Number(order.terms.total_minor),currency:order.terms.currency,simulated:false},order);
+    const shop=(await q.query('SELECT public_shop_id FROM commerce_orders WHERE order_id=$1',[orderId])).rows[0];
+    await cancelPaidOrder(q,{storefront_shop_id:shop.public_shop_id},{orderId,commandRef:randomUUID()});
+    await q.query(`INSERT INTO commerce_paid_cancellations(order_id,tenant_id,instance_id,payment_id,reason,note,cancelled_by_principal_id,cancelled_at,amount_minor,currency,refund_state,refunded_on,refund_method,refund_recorded_by_principal_id,refund_recorded_at)
+      SELECT p.order_id,p.tenant_id,p.instance_id,p.payment_id,'out_of_stock',NULL,$2,co.cancelled_at,p.amount_minor,p.currency,$3,
+        CASE WHEN $3='recorded' THEN (p.confirmed_at AT TIME ZONE 'Asia/Taipei')::date END,
+        CASE WHEN $3='recorded' THEN 'cash' END,CASE WHEN $3='recorded' THEN $2::uuid END,CASE WHEN $3='recorded' THEN clock_timestamp() END
+      FROM commerce_offline_payments p JOIN commerce_checkout_orders co USING(order_id) WHERE p.payment_id=$1`,[payment.payment_id,principalId,refundState]);
+    return;
+  }
   await q.query(`INSERT INTO commerce_meetup_handovers(tenant_id,instance_id,order_id,offline_payment_id,completed_on,recorded_by_principal_id)
     SELECT tenant_id,instance_id,order_id,payment_id,received_on,confirmed_by_principal_id FROM commerce_offline_payments WHERE payment_id=$1`, [payment.payment_id]);
 }
@@ -452,6 +466,7 @@ async function installSpace(space: Space, author: Person, invitee: Person) {
     const checkoutOrder = await placeCheckoutOrder(q,store,{checkoutId:space.checkout.checkout_id,termsSha256:space.checkout.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:null,environment:'sandbox'}, {admission:{allowed:()=>true},shipping:syntheticShippingPort()});
     await seedOfflineBankFixture(q, space.checkout.checkout_id, author.principalId);
     await seedSelfShipment(q, space.checkout.checkout_id, author.principalId);
+    await seedOfflineBankFixture(q,space.checkout.checkout_id,author.principalId,space===spaces.a?'pending':'recorded');
     const attemptId = randomUUID(), tradeNumber = newTradeNumber('F');
     await q.query(`INSERT INTO commerce_payment_attempts(attempt_id,tenant_id,instance_id,kind,sequence,account_id,
       environment,merchant_id,credential_version,merchant_trade_no,amount_minor,currency)
@@ -557,15 +572,16 @@ const personalOnly = () => ({
 });
 
 const EXPECTED: Record<string, number> = {
+  commerce_fulfilment_agreements:2,commerce_fulfilment_agreement_items:2,
   tenants: 2, tenant_memberships: 3, tenant_invitations: 2, workspaces: 2,
   tenant_authority_audit: 2, module_instances: 4, deployment_bindings: 4, workspace_module_bindings: 2,
   tenant_high_risk_verifications: 0, tenant_ownership_transfers: 0, tenant_recovery_cases: 0,
   // This fixture has no explicit instance grants; verify the new table survives empty.
   commerce_provider_accounts: 2, commerce_provider_account_services: 4, commerce_provider_credentials: 4,
   commerce_ship_from_locations: 2, commerce_logistics_services: 2,
-  commerce_offline_payment_settings: 2, commerce_offline_payments: 4, commerce_meetup_handovers: 2, commerce_self_shipments: 2,
-  // Each tenant retains a card contact and the cloned offline-bank and self-ship contacts.
-  commerce_customers: 2, commerce_checkout_contacts: 6, commerce_exception_cases: 2, commerce_order_access_grants: 2,
+  commerce_offline_payment_settings: 2, commerce_offline_payments: 6, commerce_meetup_handovers: 2, commerce_self_shipments: 2, commerce_paid_cancellations: 2,
+  // Each tenant retains a card contact and the cloned offline-bank, self-ship and paid-cancellation contacts.
+  commerce_customers: 2, commerce_checkout_contacts: 8, commerce_exception_cases: 2, commerce_order_access_grants: 2,
   tenant_module_permissions: 0, commerce_resource_tenants: 4, commerce_order_quotes: 2, commerce_hosted_supply_offers: 2,
   // Both restored tenants have real primary/secondary bytes and every gallery table.
   commerce_product_groups:4,commerce_product_group_members:4,commerce_publication_variants:2,commerce_product_gallery_photos:2,commerce_publication_galleries:2,commerce_publication_gallery_refs:4,
@@ -646,6 +662,7 @@ before(async () => {
     VALUES($1,1,NULL,'synthetic-F-GUILD-TWO-TENANTS-v1',10,3,2,1000,104857600,4,NULL,'active')`, [defaultPolicyId]);
   await installSpace(spaces.a, people.p1, people.p3);
   await installSpace(spaces.b, people.p2, people.p1);
+  await isolatedTransaction(owner,async q=>{await seedStandingAgreement(q,spaces.a.hosted!.instanceId,spaces.b.hosted!.instanceId);await seedStandingAgreement(q,spaces.b.hosted!.instanceId,spaces.a.hosted!.instanceId);});
   await owner.query(`INSERT INTO tenant_memberships(tenant_id,principal_id,role,status,accepted_at)
     VALUES($1,$2,'viewer','active',clock_timestamp())`, [spaces.b.tenantId, people.p1.principalId]);
   personalWorkId = randomUUID();
@@ -877,10 +894,10 @@ test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs
   }
   assert.equal((await restoredPool.query('SELECT 1 FROM commerce_hosted_supply_offers WHERE tenant_id=$1 OR offer_id=$2',
     [spaces.c.tenantId, spaces.c.hosted!.offerId])).rowCount, 0);
-  for (const [table, key] of [['commerce_customers', 'customer_id'], ['commerce_checkout_contacts', 'contact_id'], ['commerce_exception_cases', 'case_id'], ['commerce_order_access_grants', 'grant_id'], ['commerce_provider_accounts','account_id'], ['commerce_provider_account_services','account_id'], ['commerce_provider_credentials','credential_id'], ['commerce_payment_attempts','attempt_id'], ['commerce_hosted_payment_events','event_id'], ['commerce_due_work','due_work_id'],['commerce_refunds','refund_id'], ['commerce_outbound_emails','email_id'],['commerce_ship_from_locations','location_id'],['commerce_logistics_services','logistics_service_id'],['commerce_shipping_profile_versions','instance_id'],['commerce_item_shipping_attributes','item_id'],['commerce_offline_payment_settings','instance_id'],['commerce_offline_payments','payment_id'],['commerce_meetup_handovers','handover_id'],['commerce_self_shipments','shipment_id']] as const) {
+  for (const [table, key] of [['commerce_customers', 'customer_id'], ['commerce_checkout_contacts', 'contact_id'], ['commerce_exception_cases', 'case_id'], ['commerce_order_access_grants', 'grant_id'], ['commerce_provider_accounts','account_id'], ['commerce_provider_account_services','account_id'], ['commerce_provider_credentials','credential_id'], ['commerce_payment_attempts','attempt_id'], ['commerce_hosted_payment_events','event_id'], ['commerce_due_work','due_work_id'],['commerce_refunds','refund_id'], ['commerce_outbound_emails','email_id'],['commerce_ship_from_locations','location_id'],['commerce_logistics_services','logistics_service_id'],['commerce_shipping_profile_versions','instance_id'],['commerce_item_shipping_attributes','item_id'],['commerce_offline_payment_settings','instance_id'],['commerce_offline_payments','payment_id'],['commerce_meetup_handovers','handover_id'],['commerce_self_shipments','shipment_id'],['commerce_paid_cancellations','order_id']] as const) {
     const rows = async (pool: Pool) => (await pool.query(`SELECT * FROM ${table} ORDER BY ${key}`)).rows;
     const restored = await rows(restoredPool);
-    assert.equal(restored.length, table === 'commerce_checkout_contacts' ? 6 : ['commerce_offline_payments','commerce_payment_attempts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 4 : 2, table);
+    assert.equal(restored.length, table === 'commerce_checkout_contacts' ? 8 : table === 'commerce_offline_payments' ? 6 : ['commerce_payment_attempts','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 4 : 2, table);
     if (table === 'commerce_payment_attempts') assert.deepEqual(restored.map(row => row.kind).sort(), ['order', 'order', 'service_activation', 'service_activation']);
     assert.deepEqual(restored, (await rows(owner)).filter(row => row.tenant_id !== spaces.c.tenantId));
     assert.equal((await restoredPool.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`, [spaces.c.tenantId])).rowCount, 0);
@@ -973,21 +990,21 @@ test('J6-R4 restored seller and policy history retains immutable versions, freez
 test('J6-R4 restored checkout PII requires the exact tenant context and disappears without context', async () => {
   for (const space of [spaces.a, spaces.b]) {
     await isolatedTransaction(runtimePool, async q => {
-      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments','commerce_paid_cancellations']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindPrincipalContext(q, space === spaces.a ? people.p1.principalId : people.p2.principalId);
-      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments','commerce_paid_cancellations']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
       await bindTenantContext(q, { tenantId: space.tenantId, tenantScopeId: space.scopeId });
-      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments']) {
+      for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments','commerce_paid_cancellations']) {
         const policyKinds=['commerce_storefront_policy_drafts','commerce_storefront_policy_versions','commerce_publication_policy_refs'].includes(table);
         const order = table === 'commerce_checkout_contacts' ? ' ORDER BY contact_id' : policyKinds?' ORDER BY kind':'';
         const rows = (await q.query(`SELECT * FROM ${table}${order}`)).rows;
-        assert.equal(rows.length, table === 'commerce_checkout_contacts' ? 3 : policyKinds?4:['commerce_offline_payments','commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
+        assert.equal(rows.length, table === 'commerce_checkout_contacts' ? 4 : table === 'commerce_offline_payments' ? 3 : policyKinds?4:['commerce_provider_account_services','commerce_provider_credentials'].includes(table) ? 2 : 1, table);
         assert.deepEqual(rows, (await restoredPool.query(`SELECT * FROM ${table} WHERE tenant_id=$1${order}`, [space.tenantId])).rows);
       }
     });
   }
   await isolatedTransaction(runtimePool, async q => {
-    for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
+    for (const table of [...legalTables,'commerce_customers', 'commerce_checkout_contacts', 'commerce_exception_cases', 'commerce_order_access_grants','commerce_provider_accounts','commerce_provider_account_services','commerce_provider_credentials','commerce_ship_from_locations','commerce_logistics_services','commerce_offline_payment_settings','commerce_offline_payments','commerce_meetup_handovers','commerce_self_shipments','commerce_paid_cancellations']) assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount, 0);
   });
 });
 
@@ -1073,4 +1090,17 @@ test('category restore retains active/tombstone and frozen A/B rows through cont
    for(const table of categoryTables){const rows=(await q.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;assert.equal(rows.length,table==='commerce_publication_categories'?1:2);assert.deepEqual(rows,(await restoredPool.query(`SELECT to_jsonb(t) row FROM ${table} t WHERE tenant_id=$1 ORDER BY to_jsonb(t)::text`,[space.tenantId])).rows);assert.equal((await q.query(`SELECT 1 FROM ${table} WHERE tenant_id=$1`,[other.tenantId])).rowCount,0);}
   }
  });
+});
+
+
+test('J6-R4 restored standing consent preserves products, signatures and both participant RLS reads',async()=>{
+ for(const table of ['commerce_fulfilment_agreements','commerce_fulfilment_agreement_items']){
+  const retained=(await restoredPool.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows;
+  assert.equal(retained.length,2);assert.deepEqual(retained,(await owner.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows);
+  for(const space of [spaces.a,spaces.b])await isolatedTransaction(runtimePool,async q=>{
+   assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount,0);await bindTenantContext(q,{tenantId:space.tenantId,tenantScopeId:space.scopeId});
+   assert.deepEqual((await q.query(`SELECT * FROM ${table} ORDER BY agreement_id`)).rows,retained);
+  });
+  await isolatedTransaction(runtimePool,async q=>{await bindTenantContext(q,{tenantId:spaces.c.tenantId,tenantScopeId:spaces.c.scopeId});assert.equal((await q.query(`SELECT * FROM ${table}`)).rowCount,0);});
+ }
 });

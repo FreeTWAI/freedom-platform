@@ -135,8 +135,11 @@ Minimum order and lead time are also informational; they change no reservation,
 quantity, availability, checkout or fulfilment decision. These private references
 are shared only through the existing community offer and own-selection reads;
 the public storefront, buyer APIs and buyer receipts use their existing explicit
-allowlists and never include them. They grant no drop-ship consent or supplied-
-line checkout. Formal resale-price arrangements still need professional review.
+allowlists and never include them. They grant no drop-ship consent or supplied-line checkout by themselves. The
+2026-10-23 minimum requires a separate accepted exact-version agreement and the
+drop-ship flag; then only bank transfer and the store’s manual home delivery
+are offered, with one supplier agreement for the whole order. Formal resale-price
+arrangements still need professional review.
 
 ## Private occupied-stock breakdown
 

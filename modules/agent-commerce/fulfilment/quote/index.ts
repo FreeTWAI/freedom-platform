@@ -1,3 +1,5 @@
+import {dropShipCoverage} from '../drop-ship/coverage.js';
+import {singleShipperFailure} from '../rules/consent.js';
 import type {PoolClient} from 'pg';
 import {z} from 'zod';
 import {CartQuoteResponseSchema,type ShippingMethodRef} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
@@ -24,8 +26,8 @@ function notConfigured():never {
 function invalidDelivery(fields:readonly {path:string;code:'required'|'format'|'too_short'|'too_long'|'unknown_postal_code'|'blocked_term'}[]):never {
   throw new CheckoutDeliveryProblem(422,'delivery_invalid','配送資料有誤，請檢查標示的欄位。',fields);
 }
-function unavailable(lines:readonly {sku:string;reason:'fulfilment_not_agreed'|'shipping_attributes_missing'|'method_unsupported'|'temperature_unsupported'|'too_large'|'cvs_value_limit'|'outlying_unsupported'}[]):never {
-  throw new CheckoutDeliveryProblem(422,'shipping_unavailable','部分商品無法用這個方式配送。',undefined,lines);
+function unavailable(lines:readonly {sku:string;reason:'fulfilment_mixed_shippers'|'fulfilment_not_agreed'|'shipping_attributes_missing'|'method_unsupported'|'temperature_unsupported'|'too_large'|'cvs_value_limit'|'outlying_unsupported'}[]):never {
+  throw new CheckoutDeliveryProblem(422,'shipping_unavailable',lines.some(l=>l.reason==='fulfilment_mixed_shippers')?'這些商品由不同出貨者寄送，請分開下單。':'部分商品無法用這個方式配送。',undefined,lines);
 }
 function logisticsOptions(options:ShippingDocument['delivery_options']):LogisticsOption[] {
   return options.filter((option):option is LogisticsOption=>option.method!=='meetup'&&option.method!=='self_ship');
@@ -48,17 +50,21 @@ function cartOption(method:ShippingMethodRef,available:boolean,total:number|null
 }
 
 /** SQL-local hosted shipping quotes. Supplied lines stay `not_agreed` until agreements exist. */
-export function createShippingQuotePort({environment,selfShipEnabled=false}:{environment:ShippingEnvironment;selfShipEnabled?:boolean}):ShippingQuotePort {
+export function createShippingQuotePort({environment,selfShipEnabled=false,dropShipEnabled=false}:{environment:ShippingEnvironment;selfShipEnabled?:boolean;dropShipEnabled?:boolean}):ShippingQuotePort {
   async function prepared(q:PoolClient,store:StoreProfile,input:ShippingQuoteInput) {
     const seller=await loadSeller(q,store,environment,selfShipEnabled);
     if(!seller)return null;
+    const resolved=await dropShipCoverage(q,store.instance_id,input.lines,dropShipEnabled);
     const attributes=await currentItemShippingAttributes(q,input.lines.map(line=>line.item_id));
-    const lines=quoteLines(input.lines,attributes);
+    const lines=quoteLines(resolved,attributes);
     const profile=sellerProfile(store.supply_shop_id,seller.version,seller.document.working_days,seller.services);
     const options=logisticsOptions(seller.document.delivery_options);
-    return {seller,attributes,lines,profile,options,versions:versionsBySku(input.lines,attributes)};
+    return {seller,attributes,lines,profile,options,resolved,versions:versionsBySku(input.lines,attributes)};
   }
   function build(loaded:NonNullable<Awaited<ReturnType<typeof prepared>>>,input:ShippingQuoteInput,method:ShippingMethodRef,outlying:boolean) {
+    input={...input,lines:loaded.resolved};
+    const failures=singleShipperFailure(input.lines);
+    if(failures.some(f=>f.reason==='fulfilment_mixed_shippers'))return {kind:'unavailable' as const,lines:failures};
     if(method==='self_ship') {
       const option=loaded.seller.document.delivery_options.find(option=>option.method==='self_ship');
       if(!option)return {kind:'unavailable' as const,lines:unsupported(input.lines)};
@@ -81,11 +87,14 @@ export function createShippingQuotePort({environment,selfShipEnabled=false}:{env
     return {kind:'quoted' as const,shipping:shippingView(frozenFromPlan(planned,loaded.versions,loaded.seller.version,destination),input.lines)};
   }
   function deliveryOptions(loaded:NonNullable<Awaited<ReturnType<typeof prepared>>>,input:ShippingQuoteInput) {
+    input={...input,lines:loaded.resolved};
+    const failures=singleShipperFailure(input.lines);
+    if(failures.some(f=>f.reason==='fulfilment_mixed_shippers'))return loaded.seller.document.delivery_options.map(option=>cartOption(option.method,false,null,null,null,null,null,failures));
     const planned=optionResults(planFor({sellerShopId:loaded.profile.shop_id,profile:loaded.profile,options:loaded.options,lines:loaded.lines,merchandiseNetMinor:input.merchandise_net_minor,outlying:false}));
     return loaded.seller.document.delivery_options.map(option=>{
       if(option.method==='self_ship') {
         const result=selfShipQuote({lines:input.lines,sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,fee:option.fee_per_order_minor,handlingDays:option.handling_days,note:option.note,outlying:false});
-        return cartOption('self_ship',result.kind!=='unavailable',option.fee_per_order_minor,1,null,{kind:'excluded'},option.note,result.kind==='unavailable'?result.lines:[]);
+        return {...cartOption('self_ship',result.kind!=='unavailable',option.fee_per_order_minor,1,null,{kind:'excluded'},option.note,result.kind==='unavailable'?result.lines:[]),...(result.kind!=='unavailable'&&result.group.fulfilment_mode==='drop_ship'?{fulfilment_mode:'drop_ship' as const}:{})};
       }
       if(option.method==='meetup') {
         const meetup=meetupQuote({lines:meetupLines(input.lines),sellerShopId:loaded.profile.shop_id,profileVersion:loaded.seller.version,note:option.note});
@@ -102,6 +111,7 @@ export function createShippingQuotePort({environment,selfShipEnabled=false}:{env
     });
   }
   return {
+    resolveLines:(q,store,lines)=>dropShipCoverage(q,store.instance_id,lines,dropShipEnabled),
     normalizeDelivery(raw) {
       if(raw.method!=='self_ship')return raw;
       const parsed=parseCheckoutDelivery(raw);
