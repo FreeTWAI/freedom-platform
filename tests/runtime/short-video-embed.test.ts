@@ -55,11 +55,17 @@ test('player commands are plain JSON for the YouTube postMessage API',()=>{
   assert.deepEqual(JSON.parse(playerCommand('unMute')),{event:'command',func:'unMute',args:[]});
 });
 
-test('the player origin is allowed only when the host enabled Short, and never on payment hand-off or admin pages',()=>{
-  assert.ok(!platformContentSecurityPolicy('/').includes('frame-src'));
-  assert.ok(!platformContentSecurityPolicy('/',undefined,undefined,false).includes('frame-src'));
-  assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes(`frame-src ${SHORT_VIDEO_EMBED_ORIGIN};`));
-  for(const path of ['/admin','/admin/github/callback'])assert.ok(!platformContentSecurityPolicy(path,undefined,undefined,true).includes('frame-src'));
+test('aiSNS is confined to the home page and Short keeps its existing path restrictions',()=>{
+  const frames=(path:string,enabled=false)=>platformContentSecurityPolicy(path,undefined,undefined,enabled).split(';').map(part=>part.trim()).filter(part=>part.startsWith('frame-src '));
+  assert.deepEqual(frames('/'),["frame-src 'self' https://aisns.evitina.tw"]);
+  assert.deepEqual(frames('/',true),["frame-src 'self' https://aisns.evitina.tw "+SHORT_VIDEO_EMBED_ORIGIN]);
+  for(const path of ['/journal','/journal/manage','/api/v1/site','/login']){
+    assert.deepEqual(frames(path),[]);
+    assert.deepEqual(frames(path,true),['frame-src '+SHORT_VIDEO_EMBED_ORIGIN]);
+  }
+  for(const path of ['/admin','/admin/','/admin/github/callback','/pay/ecpay/'+ 'A'.repeat(43)]){
+    assert.deepEqual(frames(path),[]);assert.deepEqual(frames(path,true),[]);
+  }
   assert.ok(platformContentSecurityPolicy('/',undefined,undefined,true).includes("frame-ancestors 'none'"));
 });
 

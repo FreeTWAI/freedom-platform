@@ -2,8 +2,10 @@
 export type HomeRefreshReason = 'initial' | 'manual' | 'automatic';
 export type HomeTaskAction = 'resume' | 'tasks' | 'showcase';
 
-/** Only the platform-owned journal route can be configured. Empty disables the entry. */
-export function resolveHomeJournalUrl(value:unknown='/journal'):string|null{return value==='/journal'?'/journal':null;}
+/** Fixed public embed destination; an explicit empty setting disables the entry. */
+export function resolveHomeJournalUrl(value: unknown = 'https://aisns.evitina.tw/'): string | null {
+  return value === 'https://aisns.evitina.tw/' ? 'https://aisns.evitina.tw/' : null;
+}
 
 export interface HomeReadTicket {
   readonly signal: AbortSignal;

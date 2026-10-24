@@ -162,7 +162,9 @@ export function isMemberCardPage(path:string){return /^\/member-cards\/[A-Za-z0-
 export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
   const githubSetupForm=path==='/admin'||path==='/admin/github/callback'?' https://github.com/organizations/FreeTWAI/settings/apps/new':'';
   const destinations=isPaymentHandoffPath(path)?(paymentFormOrigin?' '+paymentFormOrigin:''):githubSetupForm+(brokerFormOrigin?' '+brokerFormOrigin:'');
-  const frames=shortVideosEnabled&&!isPaymentHandoffPath(path)&&path!=='/admin'&&!path.startsWith('/admin/')?' frame-src https://www.youtube-nocookie.com;':'';
+  const frameOrigins=path==='/'?["'self'",'https://aisns.evitina.tw']:[];
+  if(shortVideosEnabled&&!isPaymentHandoffPath(path)&&path!=='/admin'&&!path.startsWith('/admin/'))frameOrigins.push('https://www.youtube-nocookie.com');
+  const frames=frameOrigins.length?' frame-src '+frameOrigins.join(' ')+';':'';
   return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:;"+frames+" base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
 }
 export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
