@@ -310,6 +310,8 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await stubJson(page, '/api/v1/task-board/preview', { items: [] });
   await stubJson(page, '/api/v1/dashboard', { now: [unfinishedClaim] });
   await stubJson(page, '/api/v1/engagements/summary', { has_engagements: true, needs_response: true });
+  // Other journeys retain this shared member's cooperation records; this layout case owns its empty-history read.
+  await stubJson(page, '/api/v1/engagements', { items: [] });
   await login(page, false);
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
   const disclosure = page.locator('.home-participation-disclosure');
