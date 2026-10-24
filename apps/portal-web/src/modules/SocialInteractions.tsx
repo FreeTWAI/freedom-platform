@@ -10,6 +10,7 @@ import {ChatExtras,ChatSticker} from './ChatContent';
 import {MemberAvatar} from './MemberAvatar';
 import {SocialIcon,SocialTextTools,SocialRichText,SocialMemberLink,type Mention} from './SocialTools';
 import {SocialPostShare} from './SocialPostShare';
+import {SocialPostLike} from './SocialPostLike';
 
 type Comment = {image_url?:string|null;sticker_id?:string|null;mentions?:Mention[];like_count?:number;liked?:boolean;comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: {user_id: string; display_name: string}; mine: boolean};
 type Comments = {items: Comment[]; next_cursor: string | null};
@@ -28,7 +29,6 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [liking, setLiking] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -60,7 +60,6 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   function closePeople(){++peopleSeq.current;peopleDialog.current?.close();peopleTrigger.current?.focus();}
   async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
 
-  const pendingLike = useRef<{liked: boolean; key: string} | null>(null);
   const confirmedComments = useRef<Comment[]>([]);
   const sequence = useRef(0);
   const pendingReadChanges = useRef<Map<string, Comment | null> | null>(null);
@@ -89,18 +88,6 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
       confirmedComments.current = fresh;
     } catch (cause) { if (token === sequence.current && current(generation)) setLoadError(cause instanceof Error ? cause.message : '留言暫時無法載入。'); }
     finally { if (token === sequence.current) { pendingReadChanges.current = null; if (current(generation)) setLoading(false); } }
-  }
-  async function like() {
-    if (liking) return;
-    const command = pendingLike.current ?? {liked: !post.liked, key: crypto.randomUUID()};
-    pendingLike.current = command; setLiking(true); setError('');
-    try {
-      const value = await client.post<{liked: boolean; like_count: number}>(`/social-posts/${post.post_id}/like`, {liked: command.liked}, {idempotencyKey: command.key});
-      onUpdate(value); pendingLike.current = null;
-    } catch (cause) {
-      if (cause instanceof ApiError && !cause.network) pendingLike.current = null;
-      setError(cause instanceof Error ? cause.message : '尚未確認按讚結果，請重試。');
-    } finally { setLiking(false); }
   }
   async function send(event?:FormEvent,stickerId?:string) {
     event?.preventDefault();
@@ -167,7 +154,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
     <div className="social-interaction-summary"><button ref={peopleTrigger} type="button" className="social-text-link" aria-label="查看按讚名單" onClick={()=>{peopleDialog.current?.showModal();void loadPeople();}}><SocialIcon name="like"/>{post.like_count??0} 人按讚</button><span title="在前景停留觀看的會員，每人只計一次"><SocialIcon name="eye"/>已讀 {post.read_count??0} 人</span></div>
     <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
     <div className="social-actions">
-      <button type="button" className="btn btn-ghost" aria-pressed={post.liked ?? false} disabled={liking} onClick={() => void like()}><SocialIcon name="like"/>{liking ? '處理中…' : pendingLike.current ? '重試按讚' : post.liked ? '已讚' : '讚'} · {post.like_count ?? 0}</button>
+      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={onUpdate}/>
       <button type="button" className="btn btn-ghost" aria-expanded={open} aria-controls={`social-comments-${post.post_id}`} onClick={() => { setOpen(!open); if (!open) void load(); else { ++sequence.current; pendingReadChanges.current = null; setLoading(false); } }}><SocialIcon name="comment"/>留言 · {post.comment_count ?? 0}</button>
       <SocialPostShare client={client} post={post}/>
       <ReportButton kind="post" id={post.post_id} label="貼文"/>

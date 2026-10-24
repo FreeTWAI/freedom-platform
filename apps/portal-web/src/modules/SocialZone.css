@@ -155,3 +155,14 @@
 .social-share-preview img{display:block;max-width:100%;height:auto;margin-top:12px;border-radius:8px}
 .social-sharing-consent .btn,.social-share-dialog>.stack>.actions .btn{min-height:44px;width:auto}
 @media(max-width:480px){.social-compose-toolbar{gap:0}.social-topic-select{flex-basis:100%}.social-comment-meta time{flex-basis:100%}.social-text-picker{left:-44px}.social-interactions>.social-actions>.btn{gap:4px;padding:6px 4px}.social-write-trigger strong{padding-inline:10px}.social-composer-prompt{gap:6px}}
+
+/* Keep the like label steady while its local preview awaits the server. */
+.social-post-like{transition:background-color .16s ease,color .16s ease}
+.social-post-like[aria-busy="true"]{opacity:.8;cursor:progress}
+.social-like-icon{display:inline-flex;transform-origin:50% 70%}
+.social-like-pulse{animation:social-like-pop .28s ease-out}
+.social-like-count{font-variant-numeric:tabular-nums;white-space:nowrap}
+.social-like-error{grid-column:1/-1;order:1;font-size:.875rem;color:var(--danger);padding:4px 8px}
+.social-post-like:focus-visible{outline:2px solid var(--blue-ink);outline-offset:2px}
+@keyframes social-like-pop{0%{transform:scale(.85) rotate(-8deg)}55%{transform:scale(1.15) rotate(3deg)}100%{transform:scale(1) rotate(0)}}
+@media(prefers-reduced-motion:reduce){.social-post-like{transition:none}.social-like-pulse{animation:none}}
