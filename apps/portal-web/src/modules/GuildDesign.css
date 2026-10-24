@@ -343,3 +343,14 @@ html[data-theme="dark"] .guilds-panel .guild-application-status.is-declined { ba
   .guild-secondary-choices { grid-template-columns: 1fr; }
   .guild-detail-dialog { padding: 14px; }
 }
+
+/* Community entry reuses directory data; detail requests stay on demand. */
+.guild-community-nav{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.guild-community-nav .btn{min-height:44px;white-space:normal;overflow-wrap:anywhere}
+.guild-community-nav .btn[aria-pressed="true"]{border-color:var(--focus);box-shadow:inset 0 -2px var(--focus);font-weight:750}
+.guild-community-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.guild-community-overview>*{min-width:0;overflow-wrap:anywhere}
+.guild-community-overview h3{margin:0 0 8px;font-size:1rem}
+.guild-community-start{grid-column:1/-1;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);color:var(--ink)}
+.guild-community-start p{margin:0 0 12px}
+@media(max-width:540px){.guild-community-overview{grid-template-columns:minmax(0,1fr);gap:16px}.guild-community-nav{gap:6px}.guild-community-nav .btn{flex:1 1 calc(50% - 6px)}}
