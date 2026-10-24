@@ -12,12 +12,6 @@ export function sellerOrderNotificationAction(scope:SellerScope,orderId:string):
   return {tab:'stores',resource_id};
 }
 
-/** Prefixes fit the existing store locator limit and select only fixed console destinations. */
-export function dropShipNotificationAction(scope:SellerScope,id:string,destination:'supplier-orders'|'supplier-agreements'|'store-agreements'):Extract<OrderNotificationAction,{tab:'stores'}> {
-  const prefix={'supplier-orders':'s','supplier-agreements':'a','store-agreements':'g'}[destination];
-  return {tab:'stores',resource_id:prefix+[scope.tenantId,scope.instanceId,id].map(v=>OpaqueId.parse(v).replace(/-/g,'')).join('_')};
-}
-
 export function buyerOrderNotificationAction(slug:string,orderId:string):Extract<OrderNotificationAction,{tab:'reservations'}> {
   const action={tab:'reservations' as const,resource_id:`${slug}/${orderId}`};
   if(!isOrderNotificationAction(action))throw new Error('order_notification_action_invalid');
@@ -32,9 +26,7 @@ function expandUuid(id:string):string {
 export function orderNotificationDestination(value:unknown):OrderNotificationDestination|null {
   if(!isOrderNotificationAction(value))return null;
   if(value.tab==='stores'){
-    const prefix=value.resource_id.length===99&&/^[asg]/.test(value.resource_id)?value.resource_id[0]:null;
-    const [tenantId,instanceId,orderId]=(prefix?value.resource_id.slice(1):value.resource_id).split('_').map(expandUuid);
-    if(prefix)return {tab:'stores',hash:`#stores/${tenantId}/${instanceId}/${prefix==='g'?'drop-ship':prefix==='a'?'supply/drop-ship-agreements':'supply/drop-ship-orders'}`};
+    const [tenantId,instanceId,orderId]=value.resource_id.split('_').map(expandUuid);
     return {tab:'stores',hash:sellerConsoleHref({tenantId,instanceId},'order',{id:orderId})};
   }
   const [slug,orderId]=value.resource_id.split('/');

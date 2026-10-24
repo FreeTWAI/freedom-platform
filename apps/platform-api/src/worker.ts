@@ -1,4 +1,3 @@
-import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
 import {createSupplyMaterialLifecycle} from '../../../modules/assets/supply-material.js';
@@ -14,7 +13,7 @@ import {createEcpayPaymentGateway} from '../../../modules/agent-commerce/payment
 import {CommerceCredentialKeyring} from '../../../modules/agent-commerce/payments/credentials.js';
 import {createStoreAdmissionPort,providerEnvironment} from '../../../modules/agent-commerce/operations/admissions.js';
 import {createShippingQuotePort} from '../../../modules/agent-commerce/fulfilment/quote/index.js';
-import {readCommerceSettings,readCommerceDropShipEnabled,readCommerceOrderNotificationsEnabled,readCommerceSelfShipEnabled,readCommerceContactRetention,type CommerceContactRetention,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
+import {readCommerceSettings,readCommerceOrderNotificationsEnabled,readCommerceSelfShipEnabled,type CommerceSettings} from '../../../modules/agent-commerce/operations/runtime-settings.js';
 import {sweepCommerceOutboundEmails} from '../../../modules/agent-commerce/operations/notifications/delivery.js';
 import {createWorkerEmailSender} from '../../../modules/agent-commerce/operations/notifications/email-port.js';
 import {commerceEmailOutbox} from '../../../modules/agent-commerce/operations/notifications/outbox.js';
@@ -76,8 +75,6 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   COMMERCE_CREDENTIAL_KEYS?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
-  FREEDOM_COMMERCE_CONTACT_RETENTION?:string;
-  FREEDOM_COMMERCE_DROP_SHIP_ENABLED?:string;
   FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED?:string;
   FREEDOM_COMMERCE_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_EMAIL_ENABLED?:string;
@@ -338,9 +335,9 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     linkPreviewFetch: workerPreviewFetch,
     moduleProviders: undefined,
     guildLaunchpadEnabled: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true',
-    commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),commerceSelfShipEnabled:readCommerceSelfShipEnabled(env),commerceDropShipEnabled:readCommerceDropShipEnabled(env),
+    commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),commerceSelfShipEnabled:readCommerceSelfShipEnabled(env),
     commerceCredentialKeyring:config.commerceCredentialKeyring,commerceProviderEnvironment:config.commerceProviderEnvironment??providerEnvironment(config.freedomEnv),
-    commercePorts:{admission,shipping:createShippingQuotePort({environment,selfShipEnabled:readCommerceSelfShipEnabled(env),dropShipEnabled:readCommerceDropShipEnabled(env)}),...cardPorts,...(paymentMethods?{paymentMethods}:{}),...(settings.emailEnabled?{email:commerceEmailOutbox}:{})},
+    commercePorts:{admission,shipping:createShippingQuotePort({environment,selfShipEnabled:readCommerceSelfShipEnabled(env)}),...cardPorts,...(paymentMethods?{paymentMethods}:{}),...(settings.emailEnabled?{email:commerceEmailOutbox}:{})},
     hostedReservationsEnabled: env.FREEDOM_HOSTED_RESERVATIONS_ENABLED === 'true',
     supplierConsoleEnabled: env.FREEDOM_SUPPLIER_CONSOLE_ENABLED === 'true',
     distributionPhotosEnabled:env.FREEDOM_DISTRIBUTION_PHOTOS_ENABLED==='true',
@@ -414,7 +411,6 @@ export type WorkerDependencies = {
   /** Test seam. Production uses pruneExpiredAuthRecords. */
   authPrune?: typeof pruneExpiredAuthRecords;
   commerceDueWork?:typeof runDueCommerceWork;
-  commerceRetention?:typeof runContactRetentionWork;
   commerceQueryTransport?:PaymentQueryTransport;
   commerceSweep?:typeof sweepDueCheckoutHolds;
   commerceEmailSweep?:typeof sweepCommerceOutboundEmails;
@@ -555,11 +551,6 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               try{await processEventWaitlist(pool,send,config.origin);}catch{console.error('event_waitlist_failed');}
               try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
-          }
-          let contactRetention:CommerceContactRetention|undefined;
-          try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}
-          if(contactRetention==='all'){
-            try{await (deps.commerceRetention??runContactRetentionWork)(pool,contactRetention);}catch{console.error('commerce_contact_retention_failed');}
           }
           let commerce:CommerceSettings|undefined;
           try{commerce=readCommerceSettings(env);}catch{console.error('commerce_settings_invalid');}

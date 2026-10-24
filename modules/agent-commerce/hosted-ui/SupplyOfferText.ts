@@ -2,7 +2,6 @@ import {parseMajorToMinor} from '../../../apps/portal-web/src/format';
 import {SupplyTermsInputSchema} from '../../../contracts/guild-launchpad/v1/hosted-supply-terms';
 export const SHIPPING_TERMS_HINT = '請寫明包裝方式、寄送方式、每件運費如何計算，以及特殊情況。最低訂量與交期請填上方欄位。';
 export const RETURN_TERMS_HINT = '請寫明可退貨的條件、申請期限，以及退貨運費由誰負擔。';
-export const sellableLabel=(checkoutAvailable=false)=>checkoutAvailable?'已同意，可展示與結帳購買':SELLABLE_LABEL;
 export const SELLABLE_LABEL = '已同意，可加入展示頁（尚不能結帳購買）';
 
 export const SUPPLY_REFERENCE_FIELDS = [

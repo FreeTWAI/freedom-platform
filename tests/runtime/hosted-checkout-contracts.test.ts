@@ -4,7 +4,6 @@ import {randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import * as c from '../../contracts/guild-launchpad/v1/hosted-checkout.js';
-import {DropShipAgreementSchema,DropShipOrderSchema} from '../../contracts/guild-launchpad/v1/hosted-drop-ship.js';
 import {UNAVAILABLE_REASONS} from '../../modules/agent-commerce/fulfilment/rules/types.js';
 import type {RecipientValidationCode} from '../../modules/agent-commerce/fulfilment/rules/recipient.js';
 type Equal<A,B>=[A] extends [B]?[B] extends [A]?true:never:never;
@@ -51,14 +50,10 @@ for c in x['cases']:
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
   assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),69);
 });
-test('checkout and drop-ship timestamps require ASCII UTC milliseconds and reject trailing content',()=>{
-  const timestamps=[c.CheckoutResponseSchema.shape.expires_at,DropShipAgreementSchema.shape.proposed_at,
-    DropShipAgreementSchema.shape.decided_at.unwrap(),DropShipAgreementSchema.shape.revoked_at.unwrap(),
-    DropShipOrderSchema.shape.payment_confirmed_at];
-  for(const timestamp of timestamps){
-    assert(timestamp.safeParse('2028-02-29T12:34:56.789Z').success);
-    for(const value of ['2027-02-29T12:34:56.789Z','2028-02-29T12:34:56.789Z\n','２０２８-02-29T12:34:56.789Z','2028-02-29T12:34:56.789+00:00','2028-02-29T12:34:56Z'])assert(!timestamp.safeParse(value).success,value);
-  }
+test('checkout timestamps require ASCII UTC milliseconds and reject trailing content',()=>{
+  const timestamp=c.CheckoutResponseSchema.shape.expires_at;
+  assert(timestamp.safeParse('2028-02-29T12:34:56.789Z').success);
+  for(const value of ['2027-02-29T12:34:56.789Z','2028-02-29T12:34:56.789Z\n','２０２８-02-29T12:34:56.789Z','2028-02-29T12:34:56.789+00:00'])assert(!timestamp.safeParse(value).success,value);
 });
 test('payment DTOs and JSON Schema share closed states, bearer URLs and strict buyer allowlists',()=>{
   const id=randomUUID(),time='2028-02-29T12:34:56.789Z',handoff={handoff_url:'/pay/ecpay/'+'A'.repeat(43),attempt_ref:id,expires_at:time};

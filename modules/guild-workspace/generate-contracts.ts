@@ -1,4 +1,3 @@
-import * as dropShip from '../../contracts/guild-launchpad/v1/hosted-drop-ship.js';
 import * as categories from '../../contracts/guild-launchpad/v1/storefront-categories.js';
 import * as variants from '../../contracts/guild-launchpad/v1/storefront-variants.js';
 import * as gallery from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
@@ -133,18 +132,6 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['PublicationCategoriesDocument', categories.PublicationCategoriesDocumentSchema, 'output', []],
     ['RenderCategories', categories.RenderCategoriesSchema, 'output', []],
     ['CategoryErrorCode', categories.CategoryErrorCodeSchema, 'output', []],
-  ]],
-  ['hosted-drop-ship', 'Standing drop-ship consent and the authorized supplier order allowlist. Authorization is enforced by Commerce.', [
-    ['DropShipAgreementSchema',dropShip.DropShipAgreementSchema,'output',[]],
-    ['DropShipAgreementsSchema',dropShip.DropShipAgreementsSchema,'output',[]],
-    ['DropShipDecisionSchema',dropShip.DropShipDecisionSchema,'output',[]],
-    ['DropShipOrderQuerySchema',dropShip.DropShipOrderQuerySchema,'output',[]],
-    ['DropShipOrderSchema',dropShip.DropShipOrderSchema,'output',[]],
-    ['DropShipOrdersSchema',dropShip.DropShipOrdersSchema,'output',[]],
-    ['DropShipProposalSchema',dropShip.DropShipProposalSchema,'output',[]],
-    ['DropShipRevokeSchema',dropShip.DropShipRevokeSchema,'output',[]],
-    ['DropShipSupplierProductsSchema',dropShip.DropShipSupplierProductsSchema,'output',[]],
-    ['DropShipUnableSchema',dropShip.DropShipUnableSchema,'output',[]],
   ]],
   ['hosted-checkout', 'Public hosted checkout and payment handoff. Shape validation grants no payment, email or deployment authority.', [
     ['buyer-identity-header', checkout.CheckoutBuyerIdentitySchema, 'input', ['equality_precondition_not_authority']],
@@ -355,9 +342,6 @@ const bundles: ReadonlyArray<readonly [string, string, ReadonlyArray<readonly [s
     ['offline-payment-confirm-input', sellerCheckout.OfflinePaymentConfirmInputSchema, 'input', ['amount_equals_order_total','taipei_calendar_date']],
     ['meetup-completion-input', sellerCheckout.MeetupCompletionInputSchema, 'input', ['amount_equals_order_total','taipei_calendar_date']],
     ['meetup-handover-input', sellerCheckout.MeetupHandoverInputSchema, 'input', ['taipei_calendar_date']],
-    ['paid-cancellation-input', sellerCheckout.PaidCancellationInputSchema, 'input', ['whole_order_full_offline_refund']],
-    ['paid-cancellation-refund-input', sellerCheckout.PaidCancellationRefundInputSchema, 'input', ['taipei_confirmation_through_today']],
-    ['paid-cancellation', sellerCheckout.SellerPaidCancellationSchema, 'output', ['store_note_only','offline_record_without_verification']],
     ['self-shipment-input', sellerCheckout.SelfShipmentInputSchema, 'input', ['whole_order_immutable_shipment']],
     ['error-code', sellerCheckout.SellerCheckoutErrorCodeSchema, 'output', []],
   ]],

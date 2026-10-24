@@ -272,8 +272,6 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
 
   const quoteReady = Boolean(!identityBlocked && quote && !quoteBusy && method && quote.shipping.state === 'quoted' && quote.total_minor !== null && quote.lines.every(line => line.state === 'ok' || line.state === 'revision_changed'));
   const deliveryOption = quote?.delivery_options.find(option => option.method === method);
-  const dropShip=deliveryOption?.fulfilment_mode==='drop_ship';
-  const dropShipNotice='由供應商直接寄出；收件人姓名、手機、地址會提供給供應商，只用於寄送';
   const paymentOptions = (quote?.payment_options ?? []).filter(option => method !== 'self_ship' || option.method === 'bank_transfer');
   const panels = enhanced ? deliveryPanels(quote, method, deliveryFailure) : [];
   const alternatives = deliveryAlternatives(quote, method);
@@ -293,7 +291,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       <section className="shop-order-section" aria-labelledby="shop-checkout-summary">
         <h2 id="shop-checkout-summary">2. 核對商品與配送</h2>
         <ul className="shop-order-lines">{checkout.terms.items.map(line => <li className="shop-order-line" key={line.sku}><p>{line.title} × {line.quantity}</p><p>{formatMinor(line.line_total_minor, checkout.terms.currency)}</p></li>)}</ul>
-        {checkout.terms.shipping.groups.map(group => <div key={group.group_ref}><p>{group.fulfilment_mode==='drop_ship'?'宅配（供應商代出貨）':deliveryNames[group.method]}・運費 {formatMinor(group.amount_minor, checkout.terms.currency)}</p>{group.fulfilment_mode==='drop_ship'&&<p>{dropShipNotice}</p>}{group.meetup_note && <p className="shop-preserve-lines">{group.meetup_note}</p>}{group.self_ship&&<><p>店家確認收款後 {group.self_ship.handling_days} 個工作天內寄出。</p>{group.self_ship.note&&<p className="shop-preserve-lines">{group.self_ship.note}</p>}</>}</div>)}
+        {checkout.terms.shipping.groups.map(group => <div key={group.group_ref}><p>{deliveryNames[group.method]}・運費 {formatMinor(group.amount_minor, checkout.terms.currency)}</p>{group.meetup_note && <p className="shop-preserve-lines">{group.meetup_note}</p>}{group.self_ship&&<><p>店家確認收款後 {group.self_ship.handling_days} 個工作天內寄出。</p>{group.self_ship.note&&<p className="shop-preserve-lines">{group.self_ship.note}</p>}</>}</div>)}
         <p className="shop-pay-label">總額 {formatMinor(checkout.terms.total_minor, checkout.terms.currency)}</p>
         <p>收件人：{contactName}・{mobile}</p><p>Email：{email}</p>
         {(method === 'home' || method === 'self_ship') && <p>地址：{postal} {address}</p>}
@@ -304,7 +302,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           <input type="radio" name="payment" checked={payment === option.method} disabled={busy || !option.available || !checkout.terms.payment_methods.includes(option.method)} onChange={() => setPayment(option.method)} />
           <span>{methodNames[option.method]}{option.reason && <span className="shop-checkout-reason">{unavailable[option.reason]}</span>}</span>
         </label>)}
-        {method === 'self_ship'&&<p>{dropShip?'代出貨只提供銀行匯款，店家確認收款後由供應商寄出。':'自行寄送只提供銀行匯款，店家確認收款後寄出。'}</p>}
+        {method === 'self_ship'&&<p>自行寄送只提供銀行匯款，店家確認收款後寄出。</p>}
         {payment === 'bank_transfer' && <p>下單後提供匯款帳號，請於 {checkout.terms.offline_payment?.bank_transfer_deadline_days} 天內付款。店家確認後更新訂單狀態。</p>}
         {payment === 'cash_on_meetup' && <p>請於 {checkout.terms.offline_payment?.meetup_deadline_days} 天內完成面交付款。</p>}
       </section>
@@ -322,7 +320,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         {quoteBusy && <p role="status">正在取得配送報價…</p>}
         {quote?.delivery_options.map(option => <label className="shop-checkout-choice" key={option.method}>
           <input type="radio" name="delivery" aria-describedby={enhanced && panels.some(panel => panel.method === option.method) ? `delivery-blocked-${option.method}` : undefined} required checked={method === option.method} disabled={!option.available || option.method.startsWith('cvs:')} onChange={() => setMethod(option.method)} />
-          <span>{option.fulfilment_mode==='drop_ship'?'宅配（供應商代出貨）':deliveryNames[option.method]}{!option.available && <span className="shop-checkout-reason">目前商品無法使用這個取貨方式</span>}{option.method.startsWith('cvs:') && <span className="shop-checkout-reason">門市選擇尚未開放</span>}</span>
+          <span>{deliveryNames[option.method]}{!option.available && <span className="shop-checkout-reason">目前商品無法使用這個取貨方式</span>}{option.method.startsWith('cvs:') && <span className="shop-checkout-reason">門市選擇尚未開放</span>}</span>
         </label>)}
         {panels.map(panel => <section className="shop-order-section" key={panel.method} aria-labelledby={`delivery-blocked-title-${panel.method}`} id={`delivery-blocked-${panel.method}`}>
           <h2 id={`delivery-blocked-title-${panel.method}`}>以下商品無法使用「{deliveryNames[panel.method]}」：</h2>
@@ -336,7 +334,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           <div className="shop-order-access-field"><label htmlFor="checkout-postal">郵遞區號</label><input {...fieldProps('delivery.postal_code')} id="checkout-postal" className="shop-text-input" autoComplete="postal-code" inputMode="numeric" maxLength={10} required value={postal} onChange={event => setPostal(event.target.value)} />{fieldError('delivery.postal_code')}</div>
           <div className="shop-order-access-field"><label htmlFor="checkout-address">收件地址</label><input {...fieldProps('delivery.address')} id="checkout-address" className="shop-text-input" autoComplete="street-address" maxLength={120} required value={address} onChange={event => setAddress(event.target.value)} />{fieldError('delivery.address')}</div>
         </>}
-        {method === 'self_ship'&&<><p>每單一件包裹；不配送離島。</p><p>{dropShip?'代出貨只提供銀行匯款，店家確認收款後由供應商寄出。':'自行寄送只提供銀行匯款，店家確認收款後寄出。'}</p><p>{dropShip?dropShipNotice:'收件資料僅供這間店處理訂單；不會顯示在公開商店頁。'}</p><p>請填寫 3、5 或 6 碼郵遞區號。</p><p>工作天為週一至週五，不另排除國定假日。</p></>}
+        {method === 'self_ship'&&<><p>每單一件包裹；不配送離島。</p><p>自行寄送只提供銀行匯款，店家確認收款後寄出。</p><p>收件資料僅供這間店處理訂單；不會顯示在公開商店頁。</p><p>請填寫 3、5 或 6 碼郵遞區號。</p><p>工作天為週一至週五，不另排除國定假日。</p></>}
         {deliveryOption?.note && <p className="shop-preserve-lines">{deliveryOption.note}</p>}
         {quoteReady && quote && <><p>商品 {formatMinor(quote.merchandise_total_minor, quote.currency)}</p><p>運費 {formatMinor(quote.shipping.total_minor!, quote.currency)}</p><p>商品與運費合計 {formatMinor(quote.total_minor!, quote.currency)}</p></>}
         {quote?.lines.some(line => line.state === 'revision_changed') && <p>商品內容或價格已更新，請在下一步核對最新報價。</p>}

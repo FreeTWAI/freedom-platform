@@ -1,6 +1,6 @@
 import {lstatSync,readFileSync} from 'node:fs';
 import {parseJsonc} from './wrangler.mjs';
-const flags=new Set(['FREEDOM_COMMERCE_DROP_SHIP_ENABLED','FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_SELF_SHIP_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE']);
+const flags=new Set(['FREEDOM_COMMERCE_CHECKOUT_ENABLED','FREEDOM_COMMERCE_SELF_SHIP_ENABLED','FREEDOM_COMMERCE_CONSOLE_ENABLED','FREEDOM_COMMERCE_EMAIL_ENABLED','FREEDOM_COMMERCE_QUARANTINE']);
 /** Local declarations only. Fixed error names never copy config values or keys. */
 export function checkCommerceWranglerConfig(path) {
   const errors=[],blockers=[];
@@ -19,9 +19,7 @@ export function checkCommerceWranglerConfig(path) {
     if(block.vars!==undefined&&(!block.vars||typeof block.vars!=='object'||Array.isArray(block.vars))){errors.push('vars_invalid');continue;}
     const vars=block.vars??{};
     for(const flag of flags)if(vars[flag]!==undefined&&!['true','false'].includes(vars[flag]))errors.push('commerce_flag_invalid');
-    if(Object.keys(vars).some(k=>k.startsWith('FREEDOM_COMMERCE_')&&!flags.has(k)&&k!=='FREEDOM_COMMERCE_PROVIDER_PROFILES'&&k!=='FREEDOM_COMMERCE_CONTACT_RETENTION'))errors.push('commerce_flag_unknown');
-    const retention=vars.FREEDOM_COMMERCE_CONTACT_RETENTION;
-    if(retention!==undefined&&!['off','all'].includes(retention))errors.push('commerce_contact_retention_invalid');
+    if(Object.keys(vars).some(k=>k.startsWith('FREEDOM_COMMERCE_')&&!flags.has(k)&&k!=='FREEDOM_COMMERCE_PROVIDER_PROFILES'))errors.push('commerce_flag_unknown');
     const rawProfiles=vars.FREEDOM_COMMERCE_PROVIDER_PROFILES;
     if(rawProfiles!==undefined&&rawProfiles!==''){
       const implemented=new Set(['ecpay.aio.credit.v1','offline.bank_transfer.v1','offline.cash_on_meetup.v1']);
@@ -34,9 +32,8 @@ export function checkCommerceWranglerConfig(path) {
       if(!Array.isArray(block.r2_buckets)||!block.r2_buckets.some(b=>b&&typeof b==='object'&&b.binding==='COMMERCE_JOURNAL'))errors.push('commerce_journal_binding_required');
     }
     if(vars.FREEDOM_COMMERCE_CONSOLE_ENABLED==='true'&&vars.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true')errors.push('commerce_launchpad_required');
-    if(vars.FREEDOM_COMMERCE_DROP_SHIP_ENABLED==='true'&&vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED!=='true')errors.push('commerce_drop_ship_self_ship_required');
-    if(vars.FREEDOM_COMMERCE_DROP_SHIP_ENABLED==='true'&&vars.FREEDOM_SUPPLIER_CONSOLE_ENABLED!=='true')errors.push('commerce_drop_ship_supplier_console_required');
     if(vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED==='true'&&vars.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true')errors.push('commerce_self_ship_console_required');
+    if(vars.FREEDOM_COMMERCE_SELF_SHIP_ENABLED==='true'&&vars.FREEDOM_ENV==='public')errors.push('self_ship_retention_not_ready');
     if(vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED==='true'&&vars.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true')errors.push('commerce_console_required');
   }
   // R2 declarations are environment-local; journal history must neither share

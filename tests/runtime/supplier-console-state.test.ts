@@ -780,12 +780,3 @@ for(const openedBy of ['complete scan','explicit start','restoring'] as const)te
   started=supplySetupFlowVisible({started,restoring:false,data});assert.equal(started,true);
  }
 });
-
-
-test('drop-ship agreement navigation follows the intake flag while fulfilment remains available',()=>{
- const cap=['store:read','store:manage','store:fulfil'];
- assert.ok(consoleNavigation(cap,true,true).some(p=>p.page==='drop-ship-agreements'));
- assert.ok(!consoleNavigation(cap,true,false).some(p=>p.page==='drop-ship-agreements'));
- assert.ok(consoleNavigation(cap,true,false).some(p=>p.page==='drop-ship-orders'));
- assert.ok(!consoleNavigation(['store:read'],true,true).some(p=>p.page.startsWith('drop-ship')));
-});

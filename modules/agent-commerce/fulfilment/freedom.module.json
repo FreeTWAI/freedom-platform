@@ -29,43 +29,13 @@
     "tests/runtime/hosted-shipping-quote.test.ts",
     "tests/runtime/hosted-shipping-quote-checkout.test.ts",
     "tests/runtime/hosted-self-ship.test.ts",
-    "tests/runtime/self-ship-fixture.ts",
-    "migrations/189_hosted_drop_ship.sql",
-    "apps/platform-api/src/routes/hosted-drop-ship.ts",
-    "contracts/guild-launchpad/v1/hosted-drop-ship.ts",
-    "contracts/guild-launchpad/v1/hosted-drop-ship.schema.json",
-    "tests/runtime/hosted-drop-ship.test.ts",
-    "tests/runtime/drop-ship-fixture.ts",
-    "tests/e2e/storefront-drop-ship.spec.ts",
-    "deploy/cloudflare/test/release-history-floor-adversarial.test.mjs",
-    "docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py"
+    "tests/runtime/self-ship-fixture.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [
     "modules/agent-commerce/fulfilment/rules/index.ts"
   ],
-  "surfaces": [
-    {
-      "surface_id": "commerce.drop-ship-api",
-      "kind": "http",
-      "entry": "apps/platform-api/src/routes/hosted-drop-ship.ts",
-      "operations": [
-        "storefront.drop-ship.suppliers",
-        "storefront.drop-ship.agreements",
-        "storefront.drop-ship.propose",
-        "storefront.drop-ship.withdraw",
-        "storefront.drop-ship.revoke",
-        "supplier-console.drop-ship.agreements",
-        "supplier-console.drop-ship.accept",
-        "supplier-console.drop-ship.decline",
-        "supplier-console.drop-ship.revoke",
-        "supplier-console.drop-ship.orders",
-        "supplier-console.drop-ship.ship",
-        "supplier-console.drop-ship.unable"
-      ],
-      "auth_profile": "member-session"
-    }
-  ],
+  "surfaces": [],
   "tests": [
     "runtime.full"
   ]

@@ -1,5 +1,4 @@
 /// <reference lib="es2024.string" />
-import type {HostedDropShipCoverage} from '../fulfilment/rules/consent.js';
 import {createHash,createHmac,randomBytes,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -40,7 +39,6 @@ const inputSchema=z.object({publication_revision:z.string().regex(/^[1-9][0-9]*$
 }).refine(v=>new Set(v.lines.map(l=>l.sku)).size===v.lines.length,'Duplicate SKU');
 export type CheckoutInput=z.input<typeof inputSchema>;
 export interface ShippingQuoteLine {
-  readonly selection_id?:string; readonly drop_ship?:HostedDropShipCoverage|null; readonly fulfilment_resolved?:boolean;
   readonly sku:string; readonly item_id:string; readonly quantity:number; readonly unit_price_minor:number;
   /** The executor's supply shop for own lines; the supplier's supply shop otherwise. */
   readonly supplier_shop_id:string;
@@ -49,7 +47,6 @@ export interface ShippingQuoteLine {
 }
 export interface ShippingQuoteInput {readonly lines:readonly ShippingQuoteLine[]; readonly merchandise_net_minor:number}
 export interface ShippingQuotePort {
-  resolveLines?(q:PoolClient,store:StoreContext['profile'],lines:readonly ShippingQuoteLine[]):Promise<ShippingQuoteLine[]>;
   /** Canonicalize new delivery variants before hashing or persistence; legacy values remain unchanged. */
   normalizeDelivery?(delivery:Record<string,unknown>):Record<string,unknown>;
   /** Freeze and placement recompute. SQL-local. Validates the buyer's delivery; throws CheckoutDeliveryProblem. */
@@ -120,9 +117,7 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
     if(group.group_ref!==`g${index+1}`)invalidShippingQuote();
     const meetup=group.method_ref==='meetup',manual=group.method_ref==='self_ship';
     if((group.meetup!==null)!==meetup||(group.logistics===null)!==(meetup||manual)||(group.self_ship!==undefined)!==manual)invalidShippingQuote();
-    if(manual&&(shipping.groups.length!==1||group.parcels.length!==1||group.attribute_versions.length!==0||group.outlying_surcharge_per_parcel_minor!==0||group.amount_minor%100!==0||group.amount_minor>1_000_000))invalidShippingQuote();
-    if(group.fulfilment_mode==='drop_ship'&&manual&&(!group.drop_ship||group.self_ship?.handling_days!==group.drop_ship.promise_working_days))invalidShippingQuote();
-    if(group.fulfilment_mode==='self'&&group.drop_ship!==undefined)invalidShippingQuote();
+    if(manual&&(shipping.groups.length!==1||group.fulfilment_mode!=='self'||group.parcels.length!==1||group.attribute_versions.length!==0||group.outlying_surcharge_per_parcel_minor!==0||group.amount_minor%100!==0||group.amount_minor>1_000_000))invalidShippingQuote();
     if((group.agreement===null)!==(group.fulfilment_mode==='self'))invalidShippingQuote();
     if(meetup&&(group.fee_per_parcel_minor!==0||group.outlying_surcharge_per_parcel_minor!==0||group.parcels.length!==1||group.attribute_versions.length!==0))invalidShippingQuote();
     const quantities=new Map<string,number>();
@@ -133,10 +128,6 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
         const line=expected.get(part.sku);
         if(!line||line.supplier_shop_id!==group.supplier_shop_id)invalidShippingQuote();
         if(group.fulfilment_mode==='self'&&!line.own)invalidShippingQuote();
-        if(group.fulfilment_mode==='drop_ship'&&manual){
-          const a=line.drop_ship,frozen=group.drop_ship,price=frozen?.items.find(i=>i.sku===line.sku);
-          if(line.own||!a||!frozen||a.agreement_id!==group.agreement?.agreement_id||a.version!==group.agreement.version||a.executor_shop_id!==group.supplier_shop_id||a.fee_per_order_minor!==frozen.fee_per_order_minor||a.terms_sha256!==frozen.terms_sha256||a.promise_working_days!==frozen.promise_working_days||a.supplier_name!==frozen.supplier_name||!price||price.selection_id!==line.selection_id||price.unit_supply_cost_minor!==a.unit_supply_cost_minor)invalidShippingQuote();
-        }
         const partValue=line.unit_price_minor*part.quantity;
         if(!Number.isSafeInteger(partValue))invalidShippingQuote();
         declared+=partValue;
@@ -147,10 +138,6 @@ export function validateShippingQuote(raw:unknown,lines:readonly ShippingQuoteLi
     for(const [sku,quantity] of quantities){
       if(covered.has(sku)||expected.get(sku)!.quantity!==quantity)invalidShippingQuote();
       covered.add(sku);
-    }
-    if(manual&&group.drop_ship){
-      const cost=[...quantities].reduce((sum,[sku,quantity])=>sum+expected.get(sku)!.drop_ship!.unit_supply_cost_minor*quantity,0);
-      if(!Number.isSafeInteger(cost)||cost!==group.drop_ship.supply_cost_minor||group.drop_ship.items.length!==quantities.size||new Set(group.drop_ship.items.map(i=>i.sku)).size!==quantities.size)invalidShippingQuote();
     }
     if(!meetup&&!manual){
       const skus=[...quantities.keys()].sort(bySku);
@@ -215,8 +202,7 @@ export async function checkoutTerms(q:PoolClient,context:StoreContext,input:Retu
     return supplier;
   });
   const bindings=resolved.bindings.map(b=>({...b,unit_price_minor:resolved.lines.find(l=>l.sku===b.sku)!.unit_price_minor}));
-  let quoteLines:ShippingQuoteLine[]=bindings.map(b=>({selection_id:b.selection_id,sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:b.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id}));
-  if(ports.shipping?.resolveLines)quoteLines=await ports.shipping.resolveLines(q,p,quoteLines);
+  const quoteLines:ShippingQuoteLine[]=bindings.map(b=>({sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:b.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id}));
   const labels=await ports.buyerLabels?.resolve(q,p);
   const items=resolved.lines.map(l=>({...l,...(labels?{title:labels.get(l.sku)??l.title}:{}),offer_sha256:bindings.find(b=>b.sku===l.sku)!.offer_sha256}));
   const merchandise=items.reduce((n,l)=>n+l.line_total_minor,0);
@@ -239,7 +225,7 @@ export function publicCheckoutTerms(terms:CheckoutTerms) {
     shipping:{destination_state:terms.shipping.destination_state,groups:terms.shipping.groups.map(group=>{
       const quantities=new Map<string,number>();
       for(const parcel of group.parcels)for(const line of parcel.lines)quantities.set(line.sku,(quantities.get(line.sku)??0)+line.quantity);
-      return {group_ref:group.group_ref,...(group.fulfilment_mode==='drop_ship'&&group.method_ref==='self_ship'?{fulfilment_mode:'drop_ship' as const}:{}),method:group.method_ref,amount_minor:group.amount_minor,fee_per_parcel_minor:group.fee_per_parcel_minor,outlying_surcharge_per_parcel_minor:group.outlying_surcharge_per_parcel_minor,parcel_count:group.parcels.length,handling_days:group.self_ship?.handling_days??group.logistics?.handling_days??null,items:[...quantities.keys()].sort(bySku).map(sku=>({sku,quantity:quantities.get(sku)!})),meetup_note:group.meetup?.note??null,...(group.self_ship?{self_ship:{handling_days:group.self_ship.handling_days,note:group.self_ship.note}}:{})};
+      return {group_ref:group.group_ref,method:group.method_ref,amount_minor:group.amount_minor,fee_per_parcel_minor:group.fee_per_parcel_minor,outlying_surcharge_per_parcel_minor:group.outlying_surcharge_per_parcel_minor,parcel_count:group.parcels.length,handling_days:group.self_ship?.handling_days??group.logistics?.handling_days??null,items:[...quantities.keys()].sort(bySku).map(sku=>({sku,quantity:quantities.get(sku)!})),meetup_note:group.meetup?.note??null,...(group.self_ship?{self_ship:{handling_days:group.self_ship.handling_days,note:group.self_ship.note}}:{})};
     })},
     shipping_total_minor:terms.shipping_total_minor,tax_state:terms.tax_state,total_minor:terms.total_minor,consents:terms.consents,payment_methods:terms.payment_methods,offline_payment:terms.offline_payment};
 }

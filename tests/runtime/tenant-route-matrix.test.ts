@@ -49,8 +49,6 @@ const commerceCredentialKeyring = CommerceCredentialKeyring.parse(`matrix:${rand
 const app = createApp(runtime, origin, 'local', { guildLaunchpadEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY, tenantWorkAssetStore: store, moduleProviders: providers, adminVerifier, commerceCredentialKeyring,
   commerceSettings: { checkoutEnabled: false, consoleEnabled: true, quarantine: false, providerProfiles: [] } });
 
-const dropShipApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceDropShipEnabled:true,commerceSelfShipEnabled:true,supplierConsoleEnabled:true,commerceSettings:{checkoutEnabled:false,consoleEnabled:true,quarantine:false,providerProfiles:[]}});
-
 const distributionApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,supplierConsoleEnabled:true,storeAppearanceEnabled:true,storePoliciesEnabled:true,storeGalleryEnabled:true,storeVariantsEnabled:true,storeCategoriesEnabled:true,distributionPhotosEnabled:true,supplyOfferPhotosEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,storePhotoAssetStore:store,supplyMaterialAssetStore:store});
 
 const checkoutApp=createApp(runtime,origin,'local',{guildLaunchpadEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY,commerceSettings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]}});
@@ -90,7 +88,7 @@ async function call(method: string, path: string, session?: Session, body?: stri
   const sent: Record<string, string> = { Origin: origin, ...headers };
   if (session) { sent.Cookie = session.cookie; sent['X-CSRF-Token'] = session.csrf; }
   const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
-  const target=path.includes('/drop-ship/')?dropShipApp:path==='/me/orders'?checkoutApp:isOfferOrDistributionPhotoPath(path)?distributionApp:app;
+  const target=path==='/me/orders'?checkoutApp:isOfferOrDistributionPhotoPath(path)?distributionApp:app;
   const response = await target.request(origin + (path.startsWith('/admin/') ? path : '/api/v1' + path), { method, headers: sent, body: payload as any });
   const bytes = new Uint8Array(await response.arrayBuffer());
   const type = response.headers.get('content-type') ?? '';
@@ -221,19 +219,6 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
-  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/suppliers': 'tenant',
-  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements/:agreement_id/withdraw': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements/:agreement_id/revoke': 'tenant',
-  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/accept': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/decline': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/revoke': 'tenant',
-  'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders/:order_id/ship': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders/:order_id/unable': 'tenant',
-
   'ALL /api/v1/me/orders': 'middleware',
   'GET /api/v1/me/orders': 'principal',
   'ALL /shops/*': 'middleware',
@@ -302,8 +287,6 @@ const routeTable: Record<string, string> = {
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/contact': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/cancel': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation': 'tenant',
-  'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation/refund': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover': 'tenant',
@@ -698,8 +681,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 182, middleware: 32 });
-  assert.equal(selectedRoutes.length, 256);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 168, middleware: 32 });
+  assert.equal(selectedRoutes.length, 242);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {
@@ -738,19 +721,6 @@ function assertSameAsRandom(route: string, actor: string, real: Reply, random: R
 
 type Route = { method: string; path: string; body?: any; version?: string; isRaw?: boolean; contentType?:string };
 const routes: Route[] = [
-  {"method": "GET", "path": "/tenants/:tenant_id/storefronts/:instance_id/drop-ship/suppliers"},
-  {"method": "GET", "path": "/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements"},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements", "body": {"supplier_instance_id": "00000000-0000-4000-8000-000000000001", "selection_ids": ["00000000-0000-4000-8000-000000000001"], "fee_per_order_minor": 0, "promise_working_days": 1}, "version": "\"1\""},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements/:agreement_id/withdraw", "body": {}, "version": "\"1\""},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements/:agreement_id/revoke", "body": {}, "version": "\"1\""},
-  {"method": "GET", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements"},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/accept", "body": {"terms_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}, "version": "\"1\""},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/decline", "body": {"terms_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}, "version": "\"1\""},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/agreements/:agreement_id/revoke", "body": {}, "version": "\"1\""},
-  {"method": "GET", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders"},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders/:order_id/ship", "body": {"carrier_key": "post", "tracking_number": "SYNTHETIC-123", "sent_on": "2026-01-01"}, "version": "\"1\""},
-  {"method": "POST", "path": "/tenants/:tenant_id/storefronts/:instance_id/supplier-console/drop-ship/orders/:order_id/unable", "body": {"reason": "cannot_ship"}, "version": "\"1\""},
-
   {method:'GET',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-catalog-photos'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/share',body:{},version:'"1"'},
   {method:'POST',path:'/tenants/:tenant_id/storefronts/:instance_id/supply-offers/:offer_id/photo/stop',body:{},version:'"1"'},
@@ -765,8 +735,6 @@ const routes: Route[] = [
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id' },
   { method: 'GET', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/contact' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/cancel', body: {}, version: '"1"' },
-  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation', body: {reason:'other',refund_state:'pending'}, version: '"1"' },
-  { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/paid-cancellation/refund', body: {refunded_on:'2026-01-01',refund_method:'cash'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/offline-payments', body: {amount_minor:100, received_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-completion', body: {amount_minor:100, completed_on:'2026-01-01'}, version: '"1"' },
   { method: 'POST', path: '/tenants/:tenant_id/storefronts/:instance_id/checkout-orders/:order_id/meetup-handover', body: {completed_on:'2026-01-01'}, version: '"1"' },
@@ -939,7 +907,7 @@ function ids(data: TenantData, route: Route): Record<string, string> {
   return { tenant_id: data.tenantId, workspace_id: data.workspaceId, work_id: data.workId, result_id: data.resultId,
     group_key:'P0001',sku:'P0001',photo_key:'main',photo_id:data.workId,kind:'shipping',version_id:randomUUID(),slug:'synthetic-matrix',role:'cover',seq:'1',version:'1',upload_id: data.unfinalizedUploadId, id: route.path.includes('ownership-transfers') ? data.transferId : data.invitationId,
     principal_id: data.principalId, category_id: data.workId, product_id: data.workId, order_id: data.workId, offer_id: data.workId, selection_id: data.workId,
-    agreement_id:data.workId, location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
+    location_id: data.workId, service_key: 'ecpay.logistics.home.tcat', account_id: data.workId, admission_id: data.invitationId, case_id: data.workId, purpose: 'payment', action: 'resolve_with_evidence',
     instance_id: data.instanceId, operation_id: data.operationId, plan_id: data.planId,
     plan_version: data.planVersion, plan_digest: data.planDigest.value, operation_version: `"${data.operationVersion}"`, instance_version: `"${data.instanceVersion}"`,
     work_version: data.workVersion, m_principal_id: fixture.mPrincipalId, guild_key: 'guild_ai_field' };

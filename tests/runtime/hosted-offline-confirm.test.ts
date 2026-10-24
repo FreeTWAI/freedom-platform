@@ -1,8 +1,3 @@
-import {createCheckoutPaymentPort} from '../../modules/agent-commerce/payments/attempts.js';
-import {lockCheckoutOrders} from '../../modules/agent-commerce/checkout/orders.js';
-import {applyConfirmedPaymentHeld} from '../../modules/agent-commerce/checkout/payments.js';
-import {bindStore} from '../../modules/agent-commerce/checkout/authority.js';
-import {publicOrder} from '../../modules/agent-commerce/checkout/public-order.js';
 import assert from 'node:assert/strict';
 import {createHash, randomBytes, randomInt, randomUUID} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
@@ -19,7 +14,7 @@ import {placeCheckoutOrder, type CheckoutOrderRow} from '../../modules/agent-com
 import {applyConfirmedPayment, retryAllocation} from '../../modules/agent-commerce/checkout/payments.js';
 import {cancelPublicOrder, createPublicCheckout, placePublicOrder, type HostedCheckoutOptions} from '../../modules/agent-commerce/checkout/public-commands.js';
 import {listSellerExceptions} from '../../modules/agent-commerce/checkout/seller-exceptions.js';
-import {cancelSellerPaidCheckoutOrder, recordSellerPaidCancellationRefund, cancelSellerCheckoutOrder, listSellerCheckoutOrders, readSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
+import {cancelSellerCheckoutOrder, listSellerCheckoutOrders, readSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
 import {endOfflinePaymentWindow} from '../../modules/agent-commerce/payments/offline/window.js';
 import {recordSellerRefund} from '../../modules/agent-commerce/payments/refunds.js';
 import {canonicalJSON, freezeCheckout, type CheckoutPorts} from '../../modules/agent-commerce/checkout/terms.js';
@@ -611,107 +606,4 @@ test('member buyer notices follow bank receipt, handover, cash meetup and seller
   const self=await x.tx(async q=>{const principal=await mapPersonPrincipal(q,s.owner.user.user_id);return placeCheckoutOrder(q,s,{checkoutId:selfCheckout.checkout_id,termsSha256:selfCheckout.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:principal.principal_id,environment:'sandbox',paymentMethod:'bank_transfer'},selfPorts);});
   await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,self.order_id,{amount_minor:self.terms.total_minor,received_on:date},randomUUID(),self.version,opt);
   assert.deepEqual(await orderNotices(self.order_id),[]);
-});
-
-test('paid cancellation releases stock, protects refund capability and records a full refund exactly once',async()=>{
-  const {s,order,owner}=await placeOffline('bank_transfer',20),date=await today(),options=notificationOptions();
-  const manager=await operator(s,['store:orders:manage','store:orders:read']);
-  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{amount_minor:order.terms.total_minor,received_on:date},randomUUID(),'1');
-  const cancel=(raw:unknown,key=randomUUID(),version='1',actor=owner)=>cancelSellerPaidCheckoutOrder(x.runtime,actor,s.tenantId,s.instanceId,order.order_id,raw,key,version,options);
-  await assert.rejects(cancel({reason:'other',refund_state:'recorded',refunded_on:date,refund_method:'cash'},randomUUID(),'1',manager.actor),problem(403,'capability_denied'));
-  await assert.rejects(cancel({reason:'other',refund_state:'pending'},randomUUID(),'9'),problem(412,'version_conflict'));
-  for(const refunded_on of ['2000-01-01','2099-12-31'])await assert.rejects(cancel({reason:'other',refund_state:'recorded',refunded_on,refund_method:'cash'}),problem(422,'refund_date_invalid'));
-  const before=await balances(s.product.product_id),key=randomUUID(),input={reason:'out_of_stock',note:'合成店家備註',refund_state:'pending'};
-  const cancelled=SellerCheckoutOrderSchema.parse(await cancel(input,key,'1',manager.actor));
-  assert.equal(cancelled.lifecycle_state,'cancelled');assert.equal(cancelled.version,'2');assert.equal(cancelled.paid_cancellation?.refund_state,'pending');
-  assert.equal(cancelled.paid_cancellation?.note,input.note);assert.equal(cancelled.paid_cancellation?.amount_minor,order.terms.total_minor);assert.equal(cancelled.actions.cancel_paid,false);
-  assert.deepEqual(await cancel(input,key,'1',manager.actor),cancelled);
-  assert.equal((await balances(s.product.product_id)).reserved,before.reserved-1);
-  assert.equal((await x.h.pool.query("SELECT count(*)::int n FROM commerce_inventory_reservations WHERE order_id=$1 AND state='held'",[order.order_id])).rows[0].n,0);
-  assert.equal((await x.h.pool.query('SELECT released_quantity FROM commerce_inventory_allocations WHERE order_id=$1',[order.order_id])).rows[0].released_quantity,1);
-  const stored=(await x.h.pool.query('SELECT * FROM commerce_paid_cancellations WHERE order_id=$1',[order.order_id])).rows[0];
-  assert.equal(stored.tenant_id,s.tenantId);assert.equal(stored.instance_id,s.instanceId);assert.equal(stored.cancelled_by_principal_id,manager.principal);assert.equal(stored.refunded_on,null);
-  await assert.rejects(cancel(input,randomUUID(),'2'),problem(409,'checkout_order_closed'));
-  for(const sql of ["UPDATE commerce_paid_cancellations SET note='changed' WHERE order_id=$1","UPDATE commerce_paid_cancellations SET amount_minor=amount_minor+100 WHERE order_id=$1","DELETE FROM commerce_paid_cancellations WHERE order_id=$1","UPDATE commerce_paid_cancellations SET refund_state='recorded' WHERE order_id=$1"])
-    await assert.rejects(x.h.pool.query(sql,[order.order_id]),(error:unknown)=>(error as {code:string}).code==='23514');
-  const refund={refunded_on:date,refund_method:'bank_transfer'};
-  const record=(actor=owner,key=randomUUID(),version='2',body:unknown=refund)=>recordSellerPaidCancellationRefund(x.runtime,actor,s.tenantId,s.instanceId,order.order_id,body,key,version,options);
-  await assert.rejects(record(manager.actor),problem(403,'capability_denied'));
-  await assert.rejects(record(owner,randomUUID(),'1'),problem(412,'version_conflict'));
-  await assert.rejects(record(owner,randomUUID(),'2',{...refund,refunded_on:'2099-12-31'}),problem(422,'refund_date_invalid'));
-  const refundOnly=await operator(s,['store:refund']);
-  const refundKey=randomUUID(),recorded=SellerCheckoutOrderSchema.parse(await record(refundOnly.actor,refundKey));
-  assert.equal(recorded.paid_cancellation?.refund_state,'recorded');assert.equal(recorded.payment_state,'refunded');assert.equal(recorded.paid_cancellation?.amount_minor,order.terms.total_minor);assert.equal(recorded.payment_detail,null);
-  const finance=await readSellerCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id);assert.equal(finance.payment_detail?.applications[0].refunded_minor,order.terms.total_minor);
-  assert.deepEqual(await record(refundOnly.actor,refundKey),recorded);await assert.rejects(record(),problem(409,'refund_not_available'));
-  await assert.rejects(x.h.pool.query("UPDATE commerce_paid_cancellations SET refund_method='cash' WHERE order_id=$1",[order.order_id]),(e:unknown)=>(e as {code:string}).code==='23514');
-  const buyer=await x.tx(async q=>{await bindStore(q,s.tenantId);return publicOrder(q,{tenantId:s.tenantId,instanceId:s.instanceId,projection:{slug:s.slug,name:'合成商店'}},order.order_id);});
-  assert.equal(buyer.payment_state,'refunded');assert.equal(buyer.paid_cancellation?.refund_state,'recorded');assert.equal(JSON.stringify(buyer).includes(input.note),false);
-  const list=await listSellerCheckoutOrders(x.runtime,owner,s.tenantId,s.instanceId,{limit:'10'},pages());assert.equal(list.items[0].payment_state,'refunded');
-  const port=createCheckoutPaymentPort({settings:{checkoutEnabled:true,quarantine:false,providerProfiles:[]},profiles:[],environment:'sandbox',admission:{allowed:()=>true},keyring:null});
-  const paidSummary=await x.tx(async q=>{await bindStore(q,s.tenantId);return port.summarize!(q,[order.order_id]);});assert.equal(paidSummary.get(order.order_id)?.payment_state,'refunded');
-});
-
-test('paid cancellation refuses viewers, foreign tenants, unpaid, card and handed-over orders',async()=>{
-  const {s,order,owner}=await placeOffline('bank_transfer',20),date=await today(),input={reason:'buyer_request',refund_state:'pending'};
-  const cancel=(id=order.order_id,actor=owner,t=s.tenantId,i=s.instanceId,version='1')=>cancelSellerPaidCheckoutOrder(x.runtime,actor,t,i,id,input,randomUUID(),version);
-  const viewer=await x.h.person(synthetic(3)),principal=await x.h.candidate(s.owner,viewer.id);
-  await x.h.accept(viewer.session,s.tenantId,await x.h.invite(s.owner,s.tenantId,principal,'viewer'));
-  await x.h.pool.query(`INSERT INTO tenant_module_permissions(tenant_id,principal_id,instance_id,capabilities,status,granted_by_principal_id) SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[s.tenantId,principal,s.instanceId,s.owner.user.user_id]);
-  await assert.rejects(cancel(order.order_id,await actorOf(viewer.session.cookie)),problem(403,'capability_denied'));
-  await assert.rejects(cancel(),problem(409,'payment_not_confirmed'));
-  const {s:other}=await placeOffline('bank_transfer',10);await assert.rejects(cancel(order.order_id,await actorOf(other.owner.cookie),other.tenantId,other.instanceId),problem(404,'checkout_order_not_found'));
-  const card=await x.place(s,await x.frozen(s,1));await x.tx(q=>applyConfirmedPayment(q,{orderId:card.order_id,paymentRef:randomUUID(),amountMinor:card.terms.total_minor,currency:'TWD',simulated:false}));
-  await assert.rejects(cancel(card.order_id),problem(409,'payment_method_mismatch'));
-  const unpaid=await more(s,'bank_transfer');assert.equal((await cancelSellerCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,unpaid.order_id,randomUUID(),'1')).cancel_reason,'seller_cancelled');
-  await assert.rejects(cancel(unpaid.order_id,owner,s.tenantId,s.instanceId,'2'),problem(409,'checkout_order_closed'));
-  const cash=await more(s,'cash_on_meetup');await completeMeetup(x.runtime,owner,s.tenantId,s.instanceId,cash.order_id,{amount_minor:cash.terms.total_minor,completed_on:date},randomUUID(),'1');
-  await assert.rejects(cancel(cash.order_id),problem(409,'order_already_shipped'));
-  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{amount_minor:order.terms.total_minor,received_on:date},randomUUID(),'1');
-  const immediate=await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{reason:'cannot_ship',refund_state:'recorded',refunded_on:date,refund_method:'cash'},randomUUID(),'1');
-  assert.equal(immediate.paid_cancellation?.refund_state,'recorded');assert.equal(immediate.payment_state,'refunded');
-  assert.equal((await x.h.pool.query('SELECT count(*)::int n FROM commerce_refunds WHERE order_id=$1',[order.order_id])).rows[0].n,0);
-});
-
-test('paid cancellation resolves unallocatable cases, releases holds and never notifies a guest',async()=>{
-  const {s,order,owner}=await placeOffline('bank_transfer',20),date=await today();
-  await x.tx(async q=>{await (await checkoutInventory(q,order.order_id)).releaseHolds();});
-  await x.h.pool.query('UPDATE commerce_items SET stock=0 WHERE item_id=$1',[s.product.product_id]);
-  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{amount_minor:order.terms.total_minor,received_on:date},randomUUID(),'1');
-  const cancelled=await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{reason:'out_of_stock',refund_state:'pending'},randomUUID(),'1');
-  assert.equal(cancelled.exceptions[0].status,'resolved');assert.equal(cancelled.exceptions[0].resolution?.code,'cancelled');assert.equal(cancelled.open_exception_count,0);
-  await x.h.pool.query('UPDATE commerce_items SET stock=20 WHERE item_id=$1',[s.product.product_id]);
-  // Existing domain fixture port represents a retained guest order; public offline checkout remains member-only.
-  const ordinary=offlinePorts(),guestPorts={...ordinary,paymentMethods:{...ordinary.paymentMethods!,offlinePaymentRequiresMember:false}};
-  const saved=await x.tx(q=>freezeCheckout(q,s,{...x.input(s.product.sku,1),idempotencyKey:randomUUID()},guestPorts));
-  const guest=await x.tx(q=>placeCheckoutOrder(q,s,{checkoutId:saved.checkout_id,termsSha256:saved.terms_sha256,clientOrderId:randomUUID(),buyerPrincipalId:null,environment:'sandbox',paymentMethod:'bank_transfer'},guestPorts));
-  const options=notificationOptions();await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,guest.order_id,{amount_minor:guest.terms.total_minor,received_on:date},randomUUID(),'1',options);
-  await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,guest.order_id,{reason:'other',refund_state:'pending'},randomUUID(),'1',options);
-  await recordSellerPaidCancellationRefund(x.runtime,owner,s.tenantId,s.instanceId,guest.order_id,{refunded_on:date,refund_method:'cash'},randomUUID(),'2',options);
-  assert.deepEqual(await orderNotices(guest.order_id),[]);
-});
-
-test('paid cancellation HTTP commands require session, CSRF, key and If-Match',async()=>{
-  const {s,order}=await placeOffline('bank_transfer'),app=createApp(x.runtime,x.h.origin,'local',{guildLaunchpadEnabled:true,commerceSettings:{checkoutEnabled:false,consoleEnabled:true,quarantine:false,providerProfiles:[]}});
-  const root=s.root+'/checkout-orders/'+order.order_id+'/paid-cancellation',body={reason:'other',refund_state:'pending'};
-  for(const suffix of ['', '/refund']){
-    const value=suffix?{refunded_on:await today(),refund_method:'cash'}:body;
-    const session=await x.h.call('POST',root+suffix,undefined,value,{'Idempotency-Key':randomUUID(),'If-Match':'"1"'},app);assert.equal(session.status,401);
-    const missingKey=await x.h.call('POST',root+suffix,s.owner,value,{'If-Match':'"1"'},app);assert.equal(missingKey.status,400);
-    const missingVersion=await x.h.call('POST',root+suffix,s.owner,value,{'Idempotency-Key':randomUUID()},app);assert.equal(missingVersion.status,428);
-    const response=await app.request(x.h.origin+'/api/v1'+root+suffix,{method:'POST',headers:{Origin:x.h.origin,Cookie:s.owner.cookie,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"'},body:JSON.stringify(value)});assert.equal(response.status,403);
-  }
-});
-
-test('confirmed cash before handover can be cancelled without a delivery-method restriction',async()=>{
-  const {s,order,owner}=await placeOffline('cash_on_meetup');
-  await x.tx(async q=>{
-    await lockStore(q,s,[],[order.order_id],false);const [locked]=await lockCheckoutOrders(q,[order.order_id],s);
-    const payment=(await q.query(`INSERT INTO commerce_offline_payments(tenant_id,instance_id,order_id,method,amount_minor,currency,received_on,confirmed_by_principal_id)
-      SELECT co.tenant_id,co.instance_id,co.order_id,'cash_on_meetup',(co.terms->>'total_minor')::bigint,'TWD',(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date,p.principal_id
-      FROM commerce_checkout_orders co CROSS JOIN principals p WHERE co.order_id=$1 AND p.user_ref=$2 RETURNING payment_id`,[order.order_id,s.owner.user.user_id])).rows[0];
-    await applyConfirmedPaymentHeld(q,{orderId:order.order_id,paymentRef:payment.payment_id,amountMinor:order.terms.total_minor,currency:'TWD',simulated:false},locked);
-  });
-  const cancelled=await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{reason:'buyer_request',refund_state:'pending'},randomUUID(),'1');
-  assert.equal(cancelled.paid_cancellation?.refund_state,'pending');assert.equal(cancelled.meetup_handover,null);
 });

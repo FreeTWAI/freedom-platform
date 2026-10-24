@@ -27,6 +27,7 @@
   ],
   "module_id": "work",
   "owned_paths": [
+    "tests/e2e/core-services.spec.ts",
     "modules/opportunity-project-work/**",
     "apps/platform-api/src/platform-app.ts",
     "apps/platform-api/src/member-boundary.ts",
@@ -47,7 +48,6 @@
     "apps/portal-web/src/modules/MemberTasks.tsx",
     "tests/runtime/flows.test.ts",
     "tests/e2e/work-pagination.spec.ts",
-    "tests/e2e/core-services.spec.ts",
     "apps/portal-web/src/modules/WorkbenchPanel.tsx",
     "apps/portal-web/src/modules/ShowcasePanel.tsx",
     "apps/portal-web/src/modules/EngagementPanel.tsx",

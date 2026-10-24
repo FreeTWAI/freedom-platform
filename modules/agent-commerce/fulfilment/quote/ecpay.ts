@@ -15,7 +15,7 @@ export function quoteLines(lines:readonly ShippingQuoteLine[],attributes:Readonl
   return sortedLines(lines).map(line=>({
     line_ref:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,
     attributes:attributes.get(line.item_id)?.attributes??null,
-    fulfilment:hostedLineFulfilment(line.own,line.drop_ship,!!line.drop_ship),
+    fulfilment:hostedLineFulfilment(line.own),
   }));
 }
 export function versionsBySku(lines:readonly ShippingQuoteLine[],attributes:ReadonlyMap<string,{readonly version:string}>) {

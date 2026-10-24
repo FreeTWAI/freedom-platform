@@ -25,7 +25,6 @@ export function reservationFilterParams(filters:ReservationFilters):URLSearchPar
  return q;
 }
 const pages=[
- ['drop-ship-agreements','代出貨同意','合作','manage'],['drop-ship-orders','代出貨訂單','營運','fulfil'],
  ['overview','營運概覽','營運','read'],['products','商品與庫存','營運','write'],['reservations','預留與訂單','營運','owner'],
  ['partners','合作店家','合作','write'],['terms','供貨條件與審核','合作','write'],['materials','行銷素材','管理','write'],['reports','營運報表','管理','write'],['settings','設定與資料','管理','read'],
  ['material-new','新增素材',null,'write','materials'],['material','素材詳情',null,'write','materials'],
@@ -42,7 +41,7 @@ export function parseSupplierConsoleRoute(hash:string):SupplierConsoleRoute|null
  const rest=parts.slice(4);let page:ConsolePage='not-found',id:string|undefined;
  if(parts[3]==='supply-orders'){if(!rest.length)page='reservations';}
  else if(!rest.length)page='overview';
- else if(rest.length===1&&['drop-ship-agreements','drop-ship-orders','products','partners','terms','reservations','materials','reports','settings'].includes(rest[0]))page=rest[0] as ConsolePage;
+ else if(rest.length===1&&['products','partners','terms','reservations','materials','reports','settings'].includes(rest[0]))page=rest[0] as ConsolePage;
  else if(rest.length===2&&rest[0]==='materials'&&rest[1]==='new')page='material-new';
  else if(rest.length===2&&rest[0]==='materials'&&OpaqueId.safeParse(rest[1]).success){page='material';id=rest[1];}
  else if(rest.length===2&&rest[0]==='products'&&rest[1]==='new')page='product-new';
@@ -62,4 +61,4 @@ export function supplierConsoleHref(scope:ConsoleScope,page:ConsolePage,extra:{i
  return `#stores/${scope.tenantId}/${scope.instanceId}/supply${suffix}${q.size?'?'+q:''}`;
 }
 export function sameConsoleScope(hash:string,scope:ConsoleScope){const r=parseSupplierConsoleRoute(hash);return r?.tenantId===scope.tenantId&&r?.instanceId===scope.instanceId;}
-export function consoleNavigation(capabilities:readonly string[],owner:boolean,dropShipEnabled=false){return SUPPLIER_CONSOLE_PAGES.filter(p=>p.group&&(p.page!=='drop-ship-agreements'||dropShipEnabled)&&(p.requires==='manage'?capabilities.includes('store:manage'):p.requires==='fulfil'?capabilities.includes('store:fulfil'):p.requires==='read'||capabilities.includes('store:write')&&(p.requires!=='owner'||owner)));}
+export function consoleNavigation(capabilities:readonly string[],owner:boolean){return SUPPLIER_CONSOLE_PAGES.filter(p=>p.group&&(p.requires==='read'||capabilities.includes('store:write')&&(p.requires!=='owner'||owner)));}

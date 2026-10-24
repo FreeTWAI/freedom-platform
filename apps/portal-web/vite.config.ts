@@ -12,8 +12,8 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rolldownOptions: {
-      input: {journal:join(appRoot,'src/journal/main.tsx'),index:join(appRoot,'index.html'),'skill-social':join(appRoot,'src/skill-social.tsx'),storefront:join(appRoot,'src/storefront/main.tsx'),'storefront-gallery':join(appRoot,'src/storefront/gallery.ts'),'storefront-variants':join(appRoot,'src/storefront/variants.ts')},
-      output: {entryFileNames: chunk=>chunk.name==='journal'||chunk.name==='skill-social'||chunk.name==='storefront'||chunk.name==='storefront-gallery'||chunk.name==='storefront-variants'?`assets/${chunk.name}.js`:'assets/[name]-[hash].js'},
+      input: {index:join(appRoot,'index.html'),'skill-social':join(appRoot,'src/skill-social.tsx'),storefront:join(appRoot,'src/storefront/main.tsx'),'storefront-gallery':join(appRoot,'src/storefront/gallery.ts'),'storefront-variants':join(appRoot,'src/storefront/variants.ts')},
+      output: {entryFileNames: chunk=>chunk.name==='skill-social'||chunk.name==='storefront'||chunk.name==='storefront-gallery'||chunk.name==='storefront-variants'?`assets/${chunk.name}.js`:'assets/[name]-[hash].js'},
     },
   },
   server: {

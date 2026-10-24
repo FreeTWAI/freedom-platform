@@ -84,6 +84,8 @@
     "DESIGN.md",
     "apps/portal-web/src/GameConsole.tsx",
     "apps/portal-web/src/modules/WelcomePreview.tsx",
+    "tests/e2e/core-services.spec.ts",
+    "tests/e2e/core-services.spec.ts",
     "tests/e2e/game-console.spec.ts",
     "tests/e2e/instant-feedback.spec.ts",
     "tests/e2e/member-directory.spec.ts",

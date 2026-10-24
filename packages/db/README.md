@@ -3,16 +3,6 @@
 Migration runner compatibility and the closed DAG transition are documented in
 [migrations.md](migrations.md). They do not change this command/receipt core.
 
-The separate [snapshot evidence collector](snapshot-evidence.ts) requires the
-caller's read-only repeatable-read or serializable transaction. It acquires
-ACCESS SHARE locks on the sorted, explicitly requested tables, then reads column
-and owned-sequence catalogs in two batches. Ordinary writers remain permitted;
-table definitions stay stable during evidence collection. Row counts, row
-hashes and sequence state still come from actual per-table reads, with the same
-limits, ordering and fingerprint format. RLS-filtered evidence fails closed;
-sequence state retains its existing non-MVCC limitation. Catalog data is never
-cached across snapshots.
-
 `index.ts` retains the public `command(pool, input, authorize, run)`, `transaction`, `digest`, `journal` and `checkVersion` entrypoints. `command` is an alias of `memberCommand`. Existing callers and historical receipts do not migrate.
 
 The internal orchestration in [command-core.ts](command-core.ts) depends on PostgreSQL types, transaction handling and neutral Problem errors, not the identity or execution domain. Server-owned adapter ports provide current authentication/locking, receipt serialization, digest and receipt storage. The public DB command entrypoint still selects only the legacy member adapter. No service/execution API or credential acceptance is enabled.

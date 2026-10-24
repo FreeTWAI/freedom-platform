@@ -73,7 +73,7 @@ const CANCEL_REASON_COPY: Record<NonNullable<BuyerLifecycle['cancel_reason']>, s
   buyer_cancelled: '你取消了訂單',
   seller_cancelled: '店家取消了訂單',
   payment_not_completed: '未在期限內完成付款',
-  paid_cancelled: '店家已取消這筆訂單',
+  paid_cancelled: '店家無法出貨，將退款',
 };
 
 export function formatOrderLifecycle(order: BuyerLifecycle): string {

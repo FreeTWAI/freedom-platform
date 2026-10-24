@@ -480,7 +480,7 @@ answers `payment_already_applied`. Quarantine answers 503 before any change. The
 route is mounted with the other public checkout paths and is not part of the
 tenant route table.
 
-`publicOrder` uses the payment summary port. Outstanding unapplied payments take priority in the payment port; recorded offline cancellations read as refunded. Other orders retain confirmed applications,
+`publicOrder` uses the payment summary port. Outstanding unapplied payments take priority, followed by confirmed applications,
 fully refunded unapplied payments, pending hints, simulated applications and unpaid. The latest attempt exposes only a coarse state and creation time;
 can_resume_payment runs the same eligibility checks as resume. Provider/account
 facts and exception cases never enter the buyer DTO. Resume and order replies
@@ -580,45 +580,3 @@ capabilities and actions without adding seller pages.
 ## 店家自行寄送 B（2026-10-22）
 
 `self_ship` 是無外部帳戶的獨立方式；每單定額、一單一包、銀行匯款、自有商品。收件資料只在原 contacts.delivery，正規化後計算摘要。原 `recordHandover` 原子寫 ship movement；同單唯一不可改寫的 `commerce_self_shipments` 只允許一次個資遮蔽。供貨仍 `fulfilment_not_agreed`；出貨不關單。參見 EC-SPEC-05 §2.7、EC-SPEC-09 §3。預設 flag OFF，既有訂單仍可履約；沒有 email、API carrier 呼叫、標籤或貨態同步。PR-A public guard 由完成保留排程的 PR-C 解除；UI 另由 PR-B 提供。
-
-## Paid offline cancellation (Ted 2026-10-23 approved b.1)
-
-The seller paid-cancellation command requires orders:manage; recording a refund
-also requires store:refund. The separate refund command needs store:refund.
-Both reuse sellerCheckoutCommand, session/CSRF, idempotency and If-Match. Open,
-confirmed offline orders are eligible until any self-shipment, meetup handover
-or shipped quantity exists, regardless of the frozen delivery method.
-
-cancelPaidOfflineOrderHeld reuses cancelPaidOrder, releases remaining holds,
-retains the full payment, reason and private merchant note in
-commerce_paid_cancellations, closes open paid_unallocatable cases as cancelled,
-and emits the member buyer notice in the same transaction. The refund can be
-pending or recorded immediately. A pending refund can be recorded exactly once
-with a Taipei date between confirmation and server today and bank_transfer or
-cash. The store moves money outside the platform; the platform never verifies it.
-The buyer projection omits the merchant note. Retained member detail uses that
-same public projection; the metadata-only member list keeps its existing ACL.
-No card refunds, returns, partial cancellation, email, new flag or approval step
-are added. Existing scoped receipts retain references and replay current rows.
-
-The integrated supplier `fulfiller_unable` case points to the original order for
-whole-order offline cancellation and refund recording. It has no card-provider
-evidence action. Cancellation resolves the case in the same inventory transaction;
-a later supplier shipment can instead resolve it as shipped.
-
-## Minimal standing drop-ship (2026-10-23)
-
-With drop-ship intake enabled, accepted exact-version consent resolves supplied
-selections once per quote. A checkout contains either only store-owned lines or
-only selections covered by one agreement; mixed shippers require separate
-orders. Manual drop-ship freezes supply unit costs, the per-order fee including
-postage and the weekday promise in private terms. Public terms disclose only
-manual supplier fulfilment and the buyer's store postage; supplier costs and the
-agreement digest stay private. Existing own-line public group keys are preserved.
-
-Only bank transfer paid to the store is available. Revocation or intake off
-blocks new placement, while frozen orders retain their supplier and terms.
-Supplier reads and writes stay in Commerce, through the fulfilment module's
-explicit authorization and strict contact allowlist; no recipient projection,
-read window, read receipt, per-order acceptance, payable, statement, ECPay service or
-email is introduced. The store still owns cancellation, refund and service.

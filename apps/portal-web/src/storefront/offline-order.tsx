@@ -1,6 +1,5 @@
 import {useRef, useState} from 'react';
 import type {PublicOrder} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
-import {PAID_CANCELLATION_REASON_LABELS} from '../../../../contracts/guild-launchpad/v1/hosted-checkout.js';
 import {formatMinor} from '../../../../modules/agent-commerce/hosted/format.js';
 import {formatTaipeiDateTime} from './format.js';
 
@@ -24,9 +23,7 @@ export function OfflineOrder({order, disabled, onCancel, onRefresh, readOnly=fal
   }
   return <section className="shop-order-section" aria-labelledby="shop-offline-heading">
     <h2 id="shop-offline-heading">{order.payment_method === 'bank_transfer' ? '銀行匯款' : '面交付款'}</h2>
-    {order.paid_cancellation ? <><p>店家已取消這筆訂單</p><p>取消原因：{PAID_CANCELLATION_REASON_LABELS[order.paid_cancellation.reason]}</p>{order.paid_cancellation.refund_state==='pending'?<p>店家會在平台外退款</p>:<p>店家已於 {order.paid_cancellation.refunded_on} 以{order.paid_cancellation.refund_method==='bank_transfer'?'銀行轉帳':'現金'}退款</p>}</>
-      : order.cancel_reason === 'paid_cancelled' ? <p>店家已取消這筆訂單，請聯絡店家確認退款狀態。</p>
-      : order.payment_state === 'confirmed' ? <p>店家已確認收到付款。</p>
+    {order.payment_state === 'confirmed' ? <p>店家已確認收到付款。</p>
       : order.cancel_reason === 'payment_not_completed' ? <p>付款期限已結束，訂單已取消。如果你已經匯款，請聯絡店家。</p>
       : !open ? <p>這筆訂單已結束。如果你已經付款，請聯絡店家。</p>
       : unpaid && order.reservation_expired ? <p>付款期限已過，保留的商品已釋出。如果你已經匯款，店家仍可能在 {formatTaipeiDateTime(order.payment_grace_until!)} 前確認。</p>

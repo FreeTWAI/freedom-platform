@@ -76,8 +76,7 @@ test('a shop owner understands a saved supply version, its approval and its hone
     await expect(detail).toContainText('每件成本合計');await expect(detail).toContainText('$75.00');
     await expect(detail).toContainText('幣別：新臺幣（TWD）');
     await expect(detail.getByRole('heading',{name:'展示：供應商同意後可加入',exact:true})).toBeVisible();
-    await expect(detail.getByRole('heading',{name:'結帳購買：目前無法結帳購買',exact:true})).toBeVisible();
-    await expect(detail).toContainText('供貨商品需要有效的供應商代出貨同意，目前尚不能結帳購買。');
+    await expect(detail).toContainText('供貨商品需要供應商的代出貨同意，這項功能尚未開放。');
     await expect(detail).toContainText('自行持有商品');
     for(const width of [390,768,1440]){
       await b.setViewportSize({width,height:900});

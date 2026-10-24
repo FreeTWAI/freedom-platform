@@ -1,4 +1,3 @@
-import {retainCheckoutContacts,type ContactRetentionMode} from './contact-retention.js';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import type {Pool,PoolClient} from 'pg';
 import {isolatedTransaction} from '../../../packages/resource-scopes/tenant-transaction.js';
@@ -9,7 +8,7 @@ import type {EffectJournalPort} from './journal/journal.js';
 import {deliverCommerceEmail} from './notifications/delivery.js';
 import type {CommerceEmailOutbox,CommerceEmailSender} from './notifications/email-port.js';
 import type {OrderNotificationOptions} from '../checkout/order-notifications.js';
-export type CommerceDueWorkKind = 'payment_query' | 'payment_window_end' | 'email' | 'offline_payment_window_end' | 'checkout_contact_retention';
+export type CommerceDueWorkKind = 'payment_query' | 'payment_window_end' | 'email' | 'offline_payment_window_end';
 /** Scheduling never postpones existing work and never changes its tenant. The
  * caller owns the transaction; this helper performs no external operation. */
 export async function scheduleDueWork(q: PoolClient, input: {
@@ -40,10 +39,8 @@ export interface DueCommerceWorkDependencies extends OrderNotificationOptions {
   emailSender?:CommerceEmailSender;
   journal?:EffectJournalPort;
   origin?:string;
-  /** Omitted by ordinary business dispatchers: no retention rows are claimed. */
-  contactRetention?:ContactRetentionMode;
 }
-export interface DueCommerceWorkOptions {limit?:number;maxExternalCalls?:number;deadlineMs?:number;targets?:readonly string[];signal?:AbortSignal;trigger?:PaymentQueryTrigger;kinds?:readonly CommerceDueWorkKind[]}
+export interface DueCommerceWorkOptions {limit?:number;maxExternalCalls?:number;deadlineMs?:number;targets?:readonly string[];signal?:AbortSignal;trigger?:PaymentQueryTrigger}
 const afterResponseSignal=new AsyncLocalStorage<AbortSignal>();
 /** A single shared timeout wrapper lets a late transport return abandon its
  * lease rather than write after the request host has started closing its pool. */
@@ -77,9 +74,7 @@ export async function runDueCommerceWork(pool:Pool,deps:DueCommerceWorkDependenc
     const emailDeps={sender:deps.emailSender,journal:deps.journal,origin:deps.origin,now:deps.now,quarantine:deps.quarantine,signal};
     handlers.email=row=>deliverCommerceEmail(pool,row.target_id,emailDeps,{dueWorkId:row.due_work_id,leaseToken:row.token,tenantId:row.tenant_id});
   }
-  const retentionMode=deps.contactRetention;
-  if(retentionMode==='all')handlers.checkout_contact_retention=row=>retainCheckoutContacts(pool,row,retentionMode,{now:deps.now,signal});
-  const kinds=Object.keys(handlers).filter(kind=>!options.kinds||options.kinds.includes(kind as CommerceDueWorkKind));
+  const kinds=Object.keys(handlers);
   if(!kinds.length||signal?.aborted||deadlineMs===0)return counts;
   const rows=await isolatedTransaction(pool,async q=>{
     const now=deps.now?.()??null;
@@ -105,7 +100,7 @@ export async function runDueCommerceWork(pool:Pool,deps:DueCommerceWorkDependenc
       counts.failed++;if(error instanceof PaymentQueryExecutionError)counts.externalCalls+=error.externalCalls;
       console.error(JSON.stringify({event:'commerce_due_work_failed',kind:row.kind,code:'internal'}));
       try{await isolatedTransaction(pool,async q=>{
-        if(row.kind==='email'||row.kind==='offline_payment_window_end'||row.kind==='checkout_contact_retention'){
+        if(row.kind==='email'||row.kind==='offline_payment_window_end'){
           const current=(await q.query(`SELECT *,lease_until::text AS token FROM commerce_due_work WHERE due_work_id=$1 FOR UPDATE`,[row.due_work_id])).rows[0];
           if(!current||current.token!==row.token)return;
           const now=deps.now?.()??new Date();

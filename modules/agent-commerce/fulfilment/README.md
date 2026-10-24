@@ -280,12 +280,11 @@ A valid astral character inside that raw bound is accepted. ECPay name weight an
 blocked-term rules do not apply to meetup. Lone surrogates in JSON are still
 rejected by the shared platform boundary.
 
-Own lines are `{kind:'self'}`. With drop-ship intake enabled, one bounded read
-resolves accepted standing consent for supplied selections. Covered lines are
-manual-only `drop_ship`, with no ECPay services; uncovered lines stay
-`not_agreed`. Mixed own/supplier or multiple-agreement carts require separate
-orders. The test helper's synthetic ECPay agreements remain separate from these
-production manual agreements.
+Own lines are `{kind:'self'}`. Supplied lines are `{kind:'not_agreed'}` and fail
+with `fulfilment_not_agreed` for every offered method, including meetup. This
+port never emits `drop_ship`. An agreements job can later pass a real agreement
+into the planner; until then it must not relabel a supplied line as own. The
+test helper's synthetic drop-ship agreements are not used here.
 
 Meetup is stripped before `planDelivery`. The rules library still knows only the
 four ECPay methods. An offered meetup option with only own lines freezes one
@@ -320,27 +319,3 @@ line on an unoffered method is not reported as `fulfilment_not_agreed`.
 ## 店家自行寄送 B（2026-10-22）
 
 `self_ship` 是無外部帳戶的獨立方式；每單定額、一單一包、銀行匯款、自有商品。收件資料只在原 contacts.delivery，正規化後計算摘要。原 `recordHandover` 原子寫 ship movement；同單唯一不可改寫的 `commerce_self_shipments` 只允許一次個資遮蔽。供貨仍 `fulfilment_not_agreed`；出貨不關單。參見 EC-SPEC-05 §2.7、EC-SPEC-09 §3。預設 flag OFF，既有訂單仍可履約；沒有 email、API carrier 呼叫、標籤或貨態同步。PR-A public guard 由完成保留排程的 PR-C 解除；UI 另由 PR-B 提供。
-
-## Minimal standing drop-ship (2026-10-23)
-
-Ted's approved minimum takes precedence over the broader EC-SPEC-05 C2 plan.
-Migration189 retains immutable agreement versions and at most 200 sellable
-selections from one supplier. Acceptance signs the exact digest; new overlapping
-acceptance supersedes the old version. Either party can revoke future intake.
-The frozen whole-order group keeps its supplier, cost, fee and weekday promise.
-Only the store's `self_ship` postage and bank transfer to the store apply.
-
-`drop-ship/orders.ts` retains supplier authority separately, discovers at most
-50 references, then reads only listed contacts in one transaction per store
-tenant. Its strict DTO excludes buyer email and all retail money. Shipment
-registration holds existing store/order/inventory locks, requires paid,
-uncancelled, fully allocated stock and the Taipei payment-to-today date range,
-then records one supplier self-shipment and calls `recordHandover` atomically.
-An inability opens an order-subject exception; shipment resolves it. Existing
-contact masking is reflected as a null recipient. No retention code is added.
-
-The flag defaults off and requires self ship and Supplier Console. Off prevents
-agreement writes and new drop-ship quotes while retained orders remain readable
-and shippable. Notifications follow the existing notification installation gate.
-There are no read windows, read receipts, recipient projections, per-order
-acceptance, payables, statements, ECPay services, partial shipments or email.

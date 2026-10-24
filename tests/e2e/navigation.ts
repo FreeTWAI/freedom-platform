@@ -56,10 +56,12 @@ export async function openFeatureSearch(page:Page){
 export async function navigate(page: Page, name: string) {
   await expect(page.locator('.shell')).toBeVisible();
   if (name === '我的訊息') {
-    await openChat(page);
+    const bubble=page.locator('.floating-messages');
+    if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
     return;
   }
-  await closeChat(page);
+  const bubble=page.locator('.floating-messages');
+  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
   if (['我的名片', '待辦清單'].includes(name)) {
     const settings = page.getByRole('button', { name: '設定', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
@@ -112,7 +114,8 @@ export async function signOut(page: Page) {
 
 /** Notification history is owned by the bell, separately from chats. */
 export async function openNotifications(page:Page){
-  await closeChat(page);
+  const bubble=page.locator('.floating-messages');
+  if(await bubble.count()&&await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
   const bell=page.locator('.notification-bell-trigger');
   if(await bell.getAttribute('aria-expanded')!=='true')await bell.click();
   const all=page.getByRole('button',{name:'查看所有通知',exact:true});
@@ -121,20 +124,10 @@ export async function openNotifications(page:Page){
 export async function openChat(page:Page){
   const bubble=page.locator('.floating-messages');
   if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
-  await expect(page.locator('#floating-message-panel')).toBeVisible();
 }
 export async function closeChat(page:Page){
-  const panel=page.locator('#floating-message-panel');
-  if(await panel.isVisible()){
-    // The phone launcher is hidden while its modal is open. Its own collapse
-    // button remains reachable; wait for the panel to close before another action.
-    // The accessible name is translated; the last header button is the
-    // universal collapse control in all five supported languages.
-    const collapse=panel.locator('.floating-message-header > button').last();
-    await expect(collapse).toHaveAttribute('aria-label',/\S/);
-    await collapse.click();
-    await expect(panel).toBeHidden();
-  }
+  const bubble=page.locator('.floating-messages');
+  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
 }
 
 /** Select one complete guild workspace through the visible desktop or phone navigation. */

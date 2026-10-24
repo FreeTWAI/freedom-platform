@@ -31,18 +31,10 @@ test('chat size controls preserve drafts and fit resized desktop and mobile view
   await bubble.click();await bubble.click();expect((await panel.boundingBox())!.width).toBe(780);
   await page.setViewportSize({width:768,height:650});
   const box=(await panel.boundingBox())!;expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(768);expect(box.y).toBeGreaterThanOrEqual(0);
-  await page.setViewportSize({width:390,height:844});await expect(width).toBeHidden();await expect(height).toBeHidden();
-  await expect(panel.getByRole('button',{name:'調整大小',exact:true})).toBeHidden();
-  await expect.poll(async()=>Math.round((await panel.boundingBox())!.height)).toBe(844);
-  expect((await panel.boundingBox())!.width).toBe(390);await expect(bubble).toBeHidden();
-  await expect(draft).toHaveValue('調整聊天室大小仍保留的草稿');await expect(draft).toBeInViewport();
-  const send=panel.getByRole('button',{name:'送出',exact:true}),close=panel.getByRole('button',{name:'收合聊天室',exact:true});
-  await send.focus();await page.keyboard.press('Tab');await expect(close).toBeFocused();
-  await page.keyboard.press('Shift+Tab');await expect(send).toBeFocused();
+  await page.setViewportSize({width:390,height:844});await expect(width).toBeHidden();await height.fill('360');expect((await panel.boundingBox())!.height).toBe(360);await expect(draft).toHaveValue('調整聊天室大小仍保留的草稿');
   await page.screenshot({path:'test-results/chat-size-controls-phone.png'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.setViewportSize({width:1440,height:900});await expect(width).toHaveValue('780');await expect(height).toHaveValue('700');
-  await panel.getByRole('button',{name:'恢復預設大小'}).click();expect((await panel.boundingBox())!.width).toBe(560);
+  await page.setViewportSize({width:1440,height:900});await panel.getByRole('button',{name:'恢復預設大小'}).click();expect((await panel.boundingBox())!.width).toBe(560);
   await page.screenshot({path:'test-results/chat-size-controls-desktop.png'});
 });
 
@@ -64,29 +56,18 @@ test('one bubble toggles the persistent inbox across pages and themes at phone, 
     await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitemradio',{name,exact:true}).click();await page.keyboard.press('Escape');
     for(const width of [320,390,768,1440]){
       await page.setViewportSize({width,height:900});await expect(bubble).toBeVisible();await expect(bubble).toBeInViewport();await bubble.click();await expect(panel).toBeVisible();await expect(bubble).toHaveAttribute('aria-expanded','true');
-      const inbox=(await panel.boundingBox())!;
-      if(width<=760){
-        await expect(bubble).toBeHidden();await expect(panel).toHaveAttribute('aria-modal','true');
-        expect(inbox.x).toBe(0);expect(inbox.y).toBe(0);expect(inbox.width).toBe(width);expect(inbox.height).toBe(900);
-        await expect(page.locator('.shell')).toHaveJSProperty('inert',true);
-        const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),control=(await close.boundingBox())!;
-        expect(control.width).toBeGreaterThanOrEqual(44);expect(control.height).toBeGreaterThanOrEqual(44);await expect(close).toBeInViewport();
-      }else{
-        const box=(await bubble.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);expect(inbox.y+inbox.height).toBeLessThanOrEqual(box.y);
-        await expect(page.locator('.shell')).toHaveJSProperty('inert',false);
-      }
-      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      const box=(await bubble.boundingBox())!,inbox=(await panel.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);expect(inbox.y+inbox.height).toBeLessThanOrEqual(box.y);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await expect(panel.getByRole('tab')).toHaveCount(4);await expect(panel.getByRole('tab',{name:/^通知/})).toHaveCount(0);await expect(page.locator('.nav-primary').getByRole('button',{name:'我的訊息'})).toHaveCount(0);
       if([390,768,1440].includes(width))await page.screenshot({path:`test-results/unified-messages-${theme}-${width}.png`});
-      await page.keyboard.press('Escape');await expect(panel).toBeHidden();await expect(bubble).toBeFocused();await expect(page.locator('.shell')).toHaveJSProperty('inert',false);await expect(page).toHaveURL(homeUrl);
+      await page.keyboard.press('Escape');await expect(panel).toBeHidden();await expect(bubble).toBeFocused();await expect(page).toHaveURL(homeUrl);
     }
   }
   await page.setViewportSize({width:1440,height:900});await bubble.click();
   await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('跨頁與收合後保留的草稿');await bubble.click();await expect(panel).toBeHidden();
   await page.getByRole('button',{name:'技能書架',exact:true}).click();await bubble.click();await expect(draft).toHaveValue('跨頁與收合後保留的草稿');
-  await page.setViewportSize({width:390,height:844});await expect(bubble).toBeHidden();await expect(draft).toBeVisible();await page.screenshot({path:'test-results/unified-messages-draft-phone.png'});
-  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();await expect(bubble).toBeFocused();await expect(page.locator('.community-header')).toBeVisible();
+  await page.setViewportSize({width:390,height:844});await expect(bubble).toBeVisible();await expect(draft).toBeVisible();await page.screenshot({path:'test-results/unified-messages-draft-phone.png'});
+  await bubble.click();await expect(panel).toBeHidden();await expect(page.locator('.community-header')).toBeVisible();
 });
 
 async function readFixture(page:Page,kind:'world'|'direct',hold=false){

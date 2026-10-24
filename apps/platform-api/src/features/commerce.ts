@@ -1,4 +1,3 @@
-import {createHostedDropShipRoutes} from '../routes/hosted-drop-ship.js';
 import { storeCategoriesInstalled, storeCategoriesOptions, createHostedStoreCategoriesRoutes } from '../routes/hosted-store-categories.js';
 import { storeVariantsInstalled, storeVariantsOptions, createHostedStoreVariantsRoutes } from '../routes/hosted-store-variants.js';
 import { storeGalleryInstalled, storeGalleryOptions, createHostedStoreGalleryRoutes } from '../routes/hosted-store-gallery.js';
@@ -31,10 +30,9 @@ export function registerMemberCommerceRoutes(app: PlatformFeatureApp, context: P
     app.route('/api/v1',createTenantWorkspaceRoutes(pool));
     app.route('/api/v1',createModuleRegistryRoutes(pool,runtime.moduleProviders,runtime.tenantListCursors));
     app.route('/api/v1',createTenantWorkRoutes(pool,runtime.tenantWorkAssetStore,runtime.tenantListCursors));
-    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime),storeGalleryOptions(runtime),storeVariantsOptions(runtime),storeCategoriesOptions(runtime),runtime.commerceDropShipEnabled===true&&runtime.commerceSettings?.quarantine!==true));
+    app.route('/api/v1',createHostedStoreRoutes(pool, runtime.hostedReservationsEnabled === true, supplyOfferPhotosInstalled(runtime),storeAppearanceOptions(runtime),storePoliciesOptions(runtime),storeGalleryOptions(runtime),storeVariantsOptions(runtime),storeCategoriesOptions(runtime)));
     app.route('/api/v1',createHostedCommerceSetupRoutes(pool,{keyring:runtime.commerceCredentialKeyring??null,journal:runtime.commercePayments?.journal,activation:hostedPaymentOptions(runtime,freedomEnv),environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv)}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedStoreOverviewRoutes(pool,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv)}));
-    if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedDropShipRoutes(pool,{dropShipEnabled:runtime.commerceDropShipEnabled===true&&!runtime.commerceSettings.quarantine,settings:runtime.commerceSettings,orderNotifications:hostedCheckoutOptions(origin,runtime,freedomEnv).orderNotifications,cursors:runtime.tenantListCursors}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedShippingRoutes(pool,{environment:runtime.commerceProviderEnvironment??providerEnvironment(freedomEnv),selfShipEnabled:runtime.commerceSelfShipEnabled===true&&!runtime.commerceSettings?.quarantine}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedOfflinePaymentRoutes(pool,{profiles:runtime.commerceSettings.providerProfiles}));
     if(runtime.commerceSettings?.consoleEnabled===true)app.route('/api/v1',createHostedSellerCheckoutRoutes(pool,{settings:runtime.commerceSettings,payment:runtime.commercePorts?.payment,paymentActions:runtime.commercePorts?.paymentActions,orderNotifications:hostedCheckoutOptions(origin,runtime,freedomEnv).orderNotifications,cursors:runtime.tenantListCursors,network:runtime.rateLimitNetwork??runtime.sourceNetwork}));

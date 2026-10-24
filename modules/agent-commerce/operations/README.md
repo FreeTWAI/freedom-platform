@@ -179,15 +179,3 @@ commerce.hosted-payment.v1 (169) are mandatory for planned or retained schema
 floors; they grant no payment, email, invoice or deployment authority. See
 [EC-SPEC-10](../../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md)
 and [EC-SPEC-09](../../../docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md).
-
-Contact retention (`contact-retention.ts`, migration 187) uses a persistent per-store due-work lease and bounded existing-row discovery. `FREEDOM_COMMERCE_CONTACT_RETENTION` defaults to `off` (including unset): merge/deploy runs no discovery, dispatch or customer sweep and leaves existing due rows undispatched.
-
-Renumbered to 187 because #985 took migration 186.
-
-Exact `all` enables only the approved 180-day order rule and customer sweep. Every referencing order must have a fulfilment/cancellation start point at least 180 days ago. On 2026-10-23 Ted said 「不要再設什麼30天規則」: contacts with no order remain live indefinitely. 「別在那邊搞一堆遮蔽 很無聊」 removes deferrals for exceptions, payments, refunds, provider events and inventory. Other values, including `orders`, fail readiness with `commerce_contact_retention_invalid`; the scheduler logs that fixed name followed by `commerce_settings_invalid`, without the value. Retention and commerce payment application, hold cleanup, due work and email stop for that tick; unrelated scheduled jobs continue. Ted's 「all, all」 specifies staging/production `all`, set by the release operator. Active retention runs independently of checkout admission and quarantine, never performs external effects and never closes orders. Returning to `off` stops new masking without restoring data.
-
-Customers need an already-redacted contact linked through checkout/order customer IDs and no live contact linked through checkout customer, normalized email or order customer. Unlinked customers remain. Permanent revision limit: an older live unreferenced contact on a revised checkout still protects that checkout's customers after the order's current contact is masked. Orders without a start point retain their data. Store owners handle their own customers' manual privacy requests without a platform workflow; backups are kept 30 days (Ted, 2026-10-23).
-
-`DueCommerceWorkDependencies.contactRetention` is optional and accepts only `all`: ordinary business dispatchers omit it, so they cannot claim privacy rows; the dedicated retention runner supplies its required mode.
-
-Restore lockdown requires the operator's `--contact-retention <off|all>` declaration and composes the same bounded redaction transaction for `all`; `off` only locks ACLs. Completion always keeps `deploymentReady:false` and never authorizes reopening. Public self-ship no longer depends on retention mode; the existing console/launchpad checks remain and Ted still decides its production flag. The commerce-operations descriptor owns migration 187 because this is the due-work executor and cron lifecycle, not a checkout schema ownership transfer.

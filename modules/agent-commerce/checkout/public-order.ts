@@ -1,4 +1,3 @@
-import {paidCancellationView} from './paid-cancellation.js';
 import {selfShipOrderView} from './self-ship-view.js';
 import type {PoolClient} from 'pg';
 import {PublicOrderSchema} from '../../../contracts/guild-launchpad/v1/hosted-checkout.js';
@@ -20,8 +19,6 @@ export async function publicOrder(q:PoolClient,store:{instanceId:string;tenantId
     WHERE co.order_id=$1 AND co.tenant_id=$2 AND co.instance_id=$3 AND o.order_profile='hosted_checkout'`,[orderId,store.tenantId,store.instanceId])).rows[0];
   if(!row)return orderAccessNotFound();
   const summary=(await payment?.summarize(q,[orderId]))?.get(orderId)??{payment_state:row.confirmed?'confirmed':'unpaid',latest_payment_attempt:null,can_resume_payment:false};
-  const paidCancellation=await paidCancellationView(q,orderId);
-  if(paidCancellation?.refund_state==='recorded')summary.payment_state='refunded';
   const t=row.terms as CheckoutTerms,redacted=row.redacted_at!==null,bank=row.offline_document?.bank_transfer??null;
   const paid=['confirmed','simulated','overpaid','refunded'].includes(summary.payment_state);
   const offline_instructions=row.payment_method==='bank_transfer'&&row.lifecycle_state==='open'&&!paid&&bank?{bank_code:bank.bank_code,bank_name:bank.bank_name,branch_name:bank.branch_name,account_number:bank.account_number,account_name:bank.account_name,note:bank.note,amount_minor:t.total_minor,pay_by:row.expires_at.toISOString()}:null;
@@ -29,7 +26,7 @@ export async function publicOrder(q:PoolClient,store:{instanceId:string;tenantId
     created_at:row.created_at.toISOString(),pay_by:row.expires_at.toISOString(),reservation_expired:row.reservation_expired,lifecycle_state:row.lifecycle_state,cancel_reason:row.cancel_reason,currency:t.currency,
     lines:t.items.map(l=>({sku:l.sku,title:l.title,options:[],quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,total_minor:t.total_minor,
-    paid_cancellation:paidCancellation,payment_method:row.payment_method,payment_grace_until:row.payment_grace_until?.toISOString()??null,offline_instructions,
+    payment_method:row.payment_method,payment_grace_until:row.payment_grace_until?.toISOString()??null,offline_instructions,
     ...(t.shipping.groups[0]?.method_ref==='self_ship'?{self_ship:await selfShipOrderView(q,orderId,t)}:{}),
     meetup_notes:[...new Set(t.shipping.groups.flatMap(group=>group.meetup?[group.meetup.note]:[]))],
     meetup_handover:row.completed_on===null?null:{completed_on:row.completed_on},

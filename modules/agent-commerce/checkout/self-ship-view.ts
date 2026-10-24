@@ -18,6 +18,6 @@ export async function selfShipOrderView(q:PoolClient,orderId:string,terms:Checko
     WHERE p.order_id=$1 AND a.outcome IN ('converted','allocated','unallocatable') ORDER BY p.confirmed_at,p.payment_id LIMIT 1`,[orderId])).rows[0];
   const row=(await q.query(`SELECT shipment_id,carrier_key,carrier_name,tracking_number,to_char(sent_on,'YYYY-MM-DD') AS sent_on,recorded_at,redacted_at
     FROM commerce_self_shipments WHERE order_id=$1`,[orderId])).rows[0];
-  return {...(terms.shipping.groups[0].fulfilment_mode==='drop_ship'?{fulfilment_mode:'drop_ship' as const}:{}),handling_days:promise.handling_days,note:promise.note,ship_by:payment?selfShipBy(payment.confirmed_at,promise.handling_days):null,
+  return {handling_days:promise.handling_days,note:promise.note,ship_by:payment?selfShipBy(payment.confirmed_at,promise.handling_days):null,
     shipment:row?{shipment_ref:row.shipment_id,carrier_key:row.carrier_key,carrier_name:row.redacted_at?null:row.carrier_name,tracking_number:row.redacted_at?null:row.tracking_number,sent_on:row.sent_on,recorded_at:row.recorded_at.toISOString(),redacted:row.redacted_at!==null}:null};
 }

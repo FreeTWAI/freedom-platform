@@ -38,8 +38,8 @@ test.afterEach(async()=>{
     await q.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);await q.query('COMMIT');
   }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();await db.end();}
 });
-async function member(browser:Browser,baseURL:string,index:number,width=1280,height=900){
-  const context=await browser.newContext({baseURL,viewport:{width,height}});opened.push(context);
+async function member(browser:Browser,baseURL:string,index:number,width=1280){
+  const context=await browser.newContext({baseURL,viewport:{width,height:900}});opened.push(context);
   await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
   const page=await context.newPage(),account=accounts[index];await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill(account.email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
@@ -169,91 +169,6 @@ test('mobile guild stickers send immediately while reply drafts remain; picker i
   mkdirSync('test-results/social-chat',{recursive:true});await receiver.screenshot({path:'test-results/social-chat/guild-sticker-reply-390.png',fullPage:true});
 });
 
-test('mobile rich composer stays reachable with a visual keyboard and preserves text and reply through collapse',async({browser,baseURL})=>{
-  const page=await member(browser,baseURL!,0,390,844),path=`/me/channels/guild/${guild}/messages`;
-  const parent=await post(page,path,{body:'鍵盤測試仍要保留這份引用'}),panel=await group(page);
-  const original=panel.locator(`[data-message-id="${parent.message_id}"]`);
-  await expect(original).toBeVisible();await original.getByRole('button',{name:'回覆你的訊息',exact:true}).click();
-  const box=panel.locator('textarea'),send=panel.getByRole('button',{name:'送出',exact:true}),reply=panel.locator('.chat-reply-draft');
-  const draft='鍵盤開啟仍保留的文字草稿';await box.fill(draft);await expect(reply).toContainText('鍵盤測試仍要保留這份引用');
-  const visualHeight=async(height:number)=>page.evaluate(height=>{
-    Object.defineProperty(window.visualViewport!,'height',{configurable:true,get:()=>height});
-    window.visualViewport!.dispatchEvent(new Event('resize'));
-  },height);
-  // Controls may be reached through a user-scrollable composer or picker. Do
-  // not let Playwright make clipped controls look usable by scrolling a hidden
-  // overflow ancestor, or by clicking below the simulated software keyboard.
-  const reachable=async(control:Locator)=>{
-    await expect(control).toBeVisible();await expect(control).toBeEnabled();
-    const measure=()=>control.evaluate(node=>{
-      const viewport=window.visualViewport!,rect=node.getBoundingClientRect();
-      let top=viewport.offsetTop,bottom=top+viewport.height,left=viewport.offsetLeft,right=left+viewport.width;
-      const hiddenScrolls:string[]=[];
-      for(let ancestor=node.parentElement;ancestor;ancestor=ancestor.parentElement){
-        const style=getComputedStyle(ancestor),bounds=ancestor.getBoundingClientRect();
-        if(style.overflowY!=='visible'){top=Math.max(top,bounds.top+ancestor.clientTop);bottom=Math.min(bottom,bounds.top+ancestor.clientTop+ancestor.clientHeight);}
-        if(style.overflowX!=='visible'){left=Math.max(left,bounds.left+ancestor.clientLeft);right=Math.min(right,bounds.left+ancestor.clientLeft+ancestor.clientWidth);}
-        if(ancestor.closest('#floating-message-panel')&&(
-          /^(hidden|clip)$/.test(style.overflowY)&&Math.abs(ancestor.scrollTop)>1||
-          /^(hidden|clip)$/.test(style.overflowX)&&Math.abs(ancestor.scrollLeft)>1
-        ))hiddenScrolls.push(ancestor.className);
-        if(ancestor.id==='floating-message-panel')break;
-      }
-      const hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
-      return {inside:rect.width>0&&rect.height>0&&rect.top>=top-1&&rect.bottom<=bottom+1&&rect.left>=left-1&&rect.right<=right+1,
-        hit:hit!==null&&node.contains(hit),hiddenScrolls,control:{top:rect.top,bottom:rect.bottom},visible:{top,bottom}};
-    });
-    // Chromium's Playwright scrolling uses the 844px layout viewport. A real
-    // keyboard leaves only the visual viewport; scroll through the actual
-    // touch-scrollable composer instead of silently treating covered controls
-    // as reachable or making an overflow:hidden ancestor scroll.
-    const composer=panel.locator('.messages-compose');
-    for(let attempt=0;attempt<12;attempt++){
-      const state=await measure();
-      if(state.inside&&state.hit&&state.hiddenScrolls.length===0)return;
-      if(state.hiddenScrolls.length)break;
-      const bounds=await composer.boundingBox();
-      const visible=await page.evaluate(()=>({top:visualViewport!.offsetTop,bottom:visualViewport!.offsetTop+visualViewport!.height}));
-      if(!bounds)break;
-      const top=Math.max(visible.top,bounds.y),bottom=Math.min(visible.bottom,bounds.y+bounds.height);
-      if(bottom-top<12)break;
-      // The 4px left gutter is inside the composer, not the inner sticker grid.
-      const direction=state.control.top<state.visible.top?-1:1;
-      await page.mouse.move(bounds.x+4,(top+bottom)/2);
-      await page.mouse.wheel(0,direction*160);
-      await page.waitForTimeout(45);
-    }
-    await expect(await measure()).toMatchObject({inside:true,hit:true,hiddenScrolls:[]});
-  };
-  try{
-    // Keep the layout viewport fixed; only the browser's visible area shrinks.
-    await visualHeight(360);
-    expect(await page.evaluate(()=>({width:innerWidth,height:innerHeight,visualHeight:visualViewport!.height}))).toEqual({width:390,height:844,visualHeight:360});
-    // Distinguish a visual-viewport event from an actually resized chat panel.
-    // The fixed panel must end at the keyboard boundary, not at the old 844px layout height.
-    await expect.poll(()=>page.locator('#floating-message-panel').evaluate(node=>
-      Math.round(node.getBoundingClientRect().bottom-(visualViewport!.offsetTop+visualViewport!.height)))).toBe(0);
-    const toggle=panel.getByRole('button',{name:'選擇貼圖',exact:true});await reachable(toggle);await toggle.click();
-    const picker=panel.getByRole('region',{name:'工坊貼圖',exact:true}),search=picker.getByLabel('搜尋貼圖',{exact:true}),closePicker=picker.getByRole('button',{name:'關閉貼圖',exact:true});
-    await expect(picker.locator('.chat-sticker-choice')).toHaveCount(48);await reachable(closePicker);
-    await reachable(search);await search.fill('感謝');await reachable(picker.getByRole('button',{name:'傳送貼圖：謝謝',exact:true}));
-    await reachable(box);await box.click();await page.keyboard.press('End');await page.keyboard.insertText('，繼續編輯');
-    await expect(box).toHaveValue(`${draft}，繼續編輯`);await expect(reply).toContainText('鍵盤測試仍要保留這份引用');
-    await reachable(send);await reachable(closePicker);await closePicker.click();await expect(picker).toHaveCount(0);
-    await reachable(page.locator('.floating-message-header').getByRole('button',{name:'收合聊天室',exact:true}));
-    await closeChat(page);await visualHeight(844);await openChat(page);await visualHeight(360);
-    await expect(box).toHaveValue(`${draft}，繼續編輯`);await expect(reply).toContainText('鍵盤測試仍要保留這份引用');
-    expect(page.viewportSize()).toEqual({width:390,height:844});await reachable(box);await reachable(send);
-    const sent=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1${path}`);
-    await send.click();const ack=await sent;expect(ack.status()).toBe(201);const message=await ack.json();
-    await expect(panel.locator(`[data-message-id="${message.message_id}"]`).getByLabel('回覆的訊息')).toContainText('鍵盤測試仍要保留這份引用');
-    await expect(box).toHaveValue('');await expect(reply).toHaveCount(0);
-    expect((await db.query('SELECT count(*)::int AS n FROM member_channel_messages WHERE sender_ref=$1 AND body=$2',[accounts[0].id,`${draft}，繼續編輯`])).rows[0].n).toBe(1);
-  }finally{
-    await page.evaluate(()=>{Reflect.deleteProperty(window.visualViewport!,'height');window.visualViewport!.dispatchEvent(new Event('resize'));});
-  }
-});
-
 test('mobile private chat uses one pane, preserves drafts and shows confirmed read receipts without sending on keyboard Enter',async({browser,baseURL})=>{
   const sender=await member(browser,baseURL!,0,390),receiver=await member(browser,baseURL!,1),a=await direct(sender,accounts[1]),b=await direct(receiver,accounts[0]);
   await receiver.getByRole('tab',{name:/^公會閒聊/}).click();
@@ -290,8 +205,7 @@ test('mobile return to channel list keeps rich drafts and desktop resizing resto
   const page=await member(browser,baseURL!,0,320),panel=await group(page);
   await panel.locator('textarea').fill('公會專用的草稿');await choose(panel,'一起共創');await expect(panel.locator('.messages-bubbles [data-sticker-id="workshop-v1-together"]')).toHaveCount(1);
   await panel.getByRole('button',{name:'← 返回公會列表',exact:true}).click();await expect(panel.locator('.messages-thread')).toBeHidden();await expect(panel.locator('.messages-side')).toBeVisible();
-  await expect(page.locator('.messages-categories')).toBeVisible();await expect(page.locator('.shell')).toHaveJSProperty('inert',true);await expect(page.locator('.floating-messages')).toBeHidden();
-  await expect(page.locator('.floating-message-header').getByRole('button',{name:'收合聊天室',exact:true})).toBeInViewport();
+  await expect(page.locator('.messages-categories')).toBeVisible();await expect(page.locator('.community-header')).toBeVisible();await expect(page.locator('.floating-messages')).toBeVisible();
   await panel.locator(`[data-channel-key="${guild}"]`).click();await expect(panel.locator('.messages-bubbles [data-sticker-id="workshop-v1-together"]')).toHaveCount(1);
   await expect(panel.locator('textarea')).toHaveValue('公會專用的草稿');
   await page.setViewportSize({width:1280,height:900});await expect(panel.locator('.messages-side')).toBeVisible();await expect(panel.locator('.messages-thread')).toBeVisible();
@@ -401,8 +315,7 @@ for(const surface of ['page','dock'] as const)test(`${surface}: channel send blo
   });
   await expect(page.locator('body')).toHaveAttribute('data-send-before-unload','true');
   if(surface==='page'){
-    await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);
-    await expect(page.locator('#floating-message-panel')).toBeHidden();await openChat(page);await expect(panel).toBeVisible();
+    await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);await expect(panel).toBeVisible();
     await returnToList(page);await page.getByRole('tab',{name:/^私人訊息/}).click();
   }else await closeChat(page);
   await closeChat(page);const beforeLogout=notices;await page.getByRole('button',{name:'設定',exact:true}).click();
@@ -523,17 +436,13 @@ for(const surface of ['page','dock'] as const)for(const status of [403,404])test
   let notices=0,logouts=0;page.on('dialog',async dialog=>{notices++;await dialog.accept();});
   page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith('/api/v1/auth/logout'))logouts++;});
   await page.evaluate(()=>{location.hash='home';});
-  await expect(page).toHaveURL(/#home$/);
-  // Explicit page navigation collapses the phone/modal overlay, but the
-  // committed-yet-unknown send and its original key must stay mounted.
-  await expect(page.locator('#floating-message-panel')).toBeHidden();expect(notices).toBe(0);
-  expect(sends).toHaveLength(1);
-  await openChat(page);
-  await expect(panel.getByRole('alert')).toContainText('目前無法使用此頻道');
   if(surface==='page'){
+    await expect(page).toHaveURL(/#home$/);expect(notices).toBe(0);
     await panel.getByRole('button', { name: '← 返回公會列表', exact: true }).click();
     await page.getByRole('tab',{name:/^私人訊息/}).click();
   }else{
+    // Console stays mounted across page navigation; its original command remains reachable.
+    await expect(page).toHaveURL(/#home$/);await expect(panel.getByRole('alert')).toContainText('目前無法使用此頻道');
     await closeChat(page);
   }
   await closeChat(page);const beforeLogout=notices;await page.getByRole('button',{name:'設定',exact:true}).click();
@@ -584,10 +493,8 @@ for(const surface of ['page','dock'] as const)test(`${surface} direct retains it
   await expect(panel.getByRole('button',{name:'選擇貼圖',exact:true})).toBeDisabled();
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   let blocked=0;page.on('dialog',async dialog=>{blocked++;await dialog.accept();});
-  if(surface==='page'){
-    await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);
-    await expect(panel).toBeHidden();await openChat(page);await expect(panel).toBeVisible();
-  }else{
+  if(surface==='page'){await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(/#home$/);await expect(panel).toBeVisible();}
+  else{
     await closeChat(page);await page.getByRole('button',{name:'設定',exact:true}).click();
     await page.getByRole('menu',{name:'個人檔案'}).getByRole('menuitem',{name:'登出',exact:true}).click();
     expect(await page.evaluate(async()=>(await fetch('/api/v1/session')).status)).toBe(200);await openChat(page);

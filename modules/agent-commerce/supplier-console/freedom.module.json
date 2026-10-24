@@ -45,9 +45,7 @@
   "dependencies": [
     "agent-commerce",
     "hosted-distribution",
-    "asset-lifecycle",
-    "commerce-fulfilment",
-    "seller-console"
+    "asset-lifecycle"
   ],
   "contract_families": [
     "common"

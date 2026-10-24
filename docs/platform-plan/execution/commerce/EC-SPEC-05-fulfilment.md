@@ -183,12 +183,6 @@ FulfillmentOrder 與 Shipment 是既有訂單行項與配置（EC-SPEC-03）的�
 
 ### 2.6 代出貨同意（FulfillmentAgreement）
 
-**2026-10-23 核准的最小版優先於本節原 C2 設計。** Ted 回覆「b.2 ok」，並要求不要增加卡關條件。店家從同一供應商的可售選品挑選最多 200 件，凍結商品、每單 TWD 代出貨費（含郵資，0 可用）、確認收款次日起 1–14 個週一至週五工作天與 `terms_sha256`。費用由店家在平台外支付；不使用供應商物流帳戶、每包計價或供貨帳。接受時簽署確切版本與摘要；換條件另提新版本，同商品的舊 accepted 改為 superseded。雙方以 `store:manage` 管理，各租戶可讀自己的同意；撤銷只擋後續結帳，既有訂單保留原承諾。
-
-一單只能全是店家自有商品，或全由同一 accepted 同意涵蓋；混合時提示「這些商品由不同出貨者寄送，請分開下單。」代出貨只走店家的 `self_ship` 宅配設定，每單向買家收店家自己的宅配費；僅銀行匯款給店家，不能面交或使用任何綠界方式。買家結帳揭露「由供應商直接寄出；收件人姓名、手機、地址會提供給供應商，只用於寄送」。旗標預設關，關閉後停止新提案、決定與新代出貨報價，既有訂單仍可讀取、寄送。
-
-以下原設計仍保留為後續規劃，不能當成這次實作範圍。
-
 和既有的供貨同意分開，是另一份有版本的同意（SC-L03）：
 
 1. 供應商在出貨設定公開 `drop_ship` 方案（§2.3）。
@@ -223,13 +217,13 @@ Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍�
 
 確認付款且完整配置後，具 `store:fulfil` 的成員可 `POST …/checkout-orders/:order_id/self-shipments`，以 session、CSRF、Idempotency-Key 及 sidecar If-Match 登記業者、單號、寄出日期。業者 key 為 `post`／`tcat`／`hct`／`tjoin`／`other`；只有 `other` 可填非空名稱。單號為 1～50 個 ASCII 英數或連字號，僅檢查格式，不驗真實物流編號。寄出日期為確認收款日到今天的台北日期。
 
-伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 提供此資料約束；PR-C 的有界到期工作在保存開關為 `all` 時才執行遮蔽，預設 `off`。
+伺服器在原有 store／order／inventory 鎖序下核對付款與完整配置，取得全單行項，原子建立 `commerce_self_shipments`、呼叫 `recordHandover(shipmentRef=shipment_id)`、扣 stock 與 reserved，並通知原會員買家。不得由 client 選行項或數量。每單最多一筆；錯填由店家與買家協調，不提供修改、刪除、撤銷或重寄。唯一 UPDATE 是 EC-SPEC-09 §3 的一次個資遮蔽：`redacted_at` 從 null 變為時間、清掉 `tracking_number` 與 `carrier_name`，其他欄位不變。PR-A 只有此資料約束；PR-C 才執行遮蔽。
 
 買家尚未付款顯示等待付款確認，確認後未寄顯示等待出貨、凍結承諾與說明，寄出後顯示已出貨、業者、單號與寄出日。明示「只記錄店家填寫的資訊，工坊不追蹤物流、不核實簽收。」遮蔽後仍顯示已出貨、carrier key 的固定名稱與寄出日，不再回傳單號或自填業者名稱。出貨只啟動保存期限，**不寫 closed、不表示送達或退款**。
 
 站內通知種類 `commerce_order_shipped` 只含店名、顯示訂單編號與開啟訂單的動作，不含姓名、電話、郵區、地址、業者、單號或寄送說明。沿既有獨立通知 flag，沒有 email template、排信或補寄。
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。2026-10-23 依 Ted「不要再設什麼30天規則」及移除等待條件的決定，runtime 與 wrangler 移除 public 自行寄送對保存開關 `all` 的相依；各環境可用未設定、`off` 或 `all`。Node、Worker 與 site 使用同一旗標解析，既有 console／launchpad 檢查保留。正式自行寄送的旗標仍由 Ted 決定，不自動開旗標。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設 OFF，依賴 console 與 launchpad。關閉停止新增／修改 self_ship 選項與新報價，不影響原訂單的授權讀取及登記出貨；quarantine 仍擋 mutation。PR-A 僅允許 local／staging，public 啟動拒絕 `self_ship_retention_not_ready`；PR-C 完成並驗證遮蔽排程後才移除該 guard。正式開放仍需 Ted 另外核准，不因 guard 移除自動開旗標。
 
 後續 §2.6 可另設 exact-version 同意，凍結供應商的服務、費用、工作天與限期收件投影，才讓供應商自行寄送。不得擴張本表 tenant policy、把完整 contacts 給供應商，或繞過 `not_agreed`。
 
@@ -308,10 +302,6 @@ Ted 於 **2026-10-22 20:21Z** 回覆「照B開工ok」，核准本節 v1 範圍�
 每個群組：出貨者商店、方式（自出貨／直送）、代出貨同意的 ID 與版本、出貨設定版本與 `service_key`、寄件地版本、溫層、包裹規劃（行項與數量）、每包運費、處理天數。全部進 `freedom.checkout-terms/v1` 並計入 `terms_sha256`；收件資料在聯絡資料列，terms 只含它的摘要（EC-SPEC-03 §3.1）。下單時重算，任何一項改變（同意被撤回、設定改版、屬性改變）→ `terms_changed`，請買家重新確認。
 
 ## 4. 履約單（FulfillmentOrder）
-
-**2026-10-23 最小版差異。** 不新增履約單、逐單接受或 `commerce_fulfilment_recipients`。Commerce 依訂單凍結的單一 drop_ship 群組及同意版本，在供應商有 `store:fulfil` 的授權讀取中直接讀原訂單 contact；每個店家租戶各一筆交易，只讀本頁至多 50 筆訂單的姓名、手機、郵遞區號與地址。回應只含店名、訂單識別、付款與承諾日、品項數量、凍結供應成本、代出貨費、必要出貨／無法出貨狀態；不含 Email、零售價、總額或其他買家資料。沒有收件存取視窗、已讀回條或另一張收件表。既有保存程序遮蔽 contact 後，自然顯示「收件資料已依保存期限移除」；本工作不新增保存程序。
-
-店家確認收款後列入等待出貨；取消的訂單移出清單，任何取消路徑都讓登記出貨回 409。供應商沿用自行寄送的 carrier、tracking、sent_on 驗證，台北日期介於確認收款日與今天，完整配貨後在既有 store／order／inventory locks 內寫 `commerce_self_shipments.shipper_instance_id` 並呼叫 `recordHandover`，原子扣供應商共享庫存及 reserved，通知買家與店家。店家不能代登這類出貨。供應商可回報 `out_of_stock|cannot_ship|other` 與最多 200 字補充（勿填買家資料），建立 order 主體的 `fulfiller_unable` 例外並通知店家取消退款；之後成功出貨會解決例外。付款、取消、退款與客服仍由店家負責；不做部分出貨、多出貨者、應付款、對帳單、綠界或 email。以下完整 C2 流程不適用這次最小版。
 
 ### 4.1 建立
 
@@ -778,8 +768,3 @@ stage 的固定門市（7-ELEVEN `131386`、全家 `006598`）[8809] 只用於 s
 | live 人工交寄 | 允許，3 天無貨態開例外 | 交寄證據的強度 |
 | 逆物流 API、COD、冷鏈 | C4 | 對應的 profile |
 | stage 連線授權 | 需要 Ted | sandbox 端到端驗證；不影響向量與契約測試 |
-
-最小代出貨與 b.1 整合：供應商回報無法出貨的案件以 `cancel_and_refund`
-引導店家回原訂單處理，不提供綠界退款核對表單。店家全單取消時，同交易釋放
-供應商庫存並結束 `fulfiller_unable`；退款可稍後登記。若供應商先登記出貨，
-則取消被拒絕，避免同一份庫存同時釋放與出貨。

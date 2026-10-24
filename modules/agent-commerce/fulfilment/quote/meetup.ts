@@ -53,5 +53,5 @@ export function meetupQuote(input:MeetupQuoteRequest):MeetupQuoteResult {
 }
 
 export function meetupLines(lines:readonly ShippingQuoteLine[]):MeetupQuoteLine[] {
-  return lines.map(line=>({sku:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,supplier_shop_id:line.supplier_shop_id,fulfilment:hostedLineFulfilment(line.own,line.drop_ship,!!line.drop_ship)}));
+  return lines.map(line=>({sku:line.sku,quantity:line.quantity,unit_price_minor:line.unit_price_minor,supplier_shop_id:line.supplier_shop_id,fulfilment:hostedLineFulfilment(line.own)}));
 }

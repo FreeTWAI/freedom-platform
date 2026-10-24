@@ -402,7 +402,7 @@ test('real cancelled and paid orders plus fulfilled edge states and retry flows 
       [optionsDiscountRedactedOrder, '訂單狀態：已完成'],
       [sellerCancelledOrder, '訂單狀態：已取消（店家取消了訂單）'],
       [timeoutCancelledOrder, '訂單狀態：已取消（未在期限內完成付款）'],
-      [paidCancelledOrder, '訂單狀態：已取消（店家已取消這筆訂單）'],
+      [paidCancelledOrder, '訂單狀態：已取消（店家無法出貨，將退款）'],
     ] as const) {
       await page.route(orderApiPattern, async route => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fulfilledOrder) });

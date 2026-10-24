@@ -197,12 +197,11 @@ test('open exception replay, closing rules and a subsequent new case', async () 
   await q.query("UPDATE commerce_exception_cases SET status='dismissed',resolution_code='duplicate',resolution_note='',resolved_by_principal_id=$2,version=version+1,updated_at=clock_timestamp() WHERE case_id=$1", [c.case_id, principalId]);
 });
 test('exception kind policies cover all payment cases and contain actionable retailer defaults', () => {
-  assert.equal(Object.keys(PAYMENT_EXCEPTION_POLICIES).length, 8);
-  assert.equal(PAYMENT_EXCEPTION_POLICIES.fulfiller_unable.next_action, 'cancel_and_refund');
+  assert.equal(Object.keys(PAYMENT_EXCEPTION_POLICIES).length, 7);
   for (const policy of Object.values(PAYMENT_EXCEPTION_POLICIES)) {
     assert.equal(policy.due_hours, 72);
     assert.equal(policy.responsible_party, 'retailer');
-    assert(['cancel_and_refund', 'refund_payment', 'allocate_or_refund', 'check_with_provider', 'contact_provider'].includes(policy.next_action));
+    assert(['refund_payment', 'allocate_or_refund', 'check_with_provider', 'contact_provider'].includes(policy.next_action));
   }
 });
 test('exception cases have tenant RLS for unbound, bound and foreign contexts', async () => {

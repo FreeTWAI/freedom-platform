@@ -43,7 +43,6 @@ export type PlatformRuntime = {
   commerceSettings?:CommerceSettings;
   commerceOrderNotificationsEnabled?:boolean;
   commerceSelfShipEnabled?:boolean;
-  commerceDropShipEnabled?:boolean;
   commerceCredentialKeyring?:CommerceCredentialKeyring|null;
   commerceProviderEnvironment?:'sandbox'|'live';
   commercePorts?:CheckoutPorts & {email?:CommerceEmailOutbox};

@@ -6,10 +6,16 @@ import {
   type HomeReadClient, type HomeTaskAction,
 } from '../../apps/portal-web/src/modules/member-home-loading.js';
 
-test('journal entry stays on the platform and rejects external or private destinations', () => {
-  assert.equal(resolveHomeJournalUrl(), '/journal');
-  assert.equal(resolveHomeJournalUrl('/journal'), '/journal');
-  for (const value of [null, '', 1, 'javascript:alert(1)', 'https://freetwai.evitina.tw/', '//foreign.invalid/journal', '/journal?token=secret', '/api/v1/private/drafts']) assert.equal(resolveHomeJournalUrl(value), null);
+test('journal entry accepts only the configured public HTTPS home without private parameters', () => {
+  assert.equal(resolveHomeJournalUrl('https://freetwai.evitina.tw'), 'https://freetwai.evitina.tw/');
+  assert.equal(resolveHomeJournalUrl(' https://FreeTWAI.evitina.tw/ '), 'https://freetwai.evitina.tw/');
+  for (const value of [undefined, null, '', 1, 'javascript:alert(1)', 'http://freetwai.evitina.tw/',
+    'https://127.0.0.1/', 'https://freetwai.evitina.tw.evil.example/',
+    'https://owner:secret@freetwai.evitina.tw/', 'https://freetwai.evitina.tw:8443/',
+    'https://freetwai.evitina.tw/api/v1/private/drafts', 'https://freetwai.evitina.tw/?token=example',
+    'https://freetwai.evitina.tw/#draft', 'not-a-url']) {
+    assert.equal(resolveHomeJournalUrl(value), null, String(value));
+  }
 });
 
 function deferred<T>() {

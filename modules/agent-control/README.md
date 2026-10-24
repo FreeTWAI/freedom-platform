@@ -125,12 +125,5 @@ only references, nonce, digest, purpose and deadlines. SQL derives the broker-lo
 Actor from the original genuine session; JSON cannot supply one. One-use claim
 admission does not replace the existing ModelStep dispatch claim or stage CAS.
 
-The current-authority query groups the exact credential's model, runtime,
-connection and refresh-family checks in a statement-local materialized CTE to
-bound join planning. It is not a cached authorization: every invocation reads
-current backing state, retains all original owner/session/pin comparisons and
-checks deadlines in the outer query and again after SQL delivery. No session
-planner settings, authorization lifetime or test deadlines are changed.
-
 
 直接憑證 ingest 的中央契約與 original-session SQL authority 見 [20](../../docs/platform-plan/execution/unified-foundation/20-direct-credential-ingest.md)。主 API 只 issue/read；bootstrap/submission 各一次、registry miss 不重鑄 opaque intent，最後 SQL COMMIT 保留本人/backing/期限檢查。ModelConnection 仍 unverified，成功保管不能授模型執行權。097 尚未合併／發布。

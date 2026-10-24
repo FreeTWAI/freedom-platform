@@ -208,63 +208,48 @@ async function resolveSha256(client: PoolClient): Promise<string> {
   return quotedSha256Call(text(rows[0], 'schema'));
 }
 
-interface TableCatalog {
-  columns: SnapshotColumn[];
-  sequences: { schema: string; name: string }[];
-}
-
-async function loadCatalog(
+async function loadColumns(
   client: PoolClient,
-  tables: readonly { schema: string; table: string }[],
-): Promise<Map<string, TableCatalog>> {
-  const catalog = new Map<string, TableCatalog>();
-  if (tables.length === 0) return catalog;
-  // Keep table definitions stable while reading catalog metadata in batches.
-  // ACCESS SHARE permits ordinary writes; the caller's snapshot still selects
-  // the rows. Acquire in the same deterministic order used for fingerprinting.
-  await query(client, `LOCK TABLE ${tables.map(t => qualifiedName(t.schema, t.table)).join(', ')} IN ACCESS SHARE MODE`);
-  const wanted = new Set(tables.map(t => `${t.schema}\0${t.table}`));
-  const params = [JSON.stringify(tables)];
-  const columns = await query(client,
-    `SELECT n.nspname AS schema, c.relname AS table, a.attname AS name,
+  schema: string,
+  table: string,
+): Promise<SnapshotColumn[]> {
+  const relations = await query(
+    client,
+    `SELECT 1 AS present
+       FROM pg_catalog.pg_class c
+       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND c.relname = $2
+        AND c.relkind IN ('r', 'p')`,
+    [schema, table],
+  );
+  if (relations.length !== 1) fail();
+  const rows = await query(
+    client,
+    `SELECT a.attname AS name,
             pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type
-       FROM pg_catalog.jsonb_to_recordset($1::jsonb) AS requested(schema text, "table" text)
-       JOIN pg_catalog.pg_namespace n ON n.nspname = requested.schema
-       JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = requested."table"
-       LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-      WHERE c.relkind IN ('r', 'p')
-      ORDER BY n.nspname, c.relname, a.attnum`, params);
-  for (const row of columns) {
-    const key = `${text(row, 'schema')}\0${text(row, 'table')}`;
-    if (!wanted.has(key)) fail();
-    let entry = catalog.get(key);
-    if (!entry) { entry = { columns: [], sequences: [] }; catalog.set(key, entry); }
-    if (row.name === null && row.data_type === null) continue; // Zero-column table.
-    const name = text(row, 'name'), type = text(row, 'data_type');
+       FROM pg_catalog.pg_attribute a
+       JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND c.relname = $2
+        AND c.relkind IN ('r', 'p')
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+      ORDER BY a.attnum`,
+    [schema, table],
+  );
+  const columns: SnapshotColumn[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const name = text(row, 'name');
+    const type = text(row, 'data_type');
     if (name.length === 0 || type.length === 0 || name.includes('\0') || type.includes('\0')) fail();
-    if (entry.columns.some(column => column.name === name)) fail();
-    entry.columns.push({ name, type });
+    if (seen.has(name)) fail();
+    seen.add(name);
+    columns.push({ name, type });
   }
-  if (catalog.size !== tables.length) fail();
-  const sequences = await query(client,
-    `SELECT ntbl.nspname AS table_schema, tbl.relname AS table_name,
-            nseq.nspname AS schema, seq.relname AS name
-       FROM pg_catalog.jsonb_to_recordset($1::jsonb) AS requested(schema text, "table" text)
-       JOIN pg_catalog.pg_namespace ntbl ON ntbl.nspname = requested.schema
-       JOIN pg_catalog.pg_class tbl ON tbl.relnamespace = ntbl.oid AND tbl.relname = requested."table"
-       JOIN pg_catalog.pg_depend d ON d.refobjid = tbl.oid
-       JOIN pg_catalog.pg_class seq ON seq.oid = d.objid
-       JOIN pg_catalog.pg_namespace nseq ON nseq.oid = seq.relnamespace
-      WHERE d.classid = 'pg_catalog.pg_class'::regclass
-        AND d.refclassid = 'pg_catalog.pg_class'::regclass
-        AND d.deptype IN ('a', 'i') AND seq.relkind = 'S'
-      GROUP BY ntbl.nspname, tbl.relname, nseq.nspname, seq.relname`, params);
-  for (const row of sequences) {
-    const entry = catalog.get(`${text(row, 'table_schema')}\0${text(row, 'table_name')}`);
-    if (!entry) fail();
-    entry.sequences.push({ schema: text(row, 'schema'), name: text(row, 'name') });
-  }
-  return catalog;
+  return columns;
 }
 
 async function loadCount(client: PoolClient, schema: string, table: string): Promise<string> {
@@ -303,8 +288,26 @@ async function loadRowHashes(
 
 async function loadSequences(
   client: PoolClient,
-  rows: readonly { schema: string; name: string }[],
+  schema: string,
+  table: string,
 ): Promise<SnapshotSequenceState[]> {
+  const rows = await query(
+    client,
+    `SELECT nseq.nspname AS schema, seq.relname AS name
+       FROM pg_catalog.pg_depend d
+       JOIN pg_catalog.pg_class seq ON seq.oid = d.objid
+       JOIN pg_catalog.pg_namespace nseq ON nseq.oid = seq.relnamespace
+       JOIN pg_catalog.pg_class tbl ON tbl.oid = d.refobjid
+       JOIN pg_catalog.pg_namespace ntbl ON ntbl.oid = tbl.relnamespace
+      WHERE d.classid = 'pg_catalog.pg_class'::regclass
+        AND d.refclassid = 'pg_catalog.pg_class'::regclass
+        AND d.deptype IN ('a', 'i')
+        AND seq.relkind = 'S'
+        AND ntbl.nspname = $1
+        AND tbl.relname = $2
+      GROUP BY nseq.nspname, seq.relname`,
+    [schema, table],
+  );
   const sequences: SnapshotSequenceState[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
@@ -339,12 +342,11 @@ async function evidenceForTable(
   schema: string,
   table: string,
   sha256Call: string,
-  catalog: TableCatalog,
 ): Promise<SnapshotTableEvidence> {
-  const columns = catalog.columns;
+  const columns = await loadColumns(client, schema, table);
   const count = await loadCount(client, schema, table);
   const rowHashes = await loadRowHashes(client, schema, table, sha256Call, count);
-  const sequences = await loadSequences(client, catalog.sequences);
+  const sequences = await loadSequences(client, schema, table);
   return {
     schema,
     table,
@@ -363,11 +365,9 @@ async function collect(
   await assertSnapshotTransaction(client);
   await setSnapshotFormats(client);
   const sha256Call = tables.length === 0 ? '' : await resolveSha256(client);
-  const sorted = [...tables].sort((a, b) => compareText(a.schema, b.schema) || compareText(a.table, b.table));
-  const catalog = await loadCatalog(client, sorted);
   const evidence: SnapshotTableEvidence[] = [];
-  for (const entry of sorted) {
-    evidence.push(await evidenceForTable(client, entry.schema, entry.table, sha256Call, catalog.get(`${entry.schema}\0${entry.table}`)!));
+  for (const entry of [...tables].sort((a, b) => compareText(a.schema, b.schema) || compareText(a.table, b.table))) {
+    evidence.push(await evidenceForTable(client, entry.schema, entry.table, sha256Call));
   }
   return { tables: evidence };
 }

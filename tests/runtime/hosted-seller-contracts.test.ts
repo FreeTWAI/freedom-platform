@@ -19,9 +19,6 @@ const refund={refund_ref:id,application_ref:id,attempt_ref:id,amount_minor:600,c
 const exception={case_ref:id,kind:'amount_mismatch',status:'resolved',responsible_party:'retailer',order:{order_ref:id,display_number:summary.display_number},subject:{kind:'payment_attempt',ref:id},next_action:'refund_payment',due_at:time,opened_at:time,updated_at:time,resolution:{code:'refunded',note:'店家已登記全額退款。',resolved_by:id},payment_facts:{merchant_trade_no:attempt.merchant_trade_no,trade_no:null,expected_amount_minor:500,paid_amount_minor:600,currency:'TWD',payment_date:null,payment_type:null},allowed_actions:[],resolution_codes:[],version:'2'};
 const order={...summary,lines:[line],merchandise_total_minor:500,discount_total_minor:0,shipping_total_minor:0,payment_grace_until:null,meetup_handover:null,latest_payment_attempt:null,payment_detail:{attempts:[attempt],applications:[application],offline_payments:[],refunds:[refund]},exceptions:[exception],actions:{cancel:false,query_payment:false,record_refund:false,view_contact:true,view_finance:true,confirm_offline_payment:false,complete_meetup:false,record_meetup_handover:false}};
 const samples:[string,{safeParse:(value:unknown)=>{success:boolean}},unknown][]=[
-  ['paid-cancellation-input',c.PaidCancellationInputSchema,{reason:'out_of_stock',refund_state:'pending'}],
-  ['paid-cancellation-refund-input',c.PaidCancellationRefundInputSchema,{refunded_on:'2028-02-29',refund_method:'cash'}],
-  ['paid-cancellation',c.SellerPaidCancellationSchema,{reason:'out_of_stock',note:null,amount_minor:500,currency:'TWD',refund_state:'pending',refunded_on:null,refund_method:null}],
   ['self-shipment-input',c.SelfShipmentInputSchema,{carrier_key:'post',tracking_number:'SYNTHETIC-123',sent_on:'2028-02-29'}],
   ['payment-state',c.SellerPaymentStateSchema,'refunded'],['inventory-state',c.SellerInventoryStateSchema,'released'],['customer',c.SellerCustomerSchema,customer],['order-summary',c.SellerCheckoutOrderSummarySchema,summary],['order-page',c.SellerCheckoutOrderPageSchema,{items:[summary],next_cursor:null}],['order-line',c.SellerOrderLineSchema,line],['payment-attempt',c.SellerPaymentAttemptSchema,attempt],['payment-application',c.SellerPaymentApplicationSchema,application],['refund',c.SellerRefundSchema,refund],['exception-case',c.ExceptionCaseViewSchema,exception],['exception-case-page',c.ExceptionCasePageSchema,{items:[exception],next_cursor:null}],['order',c.SellerCheckoutOrderSchema,order],['order-contact',c.SellerOrderContactSchema,{order_ref:id,contact_redacted:false,contact:{name:'合成買家-'+id,email:'synthetic-'+id+'@example.test',phone:'000'+id.replaceAll('-','').slice(0,7)},delivery:{method:'synthetic'},invoice:null}],['empty-input',c.SellerCheckoutEmptyInputSchema,{}],['resolve-with-evidence-input',c.ResolveWithEvidenceInputSchema,{code:'refunded',provider_date:'2028-02-29',provider_reference:'REF_1'}],['retry-allocation-input',c.RetryAllocationInputSchema,{}],['manual-refund-input',c.ManualRefundInputSchema,{application_ref:id,amount_minor:100,refunded_on:'2028-02-29'}],['refund-list',c.SellerRefundListSchema,{items:[refund]}],['order-query',c.SellerCheckoutOrderQuerySchema,{lifecycle:'open',needs_action:'true',display_number:'280229-ABCDEF',payment_method:'bank_transfer',awaiting_offline_payment:'true',limit:'20'}],['offline-payment-confirm-input',c.OfflinePaymentConfirmInputSchema,{amount_minor:500,received_on:'2028-02-29',reference:'SYNTHETIC'}],['meetup-completion-input',c.MeetupCompletionInputSchema,{amount_minor:500,completed_on:'2028-02-29'}],['meetup-handover-input',c.MeetupHandoverInputSchema,{completed_on:'2028-02-29'}],['error-code',c.SellerCheckoutErrorCodeSchema,'refund_date_invalid'],
 ];
@@ -38,7 +35,7 @@ Draft202012Validator.check_schema(x['bundle'])
 for c in x['cases']:
  assert Draft202012Validator(x['bundle']['$defs'][c['name']],format_checker=FormatChecker()).is_valid(c['value']) == c['valid'],c
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8',timeout:15000});
-  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),81);
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),72);
 });
 test('seller contracts reject nested private fields, invalid dates, references and redaction shapes',()=>{
   for(const secret of ['gwsr','hash_key','hash_iv','body','sealed','dedupe_key'])assert(!c.SellerPaymentAttemptSchema.safeParse({...attempt,[secret]:'private'}).success);
@@ -65,13 +62,4 @@ test('seller route responses parse through their generated strict contracts',asy
     const r=await call('POST',root+'/refunds',{application_ref:app.application_id,amount_minor:600,refunded_on},{'Idempotency-Key':randomUUID()});assert.equal(r.status,201,JSON.stringify(r.data));c.SellerRefundSchema.parse(r.data);c.SellerRefundListSchema.parse((await get(root+'/refunds')).data);c.SellerCheckoutOrderSchema.parse((await get(root)).data);
     const query=await call('POST',root+'/payment-queries',{});assert.equal(query.status,200);c.SellerCheckoutOrderSchema.parse(query.data);
   }finally{await f.stop();}
-});
-
-test('offline cancellation inputs enforce full refund shapes and the four reasons without collecting buyer data',()=>{
-  const pending={reason:'other',refund_state:'pending'};
-  assert(c.PaidCancellationInputSchema.safeParse({...pending,note:'字'.repeat(200)}).success);
-  for(const body of [{...pending,note:'字'.repeat(201)},{...pending,reason:'invented'},{...pending,amount_minor:100},{...pending,refunded_on:'2028-02-29'},
-    {...pending,refund_state:'recorded',refunded_on:'2028-02-29'},{...pending,refund_state:'recorded',refunded_on:'2028-02-30',refund_method:'cash'}])assert(!c.PaidCancellationInputSchema.safeParse(body).success);
-  assert(c.PaidCancellationInputSchema.safeParse({reason:'cannot_ship',refund_state:'recorded',refunded_on:'2028-02-29',refund_method:'bank_transfer'}).success);
-  assert(!c.PaidCancellationRefundInputSchema.safeParse({refunded_on:'2028-02-29',refund_method:'cash',amount_minor:100}).success);
 });

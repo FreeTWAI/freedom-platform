@@ -433,10 +433,6 @@ def test_malformed_baseline_cannot_infer_acceptance(acceptance):
     assert accepted == {"M1": False, "full": False}
 
 
-def test_repository_migration_maximum_matches_the_declared_status():
-    assert vsp.repository_max_migration(EXECUTION.parents[2] / "migrations") == DECLARED_MAX_MIGRATION
-
-
 def test_repository_migration_maximum_is_a_code_fact(tmp_path):
     declared = DECLARED_MAX_MIGRATION
     ahead = declared + 1

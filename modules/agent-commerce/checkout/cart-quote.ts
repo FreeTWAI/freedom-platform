@@ -13,7 +13,7 @@ export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuote
   const context=await readCheckoutStore(q,store,input.lines.map(l=>l.sku)),p=context.profile;
   const publication=p.projection as {revision:string;products:{sku:string;title:string;price_minor:number}[]};
   const labels=await ports.buyerLabels?.resolve(q,p);
-  let quoteLines:ShippingQuoteLine[]=[];
+  const quoteLines:ShippingQuoteLine[]=[];
   const lines=[];
   for(const wanted of input.lines) {
     const published=publication.products.find(l=>l.sku===wanted.sku);
@@ -26,7 +26,7 @@ export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuote
       });
       const b=resolved.bindings[0],priced=resolved.lines[0];
       if(labels)base.title=labels.get(wanted.sku)??base.title;
-      quoteLines.push({selection_id:b.selection_id,sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:priced.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id});
+      quoteLines.push({sku:b.sku,item_id:b.item_id,quantity:b.quantity,unit_price_minor:priced.unit_price_minor,supplier_shop_id:b.supplier_shop_id,own:b.supplier_instance_id===p.instance_id});
       const available=(await q.query<{available:number}>(`SELECT greatest(0,i.stock
         -coalesce((SELECT sum(h.quantity) FROM commerce_inventory_reservations h WHERE h.item_id=i.item_id AND h.state='held' AND h.expires_at>clock_timestamp()),0)
         -coalesce((SELECT sum(a.quantity-a.shipped_quantity-a.released_quantity) FROM commerce_inventory_allocations a WHERE a.item_id=i.item_id),0))::int AS available
@@ -40,7 +40,6 @@ export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuote
   let delivery_options:z.infer<typeof cartPortResult>['delivery_options']=[];
   let shipping:z.infer<typeof cartPortResult>['shipping']={state:'not_configured',groups:[],total_minor:null};
   if(ports.shipping&&quoteLines.length===input.lines.length) {
-    if(ports.shipping.resolveLines)quoteLines=await ports.shipping.resolveLines(q,p,quoteLines);
     const merchandiseNet=quoteLines.reduce((sum,line)=>sum+line.unit_price_minor*line.quantity,0);
     if(ports.shipping.cart) {
       const parsed=cartPortResult.safeParse(await ports.shipping.cart(q,p,{lines:quoteLines,merchandise_net_minor:merchandiseNet,delivery:input.delivery??null}));

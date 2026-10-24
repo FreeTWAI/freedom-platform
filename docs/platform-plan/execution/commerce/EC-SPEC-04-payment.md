@@ -285,7 +285,7 @@ M2 的處理（wp04-seller）：賣家在 `GET …/exception-cases?view=retailer
 
 賣家同意的已付款取消（EC-SPEC-03 §3.3）、`paid_after_cancel`、`overpaid`、`paid_unallocatable` 決定不補貨、售後（EC-SPEC-06）。退款金額連到原行項、折扣分攤與運費（計畫 §9.2、§10.4；分攤規則在 EC-SPEC-06 §2.5）。
 
-M2 只處理沒有套用到訂單的付款（以下稱未套用的付款）：套用結果是 `overpaid`、`after_cancel`（例外 `paid_after_cancel`）或 `amount_mismatch` 的付款（EC-SPEC-03 §5）。這些錢不屬於訂單的任何行項，要整筆退回。離線已付款全單取消與 `paid_unallocatable` 決定不補貨先依 §7.2.1；信用卡已付款取消及其他售後退款，隨 M4 的售後申請建立（EC-SPEC-06 §2.4、§2.6）。
+M2 只處理沒有套用到訂單的付款（以下稱未套用的付款）：套用結果是 `overpaid`、`after_cancel`（例外 `paid_after_cancel`）或 `amount_mismatch` 的付款（EC-SPEC-03 §5）。這些錢不屬於訂單的任何行項，要整筆退回。已付款取消、`paid_unallocatable` 決定不補貨與售後的退款，隨 M4 的售後申請建立（EC-SPEC-06 §2.4、§2.6）。
 
 ### 7.2 退款紀錄（提議 `commerce_refunds`）
 
@@ -306,16 +306,6 @@ M2 的範圍（wp04-seller）：
 - sandbox 的人工紀錄在畫面標示「商家自行退款（平台未經綠界確認）」（§7.5）。
 - 權限：只有店的 owner／admin 或有 `store:refund` 的成員能建立與核准（EC-SPEC-09 §2.2）；供應商不能退他店訂單（計畫 §4.1）。
 - 已交寄的包裹不會因退款被撤回；退款也不代表商品已回庫（EC-SPEC-05、06）。
-
-### 7.2.1 離線已付款全單取消與退款登記
-
-**Ted 2026-10-23 核准 b.1**。已確認的銀行匯款，或交貨前已確認的面交現金，只要訂單仍 open 且沒有自行寄送紀錄、面交交貨及任何 shipped quantity，店家可取消整單。取消需要 `store:orders:manage`；當次或稍後登記退款需要 `store:refund`。沒有退款權限的訂單管理者仍可先取消並留待退款。
-
-`commerce_paid_cancellations` 與 `commerce_refunds` 分開；不需要 card attempt，也不改寫已確認的付款。每單只有一列，保存 tenant／instance／原離線付款、原因、選填 200 字內的店家備註、取消者／時間及凍結的全額實收金額／幣別。原因為 `out_of_stock`、`cannot_ship`、`buyer_request`、`other`；備註只供店家查看，表單提醒勿填買家個資。
-
-退款狀態只有 `pending`（待退款）與 `recorded`（已登記）。店家先在平台外退款，登記日期、`bank_transfer` 或 `cash` 及登記者／時間；日期不早於確認收款的台北日期、不晚於 server 今天。平台永不查核退款，不收部分金額，不新增等待期、核准或 feature flag。CHECK 綁定退款欄位；trigger 只允許 insert 及一次 pending → recorded，其他更新與刪除皆拒絕。
-
-兩個 POST 都經既有 seller scoped command、session、CSRF、Idempotency-Key 與 If-Match：`…/checkout-orders/:order_id/paid-cancellation`，以及 `…/paid-cancellation/refund`。取消交易重用 `cancelPaidOrder`，釋放 allocation／剩餘 hold，並將 open `paid_unallocatable` 以 `resolution_code=cancelled` 結案，不冒稱已退款。會員買家收到含退款狀態的取消通知；稍後登記退款再通知一次，沿原訂單連結。買家與店家訂單頁顯示原因與退款狀態，登記後付款摘要為 `refunded`。信用卡退款、出貨後退貨及 email 不在本切片。
 
 ### 7.3 綠界 API 退款（只限正式環境）
 

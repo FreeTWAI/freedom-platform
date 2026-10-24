@@ -5,8 +5,6 @@
   "owned_paths": [
     "modules/agent-commerce/checkout/**",
     "migrations/168_hosted_checkout_core.sql",
-    "migrations/188_paid_order_cancellation.sql",
-    "docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py",
     "tests/runtime/hosted-checkout-core.test.ts",
     "tests/runtime/hosted-checkout-races.test.ts",
     "tests/runtime/hosted-checkout-schema.test.ts",
