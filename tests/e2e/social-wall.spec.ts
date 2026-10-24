@@ -75,7 +75,7 @@ test('wall tools publish topics, mentions, check-ins and pictures; social commen
  await post.getByLabel('留言圖片',{exact:true}).setInputFiles({name:'回覆.png',mimeType:'image/png',buffer:png});await expect(post.getByAltText('留言圖片預覽')).toBeVisible();await post.getByRole('button',{name:'送出留言',exact:true}).click();
  const comment=post.locator('.social-comment').first();await expect(comment).toContainText('看起來不錯 😂');await expect(comment.getByAltText('留言附圖')).toBeVisible();await expect(comment.getByAltText('留言附圖')).toHaveJSProperty('naturalWidth',480);
  await comment.getByRole('button',{name:'留言讚 · 0',exact:true}).click();await expect(comment.getByRole('button',{name:'留言已讚 · 1',exact:true})).toBeVisible();
- await post.getByLabel('寫留言',{exact:true}).fill('保留的草稿');await post.getByRole('button',{name:'選擇貼圖',exact:true}).click();await post.getByRole('button',{name:'工坊夥伴',exact:true}).click();await post.getByRole('button',{name:'傳送貼圖：加油',exact:true}).click();await expect(post.locator('.social-comment')).toHaveCount(2);await expect(post.getByLabel('寫留言',{exact:true})).toHaveValue('保留的草稿');await expect(post.locator('.social-comment').last().getByRole('img',{name:'貼圖：加油'})).toBeVisible();
+ await post.getByLabel('寫留言',{exact:true}).fill('保留的草稿');await post.getByRole('button',{name:'選擇貼圖',exact:true}).click();await post.getByRole('button',{name:'工坊夥伴',exact:true}).click();await post.getByRole('button',{name:'預覽貼圖：加油',exact:true}).click();await expect(post.locator('.social-comment')).toHaveCount(1);await post.getByRole('button',{name:'送出這張貼圖',exact:true}).click();await expect(post.locator('.social-comment')).toHaveCount(2);await expect(post.getByLabel('寫留言',{exact:true})).toHaveValue('保留的草稿');await expect(post.locator('.social-comment').last().getByRole('img',{name:'貼圖：加油'})).toBeVisible();
  const stickerComment=post.locator('.social-comment').last();await stickerComment.getByLabel('留言選項',{exact:true}).click();await stickerComment.getByRole('button',{name:'編輯留言',exact:true}).click();await stickerComment.getByLabel('編輯留言',{exact:true}).fill('一起加油 🎉');await stickerComment.getByRole('button',{name:'儲存留言',exact:true}).click();await expect(stickerComment).toContainText('一起加油 🎉');await expect(stickerComment.getByRole('img',{name:'貼圖：加油'})).toBeVisible();
  for(const width of [1440,768,390]){
   await page.setViewportSize({width,height:1000});await page.evaluate(()=>window.scrollTo(0,0));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -149,4 +149,50 @@ test('removing mention text removes its selected identity from new post and comm
  expect(commentResponse.request().postDataJSON().mention_ids).toEqual([]);
  expect(commentResponse.status(),await commentResponse.text()).toBe(201);
  await expect(post.locator('.social-comment')).toHaveCount(1);
+});
+
+test('sticker previews can be cancelled without publishing, and explicit lost-ACK retry preserves text and image drafts',async({page,e2eAuthPool},testInfo)=>{
+ await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const text=`貼圖先預覽 ${Date.now()}`;
+ await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);
+ await post.getByRole('button',{name:'留言 · 0',exact:true}).click();await post.getByLabel('寫留言',{exact:true}).fill('文字和照片都還沒送');
+ const png=await sharp({create:{width:96,height:64,channels:3,background:'#539db8'}}).png().toBuffer();
+ await post.getByLabel('留言圖片',{exact:true}).setInputFiles({name:'保留草稿.png',mimeType:'image/png',buffer:png});
+ const image=post.getByAltText('留言圖片預覽');await expect(image).toBeVisible();const originalImage=await image.getAttribute('src');
+ const postId=(await post.getAttribute('id'))!.slice('social-post-'.length),path=`/api/v1/social-posts/${postId}/comments`;
+ const sends:{key:string;body:unknown}[]=[];let uploads=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/comment-images'))uploads++;});
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+ await page.route(`**${path}`,async route=>{
+  if(route.request().method()!=='POST')return route.continue();
+  sends.push({key:route.request().headers()['idempotency-key'],body:route.request().postDataJSON()});const response=await route.fetch();expect(response.status()).toBe(201);
+  if(sends.length===1){await gate;return route.abort();}return route.fulfill({response});
+ });
+ const toggle=post.getByRole('button',{name:'選擇貼圖',exact:true});
+ try{
+  await toggle.click();await post.getByLabel('搜尋貼圖',{exact:true}).fill('感謝');
+  const choice=post.getByRole('button',{name:'預覽貼圖：謝謝',exact:true});await choice.focus();await choice.press('Enter');
+  const preview=post.getByRole('group',{name:'貼圖預覽：謝謝',exact:true});await expect(preview).toBeFocused();
+  await expect(preview.locator('img')).toHaveJSProperty('naturalWidth',512);await preview.press('Enter');expect(sends).toHaveLength(0);expect(uploads).toBe(0);
+  for(const width of [320,1280]){
+   await page.setViewportSize({width,height:900});
+   for(const [theme,skin] of [['light',''],['dark',''],['versefolk',''],['dark','dragon'],['light','ai-sister']]){
+    await page.evaluate(([theme,skin])=>{document.documentElement.dataset.theme=theme;if(skin)document.documentElement.dataset.guideSkin=skin;else delete document.documentElement.dataset.guideSkin;},[theme,skin]);
+    await expect(preview).toBeVisible();expect(await preview.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect((await preview.locator('.chat-sticker').boundingBox())!.width).toBeGreaterThan(72);
+    for(const label of ['取消預覽','送出這張貼圖'])expect((await preview.getByRole('button',{name:label,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+   }
+   await preview.screenshot({path:testInfo.outputPath(`sticker-preview-${width}.png`)});
+  }
+  await preview.getByRole('button',{name:'取消預覽',exact:true}).click();await expect(choice).toBeFocused();await expect(post.getByLabel('搜尋貼圖',{exact:true})).toHaveValue('感謝');
+  await choice.click();await preview.press('Escape');await expect(toggle).toBeFocused();await expect(preview).toHaveCount(0);expect(sends).toHaveLength(0);
+  await toggle.click();await expect(preview).toHaveCount(0);await choice.click();
+  await preview.getByRole('button',{name:'送出這張貼圖',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+  await expect.poll(()=>sends.length).toBe(1);await expect(toggle).toBeDisabled();expect(uploads).toBe(0);release();
+  const retry=post.getByRole('button',{name:'重試留言',exact:true});await expect(retry).toBeEnabled();await expect(toggle).toBeDisabled();await retry.click();
+  await expect(post.locator('.social-comment')).toHaveCount(1);expect(sends).toHaveLength(2);expect(sends[1]).toEqual(sends[0]);expect(sends[0].body).toEqual({sticker_id:'freetwai-v2-thanks'});expect(uploads).toBe(0);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_comments WHERE post_id=$1',[postId])).rows[0].n).toBe(1);
+  await expect(post.getByLabel('寫留言',{exact:true})).toHaveValue('文字和照片都還沒送');await expect(image).toHaveAttribute('src',originalImage!);
+  await post.getByRole('button',{name:'送出留言',exact:true}).click();await expect(post.locator('.social-comment')).toHaveCount(2);expect(uploads).toBe(1);
+  await expect(post.locator('.social-comment').last()).toContainText('文字和照片都還沒送');await expect(post.locator('.social-comment').last().getByAltText('留言附圖')).toBeVisible();
+ }finally{release();}
 });

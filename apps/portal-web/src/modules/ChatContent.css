@@ -31,3 +31,12 @@
 .chat-retract-dialog h3{margin:0 0 .5rem}
 .chat-retract-dialog>p{margin:0 0 .6rem;overflow-wrap:anywhere;white-space:pre-wrap}
 .chat-retract-dialog .actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
+
+.chat-sticker-browse{display:grid;gap:.5rem;min-width:0}
+.chat-sticker-browse[hidden]{display:none}
+.chat-sticker-confirm{display:grid;justify-items:center;gap:.5rem;min-width:0;padding:.5rem;border:1px solid var(--line);border-radius:8px}
+.chat-sticker-confirm:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.chat-sticker-confirm>.chat-sticker{width:min(224px,100%);height:auto}
+.chat-sticker-confirm>strong{text-align:center;overflow-wrap:anywhere}
+.chat-sticker-confirm-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:.5rem}
+.chat-sticker-confirm-actions .btn{min-height:44px;padding:.4rem .7rem;font-size:14px}
