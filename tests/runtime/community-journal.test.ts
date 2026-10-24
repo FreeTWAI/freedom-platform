@@ -110,3 +110,22 @@ test('activity orders timestamps by instant across different UTC offsets',()=>{
  const result=journalActivity(snapshotSchema.parse(p),'week',new Date('2026-10-24T12:00:00Z'));
  assert.deepEqual(result.messages.map(m=>m.time),['2026-10-24T05:00:00Z','2026-10-24T12:00:00+08:00']);
 });
+
+
+test('article links exclude enclosing punctuation while preserving balanced URL parentheses and all text',()=>{
+ const cases:[string,string[]][]=[
+  ['See (https://example.org/reference).',['https://example.org/reference']],
+  ['((https://example.org/reference))',['https://example.org/reference']],
+  ['https://example.org/reference).',['https://example.org/reference']],
+  ['https://example.org/reference.)',['https://example.org/reference']],
+  ['https://example.org/wiki/Topic_(detail)',['https://example.org/wiki/Topic_(detail)']],
+  ['(https://example.org/wiki/Topic_(detail)).',['https://example.org/wiki/Topic_(detail)']],
+  ['https://example.org/a_(b_(c)))',['https://example.org/a_(b_(c))']],
+  ['https://example.org/search?q=(detail)#section_(one)',['https://example.org/search?q=(detail)#section_(one)']],
+  ['(https://example.org/a%28b%29)',['https://example.org/a%28b%29']],
+  ['來源（https://example.org/reference）。',['https://example.org/reference']],
+  ['(https://example.org/one), (http://example.org/two).',['https://example.org/one','http://example.org/two']],
+  ['(https://user:secret@example.org/private) javascript:alert(1)',[]],
+ ];
+ for(const [text,hrefs] of cases){const parts=linkParts(text);assert.deepEqual(parts.filter(p=>p.href).map(p=>p.href),hrefs,text);assert.equal(parts.map(p=>p.text).join(''),text);}
+});

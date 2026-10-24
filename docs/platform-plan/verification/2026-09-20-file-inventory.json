@@ -2629,8 +2629,8 @@
     },
     {
       "path": "apps/portal-web/src/journal/link-parts.ts",
-      "bytes": 557,
-      "sha256": "8a21eda44ca916affa5b2de75ef9b6618f0c3ea21cbe4c4a9cf2a13fe54e0be9"
+      "bytes": 739,
+      "sha256": "85028ae6895cd871c21f0af528ef33ad42c5b23ad2bd9e63c3f255fffe072ace"
     },
     {
       "path": "apps/portal-web/src/journal/main.tsx",
@@ -23839,8 +23839,8 @@
     },
     {
       "path": "tests/e2e/community-journal.spec.ts",
-      "bytes": 16855,
-      "sha256": "93b815874cdf4945fe6bbba0d7b467c231642dd37998ea0a6343602ee156cd77"
+      "bytes": 18027,
+      "sha256": "e771b926454e319256503541a2eb7b2d92902a421394cd928f276b2696ac4433"
     },
     {
       "path": "tests/e2e/community-search-interaction.spec.ts",
@@ -25259,8 +25259,8 @@
     },
     {
       "path": "tests/runtime/community-journal.test.ts",
-      "bytes": 19874,
-      "sha256": "7348cade956f0d4846a833dedbe54026f40a3fe93a429f908cd81d0fe878f0e5"
+      "bytes": 21225,
+      "sha256": "284d1aaf82c075c8c3d064b967cd2efb290033123c62f40350e7c93a00a93661"
     },
     {
       "path": "tests/runtime/community-relations.test.ts",
