@@ -502,3 +502,43 @@ again. Restoring below185 cannot erase the retained shape. Exact independently
 approved source, artifact and ledger identities remain required. Acknowledging
 the shape grants no shipping, deployment or restore authority and does not turn
 on `FREEDOM_COMMERCE_SELF_SHIP_ENABLED`.
+
+## Checkout contact retention schema187 write floor
+
+Renumbered to 187 because #985 took migration 186.
+
+`commerce.checkout-contact-retention.v1` is mandatory for every candidate and
+active binary when the planned schema or retained historical floor reaches
+migration187, even when checkout is disabled or quarantine is on. A binary
+without the retention executor and switch support cannot honour the policy, so an
+application-only rollback to it is incompatible. The capability means the binary
+contains the executor and honours `FREEDOM_COMMERCE_CONTACT_RETENTION`; it does
+not activate masking. The exact supported values are `off` and `all`; `orders`
+is invalid. Unset or `off` runs no discovery, dispatch or customer sweep.
+`all` enables only the approved 180-day order rule and customer sweep. Every
+referencing order must have a fulfilment/cancellation start point at least 180 days
+ago. On 2026-10-23 Ted said 「不要再設什麼30天規則」: unreferenced contacts
+remain live; 「別在那邊搞一堆遮蔽 很無聊」 removes deferrals for exceptions,
+payments, refunds, provider events and inventory. Ted's 「all, all」 sets the
+staging/production policy to `all`; the release operator applies those values.
+Retention remains independent of checkout/quarantine. Returning to `off` stops new
+masking and never restores erased data. Customers need a redacted checkout/order
+customer-linked contact and no live checkout-customer, normalized-email or
+order-customer link. Older live contacts after email revision permanently protect
+their checkout customers. Orders without a start point retain their contact data;
+store owners handle their own customers' privacy requests, without a platform
+workflow. Ted also confirmed 30-day backups on 2026-10-23. Public self-ship no
+longer depends on retention mode; its existing console checks and Ted's production
+flag decision remain. Restoring below187 cannot erase
+the retained floor. Capability-only retained history and enabled/written shapes
+require schema187 and exact independently approved source/artifact/ledger identities.
+
+Migration187 only extends the `commerce_due_work` kind check and adds two partial
+indexes; it creates no new table. The runtime gains only
+`UPDATE(tracking_number, carrier_name, redacted_at)` on `commerce_self_shipments`
+for contact redaction; the other columns retain their existing grants.
+
+Acknowledging the capability grants no deploy, restore, email or payment authority
+and does not open self-ship anywhere. See
+[EC-SPEC-09](../../docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md)
+and [EC-SPEC-10](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md).

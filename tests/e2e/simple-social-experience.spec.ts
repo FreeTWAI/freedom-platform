@@ -1,5 +1,5 @@
 import {test,expect,type Page} from './fixtures.js';
-import {navigate,openFeatureSearch} from './navigation.js';
+import {navigate,openFeatureSearch,reachByKeyboard} from './navigation.js';
 import {DEMO_USERS} from '../../packages/testing/seed.js';
 
 async function login(page:Page){
@@ -78,51 +78,7 @@ test('lost bulk-read acknowledgement retries the same command and keeps newly ar
   expect((await e2eAuthPool.query('SELECT read_at FROM member_notifications WHERE source_key=$1',[`${prefix}/after`])).rows[0].read_at).toBeNull();
 });
 
-test('the wordmark is a guarded native home link and exploration never forces itself open',async({page,context})=>{
-  await page.setViewportSize({width:320,height:844});
-  await page.goto('/');
-  const original=page.locator('img[src="/brand/freedom-workshop.webp"]').first();
-  await expect(original).toBeVisible();
-  await expect(page.locator('.brand-home')).toHaveCount(0);
-  await login(page);
-  const home=page.locator('.brand-home'), exploration=page.locator('.home-participation-disclosure');
-  await expect(home).toHaveAccessibleName('自由工坊 · 會員首頁');
-  await expect(home).toHaveAttribute('href','/#home');
-  expect((await home.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await expect(exploration).toHaveJSProperty('open',false);
-  await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeInViewport();
-  for(const width of [1280,320]){
-    await page.setViewportSize({width,height:844});
-    await expect(exploration).toHaveJSProperty('open',false);
-    await expect(exploration.locator(':scope > summary')).toBeVisible();
-  }
-  await exploration.locator(':scope > summary').press('Enter');
-  await expect(exploration).toHaveJSProperty('open',true);
-  await page.setViewportSize({width:1280,height:844});
-  await expect(exploration).toHaveJSProperty('open',true);
-  await page.goto('/?from=home-entry-test#skills');
-  await expect(page.getByRole('heading',{name:'技能書架',level:1,exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/\?from=home-entry-test#skills$/);
-  const popupPromise=context.waitForEvent('page');
-  await home.click({modifiers:['ControlOrMeta']});
-  const popup=await popupPromise;
-  await expect(popup).toHaveURL(/\/#home$/);
-  await expect(page).toHaveURL(/#skills$/);
-  await popup.close();
-  await home.focus();
-  expect(await home.evaluate(element=>getComputedStyle(element).outlineStyle)).not.toBe('none');
-  await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/#home$/);
-  await expect(exploration).toHaveJSProperty('open',false);
-  await page.goBack();await expect(page).toHaveURL(/\?from=home-entry-test#skills$/);
-  await page.goForward();await expect(page).toHaveURL(/#home$/);
-  await expect(exploration).toHaveJSProperty('open',false);
-  await page.reload();
-  await expect(exploration).toHaveJSProperty('open',false);
-  await page.evaluate(()=>scrollTo(0,document.body.scrollHeight));
-  await home.click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeInViewport();
-});
+
 
 for(const language of [
   {id:'zh-Hant',locale:'zh-TW',login:'登入',home:'會員首頁',explore:'探索學習與公會',expand:'展開',collapse:'收合'},
@@ -147,8 +103,7 @@ for(const language of [
     await expect(toggle).toBeInViewport();
     expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await toggle.focus();
-    expect(await toggle.evaluate(element=>getComputedStyle(element).outlineStyle)).not.toBe('none');
+    await reachByKeyboard(page,toggle);
     await page.keyboard.press('Enter');
     await expect(disclosure).toHaveJSProperty('open',true);
     await expect(toggle.locator('.home-explore-close')).toHaveText(`${language.collapse} −`);

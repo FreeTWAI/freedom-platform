@@ -1,4 +1,4 @@
-import { expect, type Page } from './fixtures.js';
+import { expect, type Page, type Locator } from './fixtures.js';
 
 /** Member tools are secondary; open their visible disclosure before choosing one.
  * Sign-in and the admin header use the same disclosure. */
@@ -65,12 +65,10 @@ export async function openFeatureSearch(page:Page){
 export async function navigate(page: Page, name: string) {
   await expect(page.locator('.shell')).toBeVisible();
   if (name === '我的訊息') {
-    const bubble=page.locator('.floating-messages');
-    if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
+    await openChat(page);
     return;
   }
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  await closeChat(page);
   if (['我的名片', '待辦清單'].includes(name)) {
     const settings = page.getByRole('button', { name: '設定', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
@@ -123,8 +121,7 @@ export async function signOut(page: Page) {
 
 /** Notification history is owned by the bell, separately from chats. */
 export async function openNotifications(page:Page){
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.count()&&await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  await closeChat(page);
   const bell=page.locator('.notification-bell-trigger');
   if(await bell.getAttribute('aria-expanded')!=='true')await bell.click();
   const all=page.getByRole('button',{name:'查看所有通知',exact:true});
@@ -133,10 +130,20 @@ export async function openNotifications(page:Page){
 export async function openChat(page:Page){
   const bubble=page.locator('.floating-messages');
   if(await bubble.getAttribute('aria-expanded')!=='true')await bubble.click();
+  await expect(page.locator('#floating-message-panel')).toBeVisible();
 }
 export async function closeChat(page:Page){
-  const bubble=page.locator('.floating-messages');
-  if(await bubble.getAttribute('aria-expanded')==='true')await bubble.click();
+  const panel=page.locator('#floating-message-panel');
+  if(await panel.isVisible()){
+    // The phone launcher is hidden while its modal is open. Its own collapse
+    // button remains reachable; wait for the panel to close before another action.
+    // The accessible name is translated; the last header button is the
+    // universal collapse control in all five supported languages.
+    const collapse=panel.locator('.floating-message-header > button').last();
+    await expect(collapse).toHaveAttribute('aria-label',/\S/);
+    await collapse.click();
+    await expect(panel).toBeHidden();
+  }
 }
 
 /** Select one complete guild workspace through the visible desktop or phone navigation. */
@@ -168,4 +175,17 @@ export async function navigateAdmin(page:Page,name:string){
   await expect(workspace).toBeVisible();
   if(changed)await expect(workspace).toBeFocused();
   await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
+}
+
+/** Traverse real tab stops rather than programmatically forcing focus-visible. */
+export async function reachByKeyboard(page:Page,target:Locator){
+  await page.getByRole('link',{name:'跳到主要內容',exact:true}).focus();
+  for(let steps=0;steps<40;steps++){
+    await page.keyboard.press('Tab');
+    if(await target.evaluate(element=>element===document.activeElement))break;
+  }
+  await expect(target).toBeFocused();
+  expect(await target.evaluate(element=>element.matches(':focus-visible'))).toBe(true);
+  expect(await target.evaluate(element=>getComputedStyle(element).outlineStyle)).not.toBe('none');
+  expect(await target.evaluate(element=>parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
 }

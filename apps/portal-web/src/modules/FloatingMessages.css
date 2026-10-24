@@ -24,16 +24,32 @@
 .floating-message-panel .messages-thread>:not(.messages-scroll){flex-shrink:0}
 .floating-message-panel .messages-scroll{flex:1;height:auto;min-height:80px;overflow:auto;overscroll-behavior:contain}
 @media(max-width:760px){
-  .floating-message-panel{inset-inline:8px;width:auto;top:calc(var(--chat-viewport-offset,0px) + 8px);bottom:auto;height:min(var(--chat-mobile-height,100dvh),calc(var(--chat-viewport-height,100dvh) - 96px - env(safe-area-inset-bottom,0px)))}
-  .floating-message-content{padding:8px}
-  .floating-message-panel .messages-categories{flex-wrap:wrap;gap:4px}
+  /* Use the phone's visible space, including when the keyboard pans the viewport. */
+  .floating-message-panel{inset-inline:0;width:auto;top:calc(var(--chat-viewport-offset,0px) + var(--connection-status-height,0px));bottom:auto;height:calc(var(--chat-viewport-height,100dvh) - var(--connection-status-height,0px));border:0;border-radius:0;box-shadow:none;overscroll-behavior:contain}
+  .floating-message-header{gap:8px;padding:calc(4px + var(--chat-safe-top,0px)) max(8px,var(--app-safe-right,0px)) 4px max(12px,var(--app-safe-left,0px))}
+  .floating-message-header h2{font-size:16px}
+  .floating-message-content{padding:0;overflow:hidden}
+  .floating-message-panel .messages-categories{flex-wrap:wrap;gap:4px;padding:8px max(8px,var(--app-safe-right,0px)) 8px max(8px,var(--app-safe-left,0px))}
   .floating-message-panel .messages-tabs{justify-content:space-between}
   .floating-message-panel .messages-tabs [role=tab]{padding:8px;flex:1}
   .floating-message-panel .messages-new-group{margin-inline-start:auto}
   .floating-message-panel .messages-tabs svg{width:18px;height:18px}
+  .floating-message-panel .messages-hub>[role=tabpanel],.floating-message-panel .messages-thread{overflow:hidden}
+  .floating-message-panel .messages-scroll{min-height:0}
+  /* Rich drafts can exceed the keyboard's remaining space; keep every control reachable. */
+  .floating-message-panel .messages-thread[data-chat-open=true]>.messages-compose{flex-shrink:1;min-height:0;max-height:70%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;align-content:start;scrollbar-gutter:stable}
+  /* A single outer composer scroll is easier to operate with the software keyboard
+     than two competing nested scroll regions around the sticker search. */
+  .floating-message-panel .messages-thread[data-chat-open=true] .chat-sticker-picker{max-height:none;overflow:visible}
+
+  /* The outer header owns the top safe area; a conversation must not add it again. */
+  html .floating-message-panel .messages-thread[data-chat-open=true]>.chat-header{padding-top:10px}
+  html .floating-message-panel .messages-thread[data-chat-open=true] .chat-search-trigger,
+  html .floating-message-panel .messages-thread[data-chat-open=true] .messages-refresh{top:10px}
+  .floating-messages[aria-expanded=true]{display:none}
 }
 
-@media(max-width:760px){.floating-messages{top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 76px - env(safe-area-inset-bottom,0px));bottom:auto}}
+@media(max-width:760px){.floating-messages{top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 76px - var(--app-safe-bottom,0px));bottom:auto}}
 
 .floating-message-header .floating-message-size-toggle{width:auto;margin-inline-start:auto;padding:8px 12px;font-size:14px}
 .floating-message-size{display:flex;flex-wrap:wrap;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none}
@@ -41,4 +57,4 @@
 .floating-message-size label{display:flex;align-items:center;gap:8px;flex:1;font-size:14px;min-width:180px;white-space:nowrap}
 .floating-message-size input{min-width:0;width:100%;min-height:44px;accent-color:var(--green)}
 .floating-message-size .btn{min-height:44px;padding:8px 12px;font-size:14px}
-@media(max-width:760px){.floating-message-size .floating-message-width{display:none}.floating-message-size label{min-width:150px}}
+@media(max-width:760px){.floating-message-header .floating-message-size-toggle,.floating-message-size{display:none}}

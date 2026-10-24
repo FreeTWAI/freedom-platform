@@ -76,7 +76,7 @@ async function openParticipation(page: Page) {
   const disclosure = page.locator('.home-participation-disclosure');
   await expect(disclosure).toBeAttached();
   if (!await disclosure.evaluate(element => (element as HTMLDetailsElement).open))
-    await disclosure.locator('summary').click();
+    await disclosure.locator(':scope > summary').click();
   await expect(disclosure).toHaveJSProperty('open', true);
 }
 

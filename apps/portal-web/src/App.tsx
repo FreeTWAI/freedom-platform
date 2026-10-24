@@ -95,6 +95,15 @@ const eventIdFromLocation=()=>{
   return /^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1]??null;
 }
 const eventLoginFromLocation=()=>Boolean(eventIdFromLocation()&&window.history.state?.freedomEventLogin===window.location.href)
+const isMessagesHash=(hash:string)=>hash.split('?')[0]==='#messages'
+const isMessagesHistoryEntry=(state:unknown)=>Boolean(state&&typeof state==='object'&&(state as Record<string,unknown>).freedomMessagesOpen===true)
+function messagesHistoryState(open:boolean,state:unknown=window.history.state){
+  const next:Record<string,unknown>=state&&typeof state==='object'?{...state}:{}
+  // This is only presentation state. Conversation IDs and drafts stay in React.
+  if(open)next.freedomMessagesOpen=true
+  else delete next.freedomMessagesOpen
+  return Object.keys(next).length?next:null
+}
 const memberCardFromLocation=()=>/^\/member-cards\/([A-Za-z0-9_-]{43})\/?$/.exec(window.location.pathname)?.[1]??null
 const clearResetHash=()=>window.history.replaceState(null,'',window.location.pathname+window.location.search)
 
@@ -629,7 +638,7 @@ function Workspace({
     if (!buyerRoute(hash)) return
     // Only the buyer page uses this after holding/confirming its exact attempt.
     acceptedHash.current = hash
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`)
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${hash}`)
     setLocationHash(hash)
     window.dispatchEvent(new HashChangeEvent('hashchange'))
   }, [])
@@ -639,14 +648,40 @@ function Workspace({
   const [friendScope,setFriendScope]=useState<'accepted'|'incoming'>('accepted')
   const [chatEntry,setChatEntry]=useState<ChatEntry|null>(null)
   const chatEntrySequence=useRef(0)
-  const [messagesOpen,setMessagesOpen]=useState(()=>window.location.hash==='#messages')
-  const [messagesMounted,setMessagesMounted]=useState(()=>window.location.hash==='#messages')
+  const [messagesOpen,setMessagesOpen]=useState(()=>isMessagesHash(window.location.hash)||isMessagesHistoryEntry(window.history.state))
+  const [messagesMounted,setMessagesMounted]=useState(()=>isMessagesHash(window.location.hash)||isMessagesHistoryEntry(window.history.state))
+  const messageLocation=useRef({href:window.location.href,state:window.history.state})
+  const messageHistoryTransition=useRef<{after:(()=>void)|null}|null>(null)
   const messageLeaveGuard=useRef<(()=>boolean)|null>(null)
   const registerMessageLeave=useCallback((guard:(()=>boolean)|null)=>{messageLeaveGuard.current=guard},[])
-  const openMessages=useCallback(()=>{setMessagesMounted(true);setMessagesOpen(true);setMobileOpen(false)},[])
-  const closeMessages=useCallback(()=>{
-    setMessagesOpen(false)
+  const openMessages=useCallback(function open(){
+    // A close traverses history asynchronously. Queue a rapid reopen after it,
+    // rather than pushing onto the entry that is about to disappear.
+    if(messageHistoryTransition.current){messageHistoryTransition.current.after=open;return}
+    if(!isMessagesHistoryEntry(window.history.state))window.history.pushState(messagesHistoryState(true),'')
+    messageLocation.current={href:window.location.href,state:window.history.state}
+    setMessagesMounted(true);setMessagesOpen(true);setMobileOpen(false)
   },[])
+  const closeMessagesThen=useCallback((after:(()=>void)|null=null)=>{
+    setMessagesOpen(false)
+    if(messageHistoryTransition.current){if(after)messageHistoryTransition.current.after=after;return}
+    if(isMessagesHistoryEntry(window.history.state)){
+      messageHistoryTransition.current={after}
+      window.history.back()
+    }else after?.()
+  },[])
+  const closeMessages=useCallback(()=>closeMessagesThen(),[closeMessagesThen])
+  useEffect(()=>{
+    if(!isMessagesHash(window.location.hash)&&!isMessagesHistoryEntry(window.history.state))return
+    if(!isMessagesHistoryEntry(window.history.state)){
+      // A cold legacy link has no in-app return point. Seed home underneath the
+      // overlay once; reloads retain the marker and do not grow the history.
+      const destination=window.location.href
+      window.history.replaceState(messagesHistoryState(false),'',`${window.location.pathname}${window.location.search}#home`)
+      window.history.pushState(messagesHistoryState(true),'',destination)
+    }
+    openMessages()
+  },[openMessages])
   const [shareEntry,setShareEntry]=useState<{target:ShareTarget;tab:TabId;sequence:number}|null>(null)
   const [shareNotice,setShareNotice]=useState('')
   const shareSequence=useRef(0)
@@ -669,15 +704,24 @@ function Workspace({
     if (nextHash !== acceptedHash.current && pageLeaveGuard.current && !pageLeaveGuard.current(nextHash)) return
     acceptedHash.current = nextHash
     if(next==='friends')setFriendScope('accepted')
-    setMobileOpen(false)
-    mainContent.current?.focus({ preventScroll: true })
-    setTab(next)
-    if(/^\/events\/[0-9a-f-]{36}\/?$/.test(window.location.pathname)){
-      window.history.replaceState(null,'',`/${nextHash}`)
-      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    // Navigation intents (for example the share launcher) observe the new page
+    // immediately, even while the overlay's history traversal is finishing.
+    setTab(next);setLocationHash(nextHash)
+    const navigate=()=>{
+      acceptedHash.current = nextHash
+      setMobileOpen(false)
+      mainContent.current?.focus({ preventScroll: true })
+      setTab(next);setLocationHash(nextHash)
+      if(/^\/events\/[0-9a-f-]{36}\/?$/.test(window.location.pathname)){
+        window.history.replaceState(messagesHistoryState(false),'',`/${nextHash}`)
+        window.dispatchEvent(new HashChangeEvent('hashchange'))
+      }
+      else window.location.hash = nextHash
     }
-    else window.location.hash = nextHash
-  }, [openMessages])
+    // Leave the overlay's history entry before pushing a destination, so Back
+    // returns to the actual page and cannot reopen an abandoned full-screen chat.
+    closeMessagesThen(navigate)
+  }, [openMessages,closeMessagesThen])
   function navigateNotification(action:BellAction){
     const destination=orderNotificationDestination(action)
     if(destination?.tab==='stores'){selectTab('stores',destination.hash);return}
@@ -687,8 +731,8 @@ function Workspace({
       window.location.assign(destination.path);return
     }
     if(action.tab==='stores'||action.tab==='reservations')return
-    selectTab(action.tab);setNotificationTarget({...action,sequence:++notificationSequence.current})
-    if(action.tab==='events'&&action.resource_id)window.location.hash=`events/${action.resource_id}`
+    selectTab(action.tab,action.tab==='events'&&action.resource_id?`#events/${action.resource_id}`:undefined)
+    setNotificationTarget({...action,sequence:++notificationSequence.current})
   }
   function chooseShare(target:ShareTarget){
     const definition=SHARE_TARGETS[target]
@@ -727,9 +771,9 @@ function Workspace({
     window.addEventListener(CHAT_ENTRY_EVENT,open);return()=>window.removeEventListener(CHAT_ENTRY_EVENT,open)
   },[selectTab])
   useEffect(()=>{
-    if(locationHash.split('?')[0]!=='#messages')return
+    if(!isMessagesHash(locationHash))return
     const entry={kind:'guild',key:new URLSearchParams(locationHash.split('?')[1]??'').get('guild')}
-    if(isChatEntry(entry))setChatEntry(current=>({...entry,request:(current?.request??0)+1}))
+    if(isChatEntry(entry))setChatEntry({...entry,request:++chatEntrySequence.current})
   },[locationHash])
   const launchpadEnabled = site?.guild_launchpad_enabled === true
   useEffect(() => {
@@ -737,15 +781,49 @@ function Workspace({
     setTab(tabFromHash(launchpadEnabled))
   }, [launchpadEnabled])
   useEffect(() => {
-    const changed = () => {
+    const changed = (event:Event) => {
       const nextHash = window.location.hash
-      if(nextHash==='#messages'){openMessages();return}
-      if (nextHash !== acceptedHash.current && pageLeaveGuard.current && !pageLeaveGuard.current(nextHash)) {
-        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`)
+      const current={href:window.location.href,state:window.history.state}
+      const previous=messageLocation.current
+      const transition=messageHistoryTransition.current
+      // A fragment traversal emits both popstate and hashchange. Only consume
+      // the traversal once, before running a queued reopen or page navigation.
+      if(transition){
+        if(event.type!=='popstate')return
+        messageHistoryTransition.current=null
+        messageLocation.current=current
+        acceptedHash.current=nextHash
+        setLocationHash(nextHash);setTab(tabFromHash(launchpadEnabled));setMessagesOpen(false)
+        transition.after?.()
         return
+      }
+      if(current.href===previous.href&&isMessagesHistoryEntry(current.state)===isMessagesHistoryEntry(previous.state))return
+      if (nextHash !== acceptedHash.current && pageLeaveGuard.current && !pageLeaveGuard.current(nextHash)) {
+        window.history.replaceState(previous.state, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`)
+        messageLocation.current={href:window.location.href,state:window.history.state}
+        return
+      }
+      if(isMessagesHash(nextHash)&&!isMessagesHistoryEntry(current.state)){
+        if(isMessagesHistoryEntry(previous.state)){
+          // A second legacy hash while open should replace the current chat
+          // entry, not create another Back step for the same overlay.
+          messageHistoryTransition.current={after:()=>{
+            window.history.pushState(messagesHistoryState(true),'',current.href)
+            acceptedHash.current=nextHash;setLocationHash(nextHash);setTab('home');openMessages()
+          }}
+          // Return beneath both chat entries, then push once to discard the
+          // duplicate forward branch as well as the extra Back step.
+          window.history.go(-2)
+          return
+        }
+        // Hash navigation already created an entry; adopt it without pushing.
+        window.history.replaceState(messagesHistoryState(true),'')
       }
       acceptedHash.current = nextHash
       setLocationHash(nextHash); setTab(tabFromHash(launchpadEnabled))
+      messageLocation.current={href:window.location.href,state:window.history.state}
+      if(isMessagesHistoryEntry(window.history.state))openMessages()
+      else setMessagesOpen(false)
     }
     window.addEventListener('hashchange', changed)
     window.addEventListener('popstate', changed)
@@ -892,12 +970,11 @@ function tabTitle(tab: TabId): string {
 
 function tabFromHash(launchpadEnabled: boolean): TabId {
   const value = window.location.hash.slice(1)
-  if(value==='messages')return 'home'
+  if(isMessagesHash(window.location.hash))return 'home'
   if(value === 'reservations' || value.startsWith('reservations/'))return 'reservations'
   if(value.split('?')[0]==='community-search')return 'community-search'
   if(value==='my-content'||value.startsWith('my-content/'))return 'my-content'
   if(value.split('?')[0]==='opensource')return 'opensource'
-  if(value.split('?')[0]==='messages')return 'messages'
   if(!value && window.location.pathname === '/device')return 'private-ai'
   if(value.startsWith('events/'))return 'events'
   if(value.startsWith('showcase/'))return 'showcase'

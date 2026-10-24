@@ -46,6 +46,7 @@
     "tests/runtime/game-console-routing.test.ts",
     "tests/runtime/portal-client-recovery.test.ts",
     "tests/e2e/audit-shell.spec.ts",
+    "tests/e2e/home-brand-navigation.spec.ts",
     "tests/e2e/page-tools.spec.ts",
     "tests/e2e/mobile-install.spec.ts",
     "tests/e2e/shared-feedback-language.spec.ts",
@@ -69,7 +70,8 @@
     "member-communications",
     "newcomer-guides",
     "shared",
-    "social-feed"
+    "social-feed",
+    "absurd-daily"
   ],
   "contract_families": [],
   "client_profiles": [

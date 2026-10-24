@@ -153,7 +153,8 @@ test('real grants marker clears stale table/column privileges, is idempotent and
     const apply=async()=>{const statements=(await q.query(query)).rows;assert.equal(statements.length,1);for(const row of statements)await q.query(Object.values(row)[0] as string);};
     await apply();const first=(await q.query("SELECT relacl::text FROM pg_class WHERE oid='commerce_self_shipments'::regclass")).rows;await apply();assert.deepEqual((await q.query("SELECT relacl::text FROM pg_class WHERE oid='commerce_self_shipments'::regclass")).rows,first);
     for(const privilege of ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN','SELECT WITH GRANT OPTION','INSERT WITH GRANT OPTION'])assert.equal((await q.query("SELECT has_table_privilege($1,'commerce_self_shipments',$2) AS ok",[runtime,privilege])).rows[0].ok,['SELECT','INSERT'].includes(privilege),privilege);
-    assert.equal((await q.query("SELECT count(*)::int n FROM pg_attribute WHERE attrelid='commerce_self_shipments'::regclass AND attacl IS NOT NULL")).rows[0].n,0);
+    assert.deepEqual((await q.query("SELECT attname FROM pg_attribute WHERE attrelid='commerce_self_shipments'::regclass AND attacl IS NOT NULL ORDER BY attname")).rows.map(r=>r.attname),['carrier_name','redacted_at','tracking_number']);
+    for(const name of ['tracking_number','carrier_name','redacted_at'])assert.deepEqual((await q.query("SELECT has_column_privilege($1,'commerce_self_shipments',$2,'UPDATE') ok,has_column_privilege($1,'commerce_self_shipments',$2,'UPDATE WITH GRANT OPTION') grantable",[runtime,name])).rows[0],{ok:true,grantable:false});
     await q.query('GRANT UPDATE(tracking_number) ON commerce_self_shipments TO PUBLIC');await assert.rejects(apply,/Unsafe runtime self shipment privileges/);
   }finally{await q.query('ROLLBACK');q.release();}
 });
