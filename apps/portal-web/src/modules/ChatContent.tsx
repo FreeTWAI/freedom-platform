@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState} from 'react';
+import {useCallback,useEffect,useId,useRef,useState} from 'react';
 import type {MessageContent,MessageContentInput,MessageReply} from '../../../../modules/member-communications/content-types';
 import {CHAT_STICKERS,CHAT_STICKER_ATLAS,findChatSticker} from '../../../../modules/member-communications/stickers';
 import './ChatContent.css';
@@ -8,9 +8,11 @@ const EMPTY:RichChatDraft={};
 /** Conversation drafts live only in this mounted chat, never in browser storage. */
 export function useRichChatDraft(){
   const [drafts,setDrafts]=useState<Record<string,RichChatDraft>>({});
+  // A reply handler in a memoized history must not change on every draft keystroke.
+  const change=useCallback((key:string,value:Partial<RichChatDraft>)=>setDrafts(current=>({...current,[key]:{...current[key],...value}})),[]);
   return {
     get:(key:string)=>drafts[key]??EMPTY,
-    change:(key:string,value:Partial<RichChatDraft>)=>setDrafts(current=>({...current,[key]:{...current[key],...value}})),
+    change,
     clear:(key:string,expected?:RichChatDraft)=>setDrafts(current=>{if(expected&&(current[key]??EMPTY)!==expected)return current;const {[key]:_,...rest}=current;return rest;}),
   };
 }
@@ -59,10 +61,22 @@ export function RetractMessageDialog({target,busy,error,onConfirm,onClose}:{targ
 }
 export function ChatExtras({draft,onChange,onSendSticker,disabled,target}:{draft:RichChatDraft;onChange:(value:Partial<RichChatDraft>)=>void;onSendSticker:(id:string)=>void;disabled:boolean;target:string}){
   const [open,setOpen]=useState(false),[search,setSearch]=useState(''),[pack,setPack]=useState('freetwai-v2');
-  const id=useId(),toggle=useRef<HTMLButtonElement>(null),input=useRef<HTMLInputElement>(null);
-  useEffect(()=>{setOpen(false);setSearch('');},[target]);
+  type Preview={id:string;target:string};
+  const [selected,setSelected]=useState<Preview|null>(null),choice=useRef<Preview|null>(null);
+  const id=useId(),toggle=useRef<HTMLButtonElement>(null),input=useRef<HTMLInputElement>(null),preview=useRef<HTMLDivElement>(null),choiceTrigger=useRef<HTMLButtonElement|null>(null);
+  const available=useRef({target,disabled});available.current={target,disabled};
+  useEffect(()=>{setOpen(false);setSearch('');setSelected(null);choice.current=null;choiceTrigger.current=null;},[target]);
   useEffect(()=>{if(open)input.current?.focus();},[open]);
-  const close=()=>{setOpen(false);toggle.current?.focus();};
+  useEffect(()=>{if(selected)preview.current?.focus();else{choiceTrigger.current?.focus();choiceTrigger.current=null;}},[selected]);
+  const close=()=>{choice.current=null;choiceTrigger.current=null;setSelected(null);setOpen(false);toggle.current?.focus();};
+  const cancelPreview=()=>{choice.current=null;setSelected(null);};
+  function confirmSticker(){
+    // Consume this exact preview synchronously, before the caller's React state
+    // updates. A stale/double click cannot resend it or borrow a newer target.
+    if(!selected||choice.current!==selected||available.current.disabled||available.current.target!==selected.target)return;
+    const stickerId=selected.id;close();onSendSticker(stickerId);
+  }
+  const selectedSticker=selected?.target===target?findChatSticker(selected.id):undefined;
   const matches=CHAT_STICKERS.filter(item=>item.pack===pack&&`${item.label} ${item.keywords}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return <div className="chat-extras">
     {draft.reply&&<div className="chat-reply-draft"><ChatQuote reply={draft.reply}/><button className="btn btn-ghost" type="button" disabled={disabled} onClick={()=>onChange({reply:undefined})}>取消回覆</button></div>}
@@ -70,11 +84,17 @@ export function ChatExtras({draft,onChange,onSendSticker,disabled,target}:{draft
     <button className="btn btn-ghost" ref={toggle} type="button" aria-label="選擇貼圖" title="選擇貼圖" disabled={disabled} aria-expanded={open} aria-controls={id} onClick={()=>open?close():setOpen(true)}><svg className="chat-sticker-trigger" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 14.5q4 4 8 0"/><path d="M8.5 9h.01M15.5 9h.01" strokeWidth="3"/></svg><span>選擇貼圖</span></button>
     {open&&<section className="chat-sticker-picker" id={id} aria-label="工坊貼圖" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}}}>
       <div className="chat-picker-heading"><strong>自由工坊貼圖</strong><button className="btn btn-ghost" type="button" onClick={close}>關閉貼圖</button></div>
-      <p className="messages-meta">點選即傳送，保留其他草稿。</p>
+      <p className="messages-meta">先點選預覽，確認後再送出。其他草稿會保留。</p>
+      {selectedSticker&&<div ref={preview} className="chat-sticker-confirm" role="group" tabIndex={-1} aria-label={`貼圖預覽：${selectedSticker.label}`} onKeyDown={event=>{if(event.key==='Enter'&&event.target===event.currentTarget)event.preventDefault();}}>
+        <ChatSticker key={selectedSticker.id} id={selectedSticker.id}/><strong>{selectedSticker.label}</strong>
+        <div className="chat-sticker-confirm-actions"><button type="button" className="btn btn-ghost" onClick={cancelPreview}>取消預覽</button><button type="button" className="btn btn-primary" disabled={disabled} onClick={confirmSticker}>送出這張貼圖</button></div>
+      </div>}
+      <div className="chat-sticker-browse" hidden={Boolean(selectedSticker)}>
       <div className="chat-sticker-packs" role="group" aria-label="貼圖包">{[['freetwai-v2','自由工坊'],['workshop-v1','工坊夥伴']].map(([key,label])=><button className="btn btn-ghost" key={key} type="button" aria-pressed={pack===key} onClick={()=>{setPack(key);setSearch('')}}>{label}</button>)}</div>
       <label className="field">搜尋貼圖<input ref={input} type="search" value={search} maxLength={80} onKeyDown={event=>{if(event.key==='Enter')event.preventDefault();}} onChange={event=>setSearch(event.target.value)} placeholder="例如：加油、合作"/></label>
-      <div className="chat-sticker-grid">{matches.map(item=><button key={item.id} className="chat-sticker-choice" type="button" disabled={disabled} aria-label={`傳送貼圖：${item.label}`} onClick={()=>{onSendSticker(item.id);close();}}><ChatSticker id={item.id} thumbnail/><span>{item.label}</span></button>)}</div>
+      <div className="chat-sticker-grid">{matches.map(item=><button key={item.id} className="chat-sticker-choice" type="button" disabled={disabled} aria-label={`預覽貼圖：${item.label}`} onClick={event=>{if(disabled)return;const next={id:item.id,target};choice.current=next;choiceTrigger.current=event.currentTarget;setSelected(next);}}><ChatSticker id={item.id} thumbnail/><span>{item.label}</span></button>)}</div>
       {matches.length===0&&<p role="status">沒有符合的貼圖，請換個關鍵字。</p>}
+      </div>
     </section>}
   </div>;
 }

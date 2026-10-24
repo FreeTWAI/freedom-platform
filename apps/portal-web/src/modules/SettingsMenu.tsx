@@ -5,70 +5,59 @@ import './MemberSettings.css';
 import {LANGUAGES,useLanguage} from '../language';
 import {useAppInstall} from '../AppInstall';
 
-export const SETTINGS_PAGES=[['account','我的名片'],['todos','待辦清單']] as const satisfies readonly (readonly [TabId,string])[];
-const LANGUAGE_COUNT=LANGUAGES.length+1;
-const LOGOUT_INDEX=SETTINGS_PAGES.length+LANGUAGE_COUNT+WORKSHOP_THEMES.length;
+export const SETTINGS_PAGES=[['profile','我的個人空間'],['account','我的名片'],['todos','待辦清單']] as const satisfies readonly (readonly [TabId,string])[];
+type Panel='main'|'language'|'appearance';
+type Item={key:string;label:string;run:()=>void;checked?:boolean;current?:boolean;lang?:string;disabled?:boolean;panel?:Panel};
 
-/** The account menu: personal pages, appearance and sign-out. Messages stay with the notification bell. */
-export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false}:{current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean}){
+/** One short account menu, with reversible preference panels. Page drafts stay mounted. */
+export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false,personalContentEnabled=false}:{current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean;personalContentEnabled?:boolean}){
   const {theme,selectTheme}=useWorkshopTheme();
   const {preference,selectLanguage,t}=useLanguage();
-  const install=useAppInstall(),logoutIndex=LOGOUT_INDEX+(install.installed?0:1);
-  const [open,setOpen]=useState(false),[focusIndex,setFocusIndex]=useState(0);
-  const root=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),items=useRef<(HTMLButtonElement|null)[]>([]);
+  const install=useAppInstall();
+  const [open,setOpen]=useState(false),[panel,setPanel]=useState<Panel>('main'),[focusIndex,setFocusIndex]=useState(0);
+  const root=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),items=useRef<(HTMLButtonElement|null)[]>([]),returnIndex=useRef(0);
   const menuId=useId();
-  useEffect(()=>{if(open)items.current[focusIndex]?.focus();},[open,focusIndex]);
-  // A route change (including browser Back) closes the menu; App already moves focus to main.
+  const close=(returnFocus:boolean)=>{setOpen(false);if(returnFocus)button.current?.focus();};
+  const page=(id:TabId,label:string):Item=>({key:id,label,current:current===id,run:()=>{close(false);onSelect(id);}});
+  const enter=(next:Panel)=>{returnIndex.current=main.findIndex(item=>item.panel===next);setFocusIndex(0);setPanel(next);};
+  const back=()=>{setPanel('main');setFocusIndex(returnIndex.current);};
+  const main:Item[]=[page('profile',t('nav.profile')),...(personalContentEnabled?[page('my-content',t('nav.my-content'))]:[]),page('todos',t('nav.todos')),page('account',t('settings.account')),
+    {key:'language',label:t('settings.language'),panel:'language',run:()=>enter('language')},
+    {key:'appearance',label:t('settings.appearance'),panel:'appearance',run:()=>enter('appearance')},
+    ...(!install.installed?[{key:'install',label:t('install.title'),run:()=>{close(false);install.open(button.current);}}]:[]),
+    {key:'logout',label:t('settings.logout'),disabled:logoutDisabled,run:()=>{if(!logoutDisabled){close(true);onLogout();}}}];
+  const choices:Item[]=panel==='main'?main:[{key:'back',label:t('settings.back'),run:back},...(panel==='language'
+    ?(['auto',...LANGUAGES.map(([id])=>id)] as const).map(id=>({key:id,label:id==='auto'?t('language.auto'):LANGUAGES.find(([key])=>key===id)![1],lang:id==='auto'?undefined:id,checked:preference===id,run:()=>selectLanguage(id)}))
+    :WORKSHOP_THEMES.map(([id,label])=>({key:id,label,checked:theme===id,run:()=>selectTheme(id)})))];
+  useEffect(()=>{if(open)items.current[focusIndex]?.focus();},[open,focusIndex,panel]);
   useEffect(()=>setOpen(false),[current]);
   useEffect(()=>{
     if(!open)return;
     const outside=(event:PointerEvent)=>{
       if(root.current?.contains(event.target as Node))return;
       setOpen(false);
-      // A click on another control keeps its focus; a blank area must not strand focus on <body>.
       setTimeout(()=>{if(!document.activeElement||document.activeElement===document.body)button.current?.focus();});
     };
-    document.addEventListener('pointerdown',outside);
-    return()=>document.removeEventListener('pointerdown',outside);
+    document.addEventListener('pointerdown',outside);return()=>document.removeEventListener('pointerdown',outside);
   },[open]);
-  function show(index:number){setFocusIndex(index);setOpen(true);}
-  function close(returnFocus:boolean){setOpen(false);if(returnFocus)button.current?.focus();}
-  function buttonKey(event:KeyboardEvent){
-    if(event.key==='ArrowDown'){event.preventDefault();show(0);}
-    else if(event.key==='ArrowUp'){event.preventDefault();show(logoutIndex);}
-  }
+  function show(last=false){setPanel('main');setFocusIndex(last?main.length-1:0);setOpen(true);}
+  function buttonKey(event:KeyboardEvent){if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();show(event.key==='ArrowUp');}}
   function menuKey(event:KeyboardEvent){
-    const last=logoutIndex;
+    const last=choices.length-1;
     const next={ArrowDown:focusIndex===last?0:focusIndex+1,ArrowUp:focusIndex===0?last:focusIndex-1,Home:0,End:last}[event.key];
     if(next!==undefined){event.preventDefault();setFocusIndex(next);items.current[next]?.focus();}
-    else if(event.key==='Escape'){event.preventDefault();close(true);}
-    // Tab keeps its native behaviour; close after focus has already moved on.
+    else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(panel!=='main')back();else close(true);}
     else if(event.key==='Tab')setTimeout(()=>setOpen(false));
   }
   return <div className="settings-menu" ref={root}>
-    <button ref={button} type="button" className="btn btn-ghost topbar-profile settings-menu-button" aria-label={t('settings.title')} title={`${t('settings.title')} · ${name}`} aria-haspopup="menu" aria-expanded={open} aria-controls={open?menuId:undefined}
-      onClick={()=>open?close(false):show(0)} onKeyDown={buttonKey}>
-      <span aria-hidden="true">{avatar}</span><span className="settings-menu-name">{name}</span>
-      <svg className="settings-menu-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-    {open&&<div id={menuId} className="settings-menu-list" role="menu" aria-label={t('settings.profile')} onKeyDown={menuKey}>
-      {/* The trigger drops the name on narrow screens; the menu still says whose account this is. */}
-      <span className="settings-menu-identity" role="presentation">{name}</span>
-      {SETTINGS_PAGES.map(([id,label],index)=>{
-        return <button key={id} ref={node=>{items.current[index]=node;}} type="button" role="menuitem" tabIndex={index===focusIndex?0:-1}
-          className={`settings-menu-item${current===id?' is-current':''}`} aria-current={current===id?'page':undefined}
-          onFocus={()=>setFocusIndex(index)} onClick={()=>{setOpen(false);onSelect(id);}}>
-          {t(`nav.${id}`)}</button>;
-      })}
-      <span className="settings-menu-heading" role="presentation">{t('settings.language')}</span>
-      {(['auto',...LANGUAGES.map(([id])=>id)] as const).map((id,offset)=>{const index=SETTINGS_PAGES.length+offset,label=id==='auto'?t('language.auto'):LANGUAGES.find(([key])=>key===id)![1];return <button key={id} ref={node=>{items.current[index]=node;}} type="button" role="menuitemradio" aria-checked={preference===id} tabIndex={index===focusIndex?0:-1} className="settings-menu-item" onFocus={()=>setFocusIndex(index)} onClick={()=>selectLanguage(id)} lang={id==='auto'?undefined:id}>{label}</button>;})}
-      <span className="settings-menu-heading" role="presentation">{t('settings.appearance')}</span>
-      {WORKSHOP_THEMES.map(([id,label],offset)=>{const index=SETTINGS_PAGES.length+LANGUAGE_COUNT+offset;return <button key={id} ref={node=>{items.current[index]=node;}} type="button" role="menuitemradio" aria-checked={theme===id} tabIndex={index===focusIndex?0:-1} className="settings-menu-item settings-theme-option" onFocus={()=>setFocusIndex(index)} onClick={()=>selectTheme(id)}><span className="settings-theme-indicator" aria-hidden="true"/>{label}</button>})}
-      <span className="settings-menu-separator" role="separator"/>
-      {!install.installed&&<button ref={node=>{items.current[LOGOUT_INDEX]=node;}} type="button" role="menuitem" tabIndex={LOGOUT_INDEX===focusIndex?0:-1} className="settings-menu-item" onFocus={()=>setFocusIndex(LOGOUT_INDEX)} onClick={()=>{setOpen(false);install.open(button.current);}}>{t('install.title')}</button>}
-      <button ref={node=>{items.current[logoutIndex]=node;}} type="button" role="menuitem" tabIndex={logoutIndex===focusIndex?0:-1}
-        className="settings-menu-item settings-menu-logout" aria-disabled={logoutDisabled||undefined}
-        onFocus={()=>setFocusIndex(logoutIndex)} onClick={()=>{if(logoutDisabled)return;close(true);onLogout();}}>
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9"/></svg>{t('settings.logout')}</button>
+    <button ref={button} type="button" className="btn btn-ghost topbar-profile settings-menu-button" aria-label={t('settings.title')} title={`${t('settings.title')} · ${name}`} aria-haspopup="menu" aria-expanded={open} aria-controls={open?menuId:undefined} onClick={()=>open?close(true):show()} onKeyDown={buttonKey}>
+      <span aria-hidden="true">{avatar}</span><span className="settings-menu-name">{name}</span><svg className="settings-menu-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    {open&&<div id={menuId} className="settings-menu-list settings-menu-compact" role="menu" aria-label={t('settings.profile')} data-settings-view={panel} onKeyDown={menuKey}>
+      <span className="settings-menu-identity" role="presentation">{panel==='main'?name:t(panel==='language'?'settings.language':'settings.appearance')}</span>
+      {choices.map((item,index)=><button key={`${panel}:${item.key}`} ref={node=>{items.current[index]=node;}} type="button" role={item.checked===undefined?'menuitem':'menuitemradio'} aria-checked={item.checked} aria-current={item.current?'page':undefined} aria-disabled={item.disabled||undefined} lang={item.lang} data-settings-panel={item.panel} tabIndex={index===focusIndex?0:-1} className={`settings-menu-item${item.current?' is-current':''}${panel==='appearance'&&index>0?' settings-theme-option':''}${item.key==='logout'?' settings-menu-logout':''}`} onFocus={()=>setFocusIndex(index)} onClick={item.run}>
+        {item.key==='back'&&<span aria-hidden="true">←</span>}{item.label}{item.panel&&<span className="settings-panel-chevron" aria-hidden="true">›</span>}
+      </button>)}
     </div>}
   </div>;
 }

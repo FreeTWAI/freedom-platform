@@ -103,3 +103,99 @@ for(const width of [320,390])test(`phone login error separates submit and recove
     await expect(trigger).toBeFocused();
   }
 });
+
+for(const viewport of [{width:390,height:844},{width:1280,height:800}])for(const theme of ['light','dark','versefolk']){
+  test(`visitor first step stays above the artwork and form while the brand image loads (${viewport.width}px ${theme})`,async({page})=>{
+    await page.setViewportSize(viewport);
+    let releaseImage!:()=>void;
+    const imageGate=new Promise<void>(resolve=>{releaseImage=resolve;});
+    await page.route('**/brand/freedom-workshop.webp',async route=>{await imageGate;await route.continue();});
+    try{
+      await page.goto('/',{waitUntil:'domcontentloaded'});
+      await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+      const first=page.locator('.visitor-first-step'),toggle=first.locator('.entry-resources > details > summary');
+      await expect(first.getByRole('heading',{level:1})).toHaveText('讓你的商品、作品和技術，找到合作夥伴。');
+      await expect(page.getByRole('heading',{level:1})).toHaveCount(1);
+      await expect(toggle).toContainText('先看免費資源，不用註冊');
+      const before=(await toggle.boundingBox())!,art=page.locator('.login-story .brand-poster img');
+      expect(before.y).toBeGreaterThanOrEqual(0);expect(before.y+before.height).toBeLessThanOrEqual(viewport.height);
+      expect(before.height).toBeGreaterThanOrEqual(44);
+      expect(before.y+before.height).toBeLessThan((await art.boundingBox())!.y);
+      expect(before.y+before.height).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
+      expect(await art.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBe(0);
+      releaseImage();await expect.poll(()=>art.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      const after=(await toggle.boundingBox())!;
+      expect(Math.abs(after.y-before.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(after.height-before.height)).toBeLessThanOrEqual(1);
+      await expect(art).toHaveAttribute('src','/brand/freedom-workshop.webp');
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:`test-results/visitor-first-${theme}-${viewport.width}.png`,fullPage:true});
+    }finally{releaseImage();}
+  });
+}
+
+test('visitor preview is keyboard accessible, remains anonymous and returns focus to its book trigger',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  const writes:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&request.url().includes('/api/v1/'))writes.push(request.url());});
+  await page.goto('/');const before=page.url(),first=page.locator('.visitor-first-step');
+  const toggle=first.locator('.entry-resources > details > summary');
+  await toggle.focus();await page.keyboard.press('Enter');
+  const preview=first.getByRole('button',{name:'免費預覽',exact:true}).first();
+  await expect(preview).toBeVisible();await preview.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(preview).toBeFocused();
+  await toggle.focus();await page.keyboard.press('Space');
+  await expect(first.locator('.entry-resources > details')).not.toHaveAttribute('open','');
+  await expect(toggle).toBeFocused();expect(page.url()).toBe(before);expect(writes).toEqual([]);
+  expect((await page.request.get('/api/v1/session')).status()).toBe(401);
+});
+
+test('visitor account choices reuse the existing keyboard-operable form without losing its draft',async({page})=>{
+  await page.goto('/');const originalUrl=page.url(),email=page.getByLabel('電子郵件',{exact:true});
+  const switcher=page.getByRole('group',{name:'登入或建立帳號',exact:true});
+  await email.fill('visitor-draft@example.test');
+  await switcher.getByRole('button',{name:'建立帳號',exact:true}).focus();await page.keyboard.press('Space');
+  await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
+  await page.keyboard.press('Tab');await expect(page.getByLabel('頁面工具',{exact:true})).toBeFocused();
+  await page.keyboard.press('Tab');await expect(email).toBeFocused();
+  await switcher.getByRole('button',{name:'會員登入',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
+  expect(page.url()).toBe(originalUrl);
+});
+
+test('dedicated skill returns keep the original reading exit and do not become a visitor landing page',async({page})=>{
+  const path='/development/skills/social-post',account=`/?join=1&skill_acquisition=1&return_to=${encodeURIComponent(path)}&skill_intro=7`;
+  await page.goto(account);await expect(page.locator('.visitor-first-step')).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'返回技能書繼續閱讀',exact:true})).toHaveAttribute('href',path+'?intro=7#skill-use-title');
+  expect(new URL(page.url()).search).toBe(new URL(account,'https://example.test').search);
+});
+
+test('the visitor first step uses all five existing interface languages at phone width',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/');
+  const languages=[
+    ['zh-Hant','先看免費資源，不用註冊','會員登入','建立帳號'],
+    ['en','Explore free resources without signing up','Sign in','Create account'],
+    ['ja','登録せずに無料教材を見る','ログイン','アカウント作成'],
+    ['ko','가입 없이 무료 자료 둘러보기','로그인','계정 만들기'],
+    ['es','Explora recursos gratuitos sin registrarte','Iniciar sesión','Crear cuenta'],
+  ];
+  for(const [language,explore,login,register] of languages){
+    await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(language);
+    const first=page.locator('.visitor-first-step'),toggle=first.locator('.entry-resources > details > summary');
+    await expect(toggle).toContainText(explore);
+    await expect(page.locator('.auth-switch').getByRole('button',{name:login,exact:true})).toBeVisible();
+    await expect(page.locator('.auth-switch').getByRole('button',{name:register,exact:true})).toBeVisible();
+    const box=(await toggle.boundingBox())!;expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(844);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+});
+
+test('compact visitor entry leaves breathing room below the email field on a short phone',async({page})=>{
+  await page.setViewportSize({width:320,height:640});await page.goto('/');
+  await expect(page.locator('.visitor-first-step')).toBeVisible();
+  const email=page.getByLabel('電子郵件',{exact:true});await expect(email).toBeVisible();
+  const box=(await email.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(624);
+  await expect(page.locator('.entry-resources > details > summary')).toHaveText('先看免費資源，不用註冊 · 搜尋社群內容');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

@@ -1,3 +1,4 @@
+import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect} from './fixtures.js';
 
@@ -59,8 +60,8 @@ for(const language of cases)test(`${language.id}: browser language, real invalid
     await page.getByRole('button',{name:language.join,exact:true}).click();
     await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
     await page.getByRole('button',{name:language.settings,exact:true}).click();
-    const menu=page.getByRole('menu');await expect(menu.getByRole('menuitemradio',{name:'日本語',exact:true})).toBeVisible();
-    await menu.getByRole('menuitemradio',{name:'English',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang','en');
+    await openSettingsPanel(page,'language');const menu=page.getByRole('menu');await expect(menu.getByRole('menuitemradio',{name:'日本語',exact:true})).toBeVisible();
+    await openSettingsPanel(page,'language');await menu.getByRole('menuitemradio',{name:'English',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang','en');
     await page.keyboard.press('Escape');await expect(page.getByRole('heading',{name:'Home',level:1,exact:true})).toBeVisible();
     await page.reload();await expect(page.locator('html')).toHaveAttribute('lang','en');await expect(page.getByRole('heading',{name:'Home',level:1,exact:true})).toBeVisible();
   }finally{await context.close();}

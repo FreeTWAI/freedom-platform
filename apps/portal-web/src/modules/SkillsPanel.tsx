@@ -53,11 +53,23 @@ export function SkillsPanel({ client, onNavigate }: ModulePanelProps) {
   }, [ids]);
   // Guild-designated books unlock by joining a guild; every other book is a 社群技能書 anyone can read.
   return <section className="module-panel skills-panel" aria-label="技能書目錄">
-    <GitHubConnectionSummary returnTo="#skills" onManage={() => onNavigate?.('account')}/>
+
+    <div className="skill-library-welcome">
+      <div><p className="eyebrow">從一個想做的事開始</p><p className="skill-library-lead">找到工具，讀懂做法，動手試試。</p><p className="muted">技能書是開源工具與實作指南。先看用途與準備事項，再依步驟練習；不需要先懂 GitHub。</p></div>
+      <div className="actions skill-library-jumps"><a className="btn btn-primary" href={`#${communityHeading}`} onClick={event=>{event.preventDefault();document.getElementById(communityHeading)?.scrollIntoView({block:'start'});document.getElementById(communityHeading)?.focus();}}>探索社群技能書 ↓</a><a className="btn btn-ghost" href={`#${guildHeading}`} onClick={event=>{event.preventDefault();document.getElementById(guildHeading)?.scrollIntoView({block:'start'});document.getElementById(guildHeading)?.focus();}}>查看公會技能書 ↓</a></div>
+    </div>
     <div className="skill-shelves">
+      <section className="skill-shelf" aria-labelledby={communityHeading}>
+        <header className="page-toolbar skill-shelf-heading">
+          <div><p className="eyebrow">自由探索，不需加入公會</p><h2 id={communityHeading} tabIndex={-1}>社群技能書</h2><p className="muted">社群成員分享的技能書，不需加入公會就能閱讀、分享與參與開發。</p></div>
+          <div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button><SkillUpload client={client} openRequest={openRequest} onChanged={()=>setDraftTick(value=>value+1)} onPublished={()=>setSubmissionsRevision(value=>value+1)} secondary/></div>
+        </header>
+        <SkillDraftCallout client={client} revision={submissionsRevision+draftTick} onOpen={(submissionId, mode) => { openNonce.current += 1; setOpenRequest({ submissionId, mode, nonce: openNonce.current }); }}/>
+        <CommunitySkillBooks client={client} revision={submissionsRevision} guildIds={ids ?? []}/>
+      </section>
       <section className="skill-shelf" aria-labelledby={guildHeading}>
         <header className="page-toolbar skill-shelf-heading">
-          <h2 id={guildHeading}>公會指定技能書</h2>
+          <div><p className="eyebrow">跟著公會練習</p><h2 id={guildHeading} tabIndex={-1}>公會指定技能書</h2><p className="muted">依公會主題整理，加入對應公會即可解鎖；未解鎖也能先免費預覽。</p></div>
           <div className="scope-tabs" role="group" aria-label="技能書範圍">
             <button data-guide-anchor="skills:unlocked" ref={unlockedTab} className="btn btn-ghost" aria-pressed={scope === 'unlocked'} onClick={() => setScope('unlocked')}>已解鎖{ids ? ` · ${ids.length}` : ''}</button>
             <button data-guide-anchor="skills:locked" className="btn btn-ghost" aria-pressed={scope === 'locked'} onClick={() => setScope('locked')}>未解鎖</button>
@@ -71,15 +83,8 @@ export function SkillsPanel({ client, onNavigate }: ModulePanelProps) {
             {(scope === 'locked' || ids.length > 0) && <RepositoryLibrary key={scope} client={client} ids={scope === 'unlocked' ? ids : undefined} excludeIds={scope === 'locked'?ids:undefined} access={scope} title={scope === 'unlocked' ? '已解鎖技能書' : '未解鎖技能書'} shelf="guild" headingLevel={3} compact/>}
           </>}
       </section>
-      <section className="skill-shelf" aria-labelledby={communityHeading}>
-        <header className="page-toolbar skill-shelf-heading">
-          <div><h2 id={communityHeading}>社群技能書</h2><p className="muted">社群成員分享的技能書，不需加入公會就能閱讀、分享與參與開發。</p></div>
-          <div className="actions"><button className="btn btn-primary" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button><SkillUpload client={client} openRequest={openRequest} onChanged={()=>setDraftTick(value=>value+1)} onPublished={()=>setSubmissionsRevision(value=>value+1)} secondary/></div>
-        </header>
-        <SkillDraftCallout client={client} revision={submissionsRevision+draftTick} onOpen={(submissionId, mode) => { openNonce.current += 1; setOpenRequest({ submissionId, mode, nonce: openNonce.current }); }}/>
-        <CommunitySkillBooks client={client} revision={submissionsRevision} guildIds={ids ?? []}/>
-      </section>
     </div>
+    <GitHubConnectionSummary returnTo="#skills" onManage={() => onNavigate?.('account')}/>
   </section>;
 }
 

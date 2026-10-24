@@ -4,12 +4,15 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/member-communications/portal/**",
+    "tests/runtime/chat-sticker-preview.test.ts",
+    "tests/runtime/chat-sticker-send.test.ts",
     "apps/portal-web/src/GameConsoleComposer.tsx",
     "apps/portal-web/src/modules/NotificationBell.css",
     "apps/portal-web/src/modules/adaptive-chat-poll.ts",
     "apps/portal-web/src/modules/chat-entry.ts",
     "apps/portal-web/src/modules/chat-leave-guards.ts",
-    "tests/e2e/chat-leave-guards.spec.ts"
+    "tests/e2e/chat-leave-guards.spec.ts",
+    "tests/runtime/notification-read-state.test.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/adaptive-chat-poll.ts",
