@@ -272,6 +272,10 @@ export const interfaceMessages = {
   "install.online": ["聊天、發文需要網路。主畫面版可能需要重新登入；請使用原帳號。", "Messages and posts need internet. You may need to sign in again from the home screen; use your existing account.", "チャットと投稿にはネット接続が必要です。ホーム画面版では、同じアカウントで再ログインが必要な場合があります。", "채팅과 게시물에는 인터넷이 필요합니다. 홈 화면에서 열면 기존 계정으로 다시 로그인해야 할 수 있어요.", "Los mensajes y las publicaciones necesitan internet. Al abrir desde el inicio, puede que debas volver a entrar con tu cuenta habitual."],
   "install.later": ["先繼續使用網頁", "Continue on the website", "ウェブサイトを使い続ける", "웹사이트 계속 사용", "Seguir usando la web"],
   "install.offline": ["裝置目前離線。此頁草稿保留，連線後請再送出。", "Your device is offline. Drafts stay on this page; send when reconnected.", "端末はオフラインです。このページの下書きを保ち、接続後に送信してください。", "기기가 오프라인입니다. 이 페이지의 초안은 유지됩니다. 연결 후 다시 보내 주세요.", "Tu dispositivo está sin conexión. El borrador se mantiene en esta página; envíalo cuando vuelvas a conectarte."],
+  "home.explore": ["探索學習與公會", "Explore learning and guilds", "学びとギルドを探す", "학습과 길드 둘러보기", "Explorar aprendizaje y gremios"],
+  "home.expand": ["展開", "Expand", "開く", "펼치기", "Expandir"],
+  "home.collapse": ["收合", "Collapse", "閉じる", "접기", "Contraer"],
+  "home.readBook": ["閱讀技能書", "Read a skill book", "スキルブックを読む", "스킬북 읽기", "Leer un libro de habilidades"],
 } as const satisfies Record<string, readonly [string,string,string,string,string]>;
 
 export type InterfaceMessage = keyof typeof interfaceMessages;
