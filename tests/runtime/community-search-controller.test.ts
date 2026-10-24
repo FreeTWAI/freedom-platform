@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createCommunitySearch,changeSearchQuery} from '../../apps/portal-web/src/modules/community-search-controller.js';
+import {createCommunitySearch,changeSearchQuery,communityListHistoryForSession} from '../../apps/portal-web/src/modules/community-search-controller.js';
 
 type Page = {items: string[]; next_cursor: string | null};
 const page = (value='found'):Page => ({items:[value],next_cursor:null});
@@ -228,4 +228,107 @@ test('subscribers receive actual changes and unsubscribe stops notifications',as
 test('synchronous read exceptions become recoverable errors',async()=>{
   const c=createCommunitySearch({query:'',generation:()=>0,read:()=>{throw new Error('bad response');},writeQuery:()=>{}});
   c.start();await tick();assert.equal(c.getSnapshot().status,'error');assert.match(String(c.getSnapshot().error),/bad response/);
+});
+
+test('private-list history defaults safely without a marker issued by this runtime',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  assert.equal(history.current(),true);
+  for(const state of [undefined,null,[],1,'updates',{}, {freedomCommunityList:{version:1,tab:'updates',epoch:'forged'}}]) assert.equal(history.read(state),'bookmarks');
+});
+
+test('same client and login retain issued list choices across a remount and structured cloning',()=>{
+  const client={sessionGeneration:1},history=communityListHistoryForSession(client,'member-a');
+  for(const tab of ['bookmarks','follows','updates'] as const){
+    const state=structuredClone(history.write(null,tab));
+    const remounted=communityListHistoryForSession(client,'member-a');
+    assert.equal(remounted,history);assert.equal(remounted.read(state),tab);
+  }
+});
+
+test('private-list history stores only enum, format version and random marker, not identity or content',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'private-user-id:private-session');
+  const state=history.write(null,'updates')!;
+  assert.deepEqual(Object.keys(state),['freedomCommunityList']);
+  const saved=state.freedomCommunityList as Record<string,unknown>;
+  assert.deepEqual(Object.keys(saved).sort(),['epoch','tab','version']);
+  assert.equal(saved.tab,'updates');assert.equal(saved.version,1);
+  assert.match(String(saved.epoch),/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.equal(JSON.stringify(state).includes('private-'),false);
+});
+
+test('changing a marker tab or adding fields cannot forge another list selection',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  const state=history.write(null,'updates')!,saved=state.freedomCommunityList as Record<string,unknown>;
+  for(const value of [
+    {...saved,tab:'follows'},{...saved,tab:'private'},{...saved,epoch:'forged'},
+    {...saved,version:2},{...saved,version:'1'},{...saved,extra:'private'},
+    {version:1,tab:'updates'},['updates',saved.epoch],Object.create(saved),
+    {...saved,[Symbol('unexpected')]:true},
+  ]) assert.equal(history.read({freedomCommunityList:value}),'bookmarks');
+  assert.equal(history.read(state),'updates');
+});
+
+test('history ignores inherited fields and accessors without evaluating them',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  const state=history.write(null,'updates')!,saved=state.freedomCommunityList as Record<string,unknown>;
+  let reads=0;
+  const accessor=Object.defineProperty({},'freedomCommunityList',{get(){reads++;return saved;}});
+  const nested={...saved};Object.defineProperty(nested,'tab',{get(){reads++;return 'updates';}});
+  assert.equal(history.read(accessor),'bookmarks');
+  assert.equal(history.read({freedomCommunityList:nested}),'bookmarks');
+  assert.equal(history.read(Object.create(state)),'bookmarks');
+  assert.equal(reads,0);
+});
+
+test('a different client or new document cannot restore another runtime marker with the same auth key',()=>{
+  const old=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  const state=old.write(null,'updates');
+  const fresh=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  assert.equal(fresh.read(state),'bookmarks');
+  assert.notDeepEqual(fresh.write(null,'updates'),state);
+});
+
+test('generation changes immediately fence old reads and writes before another render',()=>{
+  const client={sessionGeneration:1},old=communityListHistoryForSession(client,'member-a');
+  const state=old.write(null,'updates');client.sessionGeneration++;
+  assert.equal(old.current(),false);assert.equal(old.read(state),'bookmarks');assert.equal(old.write(state,'follows'),undefined);
+  const fresh=communityListHistoryForSession(client,'member-a');
+  assert.notEqual(fresh,old);assert.equal(fresh.read(state),'bookmarks');assert.equal(old.current(),false);
+});
+
+test('account replacement invalidates old markers even if the caller accidentally reuses a generation',()=>{
+  const client={sessionGeneration:1},first=communityListHistoryForSession(client,'member-a');
+  const state=first.write(null,'updates');
+  const other=communityListHistoryForSession(client,'member-b');
+  assert.equal(first.current(),false);assert.equal(first.write(null,'follows'),undefined);assert.equal(other.read(state),'bookmarks');
+  const returned=communityListHistoryForSession(client,'member-a');
+  assert.notEqual(returned,first);assert.equal(returned.read(state),'bookmarks');assert.equal(other.current(),false);
+});
+
+test('anonymous list history cannot issue or accept markers',()=>{
+  const client={sessionGeneration:1},member=communityListHistoryForSession(client,'member-a');
+  const state=member.write(null,'updates'),anonymous=communityListHistoryForSession(client,'');
+  assert.equal(anonymous.current(),false);assert.equal(anonymous.read(state),'bookmarks');assert.equal(anonymous.write(null,'updates'),undefined);
+  assert.equal(member.current(),false);
+});
+
+test('list selection preserves unrelated history data without mutating it or invoking getters',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  const original=Object.defineProperty({other:{position:7}},'getter',{enumerable:true,get(){throw Error('Do not read accessor');}});
+  const saved=history.write(original,'updates')!;
+  assert.deepEqual(saved.other,{position:7});assert.equal(Object.hasOwn(original,'freedomCommunityList'),false);
+  assert.equal(Object.hasOwn(saved,'getter'),false);assert.equal(history.read(saved),'updates');
+  const nullRecord=Object.assign(Object.create(null),{other:'kept'});
+  assert.equal(history.write(nullRecord,'follows')!.other,'kept');
+});
+
+test('only three bounded markers are retained, regardless of repeated selections',()=>{
+  const history=communityListHistoryForSession({sessionGeneration:1},'member-a');
+  const states=['bookmarks','follows','updates'].map(tab=>history.write(null,tab as 'bookmarks'|'follows'|'updates'));
+  for(let count=0;count<100;count++){
+    assert.deepEqual(history.write(null,'updates'),states[2]);
+    assert.deepEqual(history.write(null,'follows'),states[1]);
+  }
+  assert.equal(history.read(states[0]),'bookmarks');assert.equal(history.read(states[1]),'follows');assert.equal(history.read(states[2]),'updates');
+  assert.equal(history.write(null,'unsupported' as 'updates'),undefined);
 });
