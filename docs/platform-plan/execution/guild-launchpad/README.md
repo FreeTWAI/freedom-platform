@@ -6,9 +6,17 @@
 
 ## 目前狀態
 
-本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的保留政策草稿後續使用 187；這不代表人像或部署核准。
+本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的聯絡資料保留使用 187；這不代表人像或部署核准。
 
-<!-- glp-status: as_of=2026-10-12 release.production=cf7e518b129786fb4c8a23d587982a7df06c25bb release.staging=cf7e518b129786fb4c8a23d587982a7df06c25bb flag.production=true flag.staging=true repo_max_migration=187 applied_migration.production=172 applied_migration.staging=172 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=c140a346ba3c8788a3f729919465f46a49ccf99b release.staging=c140a346ba3c8788a3f729919465f46a49ccf99b flag.production=true flag.staging=true repo_max_migration=187 applied_migration.production=185 applied_migration.staging=185 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-23 11:28 UTC，兩環境已部署 `c140a346`／schema185，migrations173–185各以單一交易COMMIT，ledger184列；回退下限為 `c140a346`／185。27個旗標、路由與cron維持，8個新旗標不存在、預設OFF。四組成功before／after備份讀回、隔離還原與清理通過，dispatcher `b76f639d` 已綁定兩環境，原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-c140a346-2026-10-23.json)及[現況快照](../unified-foundation/current-state.json)。
+
+Production before備份與公開smoke首試失敗各自保留；adapter相對匯入修正的symlink本身未釘選。9a重設後service皆inactive，但腳本拒絕，僅列操作者觀察；離線absence失敗與準備期passed log的證據差異另記收據。IO gate等待後才做production after備份，未繞過。公開smoke第二次通過14項；admin僅驗Access302與精確來源CSP，未觀察線上admin Worker CSP。會員UX、真實手機／Safari、新dispatcher自然排程未驗；`as_of=2026-10-12`、M1／完整計畫與真人成果未接受狀態維持。
+
+### 2026-10-20 22:28 歷史發布
+
+以下原文保留 `cf7e518b` 當時觀察；最新部署以上方10月23日收據為準。
 
 截至 2026-10-20 22:28 UTC，兩環境都已部署 `cf7e518b`／schema172，發布供貨／零售公會首次設定資格（#916）、會員服務恢復（#903）、供貨條件按鈕位置（#922）及 Short 鍵盤焦點（#926）修正。27個旗標維持，沒有 migration；四組成功 before／after 備份還原與清理通過，dispatcher `0a478a84` 已綁定兩環境，原 timers 已恢復。詳見[供貨／零售公會發布收據](../unified-foundation/rollout-commerce-cohorts-2026-10-20.json)及[現況快照](../unified-foundation/current-state.json)。
 

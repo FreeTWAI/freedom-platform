@@ -16354,8 +16354,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 39572,
-      "sha256": "7aba73af5fb4bd4e6874c9d65bdce7c424ca642a30cad376512463159ff59cbf"
+      "bytes": 40800,
+      "sha256": "4258163d7a68ab7c6736f4e2969ed2fc73edab6ed7dca9803884910c6551814d"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -16839,8 +16839,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/closeout.md",
-      "bytes": 108074,
-      "sha256": "19b57809a6cb3a80ba56d899bb7000cf53d4efdc452da4de9f6e6e306e8af3a9"
+      "bytes": 113466,
+      "sha256": "956942ebab6f1ac01858cfa36bd62b1d34fab13163f212a4e01799e43337325b"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/composition-evidence-2026-10-05.json",
@@ -16859,8 +16859,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/current-state.json",
-      "bytes": 324930,
-      "sha256": "6fbcca43ae7381f1ea36e00e3bf242486cdef629af12e76b79e62e3fa06ea654"
+      "bytes": 371194,
+      "sha256": "80b622fb4c73edd1def30831e40bbd31eb091c54801fe50427dcfb15db99e6c2"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/daily-snapshot-pins-evidence-2026-10-05.json",
@@ -16991,6 +16991,11 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-cohorts-2026-10-20.json",
       "bytes": 46160,
       "sha256": "9abab1958bae6029b0b59d5dd89bc9e833a8e564b42c213ff93c8cc5d3bb19b7"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-c140a346-2026-10-23.json",
+      "bytes": 86396,
+      "sha256": "f767a63aa6904106812f8eaaba033d38ad515803e313154a7a27d97d6954bcb0"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/rollout-member-consoles-2026-10-19.json",
