@@ -1,9 +1,13 @@
+import type {JournalCommunity} from '../../../../modules/community-journal/community.js';
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const validSlug = (value:string) => value.length <= 64 && slug.test(value);
-export const journalUrl = (date:string, chapter = '') => `/journal/entries/${encodeURIComponent(date)}${chapter ? '#' + encodeURIComponent(chapter) : ''}`;
-export const personUrl = (id:string) => `/journal/people/${encodeURIComponent(id)}`;
+export const communityUrl = (community:JournalCommunity='freedom') => community==='claude'?'/journal/claude':community==='codex'?'/journal/codex':'/journal';
+export const journalUrl = (date:string, chapter = '',community:JournalCommunity='freedom') => `${communityUrl(community)}/entries/${encodeURIComponent(date)}${chapter ? '#' + encodeURIComponent(chapter) : ''}`;
+export const personUrl = (id:string,community:JournalCommunity='freedom') => `${communityUrl(community)}/people/${encodeURIComponent(id)}`;
 
-export function parseRoute(pathname:string):{page:string;date?:string;person?:string} {
+export function parseRoute(pathname:string):{page:string;date?:string;person?:string;community?:JournalCommunity} {
+  const scoped=pathname.match(/^\/journal\/(claude|codex)(?=\/|$)/);
+  if(scoped){const rest=pathname.slice(scoped[0].length);if(/^\/(claude|codex)(?:\/|$)/.test(rest))return {page:'not-found'};const route=parseRoute('/journal'+rest);return {...route,community:scoped[1] as JournalCommunity};}
   if (pathname === '/journal') return {page: 'home'};
   if (pathname === '/journal/people') return {page: 'people'};
   const person = pathname.match(/^\/journal\/people\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
@@ -28,8 +32,8 @@ export function canonicalPath(url:string) {
   if (parseRoute(path).page !== 'not-found') {
     target.pathname = path;
     const person = target.searchParams.get('person');
-    if (path === '/journal/people' && person && validSlug(person)) {
-      target.pathname = personUrl(person);
+    if (path === communityUrl(parseRoute(path).community)+'/people' && person && validSlug(person)) {
+      target.pathname = personUrl(person,parseRoute(path).community);
       target.searchParams.delete('person');
     }
     const chapter = target.searchParams.get('chapter');
