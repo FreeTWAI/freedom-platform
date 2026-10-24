@@ -181,3 +181,11 @@ for (const malformed of ['oversized-string', 'oversized-array', 'deep-object', '
     if (malformed === 'array-properties') floor.capabilities.extra = 'not-a-capability';
     const start = performance.now(); assert.equal(denied(f).status, 'unavailable'); assert(performance.now() - start < 1000);
   });
+
+for(const capability of ['commerce.hosted-drop-ship.v1','commerce.paid-cancellation.v1'])test(`HISTORY retained ${capability} cannot be erased by historical085 observations`,()=>{
+ const f=fixture();f.host.rollback_floor.capabilities.push(capability);
+ for(const record of f.host.release_records)record.capabilities.push(capability,'commerce.hosted-self-ship.v1','commerce.hosted-checkout.v1');
+ const report=run(f);assert.notEqual(report.status,'compatible');
+ assert(report.required_capabilities.includes(capability));
+ assert(report.issues.some(i=>i.code==='historical_shape_schema_missing'));assert(report.issues.some(i=>i.code==='shape_schema_missing'));
+});

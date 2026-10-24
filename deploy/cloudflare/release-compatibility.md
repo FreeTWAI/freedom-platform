@@ -542,3 +542,26 @@ Acknowledging the capability grants no deploy, restore, email or payment authori
 and does not open self-ship anywhere. See
 [EC-SPEC-09](../../docs/platform-plan/execution/commerce/EC-SPEC-09-security-ci-tests.md)
 and [EC-SPEC-10](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md).
+## Hosted drop-ship shape (schema189)
+
+Migration189 adds `commerce_fulfilment_agreements` and its immutable product set,
+plus nullable `commerce_self_shipments.shipper_instance_id`, notification kinds
+and order-subject `fulfiller_unable` cases. Schema189 alone adds no reader floor.
+Once `commerce.hosted-drop-ship.v1` is enabled, written or retained, every active
+and candidate binary must support that capability, `commerce.hosted-self-ship.v1`
+and `commerce.hosted-checkout.v1` at migration189 or later, including with intake
+off. The shape covers authorized Commerce reads of original contacts; it adds no
+recipient projection, read window, payables, statements, provider calls or email.
+This acknowledgement grants no deployment authority and enables no flag.
+
+## Offline paid cancellation shape (schema188)
+
+Migration188 adds `commerce_paid_cancellations` and two member notification kinds.
+The table retains one whole-order offline cancellation and its full refund,
+allowing only the single pending-to-recorded refund update. Schema188 alone
+adds no reader floor. Once `commerce.paid-cancellation.v1` is enabled, written
+or retained, every candidate and active binary must support that capability
+and `commerce.hosted-checkout.v1`; restoring below188 cannot erase the retained
+shape. Exact source, artifact and migration ledger approval remains required.
+This is a compatibility shape, not a feature flag, refund verification or
+permission to deploy. Existing console authorization gates the seller routes.

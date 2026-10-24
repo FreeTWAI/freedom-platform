@@ -304,7 +304,7 @@ function validatePlanInput(input: PlanInput, method?: DeliveryMethod): void {
       ) {
         throw new FulfilmentRuleError();
       }
-      if (!Array.isArray(ds.service_keys) || ds.service_keys.length === 0) {
+      if (!Array.isArray(ds.service_keys) || (ds.service_keys.length === 0 && ds.manual_only!==true) || (ds.manual_only===true && ds.service_keys.length!==0)) {
         throw new FulfilmentRuleError();
       }
       const sKeySet = new Set<ServiceKey>();
@@ -377,6 +377,8 @@ export function planDelivery(input: PlanInput, method: DeliveryMethod): PlanDeli
 
     if (line.fulfilment.kind === 'not_agreed') {
       failureReason = fulfilmentConsentFailure(line.fulfilment);
+    } else if (line.fulfilment.kind==='drop_ship'&&line.fulfilment.manual_only===true) {
+      failureReason = 'method_unsupported';
     } else if (line.attributes === null) {
       failureReason = 'shipping_attributes_missing';
     } else if (!option) {

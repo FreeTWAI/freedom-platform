@@ -1,3 +1,4 @@
+import {readRetainedMemberOrder} from '../../modules/agent-commerce/checkout/member-orders.js';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
@@ -9,8 +10,8 @@ import {createPublicCheckout,placePublicOrder,cancelPublicOrder,type HostedCheck
 import {createOrderNotifications,SELLER_ORDER_NOTIFICATION_RECIPIENTS_SQL,type OrderNotificationPort} from '../../modules/agent-commerce/checkout/order-notifications.js';
 import {createPaymentMethodsPort} from '../../modules/agent-commerce/payments/offline/methods.js';
 import {completeMeetup,confirmOfflinePayment} from '../../modules/agent-commerce/payments/offline/confirm.js';
-import {readSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
-import {orderNotificationDestination} from '../../modules/agent-commerce/checkout/notification-action.js';
+import {cancelSellerPaidCheckoutOrder,recordSellerPaidCancellationRefund,readSellerCheckoutOrder} from '../../modules/agent-commerce/checkout/seller-orders.js';
+import {orderNotificationDestination,dropShipNotificationAction} from '../../modules/agent-commerce/checkout/notification-action.js';
 import {authenticate} from '../../modules/identity-membership/service.js';
 import {listNotifications} from '../../modules/member-communications/service.js';
 import {mapPersonPrincipal} from '../../packages/resource-scopes/index.js';
@@ -280,4 +281,31 @@ test('fan-out is owner-first at 50 plus a sentinel, self notices are excluded, a
   await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,foreign.order_id,{amount_minor:foreign.terms.total_minor,received_on:date},randomUUID(),foreign.version,{orderNotifications:port});
   const rows=await notices(foreign.order_id,'payment_confirmed');assert.equal(rows.length,1);
   assert.equal(rows[0].recipient_ref,people[12].id);assert.equal(rows[0].community_id,foreignCommunity);assert.equal(rows[0].action_tab,'reservations');
+});
+
+test('paid cancellation and later refund send member notices with the actual refund state and keep merchant notes private',async()=>{
+  const order=await placed(),date=(await x.h.pool.query("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Taipei','YYYY-MM-DD') d")).rows[0].d;
+  await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{amount_minor:order.terms.total_minor,received_on:date},randomUUID(),'1');
+  const key=randomUUID(),input={reason:'out_of_stock',note:'合成店家私人備註',refund_state:'pending'};
+  await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,input,key,'1',{orderNotifications:port});
+  await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,input,key,'1',{orderNotifications:port});
+  const cancelled=await notices(order.order_id,'paid_cancelled');assert.equal(cancelled.length,1);assert.equal(cancelled[0].recipient_ref,buyer.id);assert.equal(cancelled[0].kind,'commerce_order_paid_cancelled');assert.match(cancelled[0].body,/待退款/);
+  assert.deepEqual(orderNotificationDestination({tab:cancelled[0].action_tab,resource_id:cancelled[0].action_resource_id}),{tab:'reservations',path:`/shops/${s.slug}/orders/${order.order_id}`});
+  const pending=await readRetainedMemberOrder(x.runtime,s.slug,order.order_id,token(buyer.session.cookie));assert.equal(pending?.paid_cancellation?.refund_state,'pending');assert.equal(JSON.stringify(pending).includes(input.note),false);
+  await recordSellerPaidCancellationRefund(x.runtime,owner,s.tenantId,s.instanceId,order.order_id,{refunded_on:date,refund_method:'cash'},randomUUID(),'2',{orderNotifications:port});
+  const recorded=await notices(order.order_id,'refund_recorded');assert.equal(recorded.length,1);assert.equal(recorded[0].recipient_ref,buyer.id);assert.equal(recorded[0].kind,'commerce_order_refund_recorded');assert.match(recorded[0].body,/已退款/);
+  const done=await readRetainedMemberOrder(x.runtime,s.slug,order.order_id,token(buyer.session.cookie));assert.equal(done?.payment_state,'refunded');assert.equal(done?.paid_cancellation?.refund_method,'cash');
+  assert.equal(JSON.stringify([...cancelled,...recorded]).includes(input.note),false);
+  const immediate=await placed();await confirmOfflinePayment(x.runtime,owner,s.tenantId,s.instanceId,immediate.order_id,{amount_minor:immediate.terms.total_minor,received_on:date},randomUUID(),'1');
+  await cancelSellerPaidCheckoutOrder(x.runtime,owner,s.tenantId,s.instanceId,immediate.order_id,{reason:'other',refund_state:'recorded',refunded_on:date,refund_method:'bank_transfer'},randomUUID(),'1',{orderNotifications:port});
+  assert.match((await notices(immediate.order_id,'paid_cancelled'))[0].body,/已退款/);assert.deepEqual(await notices(immediate.order_id,'refund_recorded'),[]);
+});
+
+test('supplier notification actions resolve only to fixed same-origin agreement and fulfilment pages',()=>{
+ const scope={tenantId:randomUUID(),instanceId:randomUUID()},id=randomUUID();
+ for(const [destination,suffix] of [['supplier-orders','supply/drop-ship-orders'],['supplier-agreements','supply/drop-ship-agreements'],['store-agreements','drop-ship']] as const){
+  const action=dropShipNotificationAction(scope,id,destination);assert.equal(action.resource_id.length,99);
+  assert.deepEqual(orderNotificationDestination(action),{tab:'stores',hash:`#stores/${scope.tenantId}/${scope.instanceId}/${suffix}`});
+ }
+ assert.equal(orderNotificationDestination({tab:'stores',resource_id:'https://example.invalid/private'}),null);
 });

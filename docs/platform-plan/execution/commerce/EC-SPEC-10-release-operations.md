@@ -51,6 +51,7 @@
 | `FREEDOM_COMMERCE_PROVIDER_PROFILES` | 空 | 每個 ID 都必須是這個 binary 實作的 profile；列有 `ecpay.*` 時必須有 `COMMERCE_CREDENTIAL_KEYS` 與 `COMMERCE_JOURNAL`；只列線下 profile 時不需要（EC-SPEC-11 §8） | 只有列出的 profile 能啟用新服務、出現在結帳選項、發起新的對外操作（付款交接、建單、開票、API 退款） | 不在清單的 profile 照常接收通知與查詢；尚未執行的操作留在佇列，重新列入後繼續，不丟棄 |
 | `FREEDOM_COMMERCE_EMAIL_ENABLED` | 關 | Worker 的 `EMAIL` binding 與 `COMMERCE_JOURNAL`；Node server 打開時就緒失敗 | §6 的交易信件；只有打開期間發生的事實會建立信件列 | 不寄信，也不建立新的信件列，關閉期間的事實事後不補寄；打開時已建立、還沒寄出的列留在佇列，重新打開後在到期前寄出（§6.3） |
 | `FREEDOM_COMMERCE_CONTACT_RETENTION` | `off`（含未設定） | 只接受精確的 `off`／`all`，無效值以 `commerce_contact_retention_invalid` 拒絕 | `all`：訂單履約登記／取消後 180 天及顧客掃描，獨立於 checkout 與 quarantine；未成單不遮蔽、沒有等待條件。Ted 2026-10-23「all, all」指定 staging／production 都 `all`，由發布操作者設定 | 不發現或領取遮蔽工作、不掃描顧客，既有 due-work 列保留；停止新遮蔽，不還原資料 |
+| `FREEDOM_COMMERCE_DROP_SHIP_ENABLED` | 關 | `FREEDOM_COMMERCE_SELF_SHIP_ENABLED=true`、`FREEDOM_SUPPLIER_CONSOLE_ENABLED=true`；只接受 true／false，缺依賴就緒與 wrangler 檢查失敗 | 2026-10-23 核准的最小代出貨同意寫入、頁面與新報價；site `commerce_drop_ship_enabled` 亦受 console、launchpad、quarantine 約束 | 同意寫入 404、頁面隱藏、無新代出貨報價；歷史同意與既有訂單可讀並出貨。先本機／staging；正式需 Ted，本工作不改環境旗標 |
 | `FREEDOM_COMMERCE_QUARANTINE` | 關 | — | 隔離模式（§8.3） | 正常 |
 | secret `COMMERCE_CREDENTIAL_KEYS` | 無 | 有值但格式錯誤時就緒失敗 | 解封商家金鑰（EC-SPEC-04 §1.3） | provider 入口回 503（綠界會重送）；帳戶寫入回 503；其他頁面正常 |
 | R2 binding `COMMERCE_JOURNAL` | 無 | — | 外部效果日誌（§8.2） | 不發起任何新的對外操作 |

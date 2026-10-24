@@ -100,9 +100,11 @@ export async function cancelPaidOrder(q:PoolClient,store:CheckoutStore,input:{or
   await retainAllocationCommand(q,input);
   return (await q.query(`UPDATE commerce_checkout_orders SET lifecycle_state='cancelled',cancel_reason='paid_cancelled',cancelled_at=clock_timestamp(),version=version+1 WHERE order_id=$1 RETURNING *,version::text`,[input.orderId])).rows[0] as typeof order;
 }
-export async function recordHandover(q:PoolClient,store:CheckoutStore,input:{shipmentRef:string;lines:readonly {orderId:string;itemId:string;quantity:number}[]}) {
+export async function recordHandover(q:PoolClient,store:CheckoutStore,input:{shipmentRef:string;lines:readonly {orderId:string;itemId:string;quantity:number}[]},held?:{locksHeld:true}) {
   requireCondition(input.lines.length>0&&input.lines.length<=10000,422,'invalid_handover_lines','交寄行項無效。');
-  const ids=[...new Set(input.lines.map(l=>l.orderId))].sort();await lockStore(q,store,[],ids,false);
+  const ids=[...new Set(input.lines.map(l=>l.orderId))].sort();
+  // Supplier commands already hold community, store, order and stock locks in a single store tenant.
+  if(!held?.locksHeld)await lockStore(q,store,[],ids,false);
   const orders=await lockCheckoutOrders(q,ids,store);
   await lockEventReference(q,'ship',input.shipmentRef);
   const prior=(await q.query<{order_id:string;item_id:string;quantity:number}>("SELECT order_id,item_id,quantity FROM commerce_inventory_movements WHERE kind='ship' AND source_ref=$1",[input.shipmentRef])).rows;
