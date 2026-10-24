@@ -130,7 +130,7 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
   const baseCsp = security.headers.get('content-security-policy') ?? '';
   assert.doesNotMatch(baseCsp, /(?:^|;)\s*frame-src(?:\s|;|$)/);
   assert.equal(homeSecurity.headers.get('content-security-policy'),
-    baseCsp.replace("; base-uri", "; frame-src 'self' https://aisns.evitina.tw; base-uri"));
+    baseCsp.replace("; base-uri", "; frame-src https://aisns.evitina.tw; base-uri"));
   const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
   assert.equal(security.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(security.headers.get('referrer-policy'), 'no-referrer');

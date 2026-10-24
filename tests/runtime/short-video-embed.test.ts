@@ -57,8 +57,8 @@ test('player commands are plain JSON for the YouTube postMessage API',()=>{
 
 test('aiSNS is confined to the home page and Short keeps its existing path restrictions',()=>{
   const frames=(path:string,enabled=false)=>platformContentSecurityPolicy(path,undefined,undefined,enabled).split(';').map(part=>part.trim()).filter(part=>part.startsWith('frame-src '));
-  assert.deepEqual(frames('/'),["frame-src 'self' https://aisns.evitina.tw"]);
-  assert.deepEqual(frames('/',true),["frame-src 'self' https://aisns.evitina.tw "+SHORT_VIDEO_EMBED_ORIGIN]);
+  assert.deepEqual(frames('/'),["frame-src https://aisns.evitina.tw"]);
+  assert.deepEqual(frames('/',true),["frame-src https://aisns.evitina.tw "+SHORT_VIDEO_EMBED_ORIGIN]);
   for(const path of ['/journal','/journal/manage','/api/v1/site','/login']){
     assert.deepEqual(frames(path),[]);
     assert.deepEqual(frames(path,true),['frame-src '+SHORT_VIDEO_EMBED_ORIGIN]);

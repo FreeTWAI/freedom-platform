@@ -17,6 +17,6 @@ test('the Worker accepts only true or false for the Short flag, and only true tu
 
 test('the player origin appears in the page policy only for a Worker that enabled the flag',()=>{
   const frames=(enabled:boolean)=>platformContentSecurityPolicy('/',undefined,undefined,enabled).split(';').map(part=>part.trim()).filter(part=>part.startsWith('frame-src '));
-  assert.deepEqual(frames(false), ["frame-src 'self' https://aisns.evitina.tw"]);
-  assert.deepEqual(frames(true), ["frame-src 'self' https://aisns.evitina.tw https://www.youtube-nocookie.com"]);
+  assert.deepEqual(frames(false), ["frame-src https://aisns.evitina.tw"]);
+  assert.deepEqual(frames(true), ["frame-src https://aisns.evitina.tw https://www.youtube-nocookie.com"]);
 });
