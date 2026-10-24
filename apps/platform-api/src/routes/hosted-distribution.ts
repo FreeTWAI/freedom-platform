@@ -7,7 +7,7 @@ import {readSupplyOffer, listSupplyOffers, publishSupplyOffer, withdrawSupplyOff
 import type {PlatformEnv} from '../module-context.js';
 import {privateCache, singleQuery, commandHeaders, etag} from './tenant-http.js';
 
-export function createHostedDistributionRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false) {
+export function createHostedDistributionRoutes(pool: Pool, admissionEnabled = false, offerPhotosEnabled = false, dropShipEnabled = false) {
   const app = new Hono<PlatformEnv>();
   app.use('*', async (c, next) => {try {await next();} finally {privateCache(c);}});
   const root = '/tenants/:tenant_id/storefronts/:instance_id';
@@ -18,7 +18,7 @@ export function createHostedDistributionRoutes(pool: Pool, admissionEnabled = fa
   });
   app.get(root+'/supply-catalog/:offer_id', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); const [t,i] = ids(c);
-    return c.json(await readSupplyOffer(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('offer_id')),admissionEnabled,offerPhotosEnabled));
+    return c.json(await readSupplyOffer(pool,c.get('actor'),t,i,OpaqueId.parse(c.req.param('offer_id')),admissionEnabled,offerPhotosEnabled,dropShipEnabled));
   });
   app.post(root+'/products/:product_id/supply-offer', async c => {
     EmptyStoreInputSchema.parse(singleQuery(c)); EmptyStoreInputSchema.parse(await c.req.json()); const [t,i] = ids(c), h = commandHeaders(c,true);

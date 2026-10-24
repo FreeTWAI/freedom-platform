@@ -38,7 +38,7 @@
    - 服務是 `active`（EC-SPEC-04 §1.4、EC-SPEC-05 §2.2、EC-SPEC-06 §3）；
    - 店家打開了 `checkout_enabled`（EC-SPEC-02 §2.3）。
 
-任何一層關閉，都只停止**新的**動作。已成立的責任照常進行，包括付款通知與查詢、退款、出貨追蹤、到期釋放與遮罩（計畫 §18.2、EC-R56）。
+任何一層關閉，都只停止**新的**動作。已成立的責任照常進行，包括付款通知與查詢、退款、出貨追蹤與到期釋放；遮罩另由保存開關控制（計畫 §18.2、EC-R56）。
 
 開關不是授權。每次讀寫仍由伺服器檢查 tenant、實例、能力與目前狀態（EC-SPEC-09 §2）。
 
@@ -50,6 +50,8 @@
 | `FREEDOM_COMMERCE_CHECKOUT_ENABLED` | 關 | console | 新的 checkout、`hosted_checkout` 訂單與付款交接（B04、B05） | 購物車與結帳按鈕隱藏，B03 顯示「目前暫停接單」。已成立訂單的付款通知、查詢、到期釋放、出貨、售後與退款照常 |
 | `FREEDOM_COMMERCE_PROVIDER_PROFILES` | 空 | 每個 ID 都必須是這個 binary 實作的 profile；列有 `ecpay.*` 時必須有 `COMMERCE_CREDENTIAL_KEYS` 與 `COMMERCE_JOURNAL`；只列線下 profile 時不需要（EC-SPEC-11 §8） | 只有列出的 profile 能啟用新服務、出現在結帳選項、發起新的對外操作（付款交接、建單、開票、API 退款） | 不在清單的 profile 照常接收通知與查詢；尚未執行的操作留在佇列，重新列入後繼續，不丟棄 |
 | `FREEDOM_COMMERCE_EMAIL_ENABLED` | 關 | Worker 的 `EMAIL` binding 與 `COMMERCE_JOURNAL`；Node server 打開時就緒失敗 | §6 的交易信件；只有打開期間發生的事實會建立信件列 | 不寄信，也不建立新的信件列，關閉期間的事實事後不補寄；打開時已建立、還沒寄出的列留在佇列，重新打開後在到期前寄出（§6.3） |
+| `FREEDOM_COMMERCE_CONTACT_RETENTION` | `off`（含未設定） | 只接受精確的 `off`／`all`，無效值以 `commerce_contact_retention_invalid` 拒絕 | `all`：訂單履約登記／取消後 180 天及顧客掃描，獨立於 checkout 與 quarantine；未成單不遮蔽、沒有等待條件。Ted 2026-10-23「all, all」指定 staging／production 都 `all`，由發布操作者設定 | 不發現或領取遮蔽工作、不掃描顧客，既有 due-work 列保留；停止新遮蔽，不還原資料 |
+| `FREEDOM_COMMERCE_DROP_SHIP_ENABLED` | 關 | `FREEDOM_COMMERCE_SELF_SHIP_ENABLED=true`、`FREEDOM_SUPPLIER_CONSOLE_ENABLED=true`；只接受 true／false，缺依賴就緒與 wrangler 檢查失敗 | 2026-10-23 核准的最小代出貨同意寫入、頁面與新報價；site `commerce_drop_ship_enabled` 亦受 console、launchpad、quarantine 約束 | 同意寫入 404、頁面隱藏、無新代出貨報價；歷史同意與既有訂單可讀並出貨。先本機／staging；正式需 Ted，本工作不改環境旗標 |
 | `FREEDOM_COMMERCE_QUARANTINE` | 關 | — | 隔離模式（§8.3） | 正常 |
 | secret `COMMERCE_CREDENTIAL_KEYS` | 無 | 有值但格式錯誤時就緒失敗 | 解封商家金鑰（EC-SPEC-04 §1.3） | provider 入口回 503（綠界會重送）；帳戶寫入回 503；其他頁面正常 |
 | R2 binding `COMMERCE_JOURNAL` | 無 | — | 外部效果日誌（§8.2） | 不發起任何新的對外操作 |
@@ -265,7 +267,7 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 | --- | --- | --- | --- |
 | 延後的付款事件 | M2 | `applyDeferredPaymentEvents`：隔離期間存下、尚未套用的通知事件，依收到的順序套用；排在到期預留釋放之前 | 只受隔離模式控制 |
 | 到期預留釋放 | M1 | `sweepDueCheckoutHolds`，每次最多 200 張；有尚未套用的已驗證 `paid` 事件的訂單略過（EC-SPEC-03 §5.2） | 只受隔離模式控制；checkout 旗標關閉時也要跑，否則已成立訂單的預留不會釋放 |
-| 到期工作 | M2 | `commerce_due_work` 的到期列（EC-SPEC-09 §2.4）：付款查詢、退款執行與查詢、建單、物流查詢、開票與查詢、寄信、遮罩、存取憑證到期、日誌補寫（§8.2） | 每一列依自己的種類檢查：對外的新操作要 profile 在清單內；寄信要寄信旗標；查詢只要 binary 支援 |
+| 到期工作 | M2 | `commerce_due_work` 的到期列（EC-SPEC-09 §2.4）：付款查詢、退款執行與查詢、建單、物流查詢、開票與查詢、寄信、遮罩、存取憑證到期、日誌補寫（§8.2） | 每一列依自己的種類檢查：對外的新操作要 profile 在清單內；寄信要寄信旗標；遮罩要保存開關為 `all`；查詢只要 binary 支援 |
 
 規則：
 
@@ -416,7 +418,7 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 | 權限或設定變更 | 收緊的變更（停用、撤銷准入、退役、寫入者移出）自動重新套用；放寬的變更（啟用、准入、新金鑰）要操作者確認。T 之後新增的商家金鑰無法從日誌取回，服務改成需要重新輸入 |
 
 5. 補記一律經過領域命令，來源標成 `restore_reconciliation` 並附日誌 ID，不直接寫表。
-6. 對完後重跑遮罩工作：備份可能含有之後已經遮罩的個資（EC-SPEC-09 §3）。
+6. 對完後依操作者明示的保存開關模式重跑遮罩工作；`off` 不執行遮罩，也不表示可以解除隔離：備份可能含有之後已經遮罩的個資（EC-SPEC-09 §3）。
 
 ### 8.5 解除隔離的條件
 
@@ -426,7 +428,7 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 2. keyring 含有還原資料中所有封存列用到的金鑰（§4.3）。
 3. 差異報表每一列都已處理，或由 Ted 註明理由接受。
 4. 平台層的 T-047 撤權對帳完成。T-047 解決之前，這一項是人工核對，列在發布檢查（EC-SPEC-08 §5.3）。
-5. 遮罩工作已重跑。
+5. 依該環境經核准的保存模式重跑遮罩，完成所有頁；`off` 的 disabled 回報不代替這項核對。
 
 ### 8.6 演練（`restore_lab`）
 
@@ -515,6 +517,10 @@ console／Supplier 的全域曝光及期間變更；下載本身不開旗標、�
 
 ### 店家自行寄送切片（2026-10-22 核准）
 
-`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。PR-A public 啟動拒絕 `self_ship_retention_not_ready`，local／staging 可測；PR-C 完成保存與還原驗證後才解除。正式開放另待 Ted 核准，沒有本輪 flag 或部署操作。
+`FREEDOM_COMMERCE_SELF_SHIP_ENABLED` 預設關閉，依賴 console／launchpad；買家仍受 checkout 與店家准入限制。Node、Worker 與 `/api/v1/site` 使用同一個有效值；site 的 `commerce_self_ship_enabled` 不代表任一商店已有收款或配送設定。2026-10-23 依 Ted「不要再設什麼30天規則」與移除等待條件的決定，public 自行寄送不再要求保存開關 `all`，runtime 與 wrangler 均移除此相依；console／launchpad 等既有檢查保留。schema 187 仍強制 `commerce.checkout-contact-retention.v1`，表示 binary 包含執行器並遵守開關；預設 `off`，改回 `off` 不還原資料。Ted 同日「all, all」指定 staging／production 的保存值由發布操作者設為 `all`。正式自行寄送的旗標仍由 Ted 決定，沒有本輪 flag 或部署操作。
+
+因 #985 已使用 migration 186，本案改編為 187。
 
 新增 retained shape/capability `commerce.hosted-self-ship.v1`，不能只因 intake OFF 就退回不認得 self_ship 的 reader。migration 185 名稱與 ledger 必須精確相符。使用既有 `20-runtime-grants.psql` 的獨立 marker，清掉 stale table/column grants 後僅 SELECT/INSERT；隔離測試執行實際 block 並驗 ACL 與二次套用。通用 `30-verify-readonly.psql` 不在本案修改範圍。此切片只有站內通知，沒有交易 email 模板或排信。
+
+還原的 commerce 個資前置：既有 media ACL lockdown 執行入口必須附 `--contact-retention <off|all>`，由操作者聲明環境設定。`off` 只鎖 ACL、回報 disabled 與 `deploymentReady:false`、exit 0；`all` 於 lockdown 後呼叫 contact retention。先從無 `--after-instance` 開始；`repeat_page` 保留原游標重跑，`next_page` 用回傳 `after_instance` 續跑，最後 `scan_complete` 才完成本輪。期間必須維持 quarantine 並禁止 runtime 流量；此結果只表示該次掃描完成，不是重新開放授權。中斷可由第一頁重跑，任何頁都以原履約／取消時間判定，不重設期限。Ted 2026-10-23 決定備份副本保存 30 天（「好」），人工個資請求由店主處理自己的客戶（「一樣」），平台不建流程。

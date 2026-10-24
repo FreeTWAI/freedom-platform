@@ -771,3 +771,14 @@ test('categories flag is an exact default-OFF boolean requiring only guild launc
   const runtime=workerRuntime(configuration,readWorkerConfig(configuration));assert.equal(runtime.storeCategoriesEnabled,true);
   assert.equal(runtime.storePhotoAssetStore,undefined);assert.equal(runtime.storePhotoUploadsEnabled===true,false);
 });
+
+test('scheduled contact retention runs with checkout OFF and during quarantine without dispatching business due work',async()=>{
+ let privacy=0,business=0;
+ const handler=createWorkerHandler({createPool:()=>({end:async()=>{}} as unknown as Pool),
+  commerceRetention:async()=>{privacy++;return {claimed:1,completed:1,failed:0,externalCalls:0,released:0,unknown:0};},
+  commerceDueWork:async()=>{business++;throw Error('business work must stay quarantined');},
+  syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'}),
+  authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
+ const pending:Promise<unknown>[]=[];await handler.scheduled({},stagingEnv({FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'}),{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
+ assert.equal(privacy,1);assert.equal(business,0);
+});

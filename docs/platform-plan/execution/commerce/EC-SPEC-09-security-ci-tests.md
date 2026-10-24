@@ -157,19 +157,24 @@ guest、provider 通知與排程都沒有 principal。規則：
 
 ## 3. 保存、遮罩與匯出（DC12、OPEN-07）
 
-2026-10-22 20:21Z Ted 核准 self-ship B：聯絡資料於履約登記（面交或自行寄送）或取消後 180 天遮蔽；履約不等於結單。PR-A 的 shipment 先具備一次性遮蔽約束；PR-C 的有界到期工作是正式開放前置。下表與執行細節於 PR-C 一併更新為已核准規則。人工個資請求負責人及備份副本窗口仍待 Ted 決定。
+**已決定（DC12）：2026-10-22 20:21Z Ted 核准「照B開工ok」。** 訂單的聯絡資料（含收件地址）在履約登記（面交完成或登記自行寄送）後 180 天遮蔽；取消的訂單從取消時起算 180 天。履約只作保存起算，**不是結單，不寫 `closed`，也不是退款**。
 
-下表是 DC12 的建議預設，等 Ted 確認。法定的保存期間由商家（必要時專業人士）確認；C2 只用平台預設值，商家自訂期限在 C4。
+2026-10-23 約 06:20Z Ted 補充決定：未成單資料「不要再設什麼30天規則」，平台不遮蔽沒有訂單參照的 contact；等待條件「別在那邊搞一堆遮蔽 很無聊」，不再因例外、付款、退款、provider 事件或庫存延後。環境值「all, all」，staging 與 production 都用 `all`，由發布操作者設定。已付未履約、沒有起算點的訂單沿用「店主可以看個資 本來就是他的客人 平台管什麼管」，資料保留；人工個資請求回答「一樣」，由店主處理自己的客戶，平台不建流程。備份保存 30 天回答「好」。
+
+依這條規則一併實作的連帶處理：同訂單自行寄送的單號與自填業者名稱在同一交易清空；顧客至少有一筆經 `commerce_checkouts.customer_id` 或 `commerce_checkout_orders.customer_id` 連結的 contact 已遮蔽，而且沒有任何 live contact，才跟著遮蔽。live contact 依 checkout 顧客、正規化 Email 或 order 顧客連結判定；沒有已遮蔽連結的顧客保留。永久限制：修改 Email 後，checkout 若仍有 live、沒有訂單參照的舊 contact，該 checkout 的顧客仍受保護；舊 contact 不會因到期被遮蔽。
+
+`FREEDOM_COMMERCE_CONTACT_RETENTION` 預設 `off`（含未設定），`all` 執行已核准的 180 天規則及上述顧客掃描。Ted 於 2026-10-23 指定 staging 與 production 都為 `all`，由發布操作者設定；合併與部署不會自行改旗標。表中其他未納入本次決定的保存列仍是提案。
 
 | 資料 | 位置 | 預設 | 到期時 |
 | --- | --- | --- | --- |
-| 沒有成立訂單的結帳聯絡資料 | `commerce_checkout_contacts`（沒有訂單指向的列） | checkout 到期後 30 天 | 遮罩 |
-| 訂單的聯絡、收件與發票買家資料 | `commerce_checkout_contacts` | 訂單各軸線都結束、售後期限也屆滿後 180 天 | 遮罩：五個個資欄位一起清空（`168` 的規則）；畫面改顯示「收件資料已依保存期限移除」 |
+| 沒有成立訂單的結帳聯絡資料 | `commerce_checkout_contacts`（沒有訂單指向的列） | 平台不設期限（Ted，2026-10-23：不要 30 天規則） | 保留，不遮罩 |
+| 訂單的聯絡、收件與發票買家資料 | `commerce_checkout_contacts` | 履約登記（面交 `recorded_at`／自行寄送 `recorded_at`）後 180 天；取消單由 `cancelled_at` 後 180 天 | 遮罩：五個個資欄位一起清空（`168` 的規則）；畫面改顯示「收件資料已依保存期限移除」 |
+| 自行寄送的私有物流參考 | `commerce_self_shipments.tracking_number`、`carrier_name` | 與同一訂單 contact 相同（依已核准規則一併處理） | 同交易清空，寫一次 `redacted_at`；保留業者 key、寄出日與出貨事實 |
 | 出貨者的收件投影 | `commerce_fulfilment_recipients` | `access_until`：送達或退回後加同意的天數（預設 14、上限 30） | 遮罩，拒絕新讀取（EC-SPEC-05 §4.4） |
 | 選店 session 的門市暫存 | 選店 session | 到期後 1 天 | 刪除 |
 | 訂單對話 | `commerce_support_messages` | 同訂單的聯絡資料 | 內文改成「（已依保存期限移除）」，保留作者種類與時間 |
 | 發票的買家識別 | 發票文件 | 同訂單的聯絡資料 | 載具號碼遮罩；統編、捐贈碼、發票號碼與金額保留（帳務資料，不是個人資料） |
-| 顧客記錄 | `commerce_customers` | 這位顧客所有訂單的聯絡資料都遮罩之後 | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
+| 顧客記錄 | `commerce_customers` | 至少一筆 checkout／order 顧客連結的 contact 已遮罩，且沒有經 checkout 顧客、正規化 Email 或 order 顧客連結的 live contact。永久限制：Email 修改後仍 live 的舊 contact 會繼續保護該 checkout 的顧客；沒有已遮罩連結的顧客保留 | Email 換成 `redacted:<customer_id>`、清掉 `email_verified_at`、填 `redacted_at`（`168` 只允許這一次改動）；會員連結保留。同一個 Email 之後再下單會建立新的顧客記錄 |
 | 訂單、行項、terms、付款、退款、履約、包裹、發票號碼與金額、供貨帳、provider 事件 | 各領域表 | 隨商店保留（交易與帳務紀錄，不含個資） | 不刪；商店遷出時依 EC-SPEC-08 §5.6 |
 | 卡號片段、授權碼、通知與查詢回應裡的收件人與寄件人欄位、標籤檔 | 不保存 | — | — |
 | 收件資料讀取與列印的紀錄（誰、哪一筆、用途，不含內容） | receipt | 1 年 | 刪除 |
@@ -178,17 +183,20 @@ guest、provider 通知與排程都沒有 principal。規則：
 | 寄信佇列（只有參照與狀態，不含 Email） | `commerce_outbound_emails` | 結束（`sent`、`suppressed`、`expired`、`failed`）後 45 天 | 刪除 |
 | 店的匯出檔 | 物件儲存 | 下載入口 7 天（OPEN-07） | 刪除檔案（EC-SPEC-08 §4.3） |
 | 限流 bucket | `auth_rate_limits` | 既有：視窗過期後清除 | — |
-| 備份 | 平台備份 | 30 天（OPEN-07） | 不改寫備份；還原後先重跑遮罩（下面） |
+| 備份 | 平台備份 | 30 天（Ted，2026-10-23） | 不改寫備份；還原後先重跑遮罩（下面） |
 
 規則：
 
-- 遮罩由到期工作（§2.4）執行，可以重跑，結果相同。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
+- 保存開關只接受精確的 `off`／`all`（未設定等於 `off`）；空字串、布林、大小寫變體與空白都無效，就緒檢查以 `commerce_contact_retention_invalid` 拒絕。`off` 不發現工作、不領取既有 `checkout_contact_retention` 列，也不掃描顧客；既有列留待之後啟用。排程遇無效值依序記固定名稱 `commerce_contact_retention_invalid`、`commerce_settings_invalid`，不記原設定值；本輪遮蔽、付款套用、hold 清理、commerce due work 與 Email 都停止，GitHub 等其他排程照常。改回 `off` 只停止新的遮蔽，不會還原已清空的資料。
+- 遮罩由現有 due-work（§2.4）的 `checkout_contact_retention` 執行：每次最多發現 200 間店、領取 200 件工作，每店交易最多 200 contacts／200 customers，工作每 10 分鐘再到期；舊列同樣由有界掃描觸及。租約失效、重播、失敗均不重寫已遮蔽列；保存開關為 `all` 時，checkout 關閉或 quarantine 不停止此種隱私工作。不觸及任何沒有訂單參照的 contact，不論已到期多久。清空五個個資欄位與 salt，與同訂單的單號／自填業者名稱在同交易完成。遮罩後 `contact_sha256` 與 terms 裡的摘要保留，但無法再拿內容重算，這是預期的。
 - 留下的摘要不能被拿來比對猜測的個資：聯絡資料的摘要含一個隨機 salt，salt 存在聯絡資料列、隨遮罩清除；建立 checkout 的請求摘要以冪等鍵為金鑰（HMAC-SHA256），明文的鍵不保存。
-- 在途的訂單不遮罩（DC12）：有 `open` 例外、未結的退款、`unknown` 的退款或發票、未結的對帳單或售後時，延到這些結束。
+- 每個 contact 必須至少有一張訂單參照，且每張參照訂單都有履約登記或取消起算點，全部滿 180 天才遮蔽。不因開啟的例外、未結付款、未登記退款、未套用 provider 事件、held reservation 或未結 allocation 延後遮蔽（Ted，2026-10-23）。
+- 未履約也未取消的訂單沒有起算點，資料保留；不能為了遮蔽而結單、退款或發明備援期限。Ted 於 2026-10-23 決定店主可看自己的客戶個資，已付未履約的訂單不另加處理。
+- 人工個資請求由店主處理自己的客戶（Ted，2026-10-23：「一樣」），平台不新增工作流程。
 - 衍生副本（搜尋、快取、報表彙總）本來就不放個資；萬一有，依 OPEN-07 先隱藏、7 天內清除。
-- 還原：備份可能含有遮罩前的個資。還原後、重新開放前，先跑遮罩工作並重新套用還原點之後的撤銷（T-047，EC-SPEC-10 §8.4）。
+- 還原：備份可能含遮蔽前個資。既有 `scripts/media-restore-acl.ts --execute-lockdown` 必須附 `--contact-retention <off|all>`，由操作者聲明該環境的設定。`off` 只執行 ACL lockdown，回報 `contactRetention.status=disabled`，不構成遮蔽完成；`all` 在 ACL lockdown 後執行有界遮蔽頁；`repeat_page` 重跑同游標，`next_page` 用回傳游標續跑直到 `scan_complete`。全程維持 quarantine，未完成所有頁不得重新開放；工具永遠不宣告 deploymentReady。另須重新套用還原點後的撤銷（T-047，EC-SPEC-10 §8.4）。
 - 匯出（EC-SPEC-08 §4）：下載入口 7 天；每次下載重新確認是 owner，再發一個 15 分鐘的網址；7 天後刪檔。
-- catalog：commerce 資料集在 DC12 確認前維持 `policy_undecided`，`decision_refs` 加上 `DC12`；確認後改成指向本表的有界狀態。
+- catalog：`DC-08-PII` 僅含 contacts、customers、self-shipments，狀態 `bounded_ec_spec_09_section_3`，`decision_refs` 含 `DC12` 與本表；其他 commerce 資料維持 `policy_undecided`。
 - 日誌、journal、outbox、分析與模型都不含 Email、電話、地址、門市、載具、統編、對話內文與卡號片段（EC-AT48）。CSV 匯出同樣不含（EC-SPEC-06 §6），並防公式注入（EC-SPEC-07 §9）。
 
 ## 4. 限流
@@ -347,7 +355,7 @@ provider 入口：
 | owner／admin 的能力改讀實例版本；升級命令 | 已建：`modules/agent-commerce/hosted/capabilities.ts`、`modules/agent-commerce/hosted/release-upgrade.ts`（`upgradeStoreRelease`） |
 | 授權驗證的基本讀取鍵 | `modules/tenant-workspaces/instance-grants.ts`、`apps/portal-web/src/modules/TenantSettings.tsx` |
 | provider 入口的判斷函式 | 已建：`modules/agent-commerce/operations/provider-entry-paths.ts`（`isCommerceProviderEntry`、`isCommerceProviderEntryPath`）；`platform-app.ts` 閘道加一個條件 |
-| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作（`retention.ts`）尚未建立 |
+| `commerce_entry_routes`、`commerce_due_work`、遮罩工作、限流常數表 | 已建：`169`；`modules/agent-commerce/payments/entry-routes.ts`、`modules/agent-commerce/operations/due-work.ts`、`modules/agent-commerce/checkout/limits.ts`。遮罩工作已建於 `modules/agent-commerce/operations/contact-retention.ts`（`187`，因 #985 已使用 186 而改編），預設 `off`，由保存開關啟用 |
 | 跨領域測試 | 已建：`tests/runtime/commerce-rate-limits.test.ts`、`hosted-payment-canary.test.ts`（秘密 canary）、`hosted-payment-schema.test.ts`、`hosted-payment-handoff.test.ts`、`hosted-payment-notifications.test.ts`、`commerce-effect-journal.test.ts`。尚未建立：`commerce-capability-matrix.test.ts`、`commerce-entry-gate.test.ts`、`commerce-retention.test.ts`、`tests/e2e/commerce-no-model-keys.spec.ts` |
 
 descriptor 的歸屬與工作順序在 [work-plan.md](work-plan.md)。
@@ -360,7 +368,7 @@ descriptor 的歸屬與工作順序在 [work-plan.md](work-plan.md)。
 
 | 項目 | 建議 | 只影響 |
 | --- | --- | --- |
-| DC12 保存期限 | §3 的預設：聯絡資料在各軸線結束且售後期限屆滿後 180 天遮罩；出貨者 14 天、上限 30 | 正式對外的隱私承諾與遮罩工作 |
+| DC12 保存期限 | §3 訂單聯絡資料由履約登記或取消後 180 天起算（2026-10-22 已核准）；Ted 2026-10-23 移除未成單 30 天與等待條件，無起算點保留、人工請求由店主處理，備份 30 天，staging／production 均 `all`；出貨者 14 天、上限 30 仍為提案 | 正式對外的隱私承諾與遮罩工作 |
 | 能力的名稱與拆法 | §2.2 | 成員授權畫面；Ted 可以改 |
 | 1.1.0 由 owner 手動升級 | 不自動升級既有商店 | 既有商店啟用訂單與收款的時間 |
 | provider 帳戶只限 owner／admin，並重新輸入密碼 | 是 | 誰能設定收款、物流與發票帳戶 |

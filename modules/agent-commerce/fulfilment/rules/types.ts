@@ -16,6 +16,7 @@ export const DELIVERY_METHODS = [
 ] as const;
 
 export const UNAVAILABLE_REASONS = [
+  'fulfilment_mixed_shippers',
   'fulfilment_not_agreed',
   'shipping_attributes_missing',
   'method_unsupported',
@@ -116,6 +117,7 @@ export type QuoteLineFulfilment =
   | { readonly kind: 'self' }
   | {
       readonly kind: 'drop_ship';
+      readonly manual_only?: true;
       readonly executor_shop_id: string;
       readonly agreement_id: string;
       readonly agreement_version: string;

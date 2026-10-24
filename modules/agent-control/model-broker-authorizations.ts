@@ -65,28 +65,38 @@ export function createModelBrokerAuthorizations(pool:Pool,options:{environment:z
   }
   interface Authority {community_id:string;session_expiry:Date;credential_expiry:Date;now:Date}
   async function currentRow(q:PoolClient,row:Row,r:RecoveryObservation):Promise<Authority> {
-    const found=(await q.query<Authority>(`SELECT u.community_id,s.expires_at session_expiry,c.expires_at credential_expiry,clock_timestamp() now
-      FROM model_broker_authorizations a JOIN users u ON u.user_id=a.owner_user_id AND u.active
-        AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
-      JOIN sessions s ON s.token_hash=a.original_session_hash AND s.user_id=u.user_id AND s.revoked_at IS NULL
-      JOIN principals p ON p.principal_id=a.owner_principal_id AND p.user_ref=u.user_id AND p.kind='person' AND p.status='active'
-      JOIN resource_scopes rs ON rs.scope_id=a.scope_id AND rs.owner_principal_id=p.principal_id AND rs.kind='personal' AND rs.status='active'
-      JOIN broker_model_credentials c ON c.credential_id=a.credential_id AND c.generation=a.credential_generation AND c.state='active'
-        AND c.recovery_generation=a.recovery_generation AND c.model_connection_id=a.model_connection_id AND c.model_version=a.model_version
-        AND c.owner_user_id=u.user_id AND c.owner_principal_id=p.principal_id AND c.scope_id=rs.scope_id
-        AND c.environment=a.environment AND c.client_id=a.client_id
+    // Bound join planning around the one immutable credential pin. Materialize
+    // only within this statement: every call still reads current backing state,
+    // and all deadlines are checked by the outer query and after SQL delivery.
+    const found=(await q.query<Authority>(`WITH credential AS MATERIALIZED (
+      SELECT c.credential_id,c.generation,c.recovery_generation,c.model_connection_id,c.model_version,
+        c.owner_user_id,c.owner_principal_id,c.scope_id,c.environment,c.client_id,c.issued_at,c.expires_at,
+        ac.issued_at connection_issued_at,ac.expires_at connection_expires_at,
+        f.issued_at family_issued_at,f.expires_at family_expires_at
+      FROM broker_model_credentials c
       JOIN model_connections m ON m.model_connection_id=c.model_connection_id AND m.aggregate_version=c.model_version AND m.state='unverified'
         AND m.selection=c.selection AND m.runtime_device_id=c.runtime_device_id AND m.connection_id=c.connection_id AND m.family_id=c.family_id
       JOIN runtime_registrations d ON d.runtime_device_id=c.runtime_device_id AND d.state='enrolled'
       JOIN agent_connections ac ON ac.connection_id=c.connection_id AND ac.state='active'
       JOIN bootstrap_refresh_families f ON f.family_id=c.family_id AND f.state='active'
+      WHERE c.credential_id=$8 AND c.state='active'
+    ) SELECT u.community_id,s.expires_at session_expiry,c.expires_at credential_expiry,clock_timestamp() now
+      FROM model_broker_authorizations a JOIN users u ON u.user_id=a.owner_user_id AND u.active
+        AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
+      JOIN sessions s ON s.token_hash=a.original_session_hash AND s.user_id=u.user_id AND s.revoked_at IS NULL
+      JOIN principals p ON p.principal_id=a.owner_principal_id AND p.user_ref=u.user_id AND p.kind='person' AND p.status='active'
+      JOIN resource_scopes rs ON rs.scope_id=a.scope_id AND rs.owner_principal_id=p.principal_id AND rs.kind='personal' AND rs.status='active'
+      JOIN credential c ON c.credential_id=a.credential_id AND c.generation=a.credential_generation
+        AND c.recovery_generation=a.recovery_generation AND c.model_connection_id=a.model_connection_id AND c.model_version=a.model_version
+        AND c.owner_user_id=u.user_id AND c.owner_principal_id=p.principal_id AND c.scope_id=rs.scope_id
+        AND c.environment=a.environment AND c.client_id=a.client_id
       WHERE a.authorization_id=$1 AND a.original_session_hash=$2 AND a.command_digest=$3
         AND a.nonce_hash=$4 AND a.environment=$5 AND a.client_id=$6 AND a.recovery_generation=$7
         AND s.expires_at>clock_timestamp() AND a.issued_at<=clock_timestamp() AND a.expires_at>clock_timestamp()
         AND c.issued_at<=clock_timestamp() AND c.expires_at>clock_timestamp()
-        AND ac.issued_at<=clock_timestamp() AND ac.expires_at>clock_timestamp()
-        AND f.issued_at<=clock_timestamp() AND f.expires_at>clock_timestamp()`,
-    [row.authorization_id,row.original_session_hash,row.command_digest,row.nonce_hash,environment,clientId,r.generation])).rows[0];
+        AND c.connection_issued_at<=clock_timestamp() AND c.connection_expires_at>clock_timestamp()
+        AND c.family_issued_at<=clock_timestamp() AND c.family_expires_at>clock_timestamp()`,
+    [row.authorization_id,row.original_session_hash,row.command_digest,row.nonce_hash,environment,clientId,r.generation,row.credential_id])).rows[0];
     if(!found||r.generation!==row.recovery_generation||Date.parse(r.expiresAt)<=found.now.getTime()
       ||Math.min(row.expires_at.getTime(),found.session_expiry.getTime(),found.credential_expiry.getTime(),Date.parse(r.expiresAt))<=Date.now())invalid();
     return found!;

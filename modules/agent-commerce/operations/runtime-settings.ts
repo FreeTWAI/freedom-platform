@@ -1,10 +1,11 @@
-import {resolveFreedomEnv,type FreedomEnv} from '../../../apps/platform-api/src/env.js';
 import {ReadinessError} from '../../../apps/platform-api/src/readiness.js';
 
 export interface CommerceSettings {checkoutEnabled:boolean;consoleEnabled?:boolean;quarantine:boolean;providerProfiles:readonly string[];emailEnabled?:boolean}
 export interface CommerceEnvironment {
   FREEDOM_ENV?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
+  FREEDOM_COMMERCE_CONTACT_RETENTION?:string;
+  FREEDOM_COMMERCE_DROP_SHIP_ENABLED?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED?:string;
   FREEDOM_COMMERCE_CONSOLE_ENABLED?:string;
@@ -14,19 +15,28 @@ export interface CommerceEnvironment {
   FREEDOM_SUPPLIER_CONSOLE_ENABLED?:string;
   FREEDOM_COMMERCE_PROVIDER_PROFILES?:string;
 }
-/** PR-A refuses public startup until contact retention is installed and verified in PR-C. */
-export function assertSelfShipReadiness(enabled:boolean,environment:FreedomEnv):void {
-  if(enabled&&environment==='public')throw new ReadinessError('self_ship_retention_not_ready');
+export type CommerceContactRetention = 'off'|'all';
+export function readCommerceContactRetention(env:CommerceEnvironment):CommerceContactRetention {
+  const value=env.FREEDOM_COMMERCE_CONTACT_RETENTION;
+  if(value===undefined||value==='off')return 'off';
+  if(value==='all')return value;
+  throw new ReadinessError('commerce_contact_retention_invalid');
 }
 export function readCommerceSelfShipEnabled(env:CommerceEnvironment):boolean {
   const value=env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED;
   if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_self_ship_flag_invalid');
   if(value==='true'&&(env.FREEDOM_COMMERCE_CONSOLE_ENABLED!=='true'||env.FREEDOM_GUILD_LAUNCHPAD_ENABLED!=='true'))throw new ReadinessError('commerce_self_ship_console_required');
-  if(value==='true'){
-    let environment:FreedomEnv;
-    try{environment=resolveFreedomEnv(env.FREEDOM_ENV);}catch{throw new ReadinessError('freedom_env_invalid');}
-    assertSelfShipReadiness(true,environment);
-  }
+  return value==='true';
+}
+export function assertDropShipDependencies(enabled:boolean,selfShipEnabled:boolean,supplierConsoleEnabled:boolean):void {
+  if(enabled&&!selfShipEnabled)throw new ReadinessError('commerce_drop_ship_self_ship_required');
+  if(enabled&&!supplierConsoleEnabled)throw new ReadinessError('commerce_drop_ship_supplier_console_required');
+}
+export function readCommerceDropShipEnabled(env:CommerceEnvironment):boolean {
+  const value=env.FREEDOM_COMMERCE_DROP_SHIP_ENABLED;
+  if(value!==undefined&&value!=='true'&&value!=='false')throw new ReadinessError('commerce_drop_ship_flag_invalid');
+  assertDropShipDependencies(value==='true',env.FREEDOM_COMMERCE_SELF_SHIP_ENABLED==='true',env.FREEDOM_SUPPLIER_CONSOLE_ENABLED==='true');
+  if(value==='true')readCommerceSelfShipEnabled(env);
   return value==='true';
 }
 export const IMPLEMENTED_PROVIDER_PROFILES=Object.freeze(['ecpay.aio.credit.v1','offline.bank_transfer.v1','offline.cash_on_meetup.v1']);
@@ -52,6 +62,8 @@ export function readNodeCommerceSettings(env:CommerceEnvironment):CommerceSettin
   return settings;
 }
 export function readCommerceSettings(env:CommerceEnvironment):CommerceSettings {
+  readCommerceContactRetention(env);
+  readCommerceDropShipEnabled(env);
   readCommerceOrderNotificationsEnabled(env);
   readCommerceSelfShipEnabled(env);
   for(const flag of [env.FREEDOM_COMMERCE_CHECKOUT_ENABLED,env.FREEDOM_COMMERCE_CONSOLE_ENABLED,env.FREEDOM_COMMERCE_QUARANTINE,env.FREEDOM_COMMERCE_EMAIL_ENABLED]) {

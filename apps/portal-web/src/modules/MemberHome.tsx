@@ -17,7 +17,7 @@ import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import {createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, resolveHomeJournalUrl, type HomeRefreshReason} from './member-home-loading';
 
-// Leave unset until the separate service's public projection is ready and approved.
+// The independently maintained journal module is hosted by this platform.
 const journalEnv = (import.meta as ImportMeta & {env?: Record<string, string | undefined>}).env;
 const journalUrl = resolveHomeJournalUrl(journalEnv?.VITE_COMMUNITY_JOURNAL_URL);
 
@@ -224,8 +224,14 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
       <h2>共創日誌</h2>
       <p>閱讀工坊討論整理、開發進展與決策。</p>
       {journalUrl
-        ? <a className="btn btn-ghost" href={journalUrl} target="_blank" rel="noopener noreferrer">閱讀共創誌<span className="sr-only">（另開分頁）</span></a>
+        ? <a className="btn btn-ghost" href={journalUrl}>閱讀共創誌</a>
         : <p role="status">日誌尚未公開</p>}
+    </section>
+
+    <section className="card stack" aria-label="離譜日常遊樂場">
+      <h2>休息一下，做點離譜的事。</h2>
+      <p>三款短局遊戲，拍下怪事、蓋完下班，也能把成果分享給工坊夥伴。</p>
+      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">玩離譜日常<span className="sr-only">（另開分頁）</span></a>
     </section>
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">

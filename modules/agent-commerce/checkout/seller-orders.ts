@@ -1,3 +1,5 @@
+import {PaidCancellationInputSchema,PaidCancellationRefundInputSchema} from '../../../contracts/guild-launchpad/v1/hosted-seller-checkout.js';
+import {cancelPaidOfflineOrderHeld,recordPaidCancellationRefundHeld,paidCancellationView} from './paid-cancellation.js';
 import {selfShipOrderView} from './self-ship-view.js';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -58,6 +60,7 @@ export async function sellerCheckoutOrderRow(q:PoolClient,context:SellerCheckout
   const row=(await q.query(`SELECT co.*,co.version::text,o.created_at,o.expires_at,o.expires_at<=clock_timestamp() AS hold_expired,
     CASE WHEN co.payment_method='immediate_card' THEN NULL ELSE o.expires_at+interval '72 hours' END AS payment_grace_until,
     ${confirmedPaymentSQL('co.order_id')} AS confirmed,
+    EXISTS(SELECT 1 FROM commerce_paid_cancellations pc WHERE pc.order_id=co.order_id AND pc.refund_state='recorded') AS offline_refunded,
     EXISTS(SELECT 1 FROM commerce_checkout_payment_applications a WHERE a.order_id=co.order_id AND a.outcome='unallocatable') AS unallocatable,
     c.contact_name,c.redacted_at,h.handover_id,to_char(h.completed_on,'YYYY-MM-DD') AS handover_completed_on,h.recorded_at AS handover_recorded_at,
     (SELECT count(*)::int FROM commerce_exception_cases e WHERE e.order_id=co.order_id AND e.tenant_id=co.tenant_id AND e.instance_id=co.instance_id AND e.status='open') AS open_exception_count
@@ -94,7 +97,7 @@ async function summary(q:PoolClient,row:Awaited<ReturnType<typeof sellerCheckout
   return {value:{order_ref:row.order_id,display_number:row.display_number,environment:row.environment,created_at:row.created_at.toISOString(),pay_by:row.expires_at.toISOString(),
     lifecycle_state:row.lifecycle_state,cancel_reason:row.cancel_reason,currency:t.currency,total_minor:t.total_minor,quantity_total:t.items.reduce((n,l)=>n+l.quantity,0),
     customer:sellerCustomer(row.contact_name,redacted),payment_method:row.payment_method,
-    payment_state:payment?.payment_state??(row.confirmed?'confirmed':'unpaid'),inventory_state:stock.state,open_exception_count:row.open_exception_count,version:row.version},stock};
+    payment_state:row.offline_refunded?'refunded':payment?.payment_state??(row.confirmed?'confirmed':'unpaid'),inventory_state:stock.state,open_exception_count:row.open_exception_count,version:row.version},stock};
 }
 export async function listSellerCheckoutOrders(pool:Pool,actor:Actor,tenantId:string,instanceId:string,raw:unknown,options:SellerCheckoutReadOptions={}) {
   const query=SellerCheckoutOrderQuerySchema.parse(raw);
@@ -123,7 +126,7 @@ export async function sellerRefunds(q:PoolClient,context:SellerCheckoutContext,o
     provider_reference:r.provider_reference,basis:r.basis,mode:r.mode,state:r.state,recorded_without_provider:r.mode==='manual_record',recorded_by:r.recorded_by_principal_id,created_at:r.created_at.toISOString()}));
 }
 export const CASE_RESOLUTION_CODES:Readonly<Record<PaymentExceptionKind,readonly ('refunded'|'confirmed'|'checked_with_provider')[]>>={
-  amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
+  fulfiller_unable:[],amount_mismatch:['refunded'],paid_after_cancel:['refunded'],overpaid:['refunded'],paid_unallocatable:[],payment_unconfirmed:['confirmed','checked_with_provider'],unmatched_payment:['checked_with_provider'],contradicting_event:['checked_with_provider'],
 };
 export async function sellerExceptionRows(q:PoolClient,context:SellerCheckoutContext,where:string,values:unknown[]=[]) {
   return (await q.query(`SELECT e.*,e.version::text,o.display_number,
@@ -133,7 +136,7 @@ export async function sellerExceptionRows(q:PoolClient,context:SellerCheckoutCon
     WHERE e.tenant_id=$1 AND e.instance_id=$2 AND ${where}`,[context.tenant.tenant_id,context.profile.instance_id,...values])).rows;
 }
 export async function sellerExceptionView(q:PoolClient,context:SellerCheckoutContext,row:Awaited<ReturnType<typeof sellerExceptionRows>>[number],keys:readonly string[]) {
-  const kind=row.kind as PaymentExceptionKind,codes=CASE_RESOLUTION_CODES[kind],actions:('resolve_with_evidence'|'retry_allocation')[]=row.status==='open'&&keys.includes('store:orders:manage')?(kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']):[];
+  const kind=row.kind as PaymentExceptionKind,codes=CASE_RESOLUTION_CODES[kind],actions:('resolve_with_evidence'|'retry_allocation')[]=row.status==='open'&&kind!=='fulfiller_unable'&&keys.includes('store:orders:manage')?(kind==='paid_unallocatable'?['retry_allocation']:['resolve_with_evidence']):[];
   let facts=null;
   if(keys.includes('store:finance:read')) {
     if(row.subject_kind==='offline_payment') {
@@ -159,9 +162,10 @@ export async function sellerExceptionView(q:PoolClient,context:SellerCheckoutCon
 }
 export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerCheckoutContext,id:string,options:SellerCheckoutReadOptions={}) {
   const row=await sellerCheckoutOrderRow(q,context,id),keys=await effectiveStoreCapabilities(q,context.tenant,context.profile.instance_id),payment=(await options.payment?.summarize(q,[id]))?.get(id),base=await summary(q,row,payment),t=row.terms as CheckoutTerms;
-  const applications=(await q.query(`SELECT a.application_id,a.payment_ref,a.amount_minor,a.currency,a.outcome,a.created_at,coalesce(r.refunded,0) AS refunded,p.payment_id AS offline_payment_id
+  const applications=(await q.query(`SELECT a.application_id,a.payment_ref,a.amount_minor,a.currency,a.outcome,a.created_at,coalesce(r.refunded,0)+coalesce(pc.amount_minor,0) AS refunded,p.payment_id AS offline_payment_id
     FROM commerce_checkout_payment_applications a LEFT JOIN LATERAL (SELECT sum(amount_minor) AS refunded FROM commerce_refunds WHERE application_id=a.application_id AND state IN ('recorded','confirmed')) r ON true
-    LEFT JOIN commerce_offline_payments p ON p.payment_id=a.payment_ref AND p.order_id=a.order_id WHERE a.order_id=$1 ORDER BY a.created_at,a.application_id`,[id])).rows.map(r=>{
+    LEFT JOIN commerce_offline_payments p ON p.payment_id=a.payment_ref AND p.order_id=a.order_id
+    LEFT JOIN commerce_paid_cancellations pc ON pc.order_id=a.order_id AND pc.payment_id=a.payment_ref AND pc.refund_state='recorded' WHERE a.order_id=$1 ORDER BY a.created_at,a.application_id`,[id])).rows.map(r=>{
       const unapplied=['overpaid','after_cancel','amount_mismatch'].includes(r.outcome),amount=Number(r.amount_minor),refunded=Number(r.refunded),offline=r.offline_payment_id!==null;
       return {application_ref:r.application_id,attempt_ref:offline||r.outcome==='simulated'?null:r.payment_ref,offline_payment_ref:offline?r.offline_payment_id:null,amount_minor:amount,currency:r.currency,outcome:r.outcome,created_at:r.created_at.toISOString(),refunded_minor:refunded,refundable_minor:unapplied?amount-refunded:0};
     });
@@ -179,16 +183,22 @@ export async function projectSellerCheckoutOrder(q:PoolClient,context:SellerChec
   for(const c of cases)exceptions.push(await sellerExceptionView(q,context,c,keys));
   const writable=context.tenant.tenant_status==='active'&&!options.settings?.quarantine,open=row.lifecycle_state==='open',manage=keys.includes('store:orders:manage'),fulfil=keys.includes('store:fulfil');
   const remaining=[...base.stock.lines.values()].reduce((n,line)=>n+line.allocated,0),meetupDelivery=t.shipping.groups.length>0&&t.shipping.groups.every(group=>group.method_ref==='meetup');
-  const selfShip=await selfShipOrderView(q,id,t);
-  return {...base.value,...(selfShip?{self_ship:selfShip}:{}),payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
+  const selfShip=await selfShipOrderView(q,id,t),paidCancellation=await paidCancellationView(q,id,true);
+  const shipped=await q.query('SELECT 1 FROM commerce_self_shipments WHERE order_id=$1',[id]);
+  const cancelPaid=manage&&writable&&open&&row.confirmed&&row.payment_method!=='immediate_card'&&row.handover_id==null&&shipped.rowCount===0&&[...base.stock.lines.values()].every(line=>line.shipped===0);
+  const drop=t.shipping.groups[0]?.drop_ship,unable=drop?(await q.query(`SELECT fulfiller_reason AS reason,fulfiller_note AS note FROM commerce_exception_cases WHERE order_id=$1 AND kind='fulfiller_unable' AND status='open' ORDER BY created_at DESC LIMIT 1`,[id])).rows[0]??null:null;
+  const dropShip=drop?{supplier_name:drop.supplier_name,supply_cost_minor:drop.supply_cost_minor,fee_per_order_minor:drop.fee_per_order_minor,state:selfShip?.shipment?'shipped' as const:unable?'unable' as const:'waiting' as const,unable}:undefined;
+  return {...base.value,...(dropShip?{drop_ship:dropShip}:{}),paid_cancellation:paidCancellation,...(paidCancellation?.refund_state==='recorded'?{payment_state:'refunded' as const}:{}),...(selfShip?{self_ship:selfShip}:{}),payment_grace_until:row.payment_grace_until?.toISOString()??null,meetup_handover:row.handover_id?{handover_ref:row.handover_id,completed_on:row.handover_completed_on,recorded_at:row.handover_recorded_at.toISOString()}:null,
     lines:t.items.map(l=>({sku:l.sku,title:l.title,quantity:l.quantity,unit_price_minor:l.unit_price_minor,line_total_minor:l.line_total_minor,inventory:base.stock.lines.get(l.sku)!})),
     merchandise_total_minor:t.merchandise_total_minor,discount_total_minor:t.discount_total_minor,shipping_total_minor:t.shipping_total_minor,latest_payment_attempt:payment?.latest_payment_attempt??null,payment_detail,exceptions,
     actions:{cancel:manage&&open&&!row.confirmed&&writable,
+      cancel_paid:cancelPaid,
+      record_paid_refund:keys.includes('store:refund')&&writable&&(cancelPaid||paidCancellation?.refund_state==='pending'),
       query_payment:(keys.includes('store:orders:read')||keys.includes('store:finance:read'))&&!options.settings?.quarantine&&(await options.payment?.queryable?.(q,id)??false),
       record_refund:keys.includes('store:refund')&&applications.some(a=>a.refundable_minor>0)&&writable,view_contact:keys.includes('store:customers:read'),view_finance:keys.includes('store:finance:read'),
       confirm_offline_payment:manage&&open&&row.payment_method==='bank_transfer'&&!row.confirmed&&writable,
       complete_meetup:manage&&fulfil&&open&&row.payment_method==='cash_on_meetup'&&!row.confirmed&&writable,
-      ...(selfShip?{record_self_shipment:fulfil&&writable&&open&&row.confirmed&&selfShip.shipment===null&&remaining>0}:{}),
+      ...(selfShip?{record_self_shipment:t.shipping.groups[0]?.fulfilment_mode==='self'&&fulfil&&writable&&open&&row.confirmed&&selfShip.shipment===null&&remaining>0}:{}),
       record_meetup_handover:fulfil&&writable&&open&&row.confirmed&&meetupDelivery&&row.handover_id==null&&remaining>0}};
 }
 export function readSellerCheckoutOrder(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,options:SellerCheckoutReadOptions={}) {
@@ -216,6 +226,18 @@ export async function cancelSellerCheckoutOrder(pool:Pool,actor:Actor,tenantId:s
       await lockStore(q,store,[],[id],false);const [order]=await lockCheckoutOrders(q,[id],store);checkVersion(order.version,expected);
       await cancelUnpaidOrder(q,store,id,'seller','seller_cancelled',{payment:options.payment,orderNotifications:options.orderNotifications,actorPrincipalId:context.tenant.principal_id});return {id};
     },(q,context,ref)=>projectSellerCheckoutOrder(q,context,ref,options));
+}
+
+export async function cancelSellerPaidCheckoutOrder(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,raw:unknown,key:string,expected:string,options:SellerCheckoutReadOptions={}) {
+  quarantineGate(options);const body=PaidCancellationInputSchema.parse(raw);
+  const capabilities=body.refund_state==='recorded'?['store:orders:manage','store:refund']:['store:orders:manage'];
+  return sellerCheckoutCommand(pool,actor,tenantId,instanceId,capabilities,'commerce.checkout_order.paid_cancellation',{kind:'hosted_checkout_order',id},body,key,expected,
+    (q,context)=>cancelPaidOfflineOrderHeld(q,context,id,body,expected,options),(q,context,ref)=>projectSellerCheckoutOrder(q,context,ref,options));
+}
+export async function recordSellerPaidCancellationRefund(pool:Pool,actor:Actor,tenantId:string,instanceId:string,id:string,raw:unknown,key:string,expected:string,options:SellerCheckoutReadOptions={}) {
+  quarantineGate(options);const body=PaidCancellationRefundInputSchema.parse(raw);
+  return sellerCheckoutCommand(pool,actor,tenantId,instanceId,'store:refund','commerce.checkout_order.record_offline_refund',{kind:'hosted_checkout_order',id},body,key,expected,
+    (q,context)=>recordPaidCancellationRefundHeld(q,context,id,{refund_state:'recorded',...body},expected,options),(q,context,ref)=>projectSellerCheckoutOrder(q,context,ref,options));
 }
 
 /** Authorize and charge in separate short transactions. The shared payment
