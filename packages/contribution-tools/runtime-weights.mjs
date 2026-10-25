@@ -4,7 +4,7 @@ import { PROGRESS_MAX_ELAPSED_MS } from './test-reporter.mjs';
 // files it completed; only callers that name such a log pass `partial`. The
 // Explicit partial input may omit files with saturated endpoints; strict input
 // rejects the whole segment. Neither mode admits malformed endpoint values.
-const saturated = value => [1_200_000, PROGRESS_MAX_ELAPSED_MS].includes(value);
+const saturated = value => [1_200_000, 1_500_000, PROGRESS_MAX_ELAPSED_MS].includes(value);
 export function parseProgressLog(text, { partial = false } = {}) {
   const lines = text.split('\n');
   const records = [];
@@ -60,7 +60,7 @@ export function parseProgressLog(text, { partial = false } = {}) {
         if (!Number.isSafeInteger(record.elapsed_ms) || record.elapsed_ms < 0 || record.elapsed_ms > PROGRESS_MAX_ELAPSED_MS) {
           throw new Error('inconsistent_progress_log');
         }
-        // Both reporter generations clamp at their ceiling. Even a complete
+        // All reporter generations clamp at their ceiling. Even a complete
         // file-count summary cannot recover time lost to that saturation.
         // Conservatively reject an exact ceiling, including a coincidental hit.
         if (!partial && saturated(record.elapsed_ms)) {

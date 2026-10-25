@@ -81,15 +81,15 @@ test('complete counts cannot admit saturated or invalid file timing as schedulin
     {schema:'freedom.test-file-progress/v1',event:'completed',path:'tests/runtime/late.test.ts',elapsed_ms:end},
     {schema:'freedom.test-file-progress-summary/v1',selected_count:1,started_count:1,completed_count:1,incomplete:false},
   ];
-  for (const [start,end] of [[1_190_000,1_200_000],[1_200_000,1_200_000],[1_490_000,1_500_000],[1_500_000,1_500_000]]) {
+  for (const [start,end] of [[1_190_000,1_200_000],[1_200_000,1_200_000],[1_490_000,1_500_000],[1_500_000,1_500_000],[2_090_000,2_100_000],[2_100_000,2_100_000]]) {
     assert.throws(()=>parseProgressLog(buildSyntheticLog(records(start,end))),/saturated_progress_timing/);
   }
-  for (const partial of [false,true]) for (const value of [-1,1.5,'100',null,1_500_001]) {
+  for (const partial of [false,true]) for (const value of [-1,1.5,'100',null,2_100_001]) {
     for (const [start,end] of [[value,200],[100,value]]) {
       assert.throws(()=>parseProgressLog(buildSyntheticLog(records(start,end)),{partial}),/inconsistent_progress_log/);
     }
   }
-  assert.throws(()=>parseProgressLog(buildSyntheticLog(records(1_400_000,1_500_001))),/inconsistent_progress_log/);
+  assert.throws(()=>parseProgressLog(buildSyntheticLog(records(1_400_000,2_100_001))),/inconsistent_progress_log/);
   const timing=parseProgressLog(buildSyntheticLog(records(1_250_000,1_360_000)));
   assert.equal(timing.get('tests/runtime/late.test.ts'),110_000);
   assert.equal(deriveRuntimeWeights([timing]).weights['tests/runtime/late.test.ts'],110);
@@ -120,8 +120,8 @@ test('parseProgressLog measures completed files of a named timed-out segment onl
   assert.throws(() => parseProgressLog(buildSyntheticLog(overSelected), {partial: true}), /incomplete_progress_log/);
 });
 
-test('only explicit partial input omits either generation of saturated endpoints', () => {
- for (const cap of [1_200_000,1_500_000]) {
+test('only explicit partial input omits any generation of saturated endpoints', () => {
+ for (const cap of [1_200_000,1_500_000,2_100_000]) {
   const records = [
     {schema: 'freedom.test-file-progress/v1', event: 'started', path: 'tests/runtime/a.test.ts', elapsed_ms: 1_000_000},
     {schema: 'freedom.test-file-progress/v1', event: 'completed', path: 'tests/runtime/a.test.ts', elapsed_ms: 1_199_999},
@@ -234,11 +234,13 @@ test('CLI tests', (t) => {
   for (const [value,flag,error] of [
     [1_200_000,'--log',/saturated_progress_timing/],
     [1_500_000,'--log',/saturated_progress_timing/],
+    [2_100_000,'--log',/saturated_progress_timing/],
     [-1,'--log',/inconsistent_progress_log/],
     ['100','--partial-log',/inconsistent_progress_log/],
-    [1_500_001,'--partial-log',/inconsistent_progress_log/],
+    [2_100_001,'--partial-log',/inconsistent_progress_log/],
     [1_200_000,'--partial-log',/Empty final segment/],
     [1_500_000,'--partial-log',/Empty final segment/],
+    [2_100_000,'--partial-log',/Empty final segment/],
   ]) {
     const invalid = ok.map(record => record.event === 'started' || record.event === 'completed'
       ? {...record, elapsed_ms:value} : record);
