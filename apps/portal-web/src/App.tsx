@@ -59,6 +59,7 @@ const AdminPanel = lazy(() => import('./modules/AdminPanel').then(m => ({default
 const GitHubCallback = lazy(() => import('./modules/GitHubCallback').then(m => ({default: m.GitHubCallback})))
 const MemberMessages = lazy(() => import('./modules/MemberMessages').then(m => ({default: m.MemberMessages})))
 const PublicEventPage = lazy(() => import('./modules/PublicEventPage').then(m => ({default: m.PublicEventPage})))
+const NewbieVillage = lazy(() => import('./modules/NewbieVillage').then(m => ({default: m.NewbieVillage})))
 const WelcomePreview = lazy(() => import('./modules/WelcomePreview').then(m => ({default: m.WelcomePreview})))
 import { HostedOrderPage } from './features/commerce'
 
@@ -282,6 +283,7 @@ function MemberApp() {
   if(emailChangeToken)return <EmailChangeConfirm key={emailChangeToken} client={client} token={emailChangeToken}/>;
   if(emailVerificationToken)return <EmailVerificationConfirm key={emailVerificationToken} client={client} token={emailVerificationToken}/>;
   if (resetToken || phase !== 'ready' || !session) {
+    if(!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
     if(!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
     if(!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
