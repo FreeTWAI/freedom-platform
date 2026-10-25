@@ -512,3 +512,22 @@ test('selecting the same hashtag from a direct post still exits that lookup and 
   const sequence=h.state.loadSequence.current;ui.selectTag('work');assert.ok(h.state.loadSequence.current>sequence);assert.equal(h.state.feedScope.current.directPost,null);assert.equal(h.state.feedScope.current.tag,'work');
   const newer=h.render(),wall=newer.load('note');assert.equal(h.calls[1].path,'/social-posts?kind=note&tag=work');h.calls[1].resolve(h.page(['tagged'],null));await wall;assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['tagged']);
 });
+
+// Execute the E2E observer predicate itself so unrelated POST receipts cannot
+// masquerade as duplicate publication, while both create APIs remain counted.
+test('composer E2E observer counts both create routes and excludes social subresource traffic',()=>{
+  const source=readFileSync(new URL('../e2e/social-feed.spec.ts',import.meta.url),'utf8');
+  const code=transformSync(source,{loader:'ts',target:'es2023',format:'esm'}).code;
+  const predicate=code.match(/^function isSocialPostCreation\([^]*?^}/m);assert.ok(predicate);
+  const matches=runInNewContext(`(${predicate[0]})`,{URL}) as (method:string,url:string)=>boolean;
+  const origin='https://workshop.example.test',root='/api/v1/social-posts';
+  for(const path of [root,root+'/notes']){
+    assert.equal(matches('POST',origin+path),true);
+    for(const method of ['GET','PUT','DELETE'])assert.equal(matches(method,origin+path),false);
+  }
+  for(const path of [root+'/post-id/read',root+'/post-id/likes',root+'/post-id/comments',root+'/post-id/thumbnail',root+'/notes-extra'])assert.equal(matches('POST',origin+path),false);
+  const traffic=[root+'/post-id/read',root+'/notes',root+'/post-id/read'];
+  assert.equal(traffic.filter(path=>matches('POST',origin+path)).length,1);
+  assert.equal([...traffic,root].filter(path=>matches('POST',origin+path)).length,2);
+  assert.equal([...traffic,root+'/notes'].filter(path=>matches('POST',origin+path)).length,2);
+});

@@ -5,6 +5,11 @@ import {test, expect, type Page} from './fixtures.js';
 import {navigate, selectSocialFeed} from './navigation.js';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 
+function isSocialPostCreation(method:string,url:string):boolean {
+  const path=new URL(url).pathname;
+  return method==='POST'&&(path==='/api/v1/social-posts'||path==='/api/v1/social-posts/notes');
+}
+
 async function login(page: Page, email = 'maker@local.test') {
   await page.goto('/');
   await page.getByLabel('電子郵件', {exact: true}).fill(email);
@@ -601,7 +606,8 @@ test('one composer posts a URL and full text without preview, preserving its pho
   const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),content=dialog.getByLabel('貼文內容',{exact:true});
   const text=`E2E unified ${Date.now()} https://example.org/read\n${'完整內文'.repeat(150)}`;
   const writes:{path:string;body:any}[]=[];
-  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/social-posts'))writes.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});});
+  // Count both publication APIs, not background read receipts or reactions.
+  page.on('request',request=>{if(isSocialPostCreation(request.method(),request.url()))writes.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});});
   await content.fill(text);
   const photo=await sharp({create:{width:40,height:30,channels:3,background:'#287a4d'}}).png().toBuffer();
   await dialog.getByLabel('貼文圖片（選填）',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:photo});
