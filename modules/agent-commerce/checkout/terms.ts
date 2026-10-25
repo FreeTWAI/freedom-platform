@@ -64,7 +64,7 @@ export class CheckoutDeliveryProblem extends Problem {
 }
 export interface CheckoutAdmissionPort {allowed(q:PoolClient,store:CheckoutStore):boolean|Promise<boolean>}
 export interface UnresolvedOrderPort {find(q:PoolClient,checkoutId:string):Promise<{order_id:string}|null>}
-export interface CheckoutPolicyPort {required(q:PoolClient,store:CheckoutStore):Promise<readonly {policy_kind:string;policy_version_id:string}[]>}
+export interface CheckoutPolicyPort {required(q:PoolClient,store:StoreContext['profile']):Promise<readonly {policy_kind:string;policy_version_id:string;label:string;url:string}[]>}
 export interface CheckoutPaymentHandoff {handoff_url:string;attempt_ref:string;expires_at:string}
 export interface CheckoutPaymentSummary {
   payment_state:'unpaid'|'pending'|'simulated'|'confirmed'|'overpaid'|'refunded';

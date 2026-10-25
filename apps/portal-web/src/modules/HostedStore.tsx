@@ -1,30 +1,28 @@
+import {useStorePageData, errorText} from './hosted-store-page-state';
+import {useStoreDirtyForms, type RegisterLeave} from './hosted-store-dirty-state';
 import {CategoriesEditor} from '../../../../modules/agent-commerce/storefront/categories/Editor';
 import {VariantsEditor} from '../../../../modules/agent-commerce/storefront/variants/Editor';
 import {StoreOverviewSchema,type StoreOverview} from '../../../../contracts/guild-launchpad/v1/hosted-commerce-setup';
 import {storeOrderStatus} from '../../../../modules/agent-commerce/seller-console/ui/view';
 import {HostedStoreGallery} from './HostedStoreGallery';
-import {ProductGalleriesSchema,type ProductGalleryDraft} from '../../../../contracts/guild-launchpad/v1/storefront-gallery';
 import {HostedStorePolicies} from './HostedStorePolicies';
-import {SellerPoliciesDraftSchema,type SellerPoliciesDraft} from '../../../../contracts/guild-launchpad/v1/storefront-policies';
 import {HostedStoreAppearance} from './HostedStoreAppearance';
-import {StorefrontAppearanceDraftSchema,type StorefrontAppearanceDraft} from '../../../../contracts/guild-launchpad/v1/storefront-appearance';
 import {HostedSupplyOffer} from './HostedSupplyOffer';
 import {parseSellerConsoleRoute,sellerSlugFallback,sellerConsoleHref} from '../../../../modules/agent-commerce/seller-console/route';
 import {parseSupplierConsoleRoute} from '../../../../modules/agent-commerce/supplier-console/ui/route';
 import {PartnerMaterials} from '../../../../modules/agent-commerce/supplier-console/ui/partner/PartnerMaterials';
 import {PageLoadBoundary} from '../LazyPage';
-import {ProductMediaPageSchema,type ProductMediaView} from '../../../../contracts/guild-launchpad/v1/hosted-store-media';
 import {HostedStorePhoto} from './HostedStorePhoto';
 import {lazy, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject} from 'react';
 import {z} from 'zod';
 import {OpaqueId} from '../../../../contracts/common/v1/identity';
 import {
   StoreViewSchema, StoreSetupInputSchema, StoreUpdateInputSchema, SlugAvailabilitySchema,
-  ProductInputSchema, MerchantProductViewSchema as ProductViewSchema, MerchantProductPageSchema as ProductPageSchema, ProductRemovedSchema, StorePreviewSchema,
+  ProductInputSchema, MerchantProductViewSchema as ProductViewSchema, ProductRemovedSchema,
   type MerchantProductView as ProductView, type StoreView,
 } from '../../../../contracts/guild-launchpad/v1/storefront';
-import {StoreAppearanceSchema, type StoreAppearance, type StoreTemplate} from '../../../../contracts/guild-launchpad/v1/storefront-presentation';
-import {StorePublicationReviewSchema, type StorePublicationReview} from '../../../../contracts/guild-launchpad/v1/storefront-publication';
+import {StoreAppearanceSchema} from '../../../../contracts/guild-launchpad/v1/storefront-presentation';
+import {type StorePublicationReview} from '../../../../contracts/guild-launchpad/v1/storefront-publication';
 import {StoreSetup} from './StoreSetup';
 import {SupplyTermsSchema} from '../../../../contracts/guild-launchpad/v1/hosted-supply-terms';
 import {HostedDistribution} from './HostedDistribution';
@@ -54,37 +52,8 @@ function absoluteUrl(path: string) {
 function ManualCopy({url, fieldRef}: {url: string; fieldRef: RefObject<HTMLInputElement | null>}) {
   return <label className="field">手動複製連結<input ref={fieldRef} readOnly value={url} onFocus={event => event.currentTarget.select()}/></label>;
 }
-const LEAVE = '還有尚未儲存的內容，要離開嗎？';
-const NEXT: Record<string, string> = {
-  storefront_slug_taken: '請換一個商店網址。',
-  storefront_slug_reserved: '請換一個商店網址。',
-  storefront_slug_locked: '網址已固定，請保留目前的商店網址。',
-  storefront_already_set_up: '請重新載入商店，繼續編輯資料。',
-  storefront_not_set_up: '請先完成商店設定。',
-  storefront_has_no_products: '請先新增至少一件商品。',
-  storefront_publication_changed: '請確認更新後的商品與店面內容，再按一次上架。',
-  storefront_product_limit: '請編輯或移除現有商品後再新增。',
-  storefront_product_in_use: '請保留這件商品，並聯絡業務空間擁有者。',
-  storefront_unavailable: '請聯絡業務空間擁有者恢復使用。',
-  storefront_exists: '這個業務空間已經有商店，請沿用它。',
-  capability_denied: '請聯絡業務空間擁有者確認你的權限。',
-  material_version_changed: '請按合作素材的「重新整理」，再選用新版本。',
-  material_not_public: '請改用其他素材，或請供應商開放公開使用。',
-  material_not_image: '請改選圖片素材。',
-  material_content_unavailable: '請稍後再試一次。',
-  distribution_photo_unavailable: '請稍後再試一次。',
-};
-function errorText(error: unknown) {
-  if (error instanceof ApiError) {
-    if (error.code === 'validation_failed') return '有欄位格式不符，請檢查後再送出。';
-    return `${error.detail ?? error.message} ${NEXT[error.code ?? ''] ?? '請重新載入後再試一次。'}`;
-  }
-  return '暫時無法確認回應。請重新載入後再試一次。';
-}
-type Preview = z.infer<typeof StorePreviewSchema>;
 const SupplierConsole = lazy(() => import('../../../../modules/agent-commerce/supplier-console/ui/SupplierConsole').then(m => ({default:m.SupplierConsole})));
 const SellerConsole = lazy(() => import('../../../../modules/agent-commerce/seller-console/ui/SellerConsole').then(m => ({default:m.SellerConsole})));
-type RegisterLeave = (guard: ((nextHash:string|null) => boolean) | null) => void;
 export function HostedStore({client, enabled, appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false, locationHash, userId, registerLeave, photosEnabled=false, photoUploadsEnabled=false, materialMediaEnabled=false, materialUploadsEnabled=false, distributionPhotosEnabled=false, supplyOfferPhotosEnabled=false, consoleEnabled=false, commerceConsoleEnabled=false, checkoutEnabled=false, selfShipEnabled=false, dropShipEnabled=false, providerEnvironment='sandbox'}: {galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;distributionPhotosEnabled?:boolean;materialMediaEnabled?:boolean;materialUploadsEnabled?:boolean;commerceConsoleEnabled?:boolean;checkoutEnabled?:boolean;selfShipEnabled?:boolean;dropShipEnabled?:boolean;providerEnvironment?:'sandbox'|'live';consoleEnabled?:boolean;client: PortalClient; photosEnabled?:boolean;photoUploadsEnabled?:boolean;enabled: boolean; locationHash: string; userId: string; registerLeave: RegisterLeave}) {
   const consoleRoute = parseSupplierConsoleRoute(locationHash);
   if (consoleEnabled && enabled && consoleRoute) {
@@ -134,46 +103,20 @@ function StoreList({client}: {client: PortalClient}) {
   </div>;
 }
 
-type Attempt = {targetMissingIsStore?: boolean; method: 'post' | 'patch'; path: string; body: unknown; version?: string; schema: z.ZodType;
-  key: string; success: (value: unknown) => void; notice: string; product?: boolean; fieldError?: (error: ApiError) => void};
 function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,appearanceEnabled=false,policiesEnabled=false,galleryEnabled=false,variantsEnabled=false,categoriesEnabled=false,client, userId,tenantId, instanceId, registerLeave,photosEnabled,photoUploadsEnabled, consoleEnabled=false, commerceConsoleEnabled=false, checkoutEnabled=false, materialMediaEnabled=false, distributionPhotosEnabled=false}: {supplyOfferPhotosEnabled?:boolean;galleryEnabled?:boolean;variantsEnabled?:boolean;categoriesEnabled?:boolean;policiesEnabled?:boolean;appearanceEnabled?:boolean;offerId?:string;cooperation?:boolean;userId:string;photosEnabled:boolean;photoUploadsEnabled:boolean;client: PortalClient; tenantId: string; instanceId: string; registerLeave: RegisterLeave; consoleEnabled?: boolean; commerceConsoleEnabled?: boolean; checkoutEnabled?:boolean; materialMediaEnabled?: boolean;distributionPhotosEnabled?:boolean}) {
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
-  const [distributionRefresh,setDistributionRefresh]=useState(0);
-  const [view, setView] = useState<StoreView | null>(null);
-  const [reservationSetting,setReservationSetting] = useState<z.infer<typeof ReservationSettingSchema>|null>(null);
-  const [products, setProducts] = useState<ProductView[]>([]);
-  const [galleries,setGalleries]=useState<ProductGalleryDraft[]>([]);
-  const [media,setMedia]=useState<ProductMediaView[]>([]);
-  const [photoBlocks,setPhotoBlocks]=useState<Record<string,boolean>>({});
-  const photoBlockRef=useRef<Record<string,boolean>>({});
-  const photoBlocking=Object.values(photoBlocks).some(Boolean);
+  const {distributionRefresh, view, reservationSetting, products, galleries, media, photoBlocks, photoBlockRef, photoBlocking, setPhotoBlocking,
+    preview, publicationReview, appearance, policiesDraft, policiesError, appearanceDraft, appearanceError, templateChoice, setTemplateChoice,
+    missing, setMissing, error, status, loading, busy, retry, busyRef, held, statusLine, load, announce, send, command} = useStorePageData({
+    client, root, photosEnabled, appearanceEnabled, policiesEnabled, galleryEnabled,
+    onConflict: () => {setEditing(null); setSupplyEditing(null); markDirty('edit', false); markDirty('supply', false);},
+  });
+  const {dirtyForms, dirtyFormsRef, hasDraft, hasFormDraft, markDirty, leaveOk} = useStoreDirtyForms({
+    client, root, registerLeave, busy, retry, photoBlocking, busyRef, held, photoBlockRef, announce,
+  });
   function photoState(id:string,dirty:boolean,blocking:boolean){
-    photoBlockRef.current={...photoBlockRef.current,[id]:blocking};
-    setPhotoBlocks(old=>old[id]===blocking?old:{...old,[id]:blocking});markDirty(id==='appearance'?'appearance':id==='policies'?'policies':'photo/'+id,dirty);
+    setPhotoBlocking(id,blocking);markDirty(id==='appearance'?'appearance':id==='policies'?'policies':'photo/'+id,dirty);
   }
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [publicationReview, setPublicationReview] = useState<StorePublicationReview | null>(null);
-  const [appearance, setAppearance] = useState<StoreAppearance | null>(null);
-  const [policiesDraft,setPoliciesDraft]=useState<SellerPoliciesDraft|null>(null),[policiesError,setPoliciesError]=useState(false);
-  const [appearanceDraft,setAppearanceDraft]=useState<StorefrontAppearanceDraft|null>(null),[appearanceError,setAppearanceError]=useState(false);
-  const [templateChoice, setTemplateChoice] = useState<StoreTemplate | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [error, setError] = useState('');
-  const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [retry, setRetry] = useState<Attempt | null>(null);
-  const [dirtyForms, setDirtyForms] = useState<Record<string, boolean>>({});
-  const dirtyFormsRef = useRef<Record<string, boolean>>({});
-  const hasDraft = Object.values(dirtyForms).some(Boolean);
-  const hasFormDraft = Object.entries(dirtyForms).some(([id,dirty])=>dirty&&!id.startsWith('photo/'));
-  const dirty = hasDraft || busy || retry !== null || photoBlocking;
-  const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
-  const controller = useRef(new AbortController());
-  const readGeneration = useRef(0);
-  const held = useRef<Attempt | null>(null);
-  const busyRef = useRef(false);
-  const statusLine = useRef<HTMLParagraphElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [supplyEditing, setSupplyEditing] = useState<string | null>(null);
   const [area,setArea]=useState<'products'|'cooperation'|'publish'|'settings'>(cooperation?'cooperation':'products');
@@ -192,106 +135,17 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     setCopyFeedback(null);
     setManualUrl(null);
   }, [root, storeCopyUrl, publishedSkuKey, editing, supplyEditing, publication?.current_revision]);
-  function leaveOk() {
-    if (Object.values(photoBlockRef.current).some(Boolean)) {announce(photoBlockRef.current.policies?'賣方資訊與商店政策操作尚未確認，請先重試原操作。':photoBlockRef.current.appearance?'外觀操作尚未確認，請先重試原操作。':photoBlockRef.current.variants?'規格操作尚未確認，請先重試原操作。':photoBlockRef.current.categories?'暫時無法確認儲存結果，請用原操作重試。':'照片操作尚未確認，請先重試原照片操作。');return false;}
-    if (busyRef.current || held.current) {
-      announce(busyRef.current ? '正在確認原操作，請等候完成後再離開。' : '尚未確認原操作的結果，請按「重試」確認後再離開。');
-      return false;
-    }
-    return !dirtyRef.current || window.confirm(LEAVE);
-  }
-  useEffect(() => {
-    registerLeave(leaveOk);
-    return () => registerLeave(null);
-  }, [registerLeave]);
-  useEffect(() => {
-    controller.current = new AbortController();
-    const unloading = (event: BeforeUnloadEvent) => {if (dirtyRef.current || busyRef.current || held.current || Object.values(photoBlockRef.current).some(Boolean)) {event.preventDefault(); event.returnValue = '';}};
-    window.addEventListener('beforeunload', unloading);
-    void load();
-    return () => {controller.current.abort(); readGeneration.current++; window.removeEventListener('beforeunload', unloading);};
-  }, [client, root]);
-  async function load(options?: {throwOnError?: boolean}) {
-    const signal = controller.current.signal; const ticket = ++readGeneration.current;
-    const current = () => !signal.aborted && readGeneration.current === ticket;
-    setLoading(true); setPublicationReview(null);
-    try {
-      const next = StoreViewSchema.parse(await client.get(root, {signal}));
-      let photos:ProductMediaView[]=[],galleryDrafts:ProductGalleryDraft[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
-      let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null, review: StorePublicationReview | null = null;
-      let branding:StorefrontAppearanceDraft|null=null,brandingError=false,legal:SellerPoliciesDraft|null=null,legalError=false;
-      if (next.setup_state === 'ready') {
-        const results = await Promise.all([client.get(root + '/products', {signal}), client.get(root + '/preview', {signal}), client.get(root + '/appearance', {signal}), photosEnabled ? client.get(root+'/product-media',{signal}) : Promise.resolve(null),
-          appearanceEnabled?client.get(root+'/appearance-settings',{signal}).then(value=>StorefrontAppearanceDraftSchema.parse(value)).catch(()=>{brandingError=true;return null;}):Promise.resolve(null),
-          policiesEnabled?client.get(root+'/seller-policies',{signal}).then(value=>SellerPoliciesDraftSchema.parse(value)).catch(()=>{legalError=true;return null;}):Promise.resolve(null),
-          galleryEnabled?client.get(root+'/product-galleries',{signal}).then(value=>ProductGalleriesSchema.parse(value)):Promise.resolve(null),
-          next.capabilities.includes('store:publish')?client.get(root+'/publication-review',{signal}):Promise.resolve(null)]);
-        items = ProductPageSchema.parse(results[0]).items; draft = StorePreviewSchema.parse(results[1]); presentation = StoreAppearanceSchema.parse(results[2]);
-        if(photosEnabled)photos=ProductMediaPageSchema.parse(results[3]).items;
-        if(appearanceEnabled)branding=results[4] as StorefrontAppearanceDraft|null;
-        if(policiesEnabled)legal=results[5] as SellerPoliciesDraft|null;
-        if(galleryEnabled)galleryDrafts=(results[6] as z.infer<typeof ProductGalleriesSchema>).items;
-        if(results[7] !== null)review=StorePublicationReviewSchema.parse(results[7]);
-        try {setting=ReservationSettingSchema.parse(await client.get(root+'/reservation-setting',{signal}));}
-        catch(cause) {if(!(cause instanceof ApiError && [403,404].includes(cause.status))) throw cause;}
-      }
-      if (!current()) return;
-      if(legal||next.setup_state!=='ready')setPoliciesDraft(legal);setPoliciesError(legalError);
-      if(branding||next.setup_state!=='ready')setAppearanceDraft(branding);setAppearanceError(brandingError);
-      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setPublicationReview(review); setError('');
-    } catch (cause) {
-      if (!current()) return;
-      if (cause instanceof ApiError && cause.status === 404 && !Object.values(photoBlockRef.current).some(Boolean)) setMissing(true);
-      else setError(errorText(cause));
-      if(options?.throwOnError) throw cause;
-    } finally {if (current()) setLoading(false);}
-  }
   useEffect(() => {if(!appearanceEnabled)markDirty('appearance', templateChoice !== null && templateChoice !== appearance?.template_id);}, [appearanceEnabled,templateChoice, appearance?.template_id]);
   useEffect(() => {
     if (!manualUrl) return;
     manualField.current?.focus();
     manualField.current?.select();
   }, [manualUrl]);
-  function markDirty(id: string, value: boolean) {
-    dirtyFormsRef.current={...dirtyFormsRef.current,[id]:value};
-    setDirtyForms(old => old[id] === value ? old : {...old, [id]: value});
-  }
-  function announce(text: string) {setStatus(text); requestAnimationFrame(() => statusLine.current?.focus());}
   async function copyLink(url: string) {
     const result = await copyAction.run('copy', () => {setManualUrl(null); setCopyFeedback(null); return navigator.clipboard.writeText(url);});
     if (result.status === 'done') setCopyFeedback({url, message: '已複製連結'});
     else if (result.status === 'failed') {setCopyFeedback({url, message: '無法自動複製，請選取並複製下方內容'}); setManualUrl(url);}
   }
-  async function send(attempt: Attempt) {
-    if (busyRef.current) return;
-    held.current = attempt; busyRef.current = true; setBusy(true); setRetry(null); setError('');
-    const signal = controller.current.signal;
-    try {
-      const raw = await client[attempt.method](attempt.path, attempt.body, {idempotencyKey: attempt.key, ifMatch: attempt.version, signal});
-      // An unreadable success may already have committed; retain the same attempt key.
-      const parsed = attempt.schema.safeParse(raw);
-      if (!parsed.success) throw new ApiError({message: '回應未完整收到，請重試確認原操作。', network: true});
-      if (signal.aborted) return;
-      held.current = null; attempt.success(parsed.data);
-      await load(); if (!signal.aborted) announce(attempt.notice);
-    } catch (cause) {
-      if (signal.aborted) return;
-      if (cause instanceof ApiError && cause.network) {setRetry(attempt); setError('尚未確認原操作的結果，請按「重試」確認。'); return;}
-      held.current = null;
-      if (cause instanceof ApiError && cause.status === 404 && attempt.targetMissingIsStore!==false) {setMissing(true); return;}
-      if (cause instanceof ApiError && attempt.path.endsWith('/publish-reviewed') && (cause.status === 412 || cause.code === 'storefront_publication_changed')) {
-        await load(); announce('商品或店面內容已更新，已重新載入。請確認後再按一次上架。');
-      } else if (cause instanceof ApiError && cause.status === 412) {
-        setEditing(null); setSupplyEditing(null); markDirty('edit', false); markDirty('supply', false); await load();
-        announce(attempt.path.endsWith('/appearance') ? '商店資料剛剛被更新，已重新載入。你的版型選擇仍保留，請確認後再儲存。' : attempt.product ? '這件商品剛剛被更新，已重新載入。' : '商店資料剛剛被更新，已重新載入。');
-      } else if (cause instanceof ApiError && cause.code === 'storefront_already_set_up') {
-        await load(); announce('這間商店已經設定過，已重新載入。');
-      } else if (cause instanceof ApiError && ['storefront_slug_taken', 'storefront_slug_reserved', 'validation_failed'].includes(cause.code ?? '') && attempt.fieldError) {
-        attempt.fieldError(cause);
-      } else setError(errorText(cause));
-    } finally {if (!signal.aborted) {busyRef.current = false; setBusy(false);}}
-  }
-  function command(attempt: Omit<Attempt, 'key'>) {return send({...attempt, key: crypto.randomUUID()});}
   const can = (key: string) => view?.writable === true && view.capabilities.includes(key);
   const locked = busy || retry !== null || photoBlocking || loading;
   const publishDisabled = locked || hasDraft || !publicationReview?.preview.projection.products.length || !can('store:publish');
