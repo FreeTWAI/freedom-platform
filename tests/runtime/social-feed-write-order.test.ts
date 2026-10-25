@@ -235,3 +235,55 @@ test('deletion forwarder never invents a successful receipt after body failure',
 test('deletion forwarder preserves a server rejection for the original status assertion',async()=>{
   const body={code:'not_found'},receipt=await deletionForwarder()({fetch:async()=>({status:()=>404,json:async()=>body}),fulfill:async()=>{}});assert.equal(receipt.status,404);assert.equal(receipt.body,body);
 });
+
+function counterHarness(){
+  const h=harness();Object.assign(h.initial,{kind:'link',platform:'youtube',like_count:0,liked:false,comment_count:1,read_count:1});
+  Object.assign(h.c,{items:h.state.items,post:h.initial,shortLiking:null,shortLikeCommands:{current:new Map()},setShortLiking(){}});
+  const like=between('async function likeShort(postId: string) {','\n  const feedText=');
+  const a=source.indexOf('onUpdate={update =>'),b=source.indexOf('}/>',a);assert.ok(a>=0&&b>a);
+  runInNewContext(transformSync(`globalThis.like=async function(postId){${like};globalThis.interaction=${source.slice(a+'onUpdate={'.length,b)};`,{loader:'ts',format:'cjs'}).code,h.c);
+  return h;
+}
+for(const operation of ['short-like','card-like','comment','read'])for(const mode of ['replace','append','quiet'])test(`${operation} confirmation fences a pending ${mode} feed read without an extra independent GET`,async()=>{
+  const h=counterHarness();h.c.feedScope.current.platform=mode==='quiet'?'shorts':'note';
+  const read=mode==='quiet'?h.c.quiet(1):h.c.load('note',mode==='append'?'original-cursor':undefined);
+  const update=operation.includes('like')?{liked:true,like_count:1}:operation==='comment'?{comment_count:2}:{read_count:2};
+  if(operation==='short-like'){h.c.client.post=async()=>update;await h.c.like('p');}else h.c.interaction(update);
+  assert.equal(h.c.confirmedWrites.current,1);assert.equal(h.requests.length,1,'confirmation starts no independent read');
+  h.requests[0].resolve(page([h.initial]));await tick();
+  if(mode==='quiet'){assert.equal(await read,null);assert.equal(h.requests.length,1);}else{
+    assert.equal(h.requests.length,2);assert.equal(h.requests[1].path,h.requests[0].path);h.requests[1].resolve(page([{...h.initial,...update}]));await read;
+    assert.equal(h.state.loading,false);assert.equal(h.state.more,false);
+  }
+  for(const [key,value] of Object.entries(update))assert.equal(h.state.items[0][key],value);
+});
+for(const network of [false,true])test(`Short like ${network?'unknown':'rejected'} result never advances the confirmed epoch`,async()=>{
+  const h=counterHarness(),read=h.c.load('note');h.c.client.post=async()=>{throw new ApiError({message:'not confirmed',network,status:network?0:422});};await h.c.like('p');
+  assert.equal(h.c.confirmedWrites.current,0);h.requests[0].resolve(page([h.initial]));await read;assert.equal(h.requests.length,1);
+});
+test('ordinary list and quiet reads never advance the mutation epoch or start correction loops',async()=>{
+  const h=counterHarness(),read=h.c.load('note');h.requests[0].resolve(page([h.initial]));await read;assert.equal(h.c.confirmedWrites.current,0);
+  h.c.feedScope.current.platform='shorts';const quiet=h.c.quiet(1);h.requests[1].resolve(page([h.initial],null));await quiet;assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.requests.length,2);
+});
+for(const operation of ['short-like','callback'])test(`old-session ${operation} completion cannot invalidate or replace the new feed`,async()=>{
+  const h=counterHarness();let resolve:any;
+  if(operation==='short-like'){h.c.client.post=()=>new Promise(r=>resolve=r);const pending=h.c.like('p');h.c.client.sessionGeneration++;resolve({liked:true,like_count:1});await pending;}
+  else{h.c.client.sessionGeneration++;h.c.interaction({comment_count:2});}
+  assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.state.items[0],h.initial);
+});
+
+const interactionSource=readFileSync(new URL('../../apps/portal-web/src/modules/SocialInteractions.tsx',import.meta.url),'utf8');
+for(const operation of ['comment-send','comment-remove','read-mark'])for(const network of [false,true])test(`actual ${operation} ${network?'unknown':'rejected'} path never calls the confirmed parent callback`,async()=>{
+  const h=counterHarness();Object.assign(h.c,{sending:false,preparing:false,pendingComment:{current:null},file:null,onUpdate:h.c.interaction,setSending(){},current:(generation:number)=>h.c.client.sessionGeneration===generation});
+  let attempts=0;const failure=async()=>{attempts++;throw new ApiError({message:'not confirmed',network,status:network?0:422});};h.c.client.post=failure;h.c.client.delete=failure;
+  if(operation==='read-mark'){
+    let scheduled!:()=>void;Object.assign(h.c,{document:{hidden:false},clearTimeout(){},setTimeout:(fn:()=>void)=>{scheduled=fn;return 1;}});
+    const a=interactionSource.indexOf('    const schedule=()=>'),b=interactionSource.indexOf('    const observer=',a);assert.ok(a>=0&&b>a);
+    runInNewContext(transformSync(`let timer,visible=true,done=false;const generation=client.sessionGeneration,key='synthetic-read';${interactionSource.slice(a,b)};schedule();`,{loader:'ts',format:'cjs'}).code,h.c);scheduled();await tick();
+  }else{
+    const a=interactionSource.indexOf(operation==='comment-send'?'  async function send(':'  async function remove('),b=interactionSource.indexOf(operation==='comment-send'?'  async function remove(':'  async function saveEdit(',a);assert.ok(a>=0&&b>a);
+    runInNewContext(transformSync(interactionSource.slice(a,b)+`;globalThis.action=${operation==='comment-send'?'send':'remove'};`,{loader:'ts',format:'cjs'}).code,h.c);
+    await h.c.action(operation==='comment-send'?{preventDefault(){}}:{comment_id:'comment'});
+  }
+  assert.equal(attempts,1);assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.state.items[0],h.initial);assert.equal(h.requests.length,0);
+});

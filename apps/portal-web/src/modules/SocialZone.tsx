@@ -625,17 +625,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   }
   // One-tap like from a Short slide: same endpoint, per-post command and idempotency key as the card's like button.
   async function likeShort(postId: string) {
+    const current=()=>client===currentClient.current&&feedSession===client.sessionGeneration;
     const post = items.find(item => item.post_id === postId);
-    if (!post || shortLiking) return;
+    if (!post || shortLiking || !current()) return;
     const command = shortLikeCommands.current.get(post.post_id) ?? {liked: !post.liked, key: crypto.randomUUID()};
     shortLikeCommands.current.set(post.post_id, command); setShortLiking(post.post_id); setNotice('');
     try {
       const value = await client.post<{liked: boolean; like_count: number}>(`/social-posts/${post.post_id}/like`, {liked: command.liked}, {idempotencyKey: command.key});
+      if(!current())return;
+      ++confirmedWrites.current;
       setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...value} : item)); shortLikeCommands.current.delete(post.post_id);
     } catch (cause) {
+      if(!current())return;
       if (cause instanceof ApiError && !cause.network) shortLikeCommands.current.delete(post.post_id);
       setNotice(cause instanceof Error ? cause.message : '尚未確認按讚結果，請再按一次重試。');
-    } finally { setShortLiking(null); }
+    } finally { if(current())setShortLiking(null); }
   }
   const feedText=FEED_MESSAGES[language];
   const filterLabel=(id:string,label:string)=>id==='note'?feedText.note:id===''?feedText.all:label;
@@ -658,7 +662,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
           {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
-          <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item))}/>
+          <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
             {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
