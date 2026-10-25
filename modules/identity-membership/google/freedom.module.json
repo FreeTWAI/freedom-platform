@@ -1,0 +1,58 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "google-identity",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/identity-membership/google/oidc.ts",
+    "modules/identity-membership/google/service.ts",
+    "modules/identity-membership/google/README.md",
+    "modules/identity-membership/google/freedom.module.json",
+    "migrations/190_google_identity.sql",
+    "tests/runtime/google-oidc.test.ts",
+    "tests/runtime/google-identity.test.ts",
+    "tests/runtime/google-auth-routes.test.ts",
+    "tests/e2e/google-login.spec.ts",
+    "tests/runtime/google-identity-runtime-role.test.ts"
+  ],
+  "public_exports": [
+    "modules/identity-membership/google/service.ts"
+  ],
+  "dependencies": [
+    "assets",
+    "command-core",
+    "member-card",
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "modules/identity-membership/google/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "member.google.identity",
+      "kind": "http",
+      "entry": "modules/identity-membership/google/service.ts",
+      "operations": [
+        "member.google.start",
+        "member.google.complete",
+        "member.google.totp",
+        "member.google.activate",
+        "member.google.cancel",
+        "member.google.link",
+        "member.google.unlink"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}

@@ -39,7 +39,8 @@
     "skill-submissions",
     "social-feed",
     "tenant-workspaces",
-    "work"
+    "work",
+    "google-identity"
   ],
   "format": "freedom.module/v1",
   "instructions": [

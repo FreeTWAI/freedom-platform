@@ -12,7 +12,7 @@ import { transaction } from '../../packages/db/transaction.js';
 export const SESSION_REFERENCES=[['credential_ingest_authorizations','original_session_hash'],['model_broker_authorizations','original_session_hash'],['tenant_high_risk_verifications','session_hash']] as const;
 // Foreign keys to sessions with ON DELETE CASCADE: those rows are deleted with their session on purpose.
 // github_social_oauth_states is short-lived OAuth state bound to one login; a session that ended a day ago cannot finish it.
-export const SESSION_CASCADES=[['github_social_oauth_states','session_hash']] as const;
+export const SESSION_CASCADES=[['github_social_oauth_states','session_hash'],['google_login_activations','session_hash']] as const;
 const identifier=/^[a-z_][a-z0-9_]*$/;
 export async function pruneExpiredAuthRecords(pool:Pool,{batch=500,sessionReferences=SESSION_REFERENCES}:{batch?:number;sessionReferences?:readonly(readonly [string,string])[]}={}):Promise<{sessions:number;login_attempts:number;auth_rate_limits:number;password_reset_tokens:number}>{
   const unreferenced=sessionReferences.map(([table,column])=>{
@@ -25,6 +25,14 @@ export async function pruneExpiredAuthRecords(pool:Pool,{batch=500,sessionRefere
   // Consumed and unused mailbox proofs share reset links' post-expiry grace.
   await pool.query(`DELETE FROM email_verification_tokens WHERE token_hash IN (SELECT token_hash FROM email_verification_tokens WHERE expires_at < now() - interval '1 day' LIMIT $1 FOR UPDATE SKIP LOCKED)`,[batch]);
   await pool.query(`DELETE FROM login_email_change_tokens WHERE token_hash IN (SELECT token_hash FROM login_email_change_tokens WHERE expires_at < now() - interval '1 day' LIMIT $1 FOR UPDATE SKIP LOCKED)`,[batch]);
+  // OAuth attempts and MFA challenges contain no retained provider tokens.
+  for(const table of ['google_login_states','google_login_challenges'])await pool.query(`DELETE FROM ${table} WHERE ctid IN (SELECT ctid FROM ${table} WHERE expires_at<clock_timestamp() LIMIT $1 FOR UPDATE SKIP LOCKED) AND expires_at<clock_timestamp()`,[batch]);
+  // A provisional session never authenticates or contributes presence. Lock sessions
+  // before proof rows, as activation does; pruning cannot delete an activated row.
+  await pool.query(`DELETE FROM sessions WHERE token_hash IN (
+    SELECT s.token_hash FROM sessions s JOIN google_login_activations a ON a.session_hash=s.token_hash
+    WHERE (a.expires_at<clock_timestamp() OR a.revoked_at IS NOT NULL) AND s.created_at IS NULL AND s.last_seen_at IS NULL AND s.expires_at<=clock_timestamp()
+    LIMIT $1 FOR UPDATE OF s SKIP LOCKED) AND created_at IS NULL AND last_seen_at IS NULL AND expires_at<=clock_timestamp()`,[batch]);
   // token_hash breaks ties (equal or missing timestamps) so exactly one newest row per user survives.
   const s=await transaction(pool,async q=>{
     const hashes=(await q.query<{token_hash:string}>(`SELECT s.token_hash FROM sessions s

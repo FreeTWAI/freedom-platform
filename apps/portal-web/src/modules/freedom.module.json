@@ -9,7 +9,8 @@
     "assets",
     "command-core",
     "tenant-workspaces",
-    "work"
+    "work",
+    "google-identity-ui"
   ],
   "format": "freedom.module/v1",
   "instructions": [
