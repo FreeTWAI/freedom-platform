@@ -1,5 +1,7 @@
-// Source: Jason and Hao 哥, authorized local quiz-v2.html. Text and score tables preserved.
-export type Career = "content" | "automation" | "coach" | "visual" | "product" | "marketing" | "outsourcer" | "consultant";
+// Source: Jason and Hao 哥, authorized local quiz-v2.html (original 8 careers, 15 questions and score tables).
+// 18-guild extension (11 added careers, added options and weights) drafted in Traditional Chinese for Jason's review;
+// see career-redesign notes. Original option indices are preserved so stored answers keep their meaning.
+export type Career = "content" | "automation" | "coach" | "visual" | "product" | "marketing" | "outsourcer" | "consultant" | "video" | "music" | "stage" | "host" | "researcher" | "engineer" | "security" | "broker" | "shopkeeper" | "maker" | "accountant";
 export type Dimension = "personality" | "lifestyle" | "capability";
 export type Question = {q:string;multi?:boolean;maxSelect?:number;options:{text:string;scores:Partial<Record<Career,number>>}[]};
 export const CLASSES_V2 = {
@@ -41,8 +43,8 @@ export const CLASSES_V2 = {
   },
   "visual": {
     "name": "AI 視覺煉金師",
-    "tagline": "用 AI 把創意變成圖、影片、設計產出",
-    "plainIntro": "你用 AI 幫品牌 / 個人做圖片、影片、設計（他們需要視覺但不會做）",
+    "tagline": "用 AI 把創意變成品牌圖、商品照與設計",
+    "plainIntro": "你用 AI 幫品牌 / 個人做品牌圖、商品照與平面設計（他們需要視覺但不會做）；影片剪輯另由 AI 影音導演承接",
     "color": "from-pink-500 to-rose-500",
     "hex": "#ec4899",
     "actions": [
@@ -77,8 +79,8 @@ export const CLASSES_V2 = {
   },
   "outsourcer": {
     "name": "AI 外包代理商",
-    "tagline": "上海外平台（Upwork）接案，用 AI 加速交件",
-    "plainIntro": "你在海外接案平台（主要英文環境）接工作，用 AI 做快一倍交件給客戶，賺美金",
+    "tagline": "國內外接案、拆清範圍，用 AI 加速交件",
+    "plainIntro": "你在國內外接案平台或熟人介紹接工作，把需求拆成清楚範圍，用 AI 做快一倍交件給客戶",
     "color": "from-teal-500 to-cyan-500",
     "hex": "#14b8a6",
     "actions": [
@@ -90,13 +92,145 @@ export const CLASSES_V2 = {
   "consultant": {
     "name": "AI 導入顧問",
     "tagline": "幫傳統企業把「業務痛點」翻譯成「AI 解決方案」",
-    "plainIntro": "你幫傳統公司（不懂 AI 的老闆）找出「哪裡可以用 AI 省錢或賺更多」，再幫他們實際裝好用起來",
+    "plainIntro": "你幫傳統公司（不懂 AI 的老闆）找出「哪裡可以用 AI 省錢或賺更多」，再幫他們實際裝好用起來；醫療、法務、財會等產業專家也可以從這裡起步",
     "color": "from-yellow-500 to-amber-500",
     "hex": "#f59e0b",
     "actions": [
       "選 1 個你熟悉的產業",
       "免費幫 1 家朋友公司診斷 AI 可用點",
       "做成 case study + 影片接付費案"
+    ]
+  },
+  "video": {
+    "name": "AI 影音導演",
+    "tagline": "用 AI 剪片、上字幕，把影片產線自動化",
+    "plainIntro": "你幫品牌或創作者把素材剪成短影音、長片與字幕版本，並把重複的剪輯流程做成可重用的產線",
+    "color": "from-red-500 to-orange-500",
+    "hex": "#f97316",
+    "actions": [
+      "挑 1 種影片格式（短影音 / 教學片）練到穩定",
+      "幫 1 位朋友把 10 支素材做成系列片",
+      "把剪輯、字幕、輸出步驟寫成檢查表接第一案"
+    ]
+  },
+  "music": {
+    "name": "AI 音律吟遊詩人",
+    "tagline": "用 AI 寫歌、編曲，配上 MV 說故事",
+    "plainIntro": "你用 AI 輔助作詞、作曲、編曲與 MV 分鏡，替個人、品牌或活動做出能被記住的聲音與故事",
+    "color": "from-fuchsia-500 to-purple-500",
+    "hex": "#d946ef",
+    "actions": [
+      "確認你使用的 AI 音樂工具授權條款",
+      "完成 1 首 60 秒作品＋簡易 MV",
+      "幫 1 個小店或活動做主題曲 demo"
+    ]
+  },
+  "stage": {
+    "name": "AI 光影造夢師",
+    "tagline": "用投影與動態視覺，把牆面、展場變成舞台",
+    "plainIntro": "你用 AI 生成動態素材、規劃投影與播放流程，讓展場、活動或店面變成會說故事的空間",
+    "color": "from-violet-500 to-blue-500",
+    "hex": "#8b5cf6",
+    "actions": [
+      "用家用投影機在牆面完成 1 段 30 秒光影",
+      "記錄場地尺寸、亮度與播放設定",
+      "找 1 場小型活動提案現場光影"
+    ]
+  },
+  "host": {
+    "name": "AI 聚會召喚師",
+    "tagline": "辦讀書會、聚會、社群活動，讓人來了就不想走",
+    "plainIntro": "你策劃讀書會、小聚與社群活動，用 AI 處理報名、提醒與回顧，讓參加的人找到下一步",
+    "color": "from-orange-400 to-amber-500",
+    "hex": "#fb923c",
+    "actions": [
+      "定一個主題，辦 1 場 6 人以內小聚",
+      "用表單＋AI 整理報名與會後回顧",
+      "把流程寫成可複製的活動手冊"
+    ]
+  },
+  "researcher": {
+    "name": "AI 研究考據師",
+    "tagline": "用 AI 讀資料、查來源，把複雜框架整理成可信筆記",
+    "plainIntro": "你用 AI 協助閱讀文獻與資料，逐一查核來源、並列不同觀點，整理成別人看得懂、也查得到出處的筆記",
+    "color": "from-slate-500 to-sky-600",
+    "hex": "#0284c7",
+    "actions": [
+      "選 1 個你好奇的主題列 10 個原始來源",
+      "寫 1 份附出處與不同觀點的整理筆記",
+      "邀 3 位同好共讀並記錄回饋"
+    ]
+  },
+  "engineer": {
+    "name": "AI 平台架構師",
+    "tagline": "串 API、整資料、顧穩定，讓系統不半夜爆炸",
+    "plainIntro": "你用 AI 協助串接 API、整理資料流與監控，讓團隊的平台穩定、好維護、出問題找得到原因",
+    "color": "from-gray-600 to-slate-800",
+    "hex": "#475569",
+    "actions": [
+      "挑 1 個常用服務，練熟它的 API 與錯誤處理",
+      "幫自己的小專案加上紀錄與健康檢查",
+      "把一次除錯過程寫成事後回顧"
+    ]
+  },
+  "security": {
+    "name": "AI 資安守門人",
+    "tagline": "在授權範圍內找漏洞、驗修復，幫系統上鎖",
+    "plainIntro": "你在自己或客戶書面授權的系統範圍內，用 AI 協助整理檢查清單、找出風險並驗證修復",
+    "color": "from-emerald-600 to-gray-700",
+    "hex": "#059669",
+    "actions": [
+      "只用自己的帳號與系統練基本檢查",
+      "整理 1 份密碼、權限、備份的自我檢查表",
+      "幫 1 個朋友的網站在授權下做健檢報告"
+    ]
+  },
+  "broker": {
+    "name": "AI 商機牽線人",
+    "tagline": "聽懂需求、找對夥伴，把合作牽成",
+    "plainIntro": "你聽懂一方的需求、找到合適的另一方，用 AI 整理提案與追蹤，把合作與交易牽成",
+    "color": "from-amber-500 to-red-500",
+    "hex": "#ef4444",
+    "actions": [
+      "列出你身邊 20 位可能互補的人",
+      "每週介紹 2 組人認識並追蹤結果",
+      "把一次成功媒合寫成合作提案範本"
+    ]
+  },
+  "shopkeeper": {
+    "name": "AI 電商掌櫃",
+    "tagline": "選貨開店、服務買家，讓小店穩穩賣",
+    "plainIntro": "你用 AI 協助選品、寫商品頁、回覆買家與整理訂單，把一間小網店經營得井井有條",
+    "color": "from-lime-500 to-green-600",
+    "hex": "#65a30d",
+    "actions": [
+      "挑 1 類你懂的商品，找 3 個貨源比較",
+      "開 1 個小賣場上架 5 件商品",
+      "用 AI 整理常見問題並回覆前 10 位買家"
+    ]
+  },
+  "maker": {
+    "name": "AI 供應鍛冶師",
+    "tagline": "把實體好貨的規格、交期與品質講清楚",
+    "plainIntro": "你用 AI 整理實體商品的規格、打樣、交期與品管紀錄，讓買家與合作方信得過這批貨",
+    "color": "from-stone-500 to-amber-700",
+    "hex": "#b45309",
+    "actions": [
+      "挑 1 件你熟悉的實體商品寫完整規格表",
+      "記錄 1 次打樣或進貨的品質檢查",
+      "把供貨條件整理成給買家的一頁說明"
+    ]
+  },
+  "accountant": {
+    "name": "AI 帳房先生",
+    "tagline": "收款、對帳、整理帳目，讓每一筆錢都對得上",
+    "plainIntro": "你用 AI 協助商家整理收款紀錄、核對訂單與入帳差異，做出老闆看得懂的月報；稅務與法規判斷仍交給合格專業人士",
+    "color": "from-teal-600 to-emerald-700",
+    "hex": "#0f766e",
+    "actions": [
+      "用試算表整理自己 1 個月的收支",
+      "練習核對 1 份訂單與收款明細的差異",
+      "幫 1 位小店老闆做一份月對帳摘要"
     ]
   }
 };
@@ -644,6 +778,754 @@ export const EXTRA_DATA_V2 = {
       "vision": 5,
       "network": 4
     }
+  },
+  "video": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "整理素材、標記可用片段"
+      },
+      {
+        "time": "10:30",
+        "act": "AI 粗剪＋自動字幕"
+      },
+      {
+        "time": "14:00",
+        "act": "精修節奏、配樂、調色"
+      },
+      {
+        "time": "16:30",
+        "act": "輸出多版本並回覆客戶意見"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "選定格式＋做 3 支樣片"
+      },
+      {
+        "week": "W2",
+        "goal": "建立剪輯與字幕檢查表"
+      },
+      {
+        "week": "W3",
+        "goal": "接第 1 案並準時交付"
+      },
+      {
+        "week": "W4",
+        "goal": "整理成套餐報價找第 2 案"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "剪一支要好幾天",
+        "solution": "先定模板與片頭片尾，素材進來只換內容"
+      },
+      {
+        "pain": "客戶說「感覺不對」",
+        "solution": "開剪前先給 3 支參考片讓客戶選方向"
+      },
+      {
+        "pain": "擔心素材版權",
+        "solution": "只用客戶提供或授權清楚的素材，並記錄來源"
+      }
+    ],
+    "ally": {
+      "key": "music",
+      "reason": "你的畫面＋他的聲音＝一支完整作品"
+    },
+    "rival": {
+      "key": "researcher",
+      "reason": "你追求速度與節奏，他要逐字查證，進度常卡住"
+    },
+    "traits": {
+      "tech": 3,
+      "creative": 4,
+      "sales": 2,
+      "discipline": 4,
+      "vision": 2,
+      "network": 2
+    }
+  },
+  "music": {
+    "dayInLife": [
+      {
+        "time": "10:00",
+        "act": "聽參考曲、整理情緒關鍵字"
+      },
+      {
+        "time": "11:00",
+        "act": "AI 協助寫詞與旋律草稿"
+      },
+      {
+        "time": "14:00",
+        "act": "編曲、混音微調"
+      },
+      {
+        "time": "17:00",
+        "act": "做 MV 分鏡並與客戶對稿"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "確認工具授權＋完成 1 首 demo"
+      },
+      {
+        "week": "W2",
+        "goal": "做 1 支簡易 MV"
+      },
+      {
+        "week": "W3",
+        "goal": "幫 1 個活動或小店做主題曲"
+      },
+      {
+        "week": "W4",
+        "goal": "整理作品集與報價"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "不知道 AI 生成的歌能不能商用",
+        "solution": "每次使用前讀工具條款，並保存生成紀錄"
+      },
+      {
+        "pain": "作品聽起來都很像",
+        "solution": "保留自己的人聲、樂器或歌詞，讓 AI 只做輔助"
+      },
+      {
+        "pain": "不知道怎麼收費",
+        "solution": "用「秒數＋用途＋修改次數」定價"
+      }
+    ],
+    "ally": {
+      "key": "video",
+      "reason": "他幫你把歌變成好看的 MV"
+    },
+    "rival": {
+      "key": "accountant",
+      "reason": "你憑感覺創作，他要每筆都對得上，節奏不同"
+    },
+    "traits": {
+      "tech": 2,
+      "creative": 5,
+      "sales": 2,
+      "discipline": 2,
+      "vision": 3,
+      "network": 3
+    }
+  },
+  "stage": {
+    "dayInLife": [
+      {
+        "time": "10:00",
+        "act": "勘場、量牆面與動線"
+      },
+      {
+        "time": "11:30",
+        "act": "AI 生成動態素材草稿"
+      },
+      {
+        "time": "14:00",
+        "act": "投影校正與播放排程"
+      },
+      {
+        "time": "19:00",
+        "act": "活動現場控台與收場紀錄"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "完成 1 段家中牆面光影"
+      },
+      {
+        "week": "W2",
+        "goal": "整理場勘與設備檢查表"
+      },
+      {
+        "week": "W3",
+        "goal": "在 1 場小活動試做"
+      },
+      {
+        "week": "W4",
+        "goal": "做成案例影片找下一場"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "設備很貴",
+        "solution": "先租借或用家用投影機做小場"
+      },
+      {
+        "pain": "現場光線和預想不同",
+        "solution": "場勘時拍照記錄亮度，準備備援素材"
+      },
+      {
+        "pain": "活動方只給很短準備時間",
+        "solution": "準備可替換文字與色彩的模板素材"
+      }
+    ],
+    "ally": {
+      "key": "host",
+      "reason": "他把人找來，你把現場變成舞台"
+    },
+    "rival": {
+      "key": "engineer",
+      "reason": "你要現場效果，他要系統穩定，常為了改動拉扯"
+    },
+    "traits": {
+      "tech": 3,
+      "creative": 5,
+      "sales": 2,
+      "discipline": 3,
+      "vision": 4,
+      "network": 3
+    }
+  },
+  "host": {
+    "dayInLife": [
+      {
+        "time": "10:00",
+        "act": "回覆報名、確認場地"
+      },
+      {
+        "time": "13:00",
+        "act": "AI 整理主題資料與提醒訊息"
+      },
+      {
+        "time": "19:00",
+        "act": "主持聚會、帶討論"
+      },
+      {
+        "time": "21:30",
+        "act": "寫會後回顧與下次邀約"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "辦 1 場 6 人小聚"
+      },
+      {
+        "week": "W2",
+        "goal": "整理報名與提醒流程"
+      },
+      {
+        "week": "W3",
+        "goal": "辦第 2 場並收集回饋"
+      },
+      {
+        "week": "W4",
+        "goal": "寫成活動手冊、找合作場地"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "擔心沒人來",
+        "solution": "先邀 3 位確定會來的朋友，再擴大"
+      },
+      {
+        "pain": "現場冷場",
+        "solution": "準備 3 個暖場問題與分組小任務"
+      },
+      {
+        "pain": "辦完就散了",
+        "solution": "會後 24 小時內寄回顧與下一步"
+      }
+    ],
+    "ally": {
+      "key": "broker",
+      "reason": "你聚人，他把聚來的人牽成合作"
+    },
+    "rival": {
+      "key": "security",
+      "reason": "你想讓人輕鬆進來，他想把門鎖緊，要互相理解"
+    },
+    "traits": {
+      "tech": 1,
+      "creative": 3,
+      "sales": 4,
+      "discipline": 3,
+      "vision": 2,
+      "network": 5
+    }
+  },
+  "researcher": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "列出今天要查的問題"
+      },
+      {
+        "time": "10:00",
+        "act": "AI 協助摘要文獻，逐條核對原文"
+      },
+      {
+        "time": "14:00",
+        "act": "整理不同觀點與出處"
+      },
+      {
+        "time": "16:30",
+        "act": "寫筆記並標示不確定處"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "選主題＋列 10 個原始來源"
+      },
+      {
+        "week": "W2",
+        "goal": "寫第 1 份附出處的筆記"
+      },
+      {
+        "week": "W3",
+        "goal": "辦 1 次共讀收集回饋"
+      },
+      {
+        "week": "W4",
+        "goal": "整理成系列筆記或小講座"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "AI 摘要有時會編造",
+        "solution": "每一條都回到原文核對頁碼或段落"
+      },
+      {
+        "pain": "觀點太多不知道怎麼寫",
+        "solution": "並列呈現、標明出處，不急著下結論"
+      },
+      {
+        "pain": "寫得太難沒人看",
+        "solution": "每篇開頭先用三句話說重點"
+      }
+    ],
+    "ally": {
+      "key": "coach",
+      "reason": "你把資料查清楚，他把它教得好懂"
+    },
+    "rival": {
+      "key": "video",
+      "reason": "他要快、你要準，時程常對不上"
+    },
+    "traits": {
+      "tech": 3,
+      "creative": 2,
+      "sales": 1,
+      "discipline": 5,
+      "vision": 4,
+      "network": 2
+    }
+  },
+  "engineer": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "看監控與昨晚紀錄"
+      },
+      {
+        "time": "10:00",
+        "act": "AI 協助寫串接與測試"
+      },
+      {
+        "time": "14:00",
+        "act": "整理資料流與文件"
+      },
+      {
+        "time": "16:30",
+        "act": "排查問題並寫回顧"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "練熟 1 個服務的 API"
+      },
+      {
+        "week": "W2",
+        "goal": "幫小專案加紀錄與健康檢查"
+      },
+      {
+        "week": "W3",
+        "goal": "完成 1 個資料串接"
+      },
+      {
+        "week": "W4",
+        "goal": "把除錯流程寫成文件"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "半夜被叫起來修",
+        "solution": "先做監控與警示，問題小時就發現"
+      },
+      {
+        "pain": "沒人看得懂系統怎麼接",
+        "solution": "畫一張資料流向圖放在說明文件"
+      },
+      {
+        "pain": "AI 寫的程式不敢上線",
+        "solution": "每段都寫測試，先在測試環境驗證"
+      }
+    ],
+    "ally": {
+      "key": "security",
+      "reason": "你把系統蓋穩，他幫你把門鎖好"
+    },
+    "rival": {
+      "key": "stage",
+      "reason": "他要臨場變化，你要流程穩定"
+    },
+    "traits": {
+      "tech": 5,
+      "creative": 1,
+      "sales": 1,
+      "discipline": 4,
+      "vision": 4,
+      "network": 1
+    }
+  },
+  "security": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "確認今天的授權範圍"
+      },
+      {
+        "time": "10:00",
+        "act": "依清單檢查設定與權限"
+      },
+      {
+        "time": "14:00",
+        "act": "AI 協助整理風險與修復建議"
+      },
+      {
+        "time": "16:00",
+        "act": "驗證修復並寫報告"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "在自己的系統練基本檢查"
+      },
+      {
+        "week": "W2",
+        "goal": "整理自我檢查表"
+      },
+      {
+        "week": "W3",
+        "goal": "在授權下幫 1 個朋友網站健檢"
+      },
+      {
+        "week": "W4",
+        "goal": "把報告格式做成範本"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "不確定什麼可以測",
+        "solution": "只碰自己或有書面授權的系統，範圍寫清楚"
+      },
+      {
+        "pain": "報告太技術沒人看",
+        "solution": "先寫給老闆看的三行摘要，再附細節"
+      },
+      {
+        "pain": "修好了又壞",
+        "solution": "每次修復都留驗證步驟，定期重跑"
+      }
+    ],
+    "ally": {
+      "key": "engineer",
+      "reason": "他蓋系統、你守系統，搭配最穩"
+    },
+    "rival": {
+      "key": "host",
+      "reason": "他想讓更多人進來，你想把門鎖緊"
+    },
+    "traits": {
+      "tech": 5,
+      "creative": 1,
+      "sales": 1,
+      "discipline": 5,
+      "vision": 3,
+      "network": 1
+    }
+  },
+  "broker": {
+    "dayInLife": [
+      {
+        "time": "09:30",
+        "act": "整理名單與需求筆記"
+      },
+      {
+        "time": "11:00",
+        "act": "約 2 場咖啡或線上聊"
+      },
+      {
+        "time": "14:00",
+        "act": "AI 協助寫合作提案"
+      },
+      {
+        "time": "17:00",
+        "act": "追蹤進度、介紹下一組人"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "列 20 位互補的人"
+      },
+      {
+        "week": "W2",
+        "goal": "每週介紹 2 組人"
+      },
+      {
+        "week": "W3",
+        "goal": "促成第 1 個合作"
+      },
+      {
+        "week": "W4",
+        "goal": "整理媒合流程與抽成方式"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "介紹了卻沒下文",
+        "solution": "介紹時寫清楚雙方各自要什麼，一週後追蹤"
+      },
+      {
+        "pain": "不知道怎麼收費",
+        "solution": "事前講好媒合費或分潤，寫成書面"
+      },
+      {
+        "pain": "人脈太散",
+        "solution": "用試算表標記每個人的需求與專長"
+      }
+    ],
+    "ally": {
+      "key": "host",
+      "reason": "他的聚會就是你的人脈池"
+    },
+    "rival": {
+      "key": "researcher",
+      "reason": "你要快速成交，他要查清楚才肯動"
+    },
+    "traits": {
+      "tech": 1,
+      "creative": 2,
+      "sales": 5,
+      "discipline": 2,
+      "vision": 4,
+      "network": 5
+    }
+  },
+  "shopkeeper": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "看訂單與買家訊息"
+      },
+      {
+        "time": "10:30",
+        "act": "AI 協助寫商品頁與回覆"
+      },
+      {
+        "time": "14:00",
+        "act": "包貨、出貨、補貨"
+      },
+      {
+        "time": "17:00",
+        "act": "看銷售數字、調整上架"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "選品＋比較 3 個貨源"
+      },
+      {
+        "week": "W2",
+        "goal": "開店上架 5 件"
+      },
+      {
+        "week": "W3",
+        "goal": "服務前 10 位買家"
+      },
+      {
+        "week": "W4",
+        "goal": "整理回購與常見問題"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "上架了沒人買",
+        "solution": "先賣給身邊 10 個人，問他們為什麼買"
+      },
+      {
+        "pain": "客服回不完",
+        "solution": "用 AI 整理常見問題與回覆範本"
+      },
+      {
+        "pain": "庫存壓太多",
+        "solution": "先小量進貨，賣得動再補"
+      }
+    ],
+    "ally": {
+      "key": "maker",
+      "reason": "他把貨做好，你把貨賣好"
+    },
+    "rival": {
+      "key": "product",
+      "reason": "你想先賣看看，他想先做到完美"
+    },
+    "traits": {
+      "tech": 2,
+      "creative": 3,
+      "sales": 4,
+      "discipline": 4,
+      "vision": 3,
+      "network": 3
+    }
+  },
+  "maker": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "確認打樣或生產進度"
+      },
+      {
+        "time": "11:00",
+        "act": "AI 協助整理規格與檢驗紀錄"
+      },
+      {
+        "time": "14:00",
+        "act": "和工廠或師傅對細節"
+      },
+      {
+        "time": "16:30",
+        "act": "更新交期與供貨說明"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "寫 1 件商品完整規格表"
+      },
+      {
+        "week": "W2",
+        "goal": "記錄 1 次打樣品檢"
+      },
+      {
+        "week": "W3",
+        "goal": "整理供貨條件一頁說明"
+      },
+      {
+        "week": "W4",
+        "goal": "找 1 位買家試單"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "工廠說的交期常延誤",
+        "solution": "每週固定確認進度並留紀錄"
+      },
+      {
+        "pain": "品質每批不一樣",
+        "solution": "訂出簡單檢驗標準，每批拍照存檔"
+      },
+      {
+        "pain": "買家問題問不完",
+        "solution": "把規格、尺寸、保固寫成一頁說明"
+      }
+    ],
+    "ally": {
+      "key": "shopkeeper",
+      "reason": "你顧品質，他顧銷售"
+    },
+    "rival": {
+      "key": "marketing",
+      "reason": "他想先打廣告，你想先確認貨沒問題"
+    },
+    "traits": {
+      "tech": 3,
+      "creative": 3,
+      "sales": 2,
+      "discipline": 5,
+      "vision": 3,
+      "network": 2
+    }
+  },
+  "accountant": {
+    "dayInLife": [
+      {
+        "time": "09:00",
+        "act": "匯入昨日訂單與收款紀錄"
+      },
+      {
+        "time": "10:30",
+        "act": "AI 協助比對差異並標記"
+      },
+      {
+        "time": "14:00",
+        "act": "追查退款、手續費與漏單"
+      },
+      {
+        "time": "16:30",
+        "act": "整理月報給老闆"
+      }
+    ],
+    "monthPlan": [
+      {
+        "week": "W1",
+        "goal": "整理自己 1 個月收支"
+      },
+      {
+        "week": "W2",
+        "goal": "練習訂單與收款對帳"
+      },
+      {
+        "week": "W3",
+        "goal": "幫 1 位老闆做月對帳摘要"
+      },
+      {
+        "week": "W4",
+        "goal": "整理成固定月服務"
+      }
+    ],
+    "painPoints": [
+      {
+        "pain": "帳對不起來找不到原因",
+        "solution": "先依日期與金額逐筆配對，再看手續費與退款"
+      },
+      {
+        "pain": "老闆看不懂報表",
+        "solution": "只放三個數字：收入、支出、差異"
+      },
+      {
+        "pain": "碰到稅務問題",
+        "solution": "記錄問題並轉介合格會計或稅務專業人士"
+      }
+    ],
+    "ally": {
+      "key": "shopkeeper",
+      "reason": "他把東西賣出去，你讓每筆錢對得上"
+    },
+    "rival": {
+      "key": "music",
+      "reason": "他憑靈感，你憑紀錄，需要互相包容"
+    },
+    "traits": {
+      "tech": 3,
+      "creative": 1,
+      "sales": 2,
+      "discipline": 5,
+      "vision": 3,
+      "network": 2
+    }
   }
 };
 export const DIMENSION_MAP_V2: Record<number,Dimension> = {
@@ -722,29 +1604,42 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "寫個腳本解掉一個煩人的重複動作",
         "scores": {
-          "automation": 2,
-          "product": 1
+          "automation": 1,
+          "product": 2,
+          "engineer": 3
         }
       },
       {
         "text": "把這週的靈感剪成一支短片",
         "scores": {
-          "visual": 2
+          "visual": 2,
+          "video": 2,
+          "music": 3
         }
       },
       {
         "text": "寫一篇把某個觀念講清楚的長文",
         "scores": {
-          "content": 2,
-          "coach": 1
+          "content": 1,
+          "coach": 2,
+          "researcher": 3
         }
       },
       {
         "text": "約個剛認識的前輩喝咖啡",
         "scores": {
-          "consultant": 2,
+          "marketing": 1,
           "outsourcer": 1,
-          "marketing": 1
+          "consultant": 1,
+          "broker": 1
+        }
+      },
+      {
+        "text": "去看展、逛市集，或找個場地辦小聚",
+        "scores": {
+          "stage": 3,
+          "host": 4,
+          "maker": 3
         }
       }
     ]
@@ -755,29 +1650,40 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "「你這個自動化幫我每週省 5 小時」",
         "scores": {
-          "automation": 2,
-          "consultant": 1,
-          "product": 1
+          "automation": 1,
+          "product": 1,
+          "consultant": 2,
+          "engineer": 2
         }
       },
       {
         "text": "「看完你那篇我終於搞懂了」",
         "scores": {
           "content": 2,
-          "coach": 2
+          "coach": 2,
+          "researcher": 4
         }
       },
       {
         "text": "「這個畫面好美我想收藏」",
         "scores": {
-          "visual": 2
+          "visual": 1,
+          "video": 4,
+          "stage": 3
         }
       },
       {
         "text": "「你操盤的廣告讓業績漲了 30%」",
         "scores": {
           "marketing": 2,
-          "outsourcer": 1
+          "outsourcer": 4
+        }
+      },
+      {
+        "text": "「這場活動讓我認識了好多人」",
+        "scores": {
+          "host": 1,
+          "broker": 4
         }
       }
     ]
@@ -788,26 +1694,36 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "好啊，開會就開會",
         "scores": {
-          "consultant": 2,
-          "marketing": 1,
           "coach": 1,
-          "outsourcer": 1
+          "marketing": 1,
+          "outsourcer": 3,
+          "consultant": 1,
+          "host": 4,
+          "broker": 4,
+          "shopkeeper": 3
         }
       },
       {
         "text": "能 email 解決為什麼要開會",
         "scores": {
-          "product": 2,
-          "automation": 2,
-          "content": 1
+          "content": 1,
+          "automation": 1,
+          "product": 1,
+          "researcher": 1,
+          "engineer": 2,
+          "security": 2,
+          "accountant": 1
         }
       },
       {
         "text": "只要我不用當主講就好",
         "scores": {
-          "visual": 1,
-          "content": 1,
-          "automation": 1
+          "content": 3,
+          "automation": 1,
+          "visual": 2,
+          "video": 4,
+          "music": 3,
+          "accountant": 1
         }
       }
     ]
@@ -818,23 +1734,30 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "又快又多，30 個客戶各做一點",
         "scores": {
-          "outsourcer": 2,
           "visual": 1,
-          "marketing": 1
+          "marketing": 1,
+          "outsourcer": 2,
+          "video": 3,
+          "shopkeeper": 4
         }
       },
       {
         "text": "少量極深，3 個客戶做很重",
         "scores": {
-          "consultant": 3,
-          "coach": 1
+          "coach": 1,
+          "consultant": 1,
+          "stage": 3,
+          "researcher": 1,
+          "security": 1,
+          "maker": 2,
+          "accountant": 4
         }
       },
       {
         "text": "都不做客戶，產品自己長",
         "scores": {
-          "product": 3,
-          "content": 1
+          "content": 2,
+          "product": 3
         }
       }
     ]
@@ -845,24 +1768,29 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "興奮，想馬上再跑一輪",
         "scores": {
+          "product": 1,
           "marketing": 2,
-          "product": 1
+          "shopkeeper": 1
         }
       },
       {
         "text": "好喔，知道結果就好",
         "scores": {
-          "visual": 1,
-          "coach": 1,
-          "content": 1
+          "content": 1,
+          "coach": 2,
+          "visual": 1
         }
       },
       {
         "text": "先別動，這可能是雜訊",
         "scores": {
           "automation": 1,
-          "consultant": 2,
-          "product": 1
+          "product": 1,
+          "consultant": 4,
+          "researcher": 4,
+          "engineer": 3,
+          "security": 2,
+          "accountant": 2
         }
       }
     ]
@@ -873,28 +1801,42 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "一個 bug（程式錯誤）不解掉睡不著",
         "scores": {
+          "automation": 3,
           "product": 2,
-          "automation": 2
+          "engineer": 3,
+          "security": 4
         }
       },
       {
         "text": "一個畫面就差一點點",
         "scores": {
-          "visual": 3
+          "visual": 4,
+          "video": 2,
+          "music": 3,
+          "stage": 3
         }
       },
       {
         "text": "有個想法不寫下來會忘",
         "scores": {
-          "content": 2,
-          "coach": 1
+          "content": 3,
+          "coach": 2,
+          "researcher": 2
         }
       },
       {
         "text": "明天見客戶要改簡報",
         "scores": {
-          "consultant": 2,
-          "marketing": 1
+          "marketing": 2,
+          "consultant": 4
+        }
+      },
+      {
+        "text": "明天活動或出貨，東西還沒到位",
+        "scores": {
+          "host": 4,
+          "shopkeeper": 4,
+          "maker": 4
         }
       }
     ]
@@ -905,25 +1847,33 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "這是必要條件，被打擾我會煩",
         "scores": {
-          "product": 2,
-          "automation": 1,
-          "content": 1
+          "content": 1,
+          "automation": 4,
+          "product": 1,
+          "music": 3,
+          "researcher": 3,
+          "engineer": 2,
+          "security": 1,
+          "accountant": 3
         }
       },
       {
         "text": "可以，但每週要幾次人互動",
         "scores": {
+          "coach": 1,
           "visual": 1,
-          "coach": 1
+          "maker": 2
         }
       },
       {
         "text": "不行，我需要被看見和被反饋",
         "scores": {
           "coach": 2,
-          "marketing": 1,
+          "marketing": 2,
+          "outsourcer": 1,
           "consultant": 1,
-          "outsourcer": 1
+          "host": 3,
+          "broker": 3
         }
       }
     ]
@@ -935,23 +1885,31 @@ export const QUESTIONS_V2: Question[] = [
         "text": "沒差，鏡頭有什麼好怕",
         "scores": {
           "coach": 2,
-          "marketing": 1,
-          "consultant": 1
+          "marketing": 2,
+          "consultant": 2,
+          "music": 2,
+          "host": 2,
+          "broker": 2
         }
       },
       {
         "text": "可以幕後剪，前面不露",
         "scores": {
-          "visual": 1,
           "content": 1,
-          "product": 1
+          "visual": 2,
+          "product": 3,
+          "video": 1,
+          "stage": 4,
+          "accountant": 2
         }
       },
       {
         "text": "死都不要",
         "scores": {
-          "product": 2,
-          "automation": 2
+          "automation": 3,
+          "product": 1,
+          "engineer": 3,
+          "security": 1
         }
       }
     ]
@@ -962,28 +1920,43 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "我可以幫他做個系統，談個月費",
         "scores": {
-          "consultant": 2,
-          "automation": 2
+          "automation": 1,
+          "consultant": 1,
+          "engineer": 2
         }
       },
       {
         "text": "寫一篇「5 步驟數位轉型」給這類人看",
         "scores": {
           "content": 2,
-          "coach": 1
+          "coach": 3
         }
       },
       {
         "text": "想做個 SaaS（訂閱制軟體）賣給 1000 個這種老闆",
         "scores": {
-          "product": 3
+          "product": 1
         }
       },
       {
         "text": "這跟我無關",
         "scores": {
           "visual": 1,
-          "outsourcer": 1
+          "outsourcer": 2
+        }
+      },
+      {
+        "text": "先問他貨從哪來、怎麼賣，幫他開網店",
+        "scores": {
+          "broker": 3,
+          "shopkeeper": 3,
+          "maker": 4
+        }
+      },
+      {
+        "text": "先幫他把訂單和收款逐筆對清楚",
+        "scores": {
+          "accountant": 4
         }
       }
     ]
@@ -995,23 +1968,28 @@ export const QUESTIONS_V2: Question[] = [
         "text": "OK 啊，不會就查 / 開字幕 / 用 AI 即時翻譯",
         "scores": {
           "outsourcer": 2,
-          "consultant": 1
+          "consultant": 2,
+          "broker": 1,
+          "shopkeeper": 2
         }
       },
       {
         "text": "能不用 Zoom 就不用，能 email / 文字解決最好",
         "scores": {
+          "automation": 2,
+          "visual": 2,
           "product": 1,
-          "automation": 1,
-          "visual": 1
+          "engineer": 2,
+          "accountant": 1
         }
       },
       {
         "text": "寧願全程打字 / 自己錄一段解釋影片傳給對方看，不要即時對話",
         "scores": {
-          "product": 1,
           "content": 1,
-          "automation": 1
+          "automation": 2,
+          "product": 1,
+          "security": 3
         }
       }
     ]
@@ -1022,32 +2000,41 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "一堆小額月費疊加，每月慢慢長大",
         "scores": {
-          "product": 2,
-          "coach": 1,
-          "marketing": 1
+          "coach": 2,
+          "product": 1,
+          "marketing": 4,
+          "shopkeeper": 2,
+          "accountant": 2
         }
       },
       {
         "text": "三五個大單專案制",
         "scores": {
+          "visual": 2,
+          "outsourcer": 1,
           "consultant": 2,
-          "visual": 1,
-          "outsourcer": 1
+          "stage": 2,
+          "security": 3,
+          "maker": 4
         }
       },
       {
         "text": "每週都有新案進來，現金流快",
         "scores": {
-          "outsourcer": 2,
           "visual": 1,
-          "marketing": 1
+          "marketing": 2,
+          "outsourcer": 4,
+          "video": 4,
+          "host": 4,
+          "broker": 4
         }
       },
       {
         "text": "看內容和流量變現，不固定但複利",
         "scores": {
           "content": 2,
-          "coach": 2
+          "coach": 2,
+          "music": 4
         }
       }
     ]
@@ -1058,30 +2045,44 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "這邏輯有漏洞，這裡應該…",
         "scores": {
-          "product": 2,
           "automation": 1,
-          "consultant": 1
+          "product": 2,
+          "consultant": 1,
+          "engineer": 2,
+          "security": 3,
+          "accountant": 3
         }
       },
       {
         "text": "這配色太可惜，如果用…",
         "scores": {
-          "visual": 3
+          "visual": 4,
+          "stage": 3
         }
       },
       {
         "text": "想法有趣但講得不夠清楚",
         "scores": {
-          "content": 2,
-          "coach": 1
+          "content": 3,
+          "coach": 1,
+          "researcher": 4
         }
       },
       {
         "text": "這賣給誰？TA（目標客戶群）對不對？",
         "scores": {
-          "marketing": 2,
+          "marketing": 4,
+          "outsourcer": 4,
           "consultant": 1,
-          "outsourcer": 1
+          "broker": 1,
+          "shopkeeper": 2
+        }
+      },
+      {
+        "text": "這來源可靠嗎？證據在哪？",
+        "scores": {
+          "researcher": 1,
+          "security": 4
         }
       }
     ]
@@ -1092,28 +2093,41 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "伺服器 + API（程式介面）+ 開發工具，做一個我想做的工具",
         "scores": {
-          "product": 3,
-          "automation": 1
+          "automation": 2,
+          "product": 1,
+          "engineer": 2
         }
       },
       {
         "text": "相機、螢幕、設計軟體，升級我的產出設備",
         "scores": {
-          "visual": 2
+          "visual": 1,
+          "video": 4,
+          "music": 2,
+          "stage": 3
         }
       },
       {
         "text": "買廣告測市場，驗證自己寫的東西有人要",
         "scores": {
+          "content": 2,
           "marketing": 2,
-          "content": 1
+          "shopkeeper": 1
         }
       },
       {
         "text": "買線上課 / 找教練 / 跟產業前輩學",
         "scores": {
-          "coach": 1,
-          "consultant": 2
+          "coach": 3,
+          "consultant": 1,
+          "researcher": 4
+        }
+      },
+      {
+        "text": "進一批貨或打樣，開店先賣看看",
+        "scores": {
+          "shopkeeper": 4,
+          "maker": 2
         }
       }
     ]
@@ -1126,40 +2140,47 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "客戶反覆改稿，每次一點點",
         "scores": {
+          "automation": 3,
           "product": 1,
-          "automation": 1
+          "engineer": 1
         }
       },
       {
         "text": "整天看後台數字和報表",
         "scores": {
-          "visual": 1,
+          "content": 1,
           "coach": 1,
-          "content": 1
+          "visual": 1,
+          "music": 3,
+          "host": 1
         }
       },
       {
         "text": "一個人關三個月沒產出回饋",
         "scores": {
-          "consultant": 1,
           "coach": 1,
+          "marketing": 1,
           "outsourcer": 1,
-          "marketing": 1
+          "consultant": 1,
+          "broker": 1
         }
       },
       {
         "text": "要不斷解釋給非技術的人聽",
         "scores": {
+          "visual": 1,
           "product": 1,
-          "visual": 1
+          "engineer": 2,
+          "security": 3
         }
       },
       {
         "text": "低價搶案、客戶砍價",
         "scores": {
-          "consultant": 1,
           "coach": 1,
-          "product": 1
+          "product": 1,
+          "consultant": 1,
+          "maker": 4
         }
       }
     ]
@@ -1176,28 +2197,52 @@ export const QUESTIONS_V2: Question[] = [
       {
         "text": "養一個粉絲社群，靠內容和教學活",
         "scores": {
-          "coach": 2,
-          "content": 2
+          "content": 2,
+          "coach": 1,
+          "music": 3,
+          "host": 4
         }
       },
       {
         "text": "養一組企業客戶，深度顧問合作",
         "scores": {
-          "consultant": 3
+          "consultant": 2
         }
       },
       {
         "text": "養一條自動化產線，幫各種品牌跑廣告/內容",
         "scores": {
-          "marketing": 2,
-          "outsourcer": 2,
-          "automation": 1
+          "automation": 2,
+          "marketing": 3,
+          "outsourcer": 4
         }
       },
       {
         "text": "養一個作品庫，作品自己帶客戶來",
         "scores": {
-          "visual": 3
+          "visual": 2,
+          "video": 1,
+          "music": 2,
+          "stage": 4
+        }
+      },
+      {
+        "text": "養一條供應鏈或一間店，回頭客自己來",
+        "scores": {
+          "shopkeeper": 2,
+          "maker": 4
+        }
+      },
+      {
+        "text": "養一張人脈網，幫人牽線成交",
+        "scores": {
+          "broker": 4
+        }
+      },
+      {
+        "text": "當好幾家小店的帳房，每月幫他們把帳對清楚",
+        "scores": {
+          "accountant": 4
         }
       }
     ]

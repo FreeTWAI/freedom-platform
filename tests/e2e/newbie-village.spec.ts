@@ -21,6 +21,10 @@ test('NEWBIE-001 complete quiz, write direction card, local quests persist and m
   await expect(page.getByRole('heading',{name:'我的定位草稿',exact:true})).toBeVisible();
   await expect(page.locator('.nv-dimensions')).toContainText('做自己');
   await expect(page.locator('.nv-radar')).toBeVisible();
+  // First option everywhere plus a second pick on question 14 ranks AI 平台架構師 first; it suggests a primary and a secondary guild.
+  await expect(page.locator('#nv-quiz')).toContainText('我的定位草稿AI 平台架構師');
+  await expect(page.locator('#nv-quiz a[href="#guilds/guild_platform_engineering"]').first()).toBeVisible();
+  await expect(page.locator('#nv-quiz a[href="#guilds/guild_commerce_settlement"]').first()).toBeVisible();
   await expect(page.locator('#nv-quiz')).toContainText('僅供建議，由你選擇');
   await page.locator('#nv-card').getByLabel('過生活底線',{exact:true}).fill('每週只投入三小時，不熬夜。');
   await page.locator('#nv-card').getByLabel('第一週行動',{exact:true}).fill('週六完成一個小工具，留下使用筆記。');

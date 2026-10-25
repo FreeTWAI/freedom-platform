@@ -5,11 +5,34 @@ import {createHash} from 'node:crypto';
 import {QUESTIONS_V2,DIMENSION_MAP_V2,DIMENSION_META_V2,RADAR_AXES_V2,CLASSES_V2,EXTRA_DATA_V2,CAREER_KEYS,CAREER_GUILDS,DIMENSIONS,calculateResult,lifestyleBaseline,validAnswer,completeAnswers,parseProgress,freshProgress,badges} from '../../modules/newbie-village/index.js';
 import {skillBooksForGuild} from '../../modules/community/catalog.js';
 const answers=QUESTIONS_V2.map(()=>[0]);
-// Digest of the six tables extracted from the authorized source, independently
-// compared byte-for-byte as parsed values before recording this fixture.
-test('authorized source wording and score tables retain their exact snapshot',()=>{
+// Digest of the six tables after the 18-guild extension (original 15 questions, original
+// option order and wording kept; 11 careers, added options and rebalanced weights added).
+// Any change to wording or weights must update this fixture deliberately.
+test('extended wording and score tables retain their recorded snapshot',()=>{
   const digest=createHash('sha256').update(JSON.stringify([CLASSES_V2,EXTRA_DATA_V2,QUESTIONS_V2,DIMENSION_MAP_V2,DIMENSION_META_V2,RADAR_AXES_V2])).digest('hex');
-  assert.equal(digest,'dbc9047a43e8a7839583974bdd47d54a6196c6e55a545e856ca4093a7f069300');
+  assert.equal(digest,'82089b3cb5e0c119d276f557d66aaf1bcaca6a9564d1aa78726b05079cc4af5d');
+});
+test('original 8 careers, question wording and option order are preserved for stored answers',()=>{
+  assert.deepEqual(CAREER_KEYS.slice(0,8),['content','automation','coach','visual','product','marketing','outsourcer','consultant']);
+  assert.equal(CAREER_KEYS.length,19);
+  assert.equal(QUESTIONS_V2[0].q,'週六下午空三小時，你最想做？');
+  assert.deepEqual(QUESTIONS_V2[0].options.slice(0,4).map(o=>o.text),['寫個腳本解掉一個煩人的重複動作','把這週的靈感剪成一支短片','寫一篇把某個觀念講清楚的長文','約個剛認識的前輩喝咖啡']);
+  assert.equal(QUESTIONS_V2[14].options[4].text,'養一個作品庫，作品自己帶客戶來');
+});
+test('random-answer simulation: every career is top 2%–15% of the time',()=>{
+  let seed=20261025;const rnd=()=>{seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296};
+  const N=20000,top=Object.fromEntries(CAREER_KEYS.map(k=>[k,0])) as Record<string,number>;
+  for(let n=0;n<N;n++){
+    const a=QUESTIONS_V2.map(q=>{const x=Math.floor(rnd()*q.options.length);if(!q.multi||rnd()<.5)return [x];let y;do y=Math.floor(rnd()*q.options.length);while(y===x);return [x,y]});
+    top[calculateResult(a).primary]++;
+  }
+  for(const c of CAREER_KEYS){const share=top[c]/N;assert.ok(share>=.02&&share<=.15,`${c} ${share}`)}
+});
+test('every career is reachable as primary by a consistent answer pattern',()=>{
+  for(const c of CAREER_KEYS){
+    const a=QUESTIONS_V2.map(q=>{let best=0,gap=-Infinity;q.options.forEach((o,i)=>{const mine=o.scores[c]??0,other=Math.max(0,...Object.entries(o.scores).filter(([k])=>k!==c).map(([,v])=>v as number));if(mine-other>gap){gap=mine-other;best=i}});return [best]});
+    assert.equal(calculateResult(a).primary,c);
+  }
 });
 test('15 original questions have valid dimensions, options and career score keys',()=>{
   assert.equal(QUESTIONS_V2.length,15);
@@ -24,11 +47,11 @@ test('15 original questions have valid dimensions, options and career score keys
 });
 test('deterministic scores, independent dimensions and original multi-select 0.7 weighting',()=>{
   const r=calculateResult(answers);assert.deepEqual(r,calculateResult(answers));
-  const expected={content:1,automation:12,coach:4,visual:1,product:18,marketing:6,outsourcer:5,consultant:8};
+  const expected={"content":1,"automation":16,"coach":5,"visual":1,"product":15,"marketing":10,"outsourcer":7,"consultant":9,"video":3,"music":5,"stage":0,"host":6,"researcher":3,"engineer":17,"security":8,"broker":7,"shopkeeper":12,"maker":0,"accountant":8};
   assert.deepEqual(r.scores,expected);
   for(const c of CAREER_KEYS)assert.equal(DIMENSIONS.reduce((sum,d)=>sum+r.scoresByDim[d][c],0),r.scores[c]);
   const one=QUESTIONS_V2.map(()=>[] as number[]);one[13]=[0,1];
-  const multi=calculateResult(one);assert.equal(multi.scores.product,.7);assert.equal(multi.scores.automation,.7);assert.equal(multi.scores.content,.7);assert.equal(multi.scores.coach,.7);assert.equal(multi.scores.visual,.7);
+  const multi=calculateResult(one);assert.equal(multi.scores.product,.7);assert.ok(Math.abs(multi.scores.automation-2.1)<1e-9);assert.equal(multi.scores.content,.7);assert.equal(multi.scores.coach,.7);assert.equal(multi.scores.visual,.7);assert.ok(Math.abs(multi.scores.music-2.1)<1e-9);
   assert.equal(calculateResult([]).primary,'content');
   assert.deepEqual(calculateResult([]).dimensionWinners,{personality:'content',lifestyle:'content',capability:'content'});
   for(const [axis,n] of Object.entries(r.axes)){
@@ -38,9 +61,12 @@ test('deterministic scores, independent dimensions and original multi-select 0.7
   }
   assert.ok(lifestyleBaseline(answers).includes(QUESTIONS_V2[13].options[0].text));
 });
-test('every career maps to 1–2 existing catalog guild ids with definition-backed justification',()=>{
+test('every career maps to 1–2 existing catalog guild ids with definition-backed justification, covering all 18 guilds',()=>{
   assert.deepEqual(Object.keys(CAREER_GUILDS),CAREER_KEYS);
-  const seed=readFileSync(new URL('../../migrations/002_positioning_guilds.sql',import.meta.url),'utf8');
+  const seed=['002_positioning_guilds','009_specialist_guilds','020_creative_guilds'].map(f=>readFileSync(new URL(`../../migrations/${f}.sql`,import.meta.url),'utf8')).join('\n');
+  const guilds=new Set(Object.values(CAREER_GUILDS).flat().map(g=>g.guildId));assert.equal(guilds.size,18);
+  for(const c of CAREER_KEYS)for(const k of ['tech','creative','sales','discipline','vision','network'] as const)assert.ok(Number.isFinite(EXTRA_DATA_V2[c].traits[k]));
+  for(const c of CAREER_KEYS){assert.ok(CAREER_KEYS.includes(EXTRA_DATA_V2[c].ally.key as never));assert.ok(CAREER_KEYS.includes(EXTRA_DATA_V2[c].rival.key as never));}
   for(const c of CAREER_KEYS){
     assert.ok(CLASSES_V2[c].name);assert.ok(EXTRA_DATA_V2[c].dayInLife.length);assert.equal(EXTRA_DATA_V2[c].monthPlan.length,4);assert.ok(EXTRA_DATA_V2[c].painPoints.length);
     assert.ok(CAREER_GUILDS[c].length>=1&&CAREER_GUILDS[c].length<=2);

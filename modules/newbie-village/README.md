@@ -8,15 +8,20 @@ Jason 與 Hao 哥授權此 repo 使用本機 source 的題目與內容；保留�
 
 ## 本機資料與計分
 
-`content.ts` 保存原題、選項、QUESTIONS_V2、DIMENSION_MAP_V2、8 職業、
-第一週行動、典型一天、30 天節奏與卡住時刻。
+`content.ts` 保存原題、選項、QUESTIONS_V2、DIMENSION_MAP_V2、原 8 職業，
+以及為對齊平台 18 個公會新增的 11 個職業（影音導演、音律吟遊詩人、光影造夢師、
+聚會召喚師、研究考據師、平台架構師、資安守門人、商機牽線人、電商掌櫃、供應鍛冶師、帳房先生），
+共 19 職業的第一週行動、典型一天、30 天節奏與卡住時刻。新職業文案為起草稿，待 Jason 與 Hao 哥審閱。
+原 15 題題目與原選項順序、文字保留（本機已存答案的索引意義不變）；新增選項一律接在原選項之後。
+權重已重新平衡：以固定種子隨機作答模擬，每個職業成為主職業的比例落在 2%–15%（測試內驗證）。
 `scoring.ts` 純函式加總選項分數，複選多於一項每項乘 0.7；三維度獨立計算。
-同分以原始職業順序決定（content → automation → coach → visual → product → marketing → outsourcer → consultant）。
+同分以職業順序決定（原 8 職業 content → … → consultant 在前，新職業接在後面）。
 六軸圖依原作職業 traits 以答題分數加權，最低 1、取至 0.5，不代表實測能力。
 頁面可展開每個回答的分數證據，結果只作反思，這不是診斷測驗。
 
-`guilds.ts` 每職業提供一個既有 catalog.ts guildBooks 公會 ID，
-理由引用既有公會定義（migrations/002_positioning_guilds.sql），沒有黑箱人格媒合。
+`guilds.ts` 每職業提供主公會與（多數職業）一個副公會，皆為既有 catalog.ts guildBooks 公會 ID，
+18 個公會都至少被一個職業對應；理由逐字引用既有公會定義
+（migrations/002_positioning_guilds.sql、009_specialist_guilds.sql、020_creative_guilds.sql），沒有黑箱人格媒合。
 `catalog.ts` 是技能書與公會關係來源，公會名稱與 purpose 的權威 seed 位於上述 SQL；
 本頁不新增公會、不改既有定義。本人可查看全部公會與小隊，自行選擇。
 
