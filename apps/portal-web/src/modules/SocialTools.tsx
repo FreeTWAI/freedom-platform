@@ -52,8 +52,12 @@ export function gameChallengeLink(token:string,origin:string){
  if(!match||!match[2].startsWith(origin+'/play?'))return null;
  const route=match[2].slice(origin.length);
  const challenge=/^\/play\?game=(photo|stamp|cash)&seed=([1-9][0-9]{0,9})$/.exec(route);
- if(!challenge||Number(challenge[2])>4294967295)return null;
- return {prefix:match[1],label:match[2],suffix:match[3],href:`/play?game=${challenge[1]}&seed=${challenge[2]}`};
+ const kitchen=/^\/play\?game=kitchen&recipe=([a-z][a-z-]{1,40})&seed=([1-9][0-9]{0,9})$/.exec(route);
+ const seed=challenge?.[2]??kitchen?.[2];
+ if(!seed||Number(seed)>4294967295)return null;
+ // Recipe syntax is bounded; existence belongs to the game router and its lobby.
+ const href=challenge?`/play?game=${challenge[1]}&seed=${seed}`:`/play?game=kitchen&recipe=${kitchen![1]}&seed=${seed}`;
+ return {prefix:match[1],label:match[2],suffix:match[3],href};
 }
 /** Link ordinary external HTTPS text without normalizing away query or fragment.
  * This is a lexical URL check, not a reputation or DNS/preview request.

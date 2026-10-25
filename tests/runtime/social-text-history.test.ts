@@ -172,3 +172,28 @@ test('external rich text keeps mentions, hashtags and escaped text while creatin
  for(const attribute of ['target="_blank"','rel="noopener noreferrer"','referrerPolicy="no-referrer"','在新分頁開啟'])assert(html.includes(attribute));
  assert(!render(url).includes('<a '),'SSR remains deterministic and does not read window');
 });
+
+
+test('kitchen challenges accept only canonical same-origin recipe and uint32 seed triples',async()=>{
+ const {gameChallengeLink:parse,render}=await gameTextHarness(),origin='https://workshop.example.test';
+ for(const recipe of ['egg-fried-rice','ab','a'+'b'.repeat(40),'unknown-recipe'])for(const seed of ['1','42','4294967295']){
+  const href=`/play?game=kitchen&recipe=${recipe}&seed=${seed}`,url=origin+href,link=parse('（'+url+'）。',origin);
+  assert(link);assert.equal(link.href,href);assert.equal(link.label,url);assert.equal(link.prefix,'（');assert.equal(link.suffix,'）。');
+  const html=render(url,origin);assert.equal((html.match(/<a /g)??[]).length,1);assert(html.includes(`href="${href.replaceAll('&','&amp;')}"`));
+  for(const attribute of ['target="_blank"','rel="noopener noreferrer"','referrerPolicy="no-referrer"','在新分頁開啟'])assert(html.includes(attribute));
+  assert(!render(url).includes('<a '),'SSR does not read browser origin');
+ }
+ const route='/play?game=kitchen&recipe=egg-fried-rice&seed=42',url=origin+route;
+ for(const token of [
+  ...['','a','A-recipe','1-recipe','-recipe','recipe_egg','egg2','a'+'b'.repeat(41),'蛋炒飯','egg%2Dfried-rice','egg/fried','egg.fried'].map(recipe=>origin+`/play?game=kitchen&recipe=${recipe}&seed=42`),
+  ...['0','01','-1','4294967296','1.5','1e2','%34%32'].map(seed=>origin+`/play?game=kitchen&recipe=egg-fried-rice&seed=${seed}`),
+  origin+'/play?game=kitchen&seed=42',origin+'/play?game=kitchen&seed=42&recipe=egg-fried-rice',origin+'/play?recipe=egg-fried-rice&game=kitchen&seed=42',
+  url+'&recipe=other',url+'&seed=7',url+'&extra=1',url+'#tag',url+'?',url+'/suffix',url+'.evil',url+'\\',url+'\u200b',url+'\u0000',
+  origin+':443'+route,'https://user@workshop.example.test'+route,'http://workshop.example.test'+route,'https://%77orkshop.example.test'+route,
+  'prefix'+url,'javascript:'+url,origin+'/pl%61y?game=kitchen&recipe=egg-fried-rice&seed=42',
+  ...['photo','stamp','cash'].map(game=>origin+`/play?game=${game}&recipe=egg-fried-rice&seed=42`),
+ ]){assert.equal(parse(token,origin),null,JSON.stringify(token));assert(!render(token,origin).includes('<a '),JSON.stringify(token));}
+ // External HTTPS may remain an ordinary external link, never a local challenge.
+ assert.equal(parse('https://other.example.test'+route,origin),null);
+ const external=render('https://other.example.test'+route,origin);assert(!external.includes('href="/play?'));
+});
