@@ -152,3 +152,64 @@ test('PERSONAL-SPACE-UI-11: all five interface languages preserve the selected p
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
 });
+
+test('PERSONAL-SPACE-UI-12: per-card retry preserves page, other cards and scroll and coalesces rapid clicks',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const reads=await synthetic(page,8);let attempts=0,inventoryReads=0;
+ page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/me/content')inventoryReads++;});
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(7)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[preview(7)]}}).catch(()=>{});});
+ try{
+  await login(page);await page.getByRole('button',{name:'下一頁',exact:true}).click();
+  const failed=page.getByRole('article',{name:'貼文：我的創作 7',exact:true}),other=page.getByRole('article',{name:'貼文：我的創作 8',exact:true});
+  const retry=failed.getByRole('button',{name:'再試一次',exact:true});await expect(retry).toBeVisible();await expect(other).toContainText('本人貼文正文 8');
+  await retry.scrollIntoViewIfNeeded();const before={scroll:await page.evaluate(()=>scrollY),reads:[...reads],inventory:inventoryReads};
+  // Same-task native activations exercise the window before React commits disabled.
+  await retry.focus();await retry.evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
+  await expect(retry).toBeDisabled();await expect(retry).toHaveAttribute('aria-busy','true');await expect.poll(()=>attempts).toBe(2);
+  await expect(other).toContainText('本人貼文正文 8');await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');
+  expect(await page.evaluate(()=>scrollY)).toBe(before.scroll);expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);
+  release();await expect(failed).toContainText('本人貼文正文 7');await expect(failed.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect(failed.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);
+  await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);await expect.poll(()=>attempts).toBe(2);
+ }finally{release();}
+});
+
+for(const destination of ['page','account'] as const)test(`PERSONAL-SPACE-UI-13: a delayed per-card retry cannot restore the old ${destination}`,async({page})=>{
+ await synthetic(page,8);let attempts=0,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[{...preview(1),note:'STALE_RETRY_SENTINEL'}]}}).catch(()=>{});});
+ try{
+  await login(page);const retry=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}).getByRole('button',{name:'再試一次',exact:true});await retry.click();await expect(retry).toBeDisabled();
+  if(destination==='page'){await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();}
+  else{
+   await page.locator('.settings-menu-button').click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
+   await page.route('**/api/v1/me/content',route=>route.fulfill({json:{items:[]}}));await login(page,'reviewer@local.test');await expect(page.getByRole('heading',{name:'這裡還沒有內容'})).toBeVisible();
+  }
+  release();await expect(page.locator('body')).not.toContainText('STALE_RETRY_SENTINEL');await expect.poll(()=>attempts).toBe(2);
+ }finally{release();}
+});
+
+test('PERSONAL-SPACE-UI-14: forbidden, missing, deleted and non-transient failures do not offer blind retry',async({page})=>{
+ await synthetic(page,6);
+ for(const [n,status] of [[1,403],[2,404],[3,410],[4,422]])await page.route(`**/api/v1/social-posts?post_id=${id(n)}`,route=>route.fulfill({status,json:{}}));
+ await page.route(`**/api/v1/social-posts?post_id=${id(5)}`,route=>route.fulfill({json:{items:[]}}));await login(page);
+ await expect(page.getByText('本人貼文正文 6',{exact:false})).toBeVisible();
+ for(const n of [1,2,3,4,5]){const card=page.getByRole('article',{name:`貼文：我的創作 ${n}`,exact:true});await expect(card).not.toContainText('正在讀取這則貼文');await expect(card.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);await expect(card.getByRole('link')).toHaveCount(0);}
+});
+
+test('PERSONAL-SPACE-UI-15: keyboard retry does not steal focus after the user moves to another card',async({page})=>{
+ await synthetic(page,2);let attempts=0,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[preview(1)]}}).catch(()=>{});});
+ try{
+  await login(page);const first=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=first.getByRole('button',{name:'再試一次',exact:true});
+  await retry.focus();await page.keyboard.press('Enter');await expect(retry).toBeDisabled();await expect.poll(()=>attempts).toBe(2);
+  const other=page.getByRole('article',{name:'貼文：我的創作 2',exact:true}).getByRole('link',{name:'開啟貼文與留言'});await other.focus();release();
+  await expect(first).toContainText('本人貼文正文 1');await expect(other).toBeFocused();
+ }finally{release();}
+});
+
+test('PERSONAL-SPACE-UI-16: a repeated transient failure keeps keyboard retry available and focused',async({page})=>{
+ await synthetic(page,1);let attempts=0;
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,route=>++attempts<=2?route.fulfill({status:503,json:{}}):route.fulfill({json:{items:[preview(1)]}}));
+ await login(page);const card=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=card.getByRole('button',{name:'再試一次',exact:true});
+ await retry.focus();await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeEnabled();await expect(retry).toBeFocused();
+ await page.keyboard.press('Enter');await expect(card).toContainText('本人貼文正文 1');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect.poll(()=>attempts).toBe(3);
+});

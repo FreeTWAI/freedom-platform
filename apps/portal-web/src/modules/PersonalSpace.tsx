@@ -6,7 +6,7 @@ import type {SessionPayload} from '../types';
 import type {MemberCardData} from './Membership';
 import {MemberAvatar} from './MemberAvatar';
 import {personalContentActionPath,type PersonalContentItem} from './MyContent';
-import {PERSONAL_SPACE_PAGE_SIZE,isPersonalSpaceScope,personalPostPath,readPersonalPostPage,type PersonalPostResult} from './personal-space-model';
+import {PERSONAL_SPACE_PAGE_SIZE,isPersonalSpaceScope,personalPostPath,createPersonalPostPageReader,type PersonalPostResult} from './personal-space-model';
 import './PersonalSpace.css';
 
 type Hero=Pick<MemberCardData,'nickname'|'avatar_url'|'positioning_title'> & {guilds:string[]};
@@ -67,18 +67,36 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
 function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:string;items:PersonalContentItem[]}){
   const {t,language}=useLanguage();
   const [previews,setPreviews]=useState<Record<string,PersonalPostResult>>({});
-  useEffect(()=>{const abort=new AbortController();void readPersonalPostPage(client,owner,items,abort.signal,(id,result)=>setPreviews(current=>({...current,[id]:result})));return()=>abort.abort();},[client,owner,items]);
+  const reader=useRef<ReturnType<typeof createPersonalPostPageReader>|null>(null);
+  const cards=useRef<Record<string,HTMLElement|null>>({});
+  const retryFocus=useRef<{id:string;button:HTMLButtonElement}|null>(null);
+  useLayoutEffect(()=>{
+    const abort=new AbortController();
+    const current=createPersonalPostPageReader(client,owner,items,abort.signal,(id,result)=>setPreviews(previous=>({...previous,[id]:result})));
+    reader.current=current;setPreviews({});void current.load();
+    return()=>{abort.abort();retryFocus.current=null;if(reader.current===current)reader.current=null;};
+  },[client,owner,items]);
+  useLayoutEffect(()=>{
+    const pending=retryFocus.current;if(!pending||previews[pending.id]?.state==='retrying')return;
+    retryFocus.current=null;
+    // Only replace focus lost with this control; never steal it back after the user moved on.
+    if(document.activeElement===document.body){
+      const card=cards.current[pending.id],target=pending.button.isConnected?pending.button:(card?.querySelector<HTMLAnchorElement>('a')??card);
+      target?.focus({preventScroll:true});
+    }
+  },[previews]);
   return <div className="personal-space-feed">{items.map(item=>{
     const result=previews[item.id],post=result?.state==='ready'?result.post:null;
     const action=item.actions.includes('view')?'view':item.actions.find(value=>['manage','continue','edit'].includes(value));
     const social=item.kind==='social_post',path=social?(post?personalPostPath(item):null):(action?personalContentActionPath(item,action):null);
-    return <article className="card stack personal-space-entry" key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
+    return <article ref={node=>{cards.current[item.id]=node;}} tabIndex={-1} className="card stack personal-space-entry" key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
       <div className="personal-space-entry-meta"><span>{t(kinds[item.kind])}</span><span>{states[item.status]?t(states[item.status]):item.status}</span><span>{audiences[item.visibility]?t(audiences[item.visibility]):item.visibility}</span></div>
       <h3>{post?.title||item.title||t('space.untitled')}</h3>
       {post&&<>{post.note&&<PersonalPostText text={post.note}/>}{post.thumbnail_url&&<PersonalPostPhoto url={post.thumbnail_url}/>}<time dateTime={post.created_at}>{new Date(post.created_at).toLocaleDateString(language)}</time></>}
-      {social&&personalPostPath(item)&&!result&&<p role="status">{t('space.postLoading')}</p>}
+      {social&&personalPostPath(item)&&(!result||result.state==='retrying')&&<p role="status">{t('space.postLoading')}</p>}
       {social&&result?.state==='unavailable'&&<p>{t('space.postUnavailable')}</p>}
       {social&&result?.state==='error'&&<p role="status">{t('space.postError')}</p>}
+      {social&&(result?.state==='retrying'||(result?.state==='error'&&result.retryable))&&<button type="button" className="btn btn-secondary btn-small" disabled={result.state==='retrying'} aria-busy={result.state==='retrying'} onClick={event=>{if(document.activeElement===event.currentTarget)retryFocus.current={id:item.id,button:event.currentTarget};void reader.current?.retry(item.id);}}>{t('feedback.retry')}</button>}
       {path&&<a className="btn btn-secondary btn-small personal-space-source" href={path}>{social?t('space.openPost'):t('space.openSource')}</a>}
     </article>;
   })}</div>;
