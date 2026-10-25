@@ -104,3 +104,222 @@ test('disabled share invalidates pending results, retains the draft, and stale p
   const pending=job.shareFiles(saved.id,'x',()=>gate);job.disable();release();await pending;assert.equal(job.snapshot().progress.x?.deviceShared,false);assert.equal(job.snapshot().prepared,saved);
   job.enable();assert.equal(job.opened(saved.id,'facebook'),false);job.confirm(saved.id,'facebook');assert.equal(job.snapshot().progress.facebook,undefined);
 });
+
+// Execute the shipped composer closures and JSX with controlled hooks/promises.
+// This tier needs neither a database nor a browser; layout/focus are E2E concerns.
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {randomUUID} from 'node:crypto';
+import {transformSync} from 'esbuild';
+import {ApiError} from '../../apps/portal-web/src/api';
+import {normalizeShareUrl,isOwnWorkshopHost} from '../../packages/shared/share-url';
+import {newTextHistory,recordText} from '../../apps/portal-web/src/modules/text-edit-history';
+const composerSource=readFileSync(new URL('../../apps/portal-web/src/modules/SocialZone.tsx',import.meta.url),'utf8');
+const composerCode=transformSync(composerSource,{loader:'tsx',target:'es2023',format:'esm'}).code;
+function composerFunction(name:string){
+  const start=new RegExp(`^( *)(?:async )?function ${name}\\(`,'m').exec(composerCode);assert.ok(start,name);
+  const tail=composerCode.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,name);
+  return tail.slice(0,end.index+end[0].length);
+}
+const plain=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
+function composerHarness(){
+  const calls:{path:string;method:string;body:any;key:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
+  const enqueue=(path:string,method:string,body:any,key:string)=>new Promise((resolve,reject)=>calls.push({path,method,body,key,resolve,reject}));
+  const state:any={text:'一起分享 https://example.com/read',url:'https://example.com/read',title:'參考資料',topic:'mood',locationName:'',checkIn:false,mentions:[],composeFile:null,preparingImage:false,linkPreview:false,
+    pending:{current:null},publishLock:{current:null},selection:{current:{platform:'note',tag:'',version:1}},composerVersion:{current:1},newPosts:{current:[]},importedGame:{current:null},directPost:null,items:[],closed:0,publishError:'',notice:'',imageReads:0,
+    crypto:{randomUUID},ApiError,normalizeShareUrl,isOwnWorkshopHost,location:{origin:'https://workshop.example.test'},newTextHistory,
+    composerText:(key:string)=>key,composerMessages:new Proxy({},{get:(_,key)=>[key]}),document:{getElementById:()=>null},sessionStorage:{},clearGameDraft:()=>{},
+    setPublishing:(value:boolean)=>{state.publishing=value;},setPublishError:(value:string)=>{state.publishError=value;},setNotice:(value:string)=>{state.notice=value;},
+    setItems:(value:any)=>{state.items=typeof value==='function'?value(state.items):value;},setCursor:()=>{},selectPlatform:(value:string)=>{state.selection.current.platform=value;},clearDirectPost:()=>{state.directPost=null;},
+    setTextHistory:(value:any)=>{state.text=value.value;},setText:(value:string,kind:string)=>{state.text=value;state.lastTextKind=kind;},setMentions:(value:any)=>{state.mentions=value;},setLocationName:(value:string)=>{state.locationName=value;},setCheckIn:(value:boolean)=>{state.checkIn=value;},
+    selectComposeImage:async()=>{state.composeFile=null;},setOriginalDraft:()=>{},setUrl:(value:string)=>{state.url=value;},setTitle:(value:string)=>{state.title=value;},setLinkPreview:(value:boolean)=>{state.linkPreview=value;},closeComposer:()=>{state.closed++;},
+    composeImage:async(file:File)=>{state.imageReads++;return {mime_type:file.type,data_base64:'cHJlcGFyZWQ='};},
+    client:{sessionGeneration:1,csrfToken:'fixture-csrf',post:(path:string,body:unknown,options:{idempotencyKey:string})=>enqueue(path,'POST',plain(body),options.idempotencyKey)},
+    accessAwareFetch:(path:string,init:RequestInit)=>enqueue(path,init.method!,init.method==='POST'?JSON.parse(init.body as string):init.body,(init.headers as Record<string,string>)['Idempotency-Key']),
+  };
+  state.currentClient={current:state.client};
+  for(const name of ['toggleLinkPreview','insertRetainedLink','removeRetainedLink','finishPublication','publishLink','publish'])state[name]=runInNewContext(`${composerFunction(name)};${name}`,state);
+  const submit=()=>state.publish({preventDefault(){}}) as Promise<void>;
+  const ack=(kind:'note'|'link'='link')=>({post_id:'10000000-0000-4000-8000-000000000001',kind,url:kind==='link'?normalizeShareUrl(state.url).ok?state.url:null:null,platform:'other',title:state.title,note:state.text,created_at:'2026-10-25T06:00:00Z',mine:true,author:{display_name:'Fixture',user_id:'author',avatar_url:null},thumbnail_url:null,tags:[]});
+  const response=(body:any,status=201)=>({ok:status>=200&&status<300,status,json:async()=>body});
+  return {state,calls,submit,ack,response};
+}
+const microtasks=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+
+test('composer default publishes URL text, 2,000-character content and metadata through the unchanged native command only',async()=>{
+  const h=composerHarness();h.state.text=('文'.repeat(1900)+' https://example.com/read @夥伴 #作品').padEnd(2000,'文');h.state.topic='work';h.state.checkIn=true;h.state.locationName='線上';h.state.mentions=[{user_id:'peer',display_name:'夥伴'}];h.state.composeFile=png();
+  const sent=h.submit();await microtasks();assert.equal(h.calls.length,1);assert.equal(h.calls[0].path,'/social-posts/notes');
+  assert.deepEqual(h.calls[0].body,{text:h.state.text,topic:'work',location_name:'線上',mention_ids:['peer'],image:{mime_type:'image/png',data_base64:'cHJlcGFyZWQ='}});
+  h.calls[0].resolve(h.ack('note'));await sent;assert.equal(h.state.closed,1);assert.equal(h.state.pending.current,null);
+});
+
+test('preview opt-in and opt-out preserve every draft field/photo and never fetch or publish',()=>{
+  const h=composerHarness(),photo=png();Object.assign(h.state,{composeFile:photo,text:'長'.repeat(900)+' https://example.com/read',url:'',topic:'work',mentions:[{user_id:'peer',display_name:'同伴'}],checkIn:true,locationName:'台北'});
+  h.state.toggleLinkPreview(true);assert.equal(h.state.url,'https://example.com/read');h.state.toggleLinkPreview(false);
+  assert.equal(h.calls.length,0);assert.equal(h.state.text.length,925);assert.equal(h.state.composeFile,photo);assert.equal(h.state.topic,'work');assert.equal(h.state.mentions.length,1);assert.equal(h.state.locationName,'台北');
+});
+
+for(const draft of [{text:'文'.repeat(501)},{topic:'work'},{topic:'event'},{mentions:[{user_id:'peer',display_name:'人'}]},{checkIn:true},{locationName:'台北'},{text:'網址 #標籤'}])test(`preview rejects incompatible metadata without truncation: ${Object.keys(draft)[0]} ${JSON.stringify(draft).slice(0,45)}`,async()=>{
+  const h=composerHarness();Object.assign(h.state,draft,{linkPreview:true,composeFile:png()});const before=h.state.text,photo=h.state.composeFile;
+  await h.submit();assert.equal(h.calls.length,0);assert.equal(h.state.publishError,'previewIncompatible');assert.equal(h.state.text,before);assert.equal(h.state.composeFile,photo);assert.equal(h.state.pending.current,null);
+});
+
+for(const url of ['javascript:alert(1)','data:text/html,bad','file:///tmp/a','http://example.com/a','https://127.0.0.1/a','https://user:secret@example.com/a','https://freetwai.com/absurd-daily/x','https://workshop.example.test/a'])test(`preview rejects unsafe or own-host URL before any network request: ${url.split(':')[0]}`,async()=>{
+  const h=composerHarness();h.state.linkPreview=true;h.state.url=url;await h.submit();assert.equal(h.calls.length,0);assert.equal(h.state.publishError,'previewUrlInvalid');assert.equal(h.state.text,'一起分享 https://example.com/read');
+});
+
+test('explicit preview publish uses the existing link contract once and does not open public-sharing or promotion APIs',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;const sent=h.submit();await h.submit();
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0].path,'/api/v1/social-posts');assert.deepEqual(h.calls[0].body,{url:h.state.url,title:h.state.title,note:h.state.text});
+  h.calls[0].resolve(h.response(h.ack()));await sent;assert.equal(h.calls.length,1);assert.equal(h.state.closed,1);assert.equal(h.state.items.length,1);
+});
+
+for(const mode of ['native','preview'] as const)test(`${mode} lost acknowledgement and later definite refusal retain the frozen body and key`,async()=>{
+  const h=composerHarness();h.state.linkPreview=mode==='preview';h.state.composeFile=mode==='native'?png():null;
+  const sent=h.submit();await microtasks();h.calls[0].reject(new ApiError({message:'lost',network:true}));await sent;
+  const key=h.calls[0].key,body=h.calls[0].body;Object.assign(h.state,{text:'later text',url:'https://different.example.com',title:'different',composeFile:null});
+  const retry=h.submit();await microtasks();assert.equal(h.calls[1].key,key);assert.deepEqual(h.calls[1].body,body);
+  if(mode==='native')h.calls[1].reject(new ApiError({message:'refused retry',status:400}));else h.calls[1].resolve(h.response({detail:'refused retry'},400));await retry;
+  assert.ok(h.state.pending.current);const again=h.submit();await microtasks();assert.equal(h.calls[2].key,key);assert.deepEqual(h.calls[2].body,body);
+  const ack={...h.ack(mode==='native'?'note':'link'),url:mode==='native'?null:body.url,title:body.title??h.state.title,note:body.note??body.text};
+  h.calls[2].resolve(mode==='native'?ack:h.response(ack));await again;assert.equal(h.state.pending.current,null);assert.equal(h.state.imageReads,mode==='native'?1:0);
+});
+
+test('malformed preview ACK stays unknown; explicit retry keeps its original command',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;const sent=h.submit();h.calls[0].resolve(h.response({}));await sent;assert.equal(h.state.publishError,'uncertain');
+  const retry=h.submit();assert.equal(h.calls[1].key,h.calls[0].key);h.calls[1].resolve(h.response(h.ack()));await retry;assert.equal(h.state.items.length,1);
+});
+
+test('preview deduplication preserves the draft and never uploads its photo to the existing post',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;h.state.composeFile=png();const original=h.state.text,sent=h.submit();
+  h.calls[0].resolve(h.response({code:'social_post_exists',post_id:h.ack().post_id},409));await sent;
+  assert.equal(h.calls.length,1);assert.equal(h.state.text,original);assert.ok(h.state.composeFile);assert.equal(h.state.publishError,'duplicate');assert.equal(h.state.pending.current,null);
+});
+
+test('acknowledged preview with failed thumbnail retries only the same image PUT and key, never republishes',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;const photo=png();h.state.composeFile=photo;const sent=h.submit();h.calls[0].resolve(h.response(h.ack()));await microtasks();
+  assert.equal(h.calls[1].method,'PUT');assert.equal(h.calls[1].body,photo);h.calls[1].reject(Error('lost image ACK'));await sent;
+  assert.equal(h.state.publishError,'thumbnailPending');assert.equal(h.state.closed,0);assert.ok(h.state.pending.current.created);
+  const retry=h.submit();await h.submit();assert.equal(h.calls.length,3);assert.equal(h.calls[2].path,h.calls[1].path);assert.equal(h.calls[2].key,h.calls[1].key);assert.equal(h.calls[2].body,photo);
+  h.calls[2].resolve(h.response({...h.ack(),thumbnail_url:'/api/v1/social-posts/fixture/thumbnail'},200));await retry;
+  assert.equal(h.calls.filter(call=>call.method==='POST').length,1);assert.equal(h.state.closed,1);assert.equal(h.state.pending.current,null);
+});
+
+for(const stage of ['post-fetch','post-json','thumbnail-fetch','thumbnail-json'] as const)test(`preview ignores an old session after ${stage}`,async()=>{
+  const h=composerHarness();h.state.linkPreview=true;h.state.composeFile=png();const sent=h.submit();let release!:(value:any)=>void;
+  if(stage.startsWith('thumbnail')){h.calls[0].resolve(h.response(h.ack()));await microtasks();}
+  const call=h.calls.at(-1)!;
+  if(stage.endsWith('json')){call.resolve({ok:true,status:201,json:()=>new Promise(resolve=>{release=resolve;})});await microtasks();}
+  const before=h.calls.length;h.state.client.sessionGeneration++;h.state.text='new session draft';
+  if(stage.endsWith('json'))release(h.ack());else call.resolve(h.response(h.ack()));await sent;
+  assert.equal(h.calls.length,before);assert.equal(h.state.text,'new session draft');assert.equal(h.state.closed,0);assert.equal(h.state.items.length,0);assert.equal(h.state.notice,'');
+});
+
+test('closing and reopening while preview publishes does not close the newly opened editor',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;const sent=h.submit();h.state.composerVersion.current+=2;h.calls[0].resolve(h.response(h.ack()));await sent;
+  assert.equal(h.state.closed,0);assert.equal(h.state.items.length,1);
+});
+
+test('actual composer JSX has one entry and one publish action; optional preview shares text and survives closing',async()=>{
+  const values:any[]=[],refs:any[]=[];let cursor=0,refCursor=0,fetches=0;
+  const element=(type:any,props:any,...children:any[])=>({type,props:{...props,children}});
+  const React={createElement:element,Component:class{},lazy:()=>()=>null,Suspense:'suspense',useState:(initial:any)=>{const i=cursor++;if(!(i in values))values[i]=typeof initial==='function'?initial():initial;return [values[i],(value:any)=>{values[i]=typeof value==='function'?value(values[i]):value;}];},useRef:(value:any)=>refs[refCursor++]??(refs[refCursor-1]={current:value}),useEffect:()=>{},useCallback:(fn:any)=>fn,useId:()=> 'composer',useSyncExternalStore:(_:any,snapshot:any)=>snapshot()};
+  const context:any={React,module:{exports:{}},window:{location:{hash:'#social',search:''}},location:{origin:'https://workshop.example.test'},URL,URLSearchParams,crypto:{randomUUID},require(name:string){
+    if(name==='react')return React;if(name.endsWith('.css'))return {};if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};
+    if(name.includes('social-post-task'))return {socialPostJobForSession:()=>({subscribe:()=>{},snapshot:()=>({phase:'idle'})})};
+    if(name.includes('text-edit-history'))return {newTextHistory,recordText};if(name.includes('GameDraftInbox'))return {useGameDraftInbox:()=>({draft:null})};
+    if(name==='./SocialTools')return {SOCIAL_TOPICS:{mood:'近況',event:'活動',work:'作品'}};if(name.includes('share-url'))return {PLATFORM_LABELS:{},normalizeShareUrl,isOwnWorkshopHost};
+    if(name==='./social-image')return {prepareSocialImage:async(file:File)=>file};
+    if(name.includes('access-fetch'))return {accessAwareFetch:()=>{fetches++;throw Error('unexpected fetch');}};
+    return new Proxy({},{get:()=>()=>null});
+  }};context.exports=context.module.exports;
+  runInNewContext(transformSync(composerSource,{loader:'tsx',target:'es2023',format:'cjs'}).code,context);
+  const render=()=>{cursor=refCursor=0;return context.module.exports.SocialZone({client:{sessionGeneration:1},viewer:{name:'Fixture'}});};
+  const nodes=(tree:any):any[]=>tree==null?[]:Array.isArray(tree)?tree.flatMap(nodes):typeof tree==='object'?[tree,...nodes(tree.props?.children)]:[];
+  let all=nodes(render());const opener=all.find(node=>node.type==='button'&&node.props['aria-label']==='建立貼文');assert.ok(opener);
+  assert.equal(all.filter(node=>node.type==='button'&&JSON.stringify(node.props.children).includes('分享外部連結')).length,0);
+  opener.props.onClick();all=nodes(render());assert.equal(all.filter(node=>node.type==='form').length,1);
+  let textarea=all.find(node=>node.type==='textarea');assert.equal(textarea.props.maxLength,2000);
+  textarea.props.onChange({target:{value:'正文 https://example.com/read'},nativeEvent:{inputType:'insertFromPaste'}});all=nodes(render());
+  all.find(node=>node.type==='input'&&node.props.type==='checkbox').props.onChange({target:{checked:true}});all=nodes(render());
+  assert.equal(all.filter(node=>node.type==='textarea').length,1);assert.equal(all.find(node=>node.type==='input'&&node.props.type==='url').props.value,'https://example.com/read');
+  assert.equal(all.filter(node=>node.type==='button'&&node.props.className==='btn btn-primary').length,1);assert.equal(fetches,0);
+  all.find(node=>node.type==='input'&&node.props.type==='file').props.onChange({target:{files:[png()]}});await microtasks();all=nodes(render());
+  assert.equal(all.find(node=>node.type==='small').props.children[0],'貼文限社群會員，連結縮圖公開');
+  all.find(node=>node.type==='input'&&node.props.type==='checkbox').props.onChange({target:{checked:false}});all=nodes(render());
+  assert.equal(all.find(node=>node.type==='small').props.children[0],'社群會員可見');
+  all.find(node=>node.type==='input'&&node.props.type==='checkbox').props.onChange({target:{checked:true}});all=nodes(render());
+  all.find(node=>node.type==='button'&&node.props['aria-label']==='關閉發文').props.onClick();opener.props.onClick();all=nodes(render());
+  textarea=all.find(node=>node.type==='textarea');assert.equal(textarea.props.value,'正文 https://example.com/read');assert.equal(all.find(node=>node.type==='input'&&node.props.type==='checkbox').props.checked,true);assert.equal(fetches,0);
+});
+
+for(const stage of ['native-image','native-post','post-fetch','post-json','thumbnail-fetch','thumbnail-json'] as const)test(`same-generation replacement client fences ${stage} before passive effects`,async()=>{
+  const h=composerHarness();h.state.linkPreview=!stage.startsWith('native');h.state.composeFile=png();let release!:(value:any)=>void;
+  if(stage==='native-image')h.state.composeImage=()=>new Promise(resolve=>{release=resolve;});
+  const sent=h.submit();await microtasks();
+  if(stage.startsWith('thumbnail')){h.calls[0].resolve(h.response(h.ack()));await microtasks();}
+  const call=h.calls.at(-1);
+  if(stage.endsWith('json')){call!.resolve({ok:true,status:201,json:()=>new Promise(resolve=>{release=resolve;})});await microtasks();}
+  // Render-time identity changes before any effect cleanup, with equal counters.
+  h.state.currentClient.current={sessionGeneration:h.state.client.sessionGeneration};h.state.text='new member private draft';
+  const count=h.calls.length;
+  if(stage==='native-image')release({mime_type:'image/png',data_base64:'old-private-image'});
+  else if(stage.endsWith('json'))release(h.ack());
+  else call!.resolve(stage==='native-post'?h.ack('note'):h.response(h.ack()));
+  await sent;assert.equal(h.calls.length,count);assert.equal(h.state.text,'new member private draft');assert.equal(h.state.items.length,0);assert.equal(h.state.closed,0);assert.equal(h.state.notice,'');
+});
+
+test('a replaced publish lock prevents old errors/finally from clearing a newer operation',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;const sent=h.submit(),nextLock={};h.state.publishLock.current=nextLock;h.state.publishError='new result';
+  h.calls[0].reject(Error('late old failure'));await sent;assert.equal(h.state.publishLock.current,nextLock);assert.equal(h.state.publishError,'new result');assert.equal(h.state.publishing,true);
+});
+
+test('shared photo preparation rejects the former client before effects even with the same generation',async()=>{
+  const h=composerHarness();let release!:(value:any)=>void;
+  Object.assign(h.state,{imageSequence:{current:0},composeInput:{current:null},prepareSocialImage:()=>new Promise(resolve=>{release=resolve;}),setPreparingImage:(value:boolean)=>{h.state.preparingImage=value;},setComposeFile:(value:File)=>{h.state.composeFile=value;}});
+  const select=runInNewContext(`${composerFunction('selectComposeImage')};selectComposeImage`,h.state),original=png(),next=jpeg();h.state.composeFile=original;
+  const pending=select(next);h.state.currentClient.current={sessionGeneration:1};release(next);await pending;assert.equal(h.state.composeFile,original);assert.equal(h.state.publishError,'');
+});
+
+for(const mode of ['native-unknown','link-unknown','thumbnail','duplicate'] as const)test(`${mode} feedback follows a language change without changing the pending command`,async()=>{
+  const start=composerCode.indexOf('const composerMessages ='),end=composerCode.indexOf('const optimizerPanelLoader =');assert.ok(start>=0&&end>start);
+  const declarations=composerCode.slice(start,end);
+  const messages=runInNewContext(`${declarations};composerMessages`);
+  const from=composerCode.indexOf('  const composerText ='),to=composerCode.indexOf('  const historyText =',from);assert.ok(from>=0&&to>from);
+  const context:any={language:'en'};
+  const feedback=runInNewContext(`${declarations}\n${composerCode.slice(from,to)};composerFeedback`,context);
+  const h=composerHarness();h.state.composerMessages=messages;h.state.linkPreview=mode!=='native-unknown';if(mode==='thumbnail')h.state.composeFile=png();
+  const sent=h.submit();await microtasks();
+  if(mode==='thumbnail'){h.calls[0].resolve(h.response(h.ack()));await microtasks();h.calls[1].reject(Error('lost image'));}
+  else if(mode==='duplicate')h.calls[0].resolve(h.response({code:'social_post_exists',post_id:h.ack().post_id},409));
+  else h.calls[0].reject(new ApiError({message:'network detail',network:true}));
+  await sent;const command=h.state.pending.current,key=mode==='thumbnail'?'thumbnailPending':mode==='duplicate'?'duplicate':'uncertain';
+  assert.equal(feedback(h.state.publishError),messages[key][1]);context.language='zh-Hant';assert.equal(feedback(h.state.publishError),messages[key][0]);context.language='ja';assert.equal(feedback(h.state.publishError),messages[key][2]);
+  assert.equal(h.state.pending.current,command);assert.equal(feedback('specific server validation'),'specific server validation');
+});
+
+test('turning preview off never silently drops a URL held outside the text; explicit insert preserves history and metadata',async()=>{
+  const h=composerHarness(),photo=png();Object.assign(h.state,{text:'保留正文  ',composeFile:photo,topic:'work',locationName:'線上',mentions:[{user_id:'peer',display_name:'人'}]});
+  await h.submit();assert.equal(h.calls.length,0);assert.equal(h.state.publishError,'retainedLink');assert.equal(h.state.text,'保留正文  ');
+  h.state.insertRetainedLink();assert.equal(h.state.text,'保留正文  \nhttps://example.com/read');assert.equal(h.state.lastTextKind,'replace');assert.equal(h.state.composeFile,photo);assert.equal(h.state.topic,'work');assert.equal(h.state.locationName,'線上');assert.equal(h.state.mentions.length,1);assert.equal(h.calls.length,0);
+});
+
+test('retained-link insertion refuses overflow; explicit remove only clears the URL/title, with both actions locked while pending',()=>{
+  const h=composerHarness(),photo=png();Object.assign(h.state,{text:'長'.repeat(2000),composeFile:photo,topic:'event'});h.state.insertRetainedLink();assert.equal(h.state.text.length,2000);assert.equal(h.state.publishError,'linkTooLong');
+  const url=h.state.url,title=h.state.title;h.state.pending.current={kind:'link'};h.state.insertRetainedLink();h.state.removeRetainedLink();h.state.toggleLinkPreview(true);assert.equal(h.state.url,url);assert.equal(h.state.title,title);assert.equal(h.state.linkPreview,false);
+  h.state.pending.current=null;h.state.publishLock.current={};h.state.removeRetainedLink();assert.equal(h.state.url,url);h.state.publishLock.current=null;
+  h.state.removeRetainedLink();assert.equal(h.state.url,'');assert.equal(h.state.title,'');assert.equal(h.state.text.length,2000);assert.equal(h.state.composeFile,photo);assert.equal(h.state.topic,'event');assert.equal(h.calls.length,0);
+});
+
+test('preview with a missing session reports a recoverable error before any request',async()=>{
+  const h=composerHarness();h.state.linkPreview=true;h.state.client.csrfToken=null;await h.submit();assert.equal(h.calls.length,0);assert.equal(h.state.publishError,'sessionChanged');assert.equal(h.state.pending.current,null);
+});
+
+test('ordinary text-only publication keeps the native payload and never requests a preview',async()=>{
+  const h=composerHarness();h.state.text='普通貼文';h.state.url='';const sent=h.submit();assert.equal(h.calls.length,1);assert.equal(h.calls[0].path,'/social-posts/notes');assert.deepEqual(h.calls[0].body,{text:'普通貼文',topic:'mood',mention_ids:[]});h.calls[0].resolve(h.ack('note'));await sent;assert.equal(h.state.closed,1);
+});
+
+test('obsolete composer handlers cannot change mode, insert/remove a URL or publish for a replacement client',async()=>{
+  const h=composerHarness();h.state.currentClient.current={sessionGeneration:1};h.state.text='new private draft';h.state.publishError='new feedback';
+  h.state.toggleLinkPreview(true);h.state.insertRetainedLink();h.state.removeRetainedLink();await h.submit();assert.equal(h.state.linkPreview,false);assert.equal(h.state.url,'https://example.com/read');assert.equal(h.state.text,'new private draft');assert.equal(h.state.publishError,'new feedback');assert.equal(h.calls.length,0);
+});

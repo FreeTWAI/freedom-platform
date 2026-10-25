@@ -43,7 +43,7 @@ test('the phone homepage starts with member posts and one clear composer, with e
     await expect(feed.locator('details.social-composer')).toHaveCount(0);
     await expect(post.locator('.social-platform-badge')).toHaveCount(0);
     await expect(post.getByRole('button',{name:'刪除',exact:true})).toBeHidden();
-    const trigger=feed.getByRole('button',{name:'建立貼文',exact:true}),options=feed.getByRole('button',{name:'動態選項',exact:true}),linkEntry=feed.getByRole('button',{name:'分享外部連結',exact:true});
+    const trigger=feed.getByRole('button',{name:'建立貼文',exact:true}),options=feed.getByRole('button',{name:'動態選項',exact:true});
     await expect(trigger).toContainText('想分享什麼？');
     for(const theme of ['light','dark','versefolk'])for(const width of [320,390]){
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
@@ -57,12 +57,14 @@ test('the phone homepage starts with member posts and one clear composer, with e
     await options.click();await page.keyboard.press('Escape');await expect(options).toBeFocused();
     await selectSocialFeed(page,'全部動態');await expect(feed.getByRole('heading',{name:externalTitle,exact:true})).toBeVisible();
     await selectSocialFeed(page,'社群貼文');await expect(feed.getByRole('heading',{name:externalTitle,exact:true})).toHaveCount(0);
-    await linkEntry.click();
-    const link=page.getByRole('dialog',{name:'分享外部連結',exact:true});await expect(link.getByLabel('連結',{exact:true})).toBeFocused();
-    await link.getByLabel('連結',{exact:true}).fill('https://example.com/unpublished-draft');await page.keyboard.press('Escape');
-    await expect(link).toBeHidden();await expect(linkEntry).toBeFocused();
-    await linkEntry.click();
-    await expect(link.getByLabel('連結',{exact:true})).toHaveValue('https://example.com/unpublished-draft');await page.keyboard.press('Escape');
+    await expect(feed.getByRole('button',{name:'分享外部連結',exact:true})).toHaveCount(0);
+    await trigger.click();
+    const link=page.getByRole('dialog',{name:'建立貼文',exact:true});await expect(link.getByLabel('貼文內容',{exact:true})).toBeFocused();
+    await link.getByRole('checkbox',{name:'加入連結預覽（選填）',exact:true}).check();
+    await link.getByLabel('預覽連結',{exact:true}).fill('https://example.com/unpublished-draft');await page.keyboard.press('Escape');
+    await expect(link).toBeHidden();await expect(trigger).toBeFocused();
+    await trigger.click();
+    await expect(link.getByLabel('預覽連結',{exact:true})).toHaveValue('https://example.com/unpublished-draft');await page.keyboard.press('Escape');
   }finally{await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id=$1',[inserted.rows[0].post_id]);}
 });
 
@@ -517,13 +519,14 @@ test('visible feed categories keep keyboard focus and drafts while failed reads 
   expect(queries).toEqual(['','']);await expect(all).toHaveAttribute('aria-pressed','true');
   await notes.focus();await page.keyboard.press('Enter');await expect(feed).toHaveAttribute('aria-busy','false');
   await expect(notes).toBeFocused();await expect(notes).toHaveAttribute('aria-pressed','true');expect(queries.at(-1)).toBe('?kind=note');
-  const linkEntry=feed.locator('.social-composer-start').getByRole('button',{name:'分享外部連結',exact:true});
+  const linkEntry=feed.locator('.social-composer-start').getByRole('button',{name:'建立貼文',exact:true});
   await linkEntry.focus();await page.keyboard.press('Enter');
-  const link=page.getByRole('dialog',{name:'分享外部連結',exact:true});
-  await expect(link.getByLabel('連結',{exact:true})).toBeFocused();await link.getByLabel('連結',{exact:true}).fill('https://example.com/retained-link');
+  const link=page.getByRole('dialog',{name:'建立貼文',exact:true});
+  await expect(link.getByLabel('貼文內容',{exact:true})).toBeFocused();
+  await link.getByRole('checkbox',{name:'加入連結預覽（選填）',exact:true}).check();await link.getByLabel('預覽連結',{exact:true}).fill('https://example.com/retained-link');
   await page.keyboard.press('Escape');await expect(linkEntry).toBeFocused();
   await feed.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(page.getByLabel('貼文內容',{exact:true})).toHaveValue(draft);await page.keyboard.press('Escape');
-  await linkEntry.click();await expect(link.getByLabel('連結',{exact:true})).toHaveValue('https://example.com/retained-link');await page.keyboard.press('Escape');
+  await linkEntry.click();await expect(link.getByLabel('預覽連結',{exact:true})).toHaveValue('https://example.com/retained-link');await page.keyboard.press('Escape');
   expect(writes).toEqual([]);
   await page.unrouteAll({behavior:'wait'});
 });
@@ -565,16 +568,16 @@ test('a delayed all-posts response cannot replace a newer direct category select
 });
 
 for(const language of [
-  {id:'zh-Hant',name:'繁體中文',note:'社群貼文',all:'全部動態',group:'動態分類',link:'分享外部連結',options:'動態選項'},
-  {id:'en',name:'English',note:'Community posts',all:'All posts',group:'Feed categories',link:'Share an external link',options:'Feed options'},
-  {id:'ja',name:'日本語',note:'コミュニティ投稿',all:'すべての投稿',group:'フィードの分類',link:'外部リンクを共有',options:'フィード設定'},
-  {id:'ko',name:'한국어',note:'커뮤니티 게시물',all:'모든 게시물',group:'피드 분류',link:'외부 링크 공유',options:'피드 옵션'},
-  {id:'es',name:'Español',note:'Comunidad',all:'Todas las publicaciones',group:'Categorías del feed',link:'Compartir un enlace externo',options:'Opciones del feed'},
+  {id:'zh-Hant',name:'繁體中文',note:'社群貼文',all:'全部動態',group:'動態分類',composer:'建立貼文',preview:'加入連結預覽（選填）',options:'動態選項'},
+  {id:'en',name:'English',note:'Community posts',all:'All posts',group:'Feed categories',composer:'Create post',preview:'Add a link preview (optional)',options:'Feed options'},
+  {id:'ja',name:'日本語',note:'コミュニティ投稿',all:'すべての投稿',group:'フィードの分類',composer:'投稿を作成',preview:'リンクプレビューを追加（任意）',options:'フィード設定'},
+  {id:'ko',name:'한국어',note:'커뮤니티 게시물',all:'모든 게시물',group:'피드 분류',composer:'게시물 작성',preview:'링크 미리보기 추가 (선택)',options:'피드 옵션'},
+  {id:'es',name:'Español',note:'Comunidad',all:'Todas las publicaciones',group:'Categorías del feed',composer:'Crear publicación',preview:'Añadir vista previa de enlace (opcional)',options:'Opciones del feed'},
 ])test(`${language.id}: feed entry labels fit narrow screens and retain accessible selection`,async({page})=>{
   await login(page);await page.keyboard.press('Escape');
   await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name:language.name,exact:true}).click();await closeSettingsMenu(page);
   await expect(page.locator('html')).toHaveAttribute('lang',language.id);
-  const feed=page.locator('.social-zone'),categories=feed.getByRole('group',{name:language.group,exact:true}),linkEntry=feed.locator('.social-composer-start').getByRole('button',{name:language.link,exact:true});
+  const feed=page.locator('.social-zone'),categories=feed.getByRole('group',{name:language.group,exact:true}),linkEntry=feed.locator('.social-composer-start').getByRole('button',{name:language.composer,exact:true});
   const notes=categories.getByRole('button',{name:language.note,exact:true}),all=categories.getByRole('button',{name:language.all,exact:true});
   await expect(notes).toHaveAttribute('aria-pressed','true');await expect(all).toHaveAttribute('aria-pressed','false');
   expect(await feed.evaluate(element=>{const composer=element.querySelector('.social-composer-start')!,categories=element.querySelector('.social-feed-navigation')!,cards=element.querySelector('.social-grid')!;return Boolean(composer.compareDocumentPosition(categories)&Node.DOCUMENT_POSITION_FOLLOWING)&&Boolean(categories.compareDocumentPosition(cards)&Node.DOCUMENT_POSITION_FOLLOWING);})).toBe(true);
@@ -589,6 +592,49 @@ for(const language of [
   }
   const options=feed.getByRole('button',{name:language.options,exact:true});await options.click();
   const dialog=page.getByRole('dialog',{name:language.options,exact:true});await expect(dialog.getByRole('button',{name:language.note,exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(dialog.getByRole('button',{name:language.link,exact:true})).toHaveCount(0);await page.keyboard.press('Escape');await expect(options).toBeFocused();
-  await linkEntry.click();await expect(page.getByRole('dialog',{name:language.link,exact:true})).toBeVisible();await page.keyboard.press('Escape');await expect(linkEntry).toBeFocused();
+  await expect(dialog.getByRole('button',{name:language.composer,exact:true})).toHaveCount(0);await page.keyboard.press('Escape');await expect(options).toBeFocused();
+  await linkEntry.click();const composer=page.getByRole('dialog',{name:language.composer,exact:true});await expect(composer).toBeVisible();await expect(composer.getByRole('checkbox',{name:language.preview,exact:true})).not.toBeChecked();await page.keyboard.press('Escape');await expect(linkEntry).toBeFocused();
+});
+
+test('one composer posts a URL and full text without preview, preserving its photo across opt-in and cancellation',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),content=dialog.getByLabel('貼文內容',{exact:true});
+  const text=`E2E unified ${Date.now()} https://example.org/read\n${'完整內文'.repeat(150)}`;
+  const writes:{path:string;body:any}[]=[];
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/social-posts'))writes.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});});
+  await content.fill(text);
+  const photo=await sharp({create:{width:40,height:30,channels:3,background:'#287a4d'}}).png().toBuffer();
+  await dialog.getByLabel('貼文圖片（選填）',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:photo});
+  await expect(dialog.getByRole('img',{name:'待發布圖片預覽'})).toBeVisible();
+  const preview=dialog.getByRole('checkbox',{name:'加入連結預覽（選填）',exact:true});await preview.check();
+  await expect(dialog).toContainText('貼文限社群會員，連結縮圖公開');
+  await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();
+  await expect(dialog.getByRole('alert')).toContainText('請關閉連結預覽後發布');expect(writes).toEqual([]);
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:'建立貼文',exact:true}).click();
+  await expect(content).toHaveValue(text);await expect(preview).toBeChecked();await preview.uncheck();
+  await expect(dialog).toContainText('社群會員可見');await expect(dialog).not.toContainText('連結縮圖公開');await expect(dialog.getByRole('img',{name:'待發布圖片預覽'})).toBeVisible();
+  await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();await expect(dialog).toBeHidden();
+  expect(writes).toHaveLength(1);expect(writes[0].path).toBe('/api/v1/social-posts/notes');expect(writes[0].body.text).toBe(text);expect(writes[0].body.image.data_base64).toBeTruthy();
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_posts WHERE note=$1 AND kind=\'note\'',[text])).rows[0].n).toBe(1);
+});
+
+test('preview publication with a lost thumbnail response retries the same upload without another post',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),text=`E2E preview retry ${Date.now()}`,url=`https://example.org/unified-${randomUUID()}`;
+  const creates:string[]=[],uploads:string[]=[];
+  await page.route('**/api/v1/social-posts',async route=>{if(route.request().method()==='POST')creates.push(route.request().headers()['idempotency-key']);await route.continue();});
+  await page.route('**/api/v1/social-posts/*/thumbnail',async route=>{
+    if(route.request().method()!=='PUT'){await route.continue();return;}
+    uploads.push(route.request().headers()['idempotency-key']);if(uploads.length===1){await route.fetch();await route.abort('failed');}else await route.continue();
+  });
+  await dialog.getByLabel('貼文內容',{exact:true}).fill(text);await dialog.getByRole('checkbox',{name:'加入連結預覽（選填）',exact:true}).check();
+  await dialog.getByLabel('預覽連結',{exact:true}).fill(url);
+  const photo=await sharp({create:{width:40,height:30,channels:3,background:'#287a4d'}}).png().toBuffer();
+  await dialog.getByLabel('貼文圖片（選填）',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:photo});await expect(dialog.getByRole('img',{name:'待發布圖片預覽'})).toBeVisible();
+  expect(creates).toEqual([]);expect(uploads).toEqual([]);
+  await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('貼文已建立，圖片尚未確認');
+  await expect(dialog.getByLabel('貼文內容',{exact:true})).toBeDisabled();
+  await dialog.getByRole('button',{name:'重試圖片',exact:true}).click();await expect(dialog).toBeHidden();
+  expect(creates).toHaveLength(1);expect(uploads).toHaveLength(2);expect(uploads[1]).toBe(uploads[0]);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_posts WHERE url=$1',[url])).rows[0].n).toBe(1);
 });

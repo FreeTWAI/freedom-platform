@@ -210,9 +210,10 @@ test.describe('sharing around Short, feature ON', () => {
   test('the link composer says what it recognised before the member shares', async ({page}) => {
     await prepare(page);
     await navigate(page, '社群分享');
-    await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
-    const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
-    const field = dialog.getByLabel('連結', {exact: true});
+    await page.locator('.social-composer-start').getByRole('button', {name: '建立貼文', exact: true}).click();
+    await page.getByRole('checkbox', {name: '加入連結預覽（選填）', exact: true}).check();
+    const dialog = page.getByRole('dialog', {name: '建立貼文', exact: true});
+    const field = dialog.getByLabel('預覽連結', {exact: true});
     await field.fill('https://www.youtube.com/shorts/dQw4w9WgXcQ');
     await expect(dialog.getByRole('status').filter({hasText: 'Short 動態'})).toBeVisible();
     await field.fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
@@ -245,9 +246,10 @@ test.describe('sharing around Short, feature OFF (default)', () => {
       await expect(options.getByRole('button', {name: 'Short', exact: true})).toHaveCount(0);
       await page.keyboard.press('Escape');
       await expect(page.locator('.social-feed-navigation').getByRole('button', {name: 'Short', exact: true})).toHaveCount(0);
-      await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
-      const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
-      await dialog.getByLabel('連結', {exact: true}).fill('https://www.youtube.com/shorts/dQw4w9WgXcQ');
+      await page.locator('.social-composer-start').getByRole('button', {name: '建立貼文', exact: true}).click();
+      await page.getByRole('checkbox', {name: '加入連結預覽（選填）', exact: true}).check();
+      const dialog = page.getByRole('dialog', {name: '建立貼文', exact: true});
+      await dialog.getByLabel('預覽連結', {exact: true}).fill('https://www.youtube.com/shorts/dQw4w9WgXcQ');
       await expect(dialog.getByRole('status')).toHaveText('這是 YouTube Short 連結。');
       await page.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);

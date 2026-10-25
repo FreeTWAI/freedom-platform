@@ -3,7 +3,7 @@ import {Component,lazy,Suspense,useCallback, useEffect, useId, useRef, useState,
 import {accessAwareFetch} from '../access-fetch';
 import {ApiError, type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
-import {PLATFORM_LABELS, type SocialPlatform} from '../../../../packages/shared/share-url';
+import {isOwnWorkshopHost,normalizeShareUrl,PLATFORM_LABELS, type SocialPlatform} from '../../../../packages/shared/share-url';
 import {MemberAvatar} from './MemberAvatar';
 import {PromotionShare} from './PromotionShare';
 import {SocialInteractions} from './SocialInteractions';
@@ -34,6 +34,23 @@ const composerMessages={
   prompt:['想分享什麼？','What would you like to share?','何を共有しますか？','무엇을 공유하고 싶나요?','¿Qué te gustaría compartir?'],
   content:['貼文內容','Post content','投稿内容','게시물 내용','Contenido de la publicación'],
   placeholder:['分享近況、作品，或找夥伴一起做點事…','Share an update, your work, or find people to create with…','近況や作品を共有したり、一緒に活動する仲間を探したり…','근황이나 작품을 공유하거나 함께할 동료를 찾아보세요…','Comparte novedades, tu trabajo o busca personas con quienes crear…'],
+  previewVisibility:['貼文限社群會員，連結縮圖公開','Post visible to members; link thumbnail is public','投稿はメンバー限定、リンクのサムネイルは公開','게시물은 회원 공개, 링크 썸네일은 전체 공개','Publicación para miembros; miniatura del enlace pública'],
+  retainedLink:['這個預覽連結尚未加入正文。請加入正文或移除連結，再發布。','This preview link is not in the post text. Add it to the text or remove it before publishing.','このリンクは本文に含まれていません。本文に追加するか削除してから投稿してください。','이 링크는 본문에 없습니다. 본문에 추가하거나 제거한 후 게시하세요.','Este enlace no está en el texto. Añádelo o elimínalo antes de publicar.'],
+  insertLink:['加入正文','Add to post text','本文に追加','본문에 추가','Añadir al texto'],
+  removeLink:['移除連結','Remove link','リンクを削除','링크 제거','Quitar enlace'],
+  linkTooLong:['加入連結會超過 2,000 字，請先調整正文；草稿仍保留。','Adding this link would exceed 2,000 characters. Edit the text first; your draft is retained.','リンクを追加すると2,000文字を超えます。本文を調整してください。下書きは保持されています。','링크를 추가하면 2,000자를 초과합니다. 본문을 먼저 수정하세요. 초안은 유지됩니다.','Añadir el enlace superaría 2.000 caracteres. Ajusta el texto; se conserva el borrador.'],
+  sessionChanged:['登入狀態已變更，請重新整理。','Your sign-in has changed. Refresh the page.','ログイン状態が変わりました。再読み込みしてください。','로그인 상태가 변경되었습니다. 새로고침하세요.','Tu sesión ha cambiado. Actualiza la página.'],
+  linkPreview:['加入連結預覽（選填）','Add a link preview (optional)','リンクプレビューを追加（任意）','링크 미리보기 추가 (선택)','Añadir vista previa de enlace (opcional)'],
+  linkHint:['網址可以直接貼在正文發布，不需要開啟預覽。','Paste links in your post and publish without a preview.','URLは本文に貼り付けるだけで投稿できます。','미리보기 없이 본문에 링크를 붙여 게시할 수 있습니다.','Puedes pegar enlaces en el texto y publicar sin vista previa.'],
+  previewHint:['只在按下發布時讀取外部網站。預覽貼文限 500 字，不支援自訂主題、標籤、標註或打卡；關閉預覽可保留完整貼文。','The website is read only when you publish. Preview posts allow 500 characters, without custom topics, hashtags, mentions or location. Turn off preview to keep the full post.','公開時のみ外部サイトを読み込みます。プレビュー投稿は500文字までで、テーマ変更・タグ・メンション・場所には対応しません。通常投稿ではすべて保持できます。','게시할 때만 외부 사이트를 읽습니다. 미리보기 게시물은 500자까지이며 사용자 지정 주제, 해시태그, 멘션, 위치를 지원하지 않습니다. 전체 내용을 유지하려면 미리보기를 끄세요.','El sitio se consulta solo al publicar. La vista previa admite 500 caracteres, sin temas personalizados, etiquetas, menciones ni ubicación. Desactívala para conservar la publicación completa.'],
+  previewPhotoHint:['這張照片會另行上傳為外部連結的公開縮圖；若上傳失敗，貼文仍已建立。','This photo is uploaded separately as the external link’s public thumbnail. An upload failure does not undo the post.','写真は外部リンクの公開サムネイルとして別途アップロードされます。失敗しても投稿は作成済みです。','사진은 외부 링크의 공개 썸네일로 별도 업로드됩니다. 업로드에 실패해도 게시물은 유지됩니다.','La foto se sube por separado como miniatura pública del enlace. Si falla, la publicación permanece creada.'],
+  linkUrl:['預覽連結','Preview link','プレビューするリンク','미리보기 링크','Enlace para vista previa'],
+  linkTitle:['預覽標題（選填）','Preview title (optional)','プレビューのタイトル（任意）','미리보기 제목 (선택)','Título de vista previa (opcional)'],
+  previewIncompatible:['目前草稿包含超過 500 字、自訂主題、標籤、標註或打卡。請關閉連結預覽後發布，內容與照片都會保留。','This draft exceeds 500 characters or includes a custom topic, hashtag, mention or location. Turn off link preview to publish without losing text or photos.','500文字を超えるか、テーマ・タグ・メンション・場所が含まれています。プレビューをオフにすると文章と写真を保持して投稿できます。','500자를 초과하거나 주제, 해시태그, 멘션, 위치가 있습니다. 내용을 보존하려면 링크 미리보기를 끄고 게시하세요.','El borrador supera 500 caracteres o incluye tema, etiqueta, mención o ubicación. Desactiva la vista previa para conservar el texto y las fotos.'],
+  previewUrlInvalid:['請使用有效的外部 HTTPS 連結；站內連結請直接貼在正文並關閉預覽。','Use a valid external HTTPS link. For Workshop links, paste in the text and turn off preview.','有効な外部HTTPSリンクを入力してください。工坊内のリンクは本文に貼り、プレビューをオフにしてください。','유효한 외부 HTTPS 링크를 사용하세요. 공방 링크는 본문에 붙이고 미리보기를 끄세요.','Usa un enlace HTTPS externo válido. Para enlaces de Workshop, pégalos en el texto y desactiva la vista previa.'],
+  thumbnailPending:['貼文已建立，圖片尚未確認。重試只會確認同一張縮圖，不會再次發文。','The post is created; the image is unconfirmed. Retry only confirms the same thumbnail, without reposting.','投稿は作成済みですが、画像は未確認です。再試行しても同じ画像のみ確認し、再投稿しません。','게시물은 생성되었지만 이미지는 확인되지 않았습니다. 다시 시도해도 같은 썸네일만 확인하며 재게시하지 않습니다.','La publicación está creada; la imagen no está confirmada. Reintentar solo confirma la misma miniatura, sin volver a publicar.'],
+  retryThumbnail:['重試圖片','Retry image','画像を再試行','이미지 다시 시도','Reintentar imagen'],
+  duplicate:['這則連結已經有人分享過了，草稿仍保留。','This link has already been shared. Your draft is retained.','このリンクは共有済みです。下書きは保持されています。','이미 공유된 링크입니다. 초안은 유지됩니다.','Este enlace ya se compartió. Se conserva tu borrador.'],
   topic:['主題','Topic','テーマ','주제','Tema'],
   topicLabel:['貼文主題','Post topic','投稿のテーマ','게시물 주제','Tema de la publicación'],
   mood:['近況心情','Updates and thoughts','近況・気持ち','근황과 생각','Novedades y reflexiones'],
@@ -103,11 +120,11 @@ const FILTERS = [
 ] as const;
 
 const FEED_MESSAGES={
-  'zh-Hant':{note:'社群貼文',all:'全部動態',filters:'動態分類',options:'動態選項',close:'關閉',closeOptions:'關閉動態選項',refresh:'更新動態',link:'分享外部連結',closeLink:'關閉外部分享'},
-  en:{note:'Community posts',all:'All posts',filters:'Feed categories',options:'Feed options',close:'Close',closeOptions:'Close feed options',refresh:'Refresh feed',link:'Share an external link',closeLink:'Close external sharing'},
-  ja:{note:'コミュニティ投稿',all:'すべての投稿',filters:'フィードの分類',options:'フィード設定',close:'閉じる',closeOptions:'フィード設定を閉じる',refresh:'フィードを更新',link:'外部リンクを共有',closeLink:'外部共有を閉じる'},
-  ko:{note:'커뮤니티 게시물',all:'모든 게시물',filters:'피드 분류',options:'피드 옵션',close:'닫기',closeOptions:'피드 옵션 닫기',refresh:'피드 새로고침',link:'외부 링크 공유',closeLink:'외부 공유 닫기'},
-  es:{note:'Comunidad',all:'Todas las publicaciones',filters:'Categorías del feed',options:'Opciones del feed',close:'Cerrar',closeOptions:'Cerrar opciones del feed',refresh:'Actualizar feed',link:'Compartir un enlace externo',closeLink:'Cerrar enlace externo'},
+  'zh-Hant':{note:'社群貼文',all:'全部動態',filters:'動態分類',options:'動態選項',close:'關閉',closeOptions:'關閉動態選項',refresh:'更新動態'},
+  en:{note:'Community posts',all:'All posts',filters:'Feed categories',options:'Feed options',close:'Close',closeOptions:'Close feed options',refresh:'Refresh feed'},
+  ja:{note:'コミュニティ投稿',all:'すべての投稿',filters:'フィードの分類',options:'フィード設定',close:'閉じる',closeOptions:'フィード設定を閉じる',refresh:'フィードを更新'},
+  ko:{note:'커뮤니티 게시물',all:'모든 게시물',filters:'피드 분류',options:'피드 옵션',close:'닫기',closeOptions:'피드 옵션 닫기',refresh:'피드 새로고침'},
+  es:{note:'Comunidad',all:'Todas las publicaciones',filters:'Categorías del feed',options:'Opciones del feed',close:'Cerrar',closeOptions:'Cerrar opciones del feed',refresh:'Actualizar feed'},
 } as const;
 
 function tone(platform: SocialPlatform) {
@@ -147,6 +164,7 @@ function sharedPostFromLocation():string|null {
 }
 export function SocialZone({client, canReview = false, viewer, focusPost, shortVideos = false}: {client: PortalClient; canReview?: boolean; shortVideos?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
   const composerId = useId();
+  const currentClient=useRef(client);currentClient.current=client;
   const composer = useRef<HTMLDialogElement>(null), composerTrigger = useRef<HTMLButtonElement>(null), composerStart = useRef<HTMLDivElement>(null);
   // The sticky community header wraps on narrow screens, so the composer sticks below its measured height.
   useEffect(() => {
@@ -156,9 +174,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const observer = new ResizeObserver(size); observer.observe(header); size();
     return () => observer.disconnect();
   }, []);
-  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null), linkComposer = useRef<HTMLDialogElement>(null), linkTrigger = useRef<HTMLButtonElement>(null);
-  const [optionsOpen, setOptionsOpen] = useState(false), [linkOpen, setLinkOpen] = useState(false);
-  const linkVersion = useRef(0);
+  const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [platform, setPlatform] = useState('note');
   const [directPost,setDirectPost]=useState<string|null>(sharedPostFromLocation);
@@ -172,17 +189,16 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [notice, setNotice] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
-  const [note, setNote] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [linkPreview, setLinkPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null), deleteTrigger = useRef<HTMLElement | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [composeFile, setComposeFile] = useState<File | null>(null), composeInput = useRef<HTMLInputElement>(null);
   const [composePreview, setComposePreview] = useState('');
-  const [preparingImage, setPreparingImage] = useState(false), [preparingLinkImage, setPreparingLinkImage] = useState(false);
-  const imageSequence = useRef(0), linkImageSequence = useRef(0);
-  useEffect(() => () => { ++imageSequence.current; ++linkImageSequence.current; }, []);
+  const [preparingImage, setPreparingImage] = useState(false);
+  const imageSequence = useRef(0);
+  useEffect(() => () => { ++imageSequence.current; }, []);
   const [editingPost, setEditingPost] = useState<Post | null>(null), editTrigger = useRef<HTMLElement | null>(null);
   const [textHistory,setTextHistory] = useState(newTextHistory);
   const text=textHistory.value;
@@ -213,29 +229,36 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [optimizationJob]=useState(()=>socialPostJobForSession(client));
   const optimization=useSyncExternalStore(optimizationJob.subscribe,optimizationJob.snapshot,optimizationJob.snapshot);
   const [originalDraft,setOriginalDraft]=useState<{before:string;after:string}|null>(null);
-  useEffect(()=>{setTextHistory(newTextHistory());setOriginalDraft(null);},[client,client.sessionGeneration]);
-  const pending = useRef<{text: string; topic?:string;location_name?:string;mention_ids?:string[]; key: string; image?: {mime_type: string; data_base64: string}} | null>(null);
+  const pending = useRef<({kind:'note';text:string;topic?:string;location_name?:string;mention_ids?:string[];image?:{mime_type:string;data_base64:string}}|{kind:'link';body:{url:string;title?:string;note?:string};photo:File|null;thumbnailKey:string;created?:Post})&{key:string;generation:number;uncertain?:boolean}|null>(null);
+  const publishLock=useRef<object|null>(null);
+  useEffect(()=>{
+    ++imageSequence.current;pending.current=null;publishLock.current=null;
+    setTextHistory(newTextHistory());setOriginalDraft(null);setComposeFile(null);setPreparingImage(false);
+    setUrl('');setTitle('');setLinkPreview(false);setTopic('mood');setMentions([]);setLocationName('');setCheckIn(false);
+    setPublishing(false);setPublishError('');setNotice('');newPosts.current=[];
+    return()=>{++imageSequence.current;publishLock.current=null;};
+  },[client,client.sessionGeneration]);
   const gameInbox=useGameDraftInbox(client.sessionGeneration);
   const importedGame=useRef<{createdAt:number;generation:number}|null>(null);
   const importingGame=useRef(false),[gameImportError,setGameImportError]=useState('');
   const latestDraft=useRef({text,file:composeFile});latestDraft.current={text,file:composeFile};
   useEffect(()=>{importedGame.current=null;importingGame.current=false;setGameImportError('');},[client,client.sessionGeneration]);
   async function importGame(draft:GameDraft){
-    if(importingGame.current||publishing||preparingImage||pending.current||composeFile)return;
+    if(client!==currentClient.current||importingGame.current||publishing||preparingImage||pending.current||composeFile)return;
     const merged=[text.trim(),draft.text].filter(Boolean).join('\n\n');
     if(merged.length>2000)return;
     const generation=client.sessionGeneration,sequence=++imageSequence.current,original=text;
     importingGame.current=true;setPreparingImage(true);setGameImportError('');
     try{
       const prepared=await prepareSocialImage(gameDraftFile(draft));
-      if(generation!==client.sessionGeneration||sequence!==imageSequence.current)return;
+      if(client!==currentClient.current||generation!==client.sessionGeneration||sequence!==imageSequence.current)return;
       if(latestDraft.current.text!==original||latestDraft.current.file){setGameImportError('你正在編輯草稿。請確認後再帶入成果。');return;}
       setText(merged,'replace');setComposeFile(prepared);
       importedGame.current={createdAt:draft.createdAt,generation};gameInbox.setDraft(null);openComposer();
     }catch(cause){
-      if(generation===client.sessionGeneration&&sequence===imageSequence.current)setGameImportError(cause instanceof Error?cause.message:'成果圖片未能處理，請重試。');
+      if(client===currentClient.current&&generation===client.sessionGeneration&&sequence===imageSequence.current)setGameImportError(cause instanceof Error?cause.message:'成果圖片未能處理，請重試。');
     }finally{
-      if(generation===client.sessionGeneration&&sequence===imageSequence.current){importingGame.current=false;setPreparingImage(false);}
+      if(client===currentClient.current&&generation===client.sessionGeneration&&sequence===imageSequence.current){importingGame.current=false;setPreparingImage(false);}
     }
   }
   useEffect(()=>{
@@ -272,7 +295,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       }
       const page = await client.get<Page>(`/social-posts${query.size ? `?${query}` : ''}`);
       if (sequence !== loadSequence.current) return;
-      const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
+      const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (nextPlatform===''||post.kind==='note')&&(!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
       setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [...fresh, ...page.items]);
       newPosts.current = newPosts.current.filter(post => !page.items.some(item => item.post_id === post.post_id));
       setCursor(page.next_cursor);
@@ -331,7 +354,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   useEffect(() => { if (optionsOpen && !options.current?.open) options.current?.showModal(); }, [optionsOpen]);
   // The editor's own effect closes its dialog first (child effects run before this one), so focus can return to the menu.
   useEffect(() => { if (!editingPost && editTrigger.current) { editTrigger.current.focus(); editTrigger.current = null; } }, [editingPost]);
-  useEffect(() => { if (linkOpen && !linkComposer.current?.open) {linkComposer.current?.showModal(); linkComposer.current?.querySelector<HTMLInputElement>('input[type=url]')?.focus();} }, [linkOpen]);
   useEffect(() => {
     if (confirming && !deleteDialog.current?.open) deleteDialog.current?.showModal();
   }, [confirming]);
@@ -342,6 +364,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     return () => URL.revokeObjectURL(preview);
   }, [composeFile]);
   async function selectComposeImage(next: File | null) {
+    if(client!==currentClient.current)return;
     const sequence = ++imageSequence.current, generation = client.sessionGeneration;
     if (!next) {
       if (composeInput.current) composeInput.current.value = '';
@@ -350,23 +373,12 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     setPreparingImage(true); setPublishError('');
     try {
       const prepared = await prepareSocialImage(next);
-      if (sequence === imageSequence.current && generation === client.sessionGeneration) setComposeFile(prepared);
+      if (sequence === imageSequence.current && client===currentClient.current && generation === client.sessionGeneration) setComposeFile(prepared);
     } catch (cause) {
-      if (sequence !== imageSequence.current || generation !== client.sessionGeneration) return;
+      if (sequence !== imageSequence.current || client!==currentClient.current || generation !== client.sessionGeneration) return;
       if (composeInput.current) composeInput.current.value = '';
       setPublishError(cause instanceof Error ? cause.message : '圖片未能處理，文字草稿仍保留。');
-    } finally { if (sequence === imageSequence.current) setPreparingImage(false); }
-  }
-  async function selectLinkThumb(next: File | null) {
-    const sequence = ++linkImageSequence.current, generation = client.sessionGeneration;
-    if (!next) { setFile(null); setPreparingLinkImage(false); return; }
-    setPreparingLinkImage(true); setError('');
-    try {
-      const prepared = await prepareSocialImage(next);
-      if (sequence === linkImageSequence.current && generation === client.sessionGeneration) setFile(prepared);
-    } catch (cause) {
-      if (sequence === linkImageSequence.current && generation === client.sessionGeneration) setError(cause instanceof Error ? cause.message : '圖片未能處理。');
-    } finally { if (sequence === linkImageSequence.current) setPreparingLinkImage(false); }
+    } finally { if (sequence === imageSequence.current && client===currentClient.current && generation === client.sessionGeneration) setPreparingImage(false); }
   }
   function openDelete(post: Post, trigger: HTMLElement) {
     deleteTrigger.current = trigger; setDeleteError(''); setConfirming(post.post_id);
@@ -391,79 +403,111 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
-  function closeLink() { ++linkVersion.current; linkComposer.current?.close(); setLinkOpen(false); linkTrigger.current?.focus({preventScroll: true}); }
-  function openLink() { ++linkVersion.current; setError(''); setNotice(''); setLinkOpen(true); }
+  function toggleLinkPreview(enabled:boolean) {
+    if(client!==currentClient.current||publishLock.current||pending.current)return;
+    setLinkPreview(enabled);setPublishError('');
+    // Local convenience only, after an explicit opt-in. Never fetch on paste or toggle.
+    if(enabled&&!url){const candidate=text.match(/https:\/\/[^\s<>]+/u)?.[0];if(candidate)setUrl(candidate);}
+  }
+  function insertRetainedLink() {
+    if(client!==currentClient.current||publishLock.current||pending.current||!url.trim())return;
+    const next=text?`${text}\n${url.trim()}`:url.trim();
+    if(next.length>2000){setPublishError(composerMessages.linkTooLong[0]);return;}
+    setText(next,'replace');setPublishError('');
+  }
+  function removeRetainedLink() {
+    if(client!==currentClient.current||publishLock.current||pending.current)return;
+    setUrl('');setTitle('');setPublishError('');
+  }
+  function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number) {
+    newPosts.current=[created,...newPosts.current.filter(post=>post.post_id!==created.post_id)];
+    const current=selection.current;
+    if(directPost&&current.version===selectedVersion)clearDirectPost();
+    if((current.platform===''||current.platform===(created.kind==='note'?'note':created.platform))&&(!current.tag||created.tags?.includes(current.tag.toLocaleLowerCase())))
+      setItems(items=>[created,...items.filter(post=>post.post_id!==created.post_id)]);
+    else if(!current.tag&&current.version===selectedVersion){setItems([created]);setCursor(null);selectPlatform(created.kind==='note'?'note':'');}
+    if(importedGame.current?.generation===generation){try{clearGameDraft(sessionStorage,importedGame.current.createdAt);}catch{/* Publication is already acknowledged. */}importedGame.current=null;}
+    pending.current=null;setTextHistory(newTextHistory());setMentions([]);setLocationName('');setCheckIn(false);
+    void selectComposeImage(null);setOriginalDraft(null);setUrl('');setTitle('');setLinkPreview(false);setNotice('貼文已發布。');
+    if(composerVersion.current===interactionVersion)closeComposer();
+  }
+  async function publishLink() {
+    if(publishLock.current||preparingImage)return;
+    const generation=client.sessionGeneration;
+    if(client!==currentClient.current||(pending.current&&pending.current.generation!==generation))return;
+    if(!client.csrfToken){setPublishError(composerMessages.sessionChanged[0]);return;}
+    let command=pending.current;
+    if(command?.kind==='note')return;
+    if(!command){
+      if(text.trim().length>500||topic!=='mood'||checkIn||locationName.trim()||mentions.length||/(?<![\p{L}\p{N}_])#[\p{L}\p{N}_]/u.test(text)){setPublishError(composerMessages.previewIncompatible[0]);return;}
+      const normalized=normalizeShareUrl(url);
+      if(!normalized.ok||isOwnWorkshopHost(normalized.host,location.origin)){setPublishError(composerMessages.previewUrlInvalid[0]);return;}
+      if(title.trim().length>120||/[\u0000-\u001f\u007f]/.test(title)){setPublishError('請填寫 120 字以內的預覽標題。');return;}
+      command={kind:'link',body:{url,...(title.trim()?{title:title.trim()}:{}),...(text.trim()?{note:text.trim()}: {})},key:crypto.randomUUID(),generation,photo:composeFile,thumbnailKey:crypto.randomUUID()};
+      pending.current=command;
+    }
+    const lock={};publishLock.current=lock;
+    const selectedVersion=selection.current.version,interactionVersion=composerVersion.current;
+    setPublishing(true);setPublishError('');setNotice('');
+    try {
+      if(!command.created){
+        const response=await accessAwareFetch('/api/v1/social-posts',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',Accept:'application/json','X-CSRF-Token':client.csrfToken,'Idempotency-Key':command.key},body:JSON.stringify(command.body)});
+        if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+        const payload=await response.json() as Post&{detail?:string;code?:string};
+        if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+        if(response.status===409&&payload.code==='social_post_exists'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(payload.post_id)&&!command.uncertain){
+          pending.current=null;setPublishError(composerMessages.duplicate[0]);
+          document.getElementById(`social-post-${payload.post_id}`)?.scrollIntoView({block:'center'});return;
+        }
+        if(!response.ok)throw new ApiError({message:payload.detail||'貼文未能分享。',status:response.status,code:payload.code});
+        const normalized=normalizeShareUrl(command.body.url);
+        if(!normalized.ok||payload.kind!=='link'||payload.url!==normalized.url||payload.note!==(command.body.note??null)||!payload.mine||typeof payload.title!=='string'||(command.body.title&&payload.title!==command.body.title)||!payload.author||typeof payload.author.display_name!=='string'||typeof payload.created_at!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(payload.post_id))throw new Error(composerMessages.uncertain[0]);
+        command.created=payload;
+      }
+      if(command.photo){
+        const uploaded=await accessAwareFetch(`/api/v1/social-posts/${command.created.post_id}/thumbnail`,{method:'PUT',credentials:'same-origin',body:command.photo,headers:{Accept:'application/json','Content-Type':command.photo.type,'X-CSRF-Token':client.csrfToken,'Idempotency-Key':command.thumbnailKey}});
+        if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+        const payload=await uploaded.json() as Post&{detail?:string};
+        if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+        if(!uploaded.ok)throw new ApiError({message:payload.detail||composerMessages.thumbnailPending[0],status:uploaded.status});
+        if(payload.post_id!==command.created.post_id||payload.kind!=='link'||payload.url!==command.created.url||typeof payload.thumbnail_url!=='string')throw new Error(composerMessages.thumbnailPending[0]);
+        command.created={...command.created,thumbnail_url:payload.thumbnail_url};
+      }
+      finishPublication(command.created,selectedVersion,interactionVersion,generation);
+    }catch(cause){
+      if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+      if(command.created)setPublishError(composerMessages.thumbnailPending[0]);
+      else{
+        const unknown=!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500;
+        if(command.uncertain||unknown){command.uncertain=true;setPublishError(composerMessages.uncertain[0]);}
+        else{pending.current=null;setPublishError(cause.message);}
+      }
+    }finally{if(client===currentClient.current&&generation===client.sessionGeneration&&publishLock.current===lock){publishLock.current=null;setPublishing(false);}}
+  }
   async function publish(event: FormEvent) {
     event.preventDefault();
-    if (publishing || preparingImage) return;
-    const command: NonNullable<typeof pending.current> = pending.current ?? {text: text.trim(),topic,location_name:checkIn&&locationName.trim()?locationName.trim():undefined,mention_ids:mentions.filter(m=>text.includes(`@${m.display_name}`)).map(m=>m.user_id), key: crypto.randomUUID()};
+    if (client!==currentClient.current || publishLock.current || preparingImage) return;
+    if(pending.current?.kind==='link'||(!pending.current&&linkPreview)){await publishLink();return;}
+    if(!pending.current&&url.trim()&&!text.includes(url.trim())){setPublishError(composerMessages.retainedLink[0]);return;}
+    if(client!==currentClient.current||(pending.current&&pending.current.generation!==client.sessionGeneration))return;
+    const command: Extract<NonNullable<typeof pending.current>,{kind:'note'}> = pending.current ?? {kind:'note',generation:client.sessionGeneration,text: text.trim(),topic,location_name:checkIn&&locationName.trim()?locationName.trim():undefined,mention_ids:mentions.filter(m=>text.includes(`@${m.display_name}`)).map(m=>m.user_id), key: crypto.randomUUID()};
     if (!command.text) return;
     const selectedVersion = selection.current.version, interactionVersion = composerVersion.current, generation = client.sessionGeneration;
+    const lock={};publishLock.current=lock;
     setPublishing(true); setPublishError(''); setNotice('');
     try {
       if (!pending.current && composeFile) command.image = await composeImage(composeFile);
-      if (generation !== client.sessionGeneration) return;
+      if (client!==currentClient.current || generation !== client.sessionGeneration || publishLock.current!==lock) return;
       pending.current = command;
       const created = await client.post<Post>('/social-posts/notes', {text: command.text,topic:command.topic,location_name:command.location_name,mention_ids:command.mention_ids, ...(command.image ? {image: command.image} : {})}, {idempotencyKey: command.key});
-      if(generation!==client.sessionGeneration)return;
-      newPosts.current = [created, ...newPosts.current.filter(post => post.post_id !== created.post_id)];
-      const currentSelection = selection.current;
-      if(directPost&&currentSelection.version===selectedVersion)clearDirectPost();
-      if ((currentSelection.platform === '' || currentSelection.platform === 'note')&&(!currentSelection.tag||created.tags?.includes(currentSelection.tag.toLocaleLowerCase()))) {
-        setItems(current => [created, ...current.filter(post => post.post_id !== created.post_id)]);
-      } else if (!currentSelection.tag&&currentSelection.version === selectedVersion) {
-        // Jump to a saved note only if the viewer has not chosen another feed
-        // while the acknowledgement was in flight.
-        setItems([created]); setCursor(null); selectPlatform('note');
-      }
-      if(importedGame.current?.generation===generation){
-        try{clearGameDraft(sessionStorage,importedGame.current.createdAt);}catch{/* Acknowledged publication remains successful if browser storage fails. */}
-        importedGame.current=null;
-      }
-      pending.current = null; setTextHistory(newTextHistory());setMentions([]);setLocationName('');setCheckIn(false); selectComposeImage(null); setOriginalDraft(null);setNotice('貼文已發布。');
-      if (composerVersion.current === interactionVersion) closeComposer();
+      if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+      finishPublication(created,selectedVersion,interactionVersion,generation);
     } catch (cause) {
-      if(generation!==client.sessionGeneration)return;
-      if (cause instanceof ApiError && !cause.network) pending.current = null;
-      setPublishError(cause instanceof Error ? cause.message : '尚未確認發布結果，請重試。');
-    } finally { if(generation===client.sessionGeneration)setPublishing(false); }
-  }
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (saving || preparingLinkImage) return;
-    if (!client.csrfToken) { setError('登入狀態已變更，請重新整理。'); return; }
-    const selectedVersion = selection.current.version, interactionVersion = linkVersion.current;
-    setSaving(true); setError(''); setNotice('');
-    try {
-      const response = await accessAwareFetch('/api/v1/social-posts', {
-        method: 'POST', credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
-        body: JSON.stringify({url, ...(title.trim() ? {title: title.trim()} : {}), ...(note.trim() ? {note: note.trim()} : {})}),
-      });
-      const payload = await response.json() as {post_id?: string; detail?: string; code?: string};
-      if (response.status === 409 && payload.post_id) {
-        setNotice('這則貼文已經有人分享過了。');
-        document.getElementById(`social-post-${payload.post_id}`)?.scrollIntoView({block: 'center'});
-        return;
-      }
-      if (!response.ok) throw new ApiError({message: payload.detail || '貼文未能分享。', status: response.status, code: payload.code});
-      const created = payload as unknown as Post;
-      if (file) {
-        const uploaded = await accessAwareFetch(`/api/v1/social-posts/${created.post_id}/thumbnail`, {
-          method: 'PUT', credentials: 'same-origin', body: file,
-          headers: {Accept: 'application/json', 'Content-Type': file.type, 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
-        });
-        if (!uploaded.ok) {
-          const problem = await uploaded.json().catch(() => ({})) as {detail?: string};
-          throw new ApiError({message: problem.detail || '縮圖未能換上，貼文已建立。', status: uploaded.status});
-        }
-      }
-      setUrl(''); setTitle(''); setNote(''); setFile(null); setNotice('已分享這則貼文。');
-      if (selection.current.version === selectedVersion && selection.current.platform === 'note') selectPlatform('');
-      else await load(selection.current.platform);
-      if (linkVersion.current === interactionVersion) closeLink();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '貼文未能分享。'); }
-    finally { setSaving(false); }
+      if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
+      if (cause instanceof ApiError && !cause.network && cause.status>0 && cause.status<500 && !command.uncertain) pending.current = null;
+      else if(pending.current)pending.current.uncertain=true;
+      setPublishError(pending.current?.uncertain ? composerMessages.uncertain[0] : cause instanceof Error ? cause.message : composerMessages.uncertain[0]);
+    } finally { if(client===currentClient.current&&generation===client.sessionGeneration&&publishLock.current===lock){publishLock.current=null;setPublishing(false);} }
   }
   async function uploadLinkThumb(post: Post, next: File) {
     if (!client.csrfToken) return;
@@ -556,15 +600,29 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       <div className="social-composer-prompt"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/>
         <button ref={composerTrigger} type="button" className="social-write-trigger" aria-label={composerText('title')} aria-haspopup="dialog" onClick={openComposer}><span>{pending.current ? composerText('resumePending') : text ? composerText('resume') : composerText('prompt')}</span></button>
       </div>
-      <div className="social-composer-entry-actions"><button ref={linkTrigger} type="button" className="btn btn-ghost social-link-entry" aria-haspopup="dialog" aria-expanded={linkOpen} onClick={openLink}><SocialIcon name="share"/>{feedText.link}</button></div>
     </div>
     <dialog ref={composer} className="social-publish-dialog" aria-labelledby={composerId} onCancel={event => {if(event.target!==event.currentTarget)return;event.preventDefault(); closeComposer();}} onClose={() => setComposerOpen(false)}>
       {composerOpen && <div className="stack">
         <header className="social-publish-head"><h2 id={composerId}>{composerText('title')}</h2><button type="button" className="btn btn-ghost" aria-label={composerText('closeLabel')} onClick={closeComposer}>{composerText('close')}</button></header>
-        <p className="social-publish-identity"><span aria-hidden="true"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/></span><span>{viewer?.name ?? composerText('me')}<small>{composerText('visibility')}</small></span></p>
+        <p className="social-publish-identity"><span aria-hidden="true"><MemberAvatar nickname={viewer?.name ?? composerText('me')} avatarUrl={viewer?.avatarUrl}/></span><span>{viewer?.name ?? composerText('me')}<small>{composerText(linkPreview&&composeFile?'previewVisibility':'visibility')}</small></span></p>
         {importedGame.current?.generation===client.sessionGeneration&&<p className="field-hint">剛才的離譜成果已帶入。確認圖片、文案與作者後，再按發布。</p>}
         <form className="social-native-composer stack" onSubmit={event => void publish(event)} aria-busy={publishing}>
-          <label className="field"><span className="sr-only">{composerText('content')}</span><textarea aria-label={composerText('content')} autoFocus required rows={6} maxLength={2000} placeholder={composerText('placeholder')} value={text} disabled={publishing || !!pending.current} onChange={event => setText(event.target.value, (event.nativeEvent as InputEvent).inputType?.startsWith('insertFrom') ? 'replace' : 'typing')} onBlur={() => setTextHistory(breakTextGroup)} onKeyDown={event=>{if(event.nativeEvent.isComposing||event.altKey||!(event.ctrlKey||event.metaKey)||!['z','y'].includes(event.key.toLowerCase()))return;event.preventDefault();if(!publishing&&!pending.current)setTextHistory(event.key.toLowerCase()==='y'||event.shiftKey?redoText:undoText);}} onPaste={event=>{const photo=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(photo&&!publishing&&!pending.current){event.preventDefault();void selectComposeImage(photo);}}}/></label>
+          <label className="field"><span className="sr-only">{composerText('content')}</span><textarea aria-label={composerText('content')} autoFocus required={!linkPreview} rows={6} maxLength={2000} placeholder={composerText('placeholder')} value={text} disabled={publishing || !!pending.current} onChange={event => setText(event.target.value, (event.nativeEvent as InputEvent).inputType?.startsWith('insertFrom') ? 'replace' : 'typing')} onBlur={() => setTextHistory(breakTextGroup)} onKeyDown={event=>{if(event.nativeEvent.isComposing||event.altKey||!(event.ctrlKey||event.metaKey)||!['z','y'].includes(event.key.toLowerCase()))return;event.preventDefault();if(!publishing&&!pending.current)setTextHistory(event.key.toLowerCase()==='y'||event.shiftKey?redoText:undoText);}} onPaste={event=>{const photo=[...event.clipboardData.files].find(f=>f.type.startsWith('image/'));if(photo&&!publishing&&!pending.current){event.preventDefault();void selectComposeImage(photo);}}}/></label>
+          <div className="social-link-option">
+            <p className="field-hint">{composerText('linkHint')}</p>
+            <label className="social-preview-toggle"><input type="checkbox" checked={linkPreview} disabled={publishing||!!pending.current} aria-controls={`${composerId}-link-preview`} onChange={event=>toggleLinkPreview(event.target.checked)}/>{composerText('linkPreview')}</label>
+            {!linkPreview&&url.trim()&&!text.includes(url.trim())&&<div className="social-retained-link">
+              <p className="field-hint">{composerText('retainedLink')}</p><p className="social-retained-url">{url}</p>
+              <div className="social-actions"><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={insertRetainedLink}>{composerText('insertLink')}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={removeRetainedLink}>{composerText('removeLink')}</button></div>
+            </div>}
+            {linkPreview&&<div id={`${composerId}-link-preview`} className="social-link-fields stack">
+              <p className="field-hint">{composerText('previewHint')}</p>
+              <label className="field">{composerText('linkUrl')}<input required type="url" inputMode="url" maxLength={2048} value={url} disabled={publishing||!!pending.current} onChange={event=>setUrl(event.target.value)} placeholder="https://"/></label>
+              {youtubeLinkHint(url,shortVideos)&&<p className="field-hint" role="status">{youtubeLinkHint(url,shortVideos)}</p>}
+              <label className="field">{composerText('linkTitle')}<input maxLength={120} value={title} disabled={publishing||!!pending.current} onChange={event=>setTitle(event.target.value)}/></label>
+              {composeFile&&<p className="field-hint">{composerText('previewPhotoHint')}</p>}
+            </div>}
+          </div>
           <div className="social-compose-toolbar"><label className="social-topic-select">{composerText('topic')}<select aria-label={composerText('topicLabel')} value={topic} disabled={publishing||!!pending.current} onChange={e=>setTopic(e.target.value as keyof typeof SOCIAL_TOPICS)}>{(Object.keys(SOCIAL_TOPICS) as (keyof typeof SOCIAL_TOPICS)[]).map(key=><option key={key} value={key}>{composerText(key)}</option>)}</select></label><button type="button" className="social-icon-button" aria-label={composerText('photo')} title={composerText('photo')} disabled={publishing||preparingImage||!!pending.current} onClick={()=>composeInput.current?.click()}><SocialIcon name="camera"/></button><SocialTextTools client={client} text={text} onChange={setText} mentions={mentions} onMentions={setMentions} disabled={publishing||!!pending.current} maxLength={2000}/><button type="button" className="social-icon-button" title={composerText('checkIn')} aria-label={composerText('checkIn')} aria-expanded={checkIn} disabled={publishing||!!pending.current} onClick={()=>setCheckIn(v=>!v)}><SocialIcon name="pin"/></button></div>
           <input ref={composeInput} className="sr-only" tabIndex={-1} aria-label={composerText('image')} type="file" accept="image/jpeg,image/png,image/webp" disabled={publishing||preparingImage||!!pending.current} onChange={event=>{void selectComposeImage(event.target.files?.[0]??null);}}/>
           {checkIn&&<label className="field">{composerText('location')}<input aria-label={composerText('location')} placeholder={composerText('locationExample')} maxLength={120} value={locationName} disabled={publishing||!!pending.current} onChange={e=>setLocationName(e.target.value)}/><small className="muted">{composerText('locationHint')}</small></label>}
@@ -574,8 +632,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           <div className="social-composer-tools"><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.past.length} onClick={()=>{setTextHistory(undoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[0]}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.future.length} onClick={()=>{setTextHistory(redoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[1]}</button><button type="button" className="btn btn-ghost" aria-pressed={optimizerEnabled} aria-expanded={optimizerEnabled} aria-controls={`${composerId}-optimizer`} disabled={publishing||!!pending.current||optimization.phase==='busy'} onClick={()=>setOptimizerEnabled(value=>!value)}>{composerText('optimize')}</button><button ref={shareTrigger} type="button" className="btn btn-ghost" aria-expanded={shareOpen} aria-controls={`${composerId}-share`} disabled={publishing||!!pending.current} onClick={()=>setShareOpen(value=>!value)}>{shareText[0]}</button>{originalDraft&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||text!==originalDraft.after} onClick={()=>{setText(originalDraft.before,'replace');setOriginalDraft(null);}}>{composerText('restore')}</button>}</div>
           {optimizerEnabled&&<div id={`${composerId}-optimizer`}><ShareLoadBoundary key={optimizerLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,optimizerLoader.attempt+1,'SocialPostOptimizer');return <div className="banner banner-error"><p role="alert">{historyText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setOptimizerLoader(current=>({component:optimizerPanelLoader(retryUrl),attempt:current.attempt+1}))}>{historyText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{historyText[2]}</p>}><Optimizer client={client} job={optimizationJob} draft={text} disabled={publishing||!!pending.current} onRecoverDraft={draft=>{setOriginalDraft({before:text,after:draft});setText(draft,'replace');}} onApply={result=>{setOriginalDraft({before:text,after:result});setText(result,'replace');optimizationJob.adopt();}}/></Suspense></ShareLoadBoundary></div>}
           {shareOpen&&<div id={`${composerId}-share`}><ShareLoadBoundary key={shareLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,shareLoader.attempt+1);return <div className="banner banner-error"><p role="alert">{shareText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setShareLoader(current=>({component:sharePanelLoader(retryUrl),attempt:current.attempt+1}))}>{shareText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{shareText[1]}</p>}><CrossPlatformShare client={client} draft={text} disabled={publishing||!!pending.current} onRestore={value=>{setOriginalDraft({before:text,after:value});setText(value,'replace');}} onClose={()=>{setShareOpen(false);shareTrigger.current?.focus({preventScroll:true});}}/></Suspense></ShareLoadBoundary></div>}
-          <div className="social-composer-footer"><span className="muted">{text.length}/2000</span><button className="btn btn-primary" disabled={publishing || preparingImage || !text.trim()}>{publishing ? composerText('publishing') : pending.current ? composerText('retry') : shareOpen?shareText[2]:composerText('publish')}</button></div>
-          {publishError && <p className="banner banner-error" role="alert">{pending.current&&language!=='zh-Hant'?composerText('uncertain'):composerFeedback(publishError)}</p>}
+          <div className="social-composer-footer"><span className="muted">{text.length}/2000</span><button className="btn btn-primary" disabled={publishing || preparingImage || (!text.trim()&&!linkPreview)}>{publishing ? composerText('publishing') : pending.current?.kind==='link'&&pending.current.created ? composerText('retryThumbnail') : pending.current ? composerText('retry') : shareOpen?shareText[2]:composerText('publish')}</button></div>
+          {publishError && <p className="banner banner-error" role="alert">{composerFeedback(publishError)}</p>}
         </form>
       </div>}
     </dialog>
@@ -583,22 +641,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       {optionsOpen && <div className="stack">
         <header className="social-publish-head"><h2 id={`${composerId}-options`}>{feedText.options}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeOptions} onClick={closeOptions}>{feedText.close}</button></header>
         <div className="social-view-options" role="group" aria-label={feedText.filters}>{FILTERS.filter(item=>item.id!=='shorts'||shortVideos).map(item=><button key={item.id||'all'} type="button" className="btn btn-ghost social-filter" aria-pressed={platform===item.id} onClick={()=>{selectPlatform(item.id);closeOptions();}}>{filterLabel(item.id,item.label)}</button>)}</div>
-      </div>}
-    </dialog>
-    <dialog ref={linkComposer} className="social-publish-dialog" aria-labelledby={`${composerId}-link`} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();closeLink();}} onClose={()=>setLinkOpen(false)}>
-      {linkOpen && <div className="stack">
-        <header className="social-publish-head"><h2 id={`${composerId}-link`}>{feedText.link}</h2><button type="button" className="btn btn-ghost" aria-label={feedText.closeLink} onClick={closeLink}>{feedText.close}</button></header>
-        <form className="social-link-composer stack" onSubmit={event=>void submit(event)} aria-busy={saving}>
-          <label className="field">連結<input required type="url" inputMode="url" maxLength={2048} value={url} disabled={saving} onChange={event=>setUrl(event.target.value)} placeholder="https://"/></label>
-          {youtubeLinkHint(url, shortVideos) && <p className="field-hint" role="status">{youtubeLinkHint(url, shortVideos)}</p>}
-          <label className="field">標題（選填）<input maxLength={120} value={title} disabled={saving} onChange={event=>setTitle(event.target.value)}/></label>
-          <label className="field">說明（選填）<textarea maxLength={500} rows={3} value={note} disabled={saving} onChange={event=>setNote(event.target.value)}/></label>
-          <label className="field">縮圖（選填，會自動調整大小）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving || preparingLinkImage} onChange={event=>{void selectLinkThumb(event.target.files?.[0]??null); event.target.value = '';}}/></label>
-          {file && <p className="muted">已選擇：{file.name}</p>}
-          <button className="btn btn-primary" type="submit" disabled={saving || preparingLinkImage}>{preparingLinkImage?'正在處理圖片…':saving?'正在讀取預覽…':'分享貼文'}</button>
-          {error && <p className="banner banner-error" role="alert">{error}</p>}
-          {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
-        </form>
       </div>}
     </dialog>
     <dialog ref={deleteDialog} className="social-publish-dialog social-delete-dialog" aria-labelledby={`${composerId}-delete`} aria-describedby={`${composerId}-delete-detail`} onCancel={event => {event.preventDefault(); closeDelete();}} onClose={() => setConfirming(null)}>
@@ -610,8 +652,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       </div>}
     </dialog>
     <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id?{...item,...saved,thumbnail_url:item.thumbnail_url}:item));setNotice('貼文已更新。');}}/>
-    {notice && !linkOpen && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
-    {error && !linkOpen && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
+    {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
+    {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
       <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
       <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
