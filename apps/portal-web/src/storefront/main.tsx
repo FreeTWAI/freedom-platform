@@ -265,6 +265,8 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
   const forgetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const forgottenTransitionRef = useRef<boolean>(false);
+  const failedForgetCloseRef = useRef(false);
+  const forgetFocusRequest = useRef<{generation: number; failed: boolean} | null>(null);
   const redeemRejectedRef = useRef<boolean>(false);
   const initialTitleRef = useRef<string>(document.title);
   const orderReadGeneration = useRef(0);
@@ -300,6 +302,22 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       paymentHeadingRef.current?.focus();
     }
   }, [focusPaymentHeadingTrigger, order]);
+
+  useEffect(() => {
+    const request = forgetFocusRequest.current;
+    if (!request?.failed) return;
+    if (request.generation !== orderReadGeneration.current || view !== 'order') {
+      forgetFocusRequest.current = null;
+      return;
+    }
+    const trigger = forgetTriggerRef.current, dialog = dialogRef.current;
+    if (!trigger || trigger.disabled || !dialog || dialog.open) return;
+    forgetFocusRequest.current = null;
+    // A failed request may close before React commits the enabled trigger.
+    // Restore once, without taking focus from a newer user interaction.
+    const active = document.activeElement;
+    if (active === document.body || active === trigger || (active && dialog.contains(active))) trigger.focus();
+  }, [forgetting, forgetError, busy, paymentBusy, redirecting, view]);
 
   function clearPendingHideTimer() {
     if (pendingHideTimerRef.current !== null) {
@@ -668,8 +686,10 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       void runInitialOrRetryGet();
     }
     function handleHashChange() {
+      forgetFocusRequest.current = null;
       const consumed = consumeAccessHash();
       if (consumed.kind === 'none') return;
+      setForgetting(false);
       if (consumed.kind === 'malformed') {
         orderReadGeneration.current++;
         redeemRejectedRef.current = false;
@@ -688,6 +708,8 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
     }
     function handlePageShow(event: PageTransitionEvent) {
       if (!event.persisted && !redirectingRef.current) return;
+      forgetFocusRequest.current = null;
+      setForgetting(false);
       redirectingRef.current = false;
       paymentInFlightRef.current = false;
       setRedirecting(false);
@@ -700,10 +722,16 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       setView('loading');
       void runInitialOrRetryGet();
     }
+    const cancelForgetFocus = () => { forgetFocusRequest.current = null; };
+    window.addEventListener('pagehide', cancelForgetFocus);
+    window.addEventListener('popstate', cancelForgetFocus);
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('pageshow', handlePageShow);
     return () => {
       orderReadGeneration.current++;
+      forgetFocusRequest.current = null;
+      window.removeEventListener('pagehide', cancelForgetFocus);
+      window.removeEventListener('popstate', cancelForgetFocus);
       window.removeEventListener('hashchange', handleHashChange);
       window.removeEventListener('pageshow', handlePageShow);
       clearPendingHideTimer();
@@ -723,14 +751,20 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
   function openForgetDialog() {
     setForgetError(false);
     forgottenTransitionRef.current = false;
+    failedForgetCloseRef.current = false;
+    forgetFocusRequest.current = null;
     dialogRef.current?.showModal();
   }
 
   async function confirmForget() {
-    orderReadGeneration.current++;
+    const generation = ++orderReadGeneration.current;
+    const focusRequest = {generation, failed: false};
+    forgetFocusRequest.current = focusRequest;
     setForgetting(true);
     const outcome = await postForgetBrowser();
+    if (generation !== orderReadGeneration.current) return;
     if (outcome === 'ok') {
+      forgetFocusRequest.current = null;
       forgottenTransitionRef.current = true;
       dialogRef.current?.close();
       setForgetting(false);
@@ -742,6 +776,8 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
       setFocusHeadingTrigger(count => count + 1);
       return;
     }
+    focusRequest.failed = true;
+    failedForgetCloseRef.current = true;
     setForgetting(false);
     setForgetError(true);
     dialogRef.current?.close();
@@ -1031,6 +1067,10 @@ function OrderPage({ container, storeSlug, storeName, orderRef, tokenBox, malfor
             if (forgetting) event.preventDefault();
           }}
           onClose={() => {
+            if (failedForgetCloseRef.current) {
+              failedForgetCloseRef.current = false;
+              return;
+            }
             if (!forgottenTransitionRef.current) {
               forgetTriggerRef.current?.focus();
             }

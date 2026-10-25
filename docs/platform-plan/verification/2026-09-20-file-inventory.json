@@ -4399,8 +4399,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/main.tsx",
-      "bytes": 103968,
-      "sha256": "050395556ec434e7dd350ff42336a01cab4a19c2169424d89c38073f69f6a518"
+      "bytes": 105925,
+      "sha256": "9f5bbf60c2453580827440a6941af35ddf821335d0a2584ce71607f3881a63bc"
     },
     {
       "path": "apps/portal-web/src/storefront/meetup-card.tsx",
@@ -25034,8 +25034,8 @@
     },
     {
       "path": "tests/e2e/storefront-orders.spec.ts",
-      "bytes": 43355,
-      "sha256": "b75e37d5c185603b11da07be5969b4ee28f53412d5cc0a0ebf2a65613abfb6b4"
+      "bytes": 46077,
+      "sha256": "4b8fe732de35ca9160e646fef29cce12683782ac317fe0b969e9dff4f1113f34"
     },
     {
       "path": "tests/e2e/storefront-payment-fixture.ts",
