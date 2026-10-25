@@ -28,7 +28,8 @@ async function registerJoined(page:Page,profile='guide-ai-sister'){
 async function openGuide(page:Page){
   await widget(page).getByRole('button',{name:'問本頁',exact:true}).click();
   await expect(widget(page)).toHaveAttribute('data-load-state','ready');
-  const skip=panel(page).getByRole('button',{name:'顯示全文',exact:true});if(await skip.isVisible())await skip.click();
+  // Natural completion can remove the optional skip button before a click.
+  await expect(panel(page).locator('.page-spirit-line')).toHaveAttribute('data-typing','false',{timeout:4000});
 }
 async function selectTheme(page:Page,label:string){
   const settings=page.getByRole('button',{name:'設定',exact:true});
