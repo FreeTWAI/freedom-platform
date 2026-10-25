@@ -70,8 +70,6 @@
 .floating-message-position input,.floating-message-position select{min-height:44px;min-width:0;flex:1;font-size:16px}
 .floating-message-position .btn{min-height:44px;font-size:14px}
 @media(max-width:760px){
-  .floating-messages{width:48px;height:48px;padding:8px;top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 64px - var(--app-safe-bottom,0px))}
-  .floating-messages-label{display:none}
   .floating-message-header .floating-message-position-toggle{margin-inline-start:auto}
 }
 
@@ -79,3 +77,18 @@
 .floating-message-header{flex-wrap:wrap}
 .floating-message-header h2{min-width:0;flex:1;overflow-wrap:anywhere}
 .floating-message-header .btn{flex-shrink:0}
+
+/* Only the surface is translucent: labels, icons and unread badges stay opaque. */
+.floating-messages{color:var(--ink);background:var(--bg-elev);box-shadow:0 3px 10px #0002}
+@supports(background:color-mix(in srgb,white 75%,transparent)){
+  .floating-messages{background:color-mix(in srgb,var(--bg-elev) 75%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+}
+.floating-messages:is(:hover,:focus-visible,:active,[data-dragging=true],[aria-expanded=true]){background:var(--bg-elev)}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+  .floating-messages{background:var(--bg-elev);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media(forced-colors:active){
+  .floating-messages{background:Canvas;color:CanvasText;border-color:ButtonText;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .floating-messages:focus-visible{outline-color:Highlight}
+  .floating-messages-badge{background:Highlight;color:HighlightText;border-color:Canvas}
+}

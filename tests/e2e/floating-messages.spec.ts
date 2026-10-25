@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {DEFAULT_LAUNCHER_PLACEMENT,LAUNCHER_PLACEMENT_KEY,parseLauncherPlacement,launcherBounds,launcherPoint,snapLauncher,launcherDragPoint,launcherDragStarted} from '../../modules/member-communications/portal/floating-message-placement.js';
 import {randomUUID} from 'node:crypto';
@@ -258,31 +259,31 @@ for(const order of ['refresh-first','older-first'] as const)test(`precision refr
 test('launcher placement validates persisted values and clamps drag geometry to safe visual bounds',()=>{
   for(const raw of [null,'broken','null','[]','{}','{"side":"top","vertical":0.5}','{"side":"left","vertical":-1}','{"side":"left","vertical":2}','{"side":"right","vertical":"0.5"}','{"side":"right","vertical":1e999}'])expect(parseLauncherPlacement(raw)).toEqual(DEFAULT_LAUNCHER_PLACEMENT);
   expect(parseLauncherPlacement('{"side":"left","vertical":0.25,"account":"ignored"}')).toEqual({side:'left',vertical:0.25});
-  const bounds=launcherBounds({left:10,top:36,width:390,height:480},48,{left:12,right:20,top:30,bottom:24},20);
-  expect(bounds).toEqual({left:30,right:324,top:94,bottom:428});
-  expect(launcherPoint({side:'right',vertical:1},bounds)).toEqual({x:324,y:428});
+  const bounds=launcherBounds({left:10,top:36,width:390,height:480},60,{left:12,right:20,top:30,bottom:24},20);
+  expect(bounds).toEqual({left:30,right:312,top:94,bottom:416});
+  expect(launcherPoint({side:'right',vertical:1},bounds)).toEqual({x:312,y:416});
   expect(snapLauncher(-100,-100,bounds)).toEqual({side:'left',vertical:0});
   expect(snapLauncher(999,999,bounds)).toEqual({side:'right',vertical:1});
-  const start={x:324,y:428,pointerX:348,pointerY:452};
+  const start={x:312,y:416,pointerX:348,pointerY:452};
   expect(launcherDragStarted(start,{x:351,y:455})).toBe(false);
   expect(launcherDragStarted(start,{x:354,y:452})).toBe(true);
-  expect(launcherDragPoint(start,{x:-100,y:999},bounds)).toEqual({x:30,y:428});
+  expect(launcherDragPoint(start,{x:-100,y:999},bounds)).toEqual({x:30,y:416});
   expect(snapLauncher(0,0,{left:16,right:16,top:16,bottom:16})).toEqual({side:'left',vertical:1});
-  expect(launcherBounds({left:5,top:10,width:80,height:60},48,{left:30,right:30,top:40,bottom:40},50)).toEqual({left:37,right:37,top:22,bottom:22});
-  expect(launcherBounds({left:5,top:10,width:30,height:30},48,{left:0,right:0,top:0,bottom:0})).toEqual({left:5,right:5,top:10,bottom:10});
+  expect(launcherBounds({left:5,top:10,width:80,height:60},60,{left:30,right:30,top:40,bottom:40},50)).toEqual({left:25,right:25,top:10,bottom:10});
+  expect(launcherBounds({left:5,top:10,width:30,height:30},60,{left:0,right:0,top:0,bottom:0})).toEqual({left:5,right:5,top:10,bottom:10});
 });
 
-test('compact launcher snaps after dragging, cancels without opening and retains accessible keyboard placement after reload',async({page})=>{
+test('full-size launcher snaps after dragging, cancels without opening and retains accessible keyboard placement after reload',async({page})=>{
   await page.setViewportSize({width:390,height:844});await login(page);
   const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
-  await expect(bubble).toHaveAccessibleName(/開啟聊天室/);await expect(bubble.locator('.floating-messages-label')).toBeHidden();
-  const initial=(await bubble.boundingBox())!;expect(initial.width).toBe(48);expect(initial.height).toBe(48);
-  await page.mouse.move(initial.x+24,initial.y+24);await page.mouse.down();await page.mouse.move(30,260,{steps:10});await page.mouse.up();
+  await expect(bubble).toHaveAccessibleName(/開啟聊天室/);await expect(bubble.locator('.floating-messages-label')).toBeVisible();
+  const initial=(await bubble.boundingBox())!;expect(initial.width).toBe(60);expect(initial.height).toBe(60);
+  await page.mouse.move(initial.x+30,initial.y+30);await page.mouse.down();await page.mouse.move(30,260,{steps:10});await page.mouse.up();
   await expect(panel).toBeHidden();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.x)).toBe(16);
   const moved=(await bubble.boundingBox())!;expect(moved.y).toBeLessThan(initial.y);
   await page.reload();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.y)).toBe(Math.round(moved.y));
   const restored=(await bubble.boundingBox())!;
-  await page.mouse.move(restored.x+24,restored.y+24);await page.mouse.down();await page.mouse.move(350,180,{steps:5});
+  await page.mouse.move(restored.x+30,restored.y+30);await page.mouse.down();await page.mouse.move(350,180,{steps:5});
   await bubble.dispatchEvent('pointercancel',{pointerId:1,pointerType:'mouse',isPrimary:true});await page.mouse.up();
   await expect(panel).toBeHidden();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.x)).toBe(16);
   await bubble.click();await expect(panel).toBeVisible();
@@ -290,12 +291,12 @@ test('compact launcher snaps after dragging, cancels without opening and retains
   await panel.getByLabel('訊息入口側邊').selectOption('right');
   const vertical=panel.getByRole('slider',{name:'訊息入口高度'});await vertical.focus();await vertical.press('Home');await expect(vertical).toHaveValue('0');
   await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(bubble).toBeFocused();
-  expect((await bubble.boundingBox())!.x).toBe(326);expect((await bubble.boundingBox())!.y).toBe(12);
+  expect((await bubble.boundingBox())!.x).toBe(314);expect((await bubble.boundingBox())!.y).toBe(12);
   await bubble.press('Enter');await expect(panel).toBeVisible();
   await panel.getByRole('button',{name:'重設入口位置',exact:true}).click();
   await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();
   expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),LAUNCHER_PLACEMENT_KEY)).toEqual(DEFAULT_LAUNCHER_PLACEMENT);
-  expect(Math.round((await bubble.boundingBox())!.y)).toBe(780);
+  expect(Math.round((await bubble.boundingBox())!.y)).toBe(768);
 });
 
 test('launcher stays in simulated keyboard and safe-area bounds and remains usable when its storage is blocked',async({page})=>{
@@ -312,8 +313,8 @@ test('launcher stays in simulated keyboard and safe-area bounds and remains usab
     for(const [side,value] of Object.entries({top:30,bottom:24,left:12,right:20}))document.documentElement.style.setProperty(`--app-safe-${side}`,`${value}px`);
     Object.assign(window.visualViewport!,{height:320,offsetTop:36});window.visualViewport!.dispatchEvent(new Event('resize'));
   });
-  await expect.poll(async()=>Math.round((await bubble.boundingBox())!.y)).toBe(268);
-  const start=(await bubble.boundingBox())!;await page.mouse.move(start.x+24,start.y+24);await page.mouse.down();await page.mouse.move(0,0,{steps:8});await page.mouse.up();
+  await expect.poll(async()=>Math.round((await bubble.boundingBox())!.y)).toBe(256);
+  const start=(await bubble.boundingBox())!;await page.mouse.move(start.x+30,start.y+30);await page.mouse.down();await page.mouse.move(0,0,{steps:8});await page.mouse.up();
   await expect(panel).toBeHidden();const moved=(await bubble.boundingBox())!;expect(moved.x).toBe(20);expect(moved.y).toBe(74);
   await bubble.click();await expect(panel).toBeVisible();await panel.getByRole('button',{name:'入口位置',exact:true}).click();
   await panel.getByRole('button',{name:'重設入口位置',exact:true}).click();await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(bubble).toBeVisible();
@@ -337,4 +338,41 @@ test('launcher position controls do not squeeze the close target with enlarged t
   }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await close.click();await expect(bubble).toBeFocused();
+});
+
+test('translucent launcher keeps theme text readable and restores a solid focused surface',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await login(page);
+  const bubble=page.locator('.floating-messages');
+  for(const theme of ['light','dark','versefolk']){
+    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    await bubble.blur();await page.mouse.move(1,1);
+    await expect(bubble.locator('.floating-messages-label')).toBeVisible();
+    expect((await bubble.boundingBox())!.width).toBe(60);
+    const style=await bubble.evaluate(node=>({opacity:getComputedStyle(node).opacity,background:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node).color}));
+    expect(style.opacity).toBe('1');expect(style.ink).not.toBe('rgba(0, 0, 0, 0)');
+    await bubble.focus();
+    const focused=await bubble.evaluate(node=>({background:getComputedStyle(node).backgroundColor,outline:getComputedStyle(node).outlineStyle}));
+    expect(focused.outline).not.toBe('none');
+    if(await page.evaluate(()=>CSS.supports('background','color-mix(in srgb,white 75%,transparent)')))expect(focused.background).not.toBe(style.background);
+  }
+  await page.emulateMedia({forcedColors:'active'});
+  await expect(bubble).toBeVisible();expect(await bubble.evaluate(node=>getComputedStyle(node).opacity)).toBe('1');
+});
+
+
+test('75 percent launcher background retains text contrast over arbitrary underlying pixels',()=>{
+  const luminance=(rgb:number[])=>rgb.map(value=>{const v=value/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+  // Read actual theme tokens so future palette changes are revalidated.
+  const pairs=['light-theme.css','rpg-theme.css','versefolk-theme.css','dragon-theme.css'].map(file=>{
+    const css=readFileSync(new URL(`../../apps/portal-web/src/${file}`,import.meta.url),'utf8');
+    const color=(name:string)=>{const hex=css.match(new RegExp(`--${name}:\\s*#([a-fA-F0-9]{6})`))?.[1];expect(hex).toBeTruthy();return [0,2,4].map(i=>parseInt(hex!.slice(i,i+2),16));};
+    return [color('bg-elev'),color('ink')];
+  });
+  const css=readFileSync(new URL('../../apps/portal-web/src/modules/FloatingMessages.css',import.meta.url),'utf8');
+  expect(css).toContain('color-mix(in srgb,var(--bg-elev) 75%,transparent)');
+  // Luminance is monotonic per channel: black/white bound any busy image.
+  for(const [background,foreground] of pairs )for(const underlying of [0,255]){
+    const surface=luminance(background.map(v=>v*.75+underlying*.25)),ink=luminance(foreground);
+    expect((Math.max(surface,ink)+.05)/(Math.min(surface,ink)+.05)).toBeGreaterThanOrEqual(4.5);
+  }
 });

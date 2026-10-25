@@ -30,7 +30,7 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
       const node=trigger.current;if(!node)return;
       const css=getComputedStyle(node),read=(name:string)=>{const value=parseFloat(css.getPropertyValue(name));return Number.isFinite(value)?Math.max(0,value):0;};
       const viewport=window.visualViewport;
-      setBounds(launcherBounds({left:viewport?.offsetLeft??0,top:viewport?.offsetTop??0,width:viewport?.width??innerWidth,height:viewport?.height??innerHeight},mobile?48:60,
+      setBounds(launcherBounds({left:viewport?.offsetLeft??0,top:viewport?.offsetTop??0,width:viewport?.width??innerWidth,height:viewport?.height??innerHeight},60,
         {left:read('--launcher-safe-left'),right:read('--launcher-safe-right'),top:read('--launcher-safe-top'),bottom:read('--launcher-safe-bottom')},read('--connection-status-height')));
       cancelDrag();
     };
