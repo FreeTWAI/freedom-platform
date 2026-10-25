@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
-import {createPersonalPostPageReader,isPersonalSpaceScope,personalPostPath,readPersonalPostPage,type PersonalPostResult} from '../../apps/portal-web/src/modules/personal-space-model.js';
+import {createPersonalPostPageReader,personalSpaceGuilds,isPersonalSpaceScope,personalPostPath,readPersonalPostPage,type PersonalPostResult} from '../../apps/portal-web/src/modules/personal-space-model.js';
 import type {PersonalContentItem} from '../../apps/portal-web/src/modules/MyContent.js';
 const owner='20000000-0000-4000-8000-000000000001';
 const item=(n:number):PersonalContentItem=>({kind:'social_post',id:`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`,title:`post ${n}`,status:'active',version:null,path:'https://evil.invalid/',visibility:'community',actions:['view','withdraw']});
@@ -104,4 +104,16 @@ test('PERSONAL-SPACE-09: retry still rejects other-owner, deleted/missing and mi
   const reader=createPersonalPostPageReader(client,owner,[item(1)],new AbortController().signal,(_,value)=>outputs.push(value));await reader.load();await reader.retry(item(1).id);await reader.retry(item(1).id);
   assert.deepEqual(outputs.at(-1),{state:'unavailable'});assert.equal(reads,2);mock.mock.restore();
  }
+});
+
+
+test('PERSONAL-SPACE-10: summary includes primary, secondary and remaining memberships even when remaining is empty',()=>{
+ const primary={guild_key:'a',name:'主要公會',alias:'private alias'},secondary={guild_key:'b',name:'次要公會'},other={guild_key:'c',name:'其他公會'};
+ assert.deepEqual(personalSpaceGuilds({primary_guild:primary,secondary_guilds:[secondary],joined_guilds:[]}),[{guild_key:'a',name:'主要公會'},{guild_key:'b',name:'次要公會'}]);
+ assert.deepEqual(personalSpaceGuilds({primary_guild:primary,secondary_guilds:[secondary],joined_guilds:[other,primary]}),[{guild_key:'a',name:'主要公會'},{guild_key:'b',name:'次要公會'},{guild_key:'c',name:'其他公會'}]);
+ assert.deepEqual(personalSpaceGuilds({primary_guild:null,secondary_guilds:[]}),[]);
+});
+test('PERSONAL-SPACE-11: category primaries keep order, deduplicate keys, retain distinct guilds with equal names, and project only key/name',()=>{
+ const a={guild_key:'a',name:'共同名稱',joined_at:'2026-01-01'},b={guild_key:'b',name:'共同名稱'},c={guild_key:'c',name:'其他公會'};
+ assert.deepEqual(personalSpaceGuilds({category_primaries:[{category:'internal',label:'內部',guild:a},{category:'external',label:'外部',guild:null},{category:'professional_industry',label:'專業',guild:b}],primary_guild:b,secondary_guilds:[],joined_guilds:[c,a]}),[{guild_key:'a',name:'共同名稱'},{guild_key:'b',name:'共同名稱'},{guild_key:'c',name:'其他公會'}]);
 });

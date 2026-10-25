@@ -94,7 +94,7 @@ for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner c
  for(const [theme,label] of [['light','自由工坊－明亮'],['dark','自由工坊－夜航'],['versefolk','自由工坊－敘生'],['dragon','新手導覽－龍娘'],['ai-sister','新手導覽－AI Sister']]){
   await openSettingsPanel(page,'appearance');const choice=page.getByRole('menuitemradio',{name:label,exact:true});await choice.click();await expect(choice).toBeFocused();await closeSettingsMenu(page);await expect(page.locator('.settings-menu-button')).toBeFocused();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  for(const selector of ['.personal-space-private','.personal-space-entry-meta']){
+  for(const selector of ['.personal-space-private','.personal-space-entry-meta','.personal-space-hero-actions .btn-secondary']){
    const ratio=await page.locator(selector).first().evaluate(element=>{
     const rgb=(value:string)=>value.match(/[\d.]+/g)!.map(Number);
     const luminance=(c:number[])=>c.slice(0,3).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
@@ -212,4 +212,34 @@ test('PERSONAL-SPACE-UI-16: a repeated transient failure keeps keyboard retry av
  await login(page);const card=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=card.getByRole('button',{name:'再試一次',exact:true});
  await retry.focus();await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeEnabled();await expect(retry).toBeFocused();
  await page.keyboard.press('Enter');await expect(card).toContainText('本人貼文正文 1');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect.poll(()=>attempts).toBe(3);
+});
+
+
+for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px identity has its own row and eight long guild names stay optional`,async({page},testInfo)=>{
+ await page.setViewportSize({width,height:844});await synthetic(page,1);
+ const names=Array.from({length:8},(_,i)=>`第${i+1}個創作者跨領域協作與長名稱公會`);
+ let longIdentity=false;
+ await page.route(`**/api/v1/members/${owner}`,async route=>{
+  const response=await route.fetch();
+  await route.fulfill({response,json:{...await response.json(),nickname:longIdentity?'VeryLongUnbrokenCreatorName'.repeat(5):'合成創作者',positioning_title:longIdentity?'這是既有定位文字而非新增自介欄位。'.repeat(12):'影音創作者',category_primaries:undefined,primary_guild:{name:names[0],guild_key:'synthetic-0'},secondary_guilds:[{name:names[1],guild_key:'synthetic-1'}],joined_guilds:names.slice(2).map((name,i)=>({name,guild_key:`synthetic-${i+2}`}))}});
+ });
+ await login(page);
+ const hero=page.locator('.personal-space-hero'),identity=page.locator('.personal-space-identity'),action=page.locator('.personal-space-hero-actions'),details=page.locator('.personal-space-memberships'),summary=details.locator('summary');
+ await expect(identity.getByRole('heading',{name:'合成創作者',exact:true})).toBeVisible();
+ await expect(summary).toHaveText('已加入公會 (8)');await expect(details).not.toHaveAttribute('open');
+ await expect(details.locator('li')).toHaveCount(8);await expect(details.locator('li').first()).not.toBeVisible();
+ const identityBox=(await identity.boundingBox())!,avatarBox=(await hero.locator('.member-avatar').boundingBox())!,actionBox=(await action.boundingBox())!;
+ expect(identityBox.y).toBeCloseTo(avatarBox.y,0);expect(identityBox.width).toBeGreaterThan(120);
+ expect(actionBox.y).toBeGreaterThanOrEqual(Math.max(identityBox.y+identityBox.height,avatarBox.y+avatarBox.height));
+ expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);expect((await action.getByRole('link').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ expect((await hero.boundingBox())!.height).toBeLessThan(300);
+ expect((await page.locator('.personal-space-entry').first().boundingBox())!.y).toBeLessThan(844);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const screenshot=testInfo.outputPath(`personal-space-guild-summary-${width}.png`);await page.screenshot({path:screenshot,fullPage:true});await testInfo.attach(`personal-space-guild-summary-${width}`,{path:screenshot,contentType:'image/png'});
+ await summary.focus();await page.keyboard.press('Enter');await expect(details).toHaveAttribute('open','');await expect(summary).toBeFocused();
+ for(const name of names)await expect(details.getByText(name,{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.keyboard.press('Space');await expect(details).not.toHaveAttribute('open');await expect(summary).toBeFocused();
+ longIdentity=true;await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link')).toHaveAttribute('href','#account');
 });

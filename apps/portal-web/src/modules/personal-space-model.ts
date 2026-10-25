@@ -1,5 +1,16 @@
 import {ApiError,requireItems,type PortalClient} from '../api';
 import type {PersonalContentItem} from './MyContent';
+import type {MemberCardData} from './Membership';
+
+/** joined_guilds contains remaining memberships, not the complete membership list. */
+export function personalSpaceGuilds(member:Pick<MemberCardData,'category_primaries'|'primary_guild'|'secondary_guilds'|'joined_guilds'>):Array<{guild_key:string;name:string}>{
+  const seen=new Set<string>(),guilds:Array<{guild_key:string;name:string}>=[];
+  for(const guild of [...(member.category_primaries?.map(item=>item.guild)??[]),member.primary_guild,...member.secondary_guilds,...(member.joined_guilds??[])]){
+    if(!guild||seen.has(guild.guild_key))continue;
+    seen.add(guild.guild_key);guilds.push({guild_key:guild.guild_key,name:guild.name});
+  }
+  return guilds;
+}
 
 export const PERSONAL_SPACE_PAGE_SIZE=6;
 export type PersonalSpaceScope={client:PortalClient;owner:string;generation:number};
