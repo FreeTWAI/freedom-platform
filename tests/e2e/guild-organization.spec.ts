@@ -427,3 +427,38 @@ test('directory discovery precedes optional controls with readable wrapping and 
     }
   }
 });
+
+for(const kind of ['set','leave'] as const)for(const denied of [403,412])test(`unknown category ${kind} retains its original command through ${denied} and a newer board read`,async({page})=>{
+  const fixture=await setupGuilds(page);
+  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),guild_launchpad_enabled:true}});});
+  const categories=['internal','external','professional_industry'];
+  let committed=false;
+  const view=()=>({aggregate_version:committed?99:7,migration_state:'switched',invalidated:[],legacy:null,primaries:categories.map((category,index)=>({category,guild_key:kind==='leave'&&committed?null:index===0?keys[0]:kind==='set'&&committed&&index===1?keys[1]:null}))});
+  await page.route('**/api/v1/me/guild-preferences/v2',route=>route.fulfill({json:view()}));
+  await page.route('**/api/v1/guild-categories',route=>route.fulfill({json:{catalog_revision:'1',pending:[],categories:categories.map((category,index)=>({category,items:fixture.directory().filter((_,i)=>i%3===index).map(guild=>({guild_key:guild.guild_key,name:guild.name,category,category_review:'approved',catalog_revision:'1'}))}))}}));
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:fixture.directory().map((guild,index)=>kind==='leave'&&committed&&index===0?{...guild,membership:{...guild.membership,state:'left',aggregate_version:2}}:guild)}}));
+  const writes:{path:string;body:unknown;key:string|undefined;version:string|undefined;preferenceVersion:string|undefined}[]=[];
+  const commandPath=kind==='set'?'/me/guild-preferences/v2/set':`/guilds/${keys[0]}/leave-v2`;
+  await page.route(`**/api/v1${commandPath}`,route=>{
+    const headers=route.request().headers();writes.push({path:new URL(route.request().url()).pathname,body:route.request().postDataJSON(),key:headers['idempotency-key'],version:headers['if-match'],preferenceVersion:headers['x-preference-version']});
+    if(writes.length===1){committed=true;return route.fulfill({status:503,json:{detail:'回應中斷，結果尚未確認。'}});}
+    if(writes.length===2)return route.fulfill({status:denied,json:{detail:'目前無法確認這次重試。'}});
+    return route.fulfill({json:kind==='set'?{...view(),aggregate_version:8}:{membership:{aggregate_version:2},preferences:view()}});
+  });
+  await login(page);const root=page.getByRole('region',{name:'公會目錄',exact:true});
+  const card=(index:number)=>root.locator(`.guild-card[data-guild-key="${keys[index]}"]`);
+  await expect(card(0).getByRole('button',{name:'取消本類主力',exact:true})).toBeVisible();
+  if(kind==='set')await card(1).getByRole('button',{name:'設為本類主力',exact:true}).click();
+  else{await card(0).getByRole('button',{name:`退出${names[0]}`,exact:true}).click();await root.getByRole('button',{name:'確認退出',exact:true}).click();}
+  const retry=root.getByRole('button',{name:kind==='set'?'再試一次':'重試原退出',exact:true});
+  await expect(retry).toBeVisible();await expect(card(2).getByRole('button',{name:'設為本類主力',exact:true})).toBeDisabled();
+  const booksButton=card(2).getByRole('button',{name:/^公會技能書庫/});await expect(booksButton).toBeEnabled();await booksButton.click();await card(2).getByRole('button',{name:'關閉公會視窗',exact:true}).click();
+  await retry.click();await expect(root.getByRole('alert')).toBeVisible();await expect(retry).toBeVisible();
+  await expect(root.getByRole('button',{name:'用新版本送出草稿',exact:true})).toHaveCount(0);
+  await root.getByRole('alert').getByRole('button',{name:'重新載入公會',exact:true}).click();
+  await expect(root.getByText('正在載入職業公會…',{exact:true})).toHaveCount(0);await expect(retry).toBeVisible();
+  await expect(card(2).getByRole('button',{name:'設為本類主力',exact:true})).toBeDisabled();await retry.click();
+  await expect(retry).toHaveCount(0);await expect(card(2).getByRole('button',{name:'設為本類主力',exact:true})).toBeEnabled();
+  expect(writes).toHaveLength(3);expect(writes[0].key).toBeTruthy();for(const write of writes)expect(write).toEqual(writes[0]);
+  expect(writes[0].version).toBe(kind==='set'?'"7"':'"1"');if(kind==='leave')expect(writes[0].preferenceVersion).toBe('7');
+});
