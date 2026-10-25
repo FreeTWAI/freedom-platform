@@ -58,3 +58,24 @@
 .floating-message-size input{min-width:0;width:100%;min-height:44px;accent-color:var(--green)}
 .floating-message-size .btn{min-height:44px;padding:8px 12px;font-size:14px}
 @media(max-width:760px){.floating-message-header .floating-message-size-toggle,.floating-message-size{display:none}}
+
+/* Dragging is confined to the launcher; document scrolling remains native. */
+.floating-messages{touch-action:none;user-select:none;-webkit-user-select:none;--launcher-safe-top:var(--app-safe-top,env(safe-area-inset-top,0px));--launcher-safe-bottom:var(--app-safe-bottom,env(safe-area-inset-bottom,0px));--launcher-safe-left:var(--app-safe-left,env(safe-area-inset-left,0px));--launcher-safe-right:var(--app-safe-right,env(safe-area-inset-right,0px))}
+.floating-messages[data-dragging=true]{cursor:grabbing}
+.floating-message-header .floating-message-position-toggle{width:auto;padding:8px;font-size:14px;white-space:nowrap}
+.floating-message-position{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;flex:none;max-height:40%;overflow:auto}
+.floating-message-position[hidden]{display:none}
+.floating-message-position p{flex-basis:100%;margin:0;font-size:14px;color:var(--text-muted)}
+.floating-message-position label{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;flex:1 1 200px}
+.floating-message-position input,.floating-message-position select{min-height:44px;min-width:0;flex:1;font-size:16px}
+.floating-message-position .btn{min-height:44px;font-size:14px}
+@media(max-width:760px){
+  .floating-messages{width:48px;height:48px;padding:8px;top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 64px - var(--app-safe-bottom,0px))}
+  .floating-messages-label{display:none}
+  .floating-message-header .floating-message-position-toggle{margin-inline-start:auto}
+}
+
+/* Long translations and enlarged text may wrap rather than squeeze the close control. */
+.floating-message-header{flex-wrap:wrap}
+.floating-message-header h2{min-width:0;flex:1;overflow-wrap:anywhere}
+.floating-message-header .btn{flex-shrink:0}

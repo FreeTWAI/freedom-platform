@@ -1,4 +1,5 @@
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
+import {DEFAULT_LAUNCHER_PLACEMENT,LAUNCHER_PLACEMENT_KEY,parseLauncherPlacement,launcherBounds,launcherPoint,snapLauncher,launcherDragPoint,launcherDragStarted} from '../../modules/member-communications/portal/floating-message-placement.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 
@@ -38,7 +39,10 @@ test('chat size controls preserve drafts and fit resized desktop and mobile view
   expect((await panel.boundingBox())!.width).toBe(390);await expect(bubble).toBeHidden();
   await expect(draft).toHaveValue('調整聊天室大小仍保留的草稿');await expect(draft).toBeInViewport();
   const send=panel.getByRole('button',{name:'送出',exact:true}),close=panel.getByRole('button',{name:'收合聊天室',exact:true});
-  await send.focus();await page.keyboard.press('Tab');await expect(close).toBeFocused();
+  const position=panel.getByRole('button',{name:'入口位置',exact:true});
+  await send.focus();await page.keyboard.press('Tab');await expect(position).toBeFocused();
+  await page.keyboard.press('Tab');await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');await expect(position).toBeFocused();
   await page.keyboard.press('Shift+Tab');await expect(send).toBeFocused();
   await page.screenshot({path:'test-results/chat-size-controls-phone.png'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -248,4 +252,89 @@ for(const order of ['refresh-first','older-first'] as const)test(`precision refr
     expect(reads).toContainEqual({offset:40,precise:true});
     if(order==='refresh-first')expect(reads.filter(read=>read.offset===40)).toEqual([{offset:40,precise:true}]);
   }finally{releaseOlder();releaseRefresh();await expect.poll(()=>activeRoutes).toBe(0);}
+});
+
+
+test('launcher placement validates persisted values and clamps drag geometry to safe visual bounds',()=>{
+  for(const raw of [null,'broken','null','[]','{}','{"side":"top","vertical":0.5}','{"side":"left","vertical":-1}','{"side":"left","vertical":2}','{"side":"right","vertical":"0.5"}','{"side":"right","vertical":1e999}'])expect(parseLauncherPlacement(raw)).toEqual(DEFAULT_LAUNCHER_PLACEMENT);
+  expect(parseLauncherPlacement('{"side":"left","vertical":0.25,"account":"ignored"}')).toEqual({side:'left',vertical:0.25});
+  const bounds=launcherBounds({left:10,top:36,width:390,height:480},48,{left:12,right:20,top:30,bottom:24},20);
+  expect(bounds).toEqual({left:30,right:324,top:94,bottom:428});
+  expect(launcherPoint({side:'right',vertical:1},bounds)).toEqual({x:324,y:428});
+  expect(snapLauncher(-100,-100,bounds)).toEqual({side:'left',vertical:0});
+  expect(snapLauncher(999,999,bounds)).toEqual({side:'right',vertical:1});
+  const start={x:324,y:428,pointerX:348,pointerY:452};
+  expect(launcherDragStarted(start,{x:351,y:455})).toBe(false);
+  expect(launcherDragStarted(start,{x:354,y:452})).toBe(true);
+  expect(launcherDragPoint(start,{x:-100,y:999},bounds)).toEqual({x:30,y:428});
+  expect(snapLauncher(0,0,{left:16,right:16,top:16,bottom:16})).toEqual({side:'left',vertical:1});
+  expect(launcherBounds({left:5,top:10,width:80,height:60},48,{left:30,right:30,top:40,bottom:40},50)).toEqual({left:37,right:37,top:22,bottom:22});
+  expect(launcherBounds({left:5,top:10,width:30,height:30},48,{left:0,right:0,top:0,bottom:0})).toEqual({left:5,right:5,top:10,bottom:10});
+});
+
+test('compact launcher snaps after dragging, cancels without opening and retains accessible keyboard placement after reload',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await login(page);
+  const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
+  await expect(bubble).toHaveAccessibleName(/開啟聊天室/);await expect(bubble.locator('.floating-messages-label')).toBeHidden();
+  const initial=(await bubble.boundingBox())!;expect(initial.width).toBe(48);expect(initial.height).toBe(48);
+  await page.mouse.move(initial.x+24,initial.y+24);await page.mouse.down();await page.mouse.move(30,260,{steps:10});await page.mouse.up();
+  await expect(panel).toBeHidden();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.x)).toBe(16);
+  const moved=(await bubble.boundingBox())!;expect(moved.y).toBeLessThan(initial.y);
+  await page.reload();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.y)).toBe(Math.round(moved.y));
+  const restored=(await bubble.boundingBox())!;
+  await page.mouse.move(restored.x+24,restored.y+24);await page.mouse.down();await page.mouse.move(350,180,{steps:5});
+  await bubble.dispatchEvent('pointercancel',{pointerId:1,pointerType:'mouse',isPrimary:true});await page.mouse.up();
+  await expect(panel).toBeHidden();await expect.poll(async()=>Math.round((await bubble.boundingBox())!.x)).toBe(16);
+  await bubble.click();await expect(panel).toBeVisible();
+  const position=panel.getByRole('button',{name:'入口位置',exact:true});await position.focus();await position.press('Enter');
+  await panel.getByLabel('訊息入口側邊').selectOption('right');
+  const vertical=panel.getByRole('slider',{name:'訊息入口高度'});await vertical.focus();await vertical.press('Home');await expect(vertical).toHaveValue('0');
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(bubble).toBeFocused();
+  expect((await bubble.boundingBox())!.x).toBe(326);expect((await bubble.boundingBox())!.y).toBe(12);
+  await bubble.press('Enter');await expect(panel).toBeVisible();
+  await panel.getByRole('button',{name:'重設入口位置',exact:true}).click();
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();
+  expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),LAUNCHER_PLACEMENT_KEY)).toEqual(DEFAULT_LAUNCHER_PLACEMENT);
+  expect(Math.round((await bubble.boundingBox())!.y)).toBe(780);
+});
+
+test('launcher stays in simulated keyboard and safe-area bounds and remains usable when its storage is blocked',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(key=>{
+    const viewport=Object.assign(new EventTarget(),{width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0,scale:1});
+    Object.defineProperty(window,'visualViewport',{configurable:true,value:viewport});
+    const get=Storage.prototype.getItem,set=Storage.prototype.setItem;
+    Storage.prototype.getItem=function(name){if(name===key)throw new DOMException('Blocked','SecurityError');return get.call(this,name);};
+    Storage.prototype.setItem=function(name,value){if(name===key)throw new DOMException('Blocked','SecurityError');return set.call(this,name,value);};
+  },LAUNCHER_PLACEMENT_KEY);
+  await login(page);const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
+  await page.evaluate(()=>{
+    for(const [side,value] of Object.entries({top:30,bottom:24,left:12,right:20}))document.documentElement.style.setProperty(`--app-safe-${side}`,`${value}px`);
+    Object.assign(window.visualViewport!,{height:320,offsetTop:36});window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+  await expect.poll(async()=>Math.round((await bubble.boundingBox())!.y)).toBe(268);
+  const start=(await bubble.boundingBox())!;await page.mouse.move(start.x+24,start.y+24);await page.mouse.down();await page.mouse.move(0,0,{steps:8});await page.mouse.up();
+  await expect(panel).toBeHidden();const moved=(await bubble.boundingBox())!;expect(moved.x).toBe(20);expect(moved.y).toBe(74);
+  await bubble.click();await expect(panel).toBeVisible();await panel.getByRole('button',{name:'入口位置',exact:true}).click();
+  await panel.getByRole('button',{name:'重設入口位置',exact:true}).click();await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(bubble).toBeVisible();
+  await page.setViewportSize({width:844,height:390});
+  await page.evaluate(()=>{Object.assign(window.visualViewport!,{width:844,height:390,offsetTop:0});window.visualViewport!.dispatchEvent(new Event('resize'));});
+  await expect.poll(async()=>(await bubble.boundingBox())!.width).toBe(60);
+  const landscape=(await bubble.boundingBox())!;expect(landscape.width).toBe(60);expect(landscape.x+landscape.width).toBeLessThanOrEqual(824);expect(landscape.y+landscape.height).toBeLessThanOrEqual(366);
+});
+
+
+test('launcher position controls do not squeeze the close target with enlarged translated header text',async({page})=>{
+  await page.setViewportSize({width:320,height:844});await login(page);
+  await page.evaluate(()=>localStorage.setItem('freedom-interface-language-v1','es'));await page.reload();
+  const bubble=page.locator('.floating-messages');await bubble.click();
+  // Explicit text-expansion simulation, not a real browser zoom or device test.
+  await page.addStyleTag({content:'.floating-message-header{font-size:28px}.floating-message-header h2{font-size:32px}.floating-message-header button{font-size:28px}'});
+  const panel=page.locator('.floating-message-panel'),close=panel.getByRole('button',{name:'Contraer chats',exact:true});
+  const buttons=panel.locator('.floating-message-header button:visible');
+  for(const button of await buttons.all()){
+    await expect(button).toBeInViewport({ratio:1});const box=(await button.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await close.click();await expect(bubble).toBeFocused();
 });
