@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from 'react';
+import {useCallback,useEffect,useId,useMemo,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import {refreshSkillDiscovery} from './skill-discovery-client';
 import {logConsoleEvent} from '../game-console-core';
@@ -111,6 +111,7 @@ function SkillBookEditor({api,books,locked,onGuildRequired,recovery,book,onBookC
 }
 
 function Council({api}:{api:ReaderWriter}){
+  const labelId=useId();
   const [creating,setCreating]=useState(false),[unconfirmed,setUnconfirmed]=useState(false),[items,setItems]=useState<CouncilThread[]>([]),[selected,setSelected]=useState<string|null>(null),[current,setCurrent]=useState<CouncilThread|null>(null),[detailLoading,setDetailLoading]=useState(false),[title,setTitle]=useState(''),[body,setBody]=useState(''),[reply,setReply]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),lock=useRef(false),generation=useRef(0),detailGeneration=useRef(0);
   const titleInput=useRef<HTMLInputElement>(null),createButton=useRef<HTMLButtonElement>(null),returnFocus=useRef(false);
   useEffect(()=>{if(creating)titleInput.current?.focus();},[creating]);
@@ -139,12 +140,12 @@ function Council({api}:{api:ReaderWriter}){
       {selected?(detailLoading?<p role="status">正在載入討論內容…</p>:current?<article className="card stack">
         <h4>{current.title}</h4><p className="field-hint">{current.author_name} · {date(current.created_at)}</p><p className="guild-workspace-body">{current.body}</p>
         {current.replies.map(item=><section className="guild-council-reply" key={item.reply_id}><p className="field-hint">{item.author_name} · {date(item.created_at)}</p><p className="guild-workspace-body">{item.body}</p></section>)}
-        <form className="stack" onSubmit={event=>void submit(event,true)}><label className="field">回覆討論<textarea required maxLength={6000} rows={5} value={reply} disabled={frozen} onChange={event=>setReply(event.target.value)}/></label><button className="btn btn-primary" disabled={busy}>發布回覆</button></form>
+        <form className="stack" onSubmit={event=>void submit(event,true)}><label className="field"><span id={`${labelId}-reply-label`}>回覆討論</span><textarea aria-labelledby={`${labelId}-reply-label`} required maxLength={6000} rows={5} value={reply} disabled={frozen} onChange={event=>setReply(event.target.value)}/></label><button className="btn btn-primary" disabled={busy}>發布回覆</button></form>
       </article>:<p>內容暫時無法載入，請重讀討論。</p>):creating&&<form className="card stack" onSubmit={event=>void submit(event,false)}>
         <h4>新增討論</h4>
         <p className="field-hint">收合會保留這次尚未送出的草稿；離開此頁或登出後不保留。</p>
         <label className="field">討論標題<input ref={titleInput} required maxLength={120} value={title} disabled={frozen} onChange={event=>setTitle(event.target.value)}/></label>
-        <label className="field">討論內容<textarea required maxLength={6000} rows={8} value={body} disabled={frozen} onChange={event=>setBody(event.target.value)}/></label>
+        <label className="field"><span id={`${labelId}-body-label`}>討論內容</span><textarea aria-labelledby={`${labelId}-body-label`} required maxLength={6000} rows={8} value={body} disabled={frozen} onChange={event=>setBody(event.target.value)}/></label>
         <div className="actions"><button className="btn btn-primary" disabled={busy}>建立討論</button><button type="button" className="btn btn-ghost" disabled={frozen} onClick={closeComposer}>收合，保留草稿</button></div>
       </form>}
     </div>
