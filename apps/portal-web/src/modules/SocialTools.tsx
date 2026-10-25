@@ -51,7 +51,7 @@ export function gameChallengeLink(token:string,origin:string){
  const match=/^([（(「『【]*)(https?:\/\/.*?)([.,!;，。！？、；：)）」』】]*)$/u.exec(token);
  if(!match||!match[2].startsWith(origin+'/play?'))return null;
  const route=match[2].slice(origin.length);
- const challenge=/^\/play\?game=(photo|stamp|cash)&seed=([1-9][0-9]{0,9})$/.exec(route);
+ const challenge=/^\/play\?game=(photo|stamp|cash|chair|tofu|holiday)&seed=([1-9][0-9]{0,9})$/.exec(route);
  const kitchen=/^\/play\?game=kitchen&recipe=([a-z][a-z-]{1,40})&seed=([1-9][0-9]{0,9})$/.exec(route);
  const seed=challenge?.[2]??kitchen?.[2];
  if(!seed||Number(seed)>4294967295)return null;

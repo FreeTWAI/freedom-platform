@@ -90,7 +90,7 @@ import * as requireJsx from 'react/jsx-runtime';
 
 test('game challenge links accept only exact current-origin canonical games and uint32 seeds',async()=>{
  const {gameChallengeLink:parse}=await gameTextHarness(),origin='https://workshop.example.test';
- for(const game of ['photo','stamp','cash'])for(const seed of ['1','42','4294967295']){
+ for(const game of ['photo','stamp','cash','chair','tofu','holiday'])for(const seed of ['1','42','4294967295']){
   const href=`/play?game=${game}&seed=${seed}`,label=origin+href;
   assert.equal(parse(label,origin)?.href,href);
   const punctuated=parse('（'+label+'）。',origin);assert(punctuated);assert.equal(punctuated.prefix,'（');assert.equal(punctuated.label,label);assert.equal(punctuated.suffix,'）。');
@@ -196,4 +196,23 @@ test('kitchen challenges accept only canonical same-origin recipe and uint32 see
  // External HTTPS may remain an ordinary external link, never a local challenge.
  assert.equal(parse('https://other.example.test'+route,origin),null);
  const external=render('https://other.example.test'+route,origin);assert(!external.includes('href="/play?'));
+});
+
+
+test('party challenges retain the exact two-key contract without a generic local fallback',async()=>{
+ const {gameChallengeLink:parse,render}=await gameTextHarness(),origin='https://workshop.example.test';
+ for(const game of ['chair','tofu','holiday']){
+  const route=`/play?game=${game}&seed=42`,url=origin+route,html=render(url,origin);
+  assert.equal((html.match(/<a /g)??[]).length,1);assert(html.includes(`href="${route.replaceAll('&','&amp;')}"`));
+  for(const token of [
+   ...['0','01','-1','4294967296','1.5','1e2','%34%32'].map(seed=>origin+`/play?game=${game}&seed=${seed}`),
+   origin+`/play?game=${game}&recipe=egg-fried-rice&seed=42`,url+'&recipe=egg-fried-rice',url+'&seed=7',url+'&extra=1',url+'#tag',url+'?',
+   origin+`/play?seed=42&game=${game}`,origin+`/play?game=${game.toUpperCase()}&seed=42`,origin+`/play?game=${game}%00&seed=42`,
+   origin+':443'+route,'https://user@workshop.example.test'+route,'http://workshop.example.test'+route,'https://%77orkshop.example.test'+route,
+   url+'\\',url+'\u200b',url+'\u0000',url+'\u0085','prefix'+url,'javascript:'+url,
+  ]){assert.equal(parse(token,origin),null,JSON.stringify(token));assert(!render(token,origin).includes('<a '),JSON.stringify(token));}
+  assert.equal(parse('https://other.example.test'+route,origin),null);
+  assert(!render('https://other.example.test'+route,origin).includes('href="/play?'));
+ }
+ for(const game of ['unknown','party','chairs']){const url=origin+`/play?game=${game}&seed=42`;assert.equal(parse(url,origin),null);assert(!render(url,origin).includes('<a '));}
 });
