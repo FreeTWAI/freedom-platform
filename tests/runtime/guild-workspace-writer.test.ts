@@ -123,3 +123,60 @@ for(const mode of ['create','reply'] as const)test(`council ${mode} keeps exact 
   }
  }
 });
+
+// Small hook ports execute the real announcement read/write handlers. Promises
+// are explicitly settled by each test; there are no timers or browser claims.
+function announcementHarness(){
+ const begin=source.indexOf('function AnnouncementEditor('),end=source.indexOf('\ntype SkillEditorProps=',begin);
+ assert.ok(begin>=0&&end>begin);
+ const code=transformSync(source.slice(begin,end),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
+ const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
+ const reads:{resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
+ const api={get:()=>new Promise((resolve,reject)=>reads.push({resolve,reject})),post:async()=>{throw new Error('unknown write outcome');}};
+ let currentApi=api;
+ const memo=(value:any,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n]))slots[i]={value,deps};return slots[i].value;};
+ const Editor=runInNewContext(code+';AnnouncementEditor',{
+  React,useState:(initial:unknown)=>{const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],(next:any)=>{slots[i]=typeof next==='function'?next(slots[i]):next;}];},
+  useRef:(initial:unknown)=>{const i=cursor++;return slots[i]??(slots[i]={current:initial});},useCallback:memo,
+  useEffect:(run:()=>void,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n])){old?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=run();});}},
+  failure:(error:Error)=>error.message,date:String,logConsoleEvent:()=>{},consoleChannel:()=>'',
+ });
+ const render=()=>{cursor=0;const tree=Editor({api:currentApi,guilds:[{guild_key:'fixture',name:'Synthetic guild'}],guild:'fixture',onGuildChange:()=>{}});for(const effect of effects.splice(0))effect();return tree;};
+ const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
+ const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
+ const buttons=(name:string)=>nodes(render()).find(n=>n.type==='button'&&text(n.props.children)===name);
+ return {reads,render,text,html:()=>renderToStaticMarkup(render()),
+  reload:()=>buttons('重新載入列表').props.onClick(),
+  draft:(title:string,body:string)=>{for(const [label,value]of [['公告標題',title],['公告內容',body]]){const field=nodes(render()).find(n=>n.type==='label'&&text(n.props.children)===label);nodes(field).find(n=>n.type==='input'||n.type==='textarea').props.onChange({target:{value}});}},
+  values:()=>nodes(render()).filter(n=>n.type==='input'||n.type==='textarea').map(n=>n.props.value),
+  save:()=>nodes(render()).find(n=>n.type==='form').props.onSubmit({preventDefault(){}}),
+  replaceClient:()=>{currentApi={...api};render();},
+ };
+}
+async function settleRead(){await Promise.resolve();await Promise.resolve();}
+const storedAnnouncement={announcement_id:'fixture-announcement',title:'Previously loaded announcement',body:'Synthetic announcement body',state:'published',updated_at:'2026-10-25'};
+test('announcement initial read failure is not an empty list; retry restores a real empty list without losing a draft',async()=>{
+ const h=announcementHarness();h.render();h.reads[0].reject(new Error('read failed'));await settleRead();
+ assert.match(h.html(),/read failed/);assert.doesNotMatch(h.html(),/尚未建立公告/);
+ h.draft('Unsaved title','Unsaved body');h.reload();h.reads[1].resolve({items:[]});await settleRead();
+ assert.doesNotMatch(h.html(),/read failed/);assert.match(h.html(),/尚未建立公告/);assert.deepEqual(h.values(),['Unsaved title','Unsaved body']);
+});
+test('announcement refresh failure keeps old items and recovery never clears an unknown write error',async()=>{
+ const h=announcementHarness();h.render();h.reads[0].resolve({items:[storedAnnouncement]});await settleRead();
+ h.draft('Unsaved title','Unsaved body');await h.save();h.reload();h.reads[1].reject(new Error('refresh failed'));await settleRead();
+ assert.match(h.html(),/Previously loaded announcement/);assert.match(h.html(),/refresh failed/);assert.match(h.html(),/unknown write outcome/);
+ h.reload();h.reads[2].resolve({items:[]});await settleRead();
+ assert.doesNotMatch(h.html(),/refresh failed/);assert.match(h.html(),/unknown write outcome/);assert.match(h.html(),/尚未建立公告/);assert.deepEqual(h.values(),['Unsaved title','Unsaved body']);
+});
+test('a stale announcement read cannot replace current errors or mark a new client list as loaded',async()=>{
+ const h=announcementHarness();h.render();h.replaceClient();h.reads[1].reject(new Error('new client read failed'));await settleRead();
+ h.reads[0].resolve({items:[storedAnnouncement]});await settleRead();
+ assert.match(h.html(),/new client read failed/);assert.doesNotMatch(h.html(),/Previously loaded announcement|尚未建立公告/);
+ h.reload();h.reads[2].resolve({items:[]});await settleRead();
+ assert.match(h.html(),/尚未建立公告/);assert.doesNotMatch(h.html(),/new client read failed/);
+});
+test('an older failed announcement refresh cannot overwrite a newer successful read',async()=>{
+ const h=announcementHarness();h.render();h.reload();h.reads[1].resolve({items:[storedAnnouncement]});await settleRead();
+ h.reads[0].reject(new Error('obsolete read error'));await settleRead();
+ assert.match(h.html(),/Previously loaded announcement/);assert.doesNotMatch(h.html(),/obsolete read error|尚未建立公告/);
+});

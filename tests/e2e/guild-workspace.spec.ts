@@ -340,3 +340,36 @@ for(const deniedRetry of [false,true])test(`an unknown council reply retains its
   await expect(reply).toHaveValue('');await expect(reply).toBeEnabled();await expect(council.locator('.guild-council-reply')).toHaveCount(1);
   expect(writes).toHaveLength(deniedRetry?3:2);expect(writes[0].key).toBeTruthy();for(const write of writes)expect(write).toEqual(writes[0]);
 });
+
+test('announcement read retry distinguishes unavailable from empty and preserves the unsaved draft',async({page})=>{
+  let reads=0;
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>{
+    reads++;return reads===1?route.fulfill({status:503,json:{detail:'公告讀取暫時失敗。'}}):route.fulfill({json:{items:[]}});
+  });
+  await login(page);await navigate(page,'公會管理');const workspace=page.locator('.guild-workspace');
+  await expect(workspace.getByRole('alert')).toBeVisible();await expect(workspace.getByText('尚未建立公告。',{exact:true})).toHaveCount(0);
+  const title=workspace.getByRole('textbox',{name:'公告標題',exact:true}),body=workspace.getByRole('textbox',{name:'公告內容',exact:true});
+  await title.fill('仍未儲存的標題');await body.fill('重新讀取不可清除的內容');
+  await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
+  await expect(workspace.getByText('尚未建立公告。',{exact:true})).toBeVisible();await expect(workspace.getByRole('alert')).toHaveCount(0);
+  await expect(title).toHaveValue('仍未儲存的標題');await expect(body).toHaveValue('重新讀取不可清除的內容');
+});
+
+test('announcement refresh recovery retains old data and an unresolved write error independently',async({page})=>{
+  let reads=0,writes=0;
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>{
+    if(route.request().method()==='POST'){writes++;return route.fulfill({status:503,json:{detail:'寫入結果未知。'}});}
+    reads++;return reads===2?route.fulfill({status:503,json:{detail:'列表重讀失敗。'}}):route.fulfill({json:{items:[announcement]}});
+  });
+  await login(page);await navigate(page,'公會管理');const workspace=page.locator('.guild-workspace');
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  const title=workspace.getByRole('textbox',{name:'公告標題',exact:true}),body=workspace.getByRole('textbox',{name:'公告內容',exact:true});
+  await title.fill('等待確認的公告');await body.fill('原本未確認的內容');await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toBeVisible();const writeError=await workspace.getByRole('alert').innerText();
+  await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toHaveCount(2);await expect(workspace.getByText('目前顯示上次成功讀取的公告，請重新載入列表。',{exact:true})).toBeVisible();
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toHaveCount(1);await expect(workspace.getByRole('alert')).toHaveText(writeError);
+  await expect(title).toHaveValue('等待確認的公告');await expect(body).toHaveValue('原本未確認的內容');expect(writes).toBe(1);
+});
