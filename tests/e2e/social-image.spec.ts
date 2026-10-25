@@ -109,7 +109,9 @@ test('dense photos are reduced to the upload budget and oversized or animated he
   const noisy = await sharp(randomFillSync(Buffer.alloc(1400 * 1400 * 3)), {raw: {width: 1400, height: 1400, channels: 3}}).png().toBuffer();
   await picker.setInputFiles({name: 'detail.png', mimeType: 'image/png', buffer: noisy});
   const preview = composer.getByRole('img', {name: '待發布圖片預覽'});
-  await expect(preview).toBeVisible();
+  // Dense noise can require several async encodes; wait for the actual preview,
+  // not a five-second performance target. Keep the overall test budget unchanged.
+  await expect(preview).toBeVisible({timeout: 15_000});
   expect(await preview.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeLessThan(1400);
   const sent = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/social-posts/notes'));
   await composer.getByRole('button', {name: '發布貼文', exact: true}).click();

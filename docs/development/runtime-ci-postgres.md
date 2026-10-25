@@ -10,7 +10,7 @@ settlement 與獨立正向 absence 檢查均保留。
 
 96 次成功清理的 p95 為 12.732 秒、最長 14.323 秒；八次失敗均在約 16 秒失去 DROP
 回覆。PR #898 的 DROP checkpoint 僅 52 ms，後續 barrier／大量檔案刪除耗時仍屬推論。
-完整 log／PostgreSQL 18 原始碼界線、1,500 秒 host／40 分鐘 job 的算式及本機入口影響見
+完整 log／PostgreSQL 18 原始碼界線、八分區 2,100 秒 host／45 分鐘 job（六分區仍為 1,500 秒）的算式及本機入口影響見
 [清理預算說明](../../packages/contribution-tools/runtime-matrix.md)。改動後的真實資料庫證據
 只能來自 hosted CI；一次綠燈不代表 flake 已消失。
 

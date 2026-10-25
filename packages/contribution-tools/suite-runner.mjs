@@ -502,14 +502,14 @@ export async function runPinnedSuite(root, id, options = {}) {
 
 const PARTITION_SCHEMA = 'freedom.runtime-partition/v1';
 // Finite matrix capacity, including provisioning and verified cleanup. Hosted
-// observations on 2026-10-15 put the same 55 files about 20% slower and the
-// projected full partition beyond 1,224s. Keep legacy four-partition behavior;
-// six and eight hosts get 1,500s including the 64s cleanup reserve.
-const PARTITION_BUDGET_MS = Object.freeze({ 4: 1_200_000, 6: 1_500_000, 8: 1_500_000 });
+// run 40145018567 spans 900–1,428s despite balanced October 24 projections;
+// run 40124240773 hit the 1,500s deadline. Eight hosts get 2,100s of headroom
+// for runner variance; four/six budgets and the 64s cleanup reserve stay fixed.
+const PARTITION_BUDGET_MS = Object.freeze({ 4: 1_200_000, 6: 1_500_000, 8: 2_100_000 });
 // Queueing can serialize every host: allow one full partition budget per host plus
 // 30 minutes of bounded queue gaps. CI scopes artifacts to one run attempt;
 // this wall span does not extend any partition's execution/cleanup deadline.
-const MATRIX_WINDOW_MS = Object.freeze({ 4: 1_800_000, 6: 6 * 1_500_000 + 1_800_000, 8: 8 * 1_500_000 + 1_800_000 });
+const MATRIX_WINDOW_MS = Object.freeze({ 4: 1_800_000, 6: 6 * 1_500_000 + 1_800_000, 8: 8 * 2_100_000 + 1_800_000 });
 const identical = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const strictKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) &&
   Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
