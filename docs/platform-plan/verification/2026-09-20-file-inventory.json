@@ -16434,8 +16434,8 @@
     },
     {
       "path": "docs/platform-plan/execution/commerce/work-plan.md",
-      "bytes": 102765,
-      "sha256": "c83311903037ba9a4e69d959cf1ef096612615343630639fbc9a7e72c11eb2f1"
+      "bytes": 106033,
+      "sha256": "1a588336cbeddc4cad02f83f77e2f33133d564960af1f426b57d2aa6c53764e3"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
@@ -18929,8 +18929,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/README.md",
-      "bytes": 15575,
-      "sha256": "8ea0acef2a3dd500987a49d57aec96b128e933d24b2f99ff2cdbe76f28512d91"
+      "bytes": 16610,
+      "sha256": "0b3c60709ff5e371411630db9f26143d4a9303a27ecc1847979c802ee1792580"
     },
     {
       "path": "modules/agent-commerce/operations/admissions.ts",
@@ -18969,8 +18969,8 @@
     },
     {
       "path": "modules/agent-commerce/operations/store-readiness.ts",
-      "bytes": 11192,
-      "sha256": "db7f369d2aabdf674db71df88ab9008ac7bdeac7ca1cbab571705bec47262835"
+      "bytes": 13663,
+      "sha256": "3f99fa59454cae0a7a2cd42f238f1ac67088a966e7b76c12960090be92954f7f"
     },
     {
       "path": "modules/agent-commerce/operations/journal/journal.ts",
@@ -25384,8 +25384,8 @@
     },
     {
       "path": "tests/runtime/commerce-store-readiness.test.ts",
-      "bytes": 21398,
-      "sha256": "b6ce4ace638a58aa9d5ce52edfa2e4a12227549bfbb1e1c297484f93954b1e81"
+      "bytes": 25960,
+      "sha256": "82a711ffc336ced12376135fc2dd447d68b275821598691ed95be3d8b62b87dd"
     },
     {
       "path": "tests/runtime/commerce.test.ts",
