@@ -51,15 +51,74 @@ workflow pin、測試選取、worker 數、重試或資料隔離，也不宣稱 
 
 `playwright.config.ts` 的 webServer 另固定帶上 `FREEDOM_E2E_GUIDE_FIXTURE=1` 與 `FREEDOM_E2E_GITHUB_FIXTURES=1`，以及這一輪的 `FREEDOM_E2E_SCHEMA`。`reuseExistingServer` 是 false。
 
-## Pinned CI 的容量界線（source 候選 2026-10-15）
+## Pinned CI 的容量界線（source 候選 2026-10-25）
 
 此 source 對 default 整輪給 60 分鐘；private-AI、avatar-asset、message-image、store-photo 與
 notification-preferences 各為 30 分鐘上限。`ui-e2e` job 的整體上限為 75 分鐘，容納安裝／建置、
 default、五個 fixture 輪次與收尾。這是有限的整體上限，不承諾五輪各自耗盡最大上限時仍能
 全部跑完。單一案例 timeout、1 worker、0 retries、完整檔案／案例選擇、預期 skip
-政策與結果驗證不變。逾時仍先 SIGTERM，最多再等 20 秒後 SIGKILL；即使 child
-在 SIGTERM 後以 0 結束，仍記 `test_timeout` 並停止後續輪次，不以不完整報告算通過。
+政策與結果驗證不變。逾時仍以 SIGINT 進入 Playwright teardown，由 webServer
+收到 SIGTERM；CLI 最多再等 20 秒後 SIGKILL。即使 child 在中斷後以 0 結束，
+仍記 `test_timeout` 並停止後續輪次，不以不完整報告算通過。
 預算是 trusted source 常數，candidate config、CLI 參數與環境不能自行調大。
+
+本次把 full default 從兩片改為三片：先以相同設定執行一次不分片的 `--list`，
+再同時跑原生 Playwright `--shard 1/3`、`2/3`、`3/3`，埠分別為
+14311、14312、14313，每片有自己的隨機 `fp_e2e_*` schema、webServer 與單一 worker。
+三片與 discovery 共用原 60 分鐘期限；任一片失敗即取消其餘兩片，fixture 輪次
+仍依序執行、不分片。三份有序且綁定 current/total 的報告都必須有實際 exit status
+與 SHA-256，互斥的案例聯集必須等於 discovery，完整檔案與跨輪 skip-to-pass 規則不變。
+診斷先保留 listing 與三份 raw report，再處理 trace；workflow 的遞迴 artifact 目錄
+已涵蓋第三片，原 128 MiB／512-entry 限制不變。
+
+容量依據來自任務提供的 main hosted 紀錄：
+
+- [Verify 40135849585，attempt 1](https://github.com/FreeTWAI/freedom-platform/actions/runs/40135849585/attempts/1)
+  （`53d528fc`，2026-10-24）：default 於 22:27:31Z 開始；第一片 772 項於
+  23:26:52Z 全部結束（59 分 21 秒，約 59.4 分鐘）；第二片在 736 項中到第 701 項，
+  於 23:27:11Z 被 60 分鐘界線停止，verdict 為 `test_timeout`。總共 1,508 項。
+- [前一天 Verify 40124240773，attempt 1](https://github.com/FreeTWAI/freedom-platform/actions/runs/40124240773/attempts/1)
+  （`f987bb74`）仍通過，job 約 65 分鐘。兩個 tree 不同，不宣稱等價效能比較。
+
+三片平均約 `1508 / 3 = 503` 項。原兩片合計每項約 2.4 秒是整體吞吐量的換算，
+不是單片每項耗時：第一片實測為 `3561 / 772 ≈ 4.6` 秒／項。
+以約 4.8 秒／項保守估計，`1508 / 3 × 4.8 / 60 ≈ 40.2` 分鐘；若直接乘 2.4
+會得到約 20 分鐘，少算原兩片並行的因素。預期每片約 40 分鐘，保留至 60 分鐘
+的約 20 分鐘餘裕給 ubuntu-24.04 公開 repo runner 的 4 vCPU／16 GB 資源競爭、
+檔案分片不均與啟停。這是容量估算，三個 Chromium、Node 與共用 PostgreSQL 的
+實際 CPU／記憶體與耗時需由本 PR CI 量測；本機不跑完整瀏覽器套件。
+
+### 三片共用 PostgreSQL 的連線與鎖容量
+
+以下以 pool 設定上限核算，並非已觀察到的同時連線峰值：
+
+| 每個 default shard 的來源 | 連線上限 |
+| --- | ---: |
+| `scripts/e2e-server.ts` 的 admin `createPool()`（`packages/db/index.ts`） | 12 |
+| 同 server 的 schema／app `new Pool()`（pg 預設） | 10 |
+| `tests/e2e/fixtures.ts` 的 worker auth pool | 1 |
+| 單一案例額外 fixture：`admin.spec.ts`／`admin-credentials.spec.ts` 的 admin 12 + app 10 | 22 |
+| SIGTERM 清理用獨立 `pg.Client` | 1 |
+| 保守合計 | 46 |
+
+每片 `workers: 1`／`fullyParallel: false`，案例 fixture 會關閉自己的 pool，不能把
+所有檔案的 pool 上限相加。其他 default fixture 的額外上限較小：兩個同時存在的
+cart listener 各 8（`storefront-orders.spec.ts`），channel 為 1 + 4，chat 為 4，todo 為 2；
+member-feature／hosted-order listeners 共用 auth pool，沒有再開 pool。
+private-AI／store-photo 的 server product pool（10）、gallery listener pool（10）
+與 private-AI gate pool（1）只在後續獨立 fixture 輪次，不與三片 default 疊加。
+
+三片保守為 `3 × 46 = 138`，超過 PostgreSQL 通常預設的 100。workflow 只對此 job 的
+隔離服務設定 `max_connections=200`，並在原容量檢查步驟讀回 200；即使預留預設三個
+superuser slots，仍有 `197 - 138 = 59` 條供 healthcheck 等短連線使用。
+`max_locks_per_transaction=256` 不變；它是共用鎖表的容量參數，不是每筆交易的硬上限。
+以 `max_prepared_transactions=0` 的預設計算，基本 object-lock 容量從
+`256 × 100 = 25,600` 增至 `256 × 200 = 51,200`，增幅 2 倍高於分片從 2 到 3 的 1.5 倍。
+保留 full-schema migration／cleanup 的原鎖餘裕；這不是實測鎖峰值。
+`dynamic_shared_memory_type=mmap`、`fsync=on`、`full_page_writes=on` 與原讀回檢查保持，
+不修改正式資料庫。連線增加會提高共享記憶體配置；實際容量仍待 hosted CI。
+PostgreSQL 的預設與資源語意見 [connection settings](https://www.postgresql.org/docs/18/runtime-config-connection.html)
+及 [lock management](https://www.postgresql.org/docs/18/runtime-config-locks.html)。
 
 2026-10-08 的歷史調整依據（30→40 分鐘）：[PR #284 的完整通過 run](https://github.com/FreeTWAI-AI/freedom-platform/actions/runs/37778414757)
 在 tree `b69fa0ab276830ea8801e7cc744a0f355d6ab076` 的 default 為 668 pass／12 個
