@@ -1,5 +1,7 @@
 import {variantBuyerLabels} from '../../../../modules/agent-commerce/storefront/variants/checkout.js';
 import {storeVariantsInstalled} from './hosted-store-variants.js';
+import {storePoliciesOptions} from './hosted-store-policies.js';
+import {storefrontCheckoutPolicies} from '../../../../modules/agent-commerce/storefront/policies/checkout.js';
 import {createOrderNotifications} from '../../../../modules/agent-commerce/checkout/order-notifications.js';
 export {createMemberCheckoutOrderRoutes} from './member-checkout-orders.js';
 import {Hono} from 'hono';
@@ -49,6 +51,7 @@ export function hostedCheckoutOptions(origin:string,runtime:PlatformRuntime,envi
   const email=runtime.commerceSettings?.emailEnabled?(runtime.commercePorts?.email??commerceEmailOutbox):undefined;
   return {origin,selfShipEnabled:runtime.commerceSelfShipEnabled===true,settings:runtime.commerceSettings,environment:providerEnvironment(environment),...runtime.commercePorts,email,
     orderNotifications:createOrderNotifications(commerceOrderNotificationsInstalled(runtime),runtime.commerceSettings),
+    ...(storePoliciesOptions(runtime).enabled?{policies:storefrontCheckoutPolicies}:{}),
     ...(storeVariantsInstalled(runtime)?{buyerLabels:variantBuyerLabels}:{})};
 }
 
