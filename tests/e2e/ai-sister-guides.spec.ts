@@ -68,7 +68,7 @@ test('member selects one character; it persists across reload and changes outfit
   await openGuide(page);
   await expect(panel(page).locator('.page-spirit-line')).toContainText('我是 Kimi。');
   await panel(page).getByRole('button',{name:'結束交談',exact:true}).click();
-  await navigate(page,'我的工作');await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
+  await navigate(page,'任務協作');await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
   await expect(widget(page)).toHaveAttribute('data-outfit-id','workplace');await openGuide(page);
   await expect(widget(page).locator('.page-spirit-art')).toHaveAttribute('src',asset('kimi/workplace-outfit'));
   await panel(page).getByRole('button',{name:'結束交談',exact:true}).click();await navigate(page,'會員首頁');
@@ -112,7 +112,7 @@ test('current outfit uses real dialogue reactions and cleans guide focus when ch
   await selectTheme(page,'新手導覽－龍娘');await expect(widget(page)).toHaveAttribute('data-character-id','home');
   await expect(page.locator('[data-page-spirit-guide-target="true"]')).toHaveCount(0);
   await selectTheme(page,'新手導覽－AI Sister');await expect(widget(page)).toHaveAttribute('data-character-id','claude');
-  await navigate(page,'私人工作與 AI');await expect(widget(page)).toHaveCount(0);
+  await navigate(page,'私人 AI 工作室');await expect(widget(page)).toHaveCount(0);
   await navigate(page,'會員首頁');await expect(widget(page)).toHaveCount(1);
   await signOut(page);await expect(widget(page)).toHaveCount(0);await expect(page.locator('.guide-gallery')).toHaveCount(0);
 });

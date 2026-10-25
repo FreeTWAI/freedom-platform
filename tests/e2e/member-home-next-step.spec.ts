@@ -216,7 +216,7 @@ test('a granted primary-guild book opens from the same next-step region', async 
   await expect(dialog).toBeHidden();
   await prompt.getByRole('button', { name: '分享作品與需求', exact: true }).click();
   await expect(page).toHaveURL(/#showcase$/);
-  await expect(page.getByRole('heading', { name: '作品與需求', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '作品與合作', level: 1, exact: true })).toBeVisible();
   await navigate(page, '會員首頁');
   await openParticipation(page);
   await page.evaluate(() => {
@@ -265,7 +265,7 @@ for (const [name, mock] of [
   });
 }
 
-const workHint = '你有認領中的工作還沒結案，可以回到「我的工作」繼續。';
+const workHint = '你有認領中的工作還沒結案，可以回到「任務協作」繼續。';
 // Only `now` matters to home; the shape mirrors work.ts dashboard() for a claim that is still in progress.
 const unfinishedClaim = { work_item_id: 'claim-1', title: '不應顯示的工作標題', state: 'claiming_closed', my_claim: { claim_id: 'claim-1', state: 'in_progress' } };
 
@@ -281,14 +281,14 @@ test('an unfinished claim replaces the open-task hint with a return to my work',
   await expect(prompt.getByText(taskHint, { exact: true })).toHaveCount(0);
   await expect(prompt.getByRole('button', { name: /社群任務|分享作品與需求/ })).toHaveCount(0);
   await expect(prompt).not.toContainText('不應顯示的');
-  const resume = prompt.getByRole('button', { name: '回到我的工作', exact: true });
+  const resume = prompt.getByRole('button', { name: '回到任務協作', exact: true });
   await expect(resume).toHaveAccessibleDescription(`${skillsMessage} ${workHint}`);
   await checkGuidance(page, skillsMessage, 'skills');
   await resume.focus();
   await expect(resume).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#workbench$/);
-  await expect(page.getByRole('heading', { name: '我的工作', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '任務協作', level: 1, exact: true })).toBeVisible();
 });
 
 test('a failed work dashboard read keeps the open-task hint', async ({ page }) => {
@@ -334,7 +334,7 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await expect(entries).toBeVisible();
   await expect(entries.getByRole('button')).toHaveCount(4);
   await expect(entries.getByRole('button')).toHaveText(['技能與工具找一本技能書，開始練習', '社群活動看看聚會，一起交流', '合作夥伴認識不同專長的人', '作品交流分享作品、提出需求']);
-  await expect(suggestion(page).getByRole('button', { name: '回到我的工作', exact: true })).toBeVisible();
+  await expect(suggestion(page).getByRole('button', { name: '回到任務協作', exact: true })).toBeVisible();
   const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
   await expect(progress).toContainText('有合作等你接續處理');
   await expect(progress.getByRole('button', { name: '接續我的內容', exact: true })).toBeVisible();

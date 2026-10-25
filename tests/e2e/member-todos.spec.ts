@@ -170,7 +170,7 @@ test('a slower earlier read never overwrites a newer one, even across a remount'
   await navigate(page,'會員首頁');
   await expect(page).toHaveURL(/#home$/);
   facts.completed=false;
-  await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'待辦清單',exact:true}).click();
+  await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'入門指南',exact:true}).click();
   await expectStates(page,{onboarding:'todo'});
   late.open();await lateDelivered.held;await painted(page);
   await expectStates(page,{onboarding:'todo'});
@@ -208,7 +208,7 @@ test('six tasks in two groups put open work first, fit phone and desktop, and ea
     await expect(page).toHaveURL(new RegExp(`#${tab}$`));await expect(page.getByRole('heading',{level:1})).toHaveText(title);
     expect(await page.evaluate(()=>document.activeElement?.id)).toBe('main-content');
     live=false;
-    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'待辦清單',exact:true}).click();
+    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'入門指南',exact:true}).click();
     await expect(task(page,'skill-book')).toHaveAttribute('data-task-state','todo');
   }
 });
