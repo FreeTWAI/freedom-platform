@@ -63,6 +63,12 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     </details>)}
     <div className="nav-footer">{item('community')}</div>
     </>}
+    {normalizedQuery && communitySearchEnabled && <div className="actions">
+      <button type="button" className="btn btn-secondary btn-small community-search-action" onClick={() => {
+        const hash = `#community-search?${new URLSearchParams({q: query})}`;
+        setMoreOpen(false); setQuery(''); onSelect('community-search', hash);
+      }}>{t('nav.searchContent')}</button>
+    </div>}
       </div>
     </details>
   </nav>;
