@@ -25354,8 +25354,8 @@
     },
     {
       "path": "tests/runtime/commerce-provider-accounts.test.ts",
-      "bytes": 23321,
-      "sha256": "6ac9803903eadcc6f354b69eabeb7a721b31eb31a4d1311b117cf2073c2e0235"
+      "bytes": 23473,
+      "sha256": "268c9453a008eb30da0f91cf9b6b77d59d7e9ac0af85aaf9832d97529323db37"
     },
     {
       "path": "tests/runtime/commerce-rate-limits.test.ts",
