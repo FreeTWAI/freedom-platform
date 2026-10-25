@@ -180,3 +180,64 @@ test('an older failed announcement refresh cannot overwrite a newer successful r
  h.reads[0].reject(new Error('obsolete read error'));await settleRead();
  assert.match(h.html(),/Previously loaded announcement/);assert.doesNotMatch(h.html(),/obsolete read error|尚未建立公告/);
 });
+
+// Actual Council handlers with controlled promises and explicit hook ports.
+// Layout, focus and native lifecycle are left to hosted E2E, not emulated here.
+function councilReadHarness(){
+ const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
+ const reads:{path:string;resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
+ const api={get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:async()=>{throw Object.assign(new Error('unknown council write'),{status:503});}};
+ let currentApi=api;
+ const Council=runInNewContext(councilCode+';Council',{
+  React,useId:()=> 'synthetic-council',date:String,failure:(error:Error)=>error.message,
+  useState:(initial:unknown)=>{const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],(next:any)=>{slots[i]=typeof next==='function'?next(slots[i]):next;}];},
+  useRef:(initial:unknown)=>{const i=cursor++;return slots[i]??(slots[i]={current:initial});},
+  useCallback:(value:any,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n]))slots[i]={value,deps};return slots[i].value;},
+  useEffect:(run:()=>void,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n])){old?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=run();});}},
+ });
+ const render=()=>{cursor=0;const tree=Council({api:currentApi});for(const effect of effects.splice(0))effect();return tree;};
+ const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
+ const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
+ const button=(name:string)=>nodes(render()).find(n=>n.type==='button'&&text(n.props.children)===name);
+ return {reads,render,html:()=>renderToStaticMarkup(render()),
+  reload:()=>button('重讀討論').props.onClick(),
+  open:()=>button('新增討論').props.onClick(),
+  select:()=>nodes(render()).find(n=>n.type==='button'&&String(n.props.className).includes('guild-thread-select')).props.onClick(),
+  draft:()=>{for(const node of nodes(render()).filter(n=>n.type==='input'||n.type==='textarea'))node.props.onChange({target:{value:node.type==='input'?'Retained council title':'Retained council body'}});},
+  fields:()=>nodes(render()).filter(n=>n.type==='input'||n.type==='textarea').map(n=>({value:n.props.value,disabled:n.props.disabled})),
+  submit:()=>nodes(render()).find(n=>n.type==='form').props.onSubmit({preventDefault(){}}),
+  replaceClient:()=>{currentApi={...api};render();},
+ };
+}
+// Drain promise continuations (including VM promises), without application waits.
+const settleCouncil=()=>new Promise<void>(resolve=>setImmediate(resolve));
+const storedThread={thread_id:'synthetic-thread',title:'Previously loaded discussion',body:'Synthetic thread body',author_name:'Synthetic author',created_at:'2026-10-25',replies:[]};
+test('council first list read failure is not empty; successful empty recovery retains a create draft',async()=>{
+ const h=councilReadHarness();h.render();h.reads[0].reject(new Error('council list failed'));await settleCouncil();
+ assert.match(h.html(),/council list failed/);assert.doesNotMatch(h.html(),/目前沒有討論/);
+ h.open();h.draft();h.reload();h.reads[1].resolve({items:[]});await settleCouncil();
+ assert.match(h.html(),/目前沒有討論/);assert.doesNotMatch(h.html(),/council list failed/);
+ assert.deepEqual(h.fields().map(f=>f.value),['Retained council title','Retained council body']);
+});
+for(const mode of ['create','reply'] as const)test(`council ${mode} unknown write survives list refresh failure and recovery with frozen original draft`,async()=>{
+ const h=councilReadHarness();h.render();h.reads[0].resolve({items:[storedThread]});await settleCouncil();
+ if(mode==='create')h.open();else{h.select();h.render();h.reads[1].resolve(storedThread);await settleCouncil();}
+ h.draft();h.submit();await settleCouncil();const original=h.fields();assert.ok(original.every(f=>f.disabled));
+ h.reload();const first=h.reads.length-(mode==='reply'?2:1);h.reads[first].reject(new Error('council refresh failed'));
+ if(mode==='reply')h.reads[first+1].resolve(storedThread);await settleCouncil();
+ assert.match(h.html(),/Previously loaded discussion/);assert.match(h.html(),/council refresh failed/);assert.match(h.html(),/unknown council write/);
+ assert.match(h.html(),/上次送出的結果尚未確認/);assert.deepEqual(h.fields(),original);
+ h.reload();const next=h.reads.length-(mode==='reply'?2:1);h.reads[next].resolve({items:[]});if(mode==='reply')h.reads[next+1].resolve(storedThread);await settleCouncil();
+ assert.doesNotMatch(h.html(),/council refresh failed/);assert.match(h.html(),/unknown council write/);assert.match(h.html(),/目前沒有討論/);assert.deepEqual(h.fields(),original);
+});
+test('obsolete council client success cannot mark a current failed list as loaded or clear its read error',async()=>{
+ const h=councilReadHarness();h.render();h.replaceClient();h.reads[1].reject(new Error('current client failed'));await settleCouncil();
+ h.reads[0].resolve({items:[storedThread]});await settleCouncil();
+ assert.match(h.html(),/current client failed/);assert.doesNotMatch(h.html(),/Previously loaded discussion|目前沒有討論/);
+ h.reload();h.reads[2].resolve({items:[]});await settleCouncil();assert.match(h.html(),/目前沒有討論/);assert.doesNotMatch(h.html(),/current client failed/);
+});
+test('obsolete council list failure cannot overwrite a newer success',async()=>{
+ const h=councilReadHarness();h.render();h.reload();h.reads[1].resolve({items:[storedThread]});await settleCouncil();
+ h.reads[0].reject(new Error('obsolete council error'));await settleCouncil();
+ assert.match(h.html(),/Previously loaded discussion/);assert.doesNotMatch(h.html(),/obsolete council error|目前沒有討論/);
+});

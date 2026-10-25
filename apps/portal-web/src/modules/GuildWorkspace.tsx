@@ -112,20 +112,22 @@ function SkillBookEditor({api,books,locked,onGuildRequired,recovery,book,onBookC
 
 function Council({api}:{api:ReaderWriter}){
   const labelId=useId();
-  const [creating,setCreating]=useState(false),[unconfirmed,setUnconfirmed]=useState(false),[items,setItems]=useState<CouncilThread[]>([]),[selected,setSelected]=useState<string|null>(null),[current,setCurrent]=useState<CouncilThread|null>(null),[detailLoading,setDetailLoading]=useState(false),[title,setTitle]=useState(''),[body,setBody]=useState(''),[reply,setReply]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),lock=useRef(false),generation=useRef(0),detailGeneration=useRef(0);
+  const [creating,setCreating]=useState(false),[unconfirmed,setUnconfirmed]=useState(false),[items,setItems]=useState<CouncilThread[]|null>(null),[selected,setSelected]=useState<string|null>(null),[current,setCurrent]=useState<CouncilThread|null>(null),[detailLoading,setDetailLoading]=useState(false),[title,setTitle]=useState(''),[body,setBody]=useState(''),[reply,setReply]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),lock=useRef(false),generation=useRef(0),detailGeneration=useRef(0);
+  const [readError,setReadError]=useState('');
   const titleInput=useRef<HTMLInputElement>(null),createButton=useRef<HTMLButtonElement>(null),returnFocus=useRef(false);
   useEffect(()=>{if(creating)titleInput.current?.focus();},[creating]);
   useEffect(()=>{if(!creating&&!busy&&returnFocus.current){returnFocus.current=false;createButton.current?.focus();}},[creating,busy]);
   function openComposer(){if(lock.current||unconfirmed)return;setSelected(null);setCreating(true);setError('');setNotice('');}
   function closeComposer(){if(lock.current||unconfirmed)return;returnFocus.current=true;setCreating(false);}
-  const load=useCallback(async()=>{const sequence=++generation.current;setLoading(true);try{const data=await api.get<{items:CouncilThread[]}>('/guild-council/threads');if(sequence===generation.current)setItems(data.items);}catch(cause){if(sequence===generation.current)setError(failure(cause));}finally{if(sequence===generation.current)setLoading(false);}},[api]);
-  useEffect(()=>{void load();return()=>{generation.current++;};},[load]);
+  const load=useCallback(async()=>{const sequence=++generation.current;setLoading(true);setReadError('');try{const data=await api.get<{items:CouncilThread[]}>('/guild-council/threads');if(sequence===generation.current){setItems(data.items);setReadError('');}}catch(cause){if(sequence===generation.current)setReadError(failure(cause));}finally{if(sequence===generation.current)setLoading(false);}},[api]);
+  useEffect(()=>{setItems(null);setReadError('');void load();return()=>{generation.current++;};},[load]);
   const loadDetail=useCallback(async(id:string)=>{const sequence=++detailGeneration.current;setDetailLoading(true);setCurrent(null);try{const data=await api.get<CouncilThread>(`/guild-council/threads/${encodeURIComponent(id)}`);if(sequence===detailGeneration.current)setCurrent(data);}catch(cause){if(sequence===detailGeneration.current)setError(failure(cause));}finally{if(sequence===detailGeneration.current)setDetailLoading(false);}},[api]);
   useEffect(()=>{setError('');setCurrent(null);if(selected)void loadDetail(selected);return()=>{detailGeneration.current++;};},[selected,loadDetail]);
   async function submit(event:FormEvent,isReply:boolean){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await api.post(isReply?`/guild-council/threads/${encodeURIComponent(selected!)}/replies`:'/guild-council/threads',isReply?{body:reply}:{title,body});if(isReply){setReply('');await loadDetail(selected!);}else{setTitle('');setBody('');returnFocus.current=true;setCreating(false);}setUnconfirmed(false);await load();setNotice(isReply?'回覆已發布。':'討論已建立。');}catch(cause){const status=(cause as {status?:unknown}|null)?.status;setUnconfirmed(previous=>previous||!(typeof status==='number'&&status>=400&&status<500));setError(failure(cause));}finally{lock.current=false;setBusy(false);}}
   const frozen=busy||unconfirmed,hasDraft=Boolean(title||body);
   return <section className="stack guild-council">
     <header><h3>公會長議事區</h3><p className="field-hint">僅正式公會長與平台管理員可見。</p></header>
+    {readError&&<div role="alert" className="banner banner-error"><p>{readError}</p>{items!==null&&<p>目前顯示上次成功讀取的討論列表，請重讀討論。</p>}</div>}
     {error&&<p role="alert" className="banner banner-error">{error}</p>}
     {unconfirmed&&<p className="field-hint">上次送出的結果尚未確認。請用原內容重試，確認前不能收合、切換討論或另開新討論。</p>}
     {notice&&<p role="status" className="banner status-note">{notice}</p>}
@@ -135,7 +137,7 @@ function Council({api}:{api:ReaderWriter}){
           {!creating&&<button ref={createButton} type="button" className={`btn ${selected?'btn-ghost':'btn-primary'}`} onClick={openComposer} disabled={frozen}>{hasDraft?'繼續草稿':'新增討論'}</button>}
           <button type="button" className="btn btn-ghost" onClick={()=>{if(!unconfirmed)setError('');void load();if(selected)void loadDetail(selected);}} disabled={busy||loading||detailLoading}>重讀討論</button>
         </div>
-        {loading?<p role="status">正在載入討論…</p>:!items.length?<p className="muted">目前沒有討論。有跨公會的安排需要協調時，可以新增討論。</p>:items.map(item=><button type="button" className={`guild-thread-select${selected===item.thread_id?' is-selected':''}`} key={item.thread_id} disabled={frozen} onClick={()=>{if(lock.current||unconfirmed)return;setSelected(item.thread_id);setCreating(false);setReply('');}}><strong>{item.title}</strong><span>{item.author_name} · {date(item.created_at)}{typeof item.reply_count==='number'?` · ${item.reply_count} 則回覆`:''}</span></button>)}
+        {loading?<p role="status">正在載入討論…</p>:items===null?<p className="muted">討論列表尚未載入，請重讀討論。</p>:!items.length?<p className="muted">目前沒有討論。有跨公會的安排需要協調時，可以新增討論。</p>:items.map(item=><button type="button" className={`guild-thread-select${selected===item.thread_id?' is-selected':''}`} key={item.thread_id} disabled={frozen} onClick={()=>{if(lock.current||unconfirmed)return;setSelected(item.thread_id);setCreating(false);setReply('');}}><strong>{item.title}</strong><span>{item.author_name} · {date(item.created_at)}{typeof item.reply_count==='number'?` · ${item.reply_count} 則回覆`:''}</span></button>)}
       </section>
       {selected?(detailLoading?<p role="status">正在載入討論內容…</p>:current?<article className="card stack">
         <h4>{current.title}</h4><p className="field-hint">{current.author_name} · {date(current.created_at)}</p><p className="guild-workspace-body">{current.body}</p>

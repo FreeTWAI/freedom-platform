@@ -1,5 +1,5 @@
 import { navigate } from './navigation.js';
-import {test,expect,type Page} from './fixtures.js';
+import {test,expect,type Page,type Route} from './fixtures.js';
 
 const caps={managed_guilds:[{guild_key:'synthetic-guild',name:'測試公會'}],managed_books:[{book_id:'video-autopilot',title:'測試剪輯技能'}],can_discuss:true};
 const announcement={announcement_id:'synthetic-announcement',guild_key:'synthetic-guild',title:'週末共創',body:'帶一段合成素材一起測試。',state:'published',aggregate_version:2,created_at:'2026-09-23T10:00:00Z',updated_at:'2026-09-23T10:00:00Z'};
@@ -372,4 +372,41 @@ test('announcement refresh recovery retains old data and an unresolved write err
   await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
   await expect(workspace.getByRole('alert')).toHaveCount(1);await expect(workspace.getByRole('alert')).toHaveText(writeError);
   await expect(title).toHaveValue('等待確認的公告');await expect(body).toHaveValue('原本未確認的內容');expect(writes).toBe(1);
+});
+
+test('council unavailable list is not an empty list and recovery keeps an unsaved discussion',async({page})=>{
+  let reads=0;
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
+  await page.route('**/api/v1/guild-council/threads',route=>{reads++;return reads===1?route.fulfill({status:503,json:{detail:'討論列表讀取失敗。'}}):route.fulfill({json:{items:[]}});});
+  await login(page);await navigate(page,'公會管理');const council=page.locator('.guild-council');
+  await expect(council.getByRole('alert')).toBeVisible();await expect(council.getByText('討論列表尚未載入，請重讀討論。',{exact:true})).toBeVisible();
+  await expect(council.getByText('目前沒有討論。有跨公會的安排需要協調時，可以新增討論。',{exact:true})).toHaveCount(0);
+  await council.getByRole('button',{name:'新增討論',exact:true}).click();
+  await council.getByLabel('討論標題',{exact:true}).fill('尚未送出的標題');await council.getByLabel('討論內容',{exact:true}).fill('重讀後仍保留的內容');
+  await council.getByRole('button',{name:'重讀討論',exact:true}).click();
+  await expect(council.getByText('目前沒有討論。有跨公會的安排需要協調時，可以新增討論。',{exact:true})).toBeVisible();await expect(council.getByRole('alert')).toHaveCount(0);
+  await expect(council.getByLabel('討論標題',{exact:true})).toHaveValue('尚未送出的標題');await expect(council.getByLabel('討論內容',{exact:true})).toHaveValue('重讀後仍保留的內容');
+});
+
+for(const mode of ['create','reply'] as const)test(`council list refresh recovery preserves an unknown ${mode} and its original retry`,async({page})=>{
+  const thread={thread_id:'read-recovery',title:'已載入的討論',body:'合成內容',author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',replies:[]};
+  let reads=0;const writes:{body:unknown;key:string|undefined}[]=[];
+  const write=async(route:Route)=>{writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});return writes.length===1?route.fulfill({status:503,json:{detail:'議事寫入結果尚未確認。'}}):route.fulfill({json:thread});};
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
+  await page.route('**/api/v1/guild-council/threads',route=>{if(route.request().method()==='POST')return write(route);reads++;return reads===2?route.fulfill({status:503,json:{detail:'討論列表重讀失敗。'}}):route.fulfill({json:{items:[thread]}});});
+  await page.route('**/api/v1/guild-council/threads/read-recovery',route=>route.fulfill({json:thread}));
+  await page.route('**/api/v1/guild-council/threads/read-recovery/replies',write);
+  await login(page);await navigate(page,'公會管理');const council=page.locator('.guild-council');
+  await expect(council.getByRole('button',{name:/已載入的討論/})).toBeVisible();
+  if(mode==='create'){await council.getByRole('button',{name:'新增討論',exact:true}).click();await council.getByLabel('討論標題',{exact:true}).fill('原本的議題');}else await council.getByRole('button',{name:/已載入的討論/}).click();
+  const field=council.getByLabel(mode==='create'?'討論內容':'回覆討論',{exact:true}),submit=council.getByRole('button',{name:mode==='create'?'建立討論':'發布回覆',exact:true});
+  await field.fill('必須保留的原內容');await submit.click();await expect(council.getByRole('alert')).toBeVisible();
+  const writeError=await council.getByRole('alert').innerText();await expect(field).toBeDisabled();
+  await council.getByRole('button',{name:'重讀討論',exact:true}).click();await expect(council.getByRole('alert')).toHaveCount(2);
+  await expect(council.getByText('目前顯示上次成功讀取的討論列表，請重讀討論。',{exact:true})).toBeVisible();
+  await expect(council.getByRole('button',{name:/已載入的討論/})).toBeDisabled();await expect(field).toHaveValue('必須保留的原內容');await expect(field).toBeDisabled();
+  await council.getByRole('button',{name:'重讀討論',exact:true}).click();await expect(council.getByRole('alert')).toHaveCount(1);await expect(council.getByRole('alert')).toHaveText(writeError);
+  await expect(field).toHaveValue('必須保留的原內容');await expect(field).toBeDisabled();expect(writes).toHaveLength(1);
+  await submit.click();await expect(council.getByRole('status')).toContainText(mode==='create'?'討論已建立':'回覆已發布');
+  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
 });
