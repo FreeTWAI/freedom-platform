@@ -351,7 +351,9 @@ test('translucent launcher keeps theme text readable and restores a solid focuse
     expect((await bubble.boundingBox())!.width).toBe(60);
     const style=await bubble.evaluate(node=>({opacity:getComputedStyle(node).opacity,background:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node).color}));
     expect(style.opacity).toBe('1');expect(style.ink).not.toBe('rgba(0, 0, 0, 0)');
-    await bubble.focus();
+    // Anchor locally, then traverse actual adjacent tab stops to enter keyboard modality.
+    await bubble.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
+    await expect(bubble).toBeFocused();expect(await bubble.evaluate(node=>node.matches(':focus-visible'))).toBe(true);
     const focused=await bubble.evaluate(node=>({background:getComputedStyle(node).backgroundColor,outline:getComputedStyle(node).outlineStyle}));
     expect(focused.outline).not.toBe('none');
     if(await page.evaluate(()=>CSS.supports('background','color-mix(in srgb,white 75%,transparent)')))expect(focused.background).not.toBe(style.background);
