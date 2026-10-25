@@ -134,8 +134,8 @@
     },
     {
       "path": ".github/CODEOWNERS",
-      "bytes": 1960,
-      "sha256": "373b6ec37a43b145c1ac3db5c68ab2cc812c62e520d8953964c45ed4f4c0b6b0"
+      "bytes": 2090,
+      "sha256": "bf8fbacf0b87e5f204835ad3ae3cd7c8b001e46bd2e7d87fbd0f18fc087ebcf2"
     },
     {
       "path": ".github/pull_request_template.md",
@@ -166,6 +166,11 @@
       "path": ".github/workflows/reconcile-issue-closures.yml",
       "bytes": 844,
       "sha256": "2217e08a06c2f085ff3711720320a1a158da63c242efc73650f386aa482d08f6"
+    },
+    {
+      "path": ".github/workflows/shared-release.yml",
+      "bytes": 5459,
+      "sha256": "a9c7715951e60297e0e5803d132b8ae3f8131df32a774b306e600a8e2c4f6739"
     },
     {
       "path": ".github/workflows/skill-book-upstreams.yml",
@@ -14553,6 +14558,11 @@
       "sha256": "a5827933a4f89ed29d4d95c68f7be9acc192889abd8dc0faddabab0e4d4843f3"
     },
     {
+      "path": "deploy/cloudflare/test/shared-release.test.mjs",
+      "bytes": 18526,
+      "sha256": "9e263f238a843f6914f7ce805c602a5765b738d6bde89466a250f36f743023a8"
+    },
+    {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
       "bytes": 1674,
       "sha256": "7dd20b8c9cd81702ae5ddc5bb768e340a9beaec3aa8c3405858fb4595f1021ce"
@@ -14586,6 +14596,41 @@
       "path": "deploy/public/freedom-public.service",
       "bytes": 554,
       "sha256": "fe25b10279848a1f11d18393936a3efea38bbf28d43f70afd74400a0293436ea"
+    },
+    {
+      "path": "deploy/shared-release/AGENTS.md",
+      "bytes": 2078,
+      "sha256": "7107ebb95c52e19c6981da89d39867c7fa7edcb59ecf7c506ee7fa25ad13c2f6"
+    },
+    {
+      "path": "deploy/shared-release/README.md",
+      "bytes": 7157,
+      "sha256": "81fdce9eead3a3a7cf8697e8cae8f5192d14f27ba3a053d4f0de9dcf8d1d9106"
+    },
+    {
+      "path": "deploy/shared-release/admission.mjs",
+      "bytes": 8455,
+      "sha256": "32d8d9bc3b0703e3c033fcb9f89c7cfc9a1c2ce4b6f693b95a323bb9c6208b11"
+    },
+    {
+      "path": "deploy/shared-release/cli.mjs",
+      "bytes": 6941,
+      "sha256": "815d02cfc70196e07dea1ef4700a5b3aa70a72d63387a2dbd2e35e3547a32c57"
+    },
+    {
+      "path": "deploy/shared-release/freedom.module.json",
+      "bytes": 833,
+      "sha256": "05153a61e93195b973a3d86423baefcf1bc0dd4b9dd5231db2bf0b755c766fd1"
+    },
+    {
+      "path": "deploy/shared-release/operator-protocol.md",
+      "bytes": 7318,
+      "sha256": "ae5f7201d4e99b778b4a52ada7e2d0b25e3712cf5869f75684986588cb6e0dd0"
+    },
+    {
+      "path": "deploy/shared-release/operator.mjs",
+      "bytes": 10108,
+      "sha256": "dd77c6b7d0c73cb63d3a53fe62c5b37b0d37b676c8b9c23af1b62bf7076d9926"
     },
     {
       "path": "deploy/staging/backup.sh",
