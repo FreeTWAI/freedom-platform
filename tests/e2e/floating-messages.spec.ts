@@ -376,3 +376,37 @@ test('75 percent launcher background retains text contrast over arbitrary underl
     expect((Math.max(surface,ink)+.05)/(Math.min(surface,ink)+.05)).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+
+test('desktop dragged launcher docks outside the open panel and restores its saved position on close',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});await login(page);
+  const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
+  await bubble.click();const originalPanel=(await panel.boundingBox())!;await bubble.click();
+  const initial=(await bubble.boundingBox())!;
+  await page.mouse.move(initial.x+30,initial.y+30);await page.mouse.down();
+  await page.mouse.move(1400,originalPanel.y+30,{steps:10});await page.mouse.up();
+  const saved=(await bubble.boundingBox())!,preference=await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY);
+  expect(saved.y).toBeLessThan(originalPanel.y+originalPanel.height);expect(saved.y+saved.height).toBeGreaterThan(originalPanel.y);
+  await bubble.click();await expect(panel).toBeVisible();
+  const docked=(await bubble.boundingBox())!,opened=(await panel.boundingBox())!;
+  expect(docked.y).toBeGreaterThanOrEqual(opened.y+opened.height);
+  const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),search=panel.getByLabel('搜尋會員',{exact:true});
+  for(const control of [close,search])expect(await control.evaluate(node=>{
+    const box=node.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===node||node.contains(hit);
+  })).toBe(true);
+  await search.fill('可操作搜尋');await expect(search).toHaveValue('可操作搜尋');
+  await close.click();await expect(panel).toBeHidden();await expect(bubble).toBeFocused();
+  expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
+  expect((await bubble.boundingBox())!.y).toBe(saved.y);
+  await bubble.click();await bubble.click();await expect(panel).toBeHidden();expect((await bubble.boundingBox())!.y).toBe(saved.y);
+  for(const viewport of [{width:1440,height:360},{width:780,height:400}]){
+    await page.setViewportSize(viewport);const before=(await bubble.boundingBox())!;
+    await bubble.focus();await bubble.press('Enter');await expect(panel).toBeVisible();
+    const launcher=(await bubble.boundingBox())!,box=(await panel.boundingBox())!;
+    expect(launcher.y).toBeGreaterThanOrEqual(box.y+box.height);
+    expect(await close.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+    await close.focus();await close.press('Enter');await expect(bubble).toBeFocused();
+    expect((await bubble.boundingBox())!.y).toBe(before.y);
+    expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
+  }
+});
