@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 12495,
-      "sha256": "015ae56a2b2eea865e4d3e30fff658bbdccaeb9169a055e16fa92471ba102967"
+      "bytes": 14060,
+      "sha256": "62f596a8b5295713d8273910828f3146e750fe4931dc9f6d784b51ccca3774a9"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14629,8 +14629,8 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 10104,
-      "sha256": "346543f80afea35ad00e4b5790661f481f4841911d5486fc5044ee7b74b27f38"
+      "bytes": 11095,
+      "sha256": "74f12438fcc9911528abe3b94a96cb3890c751cad080dc4acbac69aedae0b46d"
     },
     {
       "path": "deploy/shared-release/operator.mjs",

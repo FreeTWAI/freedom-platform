@@ -58,9 +58,22 @@ does not pretend to validate that currently unimplemented provider schema.
 
 Use the existing daily backup pipeline's source/object/restore semantics, not only
 `pg_dump`. Do not change application feature flags during this infrastructure port.
+Only owner-recorded feature decisions authorize flag values; Environment config
+does not independently approve a new flag. Mutation is attempted once: provider
+deployment-list and edge-health propagation use bounded reads, preserving every
+observation, including an initial stale result. Never re-deploy because an early
+read still shows the predecessor. Measure the actual hosted-runner/database-region
+dump time before approving its bounded budget; the current 180-second cap is not
+established by synthetic local tests. A timeout or terminating signal fails even
+when a subprocess returns zero.
 Do not switch the still-unapproved live migration profile to DAG. A one-shot
 Actions run does not replace or prove the natural backup scheduler. Coordinate
 with its existing owner; do not stop a systemd timer without a verified successor.
+Before starting/restoring a Persistent timer, determine whether a scheduled time
+was missed while paused. An immediate legitimate catch-up run must be reconciled
+with the retained lease and its actual receipt, not mistaken for a mandatory
+post-start-idle failure or silently skipped. Keep the forward-only external floor;
+dated handoff values are evidence, not a fixed current-state constant.
 
 The private operator's current assumptions require a deliberate port: absolute
 cross-kit imports become an image-owned reviewed closure; private credential-file

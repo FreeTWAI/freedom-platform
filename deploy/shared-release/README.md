@@ -23,7 +23,12 @@
 4. 確認環境已安裝後，選同一版本與 `deploy`。正式 `next` 會要求同一版本、
    同一發布工具 digest 最新的 staging 發布成功，而且成功收據須來自可信的完整 workflow 執行。
 5. 查看每個階段和 GitHub Deployment。失敗先看收據；migration 或 provider 結果
-   不明時，由操作人讀回實際狀態再處理，不能直接反覆點 Re-run。
+  不明時，由操作人讀回實際狀態再處理，不能直接反覆點 Re-run。
+
+完成對帳並確認可再次執行後，staging 應使用一次新的完整 dispatch；若依既有處理決定
+重跑既有 run，須選 **Re-run all jobs**。正式准入要求 admission 與 deploy 來自同一個
+attempt；只重跑 deploy／failed jobs，可能因 admission 屬於舊 attempt 而被拒絕。
+這不授予未知結果的 migration／部署重做權；先確認前次 provider 與 DB 的實際結果。
 
 使用自己的 GitHub 登入即可。原始發起人及重跑者都會再查當下權限，帳號同名但 ID
 不同、權限已撤銷或不在四人名單內，都不通過。Actions 使用短效 `GITHUB_TOKEN`
@@ -84,6 +89,19 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 中斷時 receipt／Deployment 可能停在 running／in_progress，代表要讀回核對，不能視為已回滾。
 容器若未確認停止，控制程式會回報清理未確認，保留私人工作磁碟到一次性 runner 銷毀，
 不會刪除可能仍在執行的 PostgreSQL 資料目錄。它不會把這種結果算成成功。
+
+現行操作者在 [2026-10-25 的交接留言](https://github.com/FreeTWAI/freedom-platform/pull/1038#issuecomment-6394000777)
+補充了實際踩過的限制：Worker deployments 清單和 edge smoke 可能暫時仍讀到舊版，
+只能有界重讀並保留各次結果，不可因此再次部署。原生 dump 目前的 180 秒上限仍是
+待實測預算；必須在 hosted runner 到實際資料庫區域測量後才可安裝，不能拿本機
+合成資料的耗時背書。程式對訊號／timeout 一律回報失敗，即使程序回傳 exit 0。
+排程接手還須判斷暫停期間是否錯過時段；既有 systemd `Persistent=yes` 可能在啟動時
+立即補跑，不能把所有啟動後的執行都當作交接失敗。這些仍是後續 operator 安裝驗收項。
+
+旗標值以 owner 的既有決策紀錄為準；Environment config 只是傳遞設定，不是新旗標
+的核准來源。該次操作者回報的 rollback floor 是 `36bec661`／schema 189，並正在準備
+下一版；這是具日期的交接觀察。接手時必須重讀權威 floor，僅能前進，不能直接把
+這個歷史值寫死在 Actions。
 
 只上傳固定欄位的公開 JSON 收據，不上傳 operator stdout/stderr、DB dump、物件、
 原始設定或 provider response。operator 每階段可寫進度，controller 只輸出白名單內的
