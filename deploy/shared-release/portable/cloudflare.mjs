@@ -66,6 +66,7 @@ export function createCloudflareRecoveryTransport({ accountId, target, mediaBuck
     return value.result;
   };
   return Object.freeze({
+    target,
     async readWorkerState() {
       const value = await json(`/workers/scripts/${targets[target].worker}/settings`);
       const bindings = value?.bindings;

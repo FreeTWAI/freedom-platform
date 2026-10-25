@@ -11,6 +11,8 @@ import { validateOperatorResult, operatorProgress, operatorCommand, runOperator 
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
+import { backupObjectStore, backupTar, bytesStream, newBackupDirectories } from '../../shared-release/portable/backup-storage.mjs';
+import { openCapturePolicy } from '../../shared-release/portable/capture-policy.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -667,4 +669,88 @@ test('workflow keeps dispatch input out of shell, secrets out of admission, and 
   for (const match of text.matchAll(/run: ([^\n]+)/g)) assert.ok(!match[1].includes('${{'));
   assert.equal([...text.matchAll(/ref: \$\{\{ job.workflow_sha \}\}/g)].length, 2);
   assert.equal([...text.matchAll(/persist-credentials: false/g)].length, 3);
+});
+
+test('backup TAR round trip preserves private bytes and refuses links at the source', async t => {
+  const root = await diskFixture(t, 'fp-tar-'), local = join(root, 'local'), remote = join(root, 'remote');
+  await mkdir(local, { mode: 0o700 }); await mkdir(remote, { mode: 0o700 });
+  await newBackupDirectories(local);
+  await writeFile(join(local, 'control.json'), '{"format":"synthetic"}', { mode: 0o600 });
+  await writeFile(join(local, 'sealed/database.dump'), Buffer.from('PGDMP synthetic'), { mode: 0o600 });
+  const bytes = await backupTar('pack', local);
+  await backupTar('unpack', remote, bytes);
+  assert.deepEqual(await readFile(join(remote, 'sealed/database.dump')), Buffer.from('PGDMP synthetic'));
+  assert.equal((await stat(join(remote, 'sealed/database.dump'))).mode & 0o777, 0o600);
+  await assert.rejects(backupTar('unpack', remote, bytes), /release_backup_archive_failed/);
+  await symlink(join(local, 'control.json'), join(local, 'objects/link'));
+  await assert.rejects(backupTar('pack', local), /release_backup_archive_failed/);
+});
+
+function fixtureTar(entries) {
+  return execFileSync('/usr/bin/python3', ['-I', '-c', `import io,json,sys,tarfile
+data=json.load(sys.stdin); output=io.BytesIO()
+with tarfile.open(fileobj=output,mode='w') as archive:
+ for entry in data:
+  member=tarfile.TarInfo(entry['name']); body=entry.get('body','fixture').encode()
+  if entry.get('link'):
+   member.type=tarfile.SYMTYPE; member.linkname=entry['link']; archive.addfile(member)
+  else:
+   member.size=len(body); archive.addfile(member,io.BytesIO(body))
+sys.stdout.buffer.write(output.getvalue())`], { input: JSON.stringify(entries), maxBuffer: 1_000_000 });
+}
+
+test('downloaded TAR rejects traversal, symlinks, duplicate names and file/directory collisions before extraction', async t => {
+  const root = await diskFixture(t, 'fp-bad-tar-'); let index = 0;
+  for (const entries of [
+    [{ name: '../escape' }], [{ name: '/tmp/escape' }], [{ name: 'objects/link', link: '../control.json' }],
+    [{ name: 'objects/same' }, { name: 'objects/same' }], [{ name: 'objects/parent' }, { name: 'objects/parent/child' }],
+    [{ name: 'secrets/credential.json' }],
+  ]) {
+    const directory = join(root, String(index++)); await mkdir(directory, { mode: 0o700 });
+    await assert.rejects(backupTar('unpack', directory, fixtureTar([{ name: 'control.json' }, ...entries])), /release_backup_archive_failed/);
+    await assert.rejects(stat(join(directory, 'control.json')), { code: 'ENOENT' });
+  }
+});
+
+test('backup object member binds bytes and metadata atomically and never overwrites or deletes', async () => {
+  const files = new Map();
+  const archive = { async putIfAbsent(key, body) {
+    const bytes = Buffer.from(await new Response(body).arrayBuffer());
+    if (files.has(key)) return 'exists'; files.set(key, bytes); return 'created';
+  }, async get(key) { return files.has(key) ? bytesStream(files.get(key)) : null; } };
+  const store = backupObjectStore(archive, {
+    assertObjectKey: key => assert.equal(key, 'v1/scope/asset/representation'),
+    validateMetadata: metadata => { assert.equal(typeof metadata.sha256, 'string'); assert(Number.isInteger(metadata.byteSize)); },
+  });
+  const key = 'v1/scope/asset/representation', bytes = Buffer.from('synthetic object');
+  const metadata = { byteSize: bytes.length, sha256: hash(bytes) };
+  assert.equal(await store.putImmutable(key, { bytes, metadata }), 'created');
+  assert.equal(await store.putImmutable(key, { bytes, metadata }), 'exists');
+  assert.deepEqual(Buffer.from(await new Response((await store.get(key)).body).arrayBuffer()), bytes);
+  await assert.rejects(store.putImmutable(key, { bytes: Buffer.from('wrong'), metadata }), /release_backup_object_invalid/);
+  await assert.rejects(store.delete(key), /release_backup_delete_forbidden/);
+  files.get(key)[files.get(key).length - 1] ^= 1;
+  await assert.rejects(store.get(key), /release_backup_object_invalid/);
+});
+
+test('uncertain capture-policy mutation must settle its exact backend before GC-off cleanup', async () => {
+  let released, disabled = false, intentWritten = false;
+  const client = { on() {}, removeListener() {}, release(destroy) { released = destroy; },
+    async query(input) {
+      if (input.text.startsWith('SELECT set_config')) return { rows: [] };
+      if (input.text.startsWith('SELECT current_database')) return { rows: [{ database: 'fixture', role: 'operator', session_role: 'operator', pid: 4321 }] };
+      assert(intentWritten); throw Error('synthetic unknown commit');
+    } };
+  const pool = { async connect() { return client; }, async query(input, values) {
+    const text = input.text ?? input;
+    if (text.startsWith('SELECT pid FROM pg_stat_activity')) { assert.deepEqual(values.slice(0, 3), [4321, 'fixture', 'operator']); return { rows: [{ pid: 4321 }] }; }
+    if (text.startsWith('SELECT pg_terminate_backend')) return { rows: [{ stopped: false }] };
+    disabled = true; throw Error('must not disable while an earlier UPDATE can still commit');
+  } };
+  const policy = await openCapturePolicy({ pool, database: 'fixture', role: 'operator',
+    revision: 'shared-backup-11111111-1111-1111-1111-111111111111', before: 'a'.repeat(64),
+    intent: { async putIfAbsent() { intentWritten = true; return 'created'; } } });
+  await assert.rejects(policy.enable(), /synthetic unknown commit/); assert.equal(released, true);
+  await assert.rejects(policy.cleanup(), /release_capture_policy_unsettled/); assert.equal(disabled, false);
+  await assert.rejects(policy.enable(), /release_capture_policy_retry_forbidden/);
 });

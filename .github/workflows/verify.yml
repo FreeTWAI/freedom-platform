@@ -719,4 +719,4 @@ jobs:
       - name: Verify both migration entrypoints against isolated PostgreSQL
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.migration-postgres
       - name: Verify native snapshot dump and isolated restore for the shared release operator
-        run: node .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .
+        run: node --import tsx .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .

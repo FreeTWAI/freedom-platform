@@ -1,7 +1,7 @@
 # 共用發布入口
 
 這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
-`Shared release` Actions，並移植 PostgreSQL 備份還原、資料庫鎖及 Cloudflare 傳輸元件。
+`Shared release` Actions，並串接資料庫／媒體備份、遠端讀回與隔離還原。
 **完整發布工具尚未串接完成，
 也尚未部署。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
 
@@ -98,6 +98,17 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   遠端連線要求完整 TLS 驗證，SQL role 與 PlanetScale 分支登入名稱分開核對。
 - `lease.mjs`：沿用舊每日備份的 advisory lock，整個發布持續使用同一連線；
   連線中斷會撤銷工作訊號，不能回報成功交接。
+- `backup.mjs`：沿用既有 daily backup coordinator，實際執行同一快照的 DB dump 與
+  媒體擷取、封裝、遠端完整讀回、PG18 與本機原生 R2 還原、隔離證據比對及清理。
+  前後核對 Worker source／bindings、完整 migration ledger 和 material policy digest；
+  runtime role 不得有倒退 sequence 的 UPDATE 權限。備份完成後仍保留來源 pins 與
+  整次發布的 lease，供接續 migration 使用。
+- `capture-policy.mjs`：先寫私人操作意圖，再條件式開啟擷取保護。若 UPDATE 結果不明，
+  先確認該次 PID／database／role／隨機 application name 的 backend 已停止，才關閉
+  自己 revision 的保護；不能讓較晚提交的 UPDATE 在清理後重新開啟維運。
+- `backup-storage.mjs`／`backup-tar.py`：使用既有 create-only 檔案存放器保存媒體，
+  大小受限的 TAR 只接受固定範圍的普通檔案。下載副本先核對整體 digest，再檢查
+  全部 member；拒絕重複路徑、穿越路徑、symlink 與特殊檔案，不使用 `extractall`。
 - `cloudflare.mjs`／`intent.mjs`：來源媒體唯讀；遠端備份使用唯一 key、寫入前先同步
   私人磁碟上的操作意圖、只上傳一次，再完整下載比對。REST 寫入仍標示
   `atomicCreateOnly=false`，不能宣稱 provider 保證原子防覆寫。意圖紀錄只保護相同私人
@@ -105,15 +116,19 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   Worker binding digest 可供前後比較；健康檢查只接受指定 SHA，不帶管理 API token，
   staging 則使用只送到固定 origin 的 Access service headers，拒絕跟隨重新導向。
 
-上述元件尚未自行組成完整備份或部署。原生 PostgreSQL 實測使用合成資料；Cloudflare
-案例使用注入的 HTTP 回覆，沒有接觸遠端 bucket、Worker 或正式資料庫。
+這個備份 adapter 仍要求上層提供已核准的來源、ledger 與 material policy digest。
+比對 digest 不等於驗證外部 retained floor 的權威；其共享保存、更新、來源授權與自然
+排程交接仍未完成，因此 adapter 尚未接到可啟用的發布 image。原生 PostgreSQL／R2
+演練使用合成資料；Cloudflare HTTP 邊界使用磁碟上的合成遠端副本，沒有接觸遠端
+bucket、Worker 或正式資料庫。
 
 現行發布程式綁定私人主機的絕對路徑、歷次 operator kit、保留 floor 和 systemd 排程。
 本 PR 沒有把它假裝成可攜式工具。接續移植須沿用現有
 [migration runner](../cloudflare/migration-operator.mjs)、
 [daily backup coordinator](../../packages/media-migration/backup-daily.ts) 及
 [備份 CLI](../../scripts/media-backup-daily.ts)，完成 [operator protocol](operator-protocol.md)
-列出的實際 provider adapter。純粹產生符合格式的收據不能替代這些操作。
+列出的其餘實際 provider 操作。備份 adapter 由 image 內的固定 `tsx` 載入既有 TypeScript
+模組；TAR codec 使用 Python 標準函式庫。純粹產生符合格式的收據不能替代這些操作。
 
 啟用標準是：已審查的 image 可在 hosted runner 完成真實 staging 發布、前後備份、
 資料庫／物件還原與清理，並證明自然備份接手；再由另一位具名操作者以自己的帳號
@@ -127,9 +142,11 @@ UF:INT-23 或第二操作者還原要求已完成。
 生產元件的磁碟與權限檢查，不會以略過測試或放寬 guard 取得成功。
 
 真實 PG18 隔離驗證：先備妥 `verify.yml` 已釘選的 PostgreSQL 18 image，再執行
-`node deploy/shared-release/test/postgres-integration.mjs --source .`。這個 fixture 才使用 Docker；
+`node --import tsx deploy/shared-release/test/postgres-integration.mjs --source .`。這個 fixture 才使用 Docker；
 發布元件本身不呼叫 Docker。案例驗證指定快照、隔離還原、截斷備份拒絕、串流失敗、
-舊鎖互斥、失去鎖後停止及四個資料庫的清理。已接入既有 deploy-preflight CI job，
+舊鎖互斥、失去鎖後停止與資料庫清理，並執行完整 DB／媒體備份還原；檢查快照後新增
+媒體不混入、遠端損毀先於還原被拒絕、PUT 回覆遺失不重送，以及 policy UPDATE 已
+提交但回覆遺失時的清理。已接入既有 deploy-preflight CI job，
 重用既有 image。這仍不是 hosted staging 發布或正式資料的還原證據。
 
 參考：[GitHub Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)、

@@ -69,10 +69,19 @@ unprivileged isolated service; host filesystem floor/scheduler state needs a
 shared durable, independently controlled location. These are open implementation
 items, not fulfilled by the controller tests. Native dump/isolated restore,
 legacy-session lease, bounded R2 transport and exact-source public health polling
-now exist under `portable/`. They are not yet the complete daily backup adapter,
-migration transaction, Worker deployer, durable floor or scheduler handoff.
-The PostgreSQL fixture runs real PG18 with synthetic data; Cloudflare tests inject
-responses. Neither establishes remote operation or provider credentials.
+now exist under `portable/`. `runPortableBackup` also composes the existing daily
+pipeline, private file archive, full R2 transport readback, native PG18 and native
+local R2 recovery, with conditional capture-policy cleanup. Its caller retains
+the same release lease before/after this backup. It checks complete ledger and
+material-policy digests on source and restored databases and the Worker binding
+digest on the source. Its required expectations are inputs from the installed
+controller, not authenticated external-floor evidence: the durable floor reader,
+approved policy authority, migration transaction, Worker deployer and scheduler
+handoff are still open. Do not install it as an independently enabled deployer.
+The integration fixture uses real PG18, native local R2 and synthetic data;
+Cloudflare transport uses disk-backed injected HTTP responses. It covers capture
+snapshot isolation, full archive readback, object restoration, corruption and
+lost mutation replies. It does not establish remote operation or credentials.
 
 `publishArchive` persists an exclusive disk intent before provider work and refuses
 reuse of that UUID in the same work directory. It preserves the existing unique

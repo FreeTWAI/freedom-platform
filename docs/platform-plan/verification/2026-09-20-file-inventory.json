@@ -189,8 +189,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 36991,
-      "sha256": "cd2c2f09a5935da414c72d6410cdfe299188a1ce663287660dc3f52e5de58aa4"
+      "bytes": 37004,
+      "sha256": "da37569b537048068a71440589b8c4f6b9f066a78de811f4c6e1b3ecf8035354"
     },
     {
       "path": "apps/freedom.module.json",
@@ -14559,8 +14559,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 47274,
-      "sha256": "14b1a90166d22e3a3980ef67f983748d6f3d8976376938dceefb9b205ffe8973"
+      "bytes": 53074,
+      "sha256": "721192a84cd06bf5b00e5ed26fa3ed235bee7c86f036580c6177307ea64ce0e3"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 10833,
-      "sha256": "865d06a1f62fbfc750f64fe104536364627ad1911092cdefdbcb6022fe59438b"
+      "bytes": 12495,
+      "sha256": "015ae56a2b2eea865e4d3e30fff658bbdccaeb9169a055e16fa92471ba102967"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14629,8 +14629,8 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 9382,
-      "sha256": "a15d67a78483462ccc469a7f9e1f418c5477c5aef47d8e6249986a8500b68b51"
+      "bytes": 10104,
+      "sha256": "346543f80afea35ad00e4b5790661f481f4841911d5486fc5044ee7b74b27f38"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
@@ -14643,9 +14643,29 @@
       "sha256": "d33826283e617290a7c2282bf9cf220ba0606b6c81b38c5a7c4df6bf9c07cc82"
     },
     {
+      "path": "deploy/shared-release/portable/backup-storage.mjs",
+      "bytes": 5421,
+      "sha256": "c7b039b0dc4b84eeb50cd0108ab7d35edfebfef2b273f7cac84529a3a4db1c54"
+    },
+    {
+      "path": "deploy/shared-release/portable/backup-tar.py",
+      "bytes": 3985,
+      "sha256": "f4b752c3bb67638d5575ea4e8c7f0b212d0fa311f81a1509001d857ad215cd63"
+    },
+    {
+      "path": "deploy/shared-release/portable/backup.mjs",
+      "bytes": 11337,
+      "sha256": "184ddd8b8cbd33a437f1c0481a5924bd2befd24ce1ce028a2afe8be72a704269"
+    },
+    {
+      "path": "deploy/shared-release/portable/capture-policy.mjs",
+      "bytes": 4550,
+      "sha256": "98eaa6bef44c089e7d4e7fb6501ae3ec44dc353cdc8955b64cff44b6fd83327a"
+    },
+    {
       "path": "deploy/shared-release/portable/cloudflare.mjs",
-      "bytes": 10997,
-      "sha256": "7c31f293c9111485d20cae0d20fa970442ee43012f3177fbe372d2072be85bbe"
+      "bytes": 11009,
+      "sha256": "779e7f27ff65eed6c60bde0c427e03d54247c95514d08ea40c2c343c6a3c65c4"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -14663,9 +14683,14 @@
       "sha256": "58e8cad9cf15b2437169252b6bff8ad59f4e89f813dbc69d9b81048175f8375b"
     },
     {
+      "path": "deploy/shared-release/test/backup-integration.mjs",
+      "bytes": 12202,
+      "sha256": "ab065b1cbfb59e5f8f4e8940775a14c35be4b1bfa85d0ebebd8a2635e0d9808d"
+    },
+    {
       "path": "deploy/shared-release/test/postgres-integration.mjs",
-      "bytes": 9403,
-      "sha256": "8bf8e32fe88fc75de36b3fc7dcef8337133175bfb621467ddb8eeca543d197d2"
+      "bytes": 9646,
+      "sha256": "d1c59aca9320d32c4819c50f850f30bcf61acdde439d92338849dfc5c480f474"
     },
     {
       "path": "deploy/staging/backup.sh",

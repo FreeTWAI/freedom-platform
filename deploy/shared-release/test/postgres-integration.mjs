@@ -100,12 +100,16 @@ try {
   await assert.rejects(interrupted.database.restore({ database: interrupted.databaseName, schema: 'public', archive: badStream }));
   assert.equal((await interrupted.pool.query("SELECT to_regclass('public.snapshot_rows') found")).rows[0].found, null);
   await interrupted.dispose(); await source.dispose();
+  const { verifyBackup } = await import(pathToFileURL(join(sourceRoot, 'deploy/shared-release/test/backup-integration.mjs')));
+  const backup = await verifyBackup({ root, openCluster, execute });
+  await clusters.at(-1).dispose();
   for (const cluster of clusters) await assert.rejects(stat(cluster.root), { code: 'ENOENT' });
   console.log(JSON.stringify({ format: 'freedom.shared-release-postgres-fixture/v1', status: 'passed',
     evidence: 'real-local-postgres18', image, network: 'none', diskBacked: true,
     snapshotExcludesLaterWrite: true, dumpReadbackVerified: true, isolatedRestoreVerified: true,
     truncatedRestoreRejected: true, failedStreamBeforeRestore: true, ownedClustersRemoved: clusters.length,
     legacyLeaseExclusion: true, lostLeaseStopsWork: true,
+    backup,
     cloudflare: 'not_run', offsiteBackup: 'not_run', production: 'not_run' }));
 } finally {
   const results = await Promise.allSettled(clusters.map(cluster => cluster.dispose()));
