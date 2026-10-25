@@ -498,6 +498,33 @@ test('an author edits a post and a comment in place; the feed marks both as edit
   await dialog.getByRole('button',{name:'取消',exact:true}).click();await expect(dialog).toBeHidden();
 });
 
+test('an uncertain post edit reopens with its original command and replays without a second revision',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const before=`E2E edit receipt ${randomUUID()}`,after=`${before} 已修正`;
+  await page.getByLabel('貼文內容',{exact:true}).fill(before);await page.getByRole('button',{name:'發布貼文',exact:true}).click();
+  const post=card(page,before);await expect(post).toBeVisible();
+  const requests:{key:string|undefined;version:string|undefined;body:unknown}[]=[];
+  await page.route('**/api/v1/social-posts/*/edit',async route=>{
+    const request=route.request();
+    if(request.method()!=='POST'){await route.continue();return;}
+    const headers=request.headers();requests.push({key:headers['idempotency-key'],version:headers['if-match'],body:request.postDataJSON()});
+    if(requests.length===1){const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');}
+    else await route.continue();
+  });
+  await post.getByLabel('貼文選項',{exact:true}).click();await post.getByRole('button',{name:'編輯',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'編輯貼文'}),input=dialog.getByLabel('貼文內容',{exact:true});
+  await input.fill(after);await dialog.getByRole('button',{name:'儲存變更',exact:true}).click();
+  await expect(dialog.getByRole('alert')).toContainText('尚未確認儲存結果');await expect(input).toBeDisabled();
+  await dialog.getByRole('button',{name:'關閉編輯',exact:true}).click();await expect(dialog).toBeHidden();
+  await post.getByLabel('貼文選項',{exact:true}).click();await post.getByRole('button',{name:'編輯',exact:true}).click();
+  await expect(input).toHaveValue(after);await expect(input).toBeDisabled();
+  await dialog.getByRole('button',{name:'確認上次儲存',exact:true}).click();await expect(dialog).toBeHidden();
+  await expect(card(page,after).locator('.social-note')).toHaveText(after);
+  expect(requests).toHaveLength(2);expect(requests[0].key).toBeTruthy();expect(requests[1]).toEqual(requests[0]);
+  const rows=(await e2eAuthPool.query('SELECT edit_revision FROM community_social_posts WHERE note=$1',[after])).rows;
+  expect(rows).toHaveLength(1);expect(Number(rows[0].edit_revision)).toBe(2);
+});
+
 test('visible feed categories keep keyboard focus and drafts while failed reads retry the selected query',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width:320,height:844});await login(page);
   const draft='保留原生草稿，不因閱讀分類或分享連結而發布';
