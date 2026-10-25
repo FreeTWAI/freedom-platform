@@ -8,7 +8,8 @@ import {transformSync} from 'esbuild';
 
 const source=readFileSync('apps/portal-web/src/modules/PositioningPanels.tsx','utf8');
 const extract=(from:string,to:string)=>{const start=source.indexOf(from),end=source.indexOf(to,start);assert.ok(start>=0&&end>start,'actual handler extraction boundary');return source.slice(start,end);};
-const code=stripTypeScriptTypes(extract('  async function sendPreference(','  async function submitFresh(')+extract('  async function leaveV2(','  async function change('));
+const ownerCode=extract('  function currentCategoryOwner(','  async function sendPreference(');
+const code=stripTypeScriptTypes(ownerCode+extract('  async function sendPreference(','  async function submitFresh(')+extract('  async function leaveV2(','  async function change('));
 const apiSource=readFileSync('apps/portal-web/src/api.ts','utf8');
 const apiStart=apiSource.indexOf('export class ApiError'),apiEnd=apiSource.indexOf('export type InstanceSelectionCandidate',apiStart);assert.ok(apiStart>=0&&apiEnd>apiStart);
 const ApiError=runInNewContext(stripTypeScriptTypes(apiSource.slice(apiStart,apiEnd).replace('export ',''))+';ApiError',{Error});
@@ -24,6 +25,7 @@ function harness(statuses:(number|{status:number;network?:boolean;timedOut?:bool
   setUnknownDraft:(value:any)=>state.unknown=value,setUnknownLeave:(value:any)=>state.unknownLeave=value,setLeaveDraft:(value:any)=>state.leaveDraft=value,
   setBoard:(next:any)=>{context.board=typeof next==='function'?next(context.board):next;},announce:()=>{},setFocusAction:()=>{},window:{dispatchEvent:()=>{}},Event:class{},SECTION_LABELS:{internal:'Synthetic section'},load:async()=>{},
  };
+ context.categoryOwner={current:{client:context.client,sessionGeneration:context.client.sessionGeneration,active:true}};context.categoryClient={current:context.client};
  const functions=runInNewContext(code+';({sendPreference,leaveV2})',context);
  const send=(kind:'set'|'leave',other=false)=>kind==='set'?functions.sendPreference({...draft,...(other?{guild_key:'other'}:{})},7):functions.leaveV2({...guild,...(other?{guild_key:'other'}:{})},true,'Synthetic section');
  return {calls,state,attempts,send,
@@ -109,8 +111,66 @@ for(const outcome of ['success','failure'] as const)test(`an obsolete submitFres
  const updates:string[]=[];
  const pending:{current:string|null}={current:null},flight={current:false},epoch={current:0};
  const ctx={categoryPending:pending,categoryInFlight:flight,categoryEpoch:epoch,client:{get:()=>new Promise((yes,no)=>{resolve=yes;reject=no;})},setCategoryBusy:()=>updates.push('busy'),setCategoryNote:()=>updates.push('note'),setError:()=>updates.push('error'),setBoard:()=>updates.push('board'),sendPreference:async()=>updates.push('send')};
- const submit=runInNewContext(stripTypeScriptTypes(extract('  async function submitFresh(','  function toggleCategory('))+';submitFresh',ctx);
+ const context:any=ctx;context.categoryOwner={current:{client:ctx.client,sessionGeneration:undefined,active:true}};context.categoryClient={current:ctx.client};
+ const submit=runInNewContext(stripTypeScriptTypes(ownerCode+extract('  async function submitFresh(','  function toggleCategory('))+';submitFresh',ctx);
  const reading=submit(draft);updates.length=0;pending.current='newer-command';flight.current=true;epoch.current++;
  if(outcome==='success')resolve({migration_state:'switched',aggregate_version:99});else reject(new Error('obsolete read failed'));
  await reading;assert.deepEqual(updates,[]);assert.equal(pending.current,'newer-command');assert.equal(flight.current,true);
+});
+
+// Actual PortalClient token/session accessors; network delivery remains a
+// deterministic synthetic port. No live credentials or cross-account requests.
+const authBegin=apiSource.indexOf('export class PortalClient {'),authEnd=apiSource.indexOf('  onUnauthorized:',authBegin);
+assert.ok(authBegin>=0&&authEnd>authBegin);
+const AuthClient=runInNewContext(stripTypeScriptTypes(apiSource.slice(authBegin,authEnd).replace('export ','')+'}')+';PortalClient',{Map});
+const ownerEffect=extract('  useEffect(()=>{const owner=categoryOwner.current;','  useEffect(()=>{if(launchpadKey)');
+function lifetimeHarness(){
+ const client=new AuthClient();client.csrfToken='synthetic-A';
+ const updates:string[]=[],calls:any[]=[],gets:{resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[],posts:{resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[],loads:(()=>void)[]=[];
+ let cleanup!:()=>void,holdLoad=false;
+ client.get=()=>new Promise((resolve,reject)=>gets.push({resolve,reject}));
+ client.post=(path:string,body:unknown,options:unknown)=>{calls.push({path,body,options,session:client.sessionGeneration,csrf:client.csrfToken});return new Promise((resolve,reject)=>posts.push({resolve,reject}));};
+ const context:any={client,categoryOwner:{current:{client,sessionGeneration:client.sessionGeneration,active:true}},categoryClient:{current:client},categoryEpoch:{current:0},categoryPending:{current:null},categoryInFlight:{current:false},preferenceKeys:{current:new Map()},board:{view:{aggregate_version:7}},
+  useEffect:(run:()=>()=>void)=>cleanup=run(),ApiError,Error,crypto:globalThis.crypto,failure:(e:Error)=>e.message,SECTION_LABELS:{internal:'Synthetic section'},Event:class{},window:{dispatchEvent:()=>updates.push('profile-event')},load:async()=>{updates.push('load');if(holdLoad)await new Promise<void>(resolve=>loads.push(resolve));},
+ };
+ for(const setter of ['setCategoryBusy','setCategoryNote','setError','setHeld','setUnknownDraft','setUnknownLeave','setLeaveDraft','setBoard','announce','setFocusAction'])context[setter]=()=>updates.push(setter);
+ runInNewContext(stripTypeScriptTypes(ownerEffect),context);
+ const functions=runInNewContext(code+stripTypeScriptTypes(extract('  async function submitFresh(','  function toggleCategory('))+';({sendPreference,leaveV2,submitFresh})',context);
+ return {updates,calls,gets,posts,functions,context,client,cleanup:()=>cleanup(),
+  cleanupAndReactivate:()=>{cleanup();runInNewContext(stripTypeScriptTypes(ownerEffect),context);},
+  switchSession:()=>{client.csrfToken=null;client.csrfToken='synthetic-B';},replaceClient:()=>{context.categoryClient.current=new AuthClient();},
+  holdLoad:()=>{holdLoad=true;},releaseLoad:()=>{for(const resolve of loads.splice(0))resolve();},
+  send:(kind:'set'|'leave')=>kind==='set'?functions.sendPreference(draft,7):functions.leaveV2(guild,true,'Synthetic section'),
+ };
+}
+for(const change of ['cleanup','switchSession','replaceClient','cleanupAndReactivate'] as const){
+ for(const outcome of ['success','failure'] as const)test(`held category GET ${outcome} after ${change} neither dispatches nor updates`,async()=>{
+  const h=lifetimeHarness();const pending=h.functions.submitFresh(draft);h.updates.length=0;h[change]();
+  if(outcome==='success')h.gets[0].resolve({migration_state:'switched',aggregate_version:7});else h.gets[0].reject(new Error('stale read failure'));
+  await pending;assert.deepEqual(h.calls,[]);assert.deepEqual(h.updates,[]);
+ });
+ for(const kind of ['set','leave'] as const){
+  if(change!=='cleanupAndReactivate')test(`${kind}: old handler entry after ${change} cannot dispatch`,async()=>{const h=lifetimeHarness();h[change]();await h.send(kind);assert.deepEqual(h.calls,[]);assert.deepEqual(h.updates,[]);});
+  for(const outcome of ['success','failure'] as const)test(`${kind}: POST ${outcome} after ${change} has no stale local/event/read effects`,async()=>{
+   const h=lifetimeHarness();const pending=h.send(kind);assert.equal(h.calls.length,1);h.updates.length=0;h[change]();
+   if(outcome==='success')h.posts[0].resolve({aggregate_version:8});else h.posts[0].reject(new ApiError({message:'stale failure',status:503}));
+   await pending;assert.deepEqual(h.updates,[]);assert.equal(h.calls.length,1);
+  });
+ }
+}
+test('leaving a guild cannot broadcast after its post-ACK read outlives the owner',async()=>{
+ const h=lifetimeHarness();h.holdLoad();const pending=h.send('leave');h.posts[0].resolve({});await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(h.updates.includes('load'));h.updates.length=0;h.cleanup();h.switchSession();h.releaseLoad();await pending;assert.deepEqual(h.updates,[]);
+});
+test('same-owner held read can submit, ACK and release its original command',async()=>{
+ const h=lifetimeHarness();const pending=h.functions.submitFresh(draft);h.gets[0].resolve({migration_state:'switched',aggregate_version:7});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0].session,h.client.sessionGeneration);h.posts[0].resolve({aggregate_version:8});await pending;
+ assert.equal(h.context.categoryPending.current,null);assert.equal(h.context.categoryInFlight.current,false);assert.ok(h.updates.includes('profile-event'));
+});
+
+test('StrictMode setup cleanup setup permits a new intent but cannot revive the old held GET',async()=>{
+ const h=lifetimeHarness();const old=h.functions.submitFresh(draft);h.cleanupAndReactivate();const current=h.functions.submitFresh({...draft,guild_key:'new-intent'});
+ h.updates.length=0;h.gets[0].resolve({migration_state:'switched',aggregate_version:7});await old;assert.deepEqual(h.calls,[]);assert.deepEqual(h.updates,[]);
+ h.gets[1].resolve({migration_state:'switched',aggregate_version:9});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.calls.length,1);assert.equal(h.calls[0].body.guild_key,'new-intent');assert.equal(h.calls[0].options.ifMatch,9);
+ h.posts[0].resolve({aggregate_version:10});await current;assert.equal(h.context.categoryInFlight.current,false);assert.equal(h.context.categoryPending.current,null);
 });

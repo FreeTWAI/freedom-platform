@@ -75,6 +75,8 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const [unknownLeave,setUnknownLeave]=useState<LeaveRetry|null>(null);
   // A later denial cannot turn an earlier unknown write into a new command.
   const categoryPending=useRef<string|null>(null),categoryInFlight=useRef(false),categoryEpoch=useRef(0);
+  const categoryOwner=useRef({client,sessionGeneration:client.sessionGeneration,active:true}),categoryClient=useRef(client);
+  categoryClient.current=client;
   const writesBlocked=Boolean(unknownDraft||unknownLeave);
   const secondaryTriggerRef=useRef<HTMLButtonElement>(null),toolsSummaryRef=useRef<HTMLElement>(null);
   const generation=useRef(0),successRef=useRef<HTMLParagraphElement>(null),nameRef=useRef<HTMLInputElement>(null),preferenceKeys=useRef(new Map<string,{key:string;uncertain:boolean}>());
@@ -99,6 +101,9 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     }catch(e){if(sequence===generation.current)setLoadError(failure(e));}
     finally{if(sequence===generation.current)setLoading(false);}
   },[client,launchpadEnabled,setError]);
+  // Never transfer an old draft to a replacement client/session. App remounts
+  // the panel for a new session; cleanup also fences already-running closures.
+  useEffect(()=>{const owner=categoryOwner.current;owner.active=owner.client===client&&owner.sessionGeneration===client.sessionGeneration;return()=>{owner.active=false;categoryEpoch.current++;};},[client]);
   useEffect(()=>{if(launchpadKey)return()=>{generation.current++;};void load();return()=>{generation.current++;};},[load,launchpadKey]);
   useEffect(()=>{if(applicationSuccess)successRef.current?.focus();},[applicationSuccess]);
   useEffect(()=>{if(showApply&&focusDraft){nameRef.current?.focus();setFocusDraft(false);}},[showApply,focusDraft]);
@@ -118,15 +123,17 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   function catalogItem(guildKey:string){return board?.catalog.categories.flatMap(group=>group.items).find(item=>item.guild_key===guildKey)??board?.catalog.pending.find(item=>item.guild_key===guildKey);}
   function slotFor(guildKey:string){return board?.view.primaries.find(item=>item.guild_key===guildKey);}
   function categoryOf(guildKey:string):CategoryName|null{const item=catalogItem(guildKey);return item?.category_review==='approved'&&item.category?item.category:null;}
+  function currentCategoryOwner(owner:typeof categoryOwner.current){return owner===categoryOwner.current&&owner.active&&owner.client===categoryClient.current&&owner.sessionGeneration===owner.client.sessionGeneration;}
   async function sendPreference(draft:PreferenceDraft,version:number){
-    if(categoryInFlight.current)return;
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner)||categoryInFlight.current)return;
     const requestKey=JSON.stringify(['set',draft,version]);
     if(categoryPending.current&&categoryPending.current!==requestKey)return;
     const attempt=preferenceKeys.current.get(requestKey)??{key:crypto.randomUUID(),uncertain:false};
-    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;categoryEpoch.current++;
+    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
       const view=await client.post<PreferenceView>('/me/guild-preferences/v2/set',{category:draft.category,guild_key:draft.guild_key,catalog_revision:draft.catalog_revision},{idempotencyKey:attempt.key,ifMatch:version});
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
       preferenceKeys.current.delete(requestKey);categoryPending.current=null;setHeld(null);setUnknownDraft(null);setUnknownLeave(null);
       // Receipt replay may acknowledge an older version than the refreshed board.
       setBoard(current=>current&&view.aggregate_version>current.view.aggregate_version?{...current,view}:current);
@@ -135,25 +142,27 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
       window.dispatchEvent(new Event('freedom-profile-updated'));
       await load(true);
     }catch(cause){
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
       const definitive=cause instanceof ApiError&&!cause.network&&!cause.timedOut&&cause.status>=400&&cause.status<500;
       if(attempt.uncertain||!definitive){attempt.uncertain=true;setUnknownDraft({draft:{...draft},version});setCategoryNote('正在確認是否已儲存');if(definitive)setError(failure(cause));return;}
       categoryPending.current=null;preferenceKeys.current.delete(requestKey);
       if(cause instanceof ApiError&&cause.status===412){setHeld(draft);setUnknownDraft(null);setCategoryNote('這份選擇和伺服器上的版本不同。草稿已保留。');return;}
       setCategoryNote('');setError(failure(cause));
-    }finally{categoryInFlight.current=false;setCategoryBusy(false);}
+    }finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current){categoryInFlight.current=false;setCategoryBusy(false);}}
   }
   async function submitFresh(draft:PreferenceDraft){
     if(categoryPending.current||categoryInFlight.current)return;
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner))return;
     const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
       const view=await client.get<PreferenceView>('/me/guild-preferences/v2',{background:true});
-      if(sequence!==categoryEpoch.current||categoryPending.current||categoryInFlight.current)return;
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current||categoryPending.current||categoryInFlight.current)return;
       if(view.migration_state!=='switched'){setCategoryNote('社群尚未切換到三類主力。');return;}
       setBoard(current=>current&&view.aggregate_version>current.view.aggregate_version?{...current,view}:current);
       await sendPreference(draft,view.aggregate_version);
-    }catch(cause){if(sequence===categoryEpoch.current)setCategoryNote(failure(cause));}
-    finally{if(sequence===categoryEpoch.current)setCategoryBusy(false);}
+    }catch(cause){if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)setCategoryNote(failure(cause));}
+    finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)setCategoryBusy(false);}
   }
   function toggleCategory(g:GuildSummary){
     if(!board||categoryPending.current||categoryInFlight.current)return;
@@ -166,7 +175,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     setHeld(draft);void sendPreference(draft,board.view.aggregate_version);
   }
   async function leaveV2(g:GuildSummary,clearPrimary:boolean,section?:string,retry?:LeaveRetry){
-    if(categoryInFlight.current)return;
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner)||categoryInFlight.current)return;
     if(!retry){
       if(!board||g.membership?.aggregate_version==null)return;
       retry={guild:g,clearPrimary,section,membershipVersion:g.membership.aggregate_version,preferenceVersion:String(board.view.aggregate_version)};
@@ -175,20 +184,22 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     const requestKey=JSON.stringify(['leave',command.guild.guild_key,body,command.membershipVersion,command.clearPrimary?command.preferenceVersion:'']);
     if(categoryPending.current&&categoryPending.current!==requestKey)return;
     const attempt=preferenceKeys.current.get(requestKey)??{key:crypto.randomUUID(),uncertain:false};
-    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;categoryEpoch.current++;
+    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
       await client.post(`/guilds/${command.guild.guild_key}/leave-v2`,body,{idempotencyKey:attempt.key,ifMatch:command.membershipVersion,...(command.clearPrimary?{preferenceVersion:command.preferenceVersion}:{})});
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
       preferenceKeys.current.delete(requestKey);categoryPending.current=null;setLeaveDraft(null);setUnknownDraft(null);setUnknownLeave(null);
       announce(`已退出${command.guild.name}，已解鎖的技能書保留。${command.section?`已清空${command.section}。私人業務資料沒有移動，也沒有刪除。`:''}`);
-      await load();window.dispatchEvent(new Event('freedom-profile-updated'));
+      await load();if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)window.dispatchEvent(new Event('freedom-profile-updated'));
     }catch(cause){
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
       const definitive=cause instanceof ApiError&&!cause.network&&!cause.timedOut&&cause.status>=400&&cause.status<500;
       if(attempt.uncertain||!definitive){attempt.uncertain=true;setUnknownLeave(command);setCategoryNote('正在確認是否已儲存');if(definitive)setError(failure(cause));return;}
       categoryPending.current=null;preferenceKeys.current.delete(requestKey);
       if(cause instanceof ApiError&&cause.status===412)setLeaveDraft(null);
       setError(failure(cause));
-    }finally{categoryInFlight.current=false;setCategoryBusy(false);}
+    }finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current){categoryInFlight.current=false;setCategoryBusy(false);}}
   }
   async function change(g:GuildSummary){
     if(categoryPending.current||categoryInFlight.current)return;

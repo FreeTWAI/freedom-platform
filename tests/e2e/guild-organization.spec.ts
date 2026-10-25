@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures.js';
+import { test, expect, type Page, type Route } from './fixtures.js';
 import { navigate } from './navigation.js';
 import { communityCatalog } from '../../modules/community/catalog.js';
 
@@ -461,4 +461,34 @@ for(const kind of ['set','leave'] as const)for(const denied of [403,412])test(`u
   await expect(retry).toHaveCount(0);await expect(card(2).getByRole('button',{name:'設為本類主力',exact:true})).toBeEnabled();
   expect(writes).toHaveLength(3);expect(writes[0].key).toBeTruthy();for(const write of writes)expect(write).toEqual(writes[0]);
   expect(writes[0].version).toBe(kind==='set'?'"7"':'"1"');if(kind==='leave')expect(writes[0].preferenceVersion).toBe('7');
+});
+
+
+test('a held fresh-version guild read cannot submit the old draft after logout and another login',async({page})=>{
+  const fixture=await setupGuilds(page);
+  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),guild_launchpad_enabled:true}});});
+  const categories=['internal','external','professional_industry'];
+  const view={aggregate_version:7,migration_state:'switched',invalidated:[],legacy:null,primaries:categories.map((category,index)=>({category,guild_key:index===0?keys[0]:null}))};
+  let holdNext=false,held:Route|undefined,captured!:()=>void;
+  const requested=new Promise<void>(resolve=>captured=resolve);
+  const readPattern='**/api/v1/me/guild-preferences/v2';
+  const readHandler=(route:Route)=>{if(holdNext){holdNext=false;held=route;captured();return;}return route.fulfill({json:view});};
+  await page.route(readPattern,readHandler);
+  await page.route('**/api/v1/guild-categories',route=>route.fulfill({json:{catalog_revision:'1',pending:[],categories:categories.map((category,index)=>({category,items:fixture.directory().filter((_,i)=>i%3===index).map(guild=>({guild_key:guild.guild_key,name:guild.name,category,category_review:'approved',catalog_revision:'1'}))}))}}));
+  const writes:unknown[]=[];
+  await page.route('**/api/v1/me/guild-preferences/v2/set',route=>{writes.push(route.request().postDataJSON());return route.fulfill({status:412,json:{detail:'Synthetic version conflict.'}});});
+  try{
+  await login(page);const initial=await (await page.request.get('/api/v1/session')).json();const root=group(page,'公會目錄');
+  await root.locator(`.guild-card[data-guild-key="${keys[1]}"]`).getByRole('button',{name:'設為本類主力',exact:true}).click();
+  await expect(root.getByRole('button',{name:'用新版本送出草稿',exact:true})).toBeVisible();holdNext=true;
+  await root.getByRole('button',{name:'用新版本送出草稿',exact:true}).click();await requested;
+  await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.locator('.login-card')).toBeVisible();
+  // Keep this document: the old async closure and its captured response survive.
+  await page.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
+  await expect(page.locator('.shell')).toBeVisible();const replacement=await (await page.request.get('/api/v1/session')).json();
+  expect(replacement.user.user_id).not.toBe(initial.user.user_id);expect(replacement.csrf_token).not.toBe(initial.csrf_token);
+  const oldRead=held!;const finished=page.waitForEvent('requestfinished',request=>request===oldRead.request());await oldRead.fulfill({json:{...view,aggregate_version:8}});held=undefined;await finished;
+  await navigate(page,'職業公會');await expect(group(page,'公會目錄').locator('.guild-card')).toHaveCount(6);
+  expect(writes).toHaveLength(1);await expect(group(page,'公會目錄').getByRole('button',{name:'用新版本送出草稿',exact:true})).toHaveCount(0);
+  }finally{if(held){try{await held.abort();}catch{/* Route may already be finished during fixture teardown. */}}await page.unroute(readPattern,readHandler);}
 });
