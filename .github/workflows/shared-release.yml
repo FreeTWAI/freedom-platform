@@ -1,0 +1,137 @@
+name: Shared release
+run-name: '${{ inputs.mode }} ${{ inputs.target }} at ${{ inputs.release_sha }} by @${{ github.actor }}'
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character main commit with successful main Verify and CodeQL'
+        required: true
+        type: string
+      target:
+        description: 'Environment'
+        required: true
+        type: choice
+        options: [staging-next, next]
+      mode:
+        description: 'Plan checks version/permissions only; deploy requires installed environment operator'
+        required: true
+        type: choice
+        default: plan
+        options: [plan, deploy]
+permissions:
+  contents: read
+# One release across BOTH environments: the current databases/operator schedules
+# share recovery infrastructure. Do not cancel a running migration or backup.
+concurrency:
+  group: shared-release
+  cancel-in-progress: false
+jobs:
+  admission:
+    if: github.ref == 'refs/heads/main' && github.repository == 'FreeTWAI/freedom-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      source_sha: ${{ steps.admit.outputs.source_sha }}
+      target: ${{ steps.admit.outputs.target }}
+      mode: ${{ steps.admit.outputs.mode }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Check actors, merged source and exact-source CI
+        id: admit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ job.workflow_sha }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_COMMAND: admit
+          PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
+        run: node controller/deploy/shared-release/cli.mjs
+      - name: Save admission receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-admission-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-public/receipt.json
+          if-no-files-found: warn
+          retention-days: 90
+  deploy:
+    needs: admission
+    if: needs.admission.outputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    environment:
+      name: ${{ needs.admission.outputs.target }}
+      # The workflow SHA is the controller, not the selected release. Create the
+      # deployment explicitly with the selected SHA after rechecking admission.
+      deployment: false
+    permissions:
+      contents: read
+      actions: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.admission.outputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Execute the installed environment operator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ job.workflow_sha }}
+          RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
+          RELEASE_TARGET: ${{ needs.admission.outputs.target }}
+          RELEASE_MODE: deploy
+          RELEASE_COMMAND: execute
+          RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
+          PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
+          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          RELEASE_OPERATOR_IMAGE: ${{ vars.RELEASE_OPERATOR_IMAGE }}
+          RELEASE_CONFIG_SHA256: ${{ vars.RELEASE_CONFIG_SHA256 }}
+          RELEASE_CONFIG_JSON: ${{ secrets.RELEASE_CONFIG_JSON }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          RUNTIME_DATABASE_URL: ${{ secrets.RUNTIME_DATABASE_URL }}
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/deploy/shared-release/cli.mjs
+      - name: Stop this run's container after interruption
+        if: always()
+        env:
+          RELEASE_CONTAINER: freedom-release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker rm --force "$RELEASE_CONTAINER" >/dev/null 2>&1 || true
+          # An interrupted release remains unknown/in_progress, never successful.
+          # Hosted runner teardown removes private temporary files and Docker state.
+      - name: Save public release receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-public/receipt.json
+          if-no-files-found: warn
+          retention-days: 90

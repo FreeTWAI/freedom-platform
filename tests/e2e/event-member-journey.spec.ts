@@ -81,6 +81,36 @@ async function logout(page:Page){
   await signOut(page);const result=await response;expect(result.status()).toBe(200);await result.finished();
 }
 
+for(const width of [1280,390])for(const fails of [false,true])eventTest(`event submission waits for initial layout and opens after ${fails?'a read error':'loading'} at ${width}px`,async({page,eventFixture})=>{
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);
+  let release!:()=>void,reached!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{reached=resolve;});
+  await page.route('**/api/v1/guilds/directory',async route=>{
+    const response=await route.fetch();reached();await held;
+    await route.fulfill(fails?{status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'合成初次讀取失敗'})}:{response});
+  });
+  try{
+    await navigate(page,'社群活動');await requested;
+    const submit=page.getByRole('button',{name:'＋ 提交活動',exact:true});
+    await expect(page.getByText('正在載入活動…',{exact:true})).toBeVisible();
+    // Calendar insertion can scroll the target away between pointer positioning
+    // and pointer-down. The control must not accept a click in that loading layout.
+    await expect(submit).toBeDisabled();
+    await expect(page.getByLabel('活動類型')).toHaveCount(0);
+    await submit.scrollIntoViewIfNeeded();
+    const box=await submit.boundingBox();expect(box).not.toBeNull();
+    await page.mouse.move(box!.x+box!.width/2,box!.y+box!.height/2);
+    release();
+    await expect(page.getByRole('region',{name:'活動行事曆',exact:true})).toBeVisible();
+    if(fails)await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await page.getByLabel('活動類型').selectOption('guild_skill_exchange');
+    await expect(page.getByLabel('活動類型')).toHaveValue('guild_skill_exchange');
+    await expect(page.getByRole('button',{name:'送出審核',exact:true})).toBeVisible();
+  }finally{release();}
+});
+
 test('member previews an event, an authorized officer approves it, and participants can return and cancel',async({page,context,browser,e2eAuthPool})=>{
   // Synthetic preassigned reviewer. Every event, publication, share and RSVP
   // transition below uses the member UI and the real domain API.
