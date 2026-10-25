@@ -41,7 +41,7 @@ function cleanPasses() {
   return E2E_PLAN.map((pass, index) => index === 0 ? {
     id: pass.id, exit_code: 0, listing: structuredClone(report(suites[0])), listing_exit_code: 0, listing_evidence_sha256: 'a'.repeat(64),
     partitions: E2E_DEFAULT_SHARDS.map(({ current, total }, part) => ({ current, total, exit_code: 0, evidence_sha256: 'b'.repeat(64),
-      report: report(part === 0 ? suites[0].slice(0, 2) : suites[0].slice(2), { current, total }) })),
+      report: report(suites[0].filter((_, index) => index % E2E_DEFAULT_SHARDS.length === part), { current, total }) })),
   } : { id: pass.id, exit_code: 0, evidence_sha256: 'a'.repeat(64), report: report(suites[index]) });
 }
 const evaluate = (passes, files = expectedFiles) => evaluateE2ePasses(files, passes, { rootDir, configFile });
@@ -53,6 +53,16 @@ function reject(mutator, reason) {
   assert.equal(result.status, 'failed');
   if (reason) assert.equal(result.reason, reason);
 }
+
+test('default shards own three distinct ports and immutable ordered host bindings', () => {
+  assert.deepEqual(E2E_DEFAULT_SHARDS, [
+    { current: 1, total: 3, port: 14311 },
+    { current: 2, total: 3, port: 14312 },
+    { current: 3, total: 3, port: 14313 },
+  ]);
+  assert.ok(Object.isFrozen(E2E_DEFAULT_SHARDS));
+  assert.ok(E2E_DEFAULT_SHARDS.every(Object.isFrozen));
+});
 
 
 test('Six clean passes including photo and preference fixtures', () => {
@@ -79,13 +89,26 @@ test('progress validates only a nonempty ordered prefix without granting complet
   assert.equal(progress(skipped).reason, 'skipped_test_never_expected');
 });
 
-test('full default evidence requires both distinct host-bound fragments, not a successful subset', () => {
+test('full default evidence requires all distinct host-bound fragments, not a successful subset', () => {
+  for (const index of E2E_DEFAULT_SHARDS.keys()) {
+    for (const mutate of [
+      pass=>pass.partitions.splice(index,1),
+      pass=>{pass.partitions[index].current=0;},
+      pass=>{pass.partitions[index].total=2;},
+      pass=>{pass.partitions[index].report.config.shard.total=2;},
+      pass=>{delete pass.partitions[index].evidence_sha256;},
+      pass=>{pass.partitions[index].exit_code=1;},
+    ]) {
+      const passes=cleanPasses();mutate(passes[0]);
+      assert.equal(evaluate(passes).status,'failed');
+    }
+  }
   for (const mutate of [
     pass=>pass.partitions.pop(),
     pass=>pass.partitions.push(structuredClone(pass.partitions[0])),
     pass=>{pass.partitions[1]=structuredClone(pass.partitions[0]);},
     pass=>pass.partitions.reverse(),
-    pass=>{pass.partitions[1].total=3;},
+    pass=>{pass.partitions[1].total=2;},
     pass=>{pass.partitions[1].report.config.shard=null;},
     pass=>{delete pass.partitions[0].evidence_sha256;},
     pass=>{pass.partitions[1].exit_code=1;},
@@ -98,7 +121,11 @@ test('full default evidence requires both distinct host-bound fragments, not a s
 
 test('full default fragment union must match unsharded discovery even when another mode passes the omitted case', () => {
   reject(passes=>{
-    const first=passes[0].partitions[0].report;
+    const third=passes[0].partitions[2].report;
+    third.suites=[];third.stats.skipped=0;
+  },'missing_or_empty_file');
+  reject(passes=>{
+    const first=passes[0].partitions[1].report;
     first.suites.find(item=>item.file==='private-work-ai.spec.ts').suites[0].suites[0].specs.pop();
     first.stats.skipped--;
   },'case_listing_mismatch');
@@ -276,11 +303,11 @@ test('Failure diagnostics survive scratch cleanup, are bounded and never follow 
   });
 });
 
-test('diagnostic saturation preserves listing and both reports before bounded optional artifacts', async () => {
+test('diagnostic saturation preserves listing and all shard reports before bounded optional artifacts', async () => {
   await withFixture(async root => {
     const temp = join(root, 'scratch'), output = join(root, 'result.json');
     await mkdir(join(temp, 'artifacts'), { recursive: true });
-    for (const path of ['listing.json', 'shard-1/report.json', 'shard-2/report.json']) {
+    for (const path of ['listing.json', ...E2E_DEFAULT_SHARDS.map(({current}) => `shard-${current}/report.json`)]) {
       await mkdir(join(temp, path, '..'), { recursive: true });
       await writeFile(join(temp, path), JSON.stringify({ path }));
     }
@@ -293,7 +320,7 @@ test('diagnostic saturation preserves listing and both reports before bounded op
     await cleanupE2ePass(temp, output, 'default', true);
     const [run] = await readdir(output + '.failure-artifacts');
     const saved = join(output + '.failure-artifacts', run);
-    for (const path of ['listing.json', 'shard-1/report.json', 'shard-2/report.json']) {
+    for (const path of ['listing.json', ...E2E_DEFAULT_SHARDS.map(({current}) => `shard-${current}/report.json`)]) {
       assert.deepEqual(JSON.parse(await readFile(join(saved, path), 'utf8')), { path });
     }
     const receipt = JSON.parse(await readFile(join(saved, 'diagnostics.json'), 'utf8'));
@@ -353,11 +380,16 @@ test('absolute failure traces survive 520 earlier screenshots that a lexical wal
       ]),
       failureResult('passed', [passedShot]),
     ]));
+    const thirdTrace=join(temp,'shard-3','artifacts','third-failed-trace.zip');
+    await mkdir(join(temp,'shard-3','artifacts'),{recursive:true});
+    await writeFile(thirdTrace,'third-failed-trace');
+    await writeFile(join(temp,'shard-3','report.json'),failureReport([failureResult('failed',[thirdTrace])]));
     await writeFile(join(temp, 'shard-1', 'report.json'), failureReport([
       failureResult('timedOut', [timedTrace]),
       failureResult('interrupted', [interruptedTrace]),
     ]));
     const { saved, receipt } = await diagnosticRun(root);
+    assert.equal(await readFile(join(saved,'shard-3','artifacts','third-failed-trace.zip'),'utf8'),'third-failed-trace');
     assert.equal(await readFile(join(saved, 'shard-2', 'artifacts', 'zzz-failed-trace.zip'), 'utf8'), 'failed-trace');
     assert.equal(await readFile(join(saved, 'shard-2', 'artifacts', 'zzz-timedout-trace.zip'), 'utf8'), 'timedout-trace');
     assert.equal(await readFile(join(saved, 'shard-1', 'artifacts', 'zzz-interrupted-trace.zip'), 'utf8'), 'interrupted-trace');
@@ -456,7 +488,9 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({value}));
       }).listen(Number(process.env.FREEDOM_E2E_PORT),'127.0.0.1');
     `);
-    const isolatedFiles=['aa-state-isolation.spec.ts','zz-state-isolation.spec.ts'];
+    const isolatedFiles=['aa-state-isolation.spec.ts',
+      E2E_BASELINE[Math.floor(E2E_BASELINE.length/2)].slice('tests/e2e/'.length).replace('.spec.ts','-state-isolation.spec.ts'),
+      'zz-state-isolation.spec.ts'];
     for(const [index,file] of isolatedFiles.entries())await writeFile(join(root,'tests/e2e',file),`
       import {test,expect} from '@playwright/test';
       import {existsSync,writeFileSync} from 'node:fs';
@@ -464,7 +498,7 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
         const mine=${JSON.stringify(String(index))};
         await request.post('/state',{data:{value:mine}});
         writeFileSync(${JSON.stringify(join(root,`arrived-${index}`))},'ready');
-        await expect.poll(()=>existsSync(${JSON.stringify(join(root,`arrived-${1-index}`))}),{timeout:10000}).toBe(true);
+        await expect.poll(()=>${JSON.stringify(isolatedFiles.map((_,peer)=>join(root,`arrived-${peer}`)))}.every(path=>existsSync(path)),{timeout:10000}).toBe(true);
         expect((await (await request.get('/state')).json()).value).toBe(mine);
       });
     `);
@@ -483,8 +517,8 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
     assert.doesNotMatch(child.stdout + child.stderr, /GitCommitInfo: running "git /);
     const result = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(result.status, 'passed');
-    assert.equal(result.test_count, 2 * (E2E_BASELINE.length + 1) + 2);
-    assert.equal(result.test_files.length, E2E_BASELINE.length + 3);
+    assert.equal(result.test_count, 2 * (E2E_BASELINE.length + 1) + isolatedFiles.length);
+    assert.equal(result.test_files.length, E2E_BASELINE.length + isolatedFiles.length + 1);
     assert.ok(result.test_files.every(file => file.counts.tests === (isolatedFiles.some(name=>file.path.endsWith('/'+name))?1:2) && file.counts.passed === file.counts.tests));
     assert.deepEqual(result.passes.map(pass => pass.exit_code), [0, 0, 0, 0, 0, 0]);
   });
@@ -516,7 +550,7 @@ test('zero-exit real shards with conditional inventory stop immediately and reta
     assert.equal(result.status, 'failed');
     assert.equal(result.reason, 'case_listing_mismatch');
     assert.deepEqual(result.passes.map(pass => pass.id), ['default']);
-    assert.deepEqual(result.passes[0].partitions.map(part => part.exit_code), [0, 0]);
+    assert.deepEqual(result.passes[0].partitions.map(part => part.exit_code), E2E_DEFAULT_SHARDS.map(() => 0));
     const executions = (await readFile(starts, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
     assert.deepEqual([...new Set(executions.map(item => item.mode))], ['default']);
     for (const scratch of new Set(executions.map(item => item.scratch))) await assert.rejects(stat(scratch), { code: 'ENOENT' });
@@ -640,33 +674,35 @@ test('CLI stops after a failing pass 1 and reports test_process_failed', async (
   });
 });
 
-test('a failed default shard cancels its live peer and never starts a fixture pass', async()=>{
+for (const failing of E2E_DEFAULT_SHARDS) test(`default shard ${failing.current} failure cancels every live peer and never starts a fixture pass`, async()=>{
   await withFixture(async root=>{
     await baseline(root);
     const runnerDir=join(root,'node_modules/@playwright/test');
     await mkdir(runnerDir,{recursive:true});
     await writeFile(join(runnerDir,'package.json'),JSON.stringify({exports:{'./cli':'./cli.cjs'}}));
-    const ready=join(root,'peer-ready'),stopped=join(root,'peer-stopped'),starts=join(root,'starts');
+    const starts=join(root,'starts'),peers=E2E_DEFAULT_SHARDS.filter(shard=>shard.current!==failing.current);
+    const parts=E2E_DEFAULT_SHARDS.map(({current,total})=>`${current}/${total}`);
     await writeFile(join(runnerDir,'cli.cjs'),`
       ${lifecycleListing(root)}
       const fs=require('node:fs'),part=process.argv[process.argv.indexOf('--shard')+1];
       fs.appendFileSync(${JSON.stringify(starts)},part+'\\n');
       const result=()=>fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
-      if(part==='1/2'){
-        const timer=setInterval(()=>{if(!fs.existsSync(${JSON.stringify(ready)}))return;clearInterval(timer);result();process.exit(1);},10);
+      if(part===${JSON.stringify(`${failing.current}/${failing.total}`)}){
+        const timer=setInterval(()=>{if(!${JSON.stringify(peers.map(({current})=>join(root,`ready-${current}`)))}.every(path=>fs.existsSync(path)))return;clearInterval(timer);result();process.exit(1);},10);
       }else{
-        process.on('SIGINT',()=>{fs.writeFileSync(${JSON.stringify(stopped)},'terminated');result();process.exit(0);});
-        fs.writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);
+        const current=part.split('/')[0];
+        process.on('SIGINT',()=>{fs.writeFileSync(${JSON.stringify(root)}+'/stopped-'+current,'terminated');result();process.exit(0);});
+        fs.writeFileSync(${JSON.stringify(root)}+'/ready-'+current,'ready');setInterval(()=>{},1000);
       }
     `);
     const output=join(root,'result.json'),child=invoke(['--root',root,'--output',output]);
     assert.equal(child.status,1,child.stdout+child.stderr);
-    assert.equal(await readFile(stopped,'utf8'),'terminated');
-    assert.deepEqual((await readFile(starts,'utf8')).trim().split('\n').sort(),['1/2','2/2']);
+    for(const {current} of peers)assert.equal(await readFile(join(root,`stopped-${current}`),'utf8'),'terminated');
+    assert.deepEqual((await readFile(starts,'utf8')).trim().split('\n').sort(),parts);
     const result=JSON.parse(await readFile(output,'utf8'));
     assert.equal(result.status,'failed');assert.equal(result.reason,'test_process_failed');
     assert.deepEqual(result.passes.map(pass=>pass.id),['default']);
-    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),[1,0]);
+    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map(({current})=>current===failing.current?1:0));
   });
 });
 
@@ -702,13 +738,13 @@ test('CLI cancellation interrupts Playwright and retains test_cancelled with a z
       let stdout = '', signalled = false;
       child.stdout.on('data', bytes => {
         stdout += bytes;
-        if (!signalled && (stdout.match(/fixture_runner_ready \d+/g)??[]).length===2) { signalled = true; child.kill('SIGTERM'); }
+        if (!signalled && (stdout.match(/fixture_runner_ready \d+/g)??[]).length===E2E_DEFAULT_SHARDS.length) { signalled = true; child.kill('SIGTERM'); }
       });
       const resultExit = await exit;
       clearTimeout(timer);
       assert.equal(resultExit.code, 1);
       assert.equal(resultExit.signal, null);
-      assert.equal(new Set((await readFile(marker,'utf8')).trim().split('\n')).size,2);
+      assert.equal(new Set((await readFile(marker,'utf8')).trim().split('\n')).size,E2E_DEFAULT_SHARDS.length);
       const result = JSON.parse(await readFile(output, 'utf8'));
       assert.equal(result.status, 'failed');
       assert.equal(result.reason, 'test_cancelled');
@@ -717,7 +753,7 @@ test('CLI cancellation interrupts Playwright and retains test_cancelled with a z
   });
 });
 
-test('CLI cancellation tears down both real Playwright web servers before returning', async () => {
+test('CLI cancellation tears down all real Playwright web servers before returning', async () => {
   await withFixture(async root => {
     await playwrightFixture(root, `
       const origin='http://127.0.0.1:'+process.env.FREEDOM_E2E_PORT;
@@ -829,7 +865,7 @@ test('CLI default deadline remains failure after graceful zero exit and stops la
         if (delay <= 60000 || delay > ${E2E_PASS_TIMEOUT_MS.default}) return realTimeout(callback, delay, ...args);
         appendFileSync(${JSON.stringify(observed)}, delay+'\\n');
         const timer = setInterval(() => {
-          if (!existsSync(${JSON.stringify(ready)}) || readFileSync(${JSON.stringify(ready)},'utf8').trim().split('\\n').length !== 2) return;
+          if (!existsSync(${JSON.stringify(ready)}) || readFileSync(${JSON.stringify(ready)},'utf8').trim().split('\\n').length !== ${E2E_DEFAULT_SHARDS.length}) return;
           clearInterval(timer); callback(...args);
         }, 10);
         return timer;
@@ -842,10 +878,10 @@ test('CLI default deadline remains failure after graceful zero exit and stops la
     assert.equal(child.status, 1, child.stdout + child.stderr);
     assert.equal(child.signal, null);
     const budgets=(await readFile(observed,'utf8')).trim().split('\n').map(Number);
-    assert.equal(budgets.length,2);assert.ok(budgets.every(delay=>delay>60000&&delay<E2E_PASS_TIMEOUT_MS.default));
+    assert.equal(budgets.length,E2E_DEFAULT_SHARDS.length);assert.ok(budgets.every(delay=>delay>60000&&delay<E2E_PASS_TIMEOUT_MS.default));
     const started=(await readFile(starts,'utf8')).trim().split('\n').sort();
     const stopped=(await readFile(marker,'utf8')).trim().split('\n').sort();
-    assert.equal(new Set(started).size,2);assert.deepEqual(stopped,started);
+    assert.equal(new Set(started).size,E2E_DEFAULT_SHARDS.length);assert.deepEqual(stopped,started);
     const result = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(result.status, 'failed');
     assert.equal(result.reason, 'test_timeout');

@@ -341,7 +341,7 @@ jobs:
           if-no-files-found: warn
   ui-e2e:
     runs-on: ubuntu-24.04
-    # Setup + the measured full default pass + five fixture passes + cleanup.
+    # Setup + three concurrent default shards + five sequential fixture passes + cleanup.
     # This remains a total bound, not the sum of all individual worst-case caps.
     timeout-minutes: 75
     needs: select
@@ -356,8 +356,9 @@ jobs:
           # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
           # have no passwords. Never use this authentication mode outside CI.
           POSTGRES_HOST_AUTH_METHOD: trust
+          # Three shards budget at most 3 × 46 = 138 connections, plus health checks.
           # Full-schema migrations and prior-pass schema cleanup share the lock table.
-          POSTGRES_INITDB_ARGS: '-c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
+          POSTGRES_INITDB_ARGS: '-c max_connections=200 -c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
         ports: ['127.0.0.1:5432:5432']
         options: >-
           --health-cmd "pg_isready -U freedom_local -d fp_foundation_ci"
@@ -374,17 +375,18 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Verify browser PostgreSQL lock capacity
+      - name: Verify browser PostgreSQL connection and lock capacity
         env:
           POSTGRES_SERVICE_ID: ${{ job.services.postgres.id }}
         run: |
           [[ "$POSTGRES_SERVICE_ID" =~ ^[a-f0-9]{64}$ ]]
-          settings=$(docker exec "$POSTGRES_SERVICE_ID" psql -U freedom_local -d fp_foundation_ci -v ON_ERROR_STOP=1 -tA -c "SELECT json_build_object('database',current_database(),'server_version_num',current_setting('server_version_num'),'max_locks_per_transaction',setting,'pending_restart',pending_restart,'dynamic_shared_memory_type',current_setting('dynamic_shared_memory_type'),'fsync',current_setting('fsync'),'full_page_writes',current_setting('full_page_writes')) FROM pg_settings WHERE name='max_locks_per_transaction'")
+          settings=$(docker exec "$POSTGRES_SERVICE_ID" psql -U freedom_local -d fp_foundation_ci -v ON_ERROR_STOP=1 -tA -c "SELECT json_build_object('database',current_database(),'server_version_num',current_setting('server_version_num'),'max_connections',current_setting('max_connections'),'max_locks_per_transaction',setting,'pending_restart',pending_restart,'dynamic_shared_memory_type',current_setting('dynamic_shared_memory_type'),'fsync',current_setting('fsync'),'full_page_writes',current_setting('full_page_writes')) FROM pg_settings WHERE name='max_locks_per_transaction'")
           python3 - "$settings" <<'PYREADBACK'
           import json,sys
           s=json.loads(sys.argv[1])
           assert s['database']=='fp_foundation_ci'
           assert 180000 <= int(s['server_version_num']) < 190000
+          assert int(s['max_connections'])==200
           assert int(s['max_locks_per_transaction'])==256 and s['pending_restart'] is False
           assert s['dynamic_shared_memory_type']=='mmap'
           assert s['fsync']=='on' and s['full_page_writes']=='on'
@@ -428,6 +430,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-selection-${{ github.sha }}
+          # The recursive failure directory includes listing and all three shards.
           path: |
             .freedom/reports/pinned-e2e.json
             .freedom/reports/pinned-e2e.json.failure-artifacts/
