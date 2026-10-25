@@ -3139,8 +3139,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStore.tsx",
-      "bytes": 64472,
-      "sha256": "f63043b7d0f9445b9382dabea48fa0589870f4c2599dffc989f5ed9dfb177158"
+      "bytes": 52766,
+      "sha256": "01b4d82fcdb7a5c38f6b6dd56b8bef11ca3ad6598d9369841a4b5d240bda1a14"
     },
     {
       "path": "apps/portal-web/src/modules/HostedStoreAppearance.css",
@@ -3796,6 +3796,16 @@
       "path": "apps/portal-web/src/modules/hosted-store-appearance-state.ts",
       "bytes": 4746,
       "sha256": "3153ef9faed604a1d8dbf923dc519986068587aded3827242d1927b83a0d3fcd"
+    },
+    {
+      "path": "apps/portal-web/src/modules/hosted-store-dirty-state.ts",
+      "bytes": 2662,
+      "sha256": "33c465d43451c54e0c84afce7c04ac8f113287229d523f39ea042df4eeac46ac"
+    },
+    {
+      "path": "apps/portal-web/src/modules/hosted-store-page-state.ts",
+      "bytes": 12048,
+      "sha256": "d0f9962734e7c44e62dcddd5704c113b29a6c70ada28e6146ae2db2035815e19"
     },
     {
       "path": "apps/portal-web/src/modules/hosted-store-photo-client.ts",
@@ -19534,8 +19544,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
-      "bytes": 3999,
-      "sha256": "3f4ffbd248f641ac981b713e48deaecf0e2c7f7d9b0fa013d7c580aba49a6855"
+      "bytes": 4177,
+      "sha256": "c2073f9c5365224c5bb294dbbfe407cfbba18f1ae41ec8ebd5dae30006ea1187"
     },
     {
       "path": "modules/agent-commerce/storefront/pages.ts",
@@ -26101,6 +26111,11 @@
       "path": "tests/runtime/hosted-store-offering.test.ts",
       "bytes": 10352,
       "sha256": "c41b218295cc483445cbe56495d1ce0dd3b06ed632d5613c4a89278e58612c30"
+    },
+    {
+      "path": "tests/runtime/hosted-store-page-state.test.ts",
+      "bytes": 15819,
+      "sha256": "6d6a6288ca9cba852b1aa54eb17d1638fbc466d3f0080f9a6b98386edcbffc12"
     },
     {
       "path": "tests/runtime/hosted-store-pagination-contracts.test.ts",
