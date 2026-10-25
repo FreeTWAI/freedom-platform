@@ -124,3 +124,66 @@ test('synthetic queued close event cannot erase a reopened dialog session',async
     else Reflect.deleteProperty(globalThis,'document');
   }
 });
+
+async function withSyntheticResultSession(check:(session:{nodes:()=>any[];button:(label:string)=>any;question:(value:string)=>void;submit:()=>void;status:()=>string;updateAvailability:(ids:readonly ('guilds'|'skills'|'stores'|'squads')[])=>void;setNavigate:(callback:()=>void)=>void;dialog:{open:boolean}})=>void){
+  const {transformSync}=await import('esbuild');
+  const model=await import('../../apps/portal-web/src/modules/platform-helper/model.js');
+  const source=readFileSync(new URL('../../apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx',import.meta.url),'utf8');
+  const slots:any[]=[];let cursor=0;
+  const hooks={useId:()=> 'synthetic-result-helper',useRef:(value:unknown)=>{const index=cursor++;return slots[index]??(slots[index]={current:value});},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
+  const jsx=(type:unknown,props:unknown,key?:string)=>({type,props,key});
+  const module={exports:{} as {PlatformHelper:(props:unknown)=>any}};
+  new Function('module','exports','require',transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code)(module,module.exports,(id:string)=>{
+    if(id==='react')return hooks;if(id==='react/jsx-runtime')return {jsx,jsxs:jsx};if(id==='./model')return model;if(id==='./helper.css')return {};
+    throw new Error(`Unexpected component dependency: ${id}`);
+  });
+  const priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{querySelector:()=>null,querySelectorAll:()=>[]}});
+  try{
+    const dialog={open:false,showModal(){this.open=true;},close(){this.open=false;}};
+    const focusTarget={isConnected:true,disabled:false,focus(){}};
+    const props={pageId:'guilds',accountScope:'synthetic-opaque',availablePageIds:available as readonly ('guilds'|'skills'|'stores'|'squads')[],knowledge,onNavigate:()=>{},blocked:false};
+    const flatten=(node:any):any[]=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(Infinity).flatMap(flatten)];
+    const text=(node:any):string=>typeof node==='string'||typeof node==='number'?String(node):!node||typeof node!=='object'?'':[node.props?.children].flat(Infinity).map(text).join('');
+    function render(){cursor=0;const outer=module.exports.PlatformHelper(props);const nodes=flatten(outer.type(outer.props));for(const node of nodes)if(node.props.ref)node.props.ref.current=node.type==='dialog'?dialog:focusTarget;return nodes;}
+    let nodes=render();
+    const button=(label:string)=>nodes.find(node=>node.type==='button'&&text(node)===label);
+    button('問路助手').props.onClick();nodes=render();
+    check({
+      nodes:()=>nodes,button:label=>({click(){button(label).props.onClick();nodes=render();}}),dialog,
+      question(value){nodes.find(node=>node.type==='input').props.onChange({target:{value}});nodes=render();},
+      submit(){nodes.find(node=>node.type==='form').props.onSubmit({preventDefault(){},stopPropagation(){}});nodes=render();},
+      status:()=>nodes.filter(node=>node.props?.role==='status').map(text).join(''),
+      updateAvailability(ids){props.availablePageIds=ids;nodes=render();},setNavigate(callback){props.onNavigate=callback;nodes=render();},
+    });
+  }finally{if(priorDocument)Object.defineProperty(globalThis,'document',priorDocument);else Reflect.deleteProperty(globalThis,'document');}
+}
+
+test('successful result announces only the current available count, not query or duplicated help',async()=>{
+  await withSyntheticResultSession(session=>{
+    session.question('請問我要怎麼學 ＡＩ？');session.submit();
+    assert.equal(session.status(),'找到 2 個可用入口，請選擇下方頁面。');
+    assert.equal(session.nodes().find(node=>node.type==='input').props.value,'');
+    assert.doesNotMatch(session.status(),/請問|公會公開說明|技能公開說明/);
+    session.updateAvailability(['skills']);
+    assert.equal(session.status(),'找到 1 個可用入口，請選擇下方頁面。');
+    session.updateAvailability([]);
+    assert.equal(session.status(),'目前沒有可提供的入口，請查看本頁原有說明。');
+  });
+});
+for(const recovery of ['question','intent'] as const)test(`fresh ${recovery} clears stale navigation notice without navigating or clearing ignored IME input`,async()=>{
+  await withSyntheticResultSession(session=>{
+    let calls=0;
+    session.setNavigate(()=>{calls++;throw new Error('synthetic-private-error');});
+    session.button('學 AI').click();session.button('前往技能書架').click();
+    const failure='目前無法切換頁面，請稍後再試，或關閉助手後使用原有導覽。';
+    assert.equal(session.status(),failure);assert.equal(session.dialog.open,true);assert.equal(calls,1);
+    assert.doesNotMatch(JSON.stringify(session.nodes()),/synthetic-private-error/);
+    session.question('怎麼學AI');session.nodes().find(node=>node.type==='input').props.onCompositionStart();session.submit();
+    assert.equal(session.status(),failure);assert.equal(session.nodes().find(node=>node.type==='input').props.value,'怎麼學AI');
+    session.nodes().find(node=>node.type==='input').props.onCompositionEnd();
+    if(recovery==='question')session.submit();else session.button('學 AI').click();
+    assert.equal(session.status(),'找到 2 個可用入口，請選擇下方頁面。');
+    assert.equal(session.nodes().find(node=>node.type==='input').props.value,'');assert.equal(session.dialog.open,true);assert.equal(calls,1);
+  });
+});

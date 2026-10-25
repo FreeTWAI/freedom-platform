@@ -39,7 +39,7 @@ function HelperSession({pageId,availablePageIds,knowledge,onNavigate}:PlatformHe
     reset();dialog.current.showModal();setOpen(true);input.current?.focus();
   }
   function selectIntent(intent:HelperIntentId){
-    setQuestion('');setResult(chooseIntent(intent,availablePageIds,knowledge));
+    setNotice('');setQuestion('');setResult(chooseIntent(intent,availablePageIds,knowledge));
   }
   const pageIds=result?.kind==='pages'?result.pageIds:[];
   const pages=pageIds.flatMap(id=>{const page=availablePage(id,availablePageIds,knowledge);return page?[page]:[];});
@@ -52,13 +52,14 @@ function HelperSession({pageId,availablePageIds,knowledge,onNavigate}:PlatformHe
       <header><h2 id={`${id}-title`}>站內問路助手・非生成式 AI</h2><button type="button" className="btn btn-secondary btn-small" onClick={close}>關閉</button></header>
       <div className="platform-helper-body">
         <p id={`${id}-description`}>不知道從哪裡開始？選一個方向，或輸入簡短問題。只依站內公開說明指路，不讀取私人工作或聊天，也不會代你操作。</p>
-        <form onSubmit={event=>{event.preventDefault();event.stopPropagation();if(composing.current)return;setResult(answerQuestion(question,availablePageIds,knowledge));setQuestion('');}}>
+        <form onSubmit={event=>{event.preventDefault();event.stopPropagation();if(composing.current)return;setNotice('');setResult(answerQuestion(question,availablePageIds,knowledge));setQuestion('');}}>
           <label htmlFor={`${id}-question`}>你想做什麼？（最多 240 字）</label>
           <input ref={input} id={`${id}-question`} value={question} maxLength={240} autoComplete="off" onChange={event=>setQuestion(event.target.value)} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}} onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||event.keyCode===229||composing.current))event.preventDefault();}} placeholder="例如：怎麼學 AI？"/>
           <button type="submit" className="btn btn-secondary btn-small">詢問</button>
         </form>
         <div role="status" aria-live="polite">
           {notice&&<p>{notice}</p>}
+          {!notice&&result?.kind==='pages'&&pages.length>0&&<p>找到 {pages.length} 個可用入口，請選擇下方頁面。</p>}
           {result?.kind==='invalid'&&<p>{result.reason==='long'?'問題超過 240 字，請縮短後再問。':'請先輸入問題，或選擇下面的方向。'}</p>}
           {result?.kind==='unknown'&&<p>目前只能辨識少數站內方向，無法回答這個問題。請選擇方向，或查看本頁說明。</p>}
           {result?.kind==='clarify'&&<p>你提到了不只一個方向，想先看哪一個？</p>}

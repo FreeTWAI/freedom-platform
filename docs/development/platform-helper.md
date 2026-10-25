@@ -102,3 +102,12 @@ restriction. Discovery does not execute assertions or establish acceptance.
 Host integration must mount the helper outside existing business forms. Its own
 submit handler also prevents default and stops propagation as defense in depth;
 this does not make nested HTML forms valid or authorize automatic business actions.
+
+Successful results announce only the current available entry count in the existing
+polite status region; the query and canonical help are not duplicated there.
+A new handled question or explicit intent clears an older navigation error, while
+an ignored composition-time submit leaves input and error state untouched. A
+navigation exception still shows only the fixed failure message and does not
+claim arrival. Three synthetic-handler regressions cover the live count as
+availability changes and both recovery paths; actual assistive-technology
+announcements remain unverified until browser/AT acceptance is performed.
