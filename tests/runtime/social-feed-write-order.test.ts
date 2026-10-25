@@ -21,13 +21,13 @@ function harness(){
   const a=source.indexOf('onSaved={saved=>{'),b=source.indexOf('}}/>',a),saved=source.slice(a+'onSaved={'.length,b+1);
   const remove=between('async function remove(post: Post) {','\n  async function hide(');
   const hide=between('async function hide(post: Post) {','\n  // One-tap like');
-  const finish=between('function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number) {','\n  async function publishLink(');
+  const finish=between('function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number,confirmedThumbnail?:string) {','\n  async function publishLink(');
   const select=between('function selectPlatform(next: string) {','\n  function clearDirectPost(');
   const quiet=between('const refreshShorts = useCallback(', ', [client, feedSession, tag]);');
   const retry=between('function retryFeed() {','\n  function refreshAfterAction(');
   const publish=between('async function publish(event: FormEvent) {','\n  async function uploadLinkThumb(');
   // These are the production closures, not a model of their epoch/merge logic.
-  runInNewContext(transformSync(`globalThis.load=${load};globalThis.saved=${saved};globalThis.remove=async function(post){${remove};globalThis.hide=async function(post){${hide};globalThis.finish=function(created,selectedVersion,interactionVersion,generation){${finish};globalThis.selectPlatform=function(next){${select};globalThis.quiet=${quiet};globalThis.retry=function(){${retry};globalThis.finishPublication=globalThis.finish;globalThis.publish=async function(event){${publish}`,{loader:'ts',format:'cjs'}).code,c);
+  runInNewContext(transformSync(`globalThis.load=${load};globalThis.saved=${saved};globalThis.remove=async function(post){${remove};globalThis.hide=async function(post){${hide};globalThis.finish=function(created,selectedVersion,interactionVersion,generation,confirmedThumbnail){${finish};globalThis.selectPlatform=function(next){${select};globalThis.quiet=${quiet};globalThis.retry=function(){${retry};globalThis.finishPublication=globalThis.finish;globalThis.publish=async function(event){${publish}`,{loader:'ts',format:'cjs'}).code,c);
   return {c,state,initial,requests};
 }
 const tick=()=>new Promise<void>(resolve=>setImmediate(resolve));
@@ -137,6 +137,41 @@ for(const operation of ['remove','hide'])test(`${operation} cannot mark a replac
 test('ordinary absence and a failed removal do not suppress a confirmed creation',async()=>{
   const h=harness();h.state.items=[];h.c.pending.current={kind:'note',generation:1,key:'pending'};h.c.accessAwareFetch=async()=>{throw Error('unknown');};
   await h.c.remove(h.initial);h.c.finish(h.initial,0,0,1);assert.equal(h.state.items.length,1);assert.equal(h.c.newPosts.current.length,1);
+});
+function publicationThumbnailHarness(){
+  const h=harness();h.initial.kind='link';h.initial.platform='other';h.initial.url='https://example.org/p';h.initial.thumbnail_url=null;
+  h.c.selection.current.platform='';h.c.composerMessages.thumbnailPending=['thumbnail unconfirmed'];
+  h.c.pending.current={kind:'link',generation:1,key:'create-key',body:{url:h.initial.url},created:{...h.initial},photo:{type:'image/png'},thumbnailKey:'upload-key'};
+  const publishLink=between('async function publishLink() {','\n  async function publish(event: FormEvent) {');
+  runInNewContext(transformSync(`globalThis.publishLink=async function(){${publishLink}`,{loader:'ts',format:'cjs'}).code,h.c);return h;
+}
+for(const revision of [1,3])test(`publication thumbnail ACK updates existing revision ${revision} without downgrading other fields`,async()=>{
+  const h=publicationThumbnailHarness();let resolve:any;h.c.accessAwareFetch=()=>new Promise(r=>resolve=r);const publishing=h.c.publishLink();await tick();
+  const known={...h.initial,revision,note:'fresh text',like_count:7,comment_count:8,mine:false};h.state.items=[known];h.c.newPosts.current=[known];
+  resolve({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})});await publishing;
+  for(const item of [h.state.items[0],h.c.newPosts.current[0]]){assert.match(item.thumbnail_url,/^\/api\/v1\/social-posts\/p\/thumbnail(?:\?v=\d+)?$/);assert.equal(item.revision,revision);assert.equal(item.note,'fresh text');assert.equal(item.like_count,7);assert.equal(item.comment_count,8);assert.equal(item.mine,false);}
+});
+for(const boundary of ['remove','hide','session'])test(`publication thumbnail ACK respects ${boundary}`,async()=>{
+  const h=publicationThumbnailHarness();let resolve:any;h.c.accessAwareFetch=()=>new Promise(r=>resolve=r);const publishing=h.c.publishLink();await tick();
+  if(boundary==='session')h.c.client.sessionGeneration++;else{h.c.accessAwareFetch=async()=>({ok:true});await h.c[boundary](h.initial);}
+  resolve({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})});await publishing;
+  if(boundary==='session'){assert.equal(h.state.items[0].thumbnail_url,null);assert.equal(h.c.confirmedWrites.current,0);}else{assert.equal(h.state.items.length,0);assert.equal(h.c.newPosts.current.length,0);}
+});
+for(const invalid of [{post_id:'other'},{kind:'note'},{url:'https://example.org/other'},{thumbnail_url:'https://example.org/untrusted'}])test(`publication rejects invalid thumbnail ACK ${JSON.stringify(invalid)}`,async()=>{
+  const h=publicationThumbnailHarness();h.c.accessAwareFetch=async()=>({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail',...invalid})});await h.c.publishLink();
+  assert.equal(h.state.items[0].thumbnail_url,null);assert.equal(h.c.confirmedWrites.current,0);assert.ok(h.c.pending.current,'unconfirmed upload remains retryable');
+});
+test('unknown publication upload retries its original key and photo before projection',async()=>{
+  const h=publicationThumbnailHarness(),calls:any[]=[];h.c.accessAwareFetch=async(path:string,options:any)=>{calls.push({path,key:options.headers['Idempotency-Key'],body:options.body});if(calls.length===1)throw Error('unknown');return {ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})};};
+  await h.c.publishLink();const pending=h.c.pending.current;assert.ok(pending);assert.equal(h.state.items[0].thumbnail_url,null);assert.equal(h.c.confirmedWrites.current,0);
+  await h.c.publishLink();assert.equal(calls.length,2);assert.deepEqual(calls[1],calls[0]);assert.equal(calls[1].body,pending.photo);assert.equal(h.c.pending.current,null);assert.match(h.state.items[0].thumbnail_url,/thumbnail\?v=/);
+});
+test('publication thumbnail projection does not modify a different post',async()=>{
+  const h=publicationThumbnailHarness(),other={...h.initial,post_id:'other',thumbnail_url:'other-image'};h.state.items.push(other);h.c.newPosts.current=[other];h.c.accessAwareFetch=async()=>({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})});await h.c.publishLink();
+  assert.equal(h.state.items.find((p:any)=>p.post_id==='other'),other);assert.equal(h.c.newPosts.current.find((p:any)=>p.post_id==='other'),other);
+});
+test('an old creation thumbnail is not fresh upload provenance',()=>{
+  const h=harness(),known={...h.initial,thumbnail_url:'newer-image'};h.state.items=[known];h.c.newPosts.current=[known];h.c.finish({...h.initial,thumbnail_url:'old-image'},0,0,1);assert.equal(h.state.items[0],known);assert.equal(h.c.newPosts.current[0],known);
 });
 function thumbnailHarness(){
   const h=harness();h.initial.kind='link';h.c.saving=false;h.c.prepareSocialImage=async(f:unknown)=>f;h.c.setActionError=(v:string)=>h.state.actionError=v;

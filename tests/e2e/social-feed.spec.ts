@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
+import type {Route} from '@playwright/test';
 import {test, expect, type Page} from './fixtures.js';
 import {navigate, selectSocialFeed} from './navigation.js';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
@@ -702,6 +703,32 @@ test('preview publication with a lost thumbnail response retries the same upload
   await dialog.getByRole('button',{name:'重試圖片',exact:true}).click();await expect(dialog).toBeHidden();
   expect(creates).toHaveLength(1);expect(uploads).toHaveLength(2);expect(uploads[1]).toBe(uploads[0]);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_posts WHERE url=$1',[url])).rows[0].n).toBe(1);
+});
+
+test('a confirmed publication thumbnail appears after the composer closes and the feed already read its creation',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),text=`E2E held preview photo ${Date.now()}`,url=`https://example.org/held-photo-${randomUUID()}`;
+  let release!:()=>void,held!:(id:string)=>void,finished!:(error?:unknown)=>void;
+  const gate=new Promise<void>(resolve=>release=resolve),waiting=new Promise<string>(resolve=>held=resolve),done=new Promise<unknown>(resolve=>finished=resolve);
+  let started=false;
+  const matchesUpload=(url:URL)=>/^\/api\/v1\/social-posts\/[^/]+\/thumbnail$/.test(url.pathname);
+  const handleUpload=async(route:Route)=>{
+    if(route.request().method()!=='PUT'){await route.continue();return;}
+    started=true;const id=new URL(route.request().url()).pathname.split('/')[4];held(id);
+    try{await gate;const response=await route.fetch();expect(response.status()).toBe(200);expect(await response.json()).toMatchObject({post_id:id,thumbnail_url:`/api/v1/social-posts/${id}/thumbnail`});await route.fulfill({response});finished();}
+    catch(error){finished(error);await route.abort('failed').catch(()=>{});}
+  };
+  await page.route(matchesUpload,handleUpload);
+  try{
+    await dialog.getByLabel('貼文內容',{exact:true}).fill(text);await dialog.getByRole('checkbox',{name:'加入連結預覽（選填）',exact:true}).check();await dialog.getByLabel('預覽連結',{exact:true}).fill(url);
+    const photo=await sharp({create:{width:40,height:30,channels:3,background:'#287a4d'}}).png().toBuffer();
+    await dialog.getByLabel('貼文圖片（選填）',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:photo});await expect(dialog.getByRole('img',{name:'待發布圖片預覽'})).toBeVisible();
+    await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();const id=await waiting;await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
+    await selectSocialFeed(page,'全部動態');await page.getByRole('button',{name:'更新動態',exact:true}).click();
+    const post=page.locator(`#social-post-${id}`);await expect(post).toContainText(text);await expect(post.locator('img.social-thumb')).toHaveCount(0);
+    release();expect(await done).toBeUndefined();await expect(page.locator('.social-feedback')).toHaveText('貼文已發布。');
+    await expect(post.locator('img.social-thumb')).toBeVisible();await expect(post.locator('img.social-thumb')).toHaveAttribute('src',new RegExp(`/api/v1/social-posts/${id}/thumbnail\\?v=\\d+$`));await expect(post).toContainText(text);
+  }finally{release();if(started)await done;await page.unroute(matchesUpload,handleUpload);}
 });
 
 test('failed feed pagination retries the same cursor, keeps existing card nodes and deduplicates the next page',async({page})=>{

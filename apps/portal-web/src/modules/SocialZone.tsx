@@ -466,19 +466,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     if(client!==currentClient.current||publishLock.current||pending.current)return;
     setUrl('');setTitle('');setPublishError('');
   }
-  function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number) {
+  function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number,confirmedThumbnail?:string) {
     ++confirmedWrites.current;
     // Only this pending publication can retain a same-session confirmed removal.
     const removed=pending.current?.generation===generation&&pending.current.removed?.has(created.post_id);
     const known=newPosts.current.find(post=>post.post_id===created.post_id);
-    const retained=known&&known.revision>=created.revision?known:created;
+    // Only a validated upload ACK may cross the independent text revision fence.
+    const projectThumbnail=(post:Post)=>confirmedThumbnail===undefined?post:{...post,thumbnail_url:confirmedThumbnail};
+    const retained=projectThumbnail(known&&known.revision>=created.revision?known:created);
     if(!removed)newPosts.current=[retained,...newPosts.current.filter(post=>post.post_id!==created.post_id)];
     const current=selection.current;
     if(!removed){
       if(directPost&&current.version===selectedVersion)clearDirectPost();
       if((current.platform===''||current.platform===(retained.kind==='note'?'note':retained.platform))&&(!current.tag||retained.tags?.includes(current.tag.toLocaleLowerCase())))
-        setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);const next=known&&known.revision>=retained.revision?known:retained;return [...(!current.tag||next.tags?.includes(current.tag.toLocaleLowerCase())?[next]:[]),...items.filter(post=>post.post_id!==retained.post_id)];});
-      else if(!current.tag&&current.version===selectedVersion){setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);return [known&&known.revision>=retained.revision?known:retained];});setCursor(null);selectPlatform(retained.kind==='note'?'note':'');}
+        setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);const next=projectThumbnail(known&&known.revision>=retained.revision?known:retained);return [...(!current.tag||next.tags?.includes(current.tag.toLocaleLowerCase())?[next]:[]),...items.filter(post=>post.post_id!==retained.post_id)];});
+      else if(!current.tag&&current.version===selectedVersion){setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);return [projectThumbnail(known&&known.revision>=retained.revision?known:retained)];});setCursor(null);selectPlatform(retained.kind==='note'?'note':'');}
     }
     if(importedGame.current?.generation===generation){try{clearGameDraft(sessionStorage,importedGame.current.createdAt);}catch{/* Publication is already acknowledged. */}importedGame.current=null;}
     pending.current=null;setTextHistory(newTextHistory());setMentions([]);setLocationName('');setCheckIn(false);
@@ -518,16 +520,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         if(!normalized.ok||payload.kind!=='link'||payload.url!==normalized.url||payload.note!==(command.body.note??null)||!payload.mine||typeof payload.title!=='string'||(command.body.title&&payload.title!==command.body.title)||!payload.author||typeof payload.author.display_name!=='string'||typeof payload.created_at!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(payload.post_id))throw new Error(composerMessages.uncertain[0]);
         command.created=payload;
       }
+      let confirmedThumbnail:string|undefined;
       if(command.photo){
         const uploaded=await accessAwareFetch(`/api/v1/social-posts/${command.created.post_id}/thumbnail`,{method:'PUT',credentials:'same-origin',body:command.photo,headers:{Accept:'application/json','Content-Type':command.photo.type,'X-CSRF-Token':client.csrfToken,'Idempotency-Key':command.thumbnailKey}});
         if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
         const payload=await uploaded.json() as Post&{detail?:string};
         if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
         if(!uploaded.ok)throw new ApiError({message:payload.detail||composerMessages.thumbnailPending[0],status:uploaded.status});
-        if(payload.post_id!==command.created.post_id||payload.kind!=='link'||payload.url!==command.created.url||typeof payload.thumbnail_url!=='string')throw new Error(composerMessages.thumbnailPending[0]);
-        command.created={...command.created,thumbnail_url:payload.thumbnail_url};
+        if(payload.post_id!==command.created.post_id||payload.kind!=='link'||payload.url!==command.created.url||payload.thumbnail_url!==`/api/v1/social-posts/${command.created.post_id}/thumbnail`)throw new Error(composerMessages.thumbnailPending[0]);
+        confirmedThumbnail=`${payload.thumbnail_url}?v=${Date.now()}`;
       }
-      finishPublication(command.created,selectedVersion,interactionVersion,generation);
+      finishPublication(command.created,selectedVersion,interactionVersion,generation,confirmedThumbnail);
     }catch(cause){
       if(client!==currentClient.current||generation!==client.sessionGeneration||publishLock.current!==lock)return;
       if(command.created)setPublishError(composerMessages.thumbnailPending[0]);

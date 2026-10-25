@@ -201,7 +201,7 @@ test('acknowledged preview with failed thumbnail retries only the same image PUT
   assert.equal(h.calls[1].method,'PUT');assert.equal(h.calls[1].body,photo);h.calls[1].reject(Error('lost image ACK'));await sent;
   assert.equal(h.state.publishError,'thumbnailPending');assert.equal(h.state.closed,0);assert.ok(h.state.pending.current.created);
   const retry=h.submit();await h.submit();assert.equal(h.calls.length,3);assert.equal(h.calls[2].path,h.calls[1].path);assert.equal(h.calls[2].key,h.calls[1].key);assert.equal(h.calls[2].body,photo);
-  h.calls[2].resolve(h.response({...h.ack(),thumbnail_url:'/api/v1/social-posts/fixture/thumbnail'},200));await retry;
+  h.calls[2].resolve(h.response({...h.ack(),thumbnail_url:`/api/v1/social-posts/${h.ack().post_id}/thumbnail`},200));await retry;
   assert.equal(h.calls.filter(call=>call.method==='POST').length,1);assert.equal(h.state.closed,1);assert.equal(h.state.pending.current,null);
 });
 
