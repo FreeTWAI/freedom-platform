@@ -1,3 +1,4 @@
+import {communityLinks} from '../../../../modules/community-hub/index';
 import { useEffect, useRef, useState } from 'react';
 import type { PortalClient } from '../api';
 import type { TabId } from '../types';
@@ -10,12 +11,7 @@ export type SiteConfig = { commerce_drop_ship_enabled?:boolean; commerce_self_sh
 export function BrandPoster({ compact = false }: { compact?: boolean }) {
   return <div className={`brand-poster brand-poster-original${compact ? ' brand-poster-compact' : ''}`}><img src="/brand/freedom-workshop.webp" alt="自由工坊 — 自由創作，一起實現" width="1280" height="720" fetchPriority={compact ? 'auto' : 'high'}/></div>;
 }
-export const communityLinks = [
-  { label: 'Discord・自由工坊', url: 'https://discord.gg/MtccYqJxCx' },
-  { label: 'LINE・Claude', url: 'https://line.me/ti/g2/DPTQR_XE6IYP8c5lBxsbRwsvEUsxI-70p1jWoA' },
-  { label: 'LINE・Codex', url: 'https://line.me/ti/g2/qwiG-IhXAyEBMzVNt6J-I1ryqj6dKhNoyCTr2A' },
-  { label: 'LINE・Grok', url: 'https://line.me/ti/g2/83dpd53WEvKWbgDROTV2t0z5hXnNSZTUTq17tg' },
-];
+export {communityLinks};
 export function CommunityLinks() {
   const {t}=useLanguage();
   return <footer className="community-footer"><div><strong>自由工坊</strong><p>{t('community.tagline')}</p></div><nav aria-label={t('community.links')} data-guide-anchor="community:links">{communityLinks.map(link => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{link.label} <span aria-hidden="true">↗</span></a>)}</nav></footer>;
@@ -84,6 +80,7 @@ export function RepositoryLibrary({ client, ids, excludeIds, access, title = '�
 }
 
 export function CommunityPanel({ client, onNavigate }: { client: PortalClient; onNavigate: (id: TabId) => void }) {
+  const {t}=useLanguage();
   const [data, setData] = useState<CommunityCatalog | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0);
   useEffect(() => {
     let active = true;
@@ -97,6 +94,11 @@ export function CommunityPanel({ client, onNavigate }: { client: PortalClient; o
       <BrandPoster compact/>
     </header>
     <CommunityLinks/>
+    <section className="card stack" aria-labelledby="community-hub-card-title">
+      <h3 id="community-hub-card-title">{t('nav.community-hub')}</h3>
+      <p>{t('communityHub.intro')}</p>
+      <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={()=>onNavigate('community-hub')}>{t('communityHub.open')}</button></div>
+    </section>
     <section className="card stack community-project" aria-labelledby="community-erp-demo-title">
       <h3 id="community-erp-demo-title">ERP／CRM 產業範本試用</h3>
       <p>mars-tw 的 MIT 個人開源專案，提供零售、批發、服務、餐飲、製造、電商、專案及一般企業八種範本。每位訪客建立自己的模擬工作區，只使用測試幣與虛構商品。</p>

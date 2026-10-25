@@ -12,8 +12,11 @@ const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m =
 const EventHighlights = lazy(() => import('../modules/EventHighlights').then(m => ({default: m.EventHighlights})))
 const TaskBoardPanel = lazy(() => import('../modules/TaskBoardPanel').then(m => ({default: m.TaskBoardPanel})))
 
+const CommunityHub = lazy(() => import('../modules/CommunityHub').then(m=>({default:m.CommunityHub})));
+
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const communityFeatures = {
+  "community-hub": {moduleId:"community-hub",placement:"page",render:()=> <CommunityHub/>},
   "community": {
     moduleId: "community", placement: 'page',
     render: ({client, selectTab}) => <CommunityPanel client={client} onNavigate={selectTab} />,
