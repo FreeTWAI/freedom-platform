@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -21,6 +21,9 @@ import { createControlStore } from '../../shared-release/portable/control-store.
 import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared-release/portable/coordinate-fence.mjs';
 import { replayReleaseFloor } from '../../shared-release/portable/floor.mjs';
 import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
+import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
+import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup } from '../../shared-release/scheduled-admission.mjs';
+import { admitImage } from '../../shared-release/image-admission.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -1114,4 +1117,110 @@ test('Worker Logs changes are rejected before upload and explicit disabled state
     await assert.rejects(f.deployer.publish({ ...f.args, async execute() { calls++; } }), /release_deploy_observability_unsupported/);
   }
   assert.equal(calls, 0);
+});
+
+test('portable configuration cannot select programs, foreign resources, profiles or database logins', () => {
+  const value = { format: 'freedom.shared-release-config/v1', target: 'staging-next', accountId: 'a'.repeat(32), zoneId: 'b'.repeat(32),
+    mediaBucket: 'fixture-media', backupBucket: 'fixture-backups',
+    database: { name: 'freedom_staging_next', host: 'fixture.pg.psdb.cloud', port: '5432', loginSuffix: 'fixture' },
+    floor: { epoch: '11111111-1111-4111-8111-111111111111', seedSha256: 'c'.repeat(64) },
+    migrationProfile: { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] } };
+  const parsed = validatePortableConfig(value, 'staging-next');
+  const url = suffix => `postgresql://freedom_staging_next${suffix}.fixture:synthetic@fixture.pg.psdb.cloud:5432/freedom_staging_next?sslmode=verify-full`;
+  const credentials = { migrationDatabaseUrl: url('_migrator'), runtimeDatabaseUrl: url('_app'), backupDatabaseUrl: url('_backup') };
+  assert.equal(portableConnections(parsed, credentials).runtime.options.ssl.rejectUnauthorized, true);
+  for (const change of [v => { v.program = '/bin/sh'; }, v => { v.database.host = 'foreign.invalid'; },
+    v => { v.migrationProfile.format = 'freedom.migrations/dag-v2'; }, v => { v.database.name = 'freedom_next'; },
+    v => { v.backupBucket = v.mediaBucket; }, v => { v.floor.seedSha256 = 'untrusted'; }]) {
+    const changed = structuredClone(value); change(changed); assert.throws(() => validatePortableConfig(changed, 'staging-next'));
+  }
+  assert.throws(() => portableConnections(parsed, { ...credentials, runtimeDatabaseUrl: url('_migrator') }), /release_pg_connection_invalid/);
+  assert.throws(() => portableConnections(parsed, { ...credentials, runtimeDatabaseUrl: url('_app').replace('fixture.pg.psdb.cloud', 'other.pg.psdb.cloud') }),
+    /release_config_database_host_changed/);
+});
+
+function scheduledFixture() {
+  const start = Date.now() - 600000, at = offset => new Date(start + offset).toISOString();
+  const run = { id: 77, run_attempt: 1, workflow_id: 9, path: '.github/workflows/shared-backup.yml', event: 'schedule',
+    repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID }, head_branch: 'main', head_sha: main,
+    status: 'completed', conclusion: 'success', actor: { login: 'teddashh', id: OPERATORS.teddashh },
+    triggering_actor: { login: 'arumwu', id: OPERATORS.arumwu }, run_started_at: at(0), updated_at: at(300000) };
+  const jobs = ['staging-next', 'next'].map(target => ({ name: `backup (${target})`, run_id: run.id, run_attempt: run.run_attempt,
+    head_sha: main, status: 'completed', conclusion: 'success', steps: ['Execute scheduled backup', 'Save public backup receipt'].map(name => ({ name, status: 'completed', conclusion: 'success' })) }));
+  const name = 'backup-result-staging-next-77-1';
+  const artifact = { id: 99, name, expired: false, digest: 'sha256:' + 'a'.repeat(64),
+    workflow_run: { id: 77, repository_id: REPOSITORY_ID, head_repository_id: REPOSITORY_ID, head_branch: 'main', head_sha: main } };
+  const receipt = { format: 'freedom.shared-backup/v1', status: 'passed', event: 'schedule', mode: 'backup',
+    providerOutcome: 'backup_and_restore_confirmed', operatorEvidence: 'validated-backup-phases/v1', repository: REPOSITORY,
+    repositoryId: REPOSITORY_ID, controllerSha: main, target: 'staging-next', runId: 77, runAttempt: 1, sourceSha: sha, sourceTree: tree,
+    operatorImage: installation.image, configSha256: installation.configSha256, original: run.actor, triggeredBy: run.triggering_actor,
+    admittedAt: at(1000), completedAt: at(200000), phases: BACKUP_PHASES.map((name, i) => ({ name, status: 'passed',
+      startedAt: at(2000 + i * 10000), completedAt: at(3000 + i * 10000) })) };
+  const state = { run, jobs, artifact, receipt, latestId: 77 };
+  const api = async path => {
+    if (path.endsWith('/workflows/shared-backup.yml')) return { id: 9, path: run.path, state: 'active' };
+    if (path.includes('/workflows/9/runs?')) return { total_count: 1, workflow_runs: [{ id: state.latestId }] };
+    if (path.endsWith('/actions/runs/77')) return structuredClone(run);
+    if (path.includes('/compare/')) return { status: 'identical', merge_base_commit: { sha: main } };
+    if (path.includes('/jobs?')) return { total_count: jobs.length, jobs: structuredClone(jobs) };
+    if (path.includes('/artifacts?')) return { total_count: 1, artifacts: [structuredClone(artifact)] };
+    throw Error('unexpected scheduler fixture request');
+  };
+  api.readArtifact = async () => structuredClone(receipt);
+  return { state, api, admission: { ...request(), mainShaObserved: main } };
+}
+
+test('natural backup handoff authenticates the completed main run, both jobs and exact environment artifact', async () => {
+  const f = scheduledFixture(), proof = await requireScheduledBackup(f.api, f.admission, installation);
+  assert.equal(proof.runId, 77); assert.equal(proof.runAttempt, 1); assert.equal(proof.artifactId, 99);
+  assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+});
+
+test('manual, failed, skipped, stale, foreign and forged backup evidence cannot authorize handoff', async () => {
+  const mutations = [s => { s.run.event = 'workflow_dispatch'; }, s => { s.run.conclusion = 'failure'; },
+    s => { s.run.head_repository.id = 123; }, s => { s.run.head_branch = 'feature'; },
+    s => { s.jobs[0].steps[0].conclusion = 'skipped'; }, s => { s.artifact.expired = true; },
+    s => { s.artifact.workflow_run.head_sha = sha; }, s => { s.receipt.target = 'next'; },
+    s => { s.receipt.configSha256 = 'f'.repeat(64); }, s => { s.receipt.operatorEvidence = 'caller-asserted'; },
+    s => { s.receipt.phases[1].status = 'failed'; }, s => { s.receipt.runAttempt = 2; }, s => { s.run.run_attempt = 2; },
+    s => { s.receipt.completedAt = '2026-01-01T00:00:00Z'; }, s => { s.run.actor.id = 123; }];
+  for (const change of mutations) {
+    const f = scheduledFixture(); change(f.state); await assert.rejects(requireScheduledBackup(f.api, f.admission, installation));
+  }
+  const f = scheduledFixture(); f.api.readArtifact = async () => { f.state.run.run_attempt++; return structuredClone(f.state.receipt); };
+  await assert.rejects(requireScheduledBackup(f.api, f.admission, installation), /release_schedule_run_invalid/);
+});
+
+test('backup and image entries validate their own main workflow identity and actual operator permissions', async () => {
+  const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-backup.yml@refs/heads/main`,
+    GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON };
+  assert.equal(backupRequestFromEnvironment(env, sha).event, 'schedule');
+  assert.throws(() => backupRequestFromEnvironment({ ...env, BACKUP_CRON: '* * * * *' }, sha));
+  assert.throws(() => backupRequestFromEnvironment({ ...env, GITHUB_REF: 'refs/heads/feature' }, sha));
+  const imageEnv = { ...environment(), CONTROLLER_SHA: sha,
+    GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release-operator-image.yml@refs/heads/main` };
+  assert.equal((await admitImage(imageEnv, fixtureApi())).sourceSha, sha);
+  await assert.rejects(admitImage({ ...imageEnv, GITHUB_ACTOR: 'unknown' }, fixtureApi()), /release_operator_not_allowed/);
+  await assert.rejects(admitImage({ ...imageEnv, GITHUB_REF: 'refs/heads/feature' }, fixtureApi()), /release_image_workflow_invalid/);
+});
+
+test('backup operator receipt requires actual restore, cleanup, retained pins and release of the lease', () => {
+  const admission = { ...request(), mode: 'backup' }, full = resultFixture(admission);
+  const value = { ...full, format: 'freedom.shared-backup-operator-result/v1', phases: [
+    { ...full.phases[0], previousSourceSha: sha }, { ...full.phases[5], name: 'backup' },
+    { ...full.phases[6], sourcePinsRetained: true }] };
+  assert.equal(validateBackupOperatorResult(value, admission, installation, 'e'.repeat(64)).length, 3);
+  for (const [index, patch] of [[1, { remoteReadback: 'not_run' }], [1, { exposure: 'public' }],
+    [2, { sourcePinsRetained: false }], [2, { leaseReleased: false }]]) {
+    const changed = structuredClone(value); Object.assign(changed.phases[index], patch);
+    assert.throws(() => validateBackupOperatorResult(changed, admission, installation, 'e'.repeat(64)));
+  }
+});
+
+test('scheduled backup uses the same floor and cannot overlap or change the committed source', () => {
+  const f = floorFixture(), request = { ...f.request, sourceSha: main }, begin = f.event('backup-begin', undefined, undefined, { request });
+  f.add(begin); assert.throws(() => replayReleaseFloor([...f.chain, f.begin], f.options), /release_floor_unsettled/);
+  const state = f.runBackup('backup', main); assert.equal(state.pending, null); assert.equal(state.sourceSha, main);
+  const changed = structuredClone(begin); changed.record.data.request.sourceSha = sha;
+  assert.throws(() => replayReleaseFloor([...f.chain, changed], f.options), /release_floor_backup_source_changed/);
 });

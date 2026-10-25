@@ -2,7 +2,7 @@
   "format": "freedom.module/v1",
   "module_id": "shared-release",
   "owner_role": "foundation",
-  "owned_paths": ["deploy/shared-release/**", ".github/workflows/shared-release.yml", "deploy/cloudflare/test/shared-release.test.mjs"],
+  "owned_paths": ["deploy/shared-release/**", ".github/workflows/shared-release.yml", ".github/workflows/shared-backup.yml", ".github/workflows/release-operator-image.yml", "deploy/cloudflare/test/shared-release.test.mjs"],
   "public_exports": [],
   "dependencies": ["governance", "command-core", "media-migration"],
   "contract_families": ["preview"],

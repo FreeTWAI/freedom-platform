@@ -1,7 +1,7 @@
 # Shared release Actions entry
 
-This module owns the manual release entry, GitHub admission, ordered operator
-calls and public receipts. It does not replace the database migration runner,
+This module owns manual release and scheduled backup entries, GitHub admission,
+the reviewed operator image, ordered calls and public receipts. It does not replace the database migration runner,
 consistent database/object backup, isolated restore or retained rollback floor.
 
 The operator runs on an ephemeral hosted runner, never through SSH to a personal
@@ -21,13 +21,19 @@ handoff must all succeed in order. The existing backup must include remote
 readback, isolated database/object restore and cleanup. Migration uncertainty or
 a failed deployment stops, retains the outcome and does not auto-retry/rollback.
 An operator handoff must preserve scheduled backups before a release completes.
+Only an authenticated successful natural schedule's first attempt, with both
+environment jobs and the exact image/config receipt, proves scheduler handoff.
+Manual backup or re-running a failed scheduled run is not that evidence.
 
 Environment credentials remain outside the source checkout and public Actions
 artifacts. Only allowlisted summaries are published. Never upload database dumps,
 objects, raw provider responses, private operator diagnostics or configuration.
 
-This is a new integration candidate. Current private operators depend on pinned
-personal-host paths and systemd; they do not yet implement the portable operator
-protocol. Keep RELEASE_ENABLED=false until that port, team service credentials,
-and an actual staging execution are verified. No main merge or deployment is
+This is a new integration candidate. The portable entry and image source exist;
+local native fixtures do not establish hosted or provider acceptance. The current
+private operator and systemd backup must remain available until a verified
+successor takes over. Install independently checked original floor authority;
+never bootstrap from live state as its own approval. Keep RELEASE_ENABLED=false
+until image installation, team service credentials and staged acceptance are ready.
+BACKUP_ENABLED is a separate installation switch. No main merge or deployment is
 authorized merely by creating this module or completing a local test.

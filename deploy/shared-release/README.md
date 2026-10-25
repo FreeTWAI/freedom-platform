@@ -2,8 +2,8 @@
 
 這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
 `Shared release` Actions，並串接資料庫／媒體備份、遠端讀回與隔離還原。
-**完整發布工具尚未串接完成，
-也尚未部署。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
+完整發布 entry、OCI image 建置入口和自然備份 workflow 已接入原始碼，
+**尚未在 hosted runner 發布或啟用。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
 
 2026-10-25 查核：`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 都有此 repo
 的 admin 權限。現有 main ruleset 仍要求非作者審查、CODEOWNERS、最新推送後核准，
@@ -43,9 +43,10 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | 種類 | 名稱 | 用途 |
 | --- | --- | --- |
 | Variable | `RELEASE_ENABLED` | 安裝與 staging 真實演練完成前維持 `false` |
+| Variable | `BACKUP_ENABLED` | 獨立安裝備份入口；未設或非 `true` 時拒絕，不能由發布開關推定 |
 | Variable | `RELEASE_OPERATOR_IMAGE` | 已審查的公開 OCI image，固定 `ghcr.io/freetwai/freedom-release-operator@sha256:…`，不能用 tag |
 | Variable | `RELEASE_CONFIG_SHA256` | 下方 config 的完整 UTF-8 bytes SHA-256，包含檔尾換行 |
-| Secret | `RELEASE_CONFIG_JSON` | 此環境的目標資源、保留旗標、schema floor 與備份設定；格式見 [operator protocol](operator-protocol.md) |
+| Secret | `RELEASE_CONFIG_JSON` | 此環境的資源、DB 身份、外部 floor seed 與 migration profile；不接受程式或旗標決策，格式見 [operator protocol](operator-protocol.md) |
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
 | Secret | `MIGRATION_DATABASE_URL` | 此環境的專用 migration role，保留現有角色、目標與 TLS 核對 |
 | Secret | `RUNTIME_DATABASE_URL` | 此環境既有 app role，migration 後用獨立唯讀交易確認實際登入與讀取權限 |
@@ -65,6 +66,28 @@ PG18／TLS 核對後，已分別寫入上述三個 Database URL secrets（共六
 沒有變更角色、重設密碼或執行 live migration。現有 Cloudflare token 經 API
 確認屬於個人帳號；它沒有被複製到共用 secrets。團隊 Cloudflare token、Access
 service token、image 與 config 仍待安裝，發布尚未啟用。
+
+## 首次安裝與備份接手
+
+1. 原始碼通過必要審查、合併及相同 main 版本 CI 後，由四人之一執行
+   `Release operator image`。它只封裝已追蹤來源，實跑 image 內 PG18、R2、migration
+   與 smoke 邊界驗證，再以短效 job token 發布 GHCR；不讀取部署秘密。
+2. 確認該 image 可公開拉取，把輸出的不可變 digest 安裝到兩個 Environment。
+   從原操作者保留的 legacy floor、素材政策及座標約束建立獨立核對的私人 seed；
+   不得以當下 DB 狀態自行核准新的還原下限。固定 config bytes 與 SHA-256 必須一致。
+3. 補齊服務憑證後，先開 `BACKUP_ENABLED`，保持 `RELEASE_ENABLED=false`。
+   各環境先手動執行 `Shared backup`，核對真實 dump 預算、遠端讀回、隔離還原及清理。
+4. 保留舊 timer，等新 `Shared backup` 在 **05:43 UTC** 自然觸發並完成兩個環境。
+   所有來源仍走 main／CI 准入；它備份當下實際部署版本，不擅自升級應用。
+   新舊入口共用原 DB advisory lease，不會同時擷取。若因舊工作占鎖而拒絕，保留失敗，
+   對齊排程後等下一次自然觸發；人工重跑不能冒充自然首試。
+5. 設定 staging 發布入口並完成真實七階段演練，再由另一位操作者使用自己的帳號執行。
+   `next` 另核對相同版本 staging 成果。舊 timer 的退役只在接手確認後處理。
+
+每次發布要求最新自然備份 run 首次 attempt 成功、兩個環境 jobs 與該環境 artifact
+通過驗證，收據不超過 36 小時，image／config 與本次完全相同。改 pin 後須先驗新 pin
+的備份與自然排程。手動備份、舊 attempt、過期 artifact、失敗的新 run 都不放行。
+目前沒有自動排程補跑或未結案 floor 的自動重做功能；缺漏會明確拒絕。
 
 ## 執行與失敗處理
 
@@ -147,7 +170,7 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   和原始 legacy floor 為起點。每次核對完整前後關聯，缺檔、分叉、舊 head 或未結案
   操作都拒絕繼續；不能由目前資料庫重新造一份權威。COMMIT 前先保留交易 ID，確認
   提交後立即提高還原下限，後續權限探測仍需完成才算 migration 通過。這些 R2 操作
-  目前以合成 transport 驗證，尚未建立 live seed 或接上完整 image。
+  目前以合成 transport 驗證並接入完整 image entry；尚未建立 live seed。
 - `coordinate-fence.mjs`：唯讀核對原有十個 repository coordinate 約束，還原時只接受
   已釘選的 PG18 定義差異。保留原始核准資料，不重建或放寬約束；已對正式 DB 做
   唯讀比對，十項吻合。備份與 migration 現在要求接入外部意圖保存及約束驗證。
@@ -163,16 +186,19 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 
 這個備份 adapter 仍要求上層提供已核准的來源、ledger 與 material policy digest。
 比對 digest 不等於驗證外部 retained floor 的權威；共享紀錄程式已補上，live 權威
-seed、完整 image 與自然排程交接仍未完成。原生 PostgreSQL／R2
+seed、公開 image 安裝與自然排程交接仍未完成。原生 PostgreSQL／R2
 演練使用合成資料；Cloudflare HTTP 邊界使用磁碟上的合成遠端副本，沒有接觸遠端
 bucket、Worker 或正式資料庫。
 
 現行發布程式綁定私人主機的絕對路徑、歷次 operator kit、保留 floor 和 systemd 排程。
-本 PR 沒有把它假裝成可攜式工具。接續移植須沿用現有
+本 PR 將執行入口移入固定 image，沿用現有
 [migration runner](../cloudflare/migration-operator.mjs)、
 [daily backup coordinator](../../packages/media-migration/backup-daily.ts) 及
 [備份 CLI](../../scripts/media-backup-daily.ts)，完成 [operator protocol](operator-protocol.md)
-列出的其餘實際 provider 操作。備份 adapter 由 image 內的固定 `tsx` 載入既有 TypeScript
+列出的操作順序。`entry.mjs` 串接實際元件，`candidate-contract.mjs` 從指定來源在全新
+隔離 DB 推導預期權限；`smoke.mjs` 重用既有唯讀 health／protocol／assets／anonymous 驗證。
+本機 image 已以 UID 1001、唯讀根目錄、無網路執行 native fixture；這不是遠端發布。
+備份 adapter 由 image 內的固定 `tsx` 載入既有 TypeScript
 模組；TAR codec 使用 Python 標準函式庫。純粹產生符合格式的收據不能替代這些操作。
 
 啟用標準是：已審查的 image 可在 hosted runner 完成真實 staging 發布、前後備份、

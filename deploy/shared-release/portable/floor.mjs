@@ -46,23 +46,27 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   for (const item of chain.slice(1)) {
     const event = item.record.data;
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
-    if (event.kind === 'begin') {
+    if (event.kind === 'begin' || event.kind === 'backup-begin') {
       check(state.pending === null, 'release_floor_unsettled'); request(event.request);
-      const candidate = event.candidate;
+      const backup = event.kind === 'backup-begin';
+      if (backup) check(event.request.sourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
+        && event.request.sourceTree === state.sourceTree, 'release_floor_backup_source_changed');
+      const candidate = backup ? { sourceSha: state.sourceSha, sourceTree: state.sourceTree, schemaLedger: state.schemaLedger } : event.candidate;
       check(candidate?.sourceSha === event.request.sourceSha && candidate.sourceTree === event.request.sourceTree
         && ledger(candidate.schemaLedger) >= state.schemaVersion, 'release_floor_candidate_invalid');
       same(candidate.schemaLedger.slice(0, state.schemaLedger.length), state.schemaLedger, 'release_floor_ledger_rewind');
       check(isAncestor(state.sourceSha, candidate.sourceSha), 'release_floor_source_rewind');
-      state.pending = { request: structuredClone(event.request), candidate: structuredClone(candidate),
+      state.pending = { kind: backup ? 'backup' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
         previousSourceSha: state.deployedSourceSha, stage: 0, intents: {} };
       continue;
     }
     const pending = state.pending;
+    const stages = pending?.kind === 'backup' ? ['backup'] : STAGES;
     check(pending && event.runId === pending.request.runId && event.runAttempt === pending.request.runAttempt
-      && event.stage === STAGES[pending.stage], 'release_floor_stage_mismatch');
+      && event.stage === stages[pending.stage], 'release_floor_stage_mismatch');
     if (event.kind === 'intent') {
       const allowed = { 'backup-before': ['capture-policy', 'archive'], migration: ['commit'], deploy: ['publish'],
-        health: [], 'backup-after': ['capture-policy', 'archive'], handoff: [] }[event.stage];
+        health: [], 'backup-after': ['capture-policy', 'archive'], handoff: [], backup: ['capture-policy', 'archive'] }[event.stage];
       const key = event.stage + ':' + event.operation;
       check(allowed.includes(event.operation) && !Object.hasOwn(pending.intents, key)
         && event.proof && typeof event.proof === 'object' && !Array.isArray(event.proof), 'release_floor_intent_invalid');
@@ -100,7 +104,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     }
     check(event.kind === 'passed', 'release_floor_event_invalid');
     const proof = event.proof;
-    if (event.stage === 'backup-before' || event.stage === 'backup-after') {
+    if (['backup-before', 'backup-after', 'backup'].includes(event.stage)) {
       check(pending.intents[event.stage + ':capture-policy'], 'release_floor_capture_intent_missing');
       verifyBackup(proof, pending.intents[event.stage + ':archive'], pending.intents[event.stage + ':capture-policy'],
         event.stage === 'backup-before' ? pending.previousSourceSha : pending.candidate.sourceSha);
@@ -127,7 +131,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       'release_floor_schedule_unverified');
     }
     pending.stage++;
-    if (pending.stage === STAGES.length) state.pending = null;
+    if (pending.stage === stages.length) state.pending = null;
   }
   return { seed, state, head: chain.at(-1) };
 }
@@ -189,6 +193,7 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
     },
     verifyConstraints(q, options) { return verifyCoordinateFence(q, coordinates, options); },
     async begin(request, candidate) { return append({ kind: 'begin', request, candidate }); },
+    async beginBackup(request) { return append({ kind: 'backup-begin', request }); },
     async intent(stage, operation, proof) {
       check(current.state.pending, 'release_floor_not_started');
       const { runId, runAttempt } = current.state.pending.request;

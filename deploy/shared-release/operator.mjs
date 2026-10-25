@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PHASES, requireRelease, isSha, isDigest } from './admission.mjs';
+import { BACKUP_PHASES } from './scheduled-admission.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value, null, 2) + '\n';
@@ -82,25 +83,46 @@ export function validateOperatorResult(value, admission, installation, requestDi
 }
 
 function validateBinding(value, admission, installation, requestDigest) {
-  requireRelease(value?.format === 'freedom.shared-release-operator-result/v1'
+  requireRelease(value?.format === (admission.mode === 'backup' ? 'freedom.shared-backup-operator-result/v1' : 'freedom.shared-release-operator-result/v1')
     && value.requestSha256 === requestDigest && value.sourceSha === admission.sourceSha
     && value.target === admission.target && value.runId === admission.runId
     && value.runAttempt === admission.runAttempt && value.operatorImage === installation.image
     && value.configSha256 === installation.configSha256, 'release_operator_receipt_binding_invalid');
 }
 
+export function validateBackupOperatorResult(value, admission, installation, requestDigest) {
+  validateBinding(value, admission, installation, requestDigest);
+  requireRelease(admission.mode === 'backup' && value.phases?.length === BACKUP_PHASES.length, 'release_backup_phases_incomplete');
+  let previous = Date.parse(admission.admittedAt);
+  for (const [i, phase] of value.phases.entries()) {
+    const start = Date.parse(phase.startedAt), end = Date.parse(phase.completedAt);
+    requireRelease(phase.name === BACKUP_PHASES[i] && phase.status === 'passed' && Number.isFinite(start) && Number.isFinite(end)
+      && start >= previous && end >= start && end <= Date.now() + 60000, 'release_backup_phase_invalid'); previous = end;
+  }
+  const [preflight, backup, handoff] = value.phases;
+  requireRelease(preflight.leaseHeld === true && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
+    && preflight.previousSourceSha === admission.sourceSha, 'release_backup_preflight_incomplete');
+  requireRelease(backup.sourceSha === admission.sourceSha && isDigest(backup.archiveSha256) && backup.remoteReadback === 'verified'
+    && backup.restore === 'database_and_objects_restored' && backup.cleanupVerified === true && backup.exposure === 'quarantine',
+  'release_backup_incomplete');
+  requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true && handoff.sourcePinsRetained === true,
+    'release_backup_handoff_incomplete');
+  return value.phases.map(({ name, startedAt, completedAt }) => ({ name, status: 'passed', startedAt, completedAt }));
+}
+
 export function operatorProgress(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
-  requireRelease(Array.isArray(value.phases) && value.phases.length <= PHASES.length, 'release_operator_progress_invalid');
+  const phases = admission.mode === 'backup' ? BACKUP_PHASES : PHASES;
+  requireRelease(Array.isArray(value.phases) && value.phases.length <= phases.length, 'release_operator_progress_invalid');
   return value.phases.map((phase, i) => {
-    requireRelease(phase.name === PHASES[i] && ['passed', 'running', 'failed'].includes(phase.status)
+    requireRelease(phase.name === phases[i] && ['passed', 'running', 'failed'].includes(phase.status)
       && (i === value.phases.length - 1 || phase.status === 'passed'), 'release_operator_progress_invalid');
     return { name: phase.name, reportedStatus: phase.status };
   });
 }
 
 export async function runOperator({ admission, installation, sourceRoot, temporaryRoot,
-  config, credentials, run = quietCommand, onProgress = async () => {} }) {
+  config, credentials, scheduleEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -121,8 +143,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
         && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
     }
   }
-  const requestBytes = json({ ...admission, operatorImage: installation.image,
-    configSha256: installation.configSha256, requiredPhases: PHASES });
+  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence,
+    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : PHASES });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });
   await mkdir(resultDir, { recursive: false, mode: 0o700 });
@@ -144,7 +166,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     timer = setInterval(() => { progressTask = progressTask.then(readProgress); }, 10_000);
     containerAttempted = true;
     await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name, workDir));
-    const result = validateOperatorResult(await boundedJson(join(resultDir, 'result.json')), admission, installation, digest(requestBytes));
+    const validate = admission.mode === 'backup' ? validateBackupOperatorResult : validateOperatorResult;
+    const result = validate(await boundedJson(join(resultDir, 'result.json')), admission, installation, digest(requestBytes));
     return result;
   } catch (error) {
     await readProgress();

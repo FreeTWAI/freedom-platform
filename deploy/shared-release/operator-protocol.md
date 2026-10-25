@@ -1,8 +1,9 @@
 # Portable operator integration contract
 
-This contract is not an installed operator. There is no production image in this
-PR. Keep both environments disabled until the port and real staging evidence
-exist. Do not implement a receipt-only adapter or copy personal-host credentials
+The executable entry and image build source implement this contract; a local
+image test is not an installed hosted operator. Keep releases disabled until
+service credentials, independently checked authority and image/config pins are
+installed for controlled staging acceptance. Do not copy personal-host credentials
 into the image. This file is part of the reviewed controller surface.
 
 ## Invocation and ownership
@@ -34,15 +35,22 @@ are environment-specific service credentials. Provider responses, diagnostics,
 source media, backups and credentials stay private. The image must not write them
 to `result.json`; the controller discards raw process output.
 
-`config.json` has format `freedom.shared-release-config/v1` and the exact `target`.
-The port must define and validate the remaining environment-specific configuration:
-Cloudflare account/Worker/bucket identities, expected database/role/TLS identities,
-public health origin, existing flags/bindings to preserve, approved migration
-profile, externally retained rollback floor, object material policy and backup
-schedule ownership. No configuration may select arbitrary executable code.
-Those required fields cannot be finalized by guessing at the private operator's
-resource bindings. The controller pins the full config bytes but intentionally
-does not pretend to validate that currently unimplemented provider schema.
+`config.json` has exactly these fields, validated by `portable/config.mjs`:
+
+| Field | Meaning |
+| --- | --- |
+| `format`, `target` | `freedom.shared-release-config/v1`, exact Environment |
+| `accountId`, `zoneId` | Cloudflare resource IDs, 32 lowercase hex |
+| `mediaBucket`, `backupBucket` | Distinct existing source/backup bucket names |
+| `database` | Exact `name`, PlanetScale `host`, `port: "5432"`, branch `loginSuffix`; roles are fixed by target and TLS uses `verify-full` |
+| `floor` | Independently provisioned UUID `epoch` and `seedSha256` |
+| `migrationProfile` | Reviewed `freedom.migrations/legacy-v1`, `first: 1`, exact approved `last`, `known_gaps: [22]` |
+
+Worker names and public origins are fixed by target. Flags, secrets and bindings
+are preserved from observed state, matched to the retained floor. Material policy
+and coordinate authority come from original pinned legacy bytes. The config
+cannot choose programs, commands, feature decisions, arbitrary origins or roles.
+The controller binds the exact UTF-8 config bytes; the entry validates all fields.
 
 ## Existing behavior the port must retain
 
@@ -81,8 +89,7 @@ The private operator's current assumptions require a deliberate port: absolute
 cross-kit imports become an image-owned reviewed closure; private credential-file
 lookup becomes the supplied credentials file; host-bound restoration becomes an
 unprivileged isolated service; host filesystem floor/scheduler state needs a
-shared durable, independently controlled location. These are open implementation
-items, not fulfilled by the controller tests. Native dump/isolated restore,
+shared durable, independently controlled location. The portable entry implements these changes; hosted acceptance remains required. Native dump/isolated restore,
 legacy-session lease, bounded R2 transport and exact-source public health polling
 now exist under `portable/`. `runPortableBackup` also composes the existing daily
 pipeline, private file archive, full R2 transport readback, native PG18 and native
@@ -91,9 +98,9 @@ the same release lease before/after this backup. It checks complete ledger and
 material-policy digests on source and restored databases and the Worker binding
 digest on the source. Its required expectations are inputs from the installed
 controller. Its mandatory external ports now retain capture/archive intent and
-verify the retained constraints on source and restored databases. The durable
-floor reader exists, but the independently pinned live seed, full image and
-scheduler handoff remain open. Do not install it as an independently enabled deployer.
+verify the retained constraints on source and restored databases. The entry now connects the durable floor, independently derived candidate
+contract and authenticated scheduled-backup evidence. The live seed, published
+image installation and actual scheduler handoff remain open.
 The integration fixture uses real PG18, native local R2 and synthetic data;
 Cloudflare transport uses disk-backed injected HTTP responses. It covers capture
 snapshot isolation, full archive readback, object restoration, corruption and
@@ -110,9 +117,9 @@ COMMIT. An unavailable shared journal aborts the transaction before COMMIT.
 A lost COMMIT reply remains unknown;
 `observeMigrationOutcome` reads the transaction status and ledger without granting
 permission to resume. The native PG18 fixture verifies atomic rollback and a
-committed transaction whose reply was lost. The enclosing operator must still
-provide authenticated floor assertion/advancement and a reviewed verification
-contract; its fixture floor callback is not live retained-floor evidence.
+committed transaction whose reply was lost. The entry provides floor assertion/advancement and derives the expected contract
+from admitted source in a fresh local PG18 database. Fixture callbacks are not
+live retained-floor evidence.
 
 `control-store.mjs` validates a complete private R2 append chain rooted in an
 independently pinned seed and original legacy authority bytes. It refuses missing
@@ -123,7 +130,7 @@ the floor before post-commit probes, separately from passing the migration phase
 `coordinate-fence.mjs` validates the retained production migration166 constraints
 and only the five already-reviewed PG18 restore definition variants. Original
 legacy material-policy bytes remain authoritative; this port cannot bootstrap a
-floor from the live database. Provisioning and the full operator are still needed.
+floor from the live database. Independent live provisioning is still needed.
 
 `buildApplication` copies the selected Git commit into a fresh independent build
 directory, installs its lockfile, builds the portal and runs the image's fixed
@@ -133,8 +140,8 @@ compares the active version, complete bindings, topology, runtime, Tokyo placeme
 and disabled Hyperdrive cache. It renders from preserved live bindings, keeps
 secrets with `--keep-vars`, leaves routes unchanged and publishes once. Bounded
 provider GETs retain stale/failed observations; an uncertain publish is never
-replayed. The mutation journal must still be retained outside the runner by the
-enclosing operator. Local actual build/dry-run and live read-only provider checks
+replayed. The entry retains mutation intent in the shared journal before invoking
+the provider. Local actual build/dry-run and live read-only provider checks
 are separate evidence from synthetic publish tests; none proves a real deployment.
 Worker Logs are read from service metadata as well as settings; the present
 absent/disabled configuration is explicitly retained. Any enabled/unknown Logs or
@@ -159,6 +166,40 @@ The download reader uses the hosted runner's Python standard ZIP reader in isola
 mode, in memory, with one regular receipt member and bounded compressed/expanded
 sizes; no artifact paths are extracted or executed. The GitHub token is never
 forwarded to the artifact download origin.
+
+## Image and scheduled backup
+
+`release-operator-image.yml` admits the exact reviewed main controller through
+Verify/CodeQL and the four-account permission check. A tracked-source archive
+excludes `.git` and private/untracked files. Immutable Node24 and PG18 bases,
+locked dependencies, fixed TS loader and the reviewed import closure produce the
+image. Its native fixture runs as UID1001 with read-only root and no network,
+then the short-lived job token publishes GHCR. Publication does not alter pins
+or enable an environment; public pull must be verified before installation.
+
+`shared-backup.yml` has a separate `BACKUP_ENABLED` switch. It backs up each
+actually deployed, main/CI-admitted SHA under the same DB lease and shared journal.
+Its fixed phases are `preflight`, `backup`, `handoff`; the backup includes complete
+readback, isolated DB/object restore and cleanup, without migration or deployment.
+The journal permits this only at the settled floor and cannot advance source pins.
+Manual runs are installation diagnostics. The natural schedule is 05:43 UTC for
+both targets, serially, sharing the release concurrency group.
+
+Before release, the controller authenticates the latest natural schedule's first
+attempt, main workflow identity, both successful jobs, and the exact environment
+artifact/digest/actors. The receipt must be no older than 36 hours and match the
+installed image/config. A manual run, rerun, stale receipt or newer failed natural
+run cannot authorize handoff. This avoids a circular bootstrap: install backup
+first, observe natural success, then enable staging release. Keep the old backup
+until the successor has been verified; no automatic timer retirement is present.
+
+The image receives this verified schedule evidence without a GitHub token and
+binds it into the final retained handoff event. Its health phase first observes
+exact source, then reuses the existing read-only candidate health, protocol,
+assets and anonymous checks with bounded retries. Staging Access is tested both
+with service headers and without them; redirects are never followed. Login
+Origin probes send only `{}` with a missing/foreign origin, no member credentials.
+Failed observations remain private and cannot be replaced by later success.
 
 ## Result and progress
 
@@ -203,3 +244,10 @@ The controller projects phase names/status/times only into public receipts;
 an interrupted run's progress is explicitly a report, not confirmed completion.
 Schema validation authenticates neither the image nor the provider observations:
 image review, environment pins and actual staging acceptance remain necessary.
+
+For standalone backup, use `freedom.shared-backup-operator-result/v1`, the same
+request binding and three ordered phases. Preflight requires the same live source,
+lease, floor and flags; backup has the same restore evidence; handoff requires
+`sourcePinsRetained`, `cleanupVerified`, `leaseReleased`. The controller marks
+`validated-backup-phases/v1` only after validation. Full backup reports are private;
+only bounded explicit proof fields enter operator results and journal events.

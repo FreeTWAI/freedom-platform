@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitInstallation,
   requireStaging, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
+import { requireScheduledBackup } from './scheduled-admission.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
@@ -35,6 +36,7 @@ export async function main(env = process.env) {
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
     receipt.stagingEvidence = await requireStaging(api, admission, installation);
+    receipt.scheduleEvidence = await requireScheduledBackup(api, admission, installation);
     const source = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     const git = args => execFileSync('git', ['-C', source, ...args], {
       encoding: 'utf8', timeout: 30_000, maxBuffer: 1_000_000, stdio: ['ignore', 'pipe', 'ignore'],
@@ -70,6 +72,7 @@ export async function main(env = process.env) {
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
     receipt.phases = await runOperator({ admission, installation, sourceRoot: source, temporaryRoot,
+      scheduleEvidence: receipt.scheduleEvidence,
       onProgress: async phases => {
         receipt.operatorProgress = phases;
         await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });

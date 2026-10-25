@@ -61,7 +61,7 @@ export function githubClient(token, fetchImpl = fetch) {
   return Object.assign(api, { readArtifact: artifactReader(REPOSITORY, token, fetchImpl) });
 }
 
-async function admitActor(api, login, claimedId) {
+export async function admitActor(api, login, claimedId) {
   requireRelease(Object.hasOwn(OPERATORS, login ?? ''), 'release_operator_not_allowed');
   const permission = await api(`/repos/${REPOSITORY}/collaborators/${login}/permission`);
   requireRelease(permission.user?.login === login && permission.user.id === OPERATORS[login]
