@@ -48,8 +48,23 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
     const run=generation.current;
     const result=await action.run('share',()=>{setStatus('');setManual(false);return navigator.share(text?{title,text,url}:{title,url});});
     if(run!==generation.current)return;
-    if(result.status==='done')setStatus('分享已送出');
+    if(result.status==='done')setStatus('已交由系統分享處理');
     else if(result.status==='failed'&&(result.error as {name?:string}|null)?.name!=='AbortError'){setManual(true);setStatus('系統分享沒有完成，請選取並複製下方內容');}
+  }
+  async function shareTo(platform: 'LINE' | 'Telegram') {
+    if (kind !== 'platform' || !open || busy || !link) return;
+    const run = generation.current;
+    const result = await action.run(platform, async () => {
+      setStatus(''); setManual(false);
+      const endpoint = platform === 'LINE' ? 'https://social-plugins.line.me/lineit/share' : 'https://t.me/share/url';
+      const destination = `${endpoint}?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text || title)}`;
+      // Open only inside this click, before awaiting; no SDK or prefetch. A null
+      // noopener handle cannot distinguish a blocked popup from an opened window.
+      window.open(destination, '_blank', 'noopener,noreferrer');
+    });
+    if (run !== generation.current) return;
+    if (result.status === 'done') setStatus(`請在 ${platform} 完成分享；若未開啟，可複製連結。`);
+    else if (result.status === 'failed') { setManual(true); setStatus(`無法開啟 ${platform} 分享，請選取並複製下方內容`); }
   }
   return <div className="skill-share promotion-share">
     <button ref={trigger} type="button" className="btn btn-ghost" aria-haspopup="dialog" onClick={openDialog}>{label}</button>
@@ -63,6 +78,7 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
         <div className="skill-share-actions">
           <button type="button" className="btn btn-primary" aria-busy={action.pending==='share'} disabled={busy || !link || action.pending!==null} onClick={() => void send()}>{action.pending==='share'?t('action.sharing'):'分享'}</button>
           <button type="button" className="btn btn-ghost" aria-busy={action.pending==='copy'} disabled={busy || !link || action.pending!==null} onClick={() => void copy()}>{action.pending==='copy'?t('action.copying'):'複製連結'}</button>
+          {kind === 'platform' && (['LINE', 'Telegram'] as const).map(platform => <button key={platform} type="button" className="btn btn-ghost" aria-busy={action.pending === platform} disabled={busy || !link || action.pending !== null} title={`另開 ${platform} 分享視窗`} onClick={() => void shareTo(platform)}>{platform} 分享 ↗</button>)}
         </div>
         <p className="promotion-share-rule">訪客每天點開算 1 分，自己點不算。</p>
         {status && <p className="skill-share-status" role="status">{status}</p>}
