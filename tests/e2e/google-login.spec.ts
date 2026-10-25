@@ -213,7 +213,7 @@ for(const mismatch of ['different-user','new-csrf'] as const)test(`activation re
   await page.route('**/api/v1/auth/google/activate',async route=>{acks++;await route.fulfill({json:SESSION})});
   const changed=mismatch==='different-user'?{...SESSION,user:{...SESSION.user,user_id:'22222222-2222-4222-8222-222222222222'}}:{...SESSION,csrf_token:'newer-current-csrf'};
   await page.route('**/api/v1/session',route=>route.fulfill({json:changed}));
-  await callback(page);await expect(page.getByRole('alert')).toContainText('目前登入的帳號或登入狀態已變更');await expect(page.getByRole('link',{name:'返回登入入口'})).toBeVisible();
+  await callback(page);await expect(page.getByRole('alert')).toContainText('目前登入的帳號或登入狀態已變更');await expect(page.getByRole('button',{name:'返回登入入口'})).toBeVisible();
   expect(acks).toBe(1);expect(new URL(page.url()).pathname).toBe('/');await expect(page.locator('.workspace-main')).toHaveCount(0);
 });
 
@@ -222,7 +222,7 @@ for(const outcome of ['rejected','lost-response'] as const)test(`activation ${ou
   await page.route('**/api/v1/auth/google/complete',route=>route.fulfill({json:PROOF}));
   await page.route('**/api/v1/auth/google/activate',async route=>{acks++;if(outcome==='lost-response')await route.abort('failed');else await route.fulfill({status:409,json:{code:'google_activation_expired',detail:'確認已失效'}})});
   await page.route('**/api/v1/session',async route=>{reads++;await route.fulfill({json:SESSION})});
-  await callback(page);await expect(page.getByRole('alert')).toContainText(outcome==='lost-response'?'尚未確認 Google 登入結果':'未完成或已失效');await expect(page.getByRole('link',{name:'返回登入入口'})).toBeVisible();
+  await callback(page);await expect(page.getByRole('alert')).toContainText(outcome==='lost-response'?'尚未確認 Google 登入結果':'未完成或已失效');await expect(page.getByRole('button',{name:'返回登入入口'})).toBeVisible();
   expect(acks).toBe(1);expect(reads).toBe(outcome==='lost-response'?1:0);expect(new URL(page.url()).pathname).toBe('/');await expect(page.locator('.workspace-main')).toHaveCount(0);
 });
 
@@ -278,4 +278,54 @@ test('successful unlink A reads fresh status and keeps a newer link B rather tha
   // another password-confirmed unlink. The response from A cannot revoke B.
   await panel.getByLabel('目前工坊密碼').fill('freedom-local-demo');await panel.getByRole('button',{name:'解除 Google 連結',exact:true}).click();
   await expect(panel.getByRole('alert')).toContainText('操作尚未確認');expect(calls).toBe(2);expect(refreshAfterUnlink).toBe(1);
+});
+
+// The callback has already scrubbed its URL to /#account. Returning to that same
+// fragment must still end this document; it must never replay a completed POST.
+test('successful Google link reloads the scrubbed account entry and leaves callback UI',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  let linked=0,logins=0;
+  await page.route('**/api/v1/me/google',route=>route.fulfill({json:{enabled:true,linked:linked>0,identity_id:linked>0?IDENTITY:null}}));
+  await loginAccount(page);
+  await page.evaluate(key=>sessionStorage.setItem(key,JSON.stringify({intent:'link',entry:'/#account',startedAt:Date.now()})),ENTRY_KEY);
+  await page.route('**/api/v1/me/google/complete',async route=>{
+    linked++;expect(route.request().headers()['x-csrf-token']).toBeTruthy();
+    expect(route.request().postDataJSON()).toEqual({state:STATE,code:CODE});
+    await route.fulfill({json:{linked:true}});
+  });
+  await page.route('**/api/v1/auth/google/complete',async route=>{logins++;await route.fulfill({status:409,json:{code:'unexpected_login'}})});
+  await callback(page);
+  await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'連結 Google',exact:true})).toHaveCount(0);
+  await expect(page.locator('.google-account')).toContainText('已連結 Google。');
+  await expect(page).toHaveURL(/\/#account$/);
+  expect(await page.evaluate(()=>(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
+  expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
+  expect(linked).toBe(1);expect(logins).toBe(0);
+  await page.reload();await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  expect(linked).toBe(1);expect(logins).toBe(0);
+});
+
+for(const intent of ['login','link'] as const)for(const outcome of ['error','cancel'] as const)test(`Google ${intent} ${outcome} return ends the callback document without replay`,async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  if(intent==='link')await loginAccount(page);else await page.goto('/');
+  await page.evaluate(({key,intent})=>sessionStorage.setItem(key,JSON.stringify({intent,entry:'/#account',startedAt:Date.now()})),{key:ENTRY_KEY,intent});
+  let calls=0;
+  const endpoint=intent==='link'?'/me/google':'/auth/google';
+  await page.route(`**/api/v1${endpoint}/${outcome==='cancel'?'cancel':'complete'}`,async route=>{
+    calls++;
+    await route.fulfill(outcome==='cancel'?{json:{cancelled:true}}:{status:409,json:{code:'google_session_changed',detail:'Synthetic conflict'}});
+  });
+  await callback(page,outcome==='cancel'?`state=${STATE}&error=access_denied`:`state=${STATE}&code=${CODE}`);
+  if(outcome==='cancel')await expect(page.getByRole('status')).toContainText('已取消這次 Google 授權');
+  else await expect(page.getByRole('alert')).toContainText('未完成或已失效');
+  const back=page.getByRole('button',{name:intent==='link'?'返回我的名片':'返回登入入口',exact:true});
+  await back.focus();await back.press('Enter');
+  if(intent==='link')await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  else await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:intent==='link'?'連結 Google':'完成 Google 登入',exact:true})).toHaveCount(0);
+  expect(await page.evaluate(()=>(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
+  expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
+  expect(new URL(page.url()).search).toBe('');expect(calls).toBe(1);
+  await page.reload();expect(calls).toBe(1);
 });

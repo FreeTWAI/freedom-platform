@@ -56,6 +56,15 @@ export function safeGoogleEntry(value:unknown):string|null{
   return value;
 }
 
+/** End the callback document even when its scrubbed URL already equals the return URL. */
+export function leaveGoogleCallback(entry:string){
+  const destination=safeGoogleEntry(entry)??'/';
+  // Same-fragment navigation alone may keep the module-level callback alive.
+  // Replace history first so a reload cannot replay provider code or state.
+  window.history.replaceState(null,'',destination);
+  window.location.reload();
+}
+
 export function rememberGoogleEntry(intent:GoogleEntry['intent']){
   const entry=safeGoogleEntry(window.location.pathname+window.location.search+window.location.hash)??(intent==='link'?'/#account':'/');
   // If storage is disabled, stop before starting a flow we cannot safely resume.
@@ -120,7 +129,7 @@ export function GoogleCallback({client,entry,onLoggedIn}:{client:PortalClient;en
   async function finish(result:GoogleLoginResult|{linked:true}|{cancelled:true}){
     if(!current())return;
     if('cancelled' in result){setNotice('已取消這次 Google 授權。原有的登入與連結狀態不受影響。');setBusy(false);return;}
-    if('linked' in result){window.location.replace(entry.entry);return;}
+    if('linked' in result){leaveGoogleCallback(entry.entry);return;}
     if('totp_required' in result){
       if(typeof result.challenge!=='string'||!result.challenge)throw Error('Invalid challenge');
       setChallenge(result.challenge);setBusy(false);requestAnimationFrame(()=>input.current?.focus());return;
@@ -177,6 +186,6 @@ export function GoogleCallback({client,entry,onLoggedIn}:{client:PortalClient;en
       <p id="google-totp-hint" className="field-hint">此帳號已啟用雙因素驗證。Google 驗證不能取代這一步；備用碼每組只能使用一次。</p>
       <div className="actions"><button className="btn btn-primary btn-small" style={{minHeight:44}} disabled={busy} aria-busy={busy}>完成登入</button><button type="button" className="btn btn-ghost btn-small" style={{minHeight:44}} disabled={busy} onClick={()=>void cancel()}>取消 Google 登入</button></div>
     </form>}
-    {!busy&&!challenge&&<a className="btn btn-ghost btn-small" style={{minHeight:44}} href={entry.entry}>{entry.intent==='link'?'返回我的名片':'返回登入入口'}</a>}
+    {!busy&&!challenge&&<button type="button" className="btn btn-ghost btn-small" style={{minHeight:44}} onClick={()=>leaveGoogleCallback(entry.entry)}>{entry.intent==='link'?'返回我的名片':'返回登入入口'}</button>}
   </section>;
 }
