@@ -720,14 +720,18 @@ function Workspace({
   const workspaceTopbar = useRef<HTMLElement>(null)
   const previousTab = useRef(tab)
   useEffect(() => {
-    if (previousTab.current === tab) return
+    setMobileOpen(false)
+    if (previousTab.current === tab) {
+      // Accepted same-page history changes must not leave focus in hidden navigation.
+      if (document.activeElement?.closest('#workspace-navigation')) mainContent.current?.focus({ preventScroll: true })
+      return
+    }
     previousTab.current = tab
     if(tab!=='social')setNotificationTarget(current=>current?.tab==='social'?null:current)
     logConsoleEvent({channel:consoleChannel('guide_navigation'),kind:'guide',source:'導覽',message:`已進入「${tabTitle(tab)}」。${TAB_GUIDANCE[tab]}`})
-    setMobileOpen(false)
     mainContent.current?.focus({ preventScroll: true })
     workspaceTopbar.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
-  }, [tab])
+  }, [tab, locationHash])
   const selectTab = useCallback((next: TabId, destinationHash?: string) => {
     if(next==='messages'){openMessages();return}
     const nextHash = destinationHash ?? `#${next}`
@@ -937,7 +941,7 @@ function Workspace({
         </a>
         <div className="shell">
           <header className="community-header">
-          <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
+          <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
             <div className="sidebar-heading"><a className="brand brand-home" href="/#home" aria-label={`自由工坊 · ${t('nav.home')}`} onClick={event => activateHomeLink(event, () => {
               selectTab('home');
               // The existing leave guard must accept before changing the canonical URL or scroll.
@@ -949,7 +953,7 @@ function Workspace({
               workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
             })}><strong>自由工坊</strong></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
-            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
+            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
           <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>

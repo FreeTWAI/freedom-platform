@@ -1,0 +1,14 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "shared-release",
+  "owner_role": "foundation",
+  "owned_paths": ["deploy/shared-release/**", ".github/workflows/shared-release.yml", ".github/workflows/shared-backup.yml", ".github/workflows/release-operator-image.yml", "deploy/cloudflare/test/shared-release.test.mjs"],
+  "public_exports": [],
+  "dependencies": ["governance", "command-core", "media-migration"],
+  "contract_families": ["preview"],
+  "client_profiles": ["member"],
+  "instructions": ["deploy/shared-release/AGENTS.md"],
+  "invariants": ["current-authority-before-replay", "no-secrets-in-artifacts"],
+  "tests": ["governance.unit", "runtime.full"],
+  "surfaces": [{"surface_id":"operator.shared-release", "kind":"cli", "entry":"deploy/shared-release/cli.mjs", "operations":["operator.release.plan", "operator.release.execute"], "auth_profile":"github-main-workflow-and-environment-scoped-operator"}]
+}
