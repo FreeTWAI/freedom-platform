@@ -17,6 +17,7 @@
     "tests/e2e/share-promotion.spec.ts",
     "tests/e2e/social-image.spec.ts",
     "tests/runtime/social-feed.test.ts",
+    "tests/runtime/social-feed-write-order.test.ts",
     "apps/portal-web/src/PlatformPurpose.tsx",
     "apps/portal-web/src/SocialLayout.css",
     "apps/portal-web/src/modules/MemberHome.tsx",

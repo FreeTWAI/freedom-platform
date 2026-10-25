@@ -126,7 +126,7 @@ function composerHarness(){
   const calls:{path:string;method:string;body:any;key:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
   const enqueue=(path:string,method:string,body:any,key:string)=>new Promise((resolve,reject)=>calls.push({path,method,body,key,resolve,reject}));
   const state:any={text:'一起分享 https://example.com/read',url:'https://example.com/read',title:'參考資料',topic:'mood',locationName:'',checkIn:false,mentions:[],composeFile:null,preparingImage:false,linkPreview:false,
-    pending:{current:null},publishLock:{current:null},selection:{current:{platform:'note',tag:'',version:1}},composerVersion:{current:1},newPosts:{current:[]},importedGame:{current:null},directPost:null,items:[],closed:0,publishError:'',notice:'',imageReads:0,
+    confirmedWrites:{current:0},pending:{current:null},publishLock:{current:null},selection:{current:{platform:'note',tag:'',version:1}},composerVersion:{current:1},newPosts:{current:[]},importedGame:{current:null},directPost:null,items:[],closed:0,publishError:'',notice:'',imageReads:0,
     crypto:{randomUUID},ApiError,normalizeShareUrl,isOwnWorkshopHost,location:{origin:'https://workshop.example.test'},newTextHistory,
     composerText:(key:string)=>key,composerMessages:new Proxy({},{get:(_,key)=>[key]}),document:{getElementById:()=>null},sessionStorage:{},clearGameDraft:()=>{},
     setPublishing:(value:boolean)=>{state.publishing=value;},setPublishError:(value:string)=>{state.publishError=value;},setNotice:(value:string)=>{state.notice=value;},
@@ -332,7 +332,7 @@ function feedHarness() {
   assert.ok(retryMarkup,'feed error retry remains wired');
   const calls:{path:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
   const writes:{path:string;method:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
-  const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
+  const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},confirmedWrites:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
   for(const [setter,key] of [['setLoading','loading'],['setMore','more'],['setError','error'],['setCursor','cursor'],['setCanHide','canHide'],['setItems','items']])state[setter]=(value:any)=>{state[key]=typeof value==='function'?value(state[key]):value;};
   state.crypto={randomUUID};state.ApiError=ApiError;state.refreshSequence={current:0};state.saving=false;state.actionError='';
   state.selection={current:{platform:'note',tag:'',version:0}};state.URL=URL;state.window={location:{href:'https://workshop.example.test/?social-post=post-2#social'},history:{replaceState:()=>{}}};state.setTag=(value:string)=>{state.tag=value;};state.setDirectPost=(value:string|null)=>{state.directPost=value;};
@@ -479,7 +479,7 @@ test('read-only action recovery retains uncertainty and an explicit new thumbnai
 for(const action of ['upload','hide'])for(const change of ['session','client'])test(`actual ${change} effect resets old ${action} saving state without letting its completion unlock a new action`,async()=>{
   const h=feedHarness();
   const effect=composerSource.match(/useEffect\(\(\)=>\{(\s*\+\+imageSequence\.current;pending\.current=null;publishLock\.current=null;[\s\S]*?)\},\[client,client\.sessionGeneration\]\)/);assert.ok(effect);
-  Object.assign(h.state,{imageSequence:{current:0},pending:{current:null},publishLock:{current:null},newTextHistory:()=>({value:''})});
+  Object.assign(h.state,{imageSequence:{current:0},confirmedWrites:{current:0},pending:{current:null},publishLock:{current:null},newTextHistory:()=>({value:''})});
   for(const name of ['setTextHistory','setOriginalDraft','setComposeFile','setPreparingImage','setUrl','setTitle','setLinkPreview','setTopic','setMentions','setLocationName','setCheckIn','setPublishing','setPublishError'])h.state[name]=()=>{};
   const old=action==='hide'?h.ui.hide({post_id:'A'}):h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();assert.equal(h.state.saving,true);
   const patch=change==='session'?{session:++h.client.sessionGeneration}:{client:{sessionGeneration:1,get:h.client.get,post:h.client.post,csrfToken:'new'}};

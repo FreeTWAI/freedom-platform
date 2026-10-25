@@ -106,9 +106,9 @@ function parentSaveHarness(initial:any[]){
   const feed=readFileSync(new URL('../../apps/portal-web/src/modules/SocialZone.tsx',import.meta.url),'utf8');
   const start=feed.indexOf('onSaved={saved=>{'),end=feed.indexOf('}}/>',start);assert.ok(start>=0&&end>start);
   const callback=feed.slice(start+'onSaved={'.length,end+1);let items=initial;
-  const context:any={setItems:(fn:(items:any[])=>any[])=>{items=fn(items);},setNotice(){}};
+  const context:any={confirmedWrites:{current:0},newPosts:{current:[]},setItems:(fn:(items:any[])=>any[])=>{items=fn(items);},setNotice(){}};
   runInNewContext(transformSync(`globalThis.saved=${callback}`,{loader:'ts',format:'cjs'}).code,context);
-  return {save:context.saved,get items(){return items;},replace(value:any[]){items=value;}};
+  return {save:context.saved,get epoch(){return context.confirmedWrites.current;},get items(){return items;},replace(value:any[]){items=value;}};
 }
 test('actual parent preserves a newer feed revision while the editor still holds its original post snapshot',async()=>{
   const h=harness(),other={post_id:'other',revision:3,note:'untouched'},parent=parentSaveHarness([h.original,other]);
@@ -136,4 +136,9 @@ test('equal-revision receipts leave already observed text and metadata untouched
   const current={post_id:'post-a',revision:2,title:'already read',note:'already read',tags:['new'],mentions:[],edited_at:'current'};
   const parent=parentSaveHarness([current]);parent.save({...current,title:'old snapshot',note:'old snapshot',tags:[],edited_at:'old'});
   assert.equal(parent.items[0],current);
+});
+
+test('unknown edit never advances the parent confirmed-write epoch',async()=>{
+  const h=harness(),parent=parentSaveHarness([h.original]);h.props.onSaved=parent.save;h.edit('after');h.submit();
+  h.requests[0].reject(unknown());await settle();assert.equal(parent.epoch,0);assert.equal(parent.items[0],h.original);
 });

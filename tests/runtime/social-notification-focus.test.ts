@@ -26,7 +26,7 @@ function shortRefreshHarness(){
   const state:{items:unknown;cursor:unknown;canHide:unknown}={items:['current-feed'],cursor:'current-cursor',canHide:false};
   const context:any={URLSearchParams,client,currentClient:{current:client},feedSession:1,tag:'work',
     feedScope:{current:{client,session:1,platform:'shorts',tag:'work',directPost:null}},
-    loadSequence:{current:7},refreshSequence:{current:0},
+    loadSequence:{current:7},refreshSequence:{current:0},confirmedWrites:{current:0},
     setItems(value:unknown){writes.push('items');state.items=value;},
     setCursor(value:unknown){writes.push('cursor');state.cursor=value;},
     setCanHide(value:unknown){writes.push('canHide');state.canHide=value;},
@@ -84,7 +84,7 @@ for(const oldCursor of [null,'old-filter-cursor'])for(const sessionChanged of [f
     let visible=false;
     const client={sessionGeneration:1,get:(path:string)=>{requests.push(path);return pending;}};
     const writes:string[]=[];
-    const context:any={URLSearchParams,loadSequence:{current:0},pendingFeedLoad:{current:false},newPosts:{current:[]},
+    const context:any={URLSearchParams,loadSequence:{current:0},confirmedWrites:{current:0},pendingFeedLoad:{current:false},newPosts:{current:[]},
       client,currentClient:{current:client},feedSession:1,
       feedScope:{current:{client,session:1,platform:'',tag:'',directPost:target}},activeFeedLoad:{current:null},failedFeedLoad:{current:null},
       setLoading(){writes.push('loading');},setMore(){writes.push('more');},setError(){writes.push('error');},setItems(){writes.push('items');},setCursor(){writes.push('cursor');},setCanHide(){writes.push('canHide');},

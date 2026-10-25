@@ -525,6 +525,38 @@ test('an uncertain post edit reopens with its original command and replays witho
   expect(rows).toHaveLength(1);expect(Number(rows[0].edit_revision)).toBe(2);
 });
 
+test('a pre-edit feed response revalidates once without restoring the old text',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const before=`E2E ordered edit ${randomUUID()}`,after=`${before} 已確認新版`;
+  await page.getByLabel('貼文內容',{exact:true}).fill(before);await page.getByRole('button',{name:'發布貼文',exact:true}).click();
+  const post=card(page,before);await expect(post).toBeVisible();
+  const reads:string[]=[];let started=false;
+  const matchesFeed=(url:URL)=>url.pathname==='/api/v1/social-posts';
+  let release!:()=>void,ready!:()=>void,failed!:(cause:unknown)=>void,finished!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),snapshot=new Promise<void>((resolve,reject)=>{ready=resolve;failed=reject;}),released=new Promise<void>(resolve=>{finished=resolve;});
+  await page.route(matchesFeed,async route=>{
+    if(route.request().method()!=='GET'){await route.continue();return;}
+    reads.push(route.request().url());
+    if(reads.length!==1){await route.continue();return;}
+    started=true;
+    try{const response=await route.fetch();expect(response.status()).toBe(200);await response.body();ready();await held;await route.fulfill({response});}
+    catch(cause){failed(cause);throw cause;}finally{finished();}
+  });
+  try{
+    await page.getByRole('button',{name:'更新動態',exact:true}).click();await snapshot;
+    await post.getByLabel('貼文選項',{exact:true}).click();await post.getByRole('button',{name:'編輯',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'編輯貼文'});
+    const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(postId).toMatch(/^[0-9a-f-]{36}$/);
+    const acknowledged=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/social-posts/${postId}/edit`);
+    await dialog.getByLabel('貼文內容',{exact:true}).fill(after);await dialog.getByRole('button',{name:'儲存變更',exact:true}).click();
+    const ack=await acknowledged;expect(ack.status()).toBe(200);expect(await ack.json()).toMatchObject({post_id:postId,revision:2,note:after});
+    await expect(dialog).toBeHidden();await expect(card(page,after)).toBeVisible();
+    release();await released;await expect(page.locator('.social-zone')).toHaveAttribute('aria-busy','false');
+    await expect(card(page,after).locator('.social-note')).toHaveText(after);
+    expect(reads).toHaveLength(2);expect(reads[1]).toBe(reads[0]);
+  }finally{release();if(started)await released;await page.unroute(matchesFeed);}
+});
+
 test('visible feed categories keep keyboard focus and drafts while failed reads retry the selected query',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width:320,height:844});await login(page);
   const draft='保留原生草稿，不因閱讀分類或分享連結而發布';

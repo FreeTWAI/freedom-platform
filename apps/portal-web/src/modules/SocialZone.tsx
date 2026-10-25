@@ -276,6 +276,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   useEffect(() => { if (shortPost && !shortDialog.current?.open) shortDialog.current?.showModal(); }, [shortPost]);
   useEffect(() => { if (!shortPost && shortTrigger.current) { const back = shortTrigger.current; shortTrigger.current = null; if (back.isConnected) back.focus(); else document.querySelector<HTMLElement>('.short-video-scroller')?.focus(); } }, [shortPost]);
   const loadSequence = useRef(0);
+  const confirmedWrites = useRef(0);
   const pendingFeedLoad = useRef(false);
   const selection = useRef({platform: 'note', tag:'', version: 0});
   const composerVersion = useRef(0);
@@ -309,8 +310,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         if (nextCursor) query.set('cursor', nextCursor);
         if(tag)query.set('tag',tag);
       }
-      const page = await client.get<Page>(`/social-posts${query.size ? `?${query}` : ''}`);
-      if (!valid()) return;
+      let confirmedPage: Page | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const epoch = confirmedWrites.current;
+        const received = await client.get<Page>(`/social-posts${query.size ? `?${query}` : ''}`);
+        if (!valid()) return;
+        if (epoch === confirmedWrites.current) { confirmedPage = received; break; }
+        // One read-only revalidation of this exact page, never a mutation retry.
+        if (attempt === 1) {
+          failedFeedLoad.current = request;
+          setError('貼文剛有更新，請重試載入最新內容。');
+          return;
+        }
+      }
+      if (!confirmedPage) return;
+      const page = confirmedPage;
       failedFeedLoad.current = null;
       const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (nextPlatform===''||post.kind==='note')&&(!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
       setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [...fresh, ...page.items]);
@@ -339,7 +353,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const ownsScope = () => client === currentClient.current && feedSession === client.sessionGeneration && feedScope.current.client === client && feedScope.current.session === feedSession && feedScope.current.platform === 'shorts' && feedScope.current.tag === tag && feedScope.current.directPost === null;
     // A queued visibility callback must not re-read or replace a newer login/feed.
     if (!ownsScope()) return null;
-    const sequence = loadSequence.current, generation = ++refreshSequence.current;
+    const sequence = loadSequence.current, generation = ++refreshSequence.current, epoch = confirmedWrites.current;
     try {
       const kept: Post[] = [];
       let next: string | null | undefined;
@@ -350,7 +364,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         if (tag) query.set('tag', tag);
         if (next) query.set('cursor', next);
         const page = await client.get<Page>(`/social-posts?${query}`);
-        if (!ownsScope() || sequence !== loadSequence.current || generation !== refreshSequence.current) return null;
+        if (!ownsScope() || sequence !== loadSequence.current || generation !== refreshSequence.current || epoch !== confirmedWrites.current) return null;
         kept.push(...page.items.filter(post => !kept.some(item => item.post_id === post.post_id)));
         next = page.next_cursor; canHideNow = page.can_hide;
       }
@@ -450,6 +464,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     setUrl('');setTitle('');setPublishError('');
   }
   function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number) {
+    ++confirmedWrites.current;
     newPosts.current=[created,...newPosts.current.filter(post=>post.post_id!==created.post_id)];
     const current=selection.current;
     if(directPost&&current.version===selectedVersion)clearDirectPost();
@@ -570,7 +585,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
       });
       if (!response.ok) { const problem = await response.json().catch(() => ({})) as {detail?: string}; throw new ApiError({message: problem.detail || '貼文未能刪除。', status: response.status}); }
-      { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); };
+      { ++confirmedWrites.current; ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); };
       newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id);
       deleteDialog.current?.close(); setConfirming(null); setNotice('貼文已刪除。');
       composerTrigger.current?.focus({preventScroll: true});
@@ -583,7 +598,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const current = () => client === currentClient.current && generation === client.sessionGeneration;
     ++refreshSequence.current;
     setSaving(true); setActionError('');
-    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); if (!current()) return; { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; setNotice('貼文已隱藏。'); }
+    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); if (!current()) return; { ++confirmedWrites.current; ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id); setNotice('貼文已隱藏。'); }
     catch (cause) { if (current()) setActionError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
     finally { if (current()) setSaving(false); }
   }
@@ -686,7 +701,11 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         {deleteError && <p className="banner banner-error" role="alert">{deleteError}</p>}
       </div>}
     </dialog>
-    <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id&&saved.revision>item.revision?{...item,title:saved.title,note:saved.note,edited_at:saved.edited_at,revision:saved.revision,tags:saved.tags,mentions:saved.mentions}:item));setNotice('貼文已更新。');}}/>
+    <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{
+      ++confirmedWrites.current;
+      const update=(item:Post)=>item.post_id===saved.post_id&&saved.revision>item.revision?{...item,title:saved.title,note:saved.note,edited_at:saved.edited_at,revision:saved.revision,tags:saved.tags,mentions:saved.mentions}:item;
+      newPosts.current=newPosts.current.map(update);
+      setItems(current=>current.map(update));setNotice('貼文已更新。');}}/>
     {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
     {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p><p>重新載入只更新貼文狀態，不會重送操作或確認圖片已更新。若要更換縮圖，請重新選取圖片。</p><button type="button" className="btn btn-ghost" disabled={loading || more || saving} onClick={refreshAfterAction}>重新載入貼文狀態</button><button type="button" className="btn btn-ghost" onClick={() => setActionError('')}>關閉提示</button></div>}
