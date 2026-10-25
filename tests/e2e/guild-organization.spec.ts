@@ -93,6 +93,32 @@ test('six synthetic guilds partition featured, other joined and unjoined members
   expect(Math.abs((await primary.boundingBox())!.height - initialHeight)).toBeLessThanOrEqual(2);
 });
 
+for (const collapseTools of [false, true]) {
+  test(`canceling secondary-guild settings returns keyboard focus with tools ${collapseTools ? 'collapsed' : 'open'}`, async ({ page }) => {
+    const fixture = await setupGuilds(page); await login(page);
+    const membershipsBefore = fixture.directory().map(guild => guild.membership);
+    const tools = page.locator('.guild-tools-disclosure');
+    const summary = tools.locator(':scope > summary');
+    const trigger = tools.getByRole('button', { name: '設定次要公會', exact: true });
+    await summary.click(); await trigger.click();
+    const editor = page.locator('#secondary-guild-editor');
+    await editor.getByRole('checkbox', { name: new RegExp(`^${names[2]}`) }).uncheck();
+    if (collapseTools) await summary.click();
+    await expect(editor).toBeVisible();
+    const cancel = editor.getByRole('button', { name: '取消', exact: true });
+    await cancel.focus(); await page.keyboard.press('Enter');
+    await expect(editor).toHaveCount(0);
+    await expect(collapseTools ? summary : trigger).toBeFocused();
+    expect(await tools.evaluate(element => (element as HTMLDetailsElement).open)).toBe(!collapseTools);
+    expect(fixture.writes).toHaveLength(0);
+    expect(fixture.directory().map(guild => guild.membership)).toEqual(membershipsBefore);
+    if (collapseTools) await summary.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.click();
+    await expect(editor.getByRole('checkbox', { name: new RegExp(`^${names[2]}`) })).toBeChecked();
+  });
+}
+
 test('the secondary-guild editor sends a versioned command and reloads the synthetic saved preference without changing memberships', async ({ page }) => {
   const fixture = await setupGuilds(page); await login(page);
   const membershipsBefore = fixture.directory().map(guild => guild.membership);
