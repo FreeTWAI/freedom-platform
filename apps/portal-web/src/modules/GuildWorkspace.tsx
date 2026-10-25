@@ -21,12 +21,14 @@ const failure=(error:unknown)=>error instanceof Error?error.message:'暫時無�
 const guildRequired=(error:unknown)=>error instanceof ApiError&&error.status===403&&(error.code==='skill_editor_guild_required'||error.code==='guild_full_member_required');
 const date=(value:string)=>new Date(value).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
 export function retrySafeWriter(send:<T>(path:string,body:unknown,version:number|undefined,key:string)=>Promise<T>):ReaderWriter['post']{
-  const keys=new Map<string,string>();
+  const keys=new Map<string,{key:string;unknown:boolean}>();
   return async<T,>(path:string,body:unknown,version?:number):Promise<T>=>{
-    const fingerprint=JSON.stringify([path,body,version]),key=keys.get(fingerprint)??crypto.randomUUID();
-    keys.set(fingerprint,key);
-    try{const result=await send<T>(path,body,version,key);keys.delete(fingerprint);return result;}
-    catch(cause){const status=(cause as {status?:unknown}|null)?.status;if(typeof status==='number'&&status>=400&&status<500)keys.delete(fingerprint);throw cause;}
+    const fingerprint=JSON.stringify([path,body,version]),attempt=keys.get(fingerprint)??{key:crypto.randomUUID(),unknown:false};
+    keys.set(fingerprint,attempt);
+    try{const result=await send<T>(path,body,version,attempt.key);keys.delete(fingerprint);return result;}
+    // A later authority/validation rejection cannot disprove an earlier commit.
+    // Only an initially definitive rejection or confirmed success ends the attempt.
+    catch(cause){const status=(cause as {status?:unknown}|null)?.status;if(typeof status==='number'&&status>=400&&status<500){if(!attempt.unknown)keys.delete(fingerprint);}else attempt.unknown=true;throw cause;}
   };
 }
 export function useMemberClient(client:PortalClient){return useMemo<ReaderWriter>(()=>({get:path=>client.get(path),post:retrySafeWriter((path,body,version,key)=>client.post(path,body,{ifMatch:version,idempotencyKey:key}))}),[client]);}
@@ -119,7 +121,7 @@ function Council({api}:{api:ReaderWriter}){
   useEffect(()=>{void load();return()=>{generation.current++;};},[load]);
   const loadDetail=useCallback(async(id:string)=>{const sequence=++detailGeneration.current;setDetailLoading(true);setCurrent(null);try{const data=await api.get<CouncilThread>(`/guild-council/threads/${encodeURIComponent(id)}`);if(sequence===detailGeneration.current)setCurrent(data);}catch(cause){if(sequence===detailGeneration.current)setError(failure(cause));}finally{if(sequence===detailGeneration.current)setDetailLoading(false);}},[api]);
   useEffect(()=>{setError('');setCurrent(null);if(selected)void loadDetail(selected);return()=>{detailGeneration.current++;};},[selected,loadDetail]);
-  async function submit(event:FormEvent,isReply:boolean){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await api.post(isReply?`/guild-council/threads/${encodeURIComponent(selected!)}/replies`:'/guild-council/threads',isReply?{body:reply}:{title,body});if(isReply){setReply('');await loadDetail(selected!);}else{setTitle('');setBody('');returnFocus.current=true;setCreating(false);}setUnconfirmed(false);await load();setNotice(isReply?'回覆已發布。':'討論已建立。');}catch(cause){const status=(cause as {status?:unknown}|null)?.status;setUnconfirmed(!(typeof status==='number'&&status>=400&&status<500));setError(failure(cause));}finally{lock.current=false;setBusy(false);}}
+  async function submit(event:FormEvent,isReply:boolean){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await api.post(isReply?`/guild-council/threads/${encodeURIComponent(selected!)}/replies`:'/guild-council/threads',isReply?{body:reply}:{title,body});if(isReply){setReply('');await loadDetail(selected!);}else{setTitle('');setBody('');returnFocus.current=true;setCreating(false);}setUnconfirmed(false);await load();setNotice(isReply?'回覆已發布。':'討論已建立。');}catch(cause){const status=(cause as {status?:unknown}|null)?.status;setUnconfirmed(previous=>previous||!(typeof status==='number'&&status>=400&&status<500));setError(failure(cause));}finally{lock.current=false;setBusy(false);}}
   const frozen=busy||unconfirmed,hasDraft=Boolean(title||body);
   return <section className="stack guild-council">
     <header><h3>公會長議事區</h3><p className="field-hint">僅正式公會長與平台管理員可見。</p></header>

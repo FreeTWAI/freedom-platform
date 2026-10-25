@@ -250,7 +250,7 @@ test('council starts with one create action, retains a closed draft and clears i
   await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();await expect(title).toHaveCount(0);await create.click();await expect(title).toHaveValue('');await expect(body).toHaveValue('');expect(writes).toBe(0);
 });
 
-test('pending and unknown council creation cannot close or change payload and retries with its original key',async({page})=>{
+for(const deniedRetry of [false,true])test(`pending and unknown council creation retains its payload and key${deniedRetry?' through a denied replay':''}`,async({page})=>{
   const writes:{body:unknown;key:string|undefined}[]=[],items:any[]=[];let release=()=>{};
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>route.fulfill({json:{items:[]}}));
@@ -259,6 +259,7 @@ test('pending and unknown council creation cannot close or change payload and re
     writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
     expect(route.request().headers()['x-csrf-token']).toBeTruthy();
     if(writes.length===1){items.push({thread_id:'created',...route.request().postDataJSON(),author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',reply_count:0});await gate;return route.fulfill({status:503,json:{detail:'建立結果尚未確認。'}});}
+    if(deniedRetry&&writes.length===2)return route.fulfill({status:403,json:{detail:'目前沒有議事權限。'}});
     return route.fulfill({json:items[0]});
   });
   try{
@@ -271,8 +272,17 @@ test('pending and unknown council creation cannot close or change payload and re
     await tabs.getByRole('button',{name:'公會公告',exact:true}).click();release();
     await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();await expect(council.getByRole('alert')).toContainText('尚未確認');
     await expect(close).toBeDisabled();await expect(title).toBeDisabled();await expect(body).toHaveValue('未知結果必須重試同一筆。');await expect(submit).toBeEnabled();
+    if(deniedRetry){
+      await submit.click();await expect(council.getByRole('alert')).toContainText('沒有議事權限');
+      await expect(close).toBeDisabled();await expect(title).toBeDisabled();await expect(body).toBeDisabled();
+      await expect(title).toHaveValue('只建立一次');await expect(body).toHaveValue('未知結果必須重試同一筆。');
+      await council.getByRole('button',{name:'重讀討論',exact:true}).click();
+      await expect(council.getByRole('button',{name:/只建立一次/})).toBeDisabled();
+      await tabs.getByRole('button',{name:'公會公告',exact:true}).click();await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();
+      await expect(close).toBeDisabled();await expect(body).toHaveValue('未知結果必須重試同一筆。');
+    }
     await submit.click();await expect(council.getByRole('status')).toContainText('討論已建立');await expect(title).toHaveCount(0);
-    expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);expect(items).toHaveLength(1);
+    expect(writes).toHaveLength(deniedRetry?3:2);expect(writes[0].key).toBeTruthy();for(const write of writes)expect(write).toEqual(writes[0]);expect(items).toHaveLength(1);
     await expect(council.getByRole('button',{name:/只建立一次/})).toBeVisible();
   }finally{release();}
 });
@@ -304,7 +314,7 @@ for(const width of [320,390,768,1440])test(`council disclosure remains readable 
   }
 });
 
-test('an unknown council reply keeps its thread and original payload until retry confirms it',async({page})=>{
+for(const deniedRetry of [false,true])test(`an unknown council reply retains its thread and payload${deniedRetry?' through a denied replay':''}`,async({page})=>{
   const thread={thread_id:'original',title:'原討論',body:'討論內容',author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',replies:[] as any[]},other={...thread,thread_id:'other',title:'另一討論'};
   const writes:{body:unknown;key:string|undefined}[]=[];
   await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
@@ -313,13 +323,20 @@ test('an unknown council reply keeps its thread and original payload until retry
   await page.route('**/api/v1/guild-council/threads/original/replies',route=>{
     writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
     if(writes.length===1){thread.replies.push({reply_id:'once',body:'原本的回覆',author_name:'測試會長',created_at:thread.created_at});return route.fulfill({status:503,json:{detail:'回覆結果尚未確認。'}});}
+    if(deniedRetry&&writes.length===2)return route.fulfill({status:403,json:{detail:'目前沒有議事權限。'}});
     return route.fulfill({json:thread});
   });
   await login(page);await navigate(page,'公會管理');const council=page.locator('.guild-council');await council.getByRole('button',{name:/原討論/}).click();
   const reply=council.getByLabel('回覆討論',{exact:true});await reply.fill('原本的回覆');await council.getByRole('button',{name:'發布回覆',exact:true}).click();
   await expect(council.getByRole('alert')).toContainText('尚未確認');await expect(reply).toBeDisabled();await expect(reply).toHaveValue('原本的回覆');
   await expect(council.getByRole('button',{name:'新增討論',exact:true})).toBeDisabled();await expect(council.getByRole('button',{name:/另一討論/})).toBeDisabled();
+  if(deniedRetry){
+    await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('alert')).toContainText('沒有議事權限');
+    await expect(reply).toBeDisabled();await expect(reply).toHaveValue('原本的回覆');
+    await expect(council.getByRole('button',{name:'新增討論',exact:true})).toBeDisabled();await expect(council.getByRole('button',{name:/另一討論/})).toBeDisabled();
+    await council.getByRole('button',{name:'重讀討論',exact:true}).click();await expect(reply).toBeDisabled();await expect(reply).toHaveValue('原本的回覆');
+  }
   await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('status')).toContainText('回覆已發布');
   await expect(reply).toHaveValue('');await expect(reply).toBeEnabled();await expect(council.locator('.guild-council-reply')).toHaveCount(1);
-  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
+  expect(writes).toHaveLength(deniedRetry?3:2);expect(writes[0].key).toBeTruthy();for(const write of writes)expect(write).toEqual(writes[0]);
 });
