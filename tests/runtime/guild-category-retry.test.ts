@@ -170,7 +170,7 @@ test('same-owner held read can submit, ACK and release its original command',asy
 
 test('StrictMode setup cleanup setup permits a new intent but cannot revive the old held GET',async()=>{
  const h=lifetimeHarness();const old=h.functions.submitFresh(draft);h.cleanupAndReactivate();const current=h.functions.submitFresh({...draft,guild_key:'new-intent'});
- h.updates.length=0;h.gets[0].resolve({migration_state:'switched',aggregate_version:7});await old;assert.deepEqual(h.calls,[]);assert.deepEqual(h.updates,[]);
+ h.updates.length=0;h.gets[0].resolve({migration_state:'switched',aggregate_version:7});await old;assert.equal(h.calls.length,0);assert.deepEqual(h.updates,[]);
  h.gets[1].resolve({migration_state:'switched',aggregate_version:9});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.calls.length,1);assert.equal(h.calls[0].body.guild_key,'new-intent');assert.equal(h.calls[0].options.ifMatch,9);
  h.posts[0].resolve({aggregate_version:10});await current;assert.equal(h.context.categoryInFlight.current,false);assert.equal(h.context.categoryPending.current,null);
 });
