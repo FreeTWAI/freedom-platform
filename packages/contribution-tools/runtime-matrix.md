@@ -1,5 +1,59 @@
 # Diagnostic runtime matrix
 
+## Capacity, 2026-10-25
+
+八分區的 absolute budget 從 **1,500 → 2,100 秒（25 → 35 分鐘）**，吸收 hosted
+runner 速度差異；本節取代下方具日期紀錄中的八分區容量與 reporter 上限，歷史觀察保留。
+10 月 24 日權重的投影已平衡於 1,142.662–1,148.066 秒，但實際 progress span 如下：
+
+| Run（attempt 1） | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| #1027 PR Verify 40145018567，新權重，秒 | 1,032 | 1,428 | 1,359 | 1,016 | 1,263 | 1,426 | 900 | 1,387 |
+| main 53d528fc Verify 40135849585，舊權重，分鐘 | 15.5 | 18.8 | 22.8 | 22.7 | 22.5 | 22.9 | 18.4 | 16.7 |
+
+第一列由 `/tmp/fp-diag/pr1027-rt/` 八份 logs 的首末 `freedom.test-progress` timestamp
+差值獨立重算；第二列是本次任務提供的歷史數據。main `f987bb74` 的 Verify
+40124240773 在 partition 0 attempt 1 與 partition 2 attempt 2 曾觸及 1,500 秒而
+`test_timeout`（任務提供，未另取得該 run logs）。兩組權重的 hosted spread 仍相近，
+與 runner 速度差異相符；再次平衡投影不能保證足夠 headroom。
+
+同一批 #1027 logs，以首筆 job timestamp 到執行 `scripts/runtime-full.mjs` 的 command
+行 timestamp 計算 setup（包含 command 前的 build／integration 等工作）：
+
+| Partition | Job ID | Setup（秒） |
+| --- | --- | ---: |
+| 0 | 121026780103 | 214.644 |
+| 1 | 121026780127 | 163.045 |
+| 2 | 121026780207 | 168.440 |
+| 3 | 121026780142 | 185.858 |
+| 4 | 121026780114 | 158.651 |
+| 5 | 121026780084 | 161.466 |
+| 6 | 121026780091 | 167.760 |
+| 7 | 121026780108 | 166.555 |
+
+範圍為 158.651–214.644 秒，約 2:39–3:35（最慢 <3.6 分鐘）。
+
+| 項目 | 舊值 → 新值 |
+| --- | --- |
+| `PARTITION_BUDGET_MS[8]` | 1,500,000 → 2,100,000 ms |
+| `MATRIX_WINDOW_MS[8]` | 8 × 1,500,000 + 1,800,000 = 13,800,000 → 8 × 2,100,000 + 1,800,000 = 18,600,000 ms（230 → 310 分鐘） |
+| `PROGRESS_MAX_ELAPSED_MS` | 1,500,000 → 2,100,000 ms |
+| `runtime-full.timeout-minutes` | 40 → 45 分鐘 |
+
+45 分鐘 job 扣除最多約 3.6 分鐘 setup 與 35 分鐘 partition，仍約有 6.4 分鐘供
+upload／額外開銷；這是有界餘裕，不保證任意 runner 都能完成。八分區預算仍包含
+20 秒 provisioning 與 64 秒 cleanup reserve，測試最多約 2,016 秒。
+四／六分區維持 1,200／1,500 秒，aggregate 維持 1,800／10,800 秒；queue gaps
+仍限 1,800 秒，local full、scheduler、weights、fixtures 與個別測試 timeout 都不變。
+October 21 投影最大值 <1,416 秒（含新增檔），October 24 最大值 <1,210 秒、spread
+<10 秒、加入未量測檔後 <1,220 秒，全部維持原 assertions。
+
+Progress decoder 接受 2,100,000 ms、拒絕 2,100,001 ms；reporter 在新上限 clamp。
+權重 parser 的 strict input 仍拒絕三代飽和值 **1,200,000、1,500,000、2,100,000**，
+explicit partial input 只省略受飽和端點影響的檔案，不將舊 clamp 當實測 duration。
+八分區 fragment 與 aggregate 也各自接受恰好上限、拒絕多一毫秒。
+這些本機 regression 不代表新的 hosted matrix、部署或原需求驗收已完成。
+
 ## 慢速 DROP 的有界等待（2026-10-20）
 
 目前清理使用一個 **60 秒** absolute deadline，suite 預留 **64 秒**；本節取代下方
@@ -34,13 +88,13 @@ rmtree 沒有逐檔 `CHECK_FOR_INTERRUPTS`，不能假設 termination ACK 會立
 大量檔案在 runner filesystem 的移除延遲是合理推論；log 沒有分開量到 barrier／rmtree，
 不能將 unavailable observer 當作進度或根因證明。
 
-八／六分區仍限 1,500 秒：最多 20 秒 provisioning + 約 1,416 秒測試 + 64 秒 reserve。
+目前八／六分區分別限 2,100／1,500 秒：最多 20 秒 provisioning + 約 2,016／1,416 秒測試 + 64 秒 reserve。
 reserve 比原本多 40 秒；以 [commerce 計畫](../../docs/platform-plan/execution/commerce/work-plan.md)
 的 1,150.196 秒最長觀察保守估算，扣完 provisioning 仍有約 266 秒測試餘裕；
-該 run 的測試／清理失敗紀錄保留。40 分鐘 Actions job 為 2,400 秒，partition 外仍留 900 秒供
+該 run 的測試／清理失敗紀錄保留。八分區 45 分鐘 Actions job 為 2,700 秒，partition 外仍留 600 秒供
 setup／build／integration／artifact；不保證任意 runner 延遲都能完成。四分區維持
 1,200 秒、本機 full 維持 900 秒，因此扣相同 provisioning 後分別約 1,116／816 秒；
-這些入口也少 40 秒測試時間，並未增加外層 deadline 或擴張 aggregate window。
+這些入口也少 40 秒測試時間；本次八分區容量另依上節調整。
 
 正向 fresh absence、owner／session／nonce identity、owner／cleaner settlement、
 所有資料庫仍存在即失敗的規則保留，不重試 DROP，不改 service container 或 durability。
@@ -56,6 +110,82 @@ node scripts/runtime-aggregate.mjs --partition-count 8 --input-dir .freedom/repo
 ```
 
 Use indexes 0 through 7 on separate hosts. Upload each `runtime-partition-N.json` even on failure, then download the eight files into one flat input directory. A fragment has schema `freedom.runtime-partition/v1` and check ID `runtime.partition.N`; it cannot represent a full-suite pass. Both its outer and nested cleanup flags must be true for acceptance. Failed artifacts remain intact and are never overwritten by aggregation.
+
+## 權重更新，2026-10-24
+
+本次沿用 `8034f082d` 的推導：每檔取兩次 hosted run 的最小 serial progress
+差值（含載入），權重向上取整秒、至少 1。輸入為 main `53d528fc` 的
+[run 40135849585](https://github.com/FreeTWAI/freedom-platform/actions/runs/40135849585)
+與 PR #1017 merge `53253dcc` 的
+[run 40135935354](https://github.com/FreeTWAI/freedom-platform/actions/runs/40135935354)，
+皆為 attempt 1、八分區全部通過。16 份 logs 均以嚴格 `--log` 解析，無 partial
+或飽和值；fixture 使用工具既有 `source`、`measurement`、`milliseconds` 格式，
+不再附前次才需要的 partial 標記。舊 fixture 原樣保留，不混入本輪 minima。
+
+兩次 run 各自的分區聯集都精確涵蓋 baseline `b13a9fa9` 的 491 個 runtime files，
+無重複、缺漏或刪除，每筆 completed record 的 `source_sha256` 都與目前檔案相符。
+`53d528fc` 到 baseline 的差異只有 FriendsPanel、其 e2e 與 inventory，無 runtime
+檔案變更；PR merge 的 parent 關係依任務提供，該 merge object 本機不可用，未另驗。
+量測合計 9,157.207 秒，整秒權重合計 9,426。這是排程估算；兩次舊權重的成功 run
+不代表新 candidate 已跑過 hosted CI，也不更新原需求驗收或部署狀態。
+
+用實際 `partitionRuntimeFiles(files, 8)`，按本次 fixture 的 ms 加總：
+
+| 分區 | 舊權重秒數 | 新權重秒數 |
+| --- | ---: | ---: |
+| 0 | 879.625 | 1,144.176 |
+| 1 | 1,127.559 | 1,142.662 |
+| 2 | 1,362.694 | 1,144.018 |
+| 3 | 1,350.967 | 1,143.654 |
+| 4 | 970.068 | 1,142.868 |
+| 5 | 1,368.154 | 1,144.836 |
+| 6 | 1,099.495 | 1,148.066 |
+| 7 | 998.645 | 1,146.927 |
+
+最小／最大由 879.625／1,368.154 → 1,142.662／1,148.066 秒，spread 5.404 秒，
+最大值低於本輪 1,250 秒目標。以各 run 自己的全部量測重算新分配，main 為
+1,161.931–1,256.785 秒、PR 為 1,231.367–1,366.546 秒；minima 的低估與主機差異
+仍存在。此處不含 integration suite、provisioning、檔案間隙或 cleanup；GitHub step
+分鐘數不能直接當作這些 per-file durations。新 candidate 仍需完整 hosted matrix。
+
+歷史測試依前次方法對齊其窗口；本次唯一改動的歷史數值如下：
+
+| 檢查 | 舊界線（秒） | 新界線（秒） | 理由 |
+| --- | ---: | ---: | --- |
+| October 21 八分區最大值 | <1,210 | <1,416 | 原 cushion 依 October 21 權重校準；改錨既有 1,500 − 64 cleanup − 20 provisioning 窗口 |
+| October 21 新增 15 秒未知檔案 | <1,220 | <1,416 | 同一個窗口，不另加額外餘裕 |
+
+October 21 的 `<10 秒` spread 檢查移至 October 24 fixture，數值不變；新 fixture
+同時保留 `<1,210 秒` 最大值與加檔 `<1,220 秒`，比本輪目標更嚴。
+October 21 歷史成本在新分配的最大值為 1,268.921 秒，加檔最多 1,276.254 秒；
+不再用它判定新量測的平衡。所有其他歷史界線、完整聯集、唯一性、排序、加檔檢查均保留。
+分區數、test／job timeout、cleanup reserve 與 case／source／失敗驗證規則完全不變。
+
+原始 logs 位於 `/tmp/fp-diag/runtime-reweigh-20261025/`，檔名包含 run／attempt／job ID；
+逐 job 的分區、檔數、SHA-256 與稽核命令保存在本次 job report。從 repo root 重現：
+
+```sh
+node scripts/ci/derive-runtime-weights.mjs --root . \
+  --note "Progress segments of runs 40135849585 (2026-10-24, main 53d528fc, attempt 1) and 40135935354 (2026-10-24, PR #1017 merge 53253dcc, attempt 1); all eight partitions of both runs passed; all 491 current runtime files have matching source hashes." \
+  --output packages/contribution-tools/runtime-file-weights.mjs \
+  --costs-output packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261024.json \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363219.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363230.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363247.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363253.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363262.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363275.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363290.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/main-53d528fc-run40135849585-a1-120998363413.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494409.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494445.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494446.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494457.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494461.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494491.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494492.log \
+  --log /tmp/fp-diag/runtime-reweigh-20261025/pr1017-merge-53253dcc-run40135935354-a1-120999494515.log
+```
 
 ## 權重更新，2026-10-21
 

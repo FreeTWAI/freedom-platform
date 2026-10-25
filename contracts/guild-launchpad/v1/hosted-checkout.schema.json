@@ -684,6 +684,42 @@
             "additionalProperties": false
           }
         },
+        "required_consents": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "policy_kind": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_.-]{0,79}$(?![\\s\\S])"
+              },
+              "policy_version_id": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[^\\u0000\\uD800-\\uDFFF]*$(?![\\s\\S])"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^\\/shops\\/[a-z0-9][a-z0-9-]*\\/policies\\/(?:shipping|returns|privacy|terms)$(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "policy_kind",
+              "policy_version_id",
+              "label",
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
         "merchandise_total_minor": {
           "type": "integer",
           "minimum": 0,
@@ -1085,6 +1121,7 @@
         "publication_revision",
         "currency",
         "lines",
+        "required_consents",
         "merchandise_total_minor",
         "discounts",
         "delivery_options",

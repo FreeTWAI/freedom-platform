@@ -103,7 +103,7 @@ test('October 16 measured costs stay inside the current six- and eight-partition
 
   // The earlier 1.33x/six-way and 1.8x/eight-way room estimates for run 38968059268
   // referred to weights derived from those runs. Current weights come from later runs,
-  // so these costs no longer measure balance; use the October 21 fixture's 1,210s window.
+  // so these costs no longer measure balance; keep the current fixture's 1,210s window.
   for (const [count, bound] of [[6, 1_210_000], [8, 1_210_000]]) {
     const partitions = partitionRuntimeFiles(files, count);
     assert.deepEqual(partitions.flat().sort(), files);
@@ -124,7 +124,7 @@ test('October 16 measured costs stay inside the current six- and eight-partition
 });
 
 
-test('October 21 measured costs balance eight partitions inside the host budget', () => {
+test('October 21 measured costs stay inside the eight-partition host window', () => {
   const observation = JSON.parse(readFileSync(new URL('./fixtures/runtime-hosted-costs-20261021.json', import.meta.url)));
   const files = Object.keys(observation.milliseconds).map(name => 'tests/runtime/' + name).sort();
   const cost = path => observation.milliseconds[path.split('/').at(-1)] ?? 0;
@@ -134,8 +134,40 @@ test('October 21 measured costs balance eight partitions inside the host budget'
   assert.equal(observation.input_completeness, 'partial_scheduling_estimates');
   assert.deepEqual(observation.partial_logs, ['b963-p1-failure.log', 'main-p3-failure.log']);
 
-  // Per-file minima are scheduling estimates, not a coherent hosted run. Leave
-  // headroom below 1,500s minus the 64s cleanup reserve and 20s provisioning.
+  // Current weights come from October 24. The old 1,210s balance cushion was
+  // calibrated to October 21 weights; retain the same 1,500s host window minus
+  // the 64s cleanup reserve and 20s provisioning for these historical costs.
+  // The unchanged <10s balance requirement now belongs to the current fixture.
+  const bound = 1_416_000;
+  const partitions = partitionRuntimeFiles(files, 8);
+  assert.deepEqual(partitions.flat().sort(), files);
+  assert.equal(new Set(partitions.flat()).size, files.length);
+  assert(partitions.every(shard => JSON.stringify(shard) === JSON.stringify([...shard].sort())));
+  const totals = partitions.map(total);
+  assert(Math.max(...totals) < bound);
+
+  for (const extra of ['tests/runtime/aaa-unmeasured.test.ts', 'tests/runtime/zzz-unmeasured.test.ts']) {
+    const expanded = [...files, extra].sort();
+    const shards = partitionRuntimeFiles(expanded, 8);
+    assert.deepEqual(shards.flat().sort(), expanded);
+    assert.equal(new Set(shards.flat()).size, expanded.length);
+    const withExtra = shard => shard.reduce((sum, path) => sum + (path === extra ? 15_000 : cost(path)), 0);
+    assert(Math.max(...shards.map(withExtra)) < bound);
+  }
+});
+
+test('October 24 measured costs balance eight partitions inside the host budget', () => {
+  const observation = JSON.parse(readFileSync(new URL('./fixtures/runtime-hosted-costs-20261024.json', import.meta.url)));
+  const files = Object.keys(observation.milliseconds).map(name => 'tests/runtime/' + name).sort();
+  const cost = path => observation.milliseconds[path.split('/').at(-1)];
+  const total = shard => shard.reduce((sum, path) => sum + cost(path), 0);
+
+  assert.equal(files.length, 491);
+  assert.equal(observation.input_completeness, undefined);
+  assert.equal(observation.partial_logs, undefined);
+
+  // Complete source-matched logs still yield per-file minima, not a coherent
+  // hosted run. Keep the previous fixture's cushion and <10s spread requirement.
   const bound = 1_210_000;
   const partitions = partitionRuntimeFiles(files, 8);
   assert.deepEqual(partitions.flat().sort(), files);
