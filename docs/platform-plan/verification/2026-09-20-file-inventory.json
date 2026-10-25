@@ -639,8 +639,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/hosted-checkout.ts",
-      "bytes": 10695,
-      "sha256": "42418a07f2d6f9b9b3188c959d5237f3766c20b87a999da64d32f094ab4c853d"
+      "bytes": 10960,
+      "sha256": "3f805c43d6364d0d4383bb21784379e2e7f8851b2053be46c279e0d63f843179"
     },
     {
       "path": "apps/platform-api/src/routes/hosted-commerce-setup.ts",
@@ -4329,8 +4329,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 31900,
-      "sha256": "8d700bce7ca6811930729c56410da10cbca52fdff0ed96da1571100b7583ef09"
+      "bytes": 33997,
+      "sha256": "22e570de56187ecb0dc486883a0adc2d4a97679b5c41119bae9e3ac888ea9191"
     },
     {
       "path": "apps/portal-web/src/storefront/delivery-copy.ts",
@@ -13769,13 +13769,13 @@
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.schema.json",
-      "bytes": 141251,
-      "sha256": "c4674bc3b2b8e2e67d166cb8ac3ac0ca5f7d1cf7019fe221361347d3ebde2d9f"
+      "bytes": 142482,
+      "sha256": "4dd56dfd6d98f06a6564d6163b99d027daf136432267d605b72a2ceb9ddfa7a3"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-checkout.ts",
-      "bytes": 22376,
-      "sha256": "3f358cc599d054b6a92c988e8c913268e958c13871f34f8accc74420187f66c4"
+      "bytes": 22578,
+      "sha256": "ec837691ba7d11fc99c8483959f69f9a17d07dbc12b20e58366d9e35b1d9360b"
     },
     {
       "path": "contracts/guild-launchpad/v1/hosted-commerce-setup.schema.json",
@@ -18369,8 +18369,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/README.md",
-      "bytes": 45224,
-      "sha256": "57bcb5235cf33f188fe16e889ac10e312247646e5f07c14e841be4f9430ab2b9"
+      "bytes": 46621,
+      "sha256": "a96ac2bf9fee610cb6ec72f9826a25444a8bba30c2afaeafcfc5ce6f1b50cffa"
     },
     {
       "path": "modules/agent-commerce/checkout/access.ts",
@@ -18389,8 +18389,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/cart-quote.ts",
-      "bytes": 6404,
-      "sha256": "db0b824931cd074b9203cbfb2c65de5e75a2bd75fbd8036009c8ada084db1959"
+      "bytes": 6462,
+      "sha256": "f3c9a4163117b8df50b7c65dc2a632eb59d255d741141d4b1657911451fdf67e"
     },
     {
       "path": "modules/agent-commerce/checkout/confirmed-payment.ts",
@@ -18489,8 +18489,8 @@
     },
     {
       "path": "modules/agent-commerce/checkout/terms.ts",
-      "bytes": 26379,
-      "sha256": "27cdb74bda3436b8ace974e721dc332fbf3709059857c09312d6d88dcc9fa2ad"
+      "bytes": 26413,
+      "sha256": "df311561dc8cb73a7eb766a6f345126a6a0fbcc4e35dfbf1dbd72646fb47a8cc"
     },
     {
       "path": "modules/agent-commerce/fulfilment/README.md",
@@ -19529,8 +19529,8 @@
     },
     {
       "path": "modules/agent-commerce/storefront/README.md",
-      "bytes": 26273,
-      "sha256": "7e46815576a81d935ccd2be6d43324723863552764253858a262eca3f502d93b"
+      "bytes": 26647,
+      "sha256": "977c7f0a314b10d944d4d9b17de7735322042310f9219730c42208427eb5ecf7"
     },
     {
       "path": "modules/agent-commerce/storefront/freedom.module.json",
@@ -19616,6 +19616,11 @@
       "path": "modules/agent-commerce/storefront/gallery/target.ts",
       "bytes": 6398,
       "sha256": "3092a86ca3cc8bc7894760d24c7a5a34fbd48aaf05cf7654292b434f4054807f"
+    },
+    {
+      "path": "modules/agent-commerce/storefront/policies/checkout.ts",
+      "bytes": 1231,
+      "sha256": "13813f313d3f45a592b3e76c0b4f16866a7a3954186a0acf55f08ab60170f696"
     },
     {
       "path": "modules/agent-commerce/storefront/policies/commands.ts",
@@ -20559,8 +20564,8 @@
     },
     {
       "path": "modules/community/content-search.ts",
-      "bytes": 21513,
-      "sha256": "b3cbbcfc9a15dd7aa077c74f148dc3d5d78c20e2ad9f9ea952008853edec2167"
+      "bytes": 21539,
+      "sha256": "642095fd794a7d3e2a8988619f365d45d62245ba0f9762512fc638d0bd7ed876"
     },
     {
       "path": "modules/community/discovery.ts",
@@ -24739,8 +24744,8 @@
     },
     {
       "path": "tests/e2e/storefront-cart.spec.ts",
-      "bytes": 69195,
-      "sha256": "d18e0b2aafbd129d6f40a4ee5b412785f83371fdb96a309cf04820ea442590c5"
+      "bytes": 69315,
+      "sha256": "dcaf4fa7edfda6fcabfd71121ef709648593ddf98964aef95200ba4a689569dd"
     },
     {
       "path": "tests/e2e/storefront-drop-ship.spec.ts",
@@ -24749,8 +24754,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 147685,
-      "sha256": "8c428cc8c67b300d07adcbd9e4e2c7b9b92d5703ba132e31c10fece231c8d588"
+      "bytes": 152119,
+      "sha256": "02f12493fd8dd2cd8ba34cec5e6bca5af49042b59f19a39ab7301ccf213ff2be"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -25269,8 +25274,8 @@
     },
     {
       "path": "tests/runtime/buyer-journey.test.ts",
-      "bytes": 17912,
-      "sha256": "c649ba7c288f1bce59ba51034612488346984b82fc4b8e472ca0b3c380f17216"
+      "bytes": 17935,
+      "sha256": "a980685d4e6d2ed1fcaafb0403013a651016883add7442397e5fa38d63e7b7d2"
     },
     {
       "path": "tests/runtime/chat-content.test.ts",
@@ -25424,8 +25429,8 @@
     },
     {
       "path": "tests/runtime/community-search.test.ts",
-      "bytes": 42224,
-      "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
+      "bytes": 47844,
+      "sha256": "96df87561f8d6ddbb80cff9543a444ae98e908bac776d1219799d3f7713cc8d6"
     },
     {
       "path": "tests/runtime/contribution-roles.test.ts",
@@ -25854,8 +25859,8 @@
     },
     {
       "path": "tests/runtime/hosted-checkout-contracts.test.ts",
-      "bytes": 17851,
-      "sha256": "4d0e252f7b549d5d7dd69dbcda082df7d5919c082aeb0bdc6fa54b9ad7ec77e1"
+      "bytes": 19726,
+      "sha256": "6a20c0ed69540af625cb29b26cd74d07d3247713782ba6613b261ac53857e5f3"
     },
     {
       "path": "tests/runtime/hosted-checkout-core.test.ts",
@@ -25869,8 +25874,8 @@
     },
     {
       "path": "tests/runtime/hosted-checkout-http.test.ts",
-      "bytes": 62114,
-      "sha256": "fafe42c9f18a514858850b384786583d7d11af9c4da3d63f16d5db9bb9ad84dc"
+      "bytes": 67993,
+      "sha256": "42a590cd82e55c71bebc702c8885106f0b1640072591c04ffa38cd85a61b8705"
     },
     {
       "path": "tests/runtime/hosted-checkout-purchase-state.test.ts",

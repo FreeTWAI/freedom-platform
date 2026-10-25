@@ -17,11 +17,13 @@ import {redeemAccessLink,shopCookieName} from '../../modules/agent-commerce/chec
 import {resolvePublicStorePage} from '../../modules/agent-commerce/hosted/public.js';
 import {checkoutHarness,ports,ok,type CheckoutHarness} from './hosted-checkout-harness.js';
 import type {CommerceSettings} from '../../modules/agent-commerce/operations/runtime-settings.js';
+import {seedSellerPolicyRows,legalTables} from '../helpers/storefront-policies.js';
+import {POLICY_KINDS,POLICY_LABELS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import type {CheckoutPorts} from '../../modules/agent-commerce/checkout/terms.js';
 let x:CheckoutHarness,app:ReturnType<typeof createPlatformApp>,email:FixtureEmailSender,journal:MemoryEffectJournal,origin:string,policies:{policy_kind:string;policy_version_id:string}[];
-function install(settings:CommerceSettings={checkoutEnabled:true,consoleEnabled:true,quarantine:false,providerProfiles:[],emailEnabled:true},extra:CheckoutPorts={}) {
+function install(settings:CommerceSettings={checkoutEnabled:true,consoleEnabled:true,quarantine:false,providerProfiles:[],emailEnabled:true},extra:CheckoutPorts={},storePoliciesEnabled=false) {
   const mode=origin.startsWith('https:')?'public':'local';
-  const runtime=nodeRuntime(mode,origin,{guildLaunchpadEnabled:true,commerceSettings:settings,commercePorts:{...ports,policies:{required:async()=>policies},...extra}});
+  const runtime=nodeRuntime(mode,origin,{guildLaunchpadEnabled:true,storePoliciesEnabled,commerceSettings:settings,commercePorts:{...ports,policies:{required:async(_q,store)=>policies.map(p=>({...p,label:'商店條款',url:`/shops/${store.slug}/policies/terms`}))},...extra}});
   runtime.rateLimitNetwork=cloudflareRateLimitNetwork(true);app=createPlatformApp(x.runtime,origin,mode,runtime);
 }
 async function http(method:string,path:string,body?:unknown,cookie?:string,headers:Record<string,string>={}) {
@@ -588,4 +590,51 @@ for(const suspended of ['tenant','deployment'] as const)test(`quote isolates a $
   assert.deepEqual(r.data.lines.map((l:{state:string})=>l.state).sort(),['ok','unavailable']);assert.equal(r.data.merchandise_total_minor,100);assert.equal(r.data.total_minor,null);
   expect(await http('POST',root(seller)+'/checkouts',{...x.input(lines[0].sku,1),publication_revision:projection.revision,lines},undefined,{'Idempotency-Key':randomUUID()}),409,'storefront_unavailable');
   await suspend(seller);expect(await http('POST',root(seller)+'/cart-quotes',{publication_revision:projection.revision,lines}),404,'checkout_store_not_found');
+});
+
+type PolicyStore=Awaited<ReturnType<CheckoutHarness['store']>>;
+const policyRefs=(quote:ReturnType<typeof wire.CartQuoteResponseSchema.parse>)=>quote.required_consents.map(({policy_kind,policy_version_id})=>({policy_kind,policy_version_id}));
+async function policyQuote(s:PolicyStore){return wire.CartQuoteResponseSchema.parse(expect(await http('POST',root(s)+'/cart-quotes',{publication_revision:'1',lines:[{sku:s.product.sku,quantity:1}],delivery:{method:'synthetic'}})));}
+async function seedPublishedPolicies(s:PolicyStore){const q=await x.h.pool.connect();try{await q.query('BEGIN');const result=await seedSellerPolicyRows(q,{tenantId:s.tenantId,instanceId:s.instanceId});await q.query('COMMIT');return result;}finally{await q.query('ROLLBACK');q.release();}}
+async function revisePolicies(s:PolicyStore,change:(policies:Record<string,{body:string}>)=>void){
+  const current=ok(await x.h.call('GET',s.root+'/seller-policies',s.owner,undefined,{},app));change(current.policies);
+  const saved=ok(await x.h.call('PUT',s.root+'/seller-policies',s.owner,{seller:current.seller,policies:current.policies},{'Idempotency-Key':randomUUID(),'If-Match':`"${current.version}"`},app));
+  ok(await x.h.call('POST',s.root+'/publish',s.owner,{}, {'Idempotency-Key':randomUUID(),'If-Match':`"${saved.current.version}"`},app));
+}
+test('published policies flag OFF reads no legal tables and preserves empty-consent checkout; ON without refs is empty',async()=>{
+  const s=await x.store();await seedPublishedPolicies(s);install(undefined,{policies:undefined});
+  const role=(await x.runtime.query('SELECT current_user AS name')).rows[0].name;
+  await x.h.pool.query(`REVOKE SELECT ON ${legalTables.join(',')} FROM ${role}`);
+  try{
+    assert.deepEqual((await policyQuote(s)).required_consents,[]);
+    const f=await checkout(s);expect(await http('POST',root(s)+`/checkouts/${f.c.checkout_ref}/orders`,{terms_sha256:f.c.terms_sha256,client_order_id:randomUUID()},f.browser),201);
+  }finally{await x.h.pool.query(`GRANT SELECT ON ${legalTables.join(',')} TO ${role}`);}
+  install(undefined,{},true);const empty=await x.store();assert.deepEqual((await policyQuote(empty)).required_consents,[]);
+  const f=await checkout(empty);assert.deepEqual(f.c.terms.consents,[]);expect(await http('POST',root(empty)+`/checkouts/${f.c.checkout_ref}/orders`,{terms_sha256:f.c.terms_sha256,client_order_id:randomUUID()},f.browser),201);
+});
+test('published policy refs quote labelled URLs, require the exact set and remain frozen in placed order terms',async()=>{
+  const s=await x.store(),seed=await seedPublishedPolicies(s);install(undefined,{},true);
+  const quote=await policyQuote(s),consents=policyRefs(quote);
+  assert.deepEqual(quote.required_consents,POLICY_KINDS.map(kind=>({policy_kind:`storefront.${kind}`,policy_version_id:seed.policyIds[kind],label:POLICY_LABELS[kind],url:`/shops/${s.slug}/policies/${kind}`})));
+  for(const supplied of [[],consents.slice(1),[...consents,consents[0]],[...consents.slice(1),{...consents[0],policy_version_id:randomUUID()}]])expect(await http('POST',root(s)+'/checkouts',{...x.input(s.product.sku,1),consents:supplied},undefined,{'Idempotency-Key':randomUUID()}),422,'consents_mismatch');
+  const f=await checkout(s,{consents:[...consents].reverse()});assert.deepEqual(f.c.terms.consents,[...consents].reverse());
+  const order=expect(await http('POST',root(s)+`/checkouts/${f.c.checkout_ref}/orders`,{terms_sha256:f.c.terms_sha256,client_order_id:randomUUID()},f.browser),201).order;
+  assert.deepEqual((await x.h.pool.query('SELECT terms->\'consents\' AS consents FROM commerce_checkout_orders WHERE order_id=$1',[order.order_ref])).rows[0].consents,[...consents].reverse());
+});
+test('newly published policy between quote and freeze rejects stale consents, while placement keeps terms_changed',async()=>{
+  const s=await x.store();await seedPublishedPolicies(s);install(undefined,{},true);
+  const old=await policyQuote(s),f=await checkout(s,{consents:policyRefs(old)});
+  await revisePolicies(s,p=>{p.shipping.body='合成新版本運送政策';});
+  expect(await http('POST',root(s)+'/checkouts',{...x.input(s.product.sku,1),consents:policyRefs(old)},undefined,{'Idempotency-Key':randomUUID()}),422,'consents_mismatch');
+  expect(await http('POST',root(s)+`/checkouts/${f.c.checkout_ref}/orders`,{terms_sha256:f.c.terms_sha256,client_order_id:randomUUID()},f.browser),409,'terms_changed');
+  const latest=await policyQuote(s);assert.notEqual(latest.required_consents[0].policy_version_id,old.required_consents[0].policy_version_id);
+  await checkout(s,{publication_revision:latest.publication_revision,consents:policyRefs(latest)});
+});
+test('only nonempty current publication policy kinds are required and another tenant never appears',async()=>{
+  const a=await x.store(),b=await x.store();await seedPublishedPolicies(a);const foreign=await seedPublishedPolicies(b);install(undefined,{},true);
+  await revisePolicies(a,p=>{p.returns.body='';p.privacy.body='';});
+  const quote=await policyQuote(a);assert.deepEqual(quote.required_consents.map(p=>p.policy_kind),['storefront.shipping','storefront.terms']);
+  for(const policy of quote.required_consents){assert(!Object.values(foreign.policyIds).includes(policy.policy_version_id));assert(policy.url.startsWith(`/shops/${a.slug}/`));}
+  const other=await policyQuote(b);assert.deepEqual(other.required_consents.map(p=>p.policy_version_id),POLICY_KINDS.map(k=>foreign.policyIds[k]));
+  await checkout(a,{publication_revision:quote.publication_revision,consents:policyRefs(quote)});
 });

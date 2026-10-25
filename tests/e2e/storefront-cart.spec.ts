@@ -550,6 +550,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
     const storeNotFoundBody = buildVerifiedError(404, 'checkout_store_not_found', '找不到商店。');
 
     const notConfiguredQuote = buildVerifiedQuote({
+      required_consents: [],
       payment_options: [{ method: 'immediate_card', available: true, reason: null }],
       publication_revision: store.revision,
       currency: 'TWD',
@@ -572,6 +573,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
     });
 
     const unavailableWithTitleQuote = buildVerifiedQuote({
+      required_consents: [],
       payment_options: [{ method: 'immediate_card', available: true, reason: null }],
       publication_revision: store.revision,
       currency: 'TWD',
@@ -737,6 +739,7 @@ test('9. B04 error table (429, 503, 409, 404, network/malformed), retry focus to
       }
       inFlightCount -= 1;
       const body = buildVerifiedQuote({
+        required_consents: [],
         payment_options: [{ method: 'immediate_card', available: true, reason: null }],
         publication_revision: store.revision,
         currency: 'TWD',
@@ -850,6 +853,7 @@ test('10. defensive storage cleanup, 50-line cap alert on B03, and Storage.proto
       const parsed = assertExactQuoteInput(route.request().postData());
       capturedLines = parsed.lines;
       const fulfilled = buildVerifiedQuote({
+        required_consents: [],
         payment_options: [{ method: 'immediate_card', available: true, reason: null }],
         publication_revision: store.revision,
         currency: 'TWD',
