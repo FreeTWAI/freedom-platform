@@ -468,3 +468,34 @@ for(const mode of ['create','edit'] as const)for(const denied of [403,412])test(
   await title.fill('確認後的新意圖');await body.fill('第二則獨立公告。');await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
   await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();expect(calls).toHaveLength(4);expect(calls[3].key).not.toBe(calls[0].key);
 });
+
+test('a held announcement ACK after logout cannot enter the replacement session console or start its reads',async({page})=>{
+  const syntheticTitle='Synthetic old-session announcement';let held:Route|undefined,captured!:()=>void,reads=0,writes=0;
+  const requested=new Promise<void>(resolve=>captured=resolve),pattern='**/api/v1/guilds/synthetic-guild/announcements';
+  const handler=(route:Route)=>{if(route.request().method()==='POST'){writes++;if(writes===1){held=route;captured();return;}return route.fulfill({json:{...announcement,...route.request().postDataJSON()}});}reads++;return route.fulfill({json:{items:[]}});};
+  await page.route(pattern,handler);
+  try{
+    await login(page);await navigate(page,'公會管理');const original=await (await page.request.get('/api/v1/session')).json();
+    const workspace=page.locator('.guild-workspace');await workspace.getByRole('textbox',{name:'公告標題',exact:true}).fill(syntheticTitle);await workspace.getByRole('textbox',{name:'公告內容',exact:true}).fill('Synthetic content from the previous session.');await workspace.getByRole('combobox',{name:'發布狀態',exact:true}).selectOption('published');
+    await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await requested;
+    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.locator('.login-card')).toBeVisible();
+    // No page.goto: the old callback must survive in this same document.
+    await page.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();
+    const replacement=await (await page.request.get('/api/v1/session')).json();expect(replacement.user.user_id).not.toBe(original.user.user_id);expect(replacement.csrf_token).not.toBe(original.csrf_token);
+    await navigate(page,'公會管理');await expect(workspace.getByText('尚未建立公告。',{exact:true})).toBeVisible();const settledReads=reads;
+    // Observe only this synthetic event's count, never store other console data.
+    await page.evaluate(title=>{const root=window as any;if(typeof BroadcastChannel==='undefined')throw new Error('BroadcastChannel is required for this console delivery assertion');const original=BroadcastChannel.prototype.postMessage;root.__guildLifetimeProbe={events:0,restore:()=>{BroadcastChannel.prototype.postMessage=original;}};BroadcastChannel.prototype.postMessage=function(message){if(message?.type==='event'&&message.event?.message===title)root.__guildLifetimeProbe.events++;return original.call(this,message);};},syntheticTitle);
+    const oldWrite=held!;const finished=page.waitForEvent('requestfinished',request=>request===oldWrite.request());await oldWrite.fulfill({json:{...announcement,title:syntheticTitle}});held=undefined;await finished;
+    await workspace.getByRole('textbox',{name:'公告標題',exact:true}).fill('Replacement session draft');
+    await expect(workspace.getByRole('textbox',{name:'公告標題',exact:true})).toHaveValue('Replacement session draft');expect(reads).toBe(settledReads);
+    expect(await page.evaluate(()=>(window as any).__guildLifetimeProbe.events)).toBe(0);
+    await workspace.getByRole('textbox',{name:'公告內容',exact:true}).fill('Replacement session body');
+    await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+    await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();
+    await expect(workspace.getByRole('textbox',{name:'公告標題',exact:true})).toHaveValue('');expect(writes).toBe(2);
+  }finally{
+    if(held){try{await held.abort();}catch{/* Already completed or fixture teardown. */}}
+    await page.unroute(pattern,handler);
+    if(!page.isClosed())await page.evaluate(()=>{const root=window as any;root.__guildLifetimeProbe?.restore();delete root.__guildLifetimeProbe;});
+  }
+});
