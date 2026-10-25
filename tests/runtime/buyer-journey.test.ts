@@ -19,7 +19,7 @@ const store = {slug: 'synthetic-buyer-shop', name: '合成商店', brand: null, 
 test('delivery copy is exhaustive; cart notes require every configured method to block the same SKU', () => {
   assert.deepEqual(Object.keys(SHIPPING_REASON_COPY).sort(), [...ShippingUnavailableReasonSchema.options].sort());
   const option = (method: ShippingMethodRef, reason?: ShippingUnavailableReason, sku = 'P0001') => ({method, available: !reason, shipping_total_minor: reason ? null : 0, parcel_count: reason ? null : 1, free_over_minor: null, outlying: null, note: null, lines: reason ? [{sku, reason}] : []});
-  const base = {publication_revision: '1', currency: 'TWD', lines: [{sku: 'P0001', title: '合成茶杯', options: [], unit_price_minor: 100, quantity: 1, line_total_minor: 100, state: 'ok'}], merchandise_total_minor: 100, discounts: [], delivery_options: [], shipping: {state: 'not_configured', groups: [], total_minor: null}, total_minor: null, payment_options: []};
+  const base = {publication_revision: '1', currency: 'TWD', lines: [{sku: 'P0001', title: '合成茶杯', options: [], unit_price_minor: 100, quantity: 1, line_total_minor: 100, state: 'ok'}], merchandise_total_minor: 100, discounts: [], delivery_options: [], shipping: {state: 'not_configured', groups: [], total_minor: null}, total_minor: null, payment_options: [], required_consents: []};
   for (const reason of ShippingUnavailableReasonSchema.options) {
     const options = [option('meetup', reason), option('home', reason)];
     const quote = CartQuoteResponseSchema.parse({...base, delivery_options: options});
