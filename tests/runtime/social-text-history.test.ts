@@ -1,3 +1,4 @@
+import {normalizeShareUrl} from '../../packages/shared/share-url';
 import * as React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {test} from 'node:test';
@@ -73,11 +74,12 @@ async function gameTextHarness(){
 
  const {readFileSync}=await import('node:fs'),{runInNewContext}=await import('node:vm'),{transformSync}=await import('esbuild');
  let origin:string|undefined,injected=false;
- const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>}};
+ const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};externalShareLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>}};
  const hooks={...React,useState:(initial:unknown)=>{if(origin!==undefined&&!injected){injected=true;return [origin,()=>{}];}return React.useState(initial);}};
  const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8');
  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,URL,require:(name:string)=>{
   if(name==='react')return hooks;if(name==='react/jsx-runtime')return requireJsx;
+  if(name==='../../../../packages/shared/share-url')return {normalizeShareUrl};
   if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};
   if(name==='./MemberAvatar')return {MemberAvatar:()=>null};throw Error('Unexpected import '+name);
  }});
@@ -123,4 +125,50 @@ test('URL-shaped text inside an existing multi-word mention remains one member l
  const html=render('@'+name+'\n'+url,origin,[{user_id:'synthetic-member',display_name:name}]);
  assert(html.includes('>@A '+url.replaceAll('&','&amp;')+'</button>'));
  assert.equal((html.match(/<a /g)??[]).length,1,'only the standalone challenge is linked');
+});
+
+test('external links preserve the original HTTPS destination and declared prose punctuation',async()=>{
+ const {externalShareLink:parse}=await gameTextHarness(),origin='https://workshop.example.test';
+ for(const url of [
+  'https://example.com/docs?b=2&utm_source=workshop&a=1&a=3#section-2',
+  'HTTPS://WWW.Example.COM/path?x=%2f&x=two+words#part%202',
+  'https://example.com/中文/%E6%96%87%E7%AB%A0?q=hello%20world#段落',
+  'https://example.com/wiki/Test_(example)',
+  'https://example.com/file%2E?literal=%2C#end%21',
+ ]){const link=parse(url,origin);assert(link,url);assert.equal(link.href,url);assert.equal(link.label,url);assert.equal(link.suffix,'');}
+ for(const punctuation of ['.',',','!',';','。','，','！','？','、','；','：']){
+  const url='https://example.com/docs',link=parse(url+punctuation,origin);assert(link);assert.equal(link.href,url);assert.equal(link.suffix,punctuation);
+ }
+ const wrapped=parse('（https://example.com/wiki/Test_(example)）。',origin);assert(wrapped);assert.equal(wrapped.prefix,'（');assert.equal(wrapped.href,'https://example.com/wiki/Test_(example)');assert.equal(wrapped.suffix,'）。');
+ const nested=parse('(https://example.com/a_(b_(c))).',origin);assert(nested);assert.equal(nested.href,'https://example.com/a_(b_(c))');assert.equal(nested.suffix,').');
+});
+
+test('external link validation rejects whole unsafe tokens and cannot bypass same-origin game checks',async()=>{
+ const {externalShareLink:parse,render}=await gameTextHarness(),origin='https://workshop.example.test',valid='https://example.com/docs';
+ const rejected=[
+  'javascript:alert(1)','data:text/html,test','http://example.com/docs','//example.com/docs','prefix'+valid,
+  'https://user@example.com/docs','https://user:pass@example.com/docs','https://example.com:443/docs','https://example.com:8443/docs',
+  'https://127.0.0.1/docs','https://192.168.0.1/docs','https://10.0.0.1/docs','https://169.254.169.254/docs','https://[::1]/docs','https://[2001:db8::1]/docs',
+  'https://2130706433/docs','https://0x7f000001/docs','https://0177.0.0.1/docs','https://localhost/docs','https://app.localhost/docs','https://printer.local/docs','https://svc.internal/docs','https://nas.lan/docs','https://intranet/docs',
+  'https://%65xample.com/docs','https://example.com%40evil.test/docs','https://example.com&#64;evil.test/docs','https://ｅxample.com/docs',
+  '\u0001'+valid,'\u200b'+valid,valid+'\u00a0suffix',valid+'\u3000suffix',valid+'\\@evil.test',valid+'\u200b',valid+'\u202e',valid+'\u0085',valid+'\n',valid+'\t',valid+'<img>',valid+'"onclick=alert(1)',valid+"'onclick=alert(1)",
+  valid+'%ZZ',valid+'%',valid+'%0a',valid+'%00',valid+'%5c',valid+'%C2%85',valid+'%E2%80%8B',valid+'%E2%80%AE',valid+'%FF',
+  origin+':443/play?game=cash&seed=42','https://%77orkshop.example.test/play?game=cash&seed=42',origin+'./play?game=cash&seed=42','http://workshop.example.test/play?game=cash&seed=42',
+  origin+'/private',origin+'/play?game=cash&seed=0',origin+'/play?game=cash&seed=42&seed=7',origin+'/pl%61y?game=cash&seed=42',origin.toUpperCase()+'/play?game=cash&seed=42',
+ ];
+ for(const token of rejected){assert.equal(parse(token,origin),null,JSON.stringify(token));if(!/[\t\n]/.test(token))assert(!render(token,origin).includes('<a '),JSON.stringify(token));}
+ assert.equal(parse(valid,''),null);assert.equal(parse(valid,'null'),null);assert.equal(parse('https://example.com/'+ 'a'.repeat(2048),origin),null);
+ // An embedded URL is not extracted from a rejected outer scheme/authority.
+ for(const token of ['javascript:'+valid,'https://localhost/?next='+valid,'https://user@evil.test/?next='+valid])assert(!render(token,origin).includes('<a '));
+ const url=origin+'/play?game=cash&seed=42',html=render(url,origin);assert(html.includes('href="/play?game=cash&amp;seed=42"'),'strict game branch still wins');
+});
+
+test('external rich text keeps mentions, hashtags and escaped text while creating only manual links',async()=>{
+ const {render}=await gameTextHarness(),origin='https://workshop.example.test',url='https://example.com/docs?a=1&a=2&utm_source=test#part-2';
+ const name='A https://example.com/docs',text=`<b>原文</b>\n@${name} #話題\n${url}。`;
+ const html=render(text,origin,[{user_id:'synthetic-member',display_name:name}]);
+ assert.equal((html.match(/<a /g)??[]).length,1);assert(html.includes(`href="${url.replaceAll('&','&amp;')}"`));
+ assert(html.includes('>@'+name+'</button>'));assert(html.includes('>#話題</button>'));assert(html.includes('&lt;b&gt;原文&lt;/b&gt;\n'));assert(html.includes('</a><span>。</span>'));
+ for(const attribute of ['target="_blank"','rel="noopener noreferrer"','referrerPolicy="no-referrer"','在新分頁開啟'])assert(html.includes(attribute));
+ assert(!render(url).includes('<a '),'SSR remains deterministic and does not read window');
 });

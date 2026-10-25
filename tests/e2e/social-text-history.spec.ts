@@ -350,6 +350,49 @@ test('a completed cash game publishes its same-seed challenge only on confirmati
   }
 });
 
+test('ordinary note publication makes external URLs clickable without a preview or automatic navigation, including comment rendering',async({page,e2eAuthPool})=>{
+  const id=randomUUID(),email=`social-link-${id}@example.test`,opened:Page[]=[],writes:string[]=[];
+  const url='https://links.example.test/docs?a=1&a=2&utm_source=post#section';
+  let externalRequests=0;
+  expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(e2eSchema(process.env.FREEDOM_E2E_SCHEMA));
+  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    VALUES($1,$2,$3,'外部連結測試會員',$4,$5,false)`,[id,DEMO_COMMUNITY,email,hashPassword(DEMO_PASSWORD),randomUUID()]);
+  await page.context().route('https://links.example.test/**',async route=>{externalRequests++;await route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic destination</title>'});});
+  page.context().on('page',popup=>opened.push(popup));
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/social-posts'))writes.push(new URL(request.url()).pathname);});
+  try{
+    const dialog=await composer(page,email),text=`直接貼網址\n${url}。\n<b>原文 & 換行</b>\n#話題\n結尾`;
+    await dialog.getByLabel('貼文內容',{exact:true}).fill(text);
+    expect(writes).toEqual([]);expect(opened).toEqual([]);expect(externalRequests).toBe(0);
+    const published=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/social-posts/notes');
+    await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();
+    const response=await published;expect(response.status()).toBe(201);const {post_id}=await response.json();await expect(dialog).toBeHidden();
+    expect((await e2eAuthPool.query('SELECT note FROM community_social_posts WHERE post_id=$1 AND author_user_id=$2',[post_id,id])).rows).toEqual([{note:text}]);
+    const post=page.locator(`#social-post-${post_id}`),body=post.locator('.social-note');
+    await expect(post).toBeVisible();await post.getByRole('button',{name:'顯示全文',exact:true}).click();
+    expect(await body.textContent()).toBe(text);await expect(body.locator('b')).toHaveCount(0);await expect(body).toHaveCSS('white-space','pre-wrap');
+    const link=body.getByRole('link',{name:`${url} (在新分頁開啟)`,exact:true});
+    await expect(link).toHaveAttribute('href',url);await expect(link).toHaveAttribute('target','_blank');
+    await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');
+    expect(writes).toEqual(['/api/v1/social-posts/notes']);expect(opened).toEqual([]);expect(externalRequests).toBe(0);
+    // A persisted comment fixture exercises the same read-only renderer, not a new write flow.
+    const comment=`${url}\nhttps://localhost/private\n<script>escaped</script>`;
+    await e2eAuthPool.query(`INSERT INTO community_social_comments(post_id,community_id,author_user_id,body) VALUES($1,$2,$3,$4)`,[post_id,DEMO_COMMUNITY,id,comment]);
+    await page.reload();await expect(post).toBeVisible();await post.getByRole('button',{name:'留言 · 1',exact:true}).click();
+    const commentBody=post.locator('.social-comment-bubble p.multiline-text');
+    await expect(commentBody).toHaveText(comment);await expect(commentBody.locator('script')).toHaveCount(0);await expect(commentBody.locator('a')).toHaveCount(1);
+    await expect(commentBody.locator('a')).toHaveAttribute('href',url);
+    expect(externalRequests).toBe(0);expect(opened).toEqual([]);
+    const [popup]=await Promise.all([page.waitForEvent('popup'),commentBody.locator('a').click()]);
+    await popup.waitForURL(url);await popup.waitForLoadState('domcontentloaded');expect(popup.url()).toBe(url);
+    expect(await popup.evaluate(()=>({opener:window.opener,referrer:document.referrer}))).toEqual({opener:null,referrer:''});
+    expect(externalRequests).toBe(1);expect(writes).toEqual(['/api/v1/social-posts/notes']);
+  }finally{
+    await Promise.all([...opened,page].map(tab=>tab.close()));
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE author_user_id=$1',[id]);
+  }
+});
+
 test('signing out and signing in again cannot recover the previous session draft',async({page})=>{
   const dialog=await composer(page);
   await dialog.getByLabel('貼文內容',{exact:true}).fill('上一個登入階段的私人草稿');

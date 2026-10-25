@@ -1,5 +1,6 @@
 import {useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import type {PortalClient} from '../api';
+import {normalizeShareUrl} from '../../../../packages/shared/share-url';
 import {MemberAvatar} from './MemberAvatar';
 import {useLanguage,type InterfaceLanguage} from '../language';
 
@@ -54,6 +55,29 @@ export function gameChallengeLink(token:string,origin:string){
  if(!challenge||Number(challenge[2])>4294967295)return null;
  return {prefix:match[1],label:match[2],suffix:match[3],href:`/play?game=${challenge[1]}&seed=${challenge[2]}`};
 }
+/** Link ordinary external HTTPS text without normalizing away query or fragment.
+ * This is a lexical URL check, not a reputation or DNS/preview request.
+ */
+export function externalShareLink(token:string,origin:string){
+ if(!origin||token.length>2048||/[\s\u0000-\u0020\u007f-\u009f\p{Cf}\\<>"']/u.test(token))return null;
+ const match=/^([（(「『【]*)(https:\/\/.+?)([.,!;，。！？、；：)）」』】]*)$/iu.exec(token);
+ if(!match)return null;
+ let label=match[2],suffix=match[3];
+ // Keep balanced URL path parentheses; only unmatched prose closers stay outside.
+ while(suffix.startsWith(')')&&(label.match(/\(/g)?.length??0)>(label.match(/\)/g)?.length??0)){
+  label+=')';suffix=suffix.slice(1);
+ }
+ const authority=/^https:\/\/([^/?#]+)/i.exec(label)?.[1];
+ // Reject credentials, even explicit default ports, encoded hosts and IP spellings
+ // before URL can erase or normalize them. Unicode path/query text is still allowed.
+ if(!authority||authority.length>253||!/^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(authority))return null;
+ try{
+  if(/%(?![0-9a-f]{2})/i.test(label)||/[\u0000-\u001f\u007f-\u009f\p{Cf}\\]/u.test(decodeURIComponent(label)))return null;
+  // A rejected local game/route must never fall through to the generic branch.
+  if(new URL(label).origin===new URL(origin).origin||!normalizeShareUrl(label).ok)return null;
+ }catch{return null;}
+ return {prefix:match[1],label,suffix,href:label};
+}
 export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalClient;text:string;mentions?:Mention[];onTag?:(tag:string)=>void}){
  const {language}=useLanguage();
  // Identical server/first hydration output; no browser globals during SSR.
@@ -69,9 +93,9 @@ export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalCli
   const start=match.index!;
   // A nickname can contain spaces and URL-shaped text; keep its existing mention.
   if(mentionRanges.some(range=>range.start<start+match[0].length&&range.end>start))continue;
-  const link=gameChallengeLink(match[0],origin);if(!link)continue;
+  const link=gameChallengeLink(match[0],origin)??externalShareLink(match[0],origin);if(!link)continue;
   parts.push(plain(text.slice(cursor,start)+link.prefix,start));
-  parts.push(<a key={`game-${start}`} className="social-text-link" href={link.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" aria-label={`${link.label} (${textToolMessages.newTab[textToolLanguageIndex[language]]})`}>{link.label}</a>);
+  parts.push(<a key={`url-${start}`} className="social-text-link" href={link.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" aria-label={`${link.label} (${textToolMessages.newTab[textToolLanguageIndex[language]]})`}>{link.label}</a>);
   cursor=start+match[0].length-link.suffix.length;
  }
  parts.push(plain(text.slice(cursor),text.length));
