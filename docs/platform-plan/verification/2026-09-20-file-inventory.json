@@ -20559,8 +20559,8 @@
     },
     {
       "path": "modules/community/content-search.ts",
-      "bytes": 21513,
-      "sha256": "b3cbbcfc9a15dd7aa077c74f148dc3d5d78c20e2ad9f9ea952008853edec2167"
+      "bytes": 21539,
+      "sha256": "642095fd794a7d3e2a8988619f365d45d62245ba0f9762512fc638d0bd7ed876"
     },
     {
       "path": "modules/community/discovery.ts",
@@ -23849,8 +23849,8 @@
     },
     {
       "path": "tests/e2e/ai-sister-guides.spec.ts",
-      "bytes": 17538,
-      "sha256": "6f3421b842fbe02214fa31fc08be966aed65a011933ed291adf26365de3172c8"
+      "bytes": 17602,
+      "sha256": "b61778b5bef6fae31450c0829ce96909f12014ac9cb4f3791250b58602e914c0"
     },
     {
       "path": "tests/e2e/audit-identity-final.spec.ts",
@@ -24439,8 +24439,8 @@
     },
     {
       "path": "tests/e2e/newcomer-guides.spec.ts",
-      "bytes": 71245,
-      "sha256": "a52e49977ee152051f2516c9cc9521a942c6885a3247d514933be1c9c7fc9c61"
+      "bytes": 72417,
+      "sha256": "1091135e3f2567f4033fb11cbd7c924e38ccdb6a6b8af0869063fe6acd6239ea"
     },
     {
       "path": "tests/e2e/notification-bell-actions.spec.ts",
@@ -24684,8 +24684,8 @@
     },
     {
       "path": "tests/e2e/social-image.spec.ts",
-      "bytes": 10095,
-      "sha256": "175661372e5793067e011798209d6976931d1a2051209c2195b13f8e8aa4549f"
+      "bytes": 10276,
+      "sha256": "5a85a94a39d0ede52f1adeebb1018ef5944c055e20bff17563f42c971e03bbdd"
     },
     {
       "path": "tests/e2e/social-links.spec.ts",
@@ -25424,8 +25424,8 @@
     },
     {
       "path": "tests/runtime/community-search.test.ts",
-      "bytes": 42224,
-      "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
+      "bytes": 47844,
+      "sha256": "96df87561f8d6ddbb80cff9543a444ae98e908bac776d1219799d3f7713cc8d6"
     },
     {
       "path": "tests/runtime/contribution-roles.test.ts",
@@ -26644,8 +26644,8 @@
     },
     {
       "path": "tests/runtime/newcomer-guides.test.ts",
-      "bytes": 6063,
-      "sha256": "f40b78766a11817784ee39b0098025762b2866831ae64233b6cfa8be42f79d43"
+      "bytes": 8218,
+      "sha256": "9598cf60e4c4613044cadfd4d932dedaa7640357b773c6e8d83f3f0b6c473b9a"
     },
     {
       "path": "tests/runtime/notification-events.test.ts",
