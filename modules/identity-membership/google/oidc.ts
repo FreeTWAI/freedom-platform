@@ -121,7 +121,10 @@ async function boundedResponse(url: typeof TOKEN_ENDPOINT | typeof JWKS_ENDPOINT
     timer = setTimeout(() => { controller.abort(); reject(new Error('Google authentication failed.')); }, REQUEST_TIMEOUT_MS);
   });
   try {
-    const request = transport(url, { ...init, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal });
+    // Workers supports manual, not the Fetch error redirect mode. Never follow
+    // Location: 307/308 could forward the token POST's code and client secret.
+    // The strict status/metadata checks below reject redirects before body reads.
+    const request = transport(url, { ...init, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal });
     // A late non-compliant transport result must not leave an unread response open.
     void request.then(value => { if (controller.signal.aborted) void value.body?.cancel().catch(() => {}); }, () => {});
     response = await Promise.race([request, deadline]);

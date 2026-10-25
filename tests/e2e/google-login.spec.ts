@@ -76,7 +76,9 @@ test('MFA cancellation uses same-origin cancel and clears the factor form',async
   let cancelled=0;await page.route('**/api/v1/auth/google/complete',route=>route.fulfill({json:{totp_required:true,challenge:CHALLENGE}}));
   await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;expect(route.request().postDataJSON()).toEqual({state:STATE});await route.fulfill({json:{cancelled:true}})});
   await remember(page);await callback(page);await page.getByRole('button',{name:'取消 Google 登入'}).click();
-  await expect(page.getByRole('status')).toContainText('已取消 Google 登入');await expect(page.getByLabel('驗證器代碼或備用碼',{exact:true})).toHaveCount(0);expect(cancelled).toBe(1);
+  const result=page.getByRole('region',{name:'完成 Google 登入',exact:true});
+  await expect(result.getByRole('button',{name:'返回登入入口',exact:true})).toBeVisible();
+  await expect(result.getByRole('status')).toContainText('已取消 Google 登入');await expect(page.getByLabel('驗證器代碼或備用碼',{exact:true})).toHaveCount(0);expect(cancelled).toBe(1);
 });
 
 test('provider cancellation consumes state without completing login or reflecting provider text',async({page})=>{
@@ -84,7 +86,9 @@ test('provider cancellation consumes state without completing login or reflectin
   await page.route('**/api/v1/auth/google/complete',async route=>{completed++;await route.fulfill({json:PROOF})});
   await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;await route.fulfill({json:{cancelled:true}})});
   await remember(page);await callback(page,`state=${STATE}&error=access_denied&error_description=UNTRUSTED_PROVIDER_TEXT`);
-  await expect(page.getByRole('status')).toContainText('已取消這次 Google 授權');expect(completed).toBe(0);expect(cancelled).toBe(1);expect(page.url()).not.toContain('error');await expect(page.getByText('UNTRUSTED_PROVIDER_TEXT')).toHaveCount(0);
+  const result=page.getByRole('region',{name:'完成 Google 登入',exact:true});
+  await expect(result.getByRole('button',{name:'返回登入入口',exact:true})).toBeVisible();
+  await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');expect(completed).toBe(0);expect(cancelled).toBe(1);expect(page.url()).not.toContain('error');await expect(page.getByText('UNTRUSTED_PROVIDER_TEXT')).toHaveCount(0);
 });
 
 for(const entry of ['https://attacker.example/','//attacker.example/','/google/callback?code=secret','/?return_to=https%3A%2F%2Fattacker.example%2F','/#reset-password/'+STATE])test(`rejects unsafe saved continuity: ${entry}`,async({page})=>{
@@ -269,7 +273,10 @@ test('successful unlink A reads fresh status and keeps a newer link B rather tha
     if(calls===1)await route.fulfill({json:{unlinked:true}});
     else await route.fulfill({status:409,json:{code:'google_identity_changed',detail:'Google 連結已變更。'}});
   });
-  await loginAccount(page);const panel=page.locator('.google-account');const readsBefore=statusReads;
+  await loginAccount(page);const panel=page.locator('.google-account');
+  await expect(panel.getByText('已連結 Google。',{exact:false})).toBeVisible();
+  await expect(panel.getByRole('button',{name:'解除 Google 連結',exact:true})).toBeEnabled();
+  const readsBefore=statusReads;
   await panel.getByLabel('目前工坊密碼').fill('freedom-local-demo');await panel.getByRole('button',{name:'解除 Google 連結',exact:true}).click();
   await expect(panel.getByRole('status')).toContainText('Google 連結已再次變更');await expect(panel.getByText('已連結 Google。',{exact:false})).toBeVisible();
   await expect(panel.getByRole('button',{name:'解除 Google 連結',exact:true})).toBeEnabled();await expect(panel.getByRole('button',{name:'連結 Google 帳號',exact:true})).toHaveCount(0);
@@ -317,9 +324,11 @@ for(const intent of ['login','link'] as const)for(const outcome of ['error','can
     await route.fulfill(outcome==='cancel'?{json:{cancelled:true}}:{status:409,json:{code:'google_session_changed',detail:'Synthetic conflict'}});
   });
   await callback(page,outcome==='cancel'?`state=${STATE}&error=access_denied`:`state=${STATE}&code=${CODE}`);
-  if(outcome==='cancel')await expect(page.getByRole('status')).toContainText('已取消這次 Google 授權');
-  else await expect(page.getByRole('alert')).toContainText('未完成或已失效');
-  const back=page.getByRole('button',{name:intent==='link'?'返回我的名片':'返回登入入口',exact:true});
+  const result=page.getByRole('region',{name:intent==='link'?'連結 Google':'完成 Google 登入',exact:true});
+  const back=result.getByRole('button',{name:intent==='link'?'返回我的名片':'返回登入入口',exact:true});
+  await expect(back).toBeVisible();
+  if(outcome==='cancel')await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');
+  else await expect(result.getByRole('alert')).toContainText('未完成或已失效');
   await back.focus();await back.press('Enter');
   if(intent==='link')await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
   else await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();

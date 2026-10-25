@@ -216,7 +216,7 @@ test('code exchange uses only fixed endpoints and trusted bounded transport, ver
   const calls: { url: string; init: RequestInit }[] = [];
   const transport: typeof fetch = async (input, init) => {
     const url = String(input); calls.push({ url, init: init! });
-    assert.equal(init?.redirect, 'error'); assert.equal(init?.credentials, 'omit'); assert.equal(init?.referrerPolicy, 'no-referrer');
+    assert.equal(init?.redirect, 'manual'); assert.equal(init?.credentials, 'omit'); assert.equal(init?.referrerPolicy, 'no-referrer');
     assert.ok(init?.signal instanceof AbortSignal);
     if (url === tokenEndpoint) {
       assert.equal(init?.method, 'POST');
@@ -259,11 +259,60 @@ test('exchange rejects missing, malformed or overlong ID tokens, failed status a
   await assert.rejects(exchangeGoogleCode(config, redirectUri, 'code', verifier, nonce, async () => { throw new Error(config.clientSecret); }), failure);
 });
 
-test('exchange rejects redirected or wrong-endpoint responses even from a noncompliant host transport', async () => {
-  for (const metadata of [{ redirected: true }, { url: 'https://attacker.example/token' }]) {
-    const response = json({ id_token: 'not-used' });
-    for (const [name, value] of Object.entries(metadata)) Object.defineProperty(response, name, { value });
-    await assert.rejects(exchangeGoogleCode(config, redirectUri, 'code', verifier, nonce, async () => response), failure);
+for (const endpoint of [tokenEndpoint, jwksEndpoint]) {
+  for (const status of [301, 302, 303, 307, 308]) {
+    test(`exchange refuses ${status} at ${endpoint} without redirecting or retrying credentials`, async () => {
+      const token = await sign(claims({}, Math.floor(Date.now() / 1000)));
+      const calls: { url: string; init: RequestInit }[] = [];
+      let cancelled = false, bodyReads = 0;
+      // A hostile Location and unread body must never enter a subsequent request
+      // or the sanitized failure, including POST-preserving 307/308 redirects.
+      const response = new Response(new ReadableStream<Uint8Array>({
+        pull() { bodyReads++; },
+        cancel() { cancelled = true; },
+      }, { highWaterMark: 0 }), { status, headers: {
+        'Content-Type': 'application/json',
+        Location: `https://attacker.example/collect?secret=${config.clientSecret}&token=synthetic-upstream-token`,
+      } });
+      const transport: typeof fetch = async (input, init) => {
+        const url = String(input); calls.push({ url, init: init! });
+        return url === tokenEndpoint && endpoint === jwksEndpoint ? json({ id_token: token }) : response;
+      };
+      await assert.rejects(exchangeGoogleCode(config, redirectUri, 'synthetic-code', verifier, nonce, transport), failure);
+      assert.deepEqual(calls.map(call => call.url), endpoint === tokenEndpoint ? [tokenEndpoint] : [tokenEndpoint, jwksEndpoint]);
+      for (const { url, init } of calls) {
+        // Assert outside the injected transport: exchange sanitizes transport
+        // exceptions, so assertions thrown inside it could mask a regression.
+        assert.equal(init.redirect, 'manual');
+        assert.equal(init.credentials, 'omit'); assert.equal(init.referrerPolicy, 'no-referrer');
+        assert.equal(new URL(url).search, ''); assert.equal(new URL(url).hash, '');
+        assert.equal(new URL(url).username, ''); assert.equal(new URL(url).password, '');
+        assert.equal(init.method, url === tokenEndpoint ? 'POST' : 'GET');
+        if (url === tokenEndpoint) {
+          const body = new URLSearchParams(String(init.body));
+          assert.equal(body.get('client_secret'), config.clientSecret);
+          assert.equal(body.get('code'), 'synthetic-code'); assert.equal(body.get('code_verifier'), verifier);
+        } else assert.equal(init.body, undefined);
+      }
+      assert.equal(bodyReads, 0); assert.equal(cancelled, true);
+    });
+  }
+}
+
+test('exchange rejects redirected, opaque-redirect or wrong-endpoint responses even from a noncompliant host transport', async () => {
+  const token = await sign(claims({}, Math.floor(Date.now() / 1000)));
+  for (const endpoint of [tokenEndpoint, jwksEndpoint]) {
+    for (const metadata of [{ redirected: true }, { type: 'opaqueredirect' }, { url: 'https://attacker.example/token' }, { url: endpoint + '?unexpected=1' }]) {
+      const response = json(endpoint === tokenEndpoint ? { id_token: token } : { keys: [publicJwk] });
+      for (const [name, value] of Object.entries(metadata)) Object.defineProperty(response, name, { value });
+      const calls: string[] = [];
+      const transport: typeof fetch = async input => {
+        const url = String(input); calls.push(url);
+        return url === tokenEndpoint && endpoint === jwksEndpoint ? json({ id_token: token }) : response;
+      };
+      await assert.rejects(exchangeGoogleCode(config, redirectUri, 'code', verifier, nonce, transport), failure);
+      assert.deepEqual(calls, endpoint === tokenEndpoint ? [tokenEndpoint] : [tokenEndpoint, jwksEndpoint]);
+    }
   }
 });
 
