@@ -4,19 +4,19 @@ import {currentStep,cutGuide,plateTarget} from './domain';
 import type {KitchenStage} from './kitchen-stage';
 import {KITCHEN_VIEW} from './catalog';
 import {syncDiagnostics} from '../diagnostics';
-type Props=ComponentProps<typeof Illustration>&{onSettled:(ready:boolean)=>void;readRun:()=>ComponentProps<typeof Illustration>['run']};
+type Props=ComponentProps<typeof Illustration>&{onSettled:(ready:boolean)=>void;readRun:()=>ComponentProps<typeof Illustration>['run'];captureRef:{current:((run:ComponentProps<typeof Illustration>['run'])=>string)|null}};
 
 /** UX-7: native hit geometry survives lazy loading and genuine WebGL failure. */
 export function CookingScene(props:Props){
- const {run,point,onSettled,readRun}=props,host=useRef<HTMLDivElement>(null),stage=useRef<KitchenStage|null>(null),live=useRef({readRun,point}),frame=useRef(0),motion=useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+ const {run,point,onSettled,readRun,captureRef}=props,host=useRef<HTMLDivElement>(null),stage=useRef<KitchenStage|null>(null),live=useRef({readRun,point}),frame=useRef(0),motion=useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches);
  const [mode,setMode]=useState<'loading'|'3d'|'light'>('loading'),[attempt,setAttempt]=useState(0),[lightweight,setLightweight]=useState(false),[notice,setNotice]=useState('');live.current={readRun,point};
- function draw(time:number){if(!stage.current)return;try{stage.current.update(live.current.readRun(),live.current.point,time,motion.current);const stats=stage.current.stats();if(host.current)syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderGeometries:stats.geometries,renderTextures:stats.textures});}catch{cancelAnimationFrame(frame.current);stage.current?.dispose();stage.current=null;setMode('light');setNotice('已切換輕量畫面，這一盤繼續。');onSettled(true);}}
+ function draw(time:number){if(!stage.current)return;try{stage.current.update(live.current.readRun(),live.current.point,time,motion.current);const stats=stage.current.stats();if(host.current)syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderGeometries:stats.geometries,renderTextures:stats.textures});}catch{cancelAnimationFrame(frame.current);stage.current?.dispose();stage.current=null;captureRef.current=null;setMode('light');setNotice('已切換輕量畫面，這一盤繼續。');onSettled(true);}}
  useEffect(()=>{let current=true;setNotice('');if(lightweight){setMode('light');onSettled(true);return;}
   setMode('loading');onSettled(false);let owned:KitchenStage|null=null;
   const fallback=()=>{if(!current)return;setMode('light');setNotice('先用輕量畫面開煮，也能再試立體料理台。');onSettled(true);};
   const deadline=setTimeout(()=>{if(current){current=false;setMode('light');setNotice('先用輕量畫面開煮，也能再試立體料理台。');onSettled(true);}},KITCHEN_VIEW.loaderMs);
-  void import('./kitchen-stage').then(({createKitchenStage})=>{if(!current||!host.current)return;owned=createKitchenStage(host.current,()=>{if(current){cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;setMode('light');setNotice('已切換輕量畫面，這一盤繼續。');onSettled(true);}});stage.current=owned;owned.update(live.current.readRun(),live.current.point,performance.now(),motion.current);clearTimeout(deadline);setMode('3d');onSettled(true);}).catch(()=>{clearTimeout(deadline);owned?.dispose();stage.current=null;fallback();});
-  return()=>{current=false;clearTimeout(deadline);cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;};
+  void import('./kitchen-stage').then(({createKitchenStage})=>{if(!current||!host.current)return;owned=createKitchenStage(host.current,()=>{if(current){cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;captureRef.current=null;setMode('light');setNotice('已切換輕量畫面，這一盤繼續。');onSettled(true);}});stage.current=owned;owned.update(live.current.readRun(),live.current.point,performance.now(),motion.current);clearTimeout(deadline);captureRef.current=final=>{if(!stage.current)throw Error('料理畫面未就緒');stage.current.update(final,null,performance.now(),false);return stage.current.capture();};setMode('3d');onSettled(true);}).catch(()=>{clearTimeout(deadline);owned?.dispose();stage.current=null;captureRef.current=null;fallback();});
+  return()=>{current=false;clearTimeout(deadline);cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;captureRef.current=null;};
  },[attempt,lightweight,onSettled]);
  useEffect(()=>{if(mode!=='3d')return;if(run.status!=='playing'){draw(performance.now());return;}const loop=(time:number)=>{draw(time);if(stage.current)frame.current=requestAnimationFrame(loop);};frame.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(frame.current);},[mode,run.status]);
  useEffect(()=>{if(mode==='3d'&&run.status!=='playing')draw(performance.now());},[run,point,mode]);

@@ -51,6 +51,7 @@ export const RECIPES:readonly Recipe[]=[
   recipe('popcorn-chicken','鹽酥雞','taiwan',5,['雞肉','地瓜粉','九層塔'],[cut('雞肉','meat'),mix('雞肉與地瓜粉','meat'),pan('鹽酥雞','meat',72),plate('九層塔')],2),
   recipe('taiwan-fish-cake','甜不辣','taiwan',6,['魚漿','白蘿蔔','醬汁'],[knead('魚漿',3),pan('甜不辣','fish',62),pour('甜辣醬','cream',.62)]),
   recipe('beef-noodle-soup','紅燒牛肉麵','taiwan',7,['牛肉','麵條','青江菜','蔥'],[cut('牛肉塊','meat',5),boil('牛肉高湯','meat'),boil('麵條','noodle'),plate('青江菜與蔥花')],3),
+  recipe('corn-dog','酥炸熱狗','taiwan',8,['熱狗','麵糊','番茄醬','黃芥末'],[mix('濃麵糊','cream'),pour('裹衣麵糊','cream',.72),pan('酥炸熱狗','meat',66),plate('醬線','cream')],2),
 
   recipe('salmon-sushi','鮭魚壽司','japan',0,['鮭魚','壽司飯','海苔'],[cut('鮭魚','fish',5),knead('壽司飯',3),plate('鮭魚','fish',4)],2),
   recipe('rice-balls','海苔飯糰','japan',1,['白飯','海苔','芝麻'],[mix('芝麻與白飯','rice',2),knead('飯糰',3),fold('海苔飯糰')]),
@@ -87,6 +88,7 @@ export const RECIPES:readonly Recipe[]=[
   recipe('seafood-paella','西班牙海鮮飯','world',5,['米','蝦','貝類','番茄'],[cut('番茄','fruit'),pan('番茄與米','rice',55),boil('海鮮燉飯','rice',68),plate('蝦與檸檬','fish',4)],3),
   recipe('butter-chicken','奶油咖哩雞','world',6,['雞肉','番茄','奶油','香料'],[cut('雞肉','meat'),pan('香料雞肉','meat',59),pour('奶油'),boil('奶油咖哩雞','meat',65)],2),
   recipe('club-sandwich','總匯三明治','world',7,['吐司','雞肉','雞蛋','生菜'],[cut('番茄與生菜','fruit'),pan('雞肉與煎蛋','egg',53),plate('三明治配料','greens',4),fold('總匯三明治',['down','up','right'])]),
+  recipe('shawarma','招牌沙威瑪','world',8,['烤肉','餅皮','生菜','番茄','蒜味醬'],[cut('旋轉烤肉','meat',7),plate('烤肉與蔬菜','greens',4),pour('蒜味醬','cream',.64),fold('招牌沙威瑪')],2),
 
   recipe('strawberry-cake','草莓鮮奶油蛋糕','bakery',0,['草莓','麵粉','雞蛋','鮮奶油'],[mix('海綿蛋糕糊','cream'),bake('蛋糕','dough',45),pour('鮮奶油','cream',.66),plate('草莓','fruit',4)],3),
   recipe('chocolate-brownie','巧克力布朗尼','bakery',1,['巧克力','奶油','雞蛋','麵粉'],[mix('巧克力麵糊','chocolate'),pour('布朗尼麵糊','chocolate',.76),bake('布朗尼','chocolate',40)],2),

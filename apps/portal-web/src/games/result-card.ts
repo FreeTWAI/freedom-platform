@@ -1,9 +1,12 @@
 import { type GameId } from './domain';
 import {partyOf,type PartyGameId} from './party/catalog';
+import type {MarketRun} from './cooking/market-domain';
 export type ArcadeGameId = GameId | PartyGameId | 'kitchen';
 export type RunResult = {
     game: ArcadeGameId;
     recipe?: string;
+    cookingMode?: 'guided'|'market';
+    market?: MarketRun;
     seed: number;
     title: string;
     caption: string;

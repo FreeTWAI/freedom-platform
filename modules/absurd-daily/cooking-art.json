@@ -472,5 +472,8 @@
       ]
     }
   ],
-  "review": "Automated source/hash/frame checks are separate from human art acceptance."
+  "review": "Automated source/hash/frame checks are separate from human art acceptance.",
+  "runtime_status": "superseded_by_cooking_3d_art",
+  "historical_source_commit": "bc211f72c74e31242d86f509b71959cb9bf5dd22",
+  "historical_source_url": "https://github.com/FreeTWAI/freedom-platform/tree/bc211f72c74e31242d86f509b71959cb9bf5dd22/apps/portal-web/public/games/absurd-daily/cooking"
 }

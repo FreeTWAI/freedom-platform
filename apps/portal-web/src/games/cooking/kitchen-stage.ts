@@ -1,26 +1,26 @@
-import {BoxGeometry,Color,CylinderGeometry,DataTexture,DirectionalLight,DoubleSide,Group,HemisphereLight,LatheGeometry,Mesh,MeshToonMaterial,NearestFilter,NoToneMapping,OrthographicCamera,PCFShadowMap,Plane,Raycaster,RedFormat,Scene,SphereGeometry,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
+import {ACESFilmicToneMapping,BoxGeometry,Color,CylinderGeometry,DirectionalLight,DoubleSide,Group,HemisphereLight,LatheGeometry,Mesh,MeshStandardMaterial,OrthographicCamera,PCFShadowMap,Plane,Raycaster,Scene,SphereGeometry,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {createDishModel,type DishModel} from './dish-model';
 import {bakeRigidGroup} from '../stage-batch';
 import {currentStep,cutGuide,plateTarget,type CookingRun} from './domain';
 import {KITCHEN_VIEW as V,type Shape} from './catalog';
 
-export type KitchenStage={update:(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean)=>void;dispose:()=>void;stats:()=>{calls:number;triangles:number;geometries:number;textures:number}};
+export type KitchenStage={update:(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean)=>void;dispose:()=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number}};
 const C={ink:'#393d40',wood:'#dfab72',edge:'#a86d42',cream:'#fff0d1',mint:'#78b9a5',red:'#e87455',gold:'#f2bb55',dark:'#555b61'};
 const foodColors:Record<Shape,string>={greens:'#67a46f',carrot:'#efa052',meat:'#d68b77',rice:'#f1cb77',dough:'#f0d09a',noodle:'#e8bf70',egg:'#edb541',fruit:'#e66e68',cream:'#f2e4c8',chocolate:'#855b48',fish:'#e9987d'};
 
 /** UX-7: original, matte toy kitchen. Rendered food never mutates cooking rules. */
 export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStage{
  const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power'}),geometries=new Set<BufferGeometry>(),stepGeometry=new Set<BufferGeometry>(),materials=new Set<Material>(),textures=new Set<Texture>();
- let disposed=false,identity='',objects:{food:Group[];tool:Group;body:Group;steam:Mesh[];flaps:Group[];liquid:Mesh|null;stream:Mesh|null;flames:Mesh[]}|null=null;
- const light=new DirectionalLight('#fff5db',1.65),lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
- const dispose=()=>{if(disposed)return;disposed=true;renderer.domElement.removeEventListener('webglcontextlost',lost);stepGeometry.forEach(g=>g.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+ let completedDish:DishModel|null=null;let disposed=false,identity='',objects:{food:Group[];tool:Group;body:Group;steam:Mesh[];flaps:Group[];liquid:Mesh|null;stream:Mesh|null;flames:Mesh[]}|null=null;
+ const light=new DirectionalLight('#fff5e4',3.1),lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
+ const dispose=()=>{if(disposed)return;disposed=true;completedDish?.dispose();renderer.domElement.removeEventListener('webglcontextlost',lost);stepGeometry.forEach(g=>g.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
  try{
-  renderer.setSize(V.width,V.height,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,V.maxDpr));renderer.toneMapping=NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
+  renderer.setSize(V.width,V.height,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,V.maxDpr));renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
   const scene=new Scene();scene.background=new Color('#eabf91');const camera=new OrthographicCamera(-4.65,4.65,3.255,-3.255,.1,40);camera.position.set(0,8.5,8.5);camera.lookAt(0,0,0);scene.add(new HemisphereLight('#fff8e9','#9c8b76',1.25));light.position.set(-4,9,5);light.castShadow=true;light.shadow.mapSize.set(V.shadowSize,V.shadowSize);Object.assign(light.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.5,far:25});light.shadow.normalBias=.04;scene.add(light);
-  const gradient=new DataTexture(new Uint8Array([120,200,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
   const own=<T extends BufferGeometry>(g:T)=>{geometries.add(g);return g;},round=own(new RoundedBoxGeometry(1,1,1,3,.17)),sphere=own(new SphereGeometry(1,24,16)),cylinder=own(new CylinderGeometry(1,1,1,32)),cone=own(new CylinderGeometry(.12,1,1,24)),torus=own(new TorusGeometry(1,.08,10,40)),box=own(new BoxGeometry(1,1,1));
   const bowl=own(new LatheGeometry([new Vector2(.04,0),new Vector2(.8,.02),new Vector2(1.2,.2),new Vector2(1.55,.65),new Vector2(1.7,1.15),new Vector2(1.8,1.3)],40));
-  const palette=new Map<string,MeshToonMaterial>();function mat(color:string){let m=palette.get(color);if(!m){m=new MeshToonMaterial({color,gradientMap:gradient,side:DoubleSide});palette.set(color,m);materials.add(m);}return m;}
+  const palette=new Map<string,MeshStandardMaterial>();function mat(color:string){let m=palette.get(color);if(!m){m=new MeshStandardMaterial({color,roughness:.9,side:DoubleSide});palette.set(color,m);materials.add(m);}return m;}
   const group=(p:Group,x=0,y=0,z=0)=>{const g=new Group();g.position.set(x,y,z);p.add(g);return g;};
   function mesh(p:Group,g:BufferGeometry,color:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=new Mesh(g,mat(color));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=m.receiveShadow=true;p.add(m);return m;}
   const rb=(p:Group,c:string,x:number,y:number,z:number,xs:number,ys:number,zs:number)=>mesh(p,round,c,x,y,z,xs,ys,zs);
@@ -50,7 +50,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    g.scale.setScalar(size);bakeRigidGroup(g,stepGeometry);return g;
   }
   function mitten(p:Group){const g=group(p);ball(g,C.mint,0,0,0,.55,.22,.57);for(let i=0;i<4;i++)ball(g,C.mint,(i-1.5)*.25,0,.49,.16,.18,.23);ball(g,C.red,0,.2,.12,.22,.03,.25);rb(g,C.cream,0,-.01,-.6,.64,.3,.4);bakeRigidGroup(g,stepGeometry);return g;}
-  function build(run:CookingRun){work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
+  function build(run:CookingRun){completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
    if(['slice','knead','fold'].includes(s.kind)){rb(body,C.edge,0,.04,.1,6.4,.28,4.5);rb(body,'#e7bd84',0,.2,.1,6.1,.08,4.2);rb(body,'#d1a56d',-2.68,.25,.1,.05,.012,3.5);}
    if(s.kind==='slice'){for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25);rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
    if(s.kind==='knead'){pieces.push(food(body,'dough',3.8));pieces[0].position.set(0,.26,.1);mitten(tool);}
@@ -67,7 +67,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    bakeRigidGroup(body,stepGeometry,new Set([...pieces,...steam,...flaps,...flames,...(liquid?[liquid]:[])]));objects={food:pieces,tool,body,steam,flaps,liquid,stream,flames};
   }
   const baked=new Color('#bd864b'),burnt=new Color('#805335');
-  function update(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean){if(disposed)return;const key=`${run.recipeId}/${run.step}`;if(key!==identity){identity=key;for(const color of Object.values(foodColors))palette.get(color)?.color.set(color);build(run);}const o=objects!,s=currentStep(run),a=run.active,t=time/1000,held=a.holdAt===null?0:Math.min(1.5,(run.elapsed-a.holdAt)/s.holdMs),pulse=Math.max(0,1-(run.elapsed-a.lastAt)/320),pos=point?screen(point.x,point.y,s.kind==='mix'?1.4:.35):null;
+  function update(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean){if(disposed)return;const key=`${run.recipeId}/${run.status==='done'?'dish':run.step}`;if(key!==identity){identity=key;for(const color of Object.values(foodColors))palette.get(color)?.color.set(color);build(run);}if(run.status==='done'){renderer.render(scene,camera);return;}const o=objects!,s=currentStep(run),a=run.active,t=time/1000,held=a.holdAt===null?0:Math.min(1.5,(run.elapsed-a.holdAt)/s.holdMs),pulse=Math.max(0,1-(run.elapsed-a.lastAt)/320),pos=point?screen(point.x,point.y,s.kind==='mix'?1.4:.35):null;
    if(s.kind==='pan'||s.kind==='bake')mat(foodColors[s.shape]).color.set(foodColors[s.shape]).lerp(a.amount>1?burnt:baked,Math.min(.7,a.amount*.4));
    o.tool.visible=s.kind!=='bake'||a.amount>=.6;
    if(s.kind==='slice'){o.food.forEach((g,i)=>{const done=i<a.count;g.position.z=done?1.1:.05;g.rotation.y=done?(i-2)*.1:0;g.scale.setScalar(done?.65:.95);});o.tool.position.copy(pos??screen(cutGuide(run),.33,.8));o.tool.position.y+=motion?pulse*.4:0;}
@@ -81,6 +81,6 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    if(s.kind==='plate'){o.food.forEach((g,i)=>{g.visible=i<a.count;if(g.visible){const p=plateTarget({...run,active:{...a,count:i}});g.position.copy(screen(p.x,p.y,.45));}});o.tool.position.copy(pos??new Vector3(-3.5,.35,.6));o.tool.visible=a.count<s.goal;}
    o.flames.forEach((f,i)=>{f.scale.y=.3+a.heat/100*.6+(motion?Math.sin(t*5+i)*.04:0);});renderer.render(scene,camera);
   }
-  return {update,stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
+  return {update,capture:()=>{if(disposed)throw Error('料理畫面已關閉');renderer.render(scene,camera);return renderer.domElement.toDataURL('image/png');},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(error){dispose();throw error;}
 }

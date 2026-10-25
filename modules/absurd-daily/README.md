@@ -1,21 +1,31 @@
 # 自由工坊遊戲大廳
 
-公開、免登入的遊戲大廳，按料理、觀察攝影與派對手速分類。包含 64 道料理小遊戲，以及照相館、蓋章、道具鈔分類、辦公椅逃亡、豆腐疊高高、假日保衛戰六款原創 3D 短局遊戲，合計70款。使用者於 2026-10-23 明確派工原遊戲，2026-10-25 追加大量料理、統一插畫風格、全面重設大廳，接著要求原創3D派對與完成後提交PR。
+公開、免登入的 `/play`：66道料理、3款觀察／反應遊戲、3款派對短局，共72個遊戲入口。原始自由工坊Logo保留。料理依8類搜尋／收藏／完成紀錄瀏覽，所有入口均可由卡片開始；返回恢復原卡片、分類、分頁及捲動位置。
 
-新三款派對的規則、時間／碰撞與來源界線見 [PARTY.md](PARTY.md)，實際renderer預覽與來源hash見 [party-art.json](party-art.json)。目前三張640×480 WebP共53,318 bytes；程序模型不另下載素材，進場才載入renderer。手機／鍵盤可完成三種不同玩法，短局離頁重新開始。分享沿用原成果預覽，由本人確認發布；沒有新增即時多人連線、社群API串接、付費、積分或排行榜。
+## 目前這一批
 
-料理、分類大廳、收藏／本機進度的規格見 [COOKING.md](COOKING.md)。圖集、完整生圖提示詞、尺寸、格位與來源雜湊見 [cooking-art.json](cooking-art.json)。8 張圖集合計 1,718,994 bytes；按目前頁面與分類載入。九種操作共用純 domain；目前以原創啞光玩具料理台呈現，沿用Three，640×448、DPR≤1.5、512陰影。可主動切換輕量插畫；載入／WebGL失敗仍保留同一盤及完整SVG操作。完成菜仍用原插畫圖集；沒有密集飯粒或白色反光粒子。
+- 炒飯、牛排、沙威瑪、炸熱狗使用獨立的自由料理台。食材、逐片熟度、正反面、火力、拋鍋、灑出、包捲、瀝油及醬線由有界純domain保存；3D只投影。成果保留這盤配料與醬線，可拖曳旋轉、雙指／按鈕縮放、顯示實際總分。
+- 炸熱狗以原創專用外皮／紙托、分離色素與微表面、可隨旋轉移動的油膜高光與環境柔光呈現；全部起鍋後接續同盤調味。直接觸控選取食物，畫醬以相機定位並保留在成品。這是可審查美術基準，尚未取得使用者接受。
+- 牛排使用有凹底、厚盤唇及鏤空耳把的橢圓鑄鐵盤，配倒角木托；其他平盤改為連續曲面的陶盤、細釉色邊與底足。食物、器皿與桌面接觸高度一致，下載沿同一模型。
+- 其餘料理沿原9種引導操作；上述4道的引導練習也保留於`practice=1`連結。所有66道有原創3D成品模型，大廳使用實際renderer輸出的靜態WebP；進場才載入Three，不建立66個context。
+- [PLAYABILITY UX-1..14](PLAYABILITY.md)記錄規格、歷次否決、失敗根因與驗證界限；[COOKING](COOKING.md)／[PARTY](PARTY.md)保留原機制契約。最新執行結果見[開發紀錄](../../docs/development/absurd-daily.md)。舊玩具／插畫截圖不作本版美術接受證據。
+- [3D預覽收據](cooking-3d-art.json)綁定實際factory、來源hash、圖像bytes與native draw stats。`cooking-art.json`是已退出runtime的歷史插畫來源，原8張atlas已由3D預覽取代。
 
-先前Playroom版本的production build截圖：[桌面／全部遊戲](review/playroom-desktop.png)、[手機／料理分類](review/playroom-phone.png)。這些是歷史像素證據；使用者已否決前版美術／直覺性，不能作目前美術接受baseline。原始尺寸及雜湊隨source inventory保留，這兩張不進入網站runtime資產。
+## 邊界與恢復
 
-先前原創派對接續截圖：[桌面派對目錄](review/party-lobby-desktop.png)、[手機辦公椅逃亡](review/party-phone.png)。當時矩陣涵蓋5種viewport、100／125／200% DOM文字壓力與開始／暫停，共59張實際截圖；這是舊版幾何證據，非本版、實機或真人趣味驗收。
+`apps/portal-web/src/games/`持有規則、程序模型、操作、成果輸出及有界本分頁交接。沒有新API、資料表、依賴框架、現金、積分、信任值或伺服器排行榜。料理最佳紀錄只存本裝置；本分頁保存暫停後可接續，未知／過期資料拒絕，保存失敗保留記憶體並提供重試。
 
-`apps/portal-web/src/games/` 持有純規則、程序模型、畫面、成果輸出與有界本機待發交接。規則不得依賴 renderer、帳號、平台積分、真實貨幣或伺服器排行榜。`/play` 使用既有 SPA fallback；只在該路徑載入遊戲，Three 再依實際進入場景延後載入。新頁面的角色導覽停用，原因是公開匿名且具有自己的遊戲操作，不讀取會員導覽／角色資料。
+Three維持既有版本。場景載入期限15秒，晚到的module不建立失去owner的場景；WebGL失敗暫停並保留同局，可重試或使用可操作備援。ready／paused／完成不持續跑場景RAF，卸載釋放自有geometry、material、texture與context。公開遊戲停用會員角色導覽，不讀會員內容。
 
-站內分享只把圖片和可編輯文案交給既有 SocialZone；由目前登入會員在原發文器確認，原 session、CSRF、圖片處理、idempotency 和 API 可見範圍保持權威。外部分享、下載與同題連結不自動發文。此模組不建立 API、資料表、付費或獎勵。
+分享沿既有Result、`PlatformLogo`與SocialZone。可選X、Threads、Facebook、Instagram，或交系統分享／下載PNG／複製同題連結；目的網站不會自動附本機檔案，也不代表已發布。站內交接只帶圖片與可編輯文案，登入後回原發文器，由本人確認發布。原session、CSRF、圖片處理、idempotency及API可見性保持權威。
 
-成果頁共用 X、Threads、Facebook、Instagram 選擇器；選擇只改UI，點入口才開目的平台。IG使用系統分享或下載PNG／複製文案；網址入口不附本機圖片、不代表已發布。沿用原共用 `PlatformLogo`，改歸 shared 的公開純UI入口，避免遊戲載入社群發文工作引擎或形成相依循環。
+讀根AGENTS、CONTRIBUTING、DESIGN與本規格。descriptor只記歸屬，不是行為驗收、合併或部署證據。實機Safari／Android效能、真人美術／趣味與社群App實際發布仍需外部驗收，不能由本機編譯或自動測試代簽。
 
-讀根 AGENTS、CONTRIBUTING、DESIGN 和本次遊戲規格。完整規格、素材來源、驗收與未驗項將記錄在 `docs/development/absurd-daily.md`。descriptor 只記歸屬，不是執行期註冊、帳號授權或發布證據。
+UX-12材質實際畫面：[炸熱狗原生截圖](review/native-corn-dog-20261025.png)、[旋轉短片](review/native-corn-dog-rotation-20261025.mp4)。均取自production createDishStage；這份目錄範例用於觀察材質，玩家成果仍由自己的run生成。影片只屬review素材，不進大廳載入路徑。
 
-全遊戲修整與本次重做見 [PLAYABILITY.md](PLAYABILITY.md) UX-1..7：大廳先呈現遊戲；料理推薦只在料理分類。主場景、圖示工具與單句動作提示各有獨立空間；直接點鍋翻面／撈泡沫、點爐門出爐，保留鍵盤替代。返回找回原卡片，成果能接下一道／玩法。豆腐輪廓取自當前真實落點；6款3D rigid合批保留照片評分／碰撞／raycast。最新測試／量測見開發文件；不以本機分數代表信任或報酬。
+UX-13依使用者截圖修正：料理評分只顯示實際總分，移除雷達圖、分項、稱號、評語與星級；分享圖／文案同步簡化。
+
+最新大廳實際畫面：[手機](review/current-lobby-phone-20261025.png)／[桌面](review/current-lobby-desktop-20261025.png)。歷史review圖仍保留各自版本，不能用來代表本批最終評分樣式。
+UX-13修正當時的實際旅程（器皿改版前）：[總分頁面](review/current-score-only-20261025.png)／[下載分享圖](review/current-corn-dog-share-20261025.png)。這是自動化實際操作得到的當局分數，與排版100分示意分開保存。
+
+UX-14器皿：[牛排鐵盤示例](review/native-steak-iron-20261025.png)／[陶盤示例](review/native-ceramic-20261025.png)。示例由production renderer產生，與真實玩家完成局分開標記。最新實際旅程：[手機牛排成品](review/current-steak-iron-phone-20261025.png)／[實際下載牛排PNG](review/current-steak-iron-share-20261025.png)。

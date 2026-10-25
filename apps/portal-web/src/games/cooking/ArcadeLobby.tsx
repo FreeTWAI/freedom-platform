@@ -31,7 +31,9 @@ export function ArcadeLobby({onGame,onRecipe,book,onFavorite,state,onState,notic
 }) {
   const {category,query,filter,limit,collection}=state;
   const [missingArt,setMissingArt]=useState<string[]>([]);
-  const filtered=RECIPES.filter(r=>(category==='all'||r.category===category)&&recipeSearch(r,query)&&(filter==='all'||filter==='favorite'&&book.favorites.includes(r.id)||filter==='completed'&&!!book.best[r.id]));
+  const featuredIds=['corn-dog','shawarma','egg-fried-rice','steak-dinner'];
+  const browse=[...featuredIds.map(id=>RECIPES.find(r=>r.id===id)!),...RECIPES.filter(r=>!featuredIds.includes(r.id))];
+  const filtered=browse.filter(r=>(category==='all'||r.category===category)&&recipeSearch(r,query)&&(filter==='all'||filter==='favorite'&&book.favorites.includes(r.id)||filter==='completed'&&!!book.best[r.id]));
   const completed=Object.keys(book.best).length,featured=RECIPES[0];
   const reset=()=>onState({category:'all',query:'',filter:'all',limit:PAGE_SIZE,collection:'all'});
   return <div className="ck-lobby">
@@ -50,7 +52,7 @@ export function ArcadeLobby({onGame,onRecipe,book,onFavorite,state,onState,notic
         <section className="ck-passport" aria-label="我的料理手帳">
           <div className="ck-passport-top"><HubIcon kind="pan"/><span>我的料理手帳</span></div>
           <div className="ck-passport-count"><b>{completed}</b><span> / {RECIPES.length}<small>道料理已完成</small></span></div>
-          <div className="ck-passport-progress" role="progressbar" aria-label="料理收集進度" aria-valuemin={0} aria-valuemax={64} aria-valuenow={completed}><span style={{width:`${completed/RECIPES.length*100}%`}}/></div>
+          <div className="ck-passport-progress" role="progressbar" aria-label="料理收集進度" aria-valuemin={0} aria-valuemax={RECIPES.length} aria-valuenow={completed}><span style={{width:`${completed/RECIPES.length*100}%`}}/></div>
           <p>{completed?'一道一道，把你的食譜本填滿。':'從第一道開始，慢慢收集拿手菜。'}</p>
           <button className="ck-book-button" onClick={()=>onState({...state,collection:'kitchen',category:'all',query:'',filter:'favorite',limit:PAGE_SIZE})}><span>♡ 我的收藏</span><b>{book.favorites.length} →</b></button>
         </section>
@@ -58,8 +60,8 @@ export function ArcadeLobby({onGame,onRecipe,book,onFavorite,state,onState,notic
       {notice&&<p className="ad-notice" role="status">{notice}</p>}
       {(collection==='all'||collection==='reflex')&&<section className="pt-party-section" aria-labelledby="pt-party-title"><div className="ck-section-heading"><div><span className="ck-section-kicker">DAY OFF PARTY</span><h2 id="pt-party-title">日常太正經？開個派對。</h2></div><p>3 款原創 3D 小遊戲，換你接招。</p></div><div className="pt-party-cards">{PARTY_GAMES.map(g=><article className="pt-party-card" key={g.id}><div className="pt-party-art" style={{background:g.color}}>{missingArt.includes(g.id)?<span className="pt-party-art-fallback">{g.title}<br/>原創 3D 派對</span>:<img src={`/games/absurd-daily/party/${g.id}.webp`} width="960" height="720" alt={`${g.title}的實際3D遊戲畫面`} loading="lazy" onError={()=>setMissingArt(ids=>ids.includes(g.id)?ids:[...ids,g.id])}/>}<span>{g.tag}</span></div><div><h3>{g.title}</h3><p>{g.subtitle}</p><button data-arcade-open={`game:${g.id}`} onClick={()=>onGame(g.id,`game:${g.id}`)}>{g.action}<span aria-hidden="true">↗</span></button><small>{g.duration} · 手機 / 鍵盤 · 免登入</small></div></article>)}</div></section>}
       {(collection==='all'||collection==='kitchen')&&<section id="ck-kitchen" className="ck-kitchen" aria-labelledby="ck-kitchen-title">
-        <div className="ck-section-heading"><div><span className="ck-section-kicker">THE LITTLE KITCHEN</span><h2 id="ck-kitchen-title">選一道，開煮。</h2></div><p>64 道料理，每一道都能親手玩。</p></div>
-        <div className="ck-categories" role="group" aria-label="料理分類">{[{id:'all',name:'全部料理'},...CATEGORIES].map(c=><button key={c.id} aria-pressed={category===c.id} onClick={()=>onState({...state,category:c.id,limit:PAGE_SIZE})}>{c.name}<small>{c.id==='all'?RECIPES.length:8}</small></button>)}</div>
+        <div className="ck-section-heading"><div><span className="ck-section-kicker">THE LITTLE KITCHEN</span><h2 id="ck-kitchen-title">選一道，開煮。</h2></div><p>{RECIPES.length} 道料理，每一道都能親手玩。</p></div>
+        <div className="ck-categories" role="group" aria-label="料理分類">{[{id:'all',name:'全部料理'},...CATEGORIES].map(c=><button key={c.id} aria-pressed={category===c.id} onClick={()=>onState({...state,category:c.id,limit:PAGE_SIZE})}>{c.name}<small>{c.id==='all'?RECIPES.length:RECIPES.filter(r=>r.category===c.id).length}</small></button>)}</div>
         <div className="ck-find"><label className="ck-search"><span>找一道想做的料理</span><div><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input type="search" placeholder="找料理、食材或玩法…" value={query} onChange={e=>onState({...state,query:e.target.value,limit:PAGE_SIZE})} maxLength={80}/></div></label><label className="ck-filter">食譜篩選<select value={filter} onChange={e=>onState({...state,filter:e.target.value,limit:PAGE_SIZE})}><option value="all">所有食譜</option><option value="favorite">我的收藏</option><option value="completed">已完成</option></select></label></div>
         <p className="ck-count" role="status">{query?`「${query}」・`:''}{filter==='favorite'?'我的收藏':filter==='completed'?'完成的料理':'這次想做哪一道？'} <span>{filtered.length} 道</span></p>
         <div className="ck-recipe-grid">{filtered.slice(0,limit).map(r=><article className={`ck-recipe-card ck-recipe-${r.category}`} key={r.id}>

@@ -1,5 +1,6 @@
 import { COOKING_RULES, recipeOf, RECIPES } from './catalog';
 import { cookingScore, parseCookingRun, type CookingRun } from './domain';
+import {marketGrade,parseMarket,type MarketRun} from './market-domain';
 
 export const COOKBOOK_KEY='freedom.cooking.cookbook.v1',COOKBOOK_BACKUP='freedom.cooking.cookbook.backup.v1',COOKING_RUN_KEY='freedom.cooking.run.v1';
 export const RUN_TTL=7*24*60*60*1000;
@@ -18,7 +19,7 @@ export function parseCookbook(raw:string|null,now=Date.now()):Cookbook|null {
 export function readCookbook(storage:CookingStorage,now=Date.now()):BookRead{
   try{const raw=storage.getItem(COOKBOOK_KEY),book=parseCookbook(raw,now);if(book)return {book,notice:'',available:true};const backup=parseCookbook(storage.getItem(COOKBOOK_BACKUP),now);return {book:backup??emptyCookbook(),notice:backup?'已讀取上一次有效的食譜備份。':raw?'食譜本資料無法讀取；這次仍可玩，舊備份不會被損毀資料覆蓋。':'',available:true};}catch{return {book:emptyCookbook(),notice:'瀏覽器未允許保存食譜本。這次仍可玩，關閉後進度可能消失。',available:false};}
 }
-type BookChange={kind:'favorite';id:string}|{kind:'complete';run:CookingRun}|{kind:'retry'};
+type BookChange={kind:'favorite';id:string}|{kind:'complete';run:CookingRun}|{kind:'market-complete';run:MarketRun}|{kind:'retry'};
 export function updateCookbook(storage:CookingStorage,memory:Cookbook,change:BookChange,now=Date.now(),preserveFavorites=false):BookRead{
   const read=readCookbook(storage,now),book:Cookbook={...read.book,favorites:[...read.book.favorites],best:{...read.book.best},savedAt:now};
   // Preserve unsaved local progress after a failed write, while taking maxima from a fresh read.
@@ -26,6 +27,7 @@ export function updateCookbook(storage:CookingStorage,memory:Cookbook,change:Boo
   if(preserveFavorites||!read.available||!read.book.savedAt||change.kind==='retry')book.favorites=[...memory.favorites];
   if(change.kind==='favorite'&&recipeOf(change.id))book.favorites=book.favorites.includes(change.id)?book.favorites.filter(id=>id!==change.id):[...book.favorites,change.id];
   if(change.kind==='complete') {const run=parseCookingRun(change.run);if(run?.status==='done'){const score=cookingScore(run),old=book.best[run.recipeId];if(!old||score>old.score)book.best[run.recipeId]={score,updatedAt:now,runId:run.id};}}
+  if(change.kind==='market-complete'){const run=parseMarket(change.run);if(run?.status==='done'){const score=marketGrade(run).score,old=book.best[run.recipe];if(!old||score>old.score)book.best[run.recipe]={score,updatedAt:now,runId:`market_${run.seed}_${Math.round(run.elapsed)}`};}}
   const raw=JSON.stringify(book);
   if(!parseCookbook(raw,now))return {book:memory,notice:'食譜本資料無法保存，請重試。',available:false};
   try{const previous=storage.getItem(COOKBOOK_KEY);if(parseCookbook(previous,now))storage.setItem(COOKBOOK_BACKUP,previous!);storage.setItem(COOKBOOK_KEY,raw);if(storage.getItem(COOKBOOK_KEY)!==raw)throw Error('write not retained');return {book,notice:'',available:true};}catch{return {book,notice:'尚未保存到這台裝置。這次的進度還在，請按「重試保存」。',available:false};}

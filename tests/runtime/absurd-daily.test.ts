@@ -26,8 +26,11 @@ import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {PARTY_GAMES,PARTY_RULES as PT,partyOf} from '../../apps/portal-web/src/games/party/catalog.js';
 import {actParty,advanceParty,chairWave,holidayTargets,newParty,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
-import {ART_FRAMES} from '../../apps/portal-web/src/games/cooking/FoodArt.js';
-import {ART_CLIPS} from '../../apps/portal-web/src/games/cooking/art-clips.js';
+import {DISH_DESIGNS,dishDesign} from '../../apps/portal-web/src/games/cooking/dish-designs.js';
+import {displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
+import {createDishModel,type DishMesh} from '../../apps/portal-web/src/games/cooking/dish-model.js';
+import {createRequire} from 'node:module';
+const {Box3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
 
 test('CK-6: all result kinds encode social handoffs as text/link intents without credentials or publish instructions',()=>{
@@ -43,16 +46,25 @@ test('CK-7: a failed favorite write survives completion against an older valid p
   saved=updateCookbook(base,saved.book,{kind:'complete',run:cook('rice-balls').run},now+2,true);assert.equal(saved.available,true);assert.deepEqual(readCookbook(base,now+2).book.favorites,['rice-balls']);assert.equal(Object.keys(saved.book.best).length,2);
 });
 
-test('CK-2: all 64 image owners bind to real transparent atlases, measured frames and bounded delivery bytes',async()=>{
-  const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/cooking-art.json',import.meta.url),'utf8'));assert.equal(manifest.assets.length,8);let bytes=0;
-  for(const c of CATEGORIES){const entry=manifest.assets.find((a:{category:string})=>a.category===c.id);const raw=await readFile(new URL(`../../${entry.file}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[1600,800]);assert.equal(info.hasAlpha,true);assert.equal(createHash('sha256').update(raw).digest('hex'),entry.sha256);assert.equal(raw.length,entry.bytes);bytes+=raw.length;assert.deepEqual(ART_FRAMES[c.id],entry.frames);assert.equal(ART_CLIPS[c.id].length,8);for(const [x,y,w,h] of ART_FRAMES[c.id])assert.ok(x>=0&&y>=0&&w>0&&h>0&&x+w<=1600&&y+h<=800);for(const clip of ART_CLIPS[c.id])assert.match(clip,/^M[0-9 LHV]+Z$/);}
-  assert.ok(bytes<=2.5*1024*1024);
+test('UX-8: every recipe has an explicit 3D design, with closed identities and no implicit dish',()=>{
+  assert.deepEqual(Object.keys(DISH_DESIGNS).sort(),RECIPES.map(r=>r.id).sort());assert.ok(new Set(Object.values(DISH_DESIGNS).map(d=>d.family)).size>=30);
+  for(const r of RECIPES){assert.equal(dishDesign(r.id),DISH_DESIGNS[r.id]);for(const c of [dishDesign(r.id).base,dishDesign(r.id).top,dishDesign(r.id).accent])assert.match(c,/^#[a-f0-9]{6}$/);}
+  for(const id of ['unknown','__proto__','constructor','../../private'])assert.throws(()=>dishDesign(id),/Unknown 3D recipe/);
+});
+test('UX-8: all 66 native assemblies have finite bounded geometry, distinct real shapes/palettes and one-time disposal',()=>{
+  const signatures=new Set<string>();for(const r of RECIPES){const model=createDishModel(r.id),bounds=new Box3().setFromObject(model.root);assert.ok(bounds.min.y>=-.3,r.id);assert.ok(bounds.max.y<3.7,r.id);assert.ok(bounds.min.x>-3.5&&bounds.max.x<3.5&&bounds.min.z>-3.5&&bounds.max.z<3.5,r.id);assert.ok(model.geometries.size<80,r.id);const hash=createHash('sha256');model.root.traverse(o=>{if((o as DishMesh).isMesh){const mesh=o as DishMesh,p=mesh.geometry.getAttribute('position');assert.ok(p.count>0);for(const n of p.array)assert.ok(Number.isFinite(n),r.id);hash.update(Buffer.from(p.array.buffer,p.array.byteOffset,p.array.byteLength));const m=Array.isArray(mesh.material)?mesh.material[0]:mesh.material;hash.update((m as any).color.getHexString());}});signatures.add(hash.digest('hex'));let disposed=0;for(const g of model.geometries)g.addEventListener('dispose',()=>disposed++);model.dispose();model.dispose();assert.equal(disposed,model.geometries.size);assert.equal(model.root.children.length,0);}
+  assert.equal(signatures.size,66);
+});
+test('UX-8: all 66 3D previews bind to the real model factory, native dimensions and immutable bytes',async()=>{
+  const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/cooking-3d-art.json',import.meta.url),'utf8'));assert.equal(manifest.format,'freedom.cooking-3d-art/v1');assert.equal(manifest.previews.length,66);assert.deepEqual(manifest.previews.map((p:{recipe:string})=>p.recipe).sort(),RECIPES.map(r=>r.id).sort());
+  for(const input of manifest.source_inputs)assert.equal(createHash('sha256').update(await readFile(new URL(`../../${input.path}`,import.meta.url))).digest('hex'),input.sha256);
+  let bytes=0;for(const r of RECIPES){const entry=manifest.previews.find((p:{recipe:string})=>p.recipe===r.id),raw=await readFile(new URL(`../../${entry.path}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[512,384]);assert.equal(raw.length,entry.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),entry.sha256);assert.ok(entry.native.calls>0&&entry.native.calls<=100);assert.ok(entry.native.geometries<100);bytes+=raw.length;}assert.ok(bytes<=2.5*1024*1024);assert.equal(bytes,manifest.total_bytes);
 });
 
-test('CK-3: 64 original recipes have eight complete categories, unique art identities and real operation plans',()=>{
-  assert.equal(RECIPES.length,64);assert.equal(new Set(RECIPES.map(r=>r.id)).size,64);assert.equal(new Set(RECIPES.map(r=>`${r.category}/${r.art}`)).size,64);
-  for(const c of CATEGORIES)assert.equal(RECIPES.filter(r=>r.category===c.id).length,8);
-  for(const r of RECIPES){assert.ok(r.steps.length>=3&&r.steps.length<=4);assert.ok(r.ingredients.length>=3);assert.ok(r.estimatedSeconds>=20);assert.ok(r.art>=0&&r.art<8);assert.equal(recipeOf(r.id),r);assert.ok(r.steps.every(s=>TECHNIQUES[s.kind]));}
+test('CK-3: 66 original recipes have eight complete categories, unique art identities and real operation plans',()=>{
+  assert.equal(RECIPES.length,66);assert.equal(new Set(RECIPES.map(r=>r.id)).size,66);assert.equal(new Set(RECIPES.map(r=>`${r.category}/${r.art}`)).size,66);
+  for(const c of CATEGORIES)assert.equal(RECIPES.filter(r=>r.category===c.id).length,['taiwan','world'].includes(c.id)?9:8);
+  for(const r of RECIPES){assert.ok(r.steps.length>=3&&r.steps.length<=4);assert.ok(r.ingredients.length>=3);assert.ok(r.estimatedSeconds>=20);assert.ok(r.art>=0&&r.art<9);assert.equal(recipeOf(r.id),r);assert.ok(r.steps.every(s=>TECHNIQUES[s.kind]));}
   assert.deepEqual([...new Set(RECIPES.flatMap(r=>r.steps.map(s=>s.kind)))].sort(),Object.keys(TECHNIQUES).sort());assert.ok(recipeSearch(recipeOf('strawberry-cake')!,'草莓 烘烤'));assert.equal(recipeSearch(RECIPES[0],'不存在的食材'),false);assert.equal(recipeOf('__proto__'),null);
 });
 function cook(recipeId:string){let run=newCookingRun(recipeOf(recipeId)!,42,`run_${recipeId}`),now=0;const send=(action:Omit<CookingAction,'step'>)=>{now+=150;run=actCooking(run,{...action,step:run.step} as CookingAction,now);};send({kind:'start'});
@@ -67,7 +79,7 @@ function cook(recipeId:string){let run=newCookingRun(recipeOf(recipeId)!,42,`run
   }
   assert.equal(run.status,'done',recipeId);return {run,now};
 }
-test('CK-4/5: actual pointer coordinates, holds, heat and ordered gestures complete all 64 dishes once',()=>{
+test('CK-4/5: actual pointer coordinates, holds, heat and ordered gestures complete all 66 dishes once',()=>{
   for(const recipe of RECIPES){const {run,now}=cook(recipe.id);assert.equal(run.reports.length,recipe.steps.length);assert.ok(cookingScore(run)>=85,`${recipe.id}: ${cookingScore(run)}`);assert.equal(cookingProgress(run),1);assert.deepEqual(parseCookingRun(JSON.parse(JSON.stringify(run))),run);assert.deepEqual(actCooking(run,{kind:'next',step:run.step},now+100),run);assert.deepEqual(advanceCooking(run,now+99999),run);}
 });
 test('CK-5: wrong cut, stale step, rapid input, invalid coordinates and rewind cannot fabricate progress',()=>{
@@ -156,4 +168,22 @@ test('PT-6: each tiny lobby preview binds to the actual procedural renderer, dim
   assert.equal(manifest.format,'freedom.party-art/v1');assert.equal(manifest.previews.length,3);assert.equal(createHash('sha256').update(await readFile(new URL(`../../${manifest.source}`,import.meta.url))).digest('hex'),manifest.source_sha256);
   for(const input of manifest.source_inputs??[])assert.equal(createHash('sha256').update(await readFile(new URL(`../../${input.path}`,import.meta.url))).digest('hex'),input.sha256);
   let bytes=0;for(const g of PARTY_GAMES){const a=manifest.previews.find((p:{game:string})=>p.game===g.id);assert.ok(a);const raw=await readFile(new URL(`../../${a.path}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[640,480]);assert.equal(raw.length,a.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),a.sha256);bytes+=raw.length;}assert.ok(bytes<100000);
+});
+
+
+test('UX-12 sauce follows the cooked surface and falls onto the plate without mutating the saved run',()=>{
+  const run=displayMarket('steak-dinner');run.portions=run.portions.slice(0,1);run.sauces=[{sauce:'garlic',points:[{x:.05,y:.5},{x:.4,y:.5},{x:.95,y:.5}]}];const saved=JSON.stringify(run),model=createDishModel('steak-dinner',run);let found=0;
+  try{model.root.traverse(o=>{if(!(o as DishMesh).isMesh)return;const mesh=o as DishMesh;if(Array.isArray(mesh.material)||(mesh.material as any).color?.getHexString()!=='e9dfbd')return;found++;const bounds=new Box3().setFromObject(mesh);assert.ok(bounds.min.y<.2,'sauce must reach the plate outside the cutlet');assert.ok(bounds.max.y<.85,'sauce must not float over the cooked meal');});assert.equal(found,1);assert.equal(JSON.stringify(run),saved);}finally{model.dispose();}
+});
+
+test('UX-14: a steak sits on exposed cast iron, with open ear holes and a separate wooden trivet',()=>{
+  const {Raycaster,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+  const run=displayMarket('steak-dinner');run.portions=run.portions.slice(0,1);const saved=JSON.stringify(run),model=createDishModel('steak-dinner',run);
+  try{
+    model.root.updateWorldMatrix(true,true);
+    const ray=new Raycaster(new Vector3(1.9,5,0),new Vector3(0,-1,0));
+    const exposed=ray.intersectObject(model.root,true)[0];assert.ok(exposed,'there is a serving surface');assert.equal((exposed.object as DishMesh).material instanceof Array,false);assert.equal(((exposed.object as DishMesh).material as any).color.getHexString(),'25272a','the wooden trivet cannot cover the iron well');
+    ray.ray.origin.set(2.65,5,0);const throughEar=ray.intersectObject(model.root,true)[0];assert.ok(throughEar);assert.equal(((throughEar.object as DishMesh).material as any).color.getHexString(),'af7d4d','the ear is a real hole with wood below');
+    const meat=model.root.children.find(o=>(o as DishMesh).isMesh&&Array.isArray((o as DishMesh).material))!;assert.ok(meat);const bounds=new Box3().setFromObject(meat);assert.ok(bounds.min.y>=.14&&bounds.min.y<=.16,'the steak rests on the iron well');assert.equal(JSON.stringify(run),saved);
+  }finally{model.dispose();}
 });

@@ -2148,44 +2148,334 @@
       "sha256": "b3526d9bfa4d75b78372b755f9caf58e945b7f3aef85c570eb0d0a1c0d2d99e7"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/bakery.webp",
-      "bytes": 208074,
-      "sha256": "ac499ab79704617cba9689e974e25b7cc6eab648b1b5d4d434e41036cae8fdfd"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/avocado-toast.webp",
+      "bytes": 10480,
+      "sha256": "9f8a2630581eb8c2afa689e10e2da201b6c41ac604a0a01752d0718d1e2e50ef"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/drinks.webp",
-      "bytes": 192402,
-      "sha256": "6385fad9f20ea316d0acdc1ba9d8989ead2fffb8f574e7873b47e61957b38fe9"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/baked-sweet-potato.webp",
+      "bytes": 10422,
+      "sha256": "8837405e8c806c14bb027be7659296dad229989b1f1e477a11e4c454416b6a05"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/italy.webp",
-      "bytes": 229130,
-      "sha256": "d415e0316c1f2f97fd864153374728bebef53a765d95fec95fe2daa7e4aee726"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/banana-smoothie.webp",
+      "bytes": 7566,
+      "sha256": "503b7dc9df2769d57a9d74bc37e6138262ce8a20b0ae24bc2831d0b7101a0cfd"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/japan.webp",
-      "bytes": 210880,
-      "sha256": "77fb8731b0b07bdce0f80823fa6febdd798aac1703078d243aa71609a266e85e"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/beef-noodle-soup.webp",
+      "bytes": 10648,
+      "sha256": "6c681758a08a0493f11a27453cc14e4f832b86f15cf349d7a0dca7cdedfa0284"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/korea.webp",
-      "bytes": 231952,
-      "sha256": "3d4d30f5724c4d736ca97cbb3f02b9822ae0498bbaefbc2ba4361b4bce59b491"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/beef-tacos.webp",
+      "bytes": 9200,
+      "sha256": "f6c10db0264e1419b8812ff1feaba989b0fc9c86360dac969f9e246f1eeb7bc7"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/taiwan.webp",
-      "bytes": 206092,
-      "sha256": "a2c164ef038d9c451f449535987270ed5f37755f32029d96a1f65ce385e66481"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/bibimbap.webp",
+      "bytes": 10174,
+      "sha256": "0f52d059f46c5ce81e7d1faf832f4e0cad5f1ff67e0e3eeadb181ddd4ab57a3d"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/vegetables.webp",
-      "bytes": 215500,
-      "sha256": "952cfb59b36df5d6f1baf46f1516b3d7953c1576905015d31cc81ec3ca3b891b"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/braised-pork-rice.webp",
+      "bytes": 9946,
+      "sha256": "078c9988df05a5b5e10ad48e29a60688d56cd0c396ad22c9f7a276407f517b10"
     },
     {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/world.webp",
-      "bytes": 224964,
-      "sha256": "c35b4a22d0399931aeb766d6e51ce766e6d4af5389e7a7e004e0894cac94e37a"
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/breakfast-waffles.webp",
+      "bytes": 13352,
+      "sha256": "bcd3ff68aff41c8d3363fba1ff779339de3491d656c113de3a1700e7c42f337a"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/bulgogi.webp",
+      "bytes": 10502,
+      "sha256": "fc2549f98dacf80a78d00774508e921273b2a4f316029f377172d9db309bed04"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/butter-chicken.webp",
+      "bytes": 9686,
+      "sha256": "d513ed24fc77f48ed248d4ff39e543b409abd73a2f6552b744b7a012b0d1a92e"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/caramel-pudding.webp",
+      "bytes": 8278,
+      "sha256": "b68fe62bd8cb378a86c0269f8f2d29606f1fce3ca278a4ff540e18e245e4f95a"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cheeseburger.webp",
+      "bytes": 9288,
+      "sha256": "9d1102165a46364e4c6118890c1c1a385ed05fe6f42aaa929c18b9baa07cb737"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chicken-egg-bowl.webp",
+      "bytes": 9794,
+      "sha256": "071c78101047131c3046b313d461616b6e16fea9e9657204cfc16827f5076321"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chocolate-brownie.webp",
+      "bytes": 9138,
+      "sha256": "10a982a8e6145cc39f81da8481cbb39c21773391f8e14ff98c33d211229f5eff"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chocolate-cookies.webp",
+      "bytes": 10738,
+      "sha256": "8917048c36e2c5958540c41d612150d169e68a967e1b0088820b56ae73718d72"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/club-sandwich.webp",
+      "bytes": 10188,
+      "sha256": "3d5e7f5d6df791792b724d8689a635e1831a1279fc246c3215b07da6971a3269"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/corn-dog.webp",
+      "bytes": 11306,
+      "sha256": "501d601c1f71a82603c16d34db642484378e81fa58c533d0f960acc2dbca750d"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cream-risotto.webp",
+      "bytes": 9340,
+      "sha256": "1d0f6da2a5a8999892042f521465f4248eeb51d5b717ab1623e53bb4ef1f7e49"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cupcakes.webp",
+      "bytes": 12478,
+      "sha256": "4ed083a8ac299202552bd38dece6aa69a90ea50fb3109670bd8505756ad7ec27"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/doenjang-soup.webp",
+      "bytes": 9240,
+      "sha256": "d66af78b36d0cc8cb82fdd42179990071020601295a7ab92e15bbabe81a5847e"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/egg-fried-rice.webp",
+      "bytes": 9652,
+      "sha256": "d56f864649ed72bdd25b39582921e2620aced911b323ccd16de8aaa1e445b716"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/egg-tarts.webp",
+      "bytes": 11488,
+      "sha256": "d39749031463e47775695fd9c2642e7be2c02b6b06c4b51c4084165e61bb9ce1"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fish-and-chips.webp",
+      "bytes": 9782,
+      "sha256": "31eb95b527dae07cbb53b9b40571b787ae568a0c6aa4cb36e3ae36475868330d"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fresh-spring-rolls.webp",
+      "bytes": 10906,
+      "sha256": "591fbb7416edf90f4b24396887bb7e342da970cfae57a79125013d5be3b67313"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fruit-tea.webp",
+      "bytes": 7590,
+      "sha256": "d79bc112ee70ee2b73a3e7ab737ac7fd18eea4b2e39f56c9b7378ade1a1568c2"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/garden-salad.webp",
+      "bytes": 9900,
+      "sha256": "7089a55d402dd43a7ebb533271104e449f598cee016c9038da22be211d57b33b"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/gimbap.webp",
+      "bytes": 10786,
+      "sha256": "dd1764ef398f54b10d892381047e81c6f450a133ab632f215a81aea648687afb"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/glazed-doughnuts.webp",
+      "bytes": 11230,
+      "sha256": "d9f433ea102e12c49b6073d3e3f36cb7d916453900197674725da4f5ba7c9f87"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/hot-chocolate.webp",
+      "bytes": 7654,
+      "sha256": "f7a51246160127a5ffeca0653082c5d58cb7e0478293c009be4570dd4365fe02"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/ice-cream-sundae.webp",
+      "bytes": 7684,
+      "sha256": "c128de78d9ef3fb59e7f64ae0a6a9aa1b551e0a3a7ed5e2cfa8e4ebe57d8ee3d"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/italian-meatballs.webp",
+      "bytes": 10346,
+      "sha256": "4e682c9e2257ed7ded6421cb950b12227fe1d1890ad540b3f2b1fe570615b097"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/japanese-curry.webp",
+      "bytes": 10068,
+      "sha256": "013cd3167323cb6f93aad2110f7fad7e921dba7c8011fcffcb5f8a5ed777096c"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/kimchi-fried-rice.webp",
+      "bytes": 10130,
+      "sha256": "16796402161f376c05624fbae4432116851b2035fd8e56537f580b9c1551aa24"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/korean-fried-chicken.webp",
+      "bytes": 10812,
+      "sha256": "a51fa1592950d8dd245bb469dfdc78683752e7889e5410b9bd5b3ea72cb092c5"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/korean-pancake.webp",
+      "bytes": 12910,
+      "sha256": "1bc9dafdebb994c5ed7743b36ee1f800fa339a02510352faab4e13a2de08e0c1"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/lasagna.webp",
+      "bytes": 10594,
+      "sha256": "731428e3c093e7427e87c5a615e51348a592e00ff8b16828f4583182ae3c0599"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/macarons.webp",
+      "bytes": 8742,
+      "sha256": "92477b7f013a6453f699810f4b33c44af54c0102b684d484f12f2997e493e947"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/mango-shaved-ice.webp",
+      "bytes": 9026,
+      "sha256": "6c8e0251a862d9994f763fd3daad9f68df75ab98e0402cded760cf3a400fc6e6"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/margherita-pizza.webp",
+      "bytes": 15430,
+      "sha256": "6fd447981aa8414f62b97177cfe1ab0b85b41140734723d773362db7722eb6a7"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/matcha-latte.webp",
+      "bytes": 7642,
+      "sha256": "67b78cada7563f77d9ff1beaf1503088995e3fb92aed3064a3d805770ea260f9"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/miso-soup.webp",
+      "bytes": 8930,
+      "sha256": "645b69f2849ad4a1e171979ccd2e82ee37b011a430ddbaeec46c87415de14e0b"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/mushroom-risotto.webp",
+      "bytes": 9464,
+      "sha256": "a93d7913ce7ab04743c39e470ade21b30b825bf082842a8326e4b2b44ae19bf9"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/oyster-omelette.webp",
+      "bytes": 13104,
+      "sha256": "632303f6d18ac8a08248e657070434b2fff912a54a1f7c81e17d824b8384fdea"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pearl-milk-tea.webp",
+      "bytes": 7848,
+      "sha256": "600f88908a8c2f0a3adc9e69f849647c8b23416dd1d806897824b2c894286f5e"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pesto-pasta.webp",
+      "bytes": 9256,
+      "sha256": "62b1c40440fc51462ff9d981dd42b2f174c05621d6ae463685366a0423124079"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/plant-burger.webp",
+      "bytes": 8972,
+      "sha256": "3acfa12b27a1a329083c89e8ce8adc6f2cb1f61e8cf730c3141d74be99b41027"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/popcorn-chicken.webp",
+      "bytes": 9744,
+      "sha256": "dcfbddbb0d94dfd390eb15617c772f93006647ffcef2a6cd0077f4fe5c2e8448"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pumpkin-soup.webp",
+      "bytes": 9244,
+      "sha256": "24c66bfe8d77e8bb1287c89fa4008bbca57e3ca5728b81e10804a810a00e561b"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/rice-balls.webp",
+      "bytes": 7582,
+      "sha256": "d9e37277d4b0b8047e48b0e6fad592e6a84e9d4329a20f94d242df0c250c8b1f"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/roasted-vegetables.webp",
+      "bytes": 10014,
+      "sha256": "c947606c0976113fadae6b4acdabb0fdb7b05a8216733592728094a1afec0b20"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/rolled-omelette.webp",
+      "bytes": 7678,
+      "sha256": "497e2ef8fbf88ed78ca3fbbc15a794060a98aa99588a881e9486398857bad80c"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/salmon-sushi.webp",
+      "bytes": 9242,
+      "sha256": "ec7106195e7123e6cbb79b94b4acbf9cd93a7cd096740a039b3371fcc07d40cc"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/scallion-pancake.webp",
+      "bytes": 12586,
+      "sha256": "258aaf63e28ce3c7d50816b24914f0419bb8400d26e35cc0bb4be86476247085"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/seafood-paella.webp",
+      "bytes": 12622,
+      "sha256": "cf4d819e7d26939ae2de55a1e06c4766e1604469462b26e318e3f784ceebe1b5"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/shawarma.webp",
+      "bytes": 9516,
+      "sha256": "89dcf5fd270cf1144acf54388bcd815d6b5b83fd5b902195ebd764f71eedda4d"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/steak-dinner.webp",
+      "bytes": 13590,
+      "sha256": "bf92a5f3f155d4eb8c4d512817490c0b70415aea820ba8b118428a4085d3a579"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/strawberry-cake.webp",
+      "bytes": 9726,
+      "sha256": "a240f8d9e70b217fbfd7302559fa73667faeda5a5ff4df8e1343b1d87e9a5254"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/taiwan-fish-cake.webp",
+      "bytes": 8988,
+      "sha256": "516eed68192bf6e11cc3abbff046d9a6aedddf5eb1934a3d55e43a2475df9aa9"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tempura.webp",
+      "bytes": 9524,
+      "sha256": "ec66a48867c3125a8fd208eb7f33ea21b9f1dde2c1fb98303bd87636589b2fbf"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tiramisu.webp",
+      "bytes": 9736,
+      "sha256": "b8a6c69bb6bd3b2103108fbd952207a8dbacaf4d1a588dfba8a5976fed0000b6"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tomato-spaghetti.webp",
+      "bytes": 9694,
+      "sha256": "ddc08fdc48850a30fd8ac39bb8c34cb9782d3e15331f15401b42eaa430e96ab3"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tonkotsu-ramen.webp",
+      "bytes": 10284,
+      "sha256": "6942f61e63c8c2ea99ae1ec22f284a295442aa28ee405533954f7dc7d7abe760"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tteokbokki.webp",
+      "bytes": 10066,
+      "sha256": "e64ae3736b20a2bda93e8e1743953f62923b6497b7f7cbe316b6f9986634d32a"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/vegetable-skewers.webp",
+      "bytes": 10562,
+      "sha256": "1fb538deea08f0c681920c3f809e9edc78caba6e3a61c22be2eac49720232b47"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/wholegrain-rice-ball.webp",
+      "bytes": 7520,
+      "sha256": "dea54934d0e4b012a7f770da10607208b94a34b36833520f4dfbc1f034b1ceb9"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/yuzu-soda.webp",
+      "bytes": 7928,
+      "sha256": "24a3a163b30bd4042084709b146a6eabd3e17cd7ef955943660a43641687a8c9"
     },
     {
       "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
@@ -2589,8 +2879,8 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 36847,
-      "sha256": "5c37e001a74665ab9abd126e0c975f0b55832b805a40cb9b83b18aa215ece8e7"
+      "bytes": 39150,
+      "sha256": "783dc8723fe70095a5a0ba72aa919183161bd104807e9d8b7c3415960f88fa77"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
@@ -2629,8 +2919,8 @@
     },
     {
       "path": "apps/portal-web/src/games/result-card.ts",
-      "bytes": 4703,
-      "sha256": "1b83dfaa2d8ac3a9faefd8842e1a1dd7fd3a47c83afe903e9b138da4badf3173"
+      "bytes": 4820,
+      "sha256": "41369e5bb4460e3093f3cd4512871203fcab30fbef8ec221865083bef6db572c"
     },
     {
       "path": "apps/portal-web/src/games/result-share.ts",
@@ -2649,8 +2939,8 @@
     },
     {
       "path": "apps/portal-web/src/games/toy-console.css",
-      "bytes": 34894,
-      "sha256": "97b1b89f67fc2638d40a91c36ec6dcecc8a41e0f160697d431d302ca2929e5aa"
+      "bytes": 41614,
+      "sha256": "2bb95698524aefd33c6aa614dbb725b38424a68aafbe8f8f9387c41b2d1640a9"
     },
     {
       "path": "apps/portal-web/src/games/toy-theme.css",
@@ -2659,13 +2949,13 @@
     },
     {
       "path": "apps/portal-web/src/games/cooking/ArcadeLobby.tsx",
-      "bytes": 11170,
-      "sha256": "87ecf50b4e732b5332cf048960da0bd20994bbba15a41b697c17789c5b5dcdba"
+      "bytes": 11434,
+      "sha256": "dc06272df4afa53320c45d48b8c883897856705e572dea7a77ba5c87b5ad38ac"
     },
     {
       "path": "apps/portal-web/src/games/cooking/CookingGame.tsx",
-      "bytes": 23991,
-      "sha256": "e72d5a11279cd920f5ed1490aa74193e94628187e957cc0d4ddb91624850023a"
+      "bytes": 23606,
+      "sha256": "a002f29f4e31da83a0c5a8edd7e0dff6609d076f1c60963987b2258020e08c32"
     },
     {
       "path": "apps/portal-web/src/games/cooking/CookingIllustration.tsx",
@@ -2674,23 +2964,38 @@
     },
     {
       "path": "apps/portal-web/src/games/cooking/CookingScene.tsx",
-      "bytes": 5306,
-      "sha256": "64230f22a4aa85e0d76353f7675186937792d1b1eeed4862fc086f805ba8d43c"
+      "bytes": 5670,
+      "sha256": "c81e5554c7b2061680744d6abaf05fc28426e6b8eac95978e775e4bdeedc9fa7"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/DishShowcase.tsx",
+      "bytes": 4656,
+      "sha256": "1469a7b66d495850489e65a1059cb5a6e382ea063ffeb8efbccfbf64a8e28f14"
     },
     {
       "path": "apps/portal-web/src/games/cooking/FoodArt.tsx",
-      "bytes": 2595,
-      "sha256": "3be90f09689f43b67936be31f25eb126144fe06727cf7e828834a7d188e54c64"
+      "bytes": 780,
+      "sha256": "ce48a483f8bc8aa02e0649789249b76e78ea951146b41e608efc807f2e0ee9c5"
     },
     {
-      "path": "apps/portal-web/src/games/cooking/art-clips.ts",
-      "bytes": 90531,
-      "sha256": "76f940880d59e0713ef270ea9fb672aeb829cc5ee34b88ffea4b853a97a2c8e1"
+      "path": "apps/portal-web/src/games/cooking/IngredientIcon.tsx",
+      "bytes": 4165,
+      "sha256": "0b903a27d6890d17c38db4851432b694856694f02d2e4ce69232a4a36d3af25c"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/MarketGame.tsx",
+      "bytes": 17731,
+      "sha256": "1d72f99dcf0dc8593dfe1d2c25d733c380121cb3e84b5e2563a7b283870e397d"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/MarketScore.tsx",
+      "bytes": 359,
+      "sha256": "82e8f77c68680e5dcd67018dd90ddfefdc44fde4e0ee610766013d1d288c769c"
     },
     {
       "path": "apps/portal-web/src/games/cooking/catalog.ts",
-      "bytes": 17555,
-      "sha256": "0d781493c1250a1731635b4a740a0087b12593f3d39d77aee46e12eaaa8ea62d"
+      "bytes": 17986,
+      "sha256": "d63de1257b681027a73f8134526c0d19431f3035d218dff9e8252c7f64dc214a"
     },
     {
       "path": "apps/portal-web/src/games/cooking/cues.ts",
@@ -2698,14 +3003,49 @@
       "sha256": "ebdfa94e6f92bfb717ce0e079a95a61d43d8438485a8f82e7b125e1660058a57"
     },
     {
+      "path": "apps/portal-web/src/games/cooking/dish-designs.ts",
+      "bytes": 5498,
+      "sha256": "ac7ef44291ae647d5dc87323f599deb107e5294e4d658e5e06923b2fdfe42283"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/dish-model.ts",
+      "bytes": 20416,
+      "sha256": "8f23fd84193069eac32e354d914dbe72f3fd0aa5dc684844af943f83cf7c24dd"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/dish-stage.ts",
+      "bytes": 3703,
+      "sha256": "77bf034d4a22264f2b5a6c21bac5a9a6fcb89d3b25c18f1b1ebebd75fbfd6212"
+    },
+    {
       "path": "apps/portal-web/src/games/cooking/domain.ts",
       "bytes": 11438,
       "sha256": "272675ed349a020cdeed557ae89abc9182ae2a890c29185a0173f4dcdac937de"
     },
     {
+      "path": "apps/portal-web/src/games/cooking/food-geometry.ts",
+      "bytes": 7089,
+      "sha256": "17696fb15efe1c2e429780eec5b6c188b64d27d2653dc5bfc0529f172ae2aea8"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-kit.ts",
+      "bytes": 5396,
+      "sha256": "65b3980b5c0bc0a513f8e6f0dac53c493e7e005b3bec20496bb1ce7ec19ab76f"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-studio.ts",
+      "bytes": 1348,
+      "sha256": "67d2b4e027402627bb00e8e42c94fd27da39320fbf93d0ea04c85dde11edb743"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-surfaces.ts",
+      "bytes": 4394,
+      "sha256": "e3b120c37e7d9081d9a50ca535f4fb88ed85f50155b892f71621b4184dc62eb6"
+    },
+    {
       "path": "apps/portal-web/src/games/cooking/kitchen-stage.ts",
-      "bytes": 15074,
-      "sha256": "7fa7e1d36cc74b1280683b2d7b770dc0fe3417b853eaae8b6b782c526f6f29fb"
+      "bytes": 15555,
+      "sha256": "246ecc6a66848cef6584d6299c28244cf366d4458ae12e65b4126dbd5d7eee7b"
     },
     {
       "path": "apps/portal-web/src/games/cooking/lobby.css",
@@ -2713,9 +3053,29 @@
       "sha256": "3a04bcb68f6fc4feb6117164b82d2a1d11755e5bbc334dafab7914fb7ce700e7"
     },
     {
+      "path": "apps/portal-web/src/games/cooking/market-domain.ts",
+      "bytes": 12923,
+      "sha256": "8340ac2f6bbcf13a98a5d55f1f2fee21561737be1d1b22091ac6db3ca6fe6430"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/market-food.ts",
+      "bytes": 10354,
+      "sha256": "b62c44e5a7631ac5d75c2d9add18f4e93f0b594395309793375982460d069feb"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/market-stage.ts",
+      "bytes": 9382,
+      "sha256": "5d6295cf9dbd7c80cdab97611ffc1f089825dc12e26c304534ef991817c00ae7"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/market.css",
+      "bytes": 8334,
+      "sha256": "5561b2fe634596053abecf8c94c80a482889e5d16e69785e29ba17bd2b9fd6ef"
+    },
+    {
       "path": "apps/portal-web/src/games/cooking/storage.ts",
-      "bytes": 5355,
-      "sha256": "14f8a7ebd4116f4eb2be1c4964b4591b87e921638a1d50cc283471ef0af05603"
+      "bytes": 5750,
+      "sha256": "fdd15769117443b58cb6781b302346e06b7079a54e77e6d2994ebba769bb0f6c"
     },
     {
       "path": "apps/portal-web/src/games/party/PartyGame.tsx",
@@ -14969,8 +15329,8 @@
     },
     {
       "path": "docs/development/absurd-daily.md",
-      "bytes": 23317,
-      "sha256": "ac074b237550f281ce0b6b89c976c08aa9b5ae46097130dba20e07d76627a9b5"
+      "bytes": 37371,
+      "sha256": "135337a633afd919d231ff45365d6ab9d8856e7cf6261f29551b85f9935908b1"
     },
     {
       "path": "docs/development/agent-development-guide.md",
@@ -18474,8 +18834,8 @@
     },
     {
       "path": "modules/absurd-daily/COOKING.md",
-      "bytes": 13241,
-      "sha256": "ac49298a402faca4c86c10f9741416e1be988da5d6039dfa0006e7094d0a2768"
+      "bytes": 14653,
+      "sha256": "f94bec2fe75eac68cdf2fb7fe1e764b1980b79e21c2523ef9a7909555ed82bbf"
     },
     {
       "path": "modules/absurd-daily/PARTY.md",
@@ -18484,28 +18844,83 @@
     },
     {
       "path": "modules/absurd-daily/PLAYABILITY.md",
-      "bytes": 9324,
-      "sha256": "d39b8f9b66a100bd790ac21c0070dc6ba3009caad4f422834fbe9c17360ed018"
+      "bytes": 28528,
+      "sha256": "ddddaa1ad49d20a169dd065de0d6efbb47ae5f6770a4b0902391d0feb4ea965a"
     },
     {
       "path": "modules/absurd-daily/README.md",
-      "bytes": 4004,
-      "sha256": "e6740eec78f47eb6c21001235acba5efabd45fa0441745de1697b5270c617e21"
+      "bytes": 4596,
+      "sha256": "62b3e9abb7cd31165dd80ad430b63c05ded9c0a354cb62089f684b2b654abd6d"
+    },
+    {
+      "path": "modules/absurd-daily/cooking-3d-art.json",
+      "bytes": 35080,
+      "sha256": "9b7745a291c8ddb200f764e9a148e5d06b6f5c9a83a4fb2c7e85cd1ac48d6ae3"
     },
     {
       "path": "modules/absurd-daily/cooking-art.json",
-      "bytes": 21225,
-      "sha256": "f1092287952dc775576b498fbd729eb6795c95a7e11f4c85d801ff5be708df13"
+      "bytes": 21522,
+      "sha256": "fba2b8ed316b0f8d4b64cf8f7b12a9269873b571b90dc603e8d5d3bb8b9c0eb6"
     },
     {
       "path": "modules/absurd-daily/freedom.module.json",
-      "bytes": 1136,
-      "sha256": "6f077815328a03374632bb52870f771d3bfe71c08aba87d3abbdd1d49b89c59c"
+      "bytes": 1180,
+      "sha256": "c8c1a787073d8598ed509601987ea13bbd1ec980943b9e4ee36721dd58819db2"
     },
     {
       "path": "modules/absurd-daily/party-art.json",
       "bytes": 2578,
       "sha256": "e705f1e587c6cba41a83bfc74ba7ff09215c8a2bfb462f93fd97db57b2781e5e"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-corn-dog-share-20261025.png",
+      "bytes": 507966,
+      "sha256": "45618d54ef8b8582a4d5ca2759e080450865beb0cd6437664e7dbcb700f8dd23"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-lobby-desktop-20261025.png",
+      "bytes": 921457,
+      "sha256": "bcc99e862ca6de4ce8de4f8c2609f87e1a06c8a3e3bc3f58a0fe202c8e72256e"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-lobby-phone-20261025.png",
+      "bytes": 621516,
+      "sha256": "052bc5393389b89a4ab64560ec89ecce17bb1373f2ffdba1bc937b285694f79a"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-score-only-20261025.png",
+      "bytes": 151928,
+      "sha256": "0538e057122744a6ef9afec19cc95130b802fee38bb4201cc067454c72460a2b"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-steak-iron-phone-20261025.png",
+      "bytes": 163245,
+      "sha256": "a99bd9bfc16db18f988b3ed0a8d1b35a68762d591d185b492fc693b735066ea0"
+    },
+    {
+      "path": "modules/absurd-daily/review/current-steak-iron-share-20261025.png",
+      "bytes": 629704,
+      "sha256": "9676e6cd06d52c8f08d2103a0aa81b1779c520a9fed599b23eb77f4ada855f4a"
+    },
+    {
+      "path": "modules/absurd-daily/review/native-ceramic-20261025.png",
+      "bytes": 392530,
+      "sha256": "fdcd128727fae8f135ac3516733b6464edc21978168ae672cb2b208cb5d7b2ad"
+    },
+    {
+      "path": "modules/absurd-daily/review/native-corn-dog-20261025.png",
+      "bytes": 335132,
+      "sha256": "a99e6b633ee7a77ab6f45c915ebb8449028aad4242b0a97146116f09a9277c9f"
+    },
+    {
+      "path": "modules/absurd-daily/review/native-corn-dog-rotation-20261025.mp4",
+      "bytes": 285177,
+      "sha256": "dbfd8cd714fe2f8b85a6f1d8e0edce4d23cc9d73b3d7fca20f9cd93eafa9d79d"
+    },
+    {
+      "path": "modules/absurd-daily/review/native-steak-iron-20261025.png",
+      "bytes": 386072,
+      "sha256": "e179e32e26f671bfbd193982bae9cea5000d1d628086bfd0af4cefa923208071"
     },
     {
       "path": "modules/absurd-daily/review/party-lobby-desktop.png",
@@ -24019,8 +24434,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 69589,
-      "sha256": "2b7dfae2d95460401b847ad0e9bfc60c2a6318296b4daa15569bf6312bf7a4b0"
+      "bytes": 87501,
+      "sha256": "dee5210b6d798830f5d349076feda37a2436ee9ad1baa1d28017792b30e81b0f"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -25274,8 +25689,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 27479,
-      "sha256": "4af91091f54de7765aa1db67e7329572fd262ab85c3719251be3ef22eea62b46"
+      "bytes": 31946,
+      "sha256": "28927e8e0c25b887294fffae4cd4f8307c69072830a22b0401e30a12955541fc"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",
@@ -26451,6 +26866,11 @@
       "path": "tests/runtime/maintainer-worker.test.ts",
       "bytes": 11956,
       "sha256": "8125efc679d5d9ee30050f93e30eb1b4c336e02fa07333c1d85e20e5bdc19e17"
+    },
+    {
+      "path": "tests/runtime/market-cooking.test.ts",
+      "bytes": 6103,
+      "sha256": "b9302d1366be2501167368d3d1907911f462438cb37c4c43c00862a223a76bbb"
     },
     {
       "path": "tests/runtime/media-accepted-formats-playback.test.ts",
