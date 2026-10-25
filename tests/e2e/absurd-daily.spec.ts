@@ -121,7 +121,9 @@ async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // photo round between clicks and starve keyboard actions on the other games.
   await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
   await page.goto(`/play?game=${game}&seed=42`);
-  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  // Functional synchronization allows the existing 15s product import bound;
+  // this is not a startup performance assertion. Never auto-retry a failed load.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
   await page.getByRole('button',{name:game==='stamp'?'先蓋一張練習紙':'開始這一局',exact:true}).click();
 }
@@ -249,6 +251,45 @@ test('AD-7 guest result survives login, shows current author, and publishes only
     await e2eAuthPool.query(`DELETE FROM community_social_posts WHERE note=$1
       AND author_user_id IN (SELECT user_id FROM users WHERE email='maker@local.test')`,[draft.text]);
   }
+});
+
+test('AD-6 stage import times out, ignores late completion, and recovers only after explicit Retry',async({page})=>{
+  const now=new Date('2026-10-23T00:00:00Z');
+  await page.clock.install({time:now});
+  await page.clock.pauseAt(new Date(now.getTime()+60_000));
+  let capture!:(route:Route)=>void;
+  const requested=new Promise<Route>(resolve=>{capture=resolve;});
+  // Hold the real production stage chunk, not a fake renderer. Returning from
+  // the handler leaves the route pending until the explicit fulfill below.
+  await page.route(/\/assets\/stage-[^/]+\.js(?:\?.*)?$/,route=>{capture(route);});
+  // A pending module can delay load; DOMContentLoaded does not await this lazy import.
+  await page.goto('/play?game=cash&seed=42',{waitUntil:'domcontentloaded'});
+  const route=await requested,response=await route.fetch(),stageUrl=route.request().url();
+  const start=page.getByRole('button',{name:'開始這一局',exact:true});
+  const retry=page.getByRole('button',{name:'重試場景',exact:true});
+  const alert=page.getByRole('alert'),canvas=page.locator('.ad-stage canvas');
+  await expect(page.locator('.ad-stage-cover').getByRole('status')).toHaveText('正在佈置現場…');
+  await page.clock.fastForward(14_999);
+  await expect(alert).toHaveCount(0);await expect(retry).toHaveCount(0);
+  await expect(start).toHaveCount(0);await expect(canvas).toHaveCount(0);
+  await page.clock.fastForward(1);
+  await expect(alert).toHaveText('遊戲場景載入較久。請重試，或回遊樂場。');
+  await expect(retry).toBeVisible();await expect(start).toHaveCount(0);
+  await route.fulfill({response});
+  // Await evaluation of the same module, not merely its HTTP response, before
+  // checking that the expired generation cannot create a scene or expose Start.
+  await page.evaluate(async url=>{await import(url);},stageUrl);
+  await expect(alert).toHaveText('遊戲場景載入較久。請重試，或回遊樂場。');
+  await expect(retry).toBeVisible();await expect(start).toHaveCount(0);
+  await expect(canvas).toHaveCount(0);
+  await expect(page.locator('[data-game-stage="ready"]')).toHaveCount(0);
+  await retry.click();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+  await expect(alert).toHaveCount(0);await expect(retry).toHaveCount(0);
+  await expect(canvas).toHaveCount(1);await expect(start).toBeVisible();
+  await start.click();
+  await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 1 / 30');
 });
 
 test('AD-6 render exception recovers paused, keeps progress and resumes action cooldowns only on Continue',async({page})=>{
