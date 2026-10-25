@@ -33,10 +33,8 @@ jobs:
       contents: read
       actions: read
     env:
-      CONTROLLER_SHA: ${{ job.workflow_sha }}
       RELEASE_TARGET: ${{ matrix.target }}
       BACKUP_CRON: ${{ github.event.schedule }}
-      PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/backup-public
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -50,6 +48,8 @@ jobs:
       - name: Admit the actually deployed source
         id: admit
         env:
+          CONTROLLER_SHA: ${{ job.workflow_sha }}
+          PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/backup-public
           GH_TOKEN: ${{ github.token }}
           BACKUP_COMMAND: admit
           BACKUP_ENABLED: ${{ vars.BACKUP_ENABLED }}
@@ -68,6 +68,8 @@ jobs:
           lfs: false
       - name: Execute scheduled backup
         env:
+          CONTROLLER_SHA: ${{ job.workflow_sha }}
+          PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/backup-public
           GH_TOKEN: ${{ github.token }}
           BACKUP_COMMAND: execute
           RELEASE_SHA: ${{ steps.admit.outputs.source_sha }}

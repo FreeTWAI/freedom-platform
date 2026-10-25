@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { parse as parseYaml } from 'yaml';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
@@ -43,6 +44,20 @@ const sha = 'a'.repeat(40), main = 'b'.repeat(40), tree = 'c'.repeat(40);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const config = JSON.stringify({ format: 'freedom.shared-release-config/v1', target: 'staging-next' });
 const installation = { image: `ghcr.io/freetwai/freedom-release-operator@sha256:${'d'.repeat(64)}`, configSha256: hash(config) };
+
+test('shared workflows use only GitHub-supported job environment contexts before runner allocation', async () => {
+  const allowed = new Set(['github', 'needs', 'strategy', 'matrix', 'vars', 'secrets', 'inputs']);
+  for (const name of ['shared-release', 'shared-backup', 'release-operator-image']) {
+    const workflow = parseYaml(await readFile(new URL(`../../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+    for (const job of Object.values(workflow.jobs)) {
+      for (const value of Object.values(job.env ?? {})) {
+        for (const [, expression] of String(value).matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+          for (const [, context] of expression.matchAll(/\b([a-z_]+)\./g)) assert(allowed.has(context), `${name}: ${context} is unavailable in jobs.<id>.env`);
+        }
+      }
+    }
+  }
+});
 const environment = () => ({ GITHUB_REPOSITORY: REPOSITORY, GITHUB_REPOSITORY_ID: String(REPOSITORY_ID),
   GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main',
   GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-release.yml@refs/heads/main`,

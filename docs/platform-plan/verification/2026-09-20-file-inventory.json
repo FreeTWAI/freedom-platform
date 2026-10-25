@@ -174,8 +174,8 @@
     },
     {
       "path": ".github/workflows/shared-backup.yml",
-      "bytes": 4035,
-      "sha256": "9cb5ac25c9afe27de0d34cf815949c1bed9ba34287532bec08239d5885947948"
+      "bytes": 4162,
+      "sha256": "f3bfd339354794768f7371dda9b7bfd5d145993e5a2ae3e56a9d067f39d893db"
     },
     {
       "path": ".github/workflows/shared-release.yml",
@@ -14569,8 +14569,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 90328,
-      "sha256": "708a87f0b2f34b07d951002bd83f6b337968e793a36b978986b6a38735b5e03a"
+      "bytes": 91188,
+      "sha256": "5b16c5d6df14b6b1c078cd8e8dcfefc023fb2d4cb3751faceedf96e00cb482bd"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
