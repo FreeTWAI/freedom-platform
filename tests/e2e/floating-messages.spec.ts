@@ -331,7 +331,10 @@ test('launcher position controls do not squeeze the close target with enlarged t
   await page.evaluate(()=>localStorage.setItem('freedom-interface-language-v1','es'));await page.reload();
   const bubble=page.locator('.floating-messages');await bubble.click();
   // Explicit text-expansion simulation, not a real browser zoom or device test.
-  await page.addStyleTag({content:'.floating-message-header{font-size:28px}.floating-message-header h2{font-size:32px}.floating-message-header button{font-size:28px}'});
+  const scaleSheet=new URL('/__test__/floating-header-scale.css',page.url()).href;
+  await page.route(scaleSheet,route=>route.fulfill({status:200,contentType:'text/css',body:'.floating-message-header{font-size:28px}.floating-message-header h2{font-size:32px}.floating-message-header button{font-size:28px}'}));
+  await page.addStyleTag({url:scaleSheet});
+  await expect(page.locator('.floating-message-header h2')).toHaveCSS('font-size','32px');
   const panel=page.locator('.floating-message-panel'),close=panel.getByRole('button',{name:'Contraer chats',exact:true});
   const buttons=panel.locator('.floating-message-header button:visible');
   for(const button of await buttons.all()){
