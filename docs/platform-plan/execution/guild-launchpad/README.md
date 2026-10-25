@@ -8,7 +8,15 @@
 
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=54961dd83fbfba721ae54bcddd8e759b7a06915f release.staging=54961dd83fbfba721ae54bcddd8e759b7a06915f flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=187 applied_migration.staging=187 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=36bec661d8e87759cbb5af4796816032bfcc0073 release.staging=36bec661d8e87759cbb5af4796816032bfcc0073 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-25 05:22 UTC，兩環境已部署 `36bec661`／schema189；migrations188–189各以單一交易COMMIT，ledger188列，回退下限為 `36bec661`／189。27個既有旗標與contact retention `all`維持；代出貨旗標不存在、仍OFF。四組發布before／after備份皆首跑通過讀回、隔離還原及清理，dispatcher `2fc4cb83`已綁定兩環境，原timers第二次完整gate恢復。詳見[本次發布收據](../unified-foundation/rollout-main-36bec661-2026-10-25.json)及[現況快照](../unified-foundation/current-state.json)。
+
+S3 receive、3b舊pin與timer restore首試拒絕保留；步序與production備份前等待乾淨網路另列觀察。Persistent補跑成功不算自然排程。Production公開smoke通過14項，admin僅驗Access302與精確來源CSP；會員UX、真實手機／Safari與新wrapper自然排程未驗，M1／完整計畫與真人成果未接受狀態維持。
+
+### 2026-10-24 21:26 歷史發布
+
+以下保留 `54961dd8` 當時觀察；最新部署以上方10月25日收據為準。
 
 截至2026-10-24 21:26 UTC，兩環境已部署 `54961dd8`／schema187，migrations186–187各以單一交易COMMIT，ledger186列；回退下限為 `54961dd8`／187。27個既有旗標維持，唯一新增contact retention `all`；其他不存在旗標仍OFF。四組成功before／after備份讀回、隔離還原與清理通過，dispatcher `4dba0c67` 已綁定兩環境，原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-54961dd8-2026-10-24.json)及[現況快照](../unified-foundation/current-state.json)。
 

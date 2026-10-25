@@ -10,6 +10,31 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-25 main 36bec661 發布完成（已付款取消與會員體驗）
+
+截至05:22 UTC，兩環境已部署 `36bec661`／schema189，接續 `54961dd8`／187；完整證據見[發布收據](rollout-main-36bec661-2026-10-25.json)。
+自前版共4個 first-parent merges：#1001、#1015（16支）、#1017（fork head）、#1027（僅CI）；文件設計不算功能或會員驗收。
+已付款訂單取消流程已部署，但checkout與交易Email仍OFF，會員目前無法建立付款訂單，不能據此推定正式交易驗收。#1015涵蓋五語發文器、草稿／安全重試、留言修改刪除防舊讀覆蓋、按讚回饋、動態分類／分享入口及已讀通知同步。
+聊天重用歷史、有限回條查詢、貼圖預覽再送出並保留草稿；搜尋依登入狀態隔離已上線；返回保留私人清單分頁只在 `FREEDOM_COMMUNITY_RELATIONS_ENABLED` 開啟時呈現，該旗標不存在、仍OFF，會員目前看不到。
+另有技能書探索閱讀、免費預覽入口、首頁品牌與學習／公會自主展開、本人空間／頭像選單及已加入公會總覽；共創誌分開Claude／Codex並支援兩社群同日文章。
+#1017修正結果清單變動後關閉好友移除／拒絕確認；#1014僅為本人明選公開名片精選貼文設計，未宣稱交付。
+Main Verify 40149666118 attempt2的17個jobs與CodeQL 40149666157的3個jobs成功；檔案記錄最後job03:48:05Z、run更新03:48:06Z。
+Verify首輪partition1的test_timeout（62檔完成60、無測試失敗）僅有派工提供的操作者紀錄，Q2未見原始報告；不改寫為成功。
+Migrations188／189各由環境 `_migrator` 單一交易COMMIT；staging交易890305、production交易892468，ledger各188列。
+**兩環境回退下限升為 `36bec661`／189，只能相容前進修復**；代出貨migration已套用，但旗標不存在，仍OFF。
+27個既有旗標加contact retention `all`共28項設定、各37 vars、路由與cron均不變；沒有新增線上 `FREEDOM_*` 名稱。
+Ted的10月24日18:08:00.318Z原話：「當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了」；新授權記錄於10月25日01:14:37.562Z。
+無staging acceptance window，會員UX為 `not_run`；production公開唯讀smoke05:00:02.174Z通過14項、health首試符合來源，未登入會員或建單。
+`/` 線上CSP允許youtube-nocookie frame；`/pay/ecpay/`加43個A無frame-src；admin兩路徑被Access302攔截，未觀察線上admin Worker CSP，僅驗精確來源函式。
+四組發布備份皆首跑通過讀回、隔離DB／物件還原及清理：staging before `ecade880`／after `ad86e455`，production before `058c207a`／after `4d310d7f`。
+Before以Q既有after wrapper新擷取、保留 `54961dd8`／187；after為 `36bec661`／189；還原不授權公開資料。00:44:05Z receive拒絕S3 `53d528fc` 的 `not_actual_current_merged_main`，Follow-up2於01:14Z改選S5／新授權並保留舊檔。
+3b首試因wrapper舊pin退出65、log空且Node未啟動；Follow-up3僅重釘該行並新增永久inline-pin audit，第二次04:12:18Z通過。
+步序為觀察：step7 staging before03:57:56Z早於3b重試與bind／plan／seal，使用前代wrapper；pointer於bind後04:13:46Z記錄。
+Step8於04:12:08Z暫停timer，04:31Z production夜備未於原時段執行；發布before／after補足，後續Persistent補跑另列。
+Production before於04:28／04:31Z因上游延遲未啟動；04:41／04:42Z連續乾淨RTT與04:42Z乾淨precheck後，04:43:42Z才啟動並首跑通過；未複製主機或IP。
+Dispatcher staging階段約04:57Z，both為 `2fc4cb83`；timer restore首試啟動後因Persistent補跑而拒絕，補跑 `b1d1ccc0`成功後第二次05:21:20Z完整gate通過，排程／argv未改。
+Deployments staging-next／next success（7309017031／20527935508、7309017615／20527938074）；補跑非自然排程，仍為 `not_observed_for_new_wrapper`；真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+
 ## 2026-10-24 main 54961dd8 發布完成（共創誌、遊戲與聯絡資料保存）
 
 截至21:26 UTC，兩環境已部署 `54961dd8`／schema187，接續 `c140a346`／185；完整證據見[發布收據](rollout-main-54961dd8-2026-10-24.json)。
