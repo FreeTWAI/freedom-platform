@@ -6,9 +6,11 @@
 
 ## 目前狀態
 
+本分支另含預設關閉的 Google 身分候選 migration190；`repo_max_migration` 只反映來源上限，不代表正式套用、啟用登入或部署。下方具日期的 applied schema、release、旗標與驗收紀錄維持原值；與 #1022 的同欄整合須保留兩邊正確事實。
+
 本機候選新增共創誌 migration186；僅建立日誌資料表，不代表正式部署、指派編輯者、發行金鑰或發布文章。整合順序已確認：#985 使用 186，#989 的聯絡資料保留使用 187；這不代表人像或部署核准。
 
-<!-- glp-status: as_of=2026-10-12 release.production=c140a346ba3c8788a3f729919465f46a49ccf99b release.staging=c140a346ba3c8788a3f729919465f46a49ccf99b flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=185 applied_migration.staging=185 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=c140a346ba3c8788a3f729919465f46a49ccf99b release.staging=c140a346ba3c8788a3f729919465f46a49ccf99b flag.production=true flag.staging=true repo_max_migration=190 applied_migration.production=185 applied_migration.staging=185 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 截至2026-10-23 11:28 UTC，兩環境已部署 `c140a346`／schema185，migrations173–185各以單一交易COMMIT，ledger184列；回退下限為 `c140a346`／185。27個旗標、路由與cron維持，8個新旗標不存在、預設OFF。四組成功before／after備份讀回、隔離還原與清理通過，dispatcher `b76f639d` 已綁定兩環境，原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-c140a346-2026-10-23.json)及[現況快照](../unified-foundation/current-state.json)。
 
