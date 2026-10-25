@@ -285,3 +285,111 @@ for (const width of [1280, 390]) {
     });
   });
 }
+
+async function openQuickstartBook(page: Page) {
+  await emptyShelf(page);
+  await login(page);
+  await navigate(page, '技能書架');
+  await page.getByRole('button', { name: '未解鎖', exact: true }).click();
+  const trigger = page.locator('.community-library [data-book-id="supplier-client"]').getByRole('button', { name: '預覽技能書', exact: true });
+  await trigger.click();
+  const dialog = page.locator('dialog.skill-intro-dialog[data-book-id="supplier-client"]');
+  await expect(dialog).toBeVisible();
+  return { dialog, trigger };
+}
+
+for (const width of [1280, 390]) {
+  test(`quickstart commands copy exactly on explicit keyboard activation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(() => {
+      const writes: string[] = [];
+      Object.defineProperty(window, '__quickstartWrites', { value: writes });
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { writes.push(text); } } });
+    });
+    const { dialog, trigger } = await openQuickstartBook(page);
+    const command = dialog.locator('.skill-intro-command');
+    const expected = await command.textContent();
+    expect(expected).toContain('npm run read -- products');
+    expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites)).toEqual([]);
+    const copy = dialog.getByRole('button', { name: '複製指令', exact: true });
+    await copy.focus(); await page.keyboard.press('Enter');
+    await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites)).toEqual([expected]);
+    await expect(copy).toBeFocused();
+    expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await dialog.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
+    await expect(trigger).toBeFocused(); await trigger.click();
+    await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toHaveCount(0);
+    await page.keyboard.press('Escape'); await expect(trigger).toBeFocused();
+  });
+}
+
+for (const mode of ['rejected', 'unavailable'] as const) {
+  test(`quickstart clipboard ${mode} offers exact manual selection without false success`, async ({ page }) => {
+    await page.addInitScript(mode => Object.defineProperty(navigator, 'clipboard', { configurable: true,
+      value: mode === 'unavailable' ? undefined : { writeText: async () => { throw new DOMException('Denied', 'NotAllowedError'); } } }), mode);
+    const { dialog } = await openQuickstartBook(page);
+    const expected = await dialog.locator('.skill-intro-command').textContent();
+    await dialog.getByRole('button', { name: '複製指令', exact: true }).click();
+    await expect(dialog.getByRole('status').filter({ hasText: '未能複製' })).toBeVisible();
+    await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toHaveCount(0);
+    const select = dialog.getByRole('button', { name: '選取指令', exact: true });
+    await select.focus(); await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(expected);
+    await expect(dialog.locator('.skill-intro-command')).toBeFocused();
+  });
+}
+
+test('quickstart pending copy deduplicates clicks and ignores completion after closing', async ({ page }) => {
+  await page.addInitScript(() => {
+    let resolveCopy: (() => void) | undefined;
+    const writes: string[] = [];
+    Object.defineProperties(window, {
+      __quickstartWrites: { value: writes },
+      __finishQuickstartCopy: { value: () => resolveCopy?.() },
+    });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (text: string) => {
+      writes.push(text); return new Promise<void>(resolve => { resolveCopy = resolve; });
+    } } });
+  });
+  const { dialog, trigger } = await openQuickstartBook(page);
+  const copy = dialog.getByRole('button', { name: '複製指令', exact: true });
+  await copy.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(dialog.getByRole('button', { name: '正在複製…', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites.length)).toBe(1);
+  await page.keyboard.press('Escape'); await expect(trigger).toBeFocused(); await trigger.click();
+  await page.evaluate(() => (window as unknown as { __finishQuickstartCopy: () => void }).__finishQuickstartCopy());
+  await expect(dialog.getByRole('button', { name: '複製指令', exact: true })).toBeEnabled();
+  await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toHaveCount(0);
+});
+
+test('books without quickstart commands do not offer copying or invent commands', async ({ page }) => {
+  await emptyShelf(page); await login(page); await navigate(page, '技能書架');
+  await page.getByRole('button', { name: '未解鎖', exact: true }).click();
+  await page.locator('.community-library [data-book-id="music-mv"]').getByRole('button', { name: '預覽技能書', exact: true }).click();
+  const dialog = page.locator('dialog.skill-intro-dialog[data-book-id="music-mv"]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.skill-intro-command')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '複製指令', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('heading', { name: '準備', exact: true })).toBeVisible();
+});
+
+test('quickstart copy can retry after rejection without keeping manual fallback', async ({ page }) => {
+  await page.addInitScript(() => {
+    const writes: string[] = [];
+    Object.defineProperty(window, '__quickstartWrites', { value: writes });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => {
+      writes.push(text); if (writes.length === 1) throw new DOMException('Denied', 'NotAllowedError');
+    } } });
+  });
+  const { dialog } = await openQuickstartBook(page);
+  const expected = await dialog.locator('.skill-intro-command').textContent();
+  const copy = dialog.getByRole('button', { name: '複製指令', exact: true });
+  await copy.click();
+  await expect(dialog.getByRole('button', { name: '選取指令', exact: true })).toBeVisible();
+  await copy.click();
+  await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '選取指令', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('status').filter({ hasText: '未能複製' })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites)).toEqual([expected, expected]);
+});
