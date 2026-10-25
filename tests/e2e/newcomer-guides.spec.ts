@@ -55,8 +55,8 @@ async function registerJoined(page: Page, profile='guide-dragon') {
 }
 
 async function finishLine(page: Page) {
-  const skip = panel(page).getByRole('button',{name:'顯示全文',exact:true});
-  if (await skip.isVisible()) await skip.click();
+  // Text naturally finishes within 3s. The optional skip button can disappear
+  // between a visibility check and a click; wait for completion, not that button.
   await expect(panel(page).locator('.page-spirit-line')).toHaveAttribute('data-typing','false',{timeout:4000});
 }
 
@@ -345,6 +345,9 @@ test('chat drafts, the existing page dialog and outside form focus keep the comp
 test('real six-frame playback finishes, cancels under motion controls and keeps flow controls operable beside the main page', async ({page}, testInfo) => {
   test.setTimeout(90_000);
   await registerJoined(page); await openSpirit(page);
+  // This case samples sprite frames immediately after asking, not text motion.
+  await useInstantText(page);
+  await panel(page).locator('.page-spirit-preferences > summary').click();
   await expect(actor(page)).toBeVisible();
   await ask(page,'你好');
   await expect(actor(page)).toHaveAttribute('data-animating','true');
@@ -370,6 +373,8 @@ test('real six-frame playback finishes, cancels under motion controls and keeps 
   await openSpirit(page); await openPreferences(page); await panel(page).getByRole('checkbox',{name:'靜態省電',exact:true}).check(); await ask(page,'你好');
   await expect(actor(page)).toHaveAttribute('data-animating','false'); await expect(actor(page).locator('img')).toHaveAttribute('src',SPIRIT_CHARACTERS.home.hero);
   await panel(page).getByRole('checkbox',{name:'靜態省電',exact:true}).uncheck();
+  // Reduced-motion coverage must not be satisfied by the instant-text preference.
+  await panel(page).getByRole('checkbox',{name:'直接顯示全文',exact:true}).uncheck();
   await page.emulateMedia({reducedMotion:'reduce'}); await ask(page,'你好');
   await expect(actor(page)).toHaveAttribute('data-animating','false'); await expect(panel(page).locator('.page-spirit-line')).toHaveAttribute('data-typing','false');
   await page.emulateMedia({reducedMotion:'no-preference'});
@@ -938,4 +943,19 @@ test('Escape interrupts native guide scrolling and prevents late focus after inl
     await expect(page.locator('[data-page-spirit-guide-target="true"]')).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);await expect(actor(page)).toHaveAttribute('data-animating','false');
   }
+});
+
+
+test('explicit show-full-text skips a paused animation and preserves the full entry line',async({page})=>{
+  await registerJoined(page);
+  const now=new Date('2026-10-25T00:00:00Z');
+  await page.clock.install({time:now});
+  await page.clock.pauseAt(new Date(now.getTime()+60_000));
+  await widget(page).locator('.page-spirit-launcher').click();
+  await expect(widget(page)).toHaveAttribute('data-load-state','ready');
+  await expect(panel(page).locator('.page-spirit-line')).toHaveAttribute('data-typing','true');
+  await panel(page).getByRole('button',{name:'顯示全文',exact:true}).click();
+  await finishLine(page);
+  await expect(line(page)).toHaveText(home.entryLine);
+  await expect(panel(page).getByRole('button',{name:'顯示全文',exact:true})).toHaveCount(0);
 });
