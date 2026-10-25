@@ -101,3 +101,39 @@ test('two uncertain posts retain independent commands until each is confirmed',a
   h.props.post=second;h.submit();assert.deepEqual(h.requests[3].options,h.requests[1].options);assert.equal(h.requests[3].body.text,'draft b');
   h.requests[3].resolve(h.ack(h.requests[3]));await settle();assert.equal(h.saved.length,2);
 });
+
+function parentSaveHarness(initial:any[]){
+  const feed=readFileSync(new URL('../../apps/portal-web/src/modules/SocialZone.tsx',import.meta.url),'utf8');
+  const start=feed.indexOf('onSaved={saved=>{'),end=feed.indexOf('}}/>',start);assert.ok(start>=0&&end>start);
+  const callback=feed.slice(start+'onSaved={'.length,end+1);let items=initial;
+  const context:any={setItems:(fn:(items:any[])=>any[])=>{items=fn(items);},setNotice(){}};
+  runInNewContext(transformSync(`globalThis.saved=${callback}`,{loader:'ts',format:'cjs'}).code,context);
+  return {save:context.saved,get items(){return items;},replace(value:any[]){items=value;}};
+}
+test('actual parent preserves a newer feed revision while the editor still holds its original post snapshot',async()=>{
+  const h=harness(),other={post_id:'other',revision:3,note:'untouched'},parent=parentSaveHarness([h.original,other]);
+  h.props.onSaved=parent.save;h.edit('after');h.submit();
+  const newer={...h.original,revision:7,note:'newer server text',like_count:5,thumbnail_url:'current-image'};
+  parent.replace([newer,other]);h.requests[0].resolve(h.ack(h.requests[0]));await settle();
+  assert.equal(parent.items[0],newer);assert.equal(parent.items[1],other);assert.equal(h.closed,1);
+});
+test('actual parent accepts current edit fields without rolling back image or independent reactions',async()=>{
+  const h=harness(),other={post_id:'other',revision:3,note:'untouched'};
+  const current={...h.original,thumbnail_url:'current-image',like_count:5,comment_count:4,liked:true,read_count:9,total_points:7,my_points:2,mine:true,author:{user_id:'current-author'}};
+  const parent=parentSaveHarness([current,other]);h.props.onSaved=parent.save;h.edit('after');h.submit();
+  h.requests[0].resolve({...h.ack(h.requests[0]),title:'after',edited_at:'2026-10-25T19:00:00Z',tags:['updated'],mentions:[],thumbnail_url:'old-image',like_count:1,comment_count:0,liked:false,read_count:1,total_points:0,my_points:0,mine:false,author:{user_id:'old-author'}});await settle();
+  const updated=parent.items[0];assert.equal(updated.revision,2);assert.equal(updated.note,'after');assert.equal(updated.title,'after');assert.deepEqual(Array.from(updated.tags),['updated']);
+  for(const field of ['thumbnail_url','like_count','comment_count','liked','read_count','total_points','my_points','mine','author'])assert.equal(updated[field],current[field as keyof typeof current],field);
+  assert.equal(parent.items[1],other);assert.equal(h.closed,1);
+});
+test('actual parent is not called by an edit ACK from a replaced account',async()=>{
+  const h=harness(),fresh={post_id:'new-account-post',revision:1,note:'fresh draft'},parent=parentSaveHarness([fresh]);
+  h.props.onSaved=parent.save;h.edit('after');h.submit();h.client.sessionGeneration++;
+  h.requests[0].resolve(h.ack(h.requests[0]));await settle();assert.equal(parent.items[0],fresh);assert.equal(h.closed,0);
+});
+
+test('equal-revision receipts leave already observed text and metadata untouched',()=>{
+  const current={post_id:'post-a',revision:2,title:'already read',note:'already read',tags:['new'],mentions:[],edited_at:'current'};
+  const parent=parentSaveHarness([current]);parent.save({...current,title:'old snapshot',note:'old snapshot',tags:[],edited_at:'old'});
+  assert.equal(parent.items[0],current);
+});

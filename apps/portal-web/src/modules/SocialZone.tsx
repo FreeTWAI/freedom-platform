@@ -686,7 +686,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         {deleteError && <p className="banner banner-error" role="alert">{deleteError}</p>}
       </div>}
     </dialog>
-    <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id?{...item,...saved,thumbnail_url:item.thumbnail_url}:item));setNotice('貼文已更新。');}}/>
+    <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id&&saved.revision>item.revision?{...item,title:saved.title,note:saved.note,edited_at:saved.edited_at,revision:saved.revision,tags:saved.tags,mentions:saved.mentions}:item));setNotice('貼文已更新。');}}/>
     {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
     {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p><p>重新載入只更新貼文狀態，不會重送操作或確認圖片已更新。若要更換縮圖，請重新選取圖片。</p><button type="button" className="btn btn-ghost" disabled={loading || more || saving} onClick={refreshAfterAction}>重新載入貼文狀態</button><button type="button" className="btn btn-ghost" onClick={() => setActionError('')}>關閉提示</button></div>}
