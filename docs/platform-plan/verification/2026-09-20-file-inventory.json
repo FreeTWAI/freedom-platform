@@ -3154,8 +3154,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/HostedStore.tsx",
-      "bytes": 52766,
-      "sha256": "01b4d82fcdb7a5c38f6b6dd56b8bef11ca3ad6598d9369841a4b5d240bda1a14"
+      "bytes": 26444,
+      "sha256": "63ac0b98aee44496bb03bb0bb06009580e25589f106a9e4b441127dae737372f"
     },
     {
       "path": "apps/portal-web/src/modules/HostedStoreAppearance.css",
@@ -3166,6 +3166,11 @@
       "path": "apps/portal-web/src/modules/HostedStoreAppearance.tsx",
       "bytes": 20207,
       "sha256": "9a9dcfd29036f13baa2042d106cdbb6b1312cb028f56109586185e97086209ed"
+    },
+    {
+      "path": "apps/portal-web/src/modules/HostedStoreCooperationArea.tsx",
+      "bytes": 2131,
+      "sha256": "aa372d8ff4a9d1995a8c2a017a435027550114eac31a570ce9f63bb04ddb1ebb"
     },
     {
       "path": "apps/portal-web/src/modules/HostedStoreGallery.css",
@@ -3191,6 +3196,21 @@
       "path": "apps/portal-web/src/modules/HostedStorePolicies.tsx",
       "bytes": 13324,
       "sha256": "3f38b2a7d83703e6903d54ab26a44673b0f28dfbdb8c2bf665af341e16b606c6"
+    },
+    {
+      "path": "apps/portal-web/src/modules/HostedStoreProductsArea.tsx",
+      "bytes": 16375,
+      "sha256": "c01fbb9e89f40a295c106c27373dec6aafdfa4d31024d153111af635d1ce5d69"
+    },
+    {
+      "path": "apps/portal-web/src/modules/HostedStorePublishArea.tsx",
+      "bytes": 7625,
+      "sha256": "17e53a4cc16e5d43a0d9bf32743936e6edaad8275f93c3300123260baacd4c4e"
+    },
+    {
+      "path": "apps/portal-web/src/modules/HostedStoreSettingsArea.tsx",
+      "bytes": 9852,
+      "sha256": "fbcd16f1fd94c63259dd0d62bf35c1ab997117c0dc0c8d528ac0dcf304dc83ef"
     },
     {
       "path": "apps/portal-web/src/modules/HostedSupplierOrders.tsx",
@@ -3811,6 +3831,11 @@
       "path": "apps/portal-web/src/modules/hosted-store-appearance-state.ts",
       "bytes": 4746,
       "sha256": "3153ef9faed604a1d8dbf923dc519986068587aded3827242d1927b83a0d3fcd"
+    },
+    {
+      "path": "apps/portal-web/src/modules/hosted-store-area-shared.tsx",
+      "bytes": 2736,
+      "sha256": "62d66ba492938febc7147976d4ff2e6114c8c7c328c16d4bd6274171e2aa05d7"
     },
     {
       "path": "apps/portal-web/src/modules/hosted-store-dirty-state.ts",
@@ -19394,8 +19419,8 @@
     },
     {
       "path": "modules/agent-commerce/portal/freedom.module.json",
-      "bytes": 709,
-      "sha256": "1cb1ca6c46b2f10976627a2919adcb0020198712d11375d8cf9fb82821c8ffb8"
+      "bytes": 1098,
+      "sha256": "055e16e1fc407de9a7519be1296d6c09aca83a728574b6988c78e8c51ec1d854"
     },
     {
       "path": "modules/agent-commerce/providers/README.md",
@@ -26326,6 +26351,11 @@
       "path": "tests/runtime/hosted-shipping-quote.test.ts",
       "bytes": 28645,
       "sha256": "76359b07ddf983f0ba9814c1f285e425c55bcaf7b5e1b8f0e26d21e41da17fde"
+    },
+    {
+      "path": "tests/runtime/hosted-store-areas.test.ts",
+      "bytes": 4441,
+      "sha256": "d3e6285acf488f3cc9d42312eb45d2fe2dd7c0f77dc3561cb4e9acbd89bd0321"
     },
     {
       "path": "tests/runtime/hosted-store-isolation.test.ts",
