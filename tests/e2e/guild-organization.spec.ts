@@ -343,6 +343,9 @@ test('directory disclosures preserve filters, joined totals and the visible crea
   await expect(topics).not.toHaveAttribute('open');
   await expect(summary).toHaveText('主題篩選 · AI 與技術');
   await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：3 個公會');
+  await expect(group(page, '未加入公會').locator('.guild-card')).toHaveCount(0);
+  await expect(group(page, '未加入公會')).toContainText('沒有符合篩選的公會。');
+  await expect(directory).not.toContainText('所有公會都已加入。');
   await expect(directory.getByLabel('我的公會概況', { exact: true })).toContainText('已加入 5 個公會');
   await directory.getByRole('searchbox', { name: '搜尋公會' }).fill(names[4]);
   await directory.getByRole('button', { name: '已加入', exact: true }).click();
@@ -356,11 +359,24 @@ test('directory disclosures preserve filters, joined totals and the visible crea
   await summary.click();
   await expect(topics.getByRole('button', { name: 'AI 與技術', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await topics.getByRole('button', { name: '全部主題', exact: true }).click();
+  await directory.getByRole('searchbox', { name: '搜尋公會' }).fill('');
+  await directory.getByRole('button', { name: '全部公會', exact: true }).click();
+  await expect(group(page, '未加入公會').locator('.guild-card')).toHaveCount(1);
+  await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：6 個公會');
   await directory.getByRole('searchbox', { name: '搜尋公會' }).fill('沒有這個合成公會');
   await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：0 個公會');
   await expect(directory.getByLabel('我的公會概況', { exact: true })).toContainText('已加入 5 個公會');
   expect(fixture.writes).toHaveLength(0);
   expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 0 });
+});
+
+test('an unfiltered directory says all joined only when every guild is joined', async ({ page }) => {
+  const fixture = await setupGuilds(page);
+  await page.route('**/api/v1/guilds/directory', route => route.fulfill({ json: { items: fixture.directory().map((guild, index) => ({ ...guild, membership: { membership_id: `all-joined-${index}`, state: 'active', aggregate_version: 1 } })) } }));
+  await login(page);
+  await expect(group(page, '未加入公會')).toContainText('所有公會都已加入。');
+  await expect(group(page, '公會目錄').getByLabel('我的公會概況', { exact: true })).toContainText('已加入 6 個公會');
+  expect(fixture.writes).toHaveLength(0);
 });
 
 test('directory discovery precedes optional controls with readable wrapping and 44px targets', async ({ page }) => {
