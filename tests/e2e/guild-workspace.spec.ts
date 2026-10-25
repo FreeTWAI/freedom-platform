@@ -220,3 +220,106 @@ test('a removed skill editor cannot lock its replacement with a late guild-requi
     await expect(workspace.getByRole('region',{name:'技能書編輯資格',exact:true})).toHaveCount(0);expect(permissionReads).toBe(reads);
   }finally{release();}
 });
+
+test('council starts with one create action, retains a closed draft and clears it when permission is revoked',async({page})=>{
+  let permissions={...caps,can_review_pulls:true},writes=0;
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:permissions}));
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>route.fulfill({json:{items:[]}}));
+  await page.route('**/api/v1/guild-council/threads',route=>{if(route.request().method()==='POST')writes++;return route.fulfill({json:{items:[]}});});
+  await page.route('**/api/v1/guild-reviews?*',route=>route.fulfill({json:{guilds:[],viewer:{github_login:null,reason:null},items:[],next_offset:null}}));
+  await login(page);await navigate(page,'公會管理');
+  const root=page.locator('.guild-workspace'),tabs=root.getByRole('navigation',{name:'公會管理功能'});
+  await expect(root.locator('.guild-workspace-purpose')).toContainText('發布給會員或封存');
+  await tabs.getByRole('button',{name:'PR 審核',exact:true}).click();
+  await expect(root.locator('.guild-workspace-purpose')).toContainText('認領不等於核准或合併');
+  await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();
+  const council=root.locator('.guild-council'),title=council.getByLabel('討論標題',{exact:true}),body=council.getByLabel('討論內容',{exact:true});
+  await expect(root.locator('.guild-workspace-purpose')).toContainText('跨公會安排');
+  await expect(council.getByText('僅正式公會長與平台管理員可見。',{exact:true})).toBeVisible();
+  await expect(title).toHaveCount(0);await expect(council.locator('.btn-primary')).toHaveCount(1);
+  const create=council.getByRole('button',{name:'新增討論',exact:true});
+  await create.focus();await page.keyboard.press('Enter');await expect(title).toBeFocused();
+  await title.fill('未送出的跨公會議題');await body.fill('仍是草稿，不可自動建立。');
+  await council.getByRole('button',{name:'收合，保留草稿',exact:true}).click();
+  const resume=council.getByRole('button',{name:'繼續草稿',exact:true});await expect(resume).toBeFocused();await expect(title).toHaveCount(0);
+  await tabs.getByRole('button',{name:'公會公告',exact:true}).click();await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();
+  await resume.click();await expect(title).toHaveValue('未送出的跨公會議題');await expect(body).toHaveValue('仍是草稿，不可自動建立。');expect(writes).toBe(0);
+  permissions={...permissions,can_discuss:false};await page.evaluate(()=>window.dispatchEvent(new Event('freedom-profile-updated')));
+  await expect(tabs.getByRole('button',{name:'公會長議事區',exact:true})).toHaveCount(0);await expect(title).toHaveCount(0);
+  permissions={...permissions,can_discuss:true};await page.evaluate(()=>window.dispatchEvent(new Event('freedom-profile-updated')));
+  await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();await expect(title).toHaveCount(0);await create.click();await expect(title).toHaveValue('');await expect(body).toHaveValue('');expect(writes).toBe(0);
+});
+
+test('pending and unknown council creation cannot close or change payload and retries with its original key',async({page})=>{
+  const writes:{body:unknown;key:string|undefined}[]=[],items:any[]=[];let release=()=>{};
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>route.fulfill({json:{items:[]}}));
+  await page.route('**/api/v1/guild-council/threads',async route=>{
+    if(route.request().method()==='GET')return route.fulfill({json:{items}});
+    writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
+    expect(route.request().headers()['x-csrf-token']).toBeTruthy();
+    if(writes.length===1){items.push({thread_id:'created',...route.request().postDataJSON(),author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',reply_count:0});await gate;return route.fulfill({status:503,json:{detail:'建立結果尚未確認。'}});}
+    return route.fulfill({json:items[0]});
+  });
+  try{
+    await login(page);await navigate(page,'公會管理');const root=page.locator('.guild-workspace'),tabs=root.getByRole('navigation',{name:'公會管理功能'});
+    await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();const council=root.locator('.guild-council');
+    await council.getByRole('button',{name:'新增討論',exact:true}).click();
+    const title=council.getByLabel('討論標題',{exact:true}),body=council.getByLabel('討論內容',{exact:true}),close=council.getByRole('button',{name:'收合，保留草稿',exact:true}),submit=council.getByRole('button',{name:'建立討論',exact:true});
+    await title.fill('只建立一次');await body.fill('未知結果必須重試同一筆。');await submit.click();await expect.poll(()=>writes.length).toBe(1);
+    await expect(close).toBeDisabled();await expect(title).toBeDisabled();await expect(body).toBeDisabled();await expect(submit).toBeDisabled();
+    await tabs.getByRole('button',{name:'公會公告',exact:true}).click();release();
+    await tabs.getByRole('button',{name:'公會長議事區',exact:true}).click();await expect(council.getByRole('alert')).toContainText('尚未確認');
+    await expect(close).toBeDisabled();await expect(title).toBeDisabled();await expect(body).toHaveValue('未知結果必須重試同一筆。');await expect(submit).toBeEnabled();
+    await submit.click();await expect(council.getByRole('status')).toContainText('討論已建立');await expect(title).toHaveCount(0);
+    expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);expect(items).toHaveLength(1);
+    await expect(council.getByRole('button',{name:/只建立一次/})).toBeVisible();
+  }finally{release();}
+});
+
+test('a rejected council draft remains editable and may be closed without discarding its text',async({page})=>{
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>route.fulfill({json:{items:[]}}));
+  await page.route('**/api/v1/guild-council/threads',route=>route.request().method()==='GET'?route.fulfill({json:{items:[]}}):route.fulfill({status:400,json:{detail:'請補充議題內容。'}}));
+  await login(page);await navigate(page,'公會管理');await page.getByRole('button',{name:'公會長議事區',exact:true}).click();const council=page.locator('.guild-council');
+  await council.getByRole('button',{name:'新增討論',exact:true}).click();await council.getByLabel('討論標題',{exact:true}).fill('待補充');await council.getByLabel('討論內容',{exact:true}).fill('原內容');
+  await council.getByRole('button',{name:'建立討論',exact:true}).click();await expect(council.getByRole('alert')).toContainText('補充');
+  await council.getByLabel('討論內容',{exact:true}).fill('補充後仍未送出的內容');await council.getByRole('button',{name:'收合，保留草稿',exact:true}).click();await council.getByRole('button',{name:'繼續草稿',exact:true}).click();
+  await expect(council.getByLabel('討論內容',{exact:true})).toHaveValue('補充後仍未送出的內容');
+});
+
+for(const width of [320,390,768,1440])test(`council disclosure remains readable and keyboard reachable at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:900});
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
+  await page.route('**/api/v1/guild-council/threads',route=>route.fulfill({json:{items:[]}}));
+  await login(page);await navigate(page,'公會管理');const root=page.locator('.guild-workspace'),council=root.locator('.guild-council');
+  for(const fontSize of [16,32]){
+    await page.evaluate(value=>{document.documentElement.style.fontSize=`${value}px`;},fontSize);
+    await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe(`${fontSize}px`);
+    const create=council.getByRole('button',{name:'新增討論',exact:true});await expect(create).toBeVisible();await expect(council.getByLabel('討論標題',{exact:true})).toHaveCount(0);
+    expect(await root.locator('.guild-workspace-purpose').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(14);
+    await create.focus();await page.keyboard.press('Enter');await expect(council.getByLabel('討論標題',{exact:true})).toBeFocused();
+    for(const button of await council.getByRole('button').all())expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await council.getByRole('button',{name:'收合，保留草稿',exact:true}).click();await expect(create).toBeFocused();
+  }
+});
+
+test('an unknown council reply keeps its thread and original payload until retry confirms it',async({page})=>{
+  const thread={thread_id:'original',title:'原討論',body:'討論內容',author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',replies:[] as any[]},other={...thread,thread_id:'other',title:'另一討論'};
+  const writes:{body:unknown;key:string|undefined}[]=[];
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
+  await page.route('**/api/v1/guild-council/threads',route=>route.fulfill({json:{items:[thread,other]}}));
+  await page.route('**/api/v1/guild-council/threads/original',route=>route.fulfill({json:thread}));
+  await page.route('**/api/v1/guild-council/threads/original/replies',route=>{
+    writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
+    if(writes.length===1){thread.replies.push({reply_id:'once',body:'原本的回覆',author_name:'測試會長',created_at:thread.created_at});return route.fulfill({status:503,json:{detail:'回覆結果尚未確認。'}});}
+    return route.fulfill({json:thread});
+  });
+  await login(page);await navigate(page,'公會管理');const council=page.locator('.guild-council');await council.getByRole('button',{name:/原討論/}).click();
+  const reply=council.getByLabel('回覆討論',{exact:true});await reply.fill('原本的回覆');await council.getByRole('button',{name:'發布回覆',exact:true}).click();
+  await expect(council.getByRole('alert')).toContainText('尚未確認');await expect(reply).toBeDisabled();await expect(reply).toHaveValue('原本的回覆');
+  await expect(council.getByRole('button',{name:'新增討論',exact:true})).toBeDisabled();await expect(council.getByRole('button',{name:/另一討論/})).toBeDisabled();
+  await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('status')).toContainText('回覆已發布');
+  await expect(reply).toHaveValue('');await expect(reply).toBeEnabled();await expect(council.locator('.guild-council-reply')).toHaveCount(1);
+  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
+});

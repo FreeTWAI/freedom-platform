@@ -27,7 +27,8 @@
     "apps/portal-web/src/modules/GuildWorkspace.tsx",
     "apps/portal-web/src/modules/GuildWorkspace.css",
     "apps/portal-web/src/modules/guild-launchpad-route.ts",
-    "tests/e2e/guild-organization.spec.ts"
+    "tests/e2e/guild-organization.spec.ts",
+    "tests/e2e/audit-identity-final.spec.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-categories.ts",
