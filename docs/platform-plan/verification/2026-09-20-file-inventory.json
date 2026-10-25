@@ -2964,8 +2964,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/EventsPanel.tsx",
-      "bytes": 43759,
-      "sha256": "2508d66b58e92540f1e2207c5d287f4cdf78c9617086f694bd017ee2f86461cd"
+      "bytes": 44036,
+      "sha256": "32053f1a7cde384a28b72aff083b5bb637f0a230cd16f20a49b5de8abdfd1a01"
     },
     {
       "path": "apps/portal-web/src/modules/ExpeditionDesign.css",
@@ -14624,8 +14624,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 19192,
-      "sha256": "8ca4a9786a7f13746255f1dd9809ca696a40018cef07f65d06caa2df5ed07544"
+      "bytes": 19243,
+      "sha256": "a0e37d3fa36ac373bd77832216f473e8c588beeb13cf76f402e3388eff84e54d"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14699,8 +14699,8 @@
     },
     {
       "path": "deploy/shared-release/portable/backup.mjs",
-      "bytes": 11841,
-      "sha256": "7b9d2fc98f6dd3db3e30b5864247d7e300c3f4536bcc53785982d181eb2269d4"
+      "bytes": 12250,
+      "sha256": "5587615e8d965d321d91df5fd4dde90b34f728e011981da426b9075220a1e843"
     },
     {
       "path": "deploy/shared-release/portable/build.mjs",
@@ -14749,8 +14749,8 @@
     },
     {
       "path": "deploy/shared-release/portable/entry.mjs",
-      "bytes": 14031,
-      "sha256": "a7605978553ea7afce33468d4186955bda618afb0604bc5517097474877dd805"
+      "bytes": 14114,
+      "sha256": "a758fcde34dd8ba35b1da774a235287727c5d40babd64836c858cb0ff6d1efbc"
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
@@ -14784,8 +14784,8 @@
     },
     {
       "path": "deploy/shared-release/test/backup-integration.mjs",
-      "bytes": 12579,
-      "sha256": "a63e2996fdc763b5ba9d1724fa8842470e6f66dffbfbf82eb23e3964ed6f42a1"
+      "bytes": 14480,
+      "sha256": "6b4a76347c5907ba010e22047e81562701cef37b3baa514420844a077d80a857"
     },
     {
       "path": "deploy/shared-release/test/image-native.mjs",
@@ -22034,8 +22034,8 @@
     },
     {
       "path": "modules/positioning/freedom.module.json",
-      "bytes": 1996,
-      "sha256": "5a78d983ac3dabeb424029e7dfdbbbbc407edf875962f7c0ee72cedfb49021e1"
+      "bytes": 2051,
+      "sha256": "331ec384bc208d9fae2ed77622fce0b066001bc935147eca5f5da26f02c37980"
     },
     {
       "path": "modules/positioning/guild-categories.ts",
@@ -24274,8 +24274,8 @@
     },
     {
       "path": "tests/e2e/event-member-journey.spec.ts",
-      "bytes": 43594,
-      "sha256": "5a84e4b252d70ab09f4b9242c943629f5b6de4f9b03a12b4e77d6d24b6696e53"
+      "bytes": 45620,
+      "sha256": "340281f72bb562202615ad8b12bcbc0c5c0756ab292016d916c74fe2c1eb73ca"
     },
     {
       "path": "tests/e2e/event-outcomes.spec.ts",
@@ -24384,8 +24384,8 @@
     },
     {
       "path": "tests/e2e/guild-member-tiers.spec.ts",
-      "bytes": 8661,
-      "sha256": "81a3b10c486823870d7846ed8828dac85988c70dc865760344cfce321c66084d"
+      "bytes": 14039,
+      "sha256": "628cdc74181326eb688a617bb0052adfea2fe1fe58bf4ae846aa23798814fc7c"
     },
     {
       "path": "tests/e2e/guild-members.spec.ts",
@@ -28141,6 +28141,11 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
+    },
+    {
+      "path": "tests/runtime/guild-member-tier-fixture.test.ts",
+      "bytes": 14507,
+      "sha256": "9c6295b7844f5835d63f3099c9d087f5e5eec36dc69488ecffb18b6a58d38c03"
     }
   ]
 }
