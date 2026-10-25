@@ -32,7 +32,7 @@ test('a pending work mutation cannot expire the replacement session through its 
   await page.route(`**/api/v1/work-items/${workId}:claim`, route => { held = route; captured(); });
   await page.goto('/');
   await signIn(page, 'maker@local.test');
-  await navigate(page, '我的工作');
+  await navigate(page, '任務協作');
   await page.locator('article.card').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).getByRole('button', { name: '認領這張工作', exact: true }).click();
   await requested;
   await page.route('**/api/v1/session', route => route.fulfill({ status: 401, json: { code: 'session_expired' } }), { times: 1 });

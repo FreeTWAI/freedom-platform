@@ -183,7 +183,14 @@ test('PUBLIC-POST-07 editing invalidates consent; reopening the reviewed version
   expect(await sharing(author,post.post_id)).toMatchObject({enabled:true,available:false});await assertUnavailable(page,post.post_id,changed);
   expect(await page.content()).not.toContain(original);
   await author.page.goto(`/?social-post=${post.post_id}#social`);await author.page.locator(`#social-post-${post.post_id}`).getByRole('button',{name:'分享貼文連結',exact:true}).click();
-  const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});await dialog.getByRole('button',{name:'重新開放目前版本',exact:true}).click();
+  const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+  // The close control is already visible for invalidated consent (enabled=true).
+  // Wait for this explicit publication's acknowledgment, not that stale control.
+  const reopening=author.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/social-posts/${post.post_id}/public-sharing`);
+  await dialog.getByRole('button',{name:'重新開放目前版本',exact:true}).click();
+  const reopened=await reopening;expect(reopened.status()).toBe(200);
+  expect(await reopened.json()).toMatchObject({enabled:true,available:true,post_revision:post.revision+1,public_path:publicPath(post.post_id)});
+  await expect(dialog.getByLabel('貼文連結',{exact:true})).toHaveValue(e2eOrigin()+publicPath(post.post_id));
   await expect(dialog.getByRole('button',{name:'關閉免登入閱讀',exact:true})).toBeVisible();
   await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(changed);await expect(page.getByAltText('貼文附圖',{exact:true})).toBeVisible();
   await dialog.getByRole('button',{name:'關閉免登入閱讀',exact:true}).click();await expect(dialog.getByRole('button',{name:'開放免登入閱讀',exact:true})).toBeVisible();

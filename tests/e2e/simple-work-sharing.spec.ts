@@ -42,7 +42,7 @@ for (const width of [1280, 320]) test(`${width}px member shares a real work link
   let galleryReads = 0;
   page.on('request', request => { if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/showcases') galleryReads++; });
   await login(page);
-  await navigate(page, '作品與需求');
+  await navigate(page, '作品與合作');
   const title = `共同創作範例 ${width}`;
   await expect(page.getByLabel('成果引用（例如 artifact:template-v1）')).toBeHidden();
   await page.getByLabel('作品標題', { exact: true }).fill(title);
@@ -58,7 +58,7 @@ for (const width of [1280, 320]) test(`${width}px member shares a real work link
   await expect(own.getByRole('link', { name: '查看作品 ↗' })).toHaveAttribute('href', 'https://example.com/portfolio');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/simple-work-sharing/showcase-${width}.png`, fullPage: true });
-  await signOut(page); await login(page, 'client@local.test'); await navigate(page, '作品與需求');
+  await signOut(page); await login(page, 'client@local.test'); await navigate(page, '作品與合作');
   const other = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   await other.getByRole('button', { name: '我想找你合作' }).click();
   const need = `一起完成一支產品介紹影片 ${width}。`;
