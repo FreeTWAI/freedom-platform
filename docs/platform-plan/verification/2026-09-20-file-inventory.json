@@ -2534,8 +2534,8 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 29998,
-      "sha256": "e7736f65932a082a5409ba96877c1ff445d5d328ed19adfe194538be184f7da5"
+      "bytes": 30194,
+      "sha256": "8ac27486ffa15a6c05be448ca9f346f5f30c6f7da984bb4e5bc7450ba3c13ec1"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
@@ -23834,8 +23834,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 18255,
-      "sha256": "42bdc0bc830b66e8cfa19c3c88a82b5e2dd43acc978e5af52c43d5999e2b94d0"
+      "bytes": 19892,
+      "sha256": "6ec469d5a608e8848ce724bc2ffa09e35d0c25251eaaa3b264616fc32a8f84aa"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -25094,8 +25094,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 6432,
-      "sha256": "cabb46c982b48d7d9b69829fd58ea04d87abda130ba0def7909af56650866031"
+      "bytes": 11333,
+      "sha256": "94e15a5f9eb75923c0999b0efb442f7667f942d3aa05f96aa1d0d5674eb5015f"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",
