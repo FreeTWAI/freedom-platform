@@ -232,10 +232,10 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
         : <p role="status">日誌尚未公開</p>}
     </section>
 
-    <section className="card stack" aria-label="離譜日常遊樂場">
-      <h2>休息一下，做點離譜的事。</h2>
-      <p>三款短局遊戲，拍下怪事、蓋完下班，也能把成果分享給工坊夥伴。</p>
-      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">玩離譜日常<span className="sr-only">（另開分頁）</span></a>
+    <section className="card stack" aria-label="自由工坊遊戲大廳">
+      <h2>休息一下，玩出一點新靈感。</h2>
+      <p>64 道料理小遊戲與離譜日常，按分類挑一款，也能把成果分享給工坊夥伴。</p>
+      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">打開遊戲大廳<span className="sr-only">（另開分頁）</span></a>
     </section>
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">

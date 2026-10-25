@@ -1,4 +1,5 @@
-import { gameOf, seedOf, type GameId } from './domain';
+import { gameOf, seedOf } from './domain';
+import type { ArcadeGameId } from './result-card';
 /** AD-7: guest-owned, bounded, same-device handoff; never a publish command. */
 export const GAME_HANDOFF_KEY = 'freedom.absurd-daily.pending.v1';
 export const GAME_HANDOFF_EVENT = 'freedom:game-result-ready';
@@ -7,7 +8,8 @@ export const MAX_IMAGE = 1200000;
 export type GameDraft = {
     version: 1;
     createdAt: number;
-    game: GameId;
+    game: ArcadeGameId;
+    recipe?: string;
     seed: number;
     title: string;
     text: string;
@@ -19,9 +21,9 @@ export function parseGameDraft(raw: string | null, now = Date.now()): GameDraft 
         return null;
     try {
         const x = JSON.parse(raw);
-        if (!x || x.version !== 1 || !gameOf(x.game) || seedOf(x.seed) !== x.seed || !Number.isFinite(x.createdAt) || x.createdAt > now + 60000 || now - x.createdAt > HANDOFF_TTL || typeof x.title !== 'string' || !x.title.trim() || x.title.length > 100 || typeof x.text !== 'string' || x.text.length > 2000 || typeof x.image !== 'string' || x.image.length > MAX_IMAGE || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(x.image))
+        if (!x || x.version !== 1 || !(gameOf(x.game) || x.game === 'kitchen' && typeof x.recipe === 'string' && /^[a-z][a-z-]{1,40}$/.test(x.recipe)) || seedOf(x.seed) !== x.seed || !Number.isFinite(x.createdAt) || x.createdAt > now + 60000 || now - x.createdAt > HANDOFF_TTL || typeof x.title !== 'string' || !x.title.trim() || x.title.length > 100 || typeof x.text !== 'string' || x.text.length > 2000 || typeof x.image !== 'string' || x.image.length > MAX_IMAGE || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(x.image))
             return null;
-        return { version: 1, createdAt: x.createdAt, game: x.game, seed: x.seed, title: x.title, text: x.text, image: x.image };
+        return { version: 1, createdAt: x.createdAt, game: x.game, ...(x.game === 'kitchen' ? {recipe:x.recipe} : {}), seed: x.seed, title: x.title, text: x.text, image: x.image };
     }
     catch {
         return null;

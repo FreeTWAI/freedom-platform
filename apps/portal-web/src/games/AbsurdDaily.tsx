@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { saveGameDraft } from './result-bridge';
-import { resultExports, type RunResult } from './result-card';
+import { resultExports, type RunResult, type ArcadeGameId } from './result-card';
+import { ResultShare } from './ResultShare';
+import { gameShareText } from './result-share';
 import type { Stage, StageView } from './stage';
 import './arcade.css';
 import './toy-theme.css';
+import './illustration-theme.css';
+import { ArcadeLobby, type LobbyState } from './cooking/ArcadeLobby';
+import { recipeOf, type Recipe } from './cooking/catalog';
+import { emptyCookbook, readCookbook, readCookingRun, updateCookbook, COOKBOOK_KEY, type Cookbook, type CookingStorage } from './cooking/storage';
+import type { CookingRun } from './cooking/domain';
+type CookingComponent = typeof import('./cooking/CookingGame')['CookingGame'];
+function CookingLoader(props:Parameters<CookingComponent>[0]) {
+    const [Game,setGame]=useState<CookingComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+    useEffect(()=>{let current=true;setError('');const timeout=setTimeout(()=>{if(current){current=false;setError('料理手帳載入較久。請重試，這一盤的進度會保留。');}},15000);void import('./cooking/CookingGame').then(module=>{if(current){clearTimeout(timeout);setGame(()=>module.CookingGame);}}).catch(()=>{if(current){clearTimeout(timeout);setError('料理手帳未能載入，請重試。');}});return()=>{current=false;clearTimeout(timeout);};},[attempt]);
+    return Game?<Game {...props}/>:<div className="ck-empty"><p role={error?'alert':'status'}>{error||'正在打開料理手帳…'}</p>{error&&<button onClick={()=>setAttempt(n=>n+1)}>重試料理手帳</button>}<button className="ad-secondary" onClick={props.onBack}>回遊戲大廳</button></div>;
+}
+const localBook:CookingStorage={getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localStorage.setItem(k,v),removeItem:k=>localStorage.removeItem(k)};
+const tabBook:CookingStorage={getItem:k=>sessionStorage.getItem(k),setItem:(k,v)=>sessionStorage.setItem(k,v),removeItem:k=>sessionStorage.removeItem(k)};
 type Photo = NonNullable<RunResult['photos']>[number];
 type Pointer = {
     id: number;
@@ -35,7 +50,7 @@ type Live = {
 };
 const hints = { photo: '拖曳取景，抓到怪事再按快門。方向鍵也能移鏡。', stamp: '按住拖到藍圈，放手蓋章。也可以直接點藍圈。', cash: '道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。' };
 function freshSeed() { const value = new Uint32Array(1); crypto.getRandomValues(value); return seedOf(value[0]); }
-function initialGame() { return gameOf(new URLSearchParams(location.search).get('game')); }
+function initialGame():ArcadeGameId|null { const q=new URLSearchParams(location.search); return q.get('game')==='kitchen'&&recipeOf(q.get('recipe'))?'kitchen':gameOf(q.get('game')); }
 function GameBoard({ game, seed, onBack, onResult }: {
     game: GameId;
     seed: number;
@@ -276,12 +291,13 @@ function Result({ result, onBack, onReplay }: {
     onReplay: () => void;
 }) {
     const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), linkRef = useRef<HTMLInputElement>(null);
-    const link = challengeUrl(location.origin, result.game, result.seed);
-    useEffect(() => { let current = true; setExports(null); setStatus('正在沖洗成果圖…'); const logo = document.querySelector<HTMLImageElement>('.ad-brand img'); void resultExports(selected, logo).then(value => { if (current) {
+    const link = result.game === 'kitchen' ? new URL(`/play?${new URLSearchParams({game:'kitchen',recipe:result.recipe!,seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, result.game, result.seed);
+    const text = gameShareText(selected,link), shareOwner = useRef(0), sharingRef = useRef(false);
+    useEffect(() => { let current = true; shareOwner.current++; sharingRef.current=false;setSharing(false);setExports(null); setStatus('正在整理成果圖…'); const logo = document.querySelector<HTMLImageElement>('.ad-brand img'); void resultExports(selected, logo).then(value => { if (current) {
         setExports(value);
-        setStatus('成果圖好了。選一個方式，把這次怪事帶走。');
+        setStatus('成果圖好了。選一個方式，把這份作品帶走。');
     } }).catch(() => { if (current)
-        setStatus('成果圖未能產生，請按重試。'); }); return () => { current = false; }; }, [selected, generation]);
+        setStatus('成果圖未能產生，請按重試。'); }); return () => { current = false; shareOwner.current++; }; }, [selected, generation]);
     useEffect(() => { if (!exports) {
         setObjectUrl('');
         return;
@@ -290,18 +306,19 @@ function Result({ result, onBack, onReplay }: {
         linkRef.current?.focus();
         linkRef.current?.select();
     } }, [manualLink]);
-    async function share() { if (!exports || sharing)
-        return; setSharing(true); try {
-        const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text: `${selected.caption}\n同題挑戰：${link}` } : { title: selected.title, text: selected.caption, url: link };
+    async function share() { if (!exports || sharingRef.current)
+        return; const owner=shareOwner.current;sharingRef.current=true;setSharing(true); try {
+        const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text } : { title: selected.title, text: `${selected.caption}\n${selected.details}`, url: link };
         if (!navigator.share) {
             setManualLink(true);
             setStatus('這個瀏覽器沒有系統分享選單。可下載圖片，或複製同題連結。');
             return;
         }
         await navigator.share(payload);
-        setStatus('已交給系統分享選單。');
+        if(owner===shareOwner.current)setStatus('已交給系統分享選單。');
     }
     catch (cause) {
+        if(owner!==shareOwner.current)return;
         if (cause instanceof Error && cause.name === 'AbortError')
             setStatus('已取消分享，成果仍在這裡。');
         else {
@@ -310,7 +327,7 @@ function Result({ result, onBack, onReplay }: {
         }
     }
     finally {
-        setSharing(false);
+        if(owner===shareOwner.current){sharingRef.current=false;setSharing(false);}
     } }
     async function copy() { try {
         await navigator.clipboard.writeText(link);
@@ -322,17 +339,25 @@ function Result({ result, onBack, onReplay }: {
     } }
     function workshop() { if (!exports)
         return; try {
-        saveGameDraft(sessionStorage, { version: 1, createdAt: Date.now(), game: result.game, seed: result.seed, title: selected.title, text: `${selected.caption}\n${selected.details}\n\n${link}\n換你試試看？ #離譜日常`, image: exports.site });
+        saveGameDraft(sessionStorage, { version: 1, createdAt: Date.now(), game: result.game, ...(result.recipe ? {recipe:result.recipe} : {}), seed: result.seed, title: selected.title, text, image: exports.site });
         location.assign('/?game-share=1#home');
     }
     catch {
         setStatus('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。');
     } }
-    return <section className="ad-result"><div className="ad-result-heading"><p className="ad-eyebrow">本日離譜成果</p><h1>{selected.caption}</h1><p>{selected.details}</p></div><div className="ad-result-layout"><div className="ad-result-photo"><img src={selected.image} alt={`本局真正拍到的畫面：${selected.caption}`} width="960" height="720"/>{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel"><h2>這次怪事，值得留一張。</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`離譜日常-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
+    return <section className="ad-result"><div className="ad-result-heading"><p className="ad-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{selected.caption}</h1><p>{selected.details}</p></div><div className="ad-result-layout"><div className="ad-result-photo"><img src={selected.image} alt={result.game === 'kitchen' ? `${selected.title}插畫與本局料理成績` : `本局真正拍到的畫面：${selected.caption}`} width="960" height="720"/>{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel"><h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
 }
 export function AbsurdDaily() {
-    const [game, setGame] = useState<GameId | null>(initialGame), [seed, setSeed] = useState(() => seedOf(new URLSearchParams(location.search).get('seed'))), [result, setResult] = useState<RunResult | null>(null), [run, setRun] = useState(0);
-    const choose = useCallback((next: GameId | null, keepSeed = false) => { const nextSeed = keepSeed ? seed : freshSeed(); setGame(next); setSeed(nextSeed); setResult(null); setRun(n => n + 1); const url = new URL(location.href); url.pathname = '/play'; url.search = next ? new URLSearchParams({ game: next, seed: String(nextSeed) }).toString() : ''; url.hash = ''; history.pushState(null, '', url); window.scrollTo({ top: 0, behavior: 'instant' }); }, [seed]);
-    useEffect(() => { document.title = '離譜日常 · 自由工坊'; const back = () => { setGame(initialGame()); setSeed(seedOf(new URLSearchParams(location.search).get('seed'))); setResult(null); setRun(n => n + 1); }; window.addEventListener('popstate', back); return () => window.removeEventListener('popstate', back); }, []);
-    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>離譜日常</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">{result ? <Result result={result} onBack={() => choose(null)} onReplay={() => choose(game, true)}/> : game ? <GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={() => choose(null)} onResult={setResult}/> : <><section className="ad-welcome"><p className="ad-eyebrow">自由工坊・造物遊樂場</p><h1>認真上班，<br /><em>離譜下班。</em></h1><p>每個人都很認真，只有事情越來越不對勁。</p><span className="ad-pill">免登入試玩 · 手機電腦都能玩 · 成果直接分享</span><div className="ad-hero-art" aria-hidden="true"><img src="/games/absurd-daily/photo.jpg" alt="" width="960" height="720"/><span>一位客人，三張鳥臉。</span><b>CASE 003</b></div></section><div className="ad-game-cards">{GAMES.map((g, i) => <article key={g.id} className={`ad-game-card ad-card-${g.id}`}><div className="ad-card-art" aria-hidden="true"><span className="ad-art-index">0{i + 1}</span><img src={`/games/absurd-daily/${g.id}.jpg`} alt="" width="960" height="720" loading="lazy"/><span className="ad-art-copy">{i === 0 ? '三位，一件風衣。' : i === 1 ? '最後一張（修正版）' : '老闆的大餅也是餅。'}</span></div><div><h2>{g.title}</h2><p>{g.subtitle}</p><button onClick={() => choose(g.id)}>{g.action} →</button></div></article>)}</div><section className="ad-how"><h2>失手也有作品。</h2><p>按快門、落印、翻鈔，留下這一局真正發生的事。拍得漂亮可以分享，拍得離譜也可以。</p><p>拍下作品、分享同題，也可以把成果發到自由工坊。</p></section></>}</main><footer className="ad-footer">自由工坊原創遊戲 · 遊戲成果由你確認後分享</footer></div>;
+    const [game,setGame]=useState<ArcadeGameId|null>(initialGame),[recipe,setRecipe]=useState(()=>recipeOf(new URLSearchParams(location.search).get('recipe'))),[seed,setSeed]=useState(()=>seedOf(new URLSearchParams(location.search).get('seed'))),[result,setResult]=useState<RunResult|null>(null),[run,setRun]=useState(0),[fresh,setFresh]=useState(false);
+    const [book,setBook]=useState<Cookbook>(()=>readCookbook(localBook).book??emptyCookbook()),[saveNotice,setSaveNotice]=useState(()=>readCookbook(localBook).notice),[bookFailed,setBookFailed]=useState(()=>!readCookbook(localBook).available);
+    const bookRef=useRef(book), bookDirty=useRef(bookFailed);bookRef.current=book;
+    const [lobby,setLobby]=useState<LobbyState>({category:'all',query:'',filter:'all',limit:8,collection:'all'});
+    const changeBook=(change:Parameters<typeof updateCookbook>[2])=>{const saved=updateCookbook(localBook,bookRef.current,change,Date.now(),bookDirty.current);bookRef.current=saved.book;bookDirty.current=!saved.available;setBook(saved.book);setSaveNotice(saved.notice);setBookFailed(!saved.available);};
+    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null)=>{const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,nextSeed=keepSeed?seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed)}).toString():'';url.hash='';history.pushState(null,'',url);window.scrollTo({top:0,behavior:'instant'});},[seed]);
+    useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const back=()=>{setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
+    const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;
+    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>遊戲大廳</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">
+      {saveNotice&&<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="ad-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>}
+      {result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={g=>choose(g)} onRecipe={r=>choose('kitchen',false,r)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
+    </main><footer className="ad-footer">自由工坊原創遊戲 · 作品由你確認後分享</footer></div>;
 }

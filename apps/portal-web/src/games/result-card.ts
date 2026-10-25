@@ -1,6 +1,8 @@
-import { GAMES, type GameId } from './domain';
+import { type GameId } from './domain';
+export type ArcadeGameId = GameId | 'kitchen';
 export type RunResult = {
-    game: GameId;
+    game: ArcadeGameId;
+    recipe?: string;
     seed: number;
     title: string;
     caption: string;
@@ -35,40 +37,40 @@ export async function resultExports(result: RunResult, logo?: HTMLImageElement |
         const ctx = canvas.getContext('2d');
         if (!ctx)
             throw Error('此瀏覽器無法產生圖片。');
-        ctx.fillStyle = '#fff1d9';
+        ctx.fillStyle = '#fff5e5';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#e4cdb5';
         for (let y = 10; y < canvas.height; y += 18)
             for (let x = 10; x < canvas.width; x += 18)
                 ctx.fillRect(x, y, 1, 1);
-        ctx.strokeStyle = '#302744';
+        ctx.strokeStyle = '#49362f';
         ctx.lineWidth = 3;
         ctx.strokeRect(23, 23, canvas.width - 46, canvas.height - 46);
         ctx.textBaseline = 'top';
         ctx.fillStyle = '#a34438';
         ctx.font = 'bold 23px monospace';
-        ctx.fillText('ODD JOBS / DAILY NONSENSE', 48, wide ? 43 : 48);
+        ctx.fillText(result.game === 'kitchen' ? 'FREE TWAI / LITTLE RECIPE BOOK' : 'ODD JOBS / DAILY NONSENSE', 48, wide ? 43 : 48);
         if (logo?.complete && logo.naturalWidth)
             contain(ctx, logo, wide ? 1090 : 798, wide ? 35 : 38, 70, 54);
-        ctx.fillStyle = '#302744';
+        ctx.fillStyle = '#49362f';
         ctx.font = `900 ${wide ? 42 : 59}px sans-serif`;
-        ctx.fillText(GAMES.find(g => g.id === result.game)!.title, wide ? 751 : 48, wide ? 129 : 103);
+        lines(ctx, result.title, wide ? 751 : 48, wide ? 129 : 103, wide ? 397 : 852, wide ? 48 : 65);
         const x = wide ? 43 : 40, y = wide ? 119 : 195, w = wide ? 660 : 880, h = wide ? 495 : 660;
         ctx.fillStyle = '#dfc7ac';
         ctx.fillRect(x + 7, y + 9, w, h);
         ctx.fillStyle = '#fffaf0';
         ctx.fillRect(x - 5, y - 5, w + 10, h + 10);
         contain(ctx, img, x, y, w, h);
-        ctx.strokeStyle = '#302744';
+        ctx.strokeStyle = '#49362f';
         ctx.lineWidth = 2;
         ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
-        ctx.fillStyle = '#302744';
+        ctx.fillStyle = '#49362f';
         ctx.font = `900 ${wide ? 32 : 42}px sans-serif`;
         const after = lines(ctx, result.caption, wide ? 751 : 48, wide ? 214 : 890, wide ? 397 : 852, wide ? 46 : 57);
-        ctx.fillStyle = '#6c6175';
+        ctx.fillStyle = '#796354';
         ctx.font = `${wide ? 25 : 27}px sans-serif`;
         lines(ctx, result.details, wide ? 751 : 48, Math.max(after + 18, wide ? 398 : 1030), wide ? 395 : 852, wide ? 38 : 40);
-        ctx.fillStyle = '#ed624a';
+        ctx.fillStyle = '#a94430';
         ctx.fillRect(wide ? 751 : 48, wide ? 557 : 1133, wide ? 395 : 852, wide ? 47 : 39);
         ctx.fillStyle = '#fffaf0';
         ctx.font = `bold ${wide ? 23 : 24}px sans-serif`;

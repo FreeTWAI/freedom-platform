@@ -15,7 +15,7 @@
     "apps/portal-web/src/games/result-bridge.ts",
     "apps/portal-web/src/games/GameDraftInbox.tsx"
   ],
-  "dependencies": [],
+  "dependencies": ["shared"],
   "contract_families": [],
   "client_profiles": [
     "member"

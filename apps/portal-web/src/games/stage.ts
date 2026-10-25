@@ -1,5 +1,4 @@
-import { ACESFilmicToneMapping, HemisphereLight, PCFShadowMap, PMREMGenerator, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type WebGLRenderTarget } from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
@@ -38,12 +37,12 @@ type Anchor = {
     object: Group;
     points: Vector3[];
 };
-const INK = '#302744', LIME = '#ffc857', BLUE = '#5062cb', PAPER = '#fff1d5';
+const INK = '#49362f', LIME = '#e8bd68', BLUE = '#608b85', PAPER = '#fff1d5';
 /** AD-6: all geometry/material/texture ownership is per mounted stage. */
 export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
-    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<CanvasTexture>(), shadows = new Set<DirectionalLight['shadow']>();
-    let disposed = false, environment: WebGLRenderTarget | undefined, pmrem: PMREMGenerator | undefined, room: RoomEnvironment | undefined, observer: ResizeObserver | undefined;
+    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<Texture>(), shadows = new Set<DirectionalLight['shadow']>();
+    let disposed = false, observer: ResizeObserver | undefined;
     const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
     // AD-6: initialization can fail before the caller receives a Stage to dispose.
     function dispose() {
@@ -55,37 +54,24 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         materials.forEach(m => m.dispose());
         textures.forEach(t => t.dispose());
         shadows.forEach(s => s.dispose());
-        room?.dispose();
-        pmrem?.dispose();
-        environment?.dispose();
         renderer.dispose();
         renderer.forceContextLoss();
         renderer.domElement.remove();
     }
     try {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RULES.maxDpr));
-    renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMapping = NoToneMapping;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden', 'true');
     host.append(renderer.domElement);
     const scene = new Scene();
-    scene.background = new Color('#ba9bdf');
+    scene.background = new Color('#f0dfc5');
     const camera = new PerspectiveCamera(44, 4 / 3, .1, 60), ray = new Raycaster(), ground = new Plane(new Vector3(0, 1, 0), 0), intersection = new Vector3();
-    scene.add(new HemisphereLight('#fff2da', '#785f9b', 2.15));
-    pmrem = new PMREMGenerator(renderer);
-    room = new RoomEnvironment();
-    // Clay materials need broad light, not the default 256px GGX prefilter.
-    // 64px keeps the same room/reflections with 1/16 of its base texel work.
-    environment = pmrem.fromScene(room, .06, .1, 100, { size: 64 });
-    scene.environment = environment.texture;
-    scene.environmentIntensity = .42;
-    room.dispose();
-    room = undefined;
-    pmrem.dispose();
-    pmrem = undefined;
-    const key = new DirectionalLight('#fff1d7', 4.2);
+    scene.add(new HemisphereLight('#fff6df', '#9c8266', .9));
+    // CK-2: three matte ink-wash bands; no reflective environment or specular highlights.
+    const gradient=new DataTexture(new Uint8Array([95,180,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
+    const key = new DirectionalLight('#fff1d7', 1.3);
     shadows.add(key.shadow);
     key.position.set(-3.5, 7, 5);
     key.castShadow = true;
@@ -95,15 +81,15 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     key.shadow.normalBias = .025;
     key.shadow.radius = 3;
     scene.add(key);
-    const rim = new DirectionalLight('#bdc7ff', 2.4);
+    const rim = new DirectionalLight('#f5dfbe', .35);
     rim.position.set(5, 3, -3);
     scene.add(rim);
     const geo = <T extends BufferGeometry>(value: T): T => { geometries.add(value); return value; };
     const round = geo(new RoundedBoxGeometry(1, 1, 1, 3, .12)), sphere = geo(new SphereGeometry(1, 24, 16)), cylinder = geo(new CylinderGeometry(1, 1, 1, 24)), cone = geo(new CylinderGeometry(0, 1, 1, 24)), plane = geo(new PlaneGeometry(1, 1)), box = geo(new BoxGeometry(1, 1, 1));
     const torus = geo(new TorusGeometry(1, .09, 10, 40)), arch = geo(new TorusGeometry(1, .09, 10, 36, Math.PI)), coat = geo(new CylinderGeometry(.72, 1, 1, 32));
-    const palette = new Map<string, MeshStandardMaterial>();
-    function mat(color: string, metalness = 0, roughness = .42) { const id = `${color}/${metalness}/${roughness}`; let m = palette.get(id); if (!m) {
-        m = new MeshStandardMaterial({ color, metalness, roughness });
+    const palette = new Map<string, MeshToonMaterial>();
+    function mat(color: string, _metalness = 0) { const id = color; let m = palette.get(id); if (!m) {
+        m = new MeshToonMaterial({ color, gradientMap:gradient });
         materials.add(m);
         palette.set(id, m);
     } return m; }

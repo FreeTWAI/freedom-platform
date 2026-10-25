@@ -1,0 +1,87 @@
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import type { RunResult } from '../result-card';
+import { COOKING_RULES, TECHNIQUES, recipeOf, type Direction, type Recipe } from './catalog';
+import { actCooking, advanceCooking, cookingProgress, cookingScore, cookingStars, currentStep, newCookingRun, type CookingAction, type CookingRun } from './domain';
+import { clearCookingRun, readCookingRun, saveCookingRun, type CookingStorage } from './storage';
+import { FoodArt, foodAtlas, foodFrame } from './FoodArt';
+import { CookingScene } from './CookingScene';
+import { ART_CLIPS } from './art-clips';
+
+export const storagePort=(kind:'localStorage'|'sessionStorage'):CookingStorage=>({getItem:key=>window[kind].getItem(key),setItem:(key,value)=>window[kind].setItem(key,value),removeItem:key=>window[kind].removeItem(key)});
+type Command=CookingAction extends infer A?A extends {step:number}?Omit<A,'step'>:never:never;
+type Gesture={id:number;x:number;y:number;index:number;step:number};
+function initial(recipe:Recipe,seed:number,fresh:boolean){const saved=readCookingRun(storagePort('sessionStorage')),other=saved.run&&saved.run.recipeId!==recipe.id&&saved.run.elapsed>0&&saved.run.status!=='done';return {run:!fresh&&saved.run?.recipeId===recipe.id&&saved.run.seed===seed?saved.run:newCookingRun(recipe,seed,crypto.randomUUID()),notice:saved.notice||(other?`上一盤「${recipeOf(saved.run!.recipeId)!.name}」尚未完成。開始這道料理後，會替換本分頁的操作進度。`:'')};}
+
+/** CK-6: bounded export uses the same recipe cell, not a photographed real meal. */
+export async function cookingResult(run:CookingRun,recipe:Recipe,withArt=true):Promise<RunResult>{
+  const canvas=document.createElement('canvas');canvas.width=960;canvas.height=720;const ctx=canvas.getContext('2d');if(!ctx)throw Error('無法產生成果圖。');
+  ctx.fillStyle='#fff5e5';ctx.fillRect(0,0,960,720);ctx.strokeStyle='#b6946e';ctx.lineWidth=2;ctx.strokeRect(24,24,912,672);
+  if(withArt){const image=await new Promise<HTMLImageElement>((resolve,reject)=>{const img=new Image(),timer=setTimeout(()=>{img.onload=null;img.onerror=null;reject(Error('料理插畫未能載入。'));},8000);img.onload=()=>{clearTimeout(timer);resolve(img);};img.onerror=()=>{clearTimeout(timer);reject(Error('料理插畫未能載入。'));};img.src=foodAtlas(recipe);});const [x,y,w,h]=foodFrame(recipe),scale=Math.min(470/w,450/h);ctx.save();ctx.translate(480-w*scale/2-x*scale,305-h*scale/2-y*scale);ctx.scale(scale,scale);ctx.clip(new Path2D(ART_CLIPS[recipe.category][recipe.art]));ctx.drawImage(image,0,0,1600,800);ctx.restore();}
+  else{ctx.fillStyle='#f4e5cc';ctx.beginPath();ctx.ellipse(480,325,225,147,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#796354';ctx.font='24px sans-serif';ctx.textAlign='center';ctx.fillText('料理完成・插畫暫未載入',480,332);}
+  const score=cookingScore(run),stars=cookingStars(score);ctx.textAlign='center';ctx.fillStyle='#49362f';ctx.font='bold 38px sans-serif';ctx.fillText(recipe.name,480,580);ctx.fillStyle='#9e4934';ctx.font='bold 26px sans-serif';ctx.fillText(`${'★'.repeat(stars)}${'☆'.repeat(3-stars)}　${score} 分`,480,632);ctx.fillStyle='#796354';ctx.font='17px sans-serif';ctx.fillText('自由工坊・料理小宇宙 / 本局遊戲成果',480,675);
+  return {game:'kitchen',recipe:recipe.id,seed:run.seed,title:recipe.name,caption:score>=85?'今天的小廚房，香得很有道理。':score>=60?'有自己的味道，也有自己的成就。':'這份料理很有個性。下一盤會更好！',details:`${recipe.name} · ${score} 分 · ${stars} 顆星 · ${run.reports.length} 個步驟完成`,image:canvas.toDataURL('image/jpeg',.88)};
+}
+
+export function CookingGame({recipe,seed,fresh=false,onBack,onResult,onComplete}:{recipe:Recipe;seed:number;fresh?:boolean;onBack:()=>void;onResult:(result:RunResult)=>void;onComplete:(run:CookingRun)=>void}) {
+  const [boot]=useState(()=>initial(recipe,seed,fresh)),live=useRef(boot.run),[view,setView]=useState(boot.run),[notice,setNotice]=useState(boot.notice),[saveFailed,setSaveFailed]=useState(false),[confirmRestart,setConfirmRestart]=useState(false),[exportError,setExportError]=useState(false),[exporting,setExporting]=useState(false),[selectedIngredient,setSelectedIngredient]=useState(false),[point,setPoint]=useState<{x:number;y:number}|null>(null),section=useRef<HTMLElement>(null),gesture=useRef<Gesture|null>(null),lastSave=useRef(-1000),lastUi=useRef(0),mounted=useRef(true),generation=useRef(0),resultStarted=useRef(''),completed=useRef(''),savedSession=useRef(storagePort('sessionStorage'));
+  const flush=(force=false)=>{if(live.current.status==='ready')return;const now=performance.now();if(!force&&now-lastSave.current<COOKING_RULES.saveThrottleMs)return;lastSave.current=now;setSaveFailed(!saveCookingRun(savedSession.current,live.current));};
+  const commit=(run:CookingRun,paint=true)=>{if(run===live.current)return;const before=live.current.status;live.current=run;if(paint)setView(run);if(run.status!==before||run.status==='step-result'||run.status==='done')flush(true);else flush();};
+  const command=(action:Command,step=live.current.step)=>{const before=live.current,next=actCooking(before,{...action,step} as CookingAction,performance.now());commit(next);if(next.active.mistakes>before.active.mistakes)setNotice('差一點點，再試一次。照著提示慢慢來。');else if(next.active.count>before.active.count||next.active.amount>before.active.amount+.5)setNotice('做到了！繼續保持。');};
+  const cancel=()=>{gesture.current=null;setPoint(null);command({kind:'cancel'});};
+  const pause=()=>{gesture.current=null;setPoint(null);command({kind:'pause'});flush(true);};
+  useEffect(()=>{mounted.current=true;const hidden=()=>{if(document.hidden)pause();};document.addEventListener('visibilitychange',hidden);window.addEventListener('blur',pause);window.addEventListener('pagehide',pause);return ()=>{mounted.current=false;generation.current++;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('blur',pause);window.removeEventListener('pagehide',pause);const paused=actCooking(live.current,{kind:'pause',step:live.current.step},performance.now());if(paused.status!=='ready')saveCookingRun(savedSession.current,paused);gesture.current=null;};},[]);
+  useEffect(()=>{if(view.status!=='playing')return;let frame=0;const loop=(now:number)=>{if(live.current.status!=='playing')return;const next=advanceCooking(live.current,now);commit(next,now-lastUi.current>66||next.status!=='playing');if(now-lastUi.current>66)lastUi.current=now;if(next.status==='playing')frame=requestAnimationFrame(loop);};frame=requestAnimationFrame(loop);return()=>cancelAnimationFrame(frame);},[view.status]);
+  const exportResult=async(withArt=true)=>{if(exporting)return;const own=++generation.current,run=live.current;setExporting(true);setExportError(false);try{const result=await cookingResult(run,recipe,withArt);if(mounted.current&&own===generation.current&&live.current.id===run.id)onResult(result);}catch{if(mounted.current&&own===generation.current)setExportError(true);}finally{if(mounted.current&&own===generation.current)setExporting(false);}};
+  useEffect(()=>{if(view.status!=='done')return;if(completed.current!==view.id){completed.current=view.id;onComplete(view);}if(resultStarted.current!==view.id){resultStarted.current=view.id;void exportResult();}},[view.status,view.id]);
+  const begin=()=>{command({kind:live.current.status==='paused'?'resume':'start'});setNotice(TECHNIQUES[currentStep(live.current).kind].hint);section.current?.focus({preventScroll:true});};
+  const restart=()=>{generation.current++;clearCookingRun(savedSession.current,live.current.id);commit(newCookingRun(recipe,seed,crypto.randomUUID()));setConfirmRestart(false);setNotice('新的一盤，準備好了。');setExporting(false);setExportError(false);};
+  const xy=(event:PointerEvent<SVGSVGElement>)=>{const rect=event.currentTarget.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height};};
+  const down=(event:PointerEvent<SVGSVGElement>)=>{if(live.current.status!=='playing'||gesture.current||event.button!==0)return;event.preventDefault();const p=xy(event),run=live.current;gesture.current={id:event.pointerId,...p,index:run.active.count,step:run.step};event.currentTarget.setPointerCapture(event.pointerId);setPoint(p);const kind=currentStep(run).kind;if(kind==='knead'||kind==='pour')command({kind:'hold-start'});if(kind==='mix')command({kind:'stir',...p});};
+  const move=(event:PointerEvent<SVGSVGElement>)=>{if(gesture.current?.id!==event.pointerId)return;const p=xy(event);setPoint(p);if(currentStep(live.current).kind==='mix')command({kind:'stir',...p},gesture.current.step);};
+  const up=(event:PointerEvent<SVGSVGElement>)=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;const p=xy(event),kind=currentStep(live.current).kind;setPoint(null);
+    if(kind==='slice')command({kind:'cut',x1:g.x,y1:g.y,x2:p.x,y2:p.y},g.step);
+    if(kind==='mix')command({kind:'cancel'},g.step);
+    if(kind==='knead'||kind==='pour')command({kind:'hold-end'},g.step);
+    if(kind==='fold'){const dx=p.x-g.x,dy=p.y-g.y;if(Math.hypot(dx,dy)>.18)command({kind:'fold',index:g.index,direction:Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'down':'up'},g.step);}
+    if(kind==='plate'){const tapped=Math.hypot(p.x-g.x,p.y-g.y)<.04;if(tapped&&g.x<.25){setSelectedIngredient(true);setNotice('拿起食材了，點盤子上的綠色光圈。');}else if(selectedIngredient||g.x<.25){const before=live.current.active.count;command({kind:'place',index:g.index,...p},g.step);setSelectedIngredient(live.current.active.count===before);}else setNotice('先拿起左邊的食材，再放到盤子上的綠色光圈。');}
+    if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+    flush(true);
+  };
+  const key=(event:KeyboardEvent,release=false)=>{if((event.target as HTMLElement).closest('input,select,textarea,button,a')||event.ctrlKey||event.metaKey||event.altKey)return;
+    if(event.key==='Escape'&&!release){event.preventDefault();pause();return;}if(live.current.status!=='playing'||event.repeat)return;const s=currentStep(live.current);
+    if(s.kind==='fold'&&event.key.startsWith('Arrow')&&!release){event.preventDefault();command({kind:'fold',index:live.current.active.count,direction:event.key.slice(5).toLowerCase() as Direction});}
+    if(s.kind==='pan'&&event.key.toLowerCase()==='f'&&!release){event.preventDefault();command({kind:'flip'});}
+    if(event.key===' '){event.preventDefault();if(s.kind==='knead'||s.kind==='pour')command({kind:release?'hold-end':'hold-start'});else if(!release){const kinds={slice:'cut-key',mix:'stir-key',pan:'flip',boil:'skim',bake:'take-out',plate:'place-key'} as const;const kind=kinds[s.kind as keyof typeof kinds];if(kind)command({kind});}}
+  };
+  const holdButton={onPointerDown:(e:PointerEvent<HTMLButtonElement>)=>{if(e.button!==0)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);command({kind:'hold-start'});},onPointerUp:(e:PointerEvent<HTMLButtonElement>)=>{command({kind:'hold-end'});if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);flush(true);},onPointerCancel:cancel,onLostPointerCapture:cancel,onKeyDown:(e:KeyboardEvent<HTMLButtonElement>)=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();command({kind:'hold-start'});}},onKeyUp:(e:KeyboardEvent<HTMLButtonElement>)=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();command({kind:'hold-end'});flush(true);}}};
+  const s=currentStep(view),a=view.active,playing=view.status==='playing',paused=view.status==='paused',p=cookingProgress(view),directions:Record<Direction,string>={left:'← 向左',right:'向右 →',up:'↑ 向上',down:'↓ 向下'};
+  return <section className="ck-game" ref={section} tabIndex={-1} onKeyDown={e=>key(e)} onKeyUp={e=>key(e,true)} aria-label={`${recipe.name}料理遊戲`}>
+    <div className="ad-toolbar"><button className="ad-secondary" onClick={()=>{pause();onBack();}}>← 遊戲大廳</button><span className="ck-step-label">料理手帳 / {view.step+1} of {recipe.steps.length}</span>{playing&&<button className="ad-secondary" onClick={pause}>暫停</button>}<button className="ad-secondary" onClick={()=>setConfirmRestart(true)}>重新做</button></div>
+    <div className="ck-game-heading"><div><p className="ad-eyebrow">A LITTLE COOKING TIME</p><h1>{recipe.name}</h1><p>{view.step+1}. {s.title}</p></div><FoodArt recipe={recipe}/></div>
+    <ol className="ck-step-track" aria-label="料理步驟">{recipe.steps.map((item,i)=><li key={i} aria-current={i===view.step?'step':undefined} className={i<view.reports.length?'is-done':''}><span>{i<view.reports.length?'✓':i+1}</span><span>{item.title}</span></li>)}</ol>
+    {confirmRestart&&<div className="ck-confirm" role="alert"><p>重新做會清除這一盤的操作進度。食譜本的最高分會保留。</p><button onClick={restart}>確定重新做</button><button className="ad-secondary" onClick={()=>setConfirmRestart(false)}>繼續這一盤</button></div>}
+    <div className="ck-game-layout"><div className="ck-scene-wrap"><CookingScene run={view} point={point} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}/>
+      {(view.status==='ready'||paused)&&<div className="ck-scene-overlay"><span className="ck-tiny-title">{paused?'鍋鏟先放著，進度幫你留好了。':'今天由你掌廚。'}</span><h2>{paused?'接著做這一盤':'先來看看食材'}</h2><p>{paused?TECHNIQUES[s.kind].hint:recipe.ingredients.join(' · ')}</p><button onClick={begin}>{paused?'繼續料理':'開始料理'}</button><small>{paused?'回來後不會自動計時。':'不用趕，失手可以繼續完成。'}</small></div>}
+      {view.status==='step-result'&&<div className="ck-scene-overlay"><span className="ck-tiny-title">STEP COMPLETE</span><h2>{view.reports.at(-1)!.score>=85?'漂亮！這一步很到位。':'完成了，有你的風格。'}</h2><p>{s.title} · {view.reports.at(-1)!.score} 分</p><button onClick={()=>{gesture.current=null;setPoint(null);setSelectedIngredient(false);command({kind:'next'});setNotice('下一步，一起來。');section.current?.focus({preventScroll:true});}}>下一步：{recipe.steps[view.step+1].title} →</button></div>}
+      {view.status==='done'&&<div className="ck-scene-overlay"><h2>料理上桌！{cookingScore(view)} 分</h2><p role="status">{exportError?'成果圖還沒做好，這盤的成績已保留。':'正在整理你的料理成果…'}</p>{exportError&&<><button disabled={exporting} onClick={()=>void exportResult()}>重試產生插畫成果</button><button className="ad-secondary" disabled={exporting} onClick={()=>void exportResult(false)}>先用文字成果圖</button></>}</div>}
+    </div><aside className="ck-game-controls"><p className="ad-eyebrow">{TECHNIQUES[s.kind].name}</p><h2>{s.title}</h2><p className="ck-hint">{TECHNIQUES[s.kind].hint}</p>
+      <div className="ck-progress" role="progressbar" aria-label="目前料理步驟進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p*100)}><span style={{width:`${p*100}%`}}/></div><output className="ck-meter-copy">{['slice','knead','fold','plate'].includes(s.kind)?`${a.count} / ${s.goal}`:s.kind==='mix'?`${Math.min(s.goal,a.amount/(Math.PI*2)).toFixed(1)} / ${s.goal} 圈`:s.kind==='pour'?`目前 ${Math.round(a.amount*100)}% · 目標 ${Math.round(s.target*100)}%`:`熟度 ${Math.round(a.amount*100)}%`}</output>
+      <div className="ck-action-controls" inert={!playing}>
+        {['pan','boil','bake'].includes(s.kind)&&<label className="ck-heat">{s.kind==='bake'?'烤箱溫度':'調整火力'} <output>{a.heat} / 100</output><input aria-label={s.kind==='bake'?'烤箱溫度':'火力'} type="range" min={0} max={100} value={a.heat} onChange={e=>command({kind:'heat',value:Number(e.target.value)})}/><small>綠色區：{s.heat-14}–{s.heat+14} · {Math.abs(a.heat-s.heat)<=14?'火候剛剛好':'把火力調進綠色區'}</small><div className="ck-heat-guide" aria-hidden="true"><i style={{left:`${s.heat-14}%`,width:'28%'}}/><b style={{left:`${a.heat}%`}}/></div></label>}
+        {s.kind==='slice'&&<button onClick={()=>command({kind:'cut-key'})}>沿線切一刀</button>}
+        {s.kind==='mix'&&<button onClick={()=>command({kind:'stir-key'})}>攪拌一圈 ↻</button>}
+        {(s.kind==='knead'||s.kind==='pour')&&<button className="ck-hold-button" {...holdButton}>{s.kind==='knead'?'按住揉壓，適時放開':'按住倒入，適時放開'}</button>}
+        {s.kind==='pan'&&<button disabled={a.flipped||a.amount<.25} onClick={()=>command({kind:'flip'})}>{a.flipped?'已翻面 ✓':'翻面！'}</button>}
+        {s.kind==='pan'&&<small className="ck-control-note">熟度 35–80% 翻面最好；翻過一次就能繼續煎熟。</small>}
+        {s.kind==='boil'&&<><button disabled={a.foam<.18||a.count>=s.goal} onClick={()=>command({kind:'skim'})}>撈掉泡沫 · {a.count} / {s.goal}</button><small className="ck-control-note">看到大泡沫再撈，煮滿進度並撈 {s.goal} 次就完成。</small></>}
+        {s.kind==='bake'&&<><button disabled={a.amount<.25} onClick={()=>command({kind:'take-out'})}>出爐！</button><small className="ck-control-note">熟度 70–90% 是最佳出爐時機。</small></>}
+        {s.kind==='fold'&&<div className="ck-fold-controls">{(['left','up','down','right'] as Direction[]).map(d=><button className="ad-secondary" key={d} onClick={()=>command({kind:'fold',direction:d,index:live.current.active.count})}>{directions[d]}</button>)}</div>}
+        {s.kind==='fold'&&<p className="ck-control-note">這次方向：{directions[s.directions[Math.min(a.count,s.goal-1)]]}</p>}
+        {s.kind==='plate'&&<><button onClick={()=>{command({kind:'place-key'});setSelectedIngredient(false);}}>放到提示位置</button>{selectedIngredient&&<small className="ck-control-note">已拿起食材・點盤子上的綠色光圈</small>}</>}
+      </div>
+      <p className="ad-notice" role="status">{notice||'可以直接操作畫面，也能用下方按鈕。'}</p><p className="ad-meta">{s.kind==='fold'?'方向鍵包食材':'空白鍵操作；揉壓、倒入請按住再放開'} · Esc 暫停</p>
+    </aside></div>
+    {saveFailed&&<div className="ck-save-warning" role="status"><p>這台裝置尚未保存進度。畫面裡的料理仍可繼續，重新整理可能遺失。</p><button className="ad-secondary" onClick={()=>flush(true)}>重試保存</button></div>}
+    <p className="ck-local-note">食譜本與最高分保存在這台裝置；本分頁保留最近一盤，可在 7 天內接著做。這是料理遊戲，食物處理與時間以實際食譜為準。</p>
+  </section>;
+}

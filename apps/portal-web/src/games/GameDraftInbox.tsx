@@ -36,7 +36,7 @@ export function GameDraftNotice({ draft, busy, hasImage, tooLong, error, onImpor
     onDiscard: () => void;
 }) {
     return <aside className="card stack" aria-label="剛才的遊戲成果">
-    <strong>你剛才的離譜成果還在。</strong>
+    <strong>{draft.game==='kitchen'?'你剛才的料理成果還在。':'你剛才的離譜成果還在。'}</strong>
     <p>{draft.title}：圖片和文案已準備好，可以加入工坊貼文。</p>
     {hasImage ? <p className="field-hint">原草稿已有圖片，先完成或移除原圖，再帶入成果。你的草稿保持原樣。</p> : tooLong ? <p className="field-hint">加上成果會超過 2,000 字。先縮短原草稿，再帶入。</p> : <p className="field-hint">原草稿有文字時，成果會接在後面；由你確認發布。</p>}
     {error && <p role="alert">{error}</p>}

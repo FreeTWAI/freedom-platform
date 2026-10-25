@@ -84,3 +84,21 @@
 - 新分享案例留下貼文，後續 synthetic chat 帳號讀取後使清理卡在已讀外鍵，進而累積貼圖；只清理本案例自己的貼文，聊天原案例未修改。
 
 整合 main `c140a346` 後，本輪 Node 24 型別／標準建置、11 個遊戲規則加 5 個既有文字歷史／樣式規則全部通過。以同一隔離 schema 依序跑遊戲 8 個、兩個 polling 案例、聊天搜尋、貼圖與未知圖片發布等共 **29 個瀏覽器案例，29 passed、0 skipped（4.9 分鐘）**。新增的兩個故障注入分別驗真正 render 呼叫拋錯後保留進度並恢復冷卻，以及 factory 回傳前失敗後 canvas 為零、舊 WebGL context 已釋放、重試只有一個 canvas。這是本機結果；新 head 的完整 CI、獨立重新審查與實機／真人驗收仍各自成立。
+
+
+## 2026-10-25：料理與分類大廳擴充
+
+原三款玩法保留。新 [COOKING 規格](../../modules/absurd-daily/COOKING.md) 定義 64 道料理、八類、九種操作、收藏／最近一盤本機保存與原成果分享接續。最新插畫方向覆蓋本文原黏土材質描述；原3D改為無反光toon材質，移除PMREM環境生成，保留原640×480邏輯尺寸、DPR上限及實際投影評分。
+
+[素材清單](../../modules/absurd-daily/cooking-art.json) 記錄內建image_gen的完整提示、來源SHA256、WebP雜湊、尺寸及frame。原始PNG與迭代圖保存在E槽；網站只取用8張WebP（總計1,718,994 bytes）。沒有複製Cooking Mama角色、商標或素材。實際手機／平板／桌面瀏覽器證據與本批測試結果見PR；CI、真人美術與實機驗收分開記錄。
+
+### Playroom重設與本機證據（2026-10-25）
+
+使用者要求大廳全面重新設計後，改為桌面側邊分類、手機四格入口，推薦遊戲、料理手帳與獨立收藏操作；8道逐批顯示。大字時減少卡片欄數，分類列可滑動，開始／收藏hit區分開。實際瀏覽器截圖見[桌面](../../modules/absurd-daily/review/playroom-desktop.png)及[手機](../../modules/absurd-daily/review/playroom-phone.png)。
+
+- Node24純規則／儲存／圖集完整性：23 passed，0 skipped。64道均從start實際驅動9種domain操作到result，另驗原三款、壞資料、備份、quota與社群URL編碼。
+- 平台production build後的完整遊戲瀏覽器檔：19 passed，0 skipped（2.2分鐘）。包含舊8案例、4道真實pointer／鍵盤旅程覆蓋9種操作、登入接回成果、社群入口／native payload、保留未完成進度、放大文字owner bounds、Playroom類型與分頁／收藏hit區。
+- 320×568、390×844、667×375、768×1024、1440×900，100／125／200% DOM文字壓力：大廳與開始／暫停共46張實際截圖；成果分享另15張。自動幾何檢查未見document橫向溢出、44px以下按鈕或pageerror；可滑動分類列另屬自己的scroll owner。這不是OS字體縮放或實機測試，也不是人類美感簽核。
+- 標準型別與build成功；保留Three chunk超過500kB提示，未放寬警戒值。Three僅進原三款才載入；大廳初次網路紀錄只有一張料理atlas，沒有stage／Three。8張atlas合計約1.64MiB，按分類載入。
+- 4×2圖集以實際alpha輪廓clip顯示，成果PNG仍為960×1200、站內圖1200×675；X／Threads入口帶文字與題目網址，Facebook只帶連結，IG由系統選單或下載／複製自行附圖。目的平台登入／發布與真實iOS／Android分享仍EXTERNAL_PENDING。
+- 所有開發／暫存／圖片原稿／瀏覽器證據保存在E槽。沒有資料庫migration、會員獎勵、貢獻值變更、merge或deploy。新head完整CI與獨立審查仍由既有流程負責。
