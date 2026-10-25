@@ -10,6 +10,25 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-25 main 758cabe2 發布完成（搜尋可見的 Repo 名稱）
+
+截至11:58 UTC，兩環境已部署 `758cabe2`／schema189，接續 `36bec661`／189；完整證據見[發布收據](rollout-main-758cabe2-2026-10-25.json)。
+會員搜尋可用已看見的精選 Repo 名稱找到公開作品（#1021）；其餘 #1026 為16檔測試／CI與相關文件，沒有其他產品變更。
+Main Verify 40175861457 attempt1的17個jobs、CodeQL 40175861736的3個jobs成功；檔案verify job10:39:12Z、run更新10:39:13Z，派工10:39:41Z未獨立佐證。
+無migration；以READ ONLY逐列核對188列ledger，schema189與兩環境 `36bec661`／189回退下限維持，Q3未建立新floor。
+27個既有旗標加contact retention `all`、各37 vars、路由及cron均不變；沒有新增線上 `FREEDOM_*`，代出貨不存在、仍OFF。
+四組備份首跑通過讀回、隔離DB／物件還原與清理：staging before `93606d6e`／after `583d0bfb`，production before `61411998`／after `23211552`；before在Q2 run dir，Q3保留pointer。
+S6 `0ec26d5c` 在receive前因 #1026 合併而失去current-main資格；Follow-up1改選S7並於08:17:35.841Z建立新授權，S6未發布，舊授權保留。
+Kit早期改選腳本曾讀取Q2兩份private template bytes算pin，未印出／複製內容但違反禁讀界線；已停止，後續pin改取既有closure entries，Q2未改。
+Step5首試舊Q2 root退出65；step8第二次因 `quote is not defined` 拒絕、無部署provider效果，該次Access已撤銷。Follow-up2／3分別修root與helper並補audit／測試；拒絕證據保留。
+每次修正後重跑bind／before pointer／plan，沿用10:31:36.262Z的staging before；最終bind 11:12:51Z、seal 11:13:23Z依mtime，READ ONLY staging gate11:13:35Z為操作者觀察。
+Step 7的10:59:19Z snapshot跨rebind保留、timer持續paused，未重跑step 7；每次備份前執行IO／mtr／DB RTT，production before最終hop有10–20% SYN探測丟包但延遲穩定、兩次DB RTT乾淨，僅列觀察。
+Production首試11:41Z在首次asset-upload-session遇Cloudflare10013；11:43:04Z GET-only確認仍前版100%、無新version／deployment，同一sealed wrapper於11:43:58–11:44:39Z重試成功，並非publish後redeploy。
+Production公開唯讀smoke11:45:06.011Z通過14項；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging約11:40Z、both約11:57Z綁定 `a423a61e`；11:57:13Z原timers恢復active／enabled，排程／argv不變；Deployments success為7312748338／20543559761、7312748460／20543560249。
+無staging acceptance window，會員UX為 `not_run`；自然排程仍 `not_observed_for_new_wrapper`，真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+Kit完整offline audit仍因managed mount modes拒絕，不能將內容gates通過寫成完整audit成功；隔離還原不授權公開資料。
+
 ## 2026-10-25 main 36bec661 發布完成（已付款取消與會員體驗）
 
 截至05:22 UTC，兩環境已部署 `36bec661`／schema189，接續 `54961dd8`／187；完整證據見[發布收據](rollout-main-36bec661-2026-10-25.json)。
