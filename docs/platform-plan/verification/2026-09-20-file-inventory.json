@@ -2534,8 +2534,8 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 29998,
-      "sha256": "e7736f65932a082a5409ba96877c1ff445d5d328ed19adfe194538be184f7da5"
+      "bytes": 30194,
+      "sha256": "8ac27486ffa15a6c05be448ca9f346f5f30c6f7da984bb4e5bc7450ba3c13ec1"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
@@ -23834,8 +23834,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 18255,
-      "sha256": "42bdc0bc830b66e8cfa19c3c88a82b5e2dd43acc978e5af52c43d5999e2b94d0"
+      "bytes": 19892,
+      "sha256": "6ec469d5a608e8848ce724bc2ffa09e35d0c25251eaaa3b264616fc32a8f84aa"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -24434,8 +24434,8 @@
     },
     {
       "path": "tests/e2e/message-load-older.spec.ts",
-      "bytes": 22071,
-      "sha256": "f2f6abed0dfb2bf6ef8349b4d6a727b6bba45d6c965248cad4b24700eff77604"
+      "bytes": 22165,
+      "sha256": "31c04b848e01530c60269bb7515e14d632b7f39823d547c58af7cd0144aa6a3f"
     },
     {
       "path": "tests/e2e/message-retraction.spec.ts",
@@ -25094,8 +25094,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 6432,
-      "sha256": "cabb46c982b48d7d9b69829fd58ea04d87abda130ba0def7909af56650866031"
+      "bytes": 11333,
+      "sha256": "94e15a5f9eb75923c0999b0efb442f7667f942d3aa05f96aa1d0d5674eb5015f"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",
@@ -25389,8 +25389,8 @@
     },
     {
       "path": "tests/runtime/commerce-provider-accounts.test.ts",
-      "bytes": 23321,
-      "sha256": "6ac9803903eadcc6f354b69eabeb7a721b31eb31a4d1311b117cf2073c2e0235"
+      "bytes": 23473,
+      "sha256": "268c9453a008eb30da0f91cf9b6b77d59d7e9ac0af85aaf9832d97529323db37"
     },
     {
       "path": "tests/runtime/commerce-rate-limits.test.ts",
