@@ -81,6 +81,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   const [policiesUpdated, setPoliciesUpdated] = useState(false);
   const policyCheckbox = useRef<HTMLInputElement>(null);
   const policyNotice = useRef<HTMLParagraphElement>(null);
+  const policyFocusPending = useRef(false);
   const policySet = JSON.stringify(quote?.required_consents.map(({policy_kind, policy_version_id}) => ({policy_kind, policy_version_id})) ?? []);
   const policiesAccepted = !quote?.required_consents.length || acceptedPolicies === policySet;
   const [method, setMethod] = useState<ShippingMethodRef | ''>('');
@@ -166,8 +167,9 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     if (target) document.getElementById(target)?.focus();
   }, [busy, identityBlocked, freezeUnknown, fieldErrors]);
   useEffect(() => {
-    if (policiesUpdated && quote && !quoteBusy && !busy && !identityBlocked) {
-      (quote.required_consents.length ? policyCheckbox.current : policyNotice.current)?.focus();
+    if (policyFocusPending.current && policiesUpdated && quote && !quoteBusy && !busy && !identityBlocked) {
+      const target = quote.required_consents.length ? policyCheckbox.current : policyNotice.current;
+      if (target) {policyFocusPending.current = false; target.focus();}
     }
   }, [policiesUpdated, quote, quoteBusy, busy, identityBlocked]);
   useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy || enhanced && identityChecking ? 'true' : 'false');}, [busy, quoteBusy, container, enhanced, identityChecking]);
@@ -230,6 +232,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         setError(errorCopy(data));
         const problem = CheckoutErrorSchema.safeParse(data);
         if (problem.success && problem.data.code === 'consents_mismatch') {
+          policyFocusPending.current = true;
           setAcceptedPolicies(null); setPoliciesUpdated(true); setQuoteBusy(true); setRefresh(value => value + 1); setError('');
         }
         if (enhanced && problem.success && problem.data.lines) {setDeliveryFailure(problem.data.lines); setRefresh(value => value + 1);}
