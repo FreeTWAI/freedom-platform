@@ -323,3 +323,101 @@ test('obsolete composer handlers cannot change mode, insert/remove a URL or publ
   const h=composerHarness();h.state.currentClient.current={sessionGeneration:1};h.state.text='new private draft';h.state.publishError='new feedback';
   h.state.toggleLinkPreview(true);h.state.insertRetainedLink();h.state.removeRetainedLink();await h.submit();assert.equal(h.state.linkPreview,false);assert.equal(h.state.url,'https://example.com/read');assert.equal(h.state.text,'new private draft');assert.equal(h.state.publishError,'new feedback');assert.equal(h.calls.length,0);
 });
+
+// Execute the real TSX load callback and the alert's actual onClick expression, not a model of pagination.
+function feedHarness() {
+  const start=composerCode.indexOf('  const load = useCallback('),end=composerCode.indexOf('  function retryFeed()',start);
+  assert.ok(start>=0&&end>start);
+  const retryMarkup=composerSource.match(/<button\b[^>]*onClick=\{([^}]+)\}>重試<\/button>/);
+  assert.ok(retryMarkup,'feed error retry remains wired');
+  const calls:{path:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
+  const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
+  for(const [setter,key] of [['setLoading','loading'],['setMore','more'],['setError','error'],['setCursor','cursor'],['setCanHide','canHide'],['setItems','items']])state[setter]=(value:any)=>{state[key]=typeof value==='function'?value(state[key]):value;};
+  const client={sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>calls.push({path,resolve,reject}))};
+  const make=runInNewContext(`(function(client,feedSession,tag,directPost,platform){${composerCode.slice(start,end)}\n${composerFunction('retryFeed')}\nreturn {load,retry:${retryMarkup[1]}};})`,state);
+  const render=(patch:Record<string,unknown>={})=>{
+    state.feedScope.current={client,session:client.sessionGeneration,platform:'note',tag:'',directPost:null,...state.feedScope.current,...patch};
+    const scope=state.feedScope.current;state.currentClient.current=scope.client;
+    return make(scope.client,scope.session,scope.tag,scope.directPost,scope.platform) as {load:(platform:string,cursor?:string)=>Promise<void>;retry:()=>void};
+  };
+  const page=(ids:string[],cursor:string|null='B')=>({items:ids.map(post_id=>({post_id,kind:'note',tags:[]})),next_cursor:cursor,can_hide:false});
+  return {state,client,calls,render,page,ui:render()};
+}
+
+test('feed JSX retry keeps failed cursor and loaded cards through repeated failures, then appends deduplicated IDs',async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const next=h.ui.load('note','B');h.calls[1].reject(new Error('offline'));await next;
+  assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A']);assert.equal(h.state.cursor,'B');
+  h.ui.retry();h.ui.retry();assert.equal(h.calls.length,3);assert.equal(h.state.more,true);assert.equal(h.state.loading,false);
+  assert.equal(h.calls[2].path,'/social-posts?kind=note&cursor=B');h.calls[2].reject(new Error('still offline'));await microtasks();
+  h.ui.retry();assert.equal(h.calls[3].path,h.calls[2].path);h.calls[3].resolve(h.page(['A','B'],'C'));await microtasks();
+  assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A','B']);assert.equal(h.state.cursor,'C');assert.equal(h.state.error,'');assert.equal(h.state.failedFeedLoad.current,null);assert.equal(h.state.more,false);
+});
+
+test('feed initial retry coalesces, while explicit refresh supersedes retry and intentionally replaces the first page',async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].reject(new Error('offline'));await first;
+  h.ui.retry();h.ui.retry();assert.equal(h.calls.length,2);assert.equal(h.calls[1].path,'/social-posts?kind=note');
+  const fresh=h.ui.load('note');assert.equal(h.calls.length,3);h.calls[1].reject(new Error('obsolete'));await microtasks();assert.equal(h.state.loading,true);assert.equal(h.state.error,'');
+  h.calls[2].resolve(h.page(['fresh']));await fresh;assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['fresh']);
+  const more=h.ui.load('note','B');h.calls[3].reject(new Error('offline'));await more;h.ui.retry();
+  const reset=h.ui.load('note');assert.equal(h.calls[5].path,'/social-posts?kind=note');h.calls[5].resolve(h.page(['reset'],null));await reset;
+  h.calls[4].resolve(h.page(['obsolete-page'],'C'));await microtasks();assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['reset']);assert.equal(h.state.cursor,null);
+});
+
+for(const scope of [{platform:''},{tag:'work'},{directPost:'post-2'},{session:2},{replaceClient:true}])test(`feed retry cannot cross a newer scope or let its delayed result/finally overwrite it: ${JSON.stringify(scope)}`,async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].reject(new Error('offline'));await first;h.ui.retry();assert.equal(h.calls.length,2);
+  const patch:any={...scope};if(patch.replaceClient){delete patch.replaceClient;patch.client={sessionGeneration:1,get:h.client.get};}
+  if(patch.session)h.client.sessionGeneration=patch.session;
+  const newer=h.render(patch),platform=h.state.feedScope.current.platform;
+  const count=h.calls.length;h.ui.retry();await h.ui.load('note','B');assert.equal(h.calls.length,count,'obsolete handlers do not start requests');
+  const pending=newer.load(platform);assert.equal(h.state.loading,true);h.calls[1].reject(new Error('obsolete failure'));await microtasks();assert.equal(h.state.error,'');assert.equal(h.state.loading,true);
+  h.calls.at(-1)!.resolve(h.page(['new-scope'],null));await pending;assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['new-scope']);assert.equal(h.state.cursor,null);
+});
+
+test('feed duplicate load-more coalesces and superseded success cannot append; unmount invalidates pending retry',async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const more=h.ui.load('note','B');await h.ui.load('note','B');assert.equal(h.calls.length,2);
+  h.state.loadSequence.current++;const newer=h.render({tag:'fresh'}),fresh=newer.load('note');
+  h.calls[1].resolve(h.page(['stale'],'C'));await more;assert.equal(h.state.loading,true);assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A']);
+  h.calls[2].reject(new Error('offline'));await fresh;newer.retry();h.state.loadSequence.current++;h.calls[3].resolve(h.page(['unmounted']));await microtasks();assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A']);
+});
+
+test('feed direct lookup and first-page retry preserve query scope and locally published cards without duplicate IDs',async()=>{
+  const h=feedHarness();h.state.newPosts.current=[{post_id:'local',kind:'note',tags:['work']}];
+  const tagged=h.render({tag:'work'}),first=tagged.load('note');h.calls[0].reject(new Error('offline'));await first;tagged.retry();assert.equal(h.calls[1].path,'/social-posts?kind=note&tag=work');
+  h.calls[1].resolve(h.page(['remote'],null));await microtasks();assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['local','remote']);
+  const direct=h.render({directPost:'post-2'}),read=direct.load('note');assert.equal(h.calls[2].path,'/social-posts?post_id=post-2');h.calls[2].reject(new Error('offline'));await read;direct.retry();assert.equal(h.calls[3].path,h.calls[2].path);h.calls[3].resolve(h.page([],null));await microtasks();assert.deepEqual(plain(h.state.items),[]);assert.equal(h.state.error,'');
+});
+
+test('Short pagination error retains the same child type/key but disables automatic pagination until explicit retry',async()=>{
+  const h=feedHarness(),ui=h.render({platform:'shorts'});
+  const line=composerSource.split('\n').find(line=>line.includes('<ShortVideoFeed posts={items}'))!.trim();assert.ok(line.startsWith('{')&&line.endsWith('}'));
+  const code=transformSync(`globalThis.element=(${line.slice(1,-1)});`,{loader:'tsx',target:'es2023'}).code;
+  const ShortVideoFeed=()=>null;
+  const render=()=>runInNewContext(`${code};element`,{...h.state,platform:'shorts',directPost:null,load:ui.load,ShortVideoFeed,React:{createElement:(type:any,props:any)=>({type,key:props.key??null,props})},shortLiking:null});
+  const first=ui.load('shorts');h.calls[0].resolve(h.page(['A']));await first;const before=render();assert.equal(before.props.hasMore,true);
+  const next=ui.load('shorts','B');h.calls[1].reject(new Error('offline'));await next;const failed=render();
+  assert.equal(failed.type,before.type);assert.equal(failed.key,before.key);assert.equal(failed.props.posts,h.state.items);assert.equal(failed.props.hasMore,false);
+  failed.props.onLoadMore();failed.props.onLoadMore();assert.equal(h.calls.length,2,'no automatic retries while the failed page awaits an explicit retry');
+  ui.retry();const retrying=render();assert.equal(retrying.type,before.type);assert.equal(retrying.props.loadingMore,true);retrying.props.onLoadMore();assert.equal(h.calls.length,3);
+  h.calls[2].resolve(h.page(['B'],null));await microtasks();assert.equal(render().type,before.type);assert.equal(render().props.hasMore,false);
+});
+
+for(const outcome of ['success','failure'])for(const change of ['session','client','tag','direct'])test(`feed ${outcome} is fenced by ${change} before the replacement effect starts a request`,async()=>{
+  const h=feedHarness(),pending=h.ui.load('note');
+  const patch:any=change==='session'?{session:++h.client.sessionGeneration}:change==='client'?{client:{sessionGeneration:1,get:h.client.get}}:change==='tag'?{tag:'new'}:{directPost:'new-post'};
+  h.render(patch);h.state.error='new scope feedback';h.state.items=[{post_id:'new-scope'}];h.state.cursor='new-cursor';
+  assert.equal(h.state.loadSequence.current,1,'no newer load/sequence can mask a missing scope guard');
+  if(outcome==='success')h.calls[0].resolve(h.page(['stale'],'old-cursor'));else h.calls[0].reject(new Error('stale failure'));
+  await pending;assert.deepEqual(plain(h.state.items),[{post_id:'new-scope'}]);assert.equal(h.state.cursor,'new-cursor');assert.equal(h.state.error,'new scope feedback');assert.equal(h.state.loading,true,'stale finally cannot clear a new scope loading state');
+});
+
+test('a pending explicit refresh cannot be superseded by the old load-more cursor or a stale failed-page retry',async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const more=h.ui.load('note','B');h.calls[1].reject(new Error('offline'));await more;
+  const refresh=h.ui.load('note');assert.equal(h.calls.length,3);assert.equal(h.state.failedFeedLoad.current,null);
+  h.ui.retry();await h.ui.load('note','B');assert.equal(h.calls.length,3,'old pagination cannot replace a pending first-page refresh');
+  h.calls[2].resolve(h.page(['fresh'],'D'));await refresh;const next=h.ui.load('note','D');assert.equal(h.calls[3].path,'/social-posts?kind=note&cursor=D');h.calls[3].resolve(h.page(['next'],null));await next;
+  assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['fresh','next']);
+  assert.match(composerSource,/disabled=\{loading \|\| more\} onClick=\{\(\) => void load\(platform, cursor\)\}/);
+});

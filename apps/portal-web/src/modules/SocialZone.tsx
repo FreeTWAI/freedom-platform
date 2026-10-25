@@ -279,8 +279,23 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const selection = useRef({platform: 'note', tag:'', version: 0});
   const composerVersion = useRef(0);
   const newPosts = useRef<Post[]>([]);
-  const load = useCallback(async (nextPlatform: string, nextCursor?: string) => {
+  const feedSession = client.sessionGeneration;
+  const feedScope = useRef({client, session: feedSession, platform, tag, directPost});
+  feedScope.current = {client, session: feedSession, platform, tag, directPost};
+  type FeedLoad = {client: PortalClient; session: number; platform: string; tag: string; directPost: string | null; cursor?: string; sequence: number};
+  const activeFeedLoad = useRef<FeedLoad | null>(null), failedFeedLoad = useRef<FeedLoad | null>(null);
+  const load = useCallback(async (nextPlatform: string, nextCursor?: string, retrying = false) => {
+    const scope = feedScope.current;
+    // Captured handlers cannot read for a replacement login or a newer selection.
+    if (client !== currentClient.current || scope.client !== client || feedSession !== client.sessionGeneration || scope.session !== feedSession || scope.platform !== nextPlatform || scope.tag !== tag || scope.directPost !== directPost) return;
+    const active = activeFeedLoad.current;
+    const sameActiveScope = active && active.sequence === loadSequence.current && active.client === client && active.session === feedSession && active.platform === nextPlatform && active.tag === tag && active.directPost === directPost;
+    if (sameActiveScope && ((nextCursor && !active.cursor) || ((nextCursor || retrying) && active.cursor === nextCursor))) return;
     const sequence = ++loadSequence.current;
+    const request: FeedLoad = {client, session: feedSession, platform: nextPlatform, tag, directPost, cursor: nextCursor, sequence};
+    activeFeedLoad.current = request;
+    failedFeedLoad.current = retrying ? request : null;
+    const valid = () => sequence === loadSequence.current && client === currentClient.current && feedSession === client.sessionGeneration && feedScope.current.client === client && feedScope.current.session === feedSession && feedScope.current.platform === nextPlatform && feedScope.current.tag === tag && feedScope.current.directPost === directPost;
     pendingFeedLoad.current = true;
     if (nextCursor) setMore(true); else setLoading(true);
     setError('');
@@ -294,15 +309,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         if(tag)query.set('tag',tag);
       }
       const page = await client.get<Page>(`/social-posts${query.size ? `?${query}` : ''}`);
-      if (sequence !== loadSequence.current) return;
+      if (!valid()) return;
+      failedFeedLoad.current = null;
       const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (nextPlatform===''||post.kind==='note')&&(!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
       setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [...fresh, ...page.items]);
       newPosts.current = newPosts.current.filter(post => !page.items.some(item => item.post_id === post.post_id));
       setCursor(page.next_cursor);
       setCanHide(page.can_hide);
-    } catch (cause) { if (sequence === loadSequence.current) setError(cause instanceof Error ? cause.message : '貼文暫時無法載入。'); }
-    finally { if (sequence === loadSequence.current) { pendingFeedLoad.current = false; setLoading(false); setMore(false); } }
-  }, [client,tag,directPost]);
+    } catch (cause) { if (valid()) { failedFeedLoad.current = request; setError(cause instanceof Error ? cause.message : '貼文暫時無法載入。'); } }
+    finally { if (valid()) { activeFeedLoad.current = null; pendingFeedLoad.current = false; setLoading(false); setMore(false); } }
+  }, [client,feedSession,tag,directPost]);
+  function retryFeed() {
+    const failed = failedFeedLoad.current, scope = feedScope.current;
+    if (!failed || failed.sequence !== loadSequence.current || failed.client !== client || failed.client !== currentClient.current || failed.session !== client.sessionGeneration || failed.session !== scope.session || failed.platform !== scope.platform || failed.tag !== scope.tag || failed.directPost !== scope.directPost) return;
+    void load(failed.platform, failed.cursor, true);
+  }
   useEffect(() => { void load(platform); }, [load, platform]);
   // Quiet re-check for the Short feed (no spinner, so the viewer keeps their place): a hidden or withdrawn post drops out
   // of everything already loaded, so it stops playing. Returns null when the list could not be confirmed.
@@ -330,14 +351,14 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     } catch { return null; }
   }, [client, tag]);
   useEffect(()=>{
-    const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;setDirectPost(next);}};
+    const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;feedScope.current={...feedScope.current,directPost:next};setDirectPost(next);}};
     window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);
     return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed);};
   },[directPost]);
   // Permalinks and notifications use one exact authorized lookup, even for old posts.
   useEffect(() => {
     if (!focusPost) return;
-    ++loadSequence.current;setNotice('');setDirectPost(focusPost.id);
+    ++loadSequence.current;feedScope.current={...feedScope.current,directPost:focusPost.id,platform:'',tag:''};setNotice('');setDirectPost(focusPost.id);
     selection.current={platform:'',tag:'',version:selection.current.version+1};setPlatform('');setTag('');
     if(directPost===focusPost.id)void load(platform);
   }, [focusPost?.sequence]);
@@ -393,13 +414,14 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     if (selection.current.platform === next) return;
     selection.current = {...selection.current,platform: next, version: selection.current.version + 1};
     ++loadSequence.current;
+    feedScope.current={...feedScope.current,platform:next};
     setPlatform(next);
   }
   function clearDirectPost(){
-    ++loadSequence.current;focusing.current=null;setDirectPost(null);setNotice('');
+    ++loadSequence.current;feedScope.current={...feedScope.current,directPost:null};focusing.current=null;setDirectPost(null);setNotice('');
     const location=new URL(window.location.href);location.searchParams.delete('social-post');window.history.replaceState(null,'',location);
   }
-  function selectTag(next:string){if(directPost)clearDirectPost();selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;setTag(next);}
+  function selectTag(next:string){if(directPost)clearDirectPost();selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;feedScope.current={...feedScope.current,tag:next};setTag(next);}
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }
@@ -653,7 +675,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     </dialog>
     <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id?{...item,...saved,thumbnail_url:item.thumbnail_url}:item));setNotice('貼文已更新。');}}/>
     {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
-    {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(platform)}>重試</button></div>}
+    {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
       <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
       <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
@@ -664,7 +686,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && !error && <ShortVideoFeed posts={items} hasMore={Boolean(cursor)} loadingMore={more} onLoadMore={() => { if (cursor) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
+    {platform === 'shorts' && !directPost && !loading && (!error || Boolean(failedFeedLoad.current?.cursor)) && <ShortVideoFeed posts={items} hasMore={Boolean(cursor) && !error} loadingMore={more} onLoadMore={() => { if (cursor && !error && !failedFeedLoad.current) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
     {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label={shortComments ? '貼文留言' : '貼文選項與檢舉'} onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
       <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => shortDialog.current?.close()}>關閉</button>
       {renderCard(shortPost, {inline: false, commentsOpen: shortComments})}
@@ -672,6 +694,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     <div className="social-grid">
       {(platform === 'shorts' && !directPost ? [] : items).map(post => renderCard(post))}
     </div>
-    {cursor && !(platform === 'shorts' && !directPost) && <button type="button" className="btn btn-ghost" disabled={more} onClick={() => void load(platform, cursor)}>{more ? '正在載入…' : '載入更多'}</button>}
+    {cursor && !(platform === 'shorts' && !directPost) && <button type="button" className="btn btn-ghost" disabled={loading || more} onClick={() => void load(platform, cursor)}>{more ? '正在載入…' : '載入更多'}</button>}
   </section>;
 }

@@ -638,3 +638,25 @@ test('preview publication with a lost thumbnail response retries the same upload
   expect(creates).toHaveLength(1);expect(uploads).toHaveLength(2);expect(uploads[1]).toBe(uploads[0]);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_posts WHERE url=$1',[url])).rows[0].n).toBe(1);
 });
+
+test('failed feed pagination retries the same cursor, keeps existing card nodes and deduplicates the next page',async({page})=>{
+  await login(page);await page.keyboard.press('Escape');
+  const feed=page.locator('.social-zone');await expect(feed).toHaveAttribute('aria-busy','false');
+  const makePost=(post_id:string,note:string)=>({post_id,kind:'note',url:null,platform:'other',platform_label:'其他',title:note,note,created_at:'2026-10-25T00:00:00Z',edited_at:null,revision:1,author:{user_id:'10000000-0000-4000-8000-000000000009',display_name:'分頁合成案例',avatar_url:null},thumbnail_url:null,total_points:0,my_points:0,mine:false,like_count:0,comment_count:0,liked:false,tags:[],mentions:[]});
+  const a=makePost('10000000-0000-4000-8000-000000000001','保留第一頁卡片'),b=makePost('10000000-0000-4000-8000-000000000002','成功續讀第二頁卡片');
+  const cursors:(string|null)[]=[];let attempts=0;
+  await page.route('**/api/v1/social-posts*',async route=>{
+    const request=route.request(),url=new URL(request.url());if(request.method()!=='GET'||url.pathname!=='/api/v1/social-posts'){await route.continue();return;}
+    const cursor=url.searchParams.get('cursor');cursors.push(cursor);
+    if(cursor==='page-B'&&++attempts<=2){await route.fulfill({status:503,json:{title:'Service unavailable',status:503}});return;}
+    await route.fulfill({json:{items:cursor==='page-B'?[a,b]:[a],next_cursor:cursor==='page-B'?null:'page-B',can_hide:false}});
+  });
+  try{
+    await feed.getByRole('button',{name:'更新動態',exact:true}).click();const first=feed.locator(`#social-post-${a.post_id}`);await expect(first).toBeVisible();const original=await first.elementHandle();
+    await feed.getByRole('button',{name:'載入更多',exact:true}).click();const retry=feed.getByRole('alert').getByRole('button',{name:'重試',exact:true});await expect(retry).toBeVisible();
+    expect(await original!.evaluate(node=>node.isConnected)).toBe(true);await retry.click();await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeVisible();
+    await retry.click();await expect(feed.locator(`#social-post-${b.post_id}`)).toBeVisible();await expect(first).toHaveCount(1);expect(await original!.evaluate(node=>node.isConnected)).toBe(true);
+    expect(cursors).toEqual([null,'page-B','page-B','page-B']);await expect(feed.getByRole('button',{name:'載入更多',exact:true})).toHaveCount(0);
+    await feed.getByRole('button',{name:'更新動態',exact:true}).click();await expect(feed.locator(`#social-post-${b.post_id}`)).toHaveCount(0);expect(cursors.at(-1)).toBeNull();
+  }finally{await page.unrouteAll({behavior:'wait'});}
+});
