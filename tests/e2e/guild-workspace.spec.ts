@@ -433,3 +433,38 @@ test('council detail recovery clears its read error without losing an unknown re
   await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('status')).toContainText('回覆已發布');await expect(reply).toBeEnabled();await expect(reply).toHaveValue('');
   expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);await expect(council.locator('.guild-council-reply')).toHaveCount(1);
 });
+
+for(const mode of ['create','edit'] as const)for(const denied of [403,412])test(`announcement ${mode} keeps its original tuple after unknown then ${denied} until ACK`,async({page})=>{
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{...caps,managed_guilds:[...caps.managed_guilds,{guild_key:'other-synthetic-guild',name:'另一測試公會'}]}}));
+  const calls:{path:string;body:unknown;key:string|undefined;version:string|undefined}[]=[];let reads=0;
+  const respond=async(route:Route)=>{
+    const request=route.request();calls.push({path:new URL(request.url()).pathname,body:request.postDataJSON(),key:request.headers()['idempotency-key'],version:request.headers()['if-match']});
+    if(calls.length===1)return route.fulfill({status:503,json:{detail:'Synthetic committed response lost.'}});
+    if(calls.length===2)return route.fulfill({status:denied,json:{detail:'Synthetic replay denial.'}});
+    return route.fulfill({json:{...announcement,aggregate_version:3}});
+  };
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>{
+    if(route.request().method()==='POST')return respond(route);
+    reads++;return route.fulfill({json:{items:[{...announcement,aggregate_version:reads>1?99:2}]}});
+  });
+  await page.route('**/api/v1/guild-announcements/synthetic-announcement/edit',respond);
+  await login(page);await navigate(page,'公會管理');const workspace=page.locator('.guild-workspace');
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  if(mode==='edit')await workspace.getByRole('button',{name:'編輯公告',exact:true}).click();
+  const title=workspace.getByRole('textbox',{name:'公告標題',exact:true}),body=workspace.getByRole('textbox',{name:'公告內容',exact:true});
+  await title.fill('尚待確認的原公告');await body.fill('只重試這份原內容。');
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByText('上次保存的結果尚未確認。請用原內容重試，確認前不能修改公告或切換公會。',{exact:true})).toBeVisible();
+  for(const field of [title,body,workspace.getByRole('combobox',{name:'管理公會',exact:true}),workspace.getByRole('combobox',{name:'發布狀態',exact:true})])await expect(field).toBeDisabled();
+  await expect(workspace.getByRole('button',{name:'編輯公告',exact:true})).toBeDisabled();
+  if(mode==='edit')await expect(workspace.getByRole('button',{name:'新增另一則',exact:true})).toBeDisabled();
+  await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toContainText('Synthetic replay denial.');await expect(title).toBeDisabled();
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();
+  expect(calls).toHaveLength(3);expect(calls[0].key).toBeTruthy();expect(calls.every(call=>JSON.stringify(call)===JSON.stringify(calls[0]))).toBe(true);
+  expect(calls[0].version).toBe(mode==='edit'?'"2"':undefined);await expect(title).toBeEnabled();await expect(title).toHaveValue('');
+  await title.fill('確認後的新意圖');await body.fill('第二則獨立公告。');await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();expect(calls).toHaveLength(4);expect(calls[3].key).not.toBe(calls[0].key);
+});

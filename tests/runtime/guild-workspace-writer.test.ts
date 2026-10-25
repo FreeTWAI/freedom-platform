@@ -126,13 +126,14 @@ for(const mode of ['create','reply'] as const)test(`council ${mode} keeps exact 
 
 // Small hook ports execute the real announcement read/write handlers. Promises
 // are explicitly settled by each test; there are no timers or browser claims.
-function announcementHarness(){
+function announcementHarness(write:Writer=async()=>{throw new Error('unknown write outcome');}){
  const begin=source.indexOf('function AnnouncementEditor('),end=source.indexOf('\ntype SkillEditorProps=',begin);
  assert.ok(begin>=0&&end>begin);
  const code=transformSync(source.slice(begin,end),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
  const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
+ const guildChanges:string[]=[];
  const reads:{resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
- const api={get:()=>new Promise((resolve,reject)=>reads.push({resolve,reject})),post:async()=>{throw new Error('unknown write outcome');}};
+ const api={get:()=>new Promise((resolve,reject)=>reads.push({resolve,reject})),post:write};
  let currentApi=api;
  const memo=(value:any,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n]))slots[i]={value,deps};return slots[i].value;};
  const Editor=runInNewContext(code+';AnnouncementEditor',{
@@ -141,11 +142,16 @@ function announcementHarness(){
   useEffect:(run:()=>void,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n])){old?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=run();});}},
   failure:(error:Error)=>error.message,date:String,logConsoleEvent:()=>{},consoleChannel:()=>'',
  });
- const render=()=>{cursor=0;const tree=Editor({api:currentApi,guilds:[{guild_key:'fixture',name:'Synthetic guild'}],guild:'fixture',onGuildChange:()=>{}});for(const effect of effects.splice(0))effect();return tree;};
+ const render=()=>{cursor=0;const tree=Editor({api:currentApi,guilds:[{guild_key:'fixture',name:'Synthetic guild'},{guild_key:'other',name:'Other guild'}],guild:'fixture',onGuildChange:(value:string)=>guildChanges.push(value)});for(const effect of effects.splice(0))effect();return tree;};
  const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
  const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
  const buttons=(name:string)=>nodes(render()).find(n=>n.type==='button'&&text(n.props.children)===name);
- return {reads,render,text,html:()=>renderToStaticMarkup(render()),
+ return {reads,render,text,guildChanges,html:()=>renderToStaticMarkup(render()),
+  editFirst:()=>buttons('編輯公告').props.onClick(),newAnother:()=>buttons('新增另一則')?.props.onClick(),
+  switchGuild:(value='other')=>nodes(render()).find(n=>n.type==='select').props.onChange({target:{value}}),
+  publish:()=>nodes(render()).filter(n=>n.type==='select')[1].props.onChange({target:{value:'published'}}),
+  controls:()=>nodes(render()).filter(n=>['input','textarea','select'].includes(n.type)).map(n=>Boolean(n.props.disabled)),
+  buttonDisabled:(name:string)=>Boolean(buttons(name)?.props.disabled),
   reload:()=>buttons('重新載入列表').props.onClick(),
   draft:(title:string,body:string)=>{for(const [label,value]of [['公告標題',title],['公告內容',body]]){const field=nodes(render()).find(n=>n.type==='label'&&text(n.props.children)===label);nodes(field).find(n=>n.type==='input'||n.type==='textarea').props.onChange({target:{value}});}},
   values:()=>nodes(render()).filter(n=>n.type==='input'||n.type==='textarea').map(n=>n.props.value),
@@ -183,10 +189,10 @@ test('an older failed announcement refresh cannot overwrite a newer successful r
 
 // Actual Council handlers with controlled promises and explicit hook ports.
 // Layout, focus and native lifecycle are left to hosted E2E, not emulated here.
-function councilReadHarness(){
+function councilReadHarness(write:Writer=async()=>{throw Object.assign(new Error('unknown council write'),{status:503});}){
  const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
  const reads:{path:string;resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
- const api={get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:async()=>{throw Object.assign(new Error('unknown council write'),{status:503});}};
+ const api={get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:write};
  let currentApi=api;
  const Council=runInNewContext(councilCode+';Council',{
   React,useId:()=> 'synthetic-council',date:String,failure:(error:Error)=>error.message,
@@ -265,4 +271,78 @@ for(const obsolete of ['success','failure'] as const)test(`council old client de
  assert.match(h.html(),/current detail failed/);assert.doesNotMatch(h.html(),/<h4>Previously loaded discussion<\/h4>|obsolete client detail error/);
  h.reload();h.reads[4].resolve({items:[storedThread]});h.reads[5].resolve(storedThread);await settleCouncil();
  assert.doesNotMatch(h.html(),/current detail failed/);assert.match(h.html(),/<h4>Previously loaded discussion<\/h4>/);
+});
+
+async function settleAnnouncementWrite(){for(let i=0;i<8;i++)await Promise.resolve();}
+
+// Actual component + actual retry writer, with synthetic receipt/storage ports.
+// These prove intent/key handling, not a browser or production database outcome.
+for(const kind of ['create','edit'] as const){
+ for(const denied of [403,412])test(`announcement ${kind}: unknown then ${denied} freezes every tuple entry until original ACK`,async()=>{
+  const calls:{path:string;body:any;version:number|undefined;key:string}[]=[],receipts=new Map<string,unknown>();let effects=0;
+  const row={...storedAnnouncement,aggregate_version:2,state:'draft'};
+  const write=retrySafeWriter(async(path,body,version,key)=>{
+   calls.push({path,body,version,key});
+   if(calls.length===2)throw rejection(denied);
+   if(!receipts.has(key)){effects++;receipts.set(key,{...row,...body as object,aggregate_version:3});}
+   if(calls.length===1)throw rejection(503);
+   return receipts.get(key);
+  });
+  const h=announcementHarness(write);h.render();h.reads[0].resolve({items:[row]});await settleRead();
+  if(kind==='edit')h.editFirst();h.draft('Original title','Original body');await h.save();
+  assert.deepEqual(h.controls(),[true,true,true,true]);
+  assert.equal(h.buttonDisabled('編輯公告'),true);assert.equal(h.buttonDisabled('重新載入列表'),false);
+  if(kind==='edit')assert.equal(h.buttonDisabled('新增另一則'),true);
+  // Programmatic handler calls must not bypass disabled controls.
+  h.draft('Changed','Changed');h.publish();h.switchGuild('fixture');h.switchGuild();h.editFirst();h.newAnother();
+  assert.deepEqual(h.values(),['Original title','Original body']);assert.deepEqual(h.guildChanges,[]);
+  await h.save();assert.deepEqual(h.controls(),[true,true,true,true]);
+  h.reload();h.reads[1].resolve({items:[{...row,aggregate_version:99}]});await settleRead();h.editFirst();
+  const recovery=h.save();await settleAnnouncementWrite();h.reads[2].resolve({items:[row]});await recovery;
+  assert.equal(effects,1);assert.equal(new Set(calls.map(c=>c.key)).size,1);
+  assert.ok(calls.every(c=>c.path===calls[0].path&&c.version===(kind==='edit'?2:undefined)&&JSON.stringify(c.body)===JSON.stringify({title:'Original title',body:'Original body',state:'draft'})));
+  assert.deepEqual(h.controls(),[false,false,false,false]);assert.deepEqual(h.values(),['','']);
+  h.draft('New intention','New body');const next=h.save();await settleAnnouncementWrite();h.reads[3].resolve({items:[]});await next;
+  assert.equal(effects,2);assert.notEqual(calls[3].key,calls[2].key);
+ });
+ test(`announcement ${kind}: initial definitive rejection permits corrected intent`,async()=>{
+  const calls:{body:any;key:string}[]=[];
+  const h=announcementHarness(retrySafeWriter(async(_path,body,_version,key)=>{calls.push({body,key});throw rejection(400);}));
+  h.render();h.reads[0].resolve({items:[{...storedAnnouncement,aggregate_version:2}]});await settleRead();if(kind==='edit')h.editFirst();
+  h.draft('Invalid original','Original');await h.save();assert.deepEqual(h.controls(),[false,false,false,false]);
+  h.draft('Corrected','Corrected body');await h.save();assert.notEqual(calls[0].key,calls[1].key);assert.equal(calls[1].body.title,'Corrected');
+ });
+}
+
+for(const flag of ['network','timedOut'])test(`writer keeps the key for a 4xx carrying ${flag}`,async()=>{
+ const keys:string[]=[];
+ const write=retrySafeWriter(async(_path,_body,_version,key)=>{keys.push(key);if(keys.length===1)throw Object.assign(rejection(408),{[flag]:true});if(keys.length===2)throw rejection(403);return 'ACK';});
+ await assert.rejects(write('/announcement',{title:'Original'}));await assert.rejects(write('/announcement',{title:'Original'}));await write('/announcement',{title:'Original'});
+ assert.equal(new Set(keys).size,1);
+});
+
+for(const flag of ['network','timedOut'])test(`announcement treats 4xx ${flag} as unknown and retains original payload`,async()=>{
+ const calls:{body:any;key:string}[]=[];
+ const h=announcementHarness(retrySafeWriter(async(_path,body,_version,key)=>{calls.push({body,key});throw Object.assign(rejection(408),{[flag]:true});}));
+ h.render();h.reads[0].resolve({items:[]});await settleRead();h.draft('Original','Original body');await h.save();
+ assert.deepEqual(h.controls(),[true,true,true,true]);h.draft('Changed','Changed');await h.save();
+ assert.equal(calls[0].key,calls[1].key);assert.equal(calls[1].body.title,'Original');
+});
+
+test('announcement pending send blocks reentrant submit and all mutation handlers',async()=>{
+ let reject!:(error:Error)=>void,calls=0;
+ const h=announcementHarness(async()=>{calls++;return new Promise((_resolve,no)=>{reject=no;});});
+ h.render();h.reads[0].resolve({items:[{...storedAnnouncement,aggregate_version:2}]});await settleRead();h.editFirst();h.draft('Original','Original body');
+ const sending=h.save();await h.save();h.draft('Changed','Changed');h.publish();h.editFirst();h.newAnother();h.switchGuild();
+ assert.equal(calls,1);assert.deepEqual(h.values(),['Original','Original body']);assert.deepEqual(h.guildChanges,[]);
+ reject(rejection(400));await sending;assert.deepEqual(h.controls(),[false,false,false,false]);
+});
+
+for(const reply of [false,true])for(const flag of ['network','timedOut'])test(`council ${reply?'reply':'create'} keeps a 4xx ${flag} outcome frozen through denied retry`,async()=>{
+ const calls:{path:string;body:unknown;key:string}[]=[];
+ const h=councilReadHarness(retrySafeWriter(async(path,body,_version,key)=>{calls.push({path,body,key});if(calls.length===1)throw Object.assign(rejection(408),{[flag]:true});throw rejection(403);}));
+ h.render();h.reads[0].resolve({items:[storedThread]});await settleCouncil();
+ if(reply){h.select();h.render();h.reads[1].resolve(storedThread);await settleCouncil();}else h.open();
+ h.draft();const original=h.fields().map(f=>f.value);h.submit();await settleCouncil();assert.ok(h.fields().every(f=>f.disabled));assert.match(h.html(),/上次送出的結果尚未確認/);
+ h.submit();await settleCouncil();assert.ok(h.fields().every(f=>f.disabled));assert.deepEqual(h.fields().map(f=>f.value),original);assert.equal(JSON.stringify(calls[0]),JSON.stringify(calls[1]));
 });
