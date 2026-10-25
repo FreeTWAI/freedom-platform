@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { parse as parseYaml } from 'yaml';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
@@ -48,13 +47,13 @@ const installation = { image: `ghcr.io/freetwai/freedom-release-operator@sha256:
 test('shared workflows use only GitHub-supported job environment contexts before runner allocation', async () => {
   const allowed = new Set(['github', 'needs', 'strategy', 'matrix', 'vars', 'secrets', 'inputs']);
   for (const name of ['shared-release', 'shared-backup', 'release-operator-image']) {
-    const workflow = parseYaml(await readFile(new URL(`../../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
-    for (const job of Object.values(workflow.jobs)) {
-      for (const value of Object.values(job.env ?? {})) {
-        for (const [, expression] of String(value).matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
-          for (const [, context] of expression.matchAll(/\b([a-z_]+)\./g)) assert(allowed.has(context), `${name}: ${context} is unavailable in jobs.<id>.env`);
+    const workflow = await readFile(new URL(`../../../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
+    // These workflows use block mappings at the conventional four-space job
+    // property indentation. This regression guard is not a full YAML validator.
+    for (const [, jobEnv] of workflow.matchAll(/^    env:\n((?: {6}.*\n)*)/gm)) {
+        for (const [, expression] of jobEnv.matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+          for (const [, context] of expression.matchAll(/(?<![.\w])([a-z_]+)\./g)) assert(allowed.has(context), `${name}: ${context} is unavailable in jobs.<id>.env`);
         }
-      }
     }
   }
 });

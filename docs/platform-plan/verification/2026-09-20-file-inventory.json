@@ -14569,8 +14569,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 91188,
-      "sha256": "5b16c5d6df14b6b1c078cd8e8dcfefc023fb2d4cb3751faceedf96e00cb482bd"
+      "bytes": 91255,
+      "sha256": "fdb1e01829d715a105ef5fdb37584aac7714fcb218529725d8fa37771bdf0bcd"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
