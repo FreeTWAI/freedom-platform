@@ -187,3 +187,71 @@ for(const recovery of ['question','intent'] as const)test(`fresh ${recovery} cle
     assert.equal(session.nodes().find(node=>node.type==='input').props.value,'');assert.equal(session.dialog.open,true);assert.equal(calls,1);
   });
 });
+
+const adapterSources=()=>({
+  metadata:{skills:{title:'技能書架最新標題',guidance:'不當作第二份答案'},guilds:{title:'職業公會'},stores:{title:'我的商店'},supplier:{title:'我有東西要賣'},retail:{title:'我可以賣東西'},messages:{title:'不可導向的訊息'}},
+  pageHelp:{skills:{summary:'目前技能書說明',steps:['目前第一步'],note:'目前限制'},guilds:{summary:'公會說明',steps:[]},stores:{summary:'商店說明',steps:['核對設定']},supplier:{summary:'供貨說明',steps:['核對供貨']},retail:{summary:'零售說明',steps:['核對選品']},messages:{summary:'不應帶入',steps:[]}},
+  availablePageIds:['retail','skills','stores','supplier','skills','guilds','messages','unknown'],guildLaunchpadEnabled:true,
+});
+test('canonical adapter intersects current IDs, projects only current canonical fields and feeds the real model',async()=>{
+  const {buildHelperKnowledge}=await import('../../apps/portal-web/src/modules/platform-helper/knowledge.js');
+  const sources=adapterSources(),result=buildHelperKnowledge(sources);
+  assert.deepEqual(result.availablePageIds,['guilds','skills','stores','supplier','retail']);
+  assert.deepEqual(Object.keys(result.knowledge),result.availablePageIds);
+  assert.deepEqual(result.knowledge.skills,{id:'skills',title:sources.metadata.skills.title,summary:sources.pageHelp.skills.summary,steps:sources.pageHelp.skills.steps,note:sources.pageHelp.skills.note});
+  assert.equal(availablePage('skills',result.availablePageIds,result.knowledge)?.title,'技能書架最新標題');
+  assert.deepEqual(chooseIntent('learn',result.availablePageIds,result.knowledge),{kind:'pages',pageIds:['skills','guilds']});
+  assert.equal(Object.hasOwn(result.knowledge,'messages'),false);
+  assert.equal(Object.hasOwn(result.knowledge.skills!,'guidance'),false);
+});
+test('canonical adapter requires exact true for stores without gating supplier or retail',async()=>{
+  const {buildHelperKnowledge}=await import('../../apps/portal-web/src/modules/platform-helper/knowledge.js');
+  for(const flag of [false,null,undefined,'true',1,{}]){
+    const result=buildHelperKnowledge({...adapterSources(),guildLaunchpadEnabled:flag} as never);
+    assert.deepEqual(result.availablePageIds,['guilds','skills','supplier','retail']);
+    assert.equal(Object.hasOwn(result.knowledge,'stores'),false);
+  }
+  assert.ok(buildHelperKnowledge(adapterSources()).availablePageIds.includes('stores'));
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),availablePageIds:[]}),{knowledge:{},availablePageIds:[]});
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),availablePageIds:['stores']}),{knowledge:{stores:{id:'stores',title:'我的商店',summary:'商店說明',steps:['核對設定']}},availablePageIds:['stores']});
+});
+test('canonical adapter drops missing, inherited and malformed canonical entries and fields',async()=>{
+  const {buildHelperKnowledge}=await import('../../apps/portal-web/src/modules/platform-helper/knowledge.js');
+  const base=adapterSources();
+  for(const metadata of [{},{skills:{}},Object.create(base.metadata),{skills:{title:''}},{skills:{title:7}},{skills:Object.create({title:'繼承標題'})}]){
+    assert.deepEqual(buildHelperKnowledge({...base,metadata,availablePageIds:['skills']} as never),{knowledge:{},availablePageIds:[]});
+  }
+  for(const pageHelp of [{},{skills:{summary:'說明'}},Object.create(base.pageHelp),{skills:null},{skills:{summary:'',steps:[]}},{skills:{summary:'說明',steps:[1]}},{skills:{summary:'說明',steps:[' ']}},{skills:{summary:'說明',steps:[],note:1}},{skills:Object.create(base.pageHelp.skills)}]){
+    assert.deepEqual(buildHelperKnowledge({...base,pageHelp,availablePageIds:['skills']} as never),{knowledge:{},availablePageIds:[]});
+  }
+  for(const malformed of [undefined,null,[],1,'data',{},Object.create(base)])assert.deepEqual(buildHelperKnowledge(malformed as never),{knowledge:{},availablePageIds:[]});
+  for(const field of ['metadata','pageHelp','availablePageIds'])assert.deepEqual(buildHelperKnowledge({...base,[field]:null} as never),{knowledge:{},availablePageIds:[]});
+});
+test('canonical adapter does not invoke accessor entries or inherit array indices',async()=>{
+  const {buildHelperKnowledge}=await import('../../apps/portal-web/src/modules/platform-helper/knowledge.js');
+  let reads=0;
+  const getter={get skills(){reads++;throw new Error('must not run');}};
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),metadata:getter} as never),{knowledge:{},availablePageIds:[]});
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),pageHelp:getter} as never),{knowledge:{},availablePageIds:[]});
+  const titleGetter={get title(){reads++;throw new Error('must not run');}};
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),metadata:{skills:titleGetter},availablePageIds:['skills']} as never),{knowledge:{},availablePageIds:[]});
+  const ids:string[]=[];Object.defineProperty(ids,'0',{get(){reads++;throw new Error('must not run');}});
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),availablePageIds:ids}),{knowledge:{},availablePageIds:[]});
+  const steps=new Array<string>(1);Object.setPrototypeOf(steps,Object.assign(Object.create(Array.prototype),{0:'繼承步驟'}));
+  assert.deepEqual(buildHelperKnowledge({...adapterSources(),pageHelp:{skills:{summary:'說明',steps}},availablePageIds:['skills']}),{knowledge:{},availablePageIds:[]});
+  assert.equal(reads,0);
+  const sources=adapterSources();
+  const nullRecord=(value:object)=>Object.assign(Object.create(null),value);
+  const projected=buildHelperKnowledge(nullRecord({...sources,metadata:nullRecord(sources.metadata),pageHelp:nullRecord(sources.pageHelp)}));
+  assert.equal(projected.knowledge.skills?.title,sources.metadata.skills.title);
+});
+test('canonical adapter never mutates or freezes sources and snapshots mutable steps without a cache',async()=>{
+  const {buildHelperKnowledge}=await import('../../apps/portal-web/src/modules/platform-helper/knowledge.js');
+  const sources=adapterSources(),before=JSON.stringify(sources),first=buildHelperKnowledge(sources);
+  assert.equal(JSON.stringify(sources),before);assert.equal(Object.isFrozen(sources.pageHelp.skills.steps),false);
+  assert.notEqual(first.knowledge.skills!.steps,sources.pageHelp.skills.steps);
+  sources.metadata.skills.title=' 更新後標題 ';sources.pageHelp.skills.steps.push('更新步驟');sources.availablePageIds=['skills'];
+  const next=buildHelperKnowledge(sources);
+  assert.equal(first.knowledge.skills!.title,'技能書架最新標題');assert.deepEqual(first.knowledge.skills!.steps,['目前第一步']);
+  assert.deepEqual(next.availablePageIds,['skills']);assert.equal(next.knowledge.skills!.title,' 更新後標題 ');assert.deepEqual(next.knowledge.skills!.steps,['目前第一步','更新步驟']);
+});

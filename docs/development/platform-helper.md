@@ -111,3 +111,37 @@ navigation exception still shows only the fixed failure message and does not
 claim arrival. Three synthetic-handler regressions cover the live count as
 availability changes and both recovery paths; actual assistive-technology
 announcements remain unverified until browser/AT acceptance is performed.
+
+## Pure canonical-data adapter (still unmounted)
+
+`knowledge.ts` exports `buildHelperKnowledge({ metadata, pageHelp,
+availablePageIds, guildLaunchpadEnabled })`, returning `{ knowledge,
+availablePageIds }` for the existing component. The host injects reviewed public
+metadata title and page-help summary/steps/optional note; the adapter imports only
+its own `model`, not App, page-help, metadata, session/client types or character
+modules. No second answer bank or provider is introduced.
+
+Both outputs contain the same intersection of valid canonical entries, the fixed
+`HELPER_PAGE_IDS` list and the host's current available IDs. Ordering follows the
+fixed list and duplicates are removed. `stores` additionally requires
+`guildLaunchpadEnabled === true`; false, missing, null or malformed flags do not
+expose it. This gate does not affect `supplier` or `retail` and does not grant any
+business authorization. The host remains responsible for authoritative routes,
+capabilities and guarded navigation.
+
+Inputs are plain or null-prototype records with own data properties. Missing,
+inherited, accessor or malformed entries/fields are omitted without invoking
+getters. Titles, summaries and steps must be nonblank strings; an empty steps
+array is valid. A supplied note must be an own string data property; omit it
+rather than supplying undefined. Valid strings are preserved exactly, not trimmed
+or rewritten. Steps are copied into fresh output; sources are never changed or
+frozen. Recompute when canonical data, availability or the flag changes: there is
+no cache and an earlier snapshot does not update itself.
+
+Runtime tests execute the adapter using structurally representative synthetic
+public records, including missing/malformed/prototype/accessor inputs, strict
+stores gating, current availability, source preservation, fresh updates and
+consumption by the real helper model. They do **not** import or parse the shared
+canonical files. Actual canonical-source/host wiring and browser acceptance remain
+**not_run** pending shared-owner coordination. This adapter is theme-neutral and
+does not fulfill the separately requested theme-dependent character integration.
