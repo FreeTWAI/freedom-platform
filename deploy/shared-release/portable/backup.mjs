@@ -48,7 +48,7 @@ export async function observeBackupControl(pool) {
  * acquired by the enclosing release. It does not release that lease between
  * backup-before and migration. It retains private dumps/archives and all pins. */
 export async function runPortableBackup({ context, workRoot, pool, role, runtimeRole, lease, transport,
-  expected, connection, binDirectory, execute = runPostgresProcess }) {
+  expected, connection, binDirectory, retainIntent, verifyRetainedFloor, execute = runPostgresProcess }) {
   check(context?.schema === 'public' && context.gcSafety === undefined
     && context.signal === lease?.signal && isSha(context.sourceRelease)
     && ['staging', 'production'].includes(context.environment)
@@ -57,7 +57,8 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
     && isDigest(expected.ledgerSha256) && isDigest(expected.materialPolicySha256)
     && Number.isSafeInteger(expected.schemaVersion) && expected.schemaVersion > 0
     && /^[a-z][a-z0-9_]{0,62}$/.test(role) && /^[a-z][a-z0-9_]{0,62}$/.test(runtimeRole)
-    && role !== runtimeRole && pool.options.max >= 4 && connection.PGDATABASE === context.database,
+    && role !== runtimeRole && pool.options.max >= 4 && connection.PGDATABASE === context.database
+    && typeof retainIntent === 'function' && typeof verifyRetainedFloor === 'function',
   'release_backup_input_invalid');
   expected = Object.freeze(structuredClone(expected));
   context = Object.freeze({ ...context });
@@ -76,6 +77,7 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
     check(worker.sourceSha === expected.sourceSha && worker.bindingsSha256 === expected.bindingsSha256,
       'release_backup_worker_changed');
     await verifyControl(pool);
+    await verifyRetainedFloor(pool, { restored: false });
   };
   const result = await runDailyBackup(context, {
     async preflight() {
@@ -107,7 +109,8 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
         environment: context.environment, database: context.database, schema: 'public', exposure: 'quarantine',
       })))) === 'created', 'release_backup_control_exists');
       policy = await openCapturePolicy({ pool, database: context.database, role, before: before.policySha256,
-        revision: 'shared-backup-' + context.setId, intent: await createFileArchiveStore(intents), lease });
+        revision: 'shared-backup-' + context.setId, intent: await createFileArchiveStore(intents), lease,
+        retainIntent: value => retainIntent('capture-policy', value) });
       assertHeld();
       await policy.enable(); assertHeld();
       const source = transport.sourceObjects({ assertObjectKey, validateMetadata });
@@ -123,6 +126,8 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
     async publishAndOpen() {
       await verifySource();
       const bytes = await backupTar('pack', join(root, 'local'), undefined, context.signal);
+      await retainIntent('archive', { setId: context.setId, archiveSha256: hash(bytes), bytes: bytes.length, automaticRetry: false });
+      assertHeld();
       const published = await transport.publishArchive({ setId: context.setId, bytes, intentDirectory: join(root, 'intents') });
       check(hash(published.bytes) === hash(bytes) && published.archiveSha256 === hash(bytes), 'release_backup_transport_mismatch');
       archiveSha256 = published.archiveSha256;
@@ -151,7 +156,8 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
       restored = await openIsolatedPostgres({ workRoot, binDirectory, Pool, execute, signal: context.signal });
       return { pool: restored.pool, databaseName: restored.databaseName, objects: restoreObjects,
         database: { async restore(input) {
-          await restored.database.restore(input); await verifyControl(restored.pool); assertHeld();
+          await restored.database.restore(input); await verifyControl(restored.pool);
+          await verifyRetainedFloor(restored.pool, { restored: true }); assertHeld();
         } } };
     },
     async cleanup() {

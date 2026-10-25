@@ -89,7 +89,9 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 
 階段固定為 preflight → backup-before → migration → deploy → health → backup-after → handoff。
 備份必須包含遠端讀回、隔離資料庫與物件還原、清理；最後驗證自然備份排程仍能執行。
-任一不完整結果都不能標成成功。失敗不自動重跑 mutation、不自動 rollback。
+任一不完整結果都不能標成成功。控制程式失敗後不重啟發布、不自動 rollback。
+釘選的 Wrangler 4.138 自己會對部分網路／5xx／429 錯誤重試上傳，最多三次；
+「只啟動一次 Wrangler」不等於「只有一次 provider upload」。不明結果仍須讀回對帳。
 中斷時 receipt／Deployment 可能停在 running／in_progress，代表要讀回核對，不能視為已回滾。
 容器若未確認停止，控制程式會回報清理未確認，保留私人工作磁碟到一次性 runner 銷毀，
 不會刪除可能仍在執行的 PostgreSQL 資料目錄。它不會把這種結果算成成功。
@@ -136,9 +138,19 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   核對來源未變與輸出 digest；建置程序不繼承部署憑證。已實跑 `0ec26d5c` 的本機
   npm 安裝、build、Wrangler dry-run，這不是 image／hosted runner 的驗收。
 - `deploy.mjs`：讀回 active version、bindings、route、crons、workers.dev、Tokyo placement
-  與 Hyperdrive cache；保留現有旗標、秘密與綁定，只發布一次。Provider 清單延遲或
+  與 Hyperdrive cache；保留現有旗標、秘密與綁定，只呼叫一次 Wrangler。Provider 清單延遲或
   GET 失敗會留下觀察紀錄並有界重讀，不再次發布。兩環境已完成實際唯讀核對；
   mutation 仍只驗了合成 provider，沒有實際部署。
+  另讀取 service metadata 核對 Workers Logs，明確保留目前的停用狀態；若已啟用
+  Logs／traces 或出現未支援設定，在上傳前拒絕，不靠 `--keep-vars` 猜測會保留。
+- `control-store.mjs`／`floor.mjs`：在私人 R2 保存有序操作紀錄，以獨立釘選的 seed
+  和原始 legacy floor 為起點。每次核對完整前後關聯，缺檔、分叉、舊 head 或未結案
+  操作都拒絕繼續；不能由目前資料庫重新造一份權威。COMMIT 前先保留交易 ID，確認
+  提交後立即提高還原下限，後續權限探測仍需完成才算 migration 通過。這些 R2 操作
+  目前以合成 transport 驗證，尚未建立 live seed 或接上完整 image。
+- `coordinate-fence.mjs`：唯讀核對原有十個 repository coordinate 約束，還原時只接受
+  已釘選的 PG18 定義差異。保留原始核准資料，不重建或放寬約束；已對正式 DB 做
+  唯讀比對，十項吻合。備份與 migration 現在要求接入外部意圖保存及約束驗證。
 - `backup-storage.mjs`／`backup-tar.py`：使用既有 create-only 檔案存放器保存媒體，
   大小受限的 TAR 只接受固定範圍的普通檔案。下載副本先核對整體 digest，再檢查
   全部 member；拒絕重複路徑、穿越路徑、symlink 與特殊檔案，不使用 `extractall`。
@@ -150,8 +162,8 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   staging 則使用只送到固定 origin 的 Access service headers，拒絕跟隨重新導向。
 
 這個備份 adapter 仍要求上層提供已核准的來源、ledger 與 material policy digest。
-比對 digest 不等於驗證外部 retained floor 的權威；其共享保存、更新、來源授權與自然
-排程交接仍未完成，因此 adapter 尚未接到可啟用的發布 image。原生 PostgreSQL／R2
+比對 digest 不等於驗證外部 retained floor 的權威；共享紀錄程式已補上，live 權威
+seed、完整 image 與自然排程交接仍未完成。原生 PostgreSQL／R2
 演練使用合成資料；Cloudflare HTTP 邊界使用磁碟上的合成遠端副本，沒有接觸遠端
 bucket、Worker 或正式資料庫。
 

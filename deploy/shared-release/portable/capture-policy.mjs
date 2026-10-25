@@ -6,10 +6,10 @@ import { bytesStream } from './backup-storage.mjs';
 /** Owned temporary capture policy. A timed-out UPDATE may still commit: settle
  * that exact backend before attempting conditional GC-off cleanup. The enclosing
  * release keeps its separate advisory-lock session throughout this operation. */
-export async function openCapturePolicy({ pool, database, role, revision, before, intent, lease }) {
+export async function openCapturePolicy({ pool, database, role, revision, before, intent, lease, retainIntent }) {
   check(/^[a-z][a-z0-9_]{0,62}$/.test(database) && /^[a-z][a-z0-9_]{0,62}$/.test(role)
     && /^shared-backup-[a-f0-9-]{36}$/.test(revision) && /^[a-f0-9]{64}$/.test(before ?? '')
-    && lease?.signal instanceof AbortSignal && typeof lease.assertHeld === 'function',
+    && lease?.signal instanceof AbortSignal && typeof lease.assertHeld === 'function' && typeof retainIntent === 'function',
   'release_capture_policy_input_invalid');
   const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
   assertHeld();
@@ -44,10 +44,13 @@ export async function openCapturePolicy({ pool, database, role, revision, before
     const row = (await query(`SELECT current_database() database,current_user role,session_user session_role,pg_backend_pid() pid`)).rows[0];
     check(row?.database === database && row.role === role && row.session_role === role
       && Number.isSafeInteger(row.pid) && row.pid > 0, 'release_capture_policy_identity_invalid'); pid = row.pid;
-    check(await intent.putIfAbsent('capture-policy.json', bytesStream(Buffer.from(JSON.stringify({
+    const binding = {
       format: 'freedom.shared-capture-policy-intent/v1', pid, application, database, role, revision,
       before, automaticRetry: false, outcome: 'unconfirmed',
-    })))) === 'created', 'release_capture_policy_intent_exists');
+    };
+    check(await intent.putIfAbsent('capture-policy.json', bytesStream(Buffer.from(JSON.stringify(binding)))) === 'created',
+      'release_capture_policy_intent_exists');
+    await retainIntent(structuredClone(binding));
   } catch (error) { release(true); throw error; }
   return Object.freeze({
     async enable() {

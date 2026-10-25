@@ -41,7 +41,7 @@ INSERT INTO shared_release_fixture VALUES(1);
   const connect = user => new Pool({ host: cluster.socket, port: 5432, user, database, max: 4,
     connectionTimeoutMillis: 5000, query_timeout: 135000 });
   const pool = connect(migrator), runtimePool = connect(runtime), backupPool = connect(backup);
-  let lease, floorCalls = 0;
+  let lease, floorCalls = 0, intentCalls = 0;
   try {
     await runMigrationPlan(pool, { sources, profile, target: { database, role: migrator, schema: 'public' } });
     await pool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${backup};
@@ -70,6 +70,8 @@ INSERT INTO shared_release_fixture VALUES(1);
     const journalRoot = async label => { const path = join(root, label); await mkdir(path, { mode: 0o700 }); return path; };
     const args = { pool, runtimePool, backupPool, database, plan, expected, beforeBackup, previousSourceSha: 'a'.repeat(40), lease,
       assertFloor: async () => { lease.assertHeld(); },
+      async verifyRetainedConstraints(q) { assert.equal((await q.query("SELECT current_setting('server_version_num')::int/10000 major")).rows[0].major, 18); },
+      retainCommitIntent: async value => { assert.match(value.transactionId, /^[1-9][0-9]*$/); intentCalls++; },
       retainCommittedFloor: async value => { assert.equal(value.afterDigest, plan.afterDigest); floorCalls++; } };
 
     const wrong = await journalRoot('migration-wrong-policy');
@@ -86,10 +88,18 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(floorCalls, 0); await pool.query('REVOKE UPDATE ON domain_media_storage_policy FROM PUBLIC');
     await assert.rejects(runPortableMigration({ ...args, journalRoot: rejected }), { code: 'EEXIST' });
 
+    const externalFailure = await journalRoot('migration-external-intent-failed');
+    await assert.rejects(runPortableMigration({ ...args, journalRoot: externalFailure,
+      async retainCommitIntent() { throw Error('synthetic shared intent unavailable'); } }), /synthetic shared intent unavailable/);
+    assert.equal((await pool.query("SELECT to_regclass('public.shared_release_fixture') relation")).rows[0].relation, null);
+    assert.deepEqual((await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, beforeLedger);
+    assert.equal(intentCalls, 0); assert.equal(floorCalls, 0);
+
     const goodRoot = await journalRoot('migration-confirmed');
     const result = await runPortableMigration({ ...args, journalRoot: goodRoot });
     assert.equal(result.outcome, 'committed'); assert.equal(result.commitStatus, 'confirmed');
     assert.deepEqual(result.applied, [pending]); assert.equal(floorCalls, 1);
+    assert.equal(intentCalls, 1);
     assert(result.probes.every(value => value.readOnly && value.tables > 300));
     assert.equal((await pool.query('SELECT count(*)::int count FROM shared_release_fixture')).rows[0].count, 1);
     const nextPlan = prepare(plan.afterLedger); let commits = 0;
@@ -105,6 +115,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     const unknownRoot = await journalRoot('migration-unknown');
     await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot }), /synthetic lost COMMIT reply/);
     assert.equal(commits, 1); assert.equal(floorCalls, 1);
+    assert.equal(intentCalls, 2);
     const failure = JSON.parse(await readFile(join(unknownRoot, 'failed.json'))); assert.equal(failure.commitStatus, 'unknown');
     const attempt = JSON.parse(await readFile(join(unknownRoot, 'attempt.json')));
     assert.deepEqual(await observeMigrationOutcome(pool, attempt), {
@@ -114,6 +125,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(commits, 1); lease.assertHeld();
     return { status: 'passed', realMigratorRole: true, migrationAndGrantsAtomic: true, existingIntentRefusesReplay: true,
       actualRuntimeAndBackupProbes: true, unknownCommitObservedWithoutReplay: true,
+      failedSharedIntentRollsBack: true,
       sourceInstallationVerified: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
   } finally {
     if (lease) await lease.release();

@@ -17,6 +17,10 @@ import { createWorkerDeployer, renderWorkerConfig } from '../../shared-release/p
 import { parseJsonc } from '../lib/wrangler.mjs';
 import { buildApplication, directoryDigest } from '../../shared-release/portable/build.mjs';
 import { git as fixtureGit } from './migration-fixtures.mjs';
+import { createControlStore } from '../../shared-release/portable/control-store.mjs';
+import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared-release/portable/coordinate-fence.mjs';
+import { replayReleaseFloor } from '../../shared-release/portable/floor.mjs';
+import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -752,6 +756,7 @@ test('uncertain capture-policy mutation must settle its exact backend before GC-
     disabled = true; throw Error('must not disable while an earlier UPDATE can still commit');
   } };
   const policy = await openCapturePolicy({ pool, database: 'fixture', role: 'operator',
+    async retainIntent(value) { assert.equal(value.pid, 4321); assert.equal(value.automaticRetry, false); },
     lease: { signal: new AbortController().signal, assertHeld() {} },
     revision: 'shared-backup-11111111-1111-1111-1111-111111111111', before: 'a'.repeat(64),
     intent: { async putIfAbsent() { intentWritten = true; return 'created'; } } });
@@ -761,7 +766,7 @@ test('uncertain capture-policy mutation must settle its exact backend before GC-
 });
 
 test('capture policy refuses a new enable after ownership is lost during intent persistence or before enable', async () => {
-  for (const point of ['intent', 'before-enable', 'ownership-check']) {
+  for (const point of ['intent', 'external-intent', 'before-enable', 'ownership-check']) {
     const controller = new AbortController(); let enables = 0, released = 0, held = true;
     const lease = { signal: controller.signal, assertHeld() { if (!held) throw Error('synthetic ownership lost'); } };
     const client = { on() {}, removeListener() {}, release() { released++; }, async query(input) {
@@ -771,6 +776,7 @@ test('capture policy refuses a new enable after ownership is lost during intent 
       throw Error('enable UPDATE must not be submitted');
     } };
     const policy = await openCapturePolicy({ pool: { async connect() { return client; } }, lease,
+      async retainIntent() { if (point === 'external-intent') controller.abort(Error('synthetic setup abort')); },
       database: 'fixture', role: 'operator', revision: 'shared-backup-11111111-1111-1111-1111-111111111111', before: 'a'.repeat(64),
       intent: { async putIfAbsent() { if (point === 'intent') controller.abort(Error('synthetic setup abort')); return 'created'; } } });
     if (point === 'before-enable') controller.abort(Error('synthetic setup abort'));
@@ -785,7 +791,7 @@ async function deployFixture(t) {
   const workRoot = await diskFixture(t, 'fp-deploy-'), controller = new AbortController();
   const oldVersion = '11111111-1111-4111-8111-111111111111', newVersion = '22222222-2222-4222-8222-222222222222';
   const sourceSha = 'a'.repeat(40), previous = 'b'.repeat(40), worker = 'freedom-platform-staging-next';
-  let published = false, polls = 0, cacheEnabled = false, failPoll = false;
+  let published = false, polls = 0, cacheEnabled = false, failPoll = false, logs;
   const bindings = source => [
     ...Object.entries({ APP_ORIGIN: 'https://staging.freetwai.com', FREEDOM_ENV: 'staging',
       FREEDOM_DATABASE_NAME: 'freedom_staging_next', FREEDOM_TRUST_CF_CONNECTING_IP: 'true',
@@ -816,6 +822,8 @@ async function deployFixture(t) {
     else if (url.pathname.endsWith('/domains')) result = [];
     else if (url.pathname.endsWith('/routes')) result = [{ id: 'fixture-route', pattern: 'staging.freetwai.com/*', script: worker }];
     else if (url.pathname.includes('/hyperdrive/configs/')) result = { caching: { disabled: !cacheEnabled } };
+    else if (url.pathname.endsWith('/environments/production')) result = { script: { logpush: false, tail_consumers: null,
+      compatibility_date: runtime.compatibility_date, compatibility_flags: runtime.compatibility_flags, observability: logs } };
     else throw Error('unexpected provider path');
     return new Response(JSON.stringify({ success: true, result }));
   };
@@ -825,14 +833,17 @@ async function deployFixture(t) {
   const source = parseJsonc(await readFile(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'));
   return { deployer, before, sourceSha, oldVersion, newVersion, controller,
     args: { sourceSha, before, source, sourceRoot: '/fixture/source', workRoot,
+      async retainIntent(value) { assert.equal(value.sourceSha, sourceSha); assert.equal(value.automaticRetry, false); },
       lease: { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } } },
-    publish() { published = true; }, failNextPoll() { failPoll = true; }, enableCache() { cacheEnabled = true; } };
+    publish() { published = true; }, failNextPoll() { failPoll = true; }, enableCache() { cacheEnabled = true; },
+    setLogs(value) { logs = value; } };
 }
 
 test('Worker publish preserves bindings/secrets/routes, records stale reads, and deploys once', async t => {
   const f = await deployFixture(t); let calls = 0, sleeps = 0;
   const config = renderWorkerConfig({ ...f.args, target: 'staging-next' });
   assert.equal(config.keep_vars, true); assert.deepEqual(config.routes, []);
+  assert.deepEqual(config.observability, { enabled: false }); assert.equal(config.logpush, false);
   assert.equal(config.vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED, 'false');
   assert.equal(config.vars.FREEDOM_RELEASE_SHA, f.sourceSha);
   assert(!('TOTP_ENCRYPTION_KEY' in config.vars));
@@ -914,4 +925,193 @@ test('application build copies only the selected commit, binds outputs and rejec
   await assert.rejects(buildApplication({ sourceRoot, sourceSha, sourceTree, workRoot: root,
     target: 'staging-next', before: f.before, signal: f.controller.signal, execute }), /release_build_source_changed/);
   assert.equal(calls.length, 6);
+});
+
+async function controlFixture(t) {
+  const directory = await diskFixture(t, 'fp-control-'), controller = new AbortController();
+  const epoch = '11111111-1111-4111-8111-111111111111', target = 'staging-next';
+  const prefix = `shared-release/v1/${target}/${epoch}/`, map = new Map(); let puts = 0, mode = 'normal';
+  const bytes = value => Buffer.from(JSON.stringify(value) + '\n');
+  const seed = bytes({ format: 'freedom.shared-control-record/v1', target, epoch, generation: 0,
+    previousSha256: null, seedSha256: null, createdAt: '2026-10-25T00:00:00Z', data: { state: 'ready' } });
+  const seedSha256 = hash(seed), seedKey = prefix + 'records/00000000-' + seedSha256 + '.json'; map.set(seedKey, seed);
+  const lease = { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } };
+  const fetchImpl = async (address, options) => {
+    const url = new URL(address); assert.equal(url.origin, 'https://api.cloudflare.com'); assert.equal(options.redirect, 'error');
+    if (url.searchParams.has('prefix')) {
+      assert.equal(options.method, 'GET');
+      const rows = [...map].filter(([key]) => key.startsWith(url.searchParams.get('prefix'))).sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => ({ key, size: value.length }));
+      // Deliberately paginate after a single item, independently of per_page.
+      const offset = Number(url.searchParams.get('cursor') ?? 0), more = offset + 1 < rows.length;
+      return new Response(JSON.stringify({ success: true, result: rows.slice(offset, offset + 1),
+        result_info: { is_truncated: more, ...(more ? { cursor: String(offset + 1) } : {}) } }));
+    }
+    const key = decodeURIComponent(url.pathname.split('/objects/')[1]);
+    if (options.method === 'PUT') {
+      puts++; assert(!map.has(key)); map.set(key, Buffer.from(options.body));
+      if (mode === 'lost-put') throw Error('synthetic lost control reply');
+      return new Response(null, { status: 200 });
+    }
+    assert.equal(options.method, 'GET');
+    if (map.has(key)) return new Response(map.get(key));
+    if (mode === 'abort-before-put') controller.abort(Error('synthetic control lease lost'));
+    return new Response(null, { status: 404 });
+  };
+  const options = { accountId: 'a'.repeat(32), bucket: 'fixture-backups', target, epoch, seedSha256,
+    token: 'synthetic-control-token', lease, fetchImpl };
+  return { directory, map, prefix, seedKey, seedSha256, options, store: createControlStore(options),
+    setMode(value) { mode = value; }, puts() { return puts; } };
+}
+
+test('external control journal pins its seed and validates every paginated predecessor', async t => {
+  const f = await controlFixture(t);
+  const first = (await f.store.load()).at(-1);
+  const next = await f.store.append({ previous: first, data: { state: 'release-started', runId: 1 }, intentDirectory: f.directory });
+  assert.equal(next.generation, 1); assert.equal(next.record.previousSha256, f.seedSha256); assert.equal(f.puts(), 1);
+  const chain = await createControlStore(f.options).load(); assert.equal(chain.length, 2);
+  assert.equal(chain[1].record.data.state, 'release-started');
+  await assert.rejects(f.store.append({ previous: first, data: { state: 'replay' }, intentDirectory: f.directory }), /release_control_head_changed/);
+  assert.equal(f.puts(), 1);
+  await assert.rejects(createControlStore({ ...f.options, seedSha256: 'f'.repeat(64) }).load(), /release_control_history_gap_or_fork/);
+  const original = f.map.get(next.key); f.map.set(next.key, Buffer.from(original)); f.map.get(next.key)[20] ^= 1;
+  await assert.rejects(f.store.load(), /release_control_chain_read_failed/);
+  f.map.set(next.key, original);
+  f.map.set(f.prefix + 'records/00000001-' + 'f'.repeat(64) + '.json', original);
+  await assert.rejects(f.store.load(), /release_control_history_gap_or_fork/);
+});
+
+test('control intent survives an unknown PUT and setup ownership loss submits zero PUTs', async t => {
+  const f = await controlFixture(t), first = (await f.store.load()).at(-1); f.setMode('lost-put');
+  await assert.rejects(f.store.append({ previous: first, data: { state: 'unsettled', runId: 2 }, intentDirectory: f.directory }), /release_control_write_unknown/);
+  assert.equal(f.puts(), 1);
+  const fresh = createControlStore(f.options), head = (await fresh.load()).at(-1);
+  assert.equal(head.record.data.state, 'unsettled');
+  await assert.rejects(fresh.append({ previous: first, data: { state: 'replay' }, intentDirectory: f.directory }), /release_control_head_changed/);
+  assert.equal(f.puts(), 1);
+  const g = await controlFixture(t), seed = (await g.store.load()).at(-1); g.setMode('abort-before-put');
+  await assert.rejects(g.store.append({ previous: seed, data: { state: 'started' }, intentDirectory: g.directory }), /synthetic control lease lost/);
+  assert.equal(g.puts(), 0);
+});
+
+function coordinateFixture() {
+  const names = ['canonical_repositories', 'catalog_repo_observations', 'development_grants', 'github_items',
+    'github_repository_events', 'github_repository_metrics', 'github_sync_repositories', 'maintainer_repositories', 'oss_projects', 'skill_star_support'];
+  const constraints = names.map(table => ({ schema: 'public', table, name: 'fp166_live_coordinate_fence', type: 'c',
+    validated: true, enforced: true, no_inherit: false, deferrable: false, deferred: false, definition: 'CHECK (true)' }));
+  const migration = { name: '166_freetwai_repository_transfer.sql', raw_sha256: '6d387e7fe02494056158aaa4365a960b06b3006f17b7147060d1b63d4204caca',
+    ledger_sha256: '1e72cf94952d42fe19f20bcf278d89be873b4a598dfb92adb41c109463abc188' };
+  const inventory = { format: 'freedom.operator-coordinate-fence-inventory/v1', postgres_major: 18, sql_sha256: 'a'.repeat(64), constraints };
+  const inventorySha256 = hash(JSON.stringify(inventory));
+  const variants = { format: 'freedom.restore-exact-check-variants/v1', originalInventorySha256: inventorySha256,
+    originalFenceSqlSha256: inventory.sql_sha256, diagnosticSha256: 'b'.repeat(64),
+    variants: ['canonical_repositories', 'catalog_repo_observations', 'development_grants', 'maintainer_repositories', 'oss_projects'].map(table => ({
+      schema: 'public', table, name: 'fp166_live_coordinate_fence', originalDefinitionSha256: hash('CHECK (true)'), restoredDefinition: 'CHECK ((true))',
+    })) };
+  const legacy = { restoreQuarantineRequired: true, retained172: {
+    floor: { floor: { environment: 'production', minimumSchema: 172 }, operatorExtensions: { coordinateFence: {
+      format: 'freedom.operator-coordinate-fence/v1', commit_status: 'confirmed', transaction_id: '123',
+      retain_after_admission_off: true, restore_verification_required: true, deployment_authorized: false,
+      inventory_sha256: inventorySha256, sql_sha256: inventory.sql_sha256, migration, constraints,
+    } } }, binding: { schemaLedger: [{ name: migration.name, sha256: migration.ledger_sha256 }] },
+  } };
+  return { target: 'next', legacy, inventory, inventorySha256, variants, variantsSha256: hash(JSON.stringify(variants)) };
+}
+
+test('retained coordinate fence accepts only original live constraints and exact reviewed restore variants', async () => {
+  const input = coordinateFixture(), authority = validateCoordinateAuthority(input);
+  let rows = structuredClone(input.inventory.constraints);
+  const q = { async query(sql) { return { rows: sql.includes('server_version_num') ? [{ major: 18 }] : rows }; } };
+  assert.equal((await verifyCoordinateFence(q, authority)).constraints, 10);
+  rows[0].definition = 'CHECK ((true))';
+  await assert.rejects(verifyCoordinateFence(q, authority), /release_coordinate_definition_changed/);
+  assert.equal((await verifyCoordinateFence(q, authority, { restored: true })).accepted[0], 'reviewed_pg18_roundtrip');
+  rows[0].definition = 'CHECK (false)';
+  await assert.rejects(verifyCoordinateFence(q, authority, { restored: true }), /release_coordinate_definition_changed/);
+  rows = structuredClone(input.inventory.constraints); rows[0].enforced = false;
+  await assert.rejects(verifyCoordinateFence(q, authority), /release_coordinate_constraint_changed/);
+  input.variants.variants[0].originalDefinitionSha256 = 'f'.repeat(64);
+  assert.throws(() => validateCoordinateAuthority(input), /release_coordinate_variant_binding_invalid/);
+});
+
+function floorFixture() {
+  const before = [{ name: '001_initial.sql', sha256: '1'.repeat(64) }];
+  const after = [...before, { name: '002_next.sql', sha256: '2'.repeat(64) }];
+  const id = '11111111-1111-4111-8111-111111111111';
+  const request = { runId: 12, runAttempt: 1, sourceSha: sha, sourceTree: tree, controllerSha: main,
+    operatorImage: installation.image, configSha256: installation.configSha256 };
+  const chain = [{ record: { data: { format: 'freedom.shared-floor-seed/v1', authority: { legacyFloorSha256: '3'.repeat(64) },
+    state: { sourceSha: main, deployedSourceSha: main, sourceTree: tree, schemaVersion: 1, schemaLedger: before,
+      bindingsSha256: '4'.repeat(64), materialPolicySha256: '5'.repeat(64), pending: null } } } }];
+  const options = { isAncestor: (a, b) => (a === main && b === sha) || a === b };
+  const event = (kind, stage, proof, extra = {}) => ({ record: { data: { format: 'freedom.shared-floor-event/v1',
+    kind, stage, proof, runId: 12, runAttempt: 1, ...extra } } });
+  const add = value => { chain.push(value); return replayReleaseFloor(chain, options).state; };
+  const begin = event('begin', undefined, undefined, { request, candidate: { sourceSha: sha, sourceTree: tree, schemaLedger: after } });
+  const capture = { format: 'freedom.shared-capture-policy-intent/v1', pid: 123, application: 'fp-capture-' + id,
+    revision: 'shared-backup-' + id, before: '6'.repeat(64), automaticRetry: false };
+  const archive = { setId: id, archiveSha256: '7'.repeat(64), bytes: 1234, automaticRetry: false };
+  const backup = sourceSha => ({ ...archive, sourceSha, remoteReadback: 'verified', restore: 'database_and_objects_restored',
+    cleanupVerified: true, exposure: 'quarantine' });
+  const runBackup = (stage, sourceSha) => {
+    add(event('intent', stage, capture, { operation: 'capture-policy' }));
+    add(event('intent', stage, archive, { operation: 'archive' })); return add(event('passed', stage, backup(sourceSha)));
+  };
+  const commit = { transactionId: '123', source: sha, tree, beforeDigest: migrationLedgerDigest(before),
+    afterDigest: migrationLedgerDigest(after), automaticRetry: false };
+  return { chain, options, event, add, begin, runBackup, before, after, commit, id, request };
+}
+
+test('shared floor advances immediately after confirmed commit and keeps incomplete later verification unsettled', () => {
+  const f = floorFixture(); f.add(f.begin); f.runBackup('backup-before', main);
+  f.add(f.event('intent', 'migration', f.commit, { operation: 'commit' }));
+  let state = f.add(f.event('committed', 'migration', { ...f.commit, ledger: f.after }));
+  assert.equal(state.sourceSha, sha); assert.equal(state.schemaVersion, 2); assert.equal(state.pending.stage, 1);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.begin], f.options), /release_floor_unsettled/);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'deploy', {})], f.options), /release_floor_stage_mismatch/);
+  f.add(f.event('passed', 'migration', { transactionId: '123', commitStatus: 'confirmed', ledgerVerified: true,
+    runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) }));
+  f.add(f.event('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id,
+    configSha256: '8'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+  f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
+  f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  f.runBackup('backup-after', sha);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'handoff', { scheduledBackupsVerified: true })], f.options),
+    /release_floor_schedule_unverified/);
+  state = f.add(f.event('passed', 'handoff', { cleanupVerified: true, schedule: { format: 'freedom.verified-scheduled-backup/v1',
+    runId: 10, operatorImage: f.request.operatorImage, configSha256: f.request.configSha256,
+    receiptSha256: '9'.repeat(64), completedAt: '2026-10-25T00:00:00Z' } }));
+  assert.equal(state.pending, null); assert.equal(state.deployedSourceSha, sha);
+});
+
+test('shared floor rejects rollback, changed ledger, missing mutation intents and duplicate attempts', () => {
+  for (const patch of [value => { value.candidate.schemaLedger[0].sha256 = 'f'.repeat(64); },
+    value => { value.request.sourceSha = value.candidate.sourceSha = 'f'.repeat(40); }]) {
+    const f = floorFixture(), begin = structuredClone(f.begin); patch(begin.record.data);
+    assert.throws(() => replayReleaseFloor([...f.chain, begin], f.options), /release_floor_(ledger|source)_rewind/);
+  }
+  const f = floorFixture(); f.add(f.begin);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'backup-before', {})], f.options), /release_floor_capture_intent_missing/);
+  f.runBackup('backup-before', main);
+  const intent = f.event('intent', 'migration', f.commit, { operation: 'commit' }); f.add(intent);
+  assert.throws(() => replayReleaseFloor([...f.chain, intent], f.options), /release_floor_intent_invalid/);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'migration', { transactionId: '123', commitStatus: 'confirmed',
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) })], f.options), /release_floor_commit_unverified/);
+});
+
+test('failed shared publish intent prevents all provider mutations', async t => {
+  const f = await deployFixture(t); let calls = 0;
+  await assert.rejects(f.deployer.publish({ ...f.args,
+    async retainIntent() { throw Error('synthetic shared intent failed'); }, async execute() { calls++; } }), /synthetic shared intent failed/);
+  assert.equal(calls, 0);
+});
+
+test('Worker Logs changes are rejected before upload and explicit disabled state is preserved', async t => {
+  const f = await deployFixture(t); let calls = 0;
+  f.setLogs({ enabled: false }); assert.deepEqual((await f.deployer.inspect()).observability, { enabled: false });
+  for (const value of [{ enabled: true }, { enabled: false, logs: { enabled: true } }, { enabled: false, traces: { enabled: true } }]) {
+    f.setLogs(value);
+    await assert.rejects(f.deployer.publish({ ...f.args, async execute() { calls++; } }), /release_deploy_observability_unsupported/);
+  }
+  assert.equal(calls, 0);
 });

@@ -51,7 +51,7 @@ does not pretend to validate that currently unimplemented provider schema.
 | `preflight` | Read actual Worker/source and DB identities; compare retained rollback floor and complete ledger, preserve existing flags/secrets/bindings, acquire the same DB backup/release lease as scheduled and legacy operators, maintain heartbeat throughout |
 | `backup-before` | Capture the previously deployed release using the existing exported DB snapshot, maintenance pins and object evidence; immutable offsite archive, full readback; isolated DB/object restore and floor/policy checks; cleanup and GC-off readback |
 | `migration` | Use the reviewed installed migration runner and exact catalog; expected DB/role/schema checks; preserve transactional migrations plus runtime grants, final ledger checks and explicit commit outcome; observe an uncertain commit instead of rerunning |
-| `deploy` | Build/package only the selected reviewed source using pinned tools; preserve current bindings/flags/secrets; invoke Cloudflare deployment once and retain provider confirmation |
+| `deploy` | Build/package only the selected reviewed source using pinned tools; preserve current bindings/flags/secrets; invoke Wrangler once and retain provider confirmation |
 | `health` | Read the actual public health endpoint and schema evidence, verify exact release SHA and approved smoke observations; HTTP 200 alone is insufficient |
 | `backup-after` | Capture and offsite-readback the new source/schema, then restore DB and objects in owned isolated services, retain floor/material-policy/quarantine checks, cleanup |
 | `handoff` | Advance the external retained floor at the approved point, confirm scheduled backup ownership still works, settle all owned temporary resources and maintenance pins, release the lease |
@@ -59,7 +59,9 @@ does not pretend to validate that currently unimplemented provider schema.
 Use the existing daily backup pipeline's source/object/restore semantics, not only
 `pg_dump`. Do not change application feature flags during this infrastructure port.
 Only owner-recorded feature decisions authorize flag values; Environment config
-does not independently approve a new flag. Mutation is attempted once: provider
+does not independently approve a new flag. The controller invokes Wrangler once;
+pinned Wrangler 4.138 can internally retry a version upload up to three attempts
+on retryable network/API errors. This is not exactly-once provider mutation. Provider
 deployment-list and edge-health propagation use bounded reads, preserving every
 observation, including an initial stale result. Never re-deploy because an early
 read still shows the predecessor. Measure the actual hosted-runner/database-region
@@ -88,9 +90,10 @@ local R2 recovery, with conditional capture-policy cleanup. Its caller retains
 the same release lease before/after this backup. It checks complete ledger and
 material-policy digests on source and restored databases and the Worker binding
 digest on the source. Its required expectations are inputs from the installed
-controller, not authenticated external-floor evidence: the durable floor reader,
-approved policy authority and scheduler
-handoff are still open. Do not install it as an independently enabled deployer.
+controller. Its mandatory external ports now retain capture/archive intent and
+verify the retained constraints on source and restored databases. The durable
+floor reader exists, but the independently pinned live seed, full image and
+scheduler handoff remain open. Do not install it as an independently enabled deployer.
 The integration fixture uses real PG18, native local R2 and synthetic data;
 Cloudflare transport uses disk-backed injected HTTP responses. It covers capture
 snapshot isolation, full archive readback, object restoration, corruption and
@@ -102,12 +105,25 @@ canonical grants and read-only verifier are read from the admitted Git object;
 the port has no private-host imports. It checks the complete before/after ledger,
 material policy and GC state, role ownership, RLS inventory, PUBLIC/sequence/table
 privileges, then probes actual runtime and backup logins in read-only transactions.
-Private create-only intents prevent replay. A lost COMMIT reply remains unknown;
+Private create-only intents plus mandatory external intent retention precede
+COMMIT. An unavailable shared journal aborts the transaction before COMMIT.
+A lost COMMIT reply remains unknown;
 `observeMigrationOutcome` reads the transaction status and ledger without granting
 permission to resume. The native PG18 fixture verifies atomic rollback and a
 committed transaction whose reply was lost. The enclosing operator must still
 provide authenticated floor assertion/advancement and a reviewed verification
 contract; its fixture floor callback is not live retained-floor evidence.
+
+`control-store.mjs` validates a complete private R2 append chain rooted in an
+independently pinned seed and original legacy authority bytes. It refuses missing
+records, forks, changed predecessors and unknown writes, under the shared lease;
+it does not claim R2-enforced immutability/CAS. `floor.mjs` rejects unfinished
+operations, source/ledger rollback and skipped phases. Confirmed COMMIT advances
+the floor before post-commit probes, separately from passing the migration phase.
+`coordinate-fence.mjs` validates the retained production migration166 constraints
+and only the five already-reviewed PG18 restore definition variants. Original
+legacy material-policy bytes remain authoritative; this port cannot bootstrap a
+floor from the live database. Provisioning and the full operator are still needed.
 
 `buildApplication` copies the selected Git commit into a fresh independent build
 directory, installs its lockfile, builds the portal and runs the image's fixed
@@ -120,6 +136,9 @@ provider GETs retain stale/failed observations; an uncertain publish is never
 replayed. The mutation journal must still be retained outside the runner by the
 enclosing operator. Local actual build/dry-run and live read-only provider checks
 are separate evidence from synthetic publish tests; none proves a real deployment.
+Worker Logs are read from service metadata as well as settings; the present
+absent/disabled configuration is explicitly retained. Any enabled/unknown Logs or
+traces shape refuses before upload. `--keep-vars` is not observability preservation.
 Capture-policy enable now receives the release lease and checks ownership directly
 before its UPDATE, including after asynchronous intent persistence. Conditional
 cleanup of an already-attempted write remains available after ownership loss.

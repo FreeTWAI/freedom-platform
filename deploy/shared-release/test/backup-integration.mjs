@@ -95,6 +95,11 @@ export async function verifyBackup({ root, openCluster, execute }) {
         operatorSource: 'b'.repeat(40), setId: randomUUID(), createdAt: new Date().toISOString(), runDirectory: root, signal: lease.signal },
       workRoot: root, pool, role: source.connection.PGUSER, runtimeRole: 'fp_fixture_runtime', lease, transport, expected,
       connection: source.connection, binDirectory: '/usr/local/bin',
+      // Fixture-only control ports. The installed entry supplies the R2 floor.
+      async retainIntent(operation, value) {
+        assert(['capture-policy', 'archive'].includes(operation)); assert.equal(value.automaticRetry, false);
+      },
+      async verifyRetainedFloor(target) { assert.equal((await observeBackupControl(target)).ledgerSha256, expected.ledgerSha256); },
       execute: async (program, args, options) => {
         if (program.endsWith('/pg_dump') && args.includes('--format=custom') && !late) late = await asset();
         if (program.endsWith('/pg_restore')) restores++;

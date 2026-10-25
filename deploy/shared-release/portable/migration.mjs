@@ -109,16 +109,17 @@ async function probe(pool, database, suffix, tables) {
   } finally { q.release(broken); }
 }
 
-/** assertFloor and retainCommittedFloor are mandatory authenticated external
+/** assertFloor, retainCommitIntent and retainCommittedFloor are mandatory external
  * control ports. No self-observed digest or no-op default is release authority.
  * journalRoot must persist privately after an uncertain COMMIT; never replay it. */
 export async function runPortableMigration({ pool, runtimePool, backupPool, database, plan, expected,
-  beforeBackup, previousSourceSha, journalRoot, lease, assertFloor, retainCommittedFloor }) {
+  beforeBackup, previousSourceSha, journalRoot, lease, assertFloor, verifyRetainedConstraints, retainCommitIntent, retainCommittedFloor }) {
   check(/^[a-z][a-z0-9_]{0,45}$/.test(database) && isSha(previousSourceSha)
     && plan?.canonical?.sourceCommit === plan.sourceCommit && isSha(plan.sourceCommit) && isSha(plan.sourceTree)
     && isDigest(expected?.materialPolicySha256) && Array.isArray(expected.rlsTables) && expected.rlsTables.length > 0
     && Array.isArray(expected.runtimeUnreadable) && Array.isArray(expected.tablePrivileges)
-    && typeof assertFloor === 'function' && typeof retainCommittedFloor === 'function', 'release_migration_input_invalid');
+    && typeof assertFloor === 'function' && typeof verifyRetainedConstraints === 'function' && typeof retainCommitIntent === 'function'
+    && typeof retainCommittedFloor === 'function', 'release_migration_input_invalid');
   plan = structuredClone(plan); expected = structuredClone(expected); beforeBackup = structuredClone(beforeBackup);
   const role = database + '_migrator';
   const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
@@ -156,12 +157,17 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
         same(await invariants(q), baseline, 'release_migration_invariants_changed');
         await runCanonicalSql(q, plan.canonical, '20-runtime-grants.psql', { runtime: database + '_app', migrator: role });
         await verify(q, { database, plan, expected });
+        await verifyRetainedConstraints(q);
         freshBackup(); await assertFloor(); assertHeld();
         transactionId = (await q.query('SELECT pg_current_xact_id()::text id')).rows[0].id;
         check(/^[1-9][0-9]*$/.test(transactionId), 'release_migration_xid_invalid');
         const binding = { source: plan.sourceCommit, tree: plan.sourceTree, database, transactionId,
           beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, automaticRetry: false };
         await journal(journalRoot, 'attempt', binding);
+        // A fresh runner must be able to observe this transaction even when the
+        // local disk and COMMIT reply are lost. Failure here rolls back the DDL.
+        await retainCommitIntent(structuredClone(binding));
+        freshBackup(); assertHeld();
         outcome = 'unknown';
         const result = await q.query('COMMIT');
         check(result.command === 'COMMIT', 'release_migration_commit_unconfirmed'); outcome = 'confirmed';
@@ -178,6 +184,7 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
       expectedProfileDigest: i.profile_digest, target: { database, role, schema: 'public' } });
     same(result.applied, plan.pending, 'release_migration_plan_changed');
     await q.query('BEGIN READ ONLY'); const tables = await verify(q, { database, plan, expected });
+    await verifyRetainedConstraints(q);
     same(await invariants(q), baseline, 'release_migration_post_commit_changed'); await q.query('ROLLBACK');
     const probes = [await probe(runtimePool, database, '_app', tables.filter(row => row.readable).map(row => row.relname)),
       await probe(backupPool, database, '_backup', tables.map(row => row.relname))];

@@ -23,6 +23,13 @@ const hash = value => createHash('sha256').update(serialized(value)).digest('hex
 const retained = bindings => bindings.filter(binding => binding.name !== 'FREEDOM_RELEASE_SHA').map(canonical).sort((a, b) => a.name.localeCompare(b.name, 'en'));
 const sortedBindings = bindings => [...bindings].sort((a, b) => a.name.localeCompare(b.name, 'en'));
 
+function disabledObservability(value) {
+  // Current environments have no Workers Logs configuration. Refuse a newly
+  // enabled/extended shape before upload; --keep-vars does not preserve it.
+  check(value == null || serialized(value) === serialized({ enabled: false }), 'release_deploy_observability_unsupported');
+  return { enabled: false };
+}
+
 async function persist(root, name, value) {
   await privateBackupRoot(root);
   const f = await open(join(root, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -88,6 +95,7 @@ export function renderWorkerConfig({ target, source, sourceRoot, sourceSha, befo
     compatibility_flags: source.compatibility_flags, alias, workers_dev: false, preview_urls: false,
     // Preserve routes already owned by this Worker. Never alter DNS or Access.
     routes: [], triggers: { crons: before.crons }, keep_vars: true,
+    observability: disabledObservability(before.observability), logpush: false, tail_consumers: [],
     placement: { region: 'aws:ap-northeast-1' },
     assets: { ...source.assets, directory: join(root, source.assets.directory) },
     hyperdrive: before.bindings.filter(b => b.type === 'hyperdrive').map(b => ({ binding: b.name, id: b.id })),
@@ -153,9 +161,10 @@ export function createWorkerDeployer({ accountId, zoneId, target, token, signal,
   };
   const inspect = async () => {
     const current = await active();
-    const [settings, schedules, domains, subdomain, routes] = await Promise.all([
+    const [settings, schedules, domains, subdomain, routes, service] = await Promise.all([
       get(base + '/settings'), get(base + '/schedules'), get(account + '/workers/domains?service=' + spec.worker),
       get(base + '/subdomain'), get('/zones/' + zoneId + '/workers/routes'),
+      get(account + '/workers/services/' + spec.worker + '/environments/production'),
     ]);
     same(sortedBindings(settings.bindings), sortedBindings(current.bindings), 'release_deploy_settings_inconsistent');
     check(Array.isArray(domains) && domains.length === 0 && subdomain.enabled === false && subdomain.previews_enabled === false,
@@ -167,23 +176,33 @@ export function createWorkerDeployer({ accountId, zoneId, target, token, signal,
       && current.placement.target[0].region === 'aws:ap-northeast-1', 'release_deploy_placement_changed');
     check(settings.logpush === false && Array.isArray(settings.tail_consumers) && settings.tail_consumers.length === 0,
       'release_deploy_observability_unsupported');
+    check(service.script?.logpush === false && (service.script.tail_consumers == null
+      || (Array.isArray(service.script.tail_consumers) && service.script.tail_consumers.length === 0)),
+    'release_deploy_observability_unsupported');
+    const observability = disabledObservability(service.script.observability);
+    same(disabledObservability(settings.observability), observability, 'release_deploy_observability_inconsistent');
+    same(service.script.compatibility_date, current.runtime.compatibility_date, 'release_deploy_settings_inconsistent');
+    same(service.script.compatibility_flags, current.runtime.compatibility_flags, 'release_deploy_settings_inconsistent');
     const hd = current.bindings.find(b => b.type === 'hyperdrive');
     check((await get(account + '/hyperdrive/configs/' + hd.id)).caching?.disabled === true, 'release_deploy_hyperdrive_cache_enabled');
     const last = await active(); same(last, current, 'release_deploy_version_changed_during_read');
-    return { target, ...current, crons, bindingsSha256: hash(retained(current.bindings)),
-      topologySha256: hash({ owned, domains, subdomain, crons }), runtimeSha256: hash({ runtime: current.runtime, placement: current.placement }) };
+    return { target, ...current, crons, observability, bindingsSha256: hash(retained(current.bindings)),
+      topologySha256: hash({ owned, domains, subdomain, crons }), runtimeSha256: hash({ runtime: current.runtime, placement: current.placement, observability }) };
   };
   return Object.freeze({ inspect, async publish({ sourceSha, before, source, sourceRoot, workRoot, lease,
-    execute = executeWrangler, sleep = ms => delay(ms, undefined, { signal }) }) {
-    check(isSha(sourceSha) && before?.target === target && lease?.signal === signal, 'release_deploy_request_invalid');
+    retainIntent, execute = executeWrangler, sleep = ms => delay(ms, undefined, { signal }) }) {
+    check(isSha(sourceSha) && before?.target === target && lease?.signal === signal
+      && typeof retainIntent === 'function', 'release_deploy_request_invalid');
     before = structuredClone(before); source = structuredClone(source);
     const assertHeld = () => { signal.throwIfAborted(); lease.assertHeld(); };
     assertHeld(); await privateBackupRoot(workRoot);
     const config = renderWorkerConfig({ target, sourceSha, before, source, sourceRoot });
     same(await inspect(), before, 'release_deploy_predecessor_changed');
     await persist(workRoot, 'wrangler.publish.json', config);
-    await persist(workRoot, 'deploy-intent.json', { sourceSha, previousSourceSha: before.sourceSha, previousVersion: before.versionId,
-      target, configSha256: hash(config), automaticRetry: false, outcome: 'unknown' });
+    const intent = { sourceSha, previousSourceSha: before.sourceSha, previousVersion: before.versionId,
+      target, configSha256: hash(config), automaticRetry: false, providerUploadRetryLimit: 3, outcome: 'unknown' };
+    await persist(workRoot, 'deploy-intent.json', intent);
+    await retainIntent(structuredClone(intent));
     assertHeld();
     const result = await execute({ configPath: join(workRoot, 'wrangler.publish.json'), sourceSha, accountId, token, cwd: workRoot, signal });
     check(UUID.test(result?.versionId), 'release_deploy_provider_receipt_missing');
