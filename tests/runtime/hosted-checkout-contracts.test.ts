@@ -32,7 +32,7 @@ test('closed errors and the generated hosted checkout bundle cover each JSON req
   const samples:[string,unknown][]=[
     ['member-order-query',{}],['member-order-summary',memberSummary],['member-order-page',{items:[memberSummary],next_cursor:null}],
     ['buyer-identity-header','guest'],['shipping-method-ref','home'],['delivery-field-error-code','required'],['shipping-unavailable-reason','fulfilment_not_agreed'],['checkout-shipping',frozenShipping],
-    ['cart-quote-input',input],['cart-quote',{publication_revision:'1',currency:'TWD',lines:[{...item,options:[],state:'ok'}],merchandise_total_minor:100,discounts:[],delivery_options:[],shipping:{state:'quoted',method:'home',groups:[{group_ref:'g1',amount_minor:0}],total_minor:0},total_minor:100,payment_options:[{method:'immediate_card',available:true,reason:null}]}],
+    ['cart-quote-input',input],['cart-quote',{required_consents:[],publication_revision:'1',currency:'TWD',lines:[{...item,options:[],state:'ok'}],merchandise_total_minor:100,discounts:[],delivery_options:[],shipping:{state:'quoted',method:'home',groups:[{group_ref:'g1',amount_minor:0}],total_minor:0},total_minor:100,payment_options:[{method:'immediate_card',available:true,reason:null}]}],
     ['checkout-input',{...input,contact:order.contact,delivery:{}}],['checkout',{checkout_ref:id,terms,terms_sha256:hash,expires_at:time}],
     ['placement-input',{terms_sha256:hash,client_order_id:id}],['placement',{order,payment:null}],['order',order],['redeem-input',{token:'synthetic'}],
     ['payment-query-input',{}],['payment-query',order],['payment-handoff-input',{}],['payment-handoff',{handoff_url:'/pay/ecpay/'+'A'.repeat(43),attempt_ref:id,expires_at:time}],
@@ -138,5 +138,20 @@ x=json.load(sys.stdin)
 for c in x['cases']:
  assert Draft202012Validator(x['bundle']['$defs'][c['name']],format_checker=FormatChecker()).is_valid(c['value'])==c['valid'],c
 print(len(x['cases']))`],{input:JSON.stringify({bundle,cases}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
+});
+
+test('cart quote requires policy consent metadata with matching strict Zod and generated schema vectors',()=>{
+  const quote={publication_revision:'1',currency:'TWD',lines:[{sku:'P0001',title:'合成商品',options:[],unit_price_minor:100,quantity:1,line_total_minor:100,state:'ok'}],merchandise_total_minor:100,discounts:[],delivery_options:[],shipping:{state:'not_configured',groups:[],total_minor:null},total_minor:null,payment_options:[],required_consents:[]};
+  const policy={policy_kind:'storefront.shipping',policy_version_id:randomUUID(),label:'配送政策',url:'/shops/synthetic-shop/policies/shipping'};
+  const cases:{value:unknown;valid:boolean}[]=[{value:quote,valid:true},{value:{...quote,required_consents:[policy]},valid:true},{value:{...quote,required_consents:undefined},valid:false}];
+  for(const extra of [{label:undefined},{url:undefined},{policy_version_id:'invalid'},{url:'https://foreign.test/shops/synthetic-shop/policies/shipping'},{url:policy.url+'\n'},{url:policy.url+'?x=1'},{body:'forbidden'}])cases.push({value:{...quote,required_consents:[{...policy,...extra}]},valid:false});
+  for(const sample of cases)assert.equal(c.CartQuoteResponseSchema.safeParse(sample.value).success,sample.valid);
+  const bundle=JSON.parse(readFileSync(new URL('../../contracts/guild-launchpad/v1/hosted-checkout.schema.json',import.meta.url),'utf8'));
+  const result=spawnSync('python3',['-c',`import json,sys
+from jsonschema import Draft202012Validator,FormatChecker
+x=json.load(sys.stdin)
+for c in x['cases']: assert Draft202012Validator(x['schema'],format_checker=FormatChecker()).is_valid(c['value'])==c['valid'],c
+print(len(x['cases']))`],{input:JSON.stringify({schema:bundle.$defs['cart-quote'],cases}),encoding:'utf8',timeout:15000});
   assert.equal(result.status,0,result.stderr);assert.equal(Number(result.stdout),cases.length);
 });

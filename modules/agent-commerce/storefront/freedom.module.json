@@ -61,7 +61,10 @@
     "tests/runtime/storefront-gallery-commands.test.ts",
     "tests/runtime/storefront-gallery-media.test.ts",
     "tests/e2e/hosted-store-gallery-off.spec.ts",
-    "tests/runtime/buyer-journey.test.ts"
+    "tests/runtime/buyer-journey.test.ts",
+    "apps/portal-web/src/modules/hosted-store-page-state.ts",
+    "apps/portal-web/src/modules/hosted-store-dirty-state.ts",
+    "tests/runtime/hosted-store-page-state.test.ts"
   ],
   "public_exports": [],
   "dependencies": [
