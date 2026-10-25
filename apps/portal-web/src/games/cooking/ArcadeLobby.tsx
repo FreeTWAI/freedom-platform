@@ -1,16 +1,19 @@
 import { GAMES, type GameId } from '../domain';
+import {useState} from 'react';
+import {PARTY_GAMES,type PartyGameId} from '../party/catalog';
 import { CATEGORIES, RECIPES, recipeSearch, TECHNIQUES, type Recipe } from './catalog';
 import { FoodArt } from './FoodArt';
 import type { Cookbook } from './storage';
 import './lobby.css';
+import '../party/party.css';
 
 export type LobbyState = {category:string;query:string;filter:string;limit:number;collection:'all'|'kitchen'|'observe'|'reflex'};
 const PAGE_SIZE = 8;
 const TYPES = [
-  {id:'all',name:'全部遊戲',label:'全部遊戲',count:RECIPES.length+GAMES.length,icon:'play'},
+  {id:'all',name:'全部遊戲',label:'全部遊戲',count:RECIPES.length+GAMES.length+PARTY_GAMES.length,icon:'play'},
   {id:'kitchen',name:'料理小遊戲',label:'料理廚房',count:RECIPES.length,icon:'pan'},
   {id:'observe',name:'觀察攝影',label:'觀察攝影',count:1,icon:'camera'},
-  {id:'reflex',name:'反應手速',label:'反應手速',count:2,icon:'bolt'},
+  {id:'reflex',name:'反應手速',label:'派對手速',count:2+PARTY_GAMES.length,icon:'bolt'},
 ] as const;
 function HubIcon({kind}:{kind:string}) {
   return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -23,10 +26,11 @@ function HubIcon({kind}:{kind:string}) {
 
 /** CK-3/8: a compact playroom, with separate browsing, artwork and action owners. */
 export function ArcadeLobby({onGame,onRecipe,book,onFavorite,state,onState,notice=''}:{
-  onGame:(game:GameId)=>void;onRecipe:(recipe:Recipe)=>void;book:Cookbook;
+  onGame:(game:GameId|PartyGameId)=>void;onRecipe:(recipe:Recipe)=>void;book:Cookbook;
   onFavorite:(id:string)=>void;state:LobbyState;onState:(state:LobbyState)=>void;notice?:string;
 }) {
   const {category,query,filter,limit,collection}=state;
+  const [missingArt,setMissingArt]=useState<string[]>([]);
   const filtered=RECIPES.filter(r=>(category==='all'||r.category===category)&&recipeSearch(r,query)&&(filter==='all'||filter==='favorite'&&book.favorites.includes(r.id)||filter==='completed'&&!!book.best[r.id]));
   const completed=Object.keys(book.best).length,featured=RECIPES[0];
   const reset=()=>onState({category:'all',query:'',filter:'all',limit:PAGE_SIZE,collection:'all'});
@@ -52,6 +56,7 @@ export function ArcadeLobby({onGame,onRecipe,book,onFavorite,state,onState,notic
         </section>
       </div>
       {notice&&<p className="ad-notice" role="status">{notice}</p>}
+      {(collection==='all'||collection==='reflex')&&<section className="pt-party-section" aria-labelledby="pt-party-title"><div className="ck-section-heading"><div><span className="ck-section-kicker">DAY OFF PARTY</span><h2 id="pt-party-title">日常太正經？開個派對。</h2></div><p>3 款原創 3D 小遊戲，換你接招。</p></div><div className="pt-party-cards">{PARTY_GAMES.map(g=><article className="pt-party-card" key={g.id}><div className="pt-party-art" style={{background:g.color}}>{missingArt.includes(g.id)?<span className="pt-party-art-fallback">{g.title}<br/>原創 3D 派對</span>:<img src={`/games/absurd-daily/party/${g.id}.webp`} width="960" height="720" alt={`${g.title}的實際3D遊戲畫面`} loading="lazy" onError={()=>setMissingArt(ids=>ids.includes(g.id)?ids:[...ids,g.id])}/>}<span>{g.tag}</span></div><div><h3>{g.title}</h3><p>{g.subtitle}</p><button onClick={()=>onGame(g.id)}>{g.action}<span aria-hidden="true">↗</span></button><small>{g.duration} · 手機 / 鍵盤 · 免登入</small></div></article>)}</div></section>}
       {(collection==='all'||collection==='kitchen')&&<section id="ck-kitchen" className="ck-kitchen" aria-labelledby="ck-kitchen-title">
         <div className="ck-section-heading"><div><span className="ck-section-kicker">THE LITTLE KITCHEN</span><h2 id="ck-kitchen-title">選一道，開煮。</h2></div><p>64 道料理，每一道都能親手玩。</p></div>
         <div className="ck-categories" role="group" aria-label="料理分類">{[{id:'all',name:'全部料理'},...CATEGORIES].map(c=><button key={c.id} aria-pressed={category===c.id} onClick={()=>onState({...state,category:c.id,limit:PAGE_SIZE})}>{c.name}<small>{c.id==='all'?RECIPES.length:8}</small></button>)}</div>

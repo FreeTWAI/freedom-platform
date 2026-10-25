@@ -1,0 +1,51 @@
+{
+  "format": "freedom.party-art/v1",
+  "created_at": "2026-10-25T07:20:18.629Z",
+  "source": "apps/portal-web/src/games/party/stage.ts",
+  "source_sha256": "c0d9317a216754d9dfe31d58fe8e4e68f0529f1959f06d438911a83072712c40",
+  "provenance": "Original procedural Three models captured from the actual production web renderer with Playwright and Chromium. No Nintendo or third-party game assets.",
+  "native_canvas": {
+    "width": 640,
+    "height": 480,
+    "device_pixel_ratio": 1
+  },
+  "previews": [
+    {
+      "game": "chair",
+      "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 11446,
+      "sha256": "a314c02713224e6b380f5e492946af786440c59725e2f652d9633a4dc6eb0d43",
+      "source_png": "polished-chair-scene.png",
+      "source_sha256": "ca3bda900cd31007e5e05b81bb2b38c25cbf36dbe301c83c6dca2c434c2000a4",
+      "seed": 42,
+      "elapsed_ms": 1072
+    },
+    {
+      "game": "tofu",
+      "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 16376,
+      "sha256": "be6b2f41e5cc335cbcee1a6129bacea1d00429f0626c9748c03b762d11c91450",
+      "source_png": "polished-tofu-scene.png",
+      "source_sha256": "51e3255bcc9f46d4d067eaad8e989914e4a4a50311f3bf9fb59c31ff73100ea2",
+      "seed": 42,
+      "elapsed_ms": 176
+    },
+    {
+      "game": "holiday",
+      "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 18684,
+      "sha256": "adf35b7fa19b74464b01bdd2fce955b85532bcb790b7f99f6ef0508598be9662",
+      "source_png": "polished-holiday-scene.png",
+      "source_sha256": "e1eeb090a871ab507c97ee9aaa53a5933ade9e501f5b37a040c8f92815d00907",
+      "seed": 42,
+      "elapsed_ms": 320
+    }
+  ],
+  "usage": "自由工坊遊戲與本次公開 PR 預覽，沿用根 README 的視覺素材政策。"
+}

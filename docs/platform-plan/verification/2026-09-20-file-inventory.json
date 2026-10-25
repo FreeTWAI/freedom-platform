@@ -2188,6 +2188,21 @@
       "sha256": "c35b4a22d0399931aeb766d6e51ce766e6d4af5389e7a7e004e0894cac94e37a"
     },
     {
+      "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
+      "bytes": 11446,
+      "sha256": "a314c02713224e6b380f5e492946af786440c59725e2f652d9633a4dc6eb0d43"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
+      "bytes": 18684,
+      "sha256": "adf35b7fa19b74464b01bdd2fce955b85532bcb790b7f99f6ef0508598be9662"
+    },
+    {
+      "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
+      "bytes": 16376,
+      "sha256": "be6b2f41e5cc335cbcee1a6129bacea1d00429f0626c9748c03b762d11c91450"
+    },
+    {
       "path": "apps/portal-web/public/journal-assets/78f6ad158a6ce19acb92468fb1d7075513be3f07aea68aa23a148b68e6a57d59.png",
       "bytes": 1578206,
       "sha256": "78f6ad158a6ce19acb92468fb1d7075513be3f07aea68aa23a148b68e6a57d59"
@@ -2574,8 +2589,8 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 33625,
-      "sha256": "9a19bd8c0ee59b36ca61b1a36697e542877fc094465e9472edcca07eb90a68ea"
+      "bytes": 34954,
+      "sha256": "6479a4d72266d63c35ae884d0d001501dff7f89baba8c6207672a460451a0bd3"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
@@ -2604,13 +2619,13 @@
     },
     {
       "path": "apps/portal-web/src/games/result-bridge.ts",
-      "bytes": 2679,
-      "sha256": "345fbd20a00e8051e58da91bd5737b78785cb8d60604e577e7cb55b92721c98d"
+      "bytes": 2739,
+      "sha256": "7afc6b52e50af253990c68b0f3b679070701f54d8b43a5a053f778e25b7647cf"
     },
     {
       "path": "apps/portal-web/src/games/result-card.ts",
-      "bytes": 4578,
-      "sha256": "ebb86f88380adab36c826766f468f9baf0aae5554c92803af0b598e2e1ba4ff6"
+      "bytes": 4703,
+      "sha256": "1b83dfaa2d8ac3a9faefd8842e1a1dd7fd3a47c83afe903e9b138da4badf3173"
     },
     {
       "path": "apps/portal-web/src/games/result-share.ts",
@@ -2629,8 +2644,8 @@
     },
     {
       "path": "apps/portal-web/src/games/cooking/ArcadeLobby.tsx",
-      "bytes": 9631,
-      "sha256": "b614d4eca00f28911ef6e27fee986444a7cb15b40ae312fa4ed798640f01a4e0"
+      "bytes": 10928,
+      "sha256": "31e34fbc8fac894f47f1cc688f4b25798934f52ed165d7bf6ed35d5741f2c31c"
     },
     {
       "path": "apps/portal-web/src/games/cooking/CookingGame.tsx",
@@ -2671,6 +2686,31 @@
       "path": "apps/portal-web/src/games/cooking/storage.ts",
       "bytes": 5355,
       "sha256": "14f8a7ebd4116f4eb2be1c4964b4591b87e921638a1d50cc283471ef0af05603"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/PartyGame.tsx",
+      "bytes": 14823,
+      "sha256": "11728d6fd420d524343fb64e4a0953886c96aa77f2b3f6351aa5d8ebc6563560"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/catalog.ts",
+      "bytes": 1831,
+      "sha256": "17281aa0e2ff9ca0ee648001f1e9b8ae7937003ce22633564096626217e86200"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/domain.ts",
+      "bytes": 9126,
+      "sha256": "b9599a91c79f68a97354cc0de0d8bd156511fa06dfde62ace461ec3da19b23bc"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/party.css",
+      "bytes": 10045,
+      "sha256": "de67d7b0d7445483d8da0af5d79a175ecb7a173fc31c41b0be8cd5e968827460"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/stage.ts",
+      "bytes": 16575,
+      "sha256": "c0d9317a216754d9dfe31d58fe8e4e68f0529f1959f06d438911a83072712c40"
     },
     {
       "path": "apps/portal-web/src/guild-blocks/GuildBlockState.tsx",
@@ -14899,8 +14939,8 @@
     },
     {
       "path": "docs/development/absurd-daily.md",
-      "bytes": 15377,
-      "sha256": "0a6a6c88878f8e3d7371b19782ed0d55abe268413c71338d9555b942d9bcc8ee"
+      "bytes": 20005,
+      "sha256": "538aacebe63f7cc64ae39eef371e93e04dae15668e41c02025f850787a100a3f"
     },
     {
       "path": "docs/development/agent-development-guide.md",
@@ -18408,9 +18448,14 @@
       "sha256": "ac49298a402faca4c86c10f9741416e1be988da5d6039dfa0006e7094d0a2768"
     },
     {
+      "path": "modules/absurd-daily/PARTY.md",
+      "bytes": 10024,
+      "sha256": "05d19a4d271a4a2670d149927e5ce8d47aed5fa95dd631a267d428ed7787a125"
+    },
+    {
       "path": "modules/absurd-daily/README.md",
-      "bytes": 2436,
-      "sha256": "159839970d253e1ab2d78fc4dc2968ddf860e2fb7ffa8a8a8683e35fb7f563fb"
+      "bytes": 3312,
+      "sha256": "679d768a2886c6a888794c79451c7e796811ef05c5d454ad094d8bf82f90c5e0"
     },
     {
       "path": "modules/absurd-daily/cooking-art.json",
@@ -18421,6 +18466,21 @@
       "path": "modules/absurd-daily/freedom.module.json",
       "bytes": 1136,
       "sha256": "6f077815328a03374632bb52870f771d3bfe71c08aba87d3abbdd1d49b89c59c"
+    },
+    {
+      "path": "modules/absurd-daily/party-art.json",
+      "bytes": 1934,
+      "sha256": "6639491d07dff514489cc81b3fa57957006e59b5e1f87aa9f1db0d049fd95550"
+    },
+    {
+      "path": "modules/absurd-daily/review/party-lobby-desktop.png",
+      "bytes": 486351,
+      "sha256": "8425bdc3936414315e254cb8891d3bb2af9ba47afce42604212b0b759cdf5a7d"
+    },
+    {
+      "path": "modules/absurd-daily/review/party-phone.png",
+      "bytes": 106185,
+      "sha256": "fb30db613672cd75365c389a419f52274fcf3c60aa975765a305f2ab862ad7be"
     },
     {
       "path": "modules/absurd-daily/review/playroom-desktop.png",
@@ -23924,8 +23984,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 32773,
-      "sha256": "bddca09a90f73fac0e611d0eb219f94a2d8dd2415e3f8658a1779fe2e088fdba"
+      "bytes": 47471,
+      "sha256": "6f595f42ed51cc045f504632cbf048d828b4a4f8ece135c3253cfc675ae5fbf5"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -25179,8 +25239,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 19605,
-      "sha256": "be517cff70087fee213276417f4026ac8b7d9d6296fe12dd4247279d53ad5d8e"
+      "bytes": 27297,
+      "sha256": "2a971232f78a2d608c80c7600f515699a20d7e79792f7b27cf4394977c3c3341"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",

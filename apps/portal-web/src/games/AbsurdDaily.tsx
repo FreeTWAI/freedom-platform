@@ -12,6 +12,13 @@ import { ArcadeLobby, type LobbyState } from './cooking/ArcadeLobby';
 import { recipeOf, type Recipe } from './cooking/catalog';
 import { emptyCookbook, readCookbook, readCookingRun, updateCookbook, COOKBOOK_KEY, type Cookbook, type CookingStorage } from './cooking/storage';
 import type { CookingRun } from './cooking/domain';
+import {partyOf,type PartyGameId} from './party/catalog';
+type PartyComponent = typeof import('./party/PartyGame')['PartyGame'];
+function PartyLoader(props:Parameters<PartyComponent>[0]) {
+    const [Game,setGame]=useState<PartyComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+    useEffect(()=>{let current=true;setError('');const timeout=setTimeout(()=>{if(current){current=false;setError('派對入口載入較久，可以重試。');}},15000);void import('./party/PartyGame').then(module=>{if(current){clearTimeout(timeout);setGame(()=>module.PartyGame);}}).catch(()=>{if(current){clearTimeout(timeout);setError('派對入口未能載入，請重試。');}});return()=>{current=false;clearTimeout(timeout);};},[attempt]);
+    return Game?<Game {...props}/>:<div className="ck-empty"><p role={error?'alert':'status'}>{error||'派對準備中…'}</p>{error&&<button onClick={()=>setAttempt(n=>n+1)}>重試派對入口</button>}<button className="ad-secondary" onClick={props.onBack}>回遊戲大廳</button></div>;
+}
 type CookingComponent = typeof import('./cooking/CookingGame')['CookingGame'];
 function CookingLoader(props:Parameters<CookingComponent>[0]) {
     const [Game,setGame]=useState<CookingComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
@@ -50,7 +57,7 @@ type Live = {
 };
 const hints = { photo: '拖曳取景，抓到怪事再按快門。方向鍵也能移鏡。', stamp: '按住拖到藍圈，放手蓋章。也可以直接點藍圈。', cash: '道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。' };
 function freshSeed() { const value = new Uint32Array(1); crypto.getRandomValues(value); return seedOf(value[0]); }
-function initialGame():ArcadeGameId|null { const q=new URLSearchParams(location.search); return q.get('game')==='kitchen'&&recipeOf(q.get('recipe'))?'kitchen':gameOf(q.get('game')); }
+function initialGame():ArcadeGameId|null { const q=new URLSearchParams(location.search); return q.get('game')==='kitchen'&&recipeOf(q.get('recipe'))?'kitchen':partyOf(q.get('game'))??gameOf(q.get('game')); }
 function GameBoard({ game, seed, onBack, onResult }: {
     game: GameId;
     seed: number;
@@ -291,7 +298,7 @@ function Result({ result, onBack, onReplay }: {
     onReplay: () => void;
 }) {
     const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), linkRef = useRef<HTMLInputElement>(null);
-    const link = result.game === 'kitchen' ? new URL(`/play?${new URLSearchParams({game:'kitchen',recipe:result.recipe!,seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, result.game, result.seed);
+    const link = result.game === 'kitchen' || partyOf(result.game) ? new URL(`/play?${new URLSearchParams({game:result.game,...(result.recipe?{recipe:result.recipe}:{}),seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, gameOf(result.game)!, result.seed);
     const text = gameShareText(selected,link), shareOwner = useRef(0), sharingRef = useRef(false);
     useEffect(() => { let current = true; shareOwner.current++; sharingRef.current=false;setSharing(false);setExports(null); setStatus('正在整理成果圖…'); const logo = document.querySelector<HTMLImageElement>('.ad-brand img'); void resultExports(selected, logo).then(value => { if (current) {
         setExports(value);
@@ -356,8 +363,9 @@ export function AbsurdDaily() {
     const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null)=>{const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,nextSeed=keepSeed?seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed)}).toString():'';url.hash='';history.pushState(null,'',url);window.scrollTo({top:0,behavior:'instant'});},[seed]);
     useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const back=()=>{setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
     const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;
+    const partyGame:PartyGameId|null=partyOf(game);
     return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>遊戲大廳</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">
       {saveNotice&&<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="ad-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>}
-      {result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={g=>choose(g)} onRecipe={r=>choose('kitchen',false,r)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
+      {result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={g=>choose(g)} onRecipe={r=>choose('kitchen',false,r)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
     </main><footer className="ad-footer">自由工坊原創遊戲 · 作品由你確認後分享</footer></div>;
 }

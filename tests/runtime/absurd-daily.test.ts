@@ -24,6 +24,8 @@ import {COOKBOOK_KEY,COOKBOOK_BACKUP,COOKING_RUN_KEY,RUN_TTL,emptyCookbook,parse
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
+import {PARTY_GAMES,PARTY_RULES as PT,partyOf} from '../../apps/portal-web/src/games/party/catalog.js';
+import {actParty,advanceParty,chairWave,holidayTargets,newParty,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {ART_FRAMES} from '../../apps/portal-web/src/games/cooking/FoodArt.js';
 import {ART_CLIPS} from '../../apps/portal-web/src/games/cooking/art-clips.js';
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
@@ -98,4 +100,59 @@ test('CK-7: denied/quota storage keeps a truthful in-memory book, with an explic
 });
 test('CK-6: cooking handoff remains bounded v1 and contains a recipe, never a publish command',()=>{
   const now=Date.now(),draft={version:1 as const,createdAt:now,game:'kitchen' as const,recipe:'egg-fried-rice',seed:42,title:'黃金蛋炒飯',text:'我的料理成果',image:'data:image/jpeg;base64,YWJjZA=='};assert.deepEqual(parseGameDraft(JSON.stringify({...draft,autoPublish:true}),now),draft);assert.equal(parseGameDraft(JSON.stringify({...draft,recipe:'../../private'}),now),null);assert.equal(parseGameDraft(JSON.stringify({...draft,recipe:undefined}),now),null);
+});
+
+function partyTime<T extends PartyRun>(initial:T,target:number):T {
+  let s=initial;while(s.elapsed<target&&s.status==='playing')s=advanceParty(s,Math.min(100,target-s.elapsed)) as T;return s;
+}
+test('PT-1/2: three original catalogs and deterministic bounded clocks reject inactive and malformed time',()=>{
+  assert.equal(PARTY_GAMES.length,3);assert.equal(partyOf('mario'),null);assert.equal(partyOf('tofu'),'tofu');
+  assert.deepEqual(Array.from({length:22},(_,i)=>chairWave(42,i)),Array.from({length:22},(_,i)=>chairWave(42,i)));
+  assert.notDeepEqual(chairWave(42,0),chairWave(43,0));
+  for(const g of PARTY_GAMES){const ready=newParty(g.id,42);assert.equal(advanceParty(ready,500),ready);let s=startParty(ready);assert.equal(startParty(s),s);for(const d of [NaN,Infinity,-1,0])assert.equal(advanceParty(s,d),s);s=advanceParty(s,50000);assert.equal(s.elapsed,1000);const paused=pauseParty(s);assert.equal(advanceParty(paused,1000),paused);assert.equal(actParty(paused,{kind:'jump'}),paused);assert.equal(resumeParty(paused).status,'playing');}
+});
+test('PT-3: all 22 actual lane decisions collect tickets, avoid collisions and settle the same seeded course once',()=>{
+  let s=startParty(newParty('chair',42)) as ChairRun;
+  for(let i=0;i<PT.chairWaves;i++){
+    const w=chairWave(42,i);assert.notEqual(w.lane,w.ticketLane);
+    while(s.lane!==w.ticketLane){s=actParty(s,{kind:'lane',direction:w.ticketLane>s.lane?1:-1}) as ChairRun;s=partyTime(s,s.elapsed+140);}
+    s=partyTime(s,w.at);assert.equal(s.lives,3);assert.equal(s.tickets,i+1);assert.equal(s.resolved,i+1);
+  }
+  s=partyTime(s,PT.chairMs);assert.equal(s.status,'done');assert.equal(s.score,4280);assert.equal(s.bestCombo,22);assert.equal(advanceParty(s,1000),s);assert.equal(actParty(s,{kind:'jump'}),s);
+});
+test('PT-3: collision uses arrival position, carts can be jumped, meeting tables cannot',()=>{
+  const base=startParty(newParty('chair',42)) as ChairRun,w=chairWave(42,0);
+  let late:ChairRun={...base,elapsed:w.at-1,resolved:0,lane:w.lane,x:w.lane};late=actParty(late,{kind:'lane',direction:w.lane===1?-1:1}) as ChairRun;
+  assert.equal((advanceParty(late,30) as ChairRun).lives,2,'a new target lane cannot teleport across the collision');
+  for(const kind of ['cart','meeting']){const i=Array.from({length:22},(_,j)=>j).find(j=>chairWave(42,j).kind===kind)!,wave=chairWave(42,i);let s:ChairRun={...base,elapsed:wave.at-400,resolved:i,lane:wave.lane,x:wave.lane};s=actParty(s,{kind:'jump'}) as ChairRun;assert.equal((advanceParty(s,400) as ChairRun).lives,kind==='cart'?3:2);}
+  const locked=actParty(base,{kind:'lane',direction:1}) as ChairRun;assert.equal(actParty(locked,{kind:'lane',direction:-1}),locked);const jump=actParty(base,{kind:'jump'});assert.equal(actParty(jump,{kind:'jump'}),jump);
+});
+function tofuReady(s:TofuRun,perfect:boolean):TofuRun {
+  const started=s.elapsed;while(s.status==='playing'&&s.elapsed-started<5000){const axis=tofuAxis(s),offset=Math.abs(tofuPosition(s)[axis]-s.layers[s.layers.length-1][axis]);if(perfect?offset<.06:offset>2.6)return s;s=advanceParty(s,5) as TofuRun;}throw Error('no reachable seeded tofu timing');
+}
+test('PT-4: twelve real timed drops build twelve immutable layers, with a single landing per fall',()=>{
+  let s=startParty(newParty('tofu',42)) as TofuRun;
+  for(let i=0;i<PT.tofuGoal;i++){s=tofuReady(s,true);const old=s;const falling=actParty(s,{kind:'drop'}) as TofuRun;assert.equal(actParty(falling,{kind:'drop'}),falling);assert.equal(falling.layers.length,i+1);s=advanceParty(falling,PT.tofuFallMs-1) as TofuRun;assert.equal(s.layers.length,i+1);s=advanceParty(s,1) as TofuRun;assert.equal(s.layers.length,i+2);assert.equal(old.layers.length,i+1);assert.equal(s.perfects,i+1);}
+  assert.equal(s.status,'done');assert.equal(s.layers.length,13);assert.equal(s.score,2925);assert.equal(advanceParty(s,500),s);
+});
+test('PT-4: clipped overlap narrows the real tower and three misses end the game without extra layers',()=>{
+  let s=startParty(newParty('tofu',42)) as TofuRun;
+  for(let i=0;i<8&&s.status==='playing';i++){s=tofuReady(s,false);s=advanceParty(actParty(s,{kind:'drop'}),PT.tofuFallMs) as TofuRun;}
+  assert.equal(s.status,'done');assert.equal(s.misses,3);assert.ok(s.layers.some(l=>l.width<1||l.depth<1));assert.ok(s.layers.every(l=>l.width>=PT.tofuMinimum&&l.depth>=PT.tofuMinimum));
+});
+test('PT-5: all twenty real target windows work, stale rounds and repeated holes never score twice',()=>{
+  let s=startParty(newParty('holiday',42)) as HolidayRun;
+  for(let i=0;i<20;i++){s=partyTime(s,i*PT.holidayRoundMs+PT.holidayOpenMs);const {good,boss}=holidayTargets(42,i);assert.notEqual(good,boss);const before=s;s=actParty(s,{kind:'pick',hole:good,round:i}) as HolidayRun;assert.equal(s.saved,i+1);assert.equal(actParty(s,{kind:'pick',hole:good,round:i}),s);assert.equal(actParty(s,{kind:'pick',hole:boss,round:i-1}),s);assert.equal(before.saved,i);}
+  s=partyTime(s,PT.holidayMs);assert.equal(s.status,'done');assert.equal(s.score,5100);assert.equal(s.bestCombo,20);assert.equal(s.mistakes,0);
+});
+test('PT-5: missed windows, bosses and empty holes break combos with a nonnegative score floor',()=>{
+  let s=startParty(newParty('holiday',42)) as HolidayRun;const {good,boss}=holidayTargets(42,0);assert.equal(actParty(s,{kind:'pick',hole:good,round:0}),s);s=partyTime(s,PT.holidayOpenMs);s=actParty(s,{kind:'pick',hole:good,round:0}) as HolidayRun;assert.equal(s.combo,1);s=actParty(s,{kind:'pick',hole:boss,round:0}) as HolidayRun;assert.equal(s.combo,0);assert.equal(s.score,40);const empty=Array.from({length:6},(_,i)=>i).filter(i=>i!==good&&i!==boss);for(const hole of empty)s=actParty(s,{kind:'pick',hole,round:0}) as HolidayRun;assert.equal(s.score,0);assert.equal(actParty(s,{kind:'pick',hole:NaN,round:0}),s);s=partyTime(s,1200+120);s=actParty(s,{kind:'pick',hole:holidayTargets(42,1).good,round:1}) as HolidayRun;assert.equal(s.combo,1);s=partyTime(s,3*1200);assert.equal(s.combo,0);
+});
+test('PT-7: party results extend the bounded v1 whitelist and strip untrusted publishing fields',()=>{
+  const now=Date.now();for(const g of PARTY_GAMES){const draft={version:1,createdAt:now,game:g.id,seed:42,title:g.title,text:'本局 120 分',image:'data:image/jpeg;base64,YWJjZA=='};assert.deepEqual(parseGameDraft(JSON.stringify({...draft,recipe:'extra',autoPublish:true,score:999999}),now),draft);assert.equal(parseGameDraft(JSON.stringify({...draft,game:'../../private'}),now),null);}
+});
+test('PT-6: each tiny lobby preview binds to the actual procedural renderer, dimensions and immutable bytes',async()=>{
+  const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/party-art.json',import.meta.url),'utf8'));
+  assert.equal(manifest.format,'freedom.party-art/v1');assert.equal(manifest.previews.length,3);assert.equal(createHash('sha256').update(await readFile(new URL(`../../${manifest.source}`,import.meta.url))).digest('hex'),manifest.source_sha256);
+  let bytes=0;for(const g of PARTY_GAMES){const a=manifest.previews.find((p:{game:string})=>p.game===g.id);assert.ok(a);const raw=await readFile(new URL(`../../${a.path}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[640,480]);assert.equal(raw.length,a.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),a.sha256);bytes+=raw.length;}assert.ok(bytes<100000);
 });

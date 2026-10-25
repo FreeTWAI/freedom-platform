@@ -102,3 +102,28 @@
 - 標準型別與build成功；保留Three chunk超過500kB提示，未放寬警戒值。Three僅進原三款才載入；大廳初次網路紀錄只有一張料理atlas，沒有stage／Three。8張atlas合計約1.64MiB，按分類載入。
 - 4×2圖集以實際alpha輪廓clip顯示，成果PNG仍為960×1200、站內圖1200×675；X／Threads入口帶文字與題目網址，Facebook只帶連結，IG由系統選單或下載／複製自行附圖。目的平台登入／發布與真實iOS／Android分享仍EXTERNAL_PENDING。
 - 所有開發／暫存／圖片原稿／瀏覽器證據保存在E槽。沒有資料庫migration、會員獎勵、貢獻值變更、merge或deploy。新head完整CI與獨立審查仍由既有流程負責。
+
+## 2026-10-25：日常派對三款原創3D小遊戲
+
+料理與大廳已獨立提交 #1050（`bc211f72`）。本批接續 [PARTY 規格](../../modules/absurd-daily/PARTY.md)，不再往料理PR加內容。三種真實操作：辦公椅換路／跳推車、豆腐落點／區間交集裁切、六格蒸籠raycast／休假與開會辨識。目錄合計70款，仍為四個分類入口。
+
+類型參考限於可切換的小玩法與容易理解的控制；參閱 [Nintendo官方介紹](https://www.nintendo.com/us/store/products/super-mario-party-jamboree-switch/)。本批的人物、模型、配色、題目與文案由本專案實作，沒有引入該遊戲的角色、商標、音樂、關卡或UI素材。這是單人短局和同seed輪流挑戰，不宣稱即時多人。
+
+- 純domain持有elapsed、碰撞、層數、combo與score；renderer只投影。前景第一幀不計時，blur／hidden／過長卡頓暫停；本人繼續，不補算背景。音效預設關閉，減少動態不變更判定窗口。
+- 控制與文字各自擁有正常文件流；開始後移到遊戲區，手機橫向把場景與操作放並排。觸控、鍵盤、可見大按鈕同步，角色有葉子／領帶和文字提示，不只靠顏色。
+- [素材收據](../../modules/absurd-daily/party-art.json)綁定實際Three renderer來源SHA與3張640×480 WebP，總46,506 bytes。縮圖由本機production build實際場景擷取；不是概念圖或另一款遊戲的截圖。原始PNG與瀏覽器證據在E槽。
+- 三款樣本時刻的 draw calls／triangles 分別143／67,840、56／24,424、186／84,508；這是桌面Chromium軟體WebGL的結構量測，非最高負載或實機FPS。模型、材質、圖像與粒子數量有界，每次卸載釋放自有context。大廳使用靜態縮圖，進場才載入Three。
+- 原Result／社群Logo選擇、系統分享、下載、同題連結與v1同分頁草稿沿用；僅加入新game whitelist。舊3款／kitchen保持相容。站內仍進登入與可編輯預覽，由本人發布，沒有社群API串接或自動發文。
+- 32項純規則／存取／圖像完整性測試實跑通過、0 skipped；涵蓋全22波逃亡、12層豆腐、20波假日、失敗／非法時間與舊結果解析。標準typecheck與build通過，原Three大chunk提示保留。
+
+### 本輪觀察與待驗
+
+首輪派對瀏覽器子集5 passed／1 failed，原始trace、截圖與錯誤輸出保留。逃亡取得3680分／19票／0碰撞，與滿分4280的fixture預期不符；獨立重現確認第一個150ms虛擬等待只形成128ms遊戲前景時間，未達130ms換路冷卻。修正fixture以實際前景時間與路線斷言驅動，沒有降低分數要求、改冷卻或改碰撞規則。
+
+同輪豆腐在實際瀏覽器完成12層、2925分；假日以raycast／鍵盤完成20波、5100分並接回登入後發文預覽；blur、真正WebGL context loss、重建與重新開始選擇均通過。放大文字owner和載入失敗返回也已通過。後續完整回歸與截圖矩陣的最終結果追加於下方及PR，不把前輪失敗改成PASS。
+
+本輪屬自動化可玩鏈和開發者畫面檢視；真人第一眼理解、趣味／重玩、真實手機／Safari、登入社群App與實際發布仍EXTERNAL_PENDING。迭代決策CONTINUE：保留三款完整短局，交付可審查PR，讓真人試玩後再調難度／笑點；不因編譯成功宣稱好玩。沒有資料庫migration、真實報酬、信任值、merge或deploy。
+
+最終本機回歸：完整遊戲檔 **28 passed／0 skipped（5.8分鐘）**。之後補上UI動作的繪圖拋錯恢復、缺圖大字owner，再build並跑派對子集 **10 passed／0 skipped（3.9分鐘）**；包含原分數保留與重建繼續。兩次聯集為29種不同案例，沒有宣稱最後重跑29項全檔。最後型別／build均通過；32項純規則仍與本次domain／素材一致。完整pitfall記於PARTY PT-8，不覆寫首輪失敗。
+
+最後production build的畫面矩陣共 **59張、0幾何失敗**：5種viewport（320×568／390×844／667×375／768×1024／1440×900）×3種DOM文字比例×3款ready，加手機直／橫向playing／paused與兩張大廳。檢查document overflow、按鈕44px、owner bounds及pageerror；200%可增加文件高度，不宣稱全部內容同屏。冷大廳的資源紀錄另核對實際emitted Three引擎chunk的hash，未載入引擎或PartyGame／stage。可審查原始像素見[桌面派對目錄](../../modules/absurd-daily/review/party-lobby-desktop.png)與[手機操作](../../modules/absurd-daily/review/party-phone.png)；其餘PNG、geometry及資源記錄保留E槽。

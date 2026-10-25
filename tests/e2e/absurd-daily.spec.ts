@@ -2,7 +2,91 @@ import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
+import {chairWave} from '../../apps/portal-web/src/games/party/domain.js';
+import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
+
+async function openParty(page:Page,game:PartyGameId){
+  await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.goto(`/play?game=${game}&seed=42`);
+  await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));
+  await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+}
+async function partyElapsed(page:Page){return Number(await page.locator('.pt-canvas').getAttribute('data-elapsed'));}
+async function partyAdvance(page:Page,target:number){
+  for(let i=0;i<80;i++){const at=await partyElapsed(page);if(at>=target||await page.locator('.pt-root').getAttribute('data-party-state')==='done')return;await page.clock.runFor(Math.min(1000,target-at+17));}throw Error('party clock did not advance');
+}
+async function partyResult(page:Page,game:PartyGameId){
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');const score=Number(await page.locator('.pt-root').getAttribute('data-party-score'));expect(score).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.ad-result-heading')).toContainText(`${score} 分`);await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await socialEntries(page,game);return score;
+}
+
+test('PT-3/7: chair escape uses real swipes and keyboard lanes, ends once, then exports the actual score and challenge',async({page})=>{
+  test.setTimeout(150000);await page.setViewportSize({width:390,height:844});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openParty(page,'chair');
+  const canvas=page.locator('.pt-canvas'),b=(await canvas.boundingBox())!;await page.mouse.move(b.x+b.width*.5,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*.75,b.y+b.height*.5);await page.mouse.up();await expect(canvas).toHaveAttribute('data-lane','1');await partyAdvance(page,160);await canvas.press('ArrowLeft');await expect(canvas).toHaveAttribute('data-lane','0');await partyAdvance(page,320);let lane=0;
+  for(let i=0;i<PT.chairWaves;i++){const w=chairWave(42,i);while(lane!==w.ticketLane){await canvas.press(lane<w.ticketLane?'ArrowRight':'ArrowLeft');lane+=lane<w.ticketLane?1:-1;await expect(canvas).toHaveAttribute('data-lane',String(lane));await partyAdvance(page,await partyElapsed(page)+160);}await partyAdvance(page,w.at+20);}
+  await partyAdvance(page,PT.chairMs);expect(await partyResult(page,'chair')).toBe(4280);
+  const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();const metadata=await sharp((await (await download).path())!).metadata();expect([metadata.width,metadata.height]).toEqual([960,1200]);expect(errors).toEqual([]);
+});
+
+test('PT-4: tofu uses actual moving-block timing, rejects an in-flight second drop and reaches all twelve layers',async({page})=>{
+  test.setTimeout(180000);await openParty(page,'tofu');
+  for(let layer=0;layer<PT.tofuGoal;layer++){
+    let aligned=false;for(let t=0;t<180;t++){const offset=Math.abs(Number(await page.locator('.pt-canvas').getAttribute('data-tofu-offset')));if(offset<.105){aligned=true;break;}await page.clock.runFor(offset>.7?90:10);}expect(aligned).toBe(true);
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer===0)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
+  }
+  await expect(page.locator('.pt-scoreboard')).toContainText('12 / 12');expect(await partyResult(page,'tofu')).toBe(2925);
+});
+
+test('PT-5/7: holiday raycasts a real 3D character, accepts keyboard targets, and carries the result to confirmed site sharing',async({page})=>{
+  test.setTimeout(150000);await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');
+  for(let round=0;round<20;round++){
+    await partyAdvance(page,round*PT.holidayRoundMs+250);const good=page.getByRole('button',{name:/第 [1-6] 格：休假/}),label=(await good.getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;
+    if(!round){const anchor=JSON.parse((await page.locator('.pt-canvas').getAttribute('data-anchors'))!)[hole],b=(await page.locator('.pt-canvas').boundingBox())!;await page.mouse.click(b.x+anchor.x*b.width,b.y+anchor.y*b.height);}else await page.locator('.pt-canvas').press(String(hole+1));
+    await expect(page.locator('.pt-live-label')).toContainText(`已守住 ${round+1} 個假日`);
+  }
+  await partyAdvance(page,PT.holidayMs);expect(await partyResult(page,'holiday')).toBe(5100);await page.getByRole('button',{name:'發到自由工坊',exact:true}).click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
+  const draft=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),GAME_HANDOFF_KEY);expect(draft.game).toBe('holiday');expect(draft.text).toContain('5100 分');expect(draft.text).toContain('game=holiday');expect(draft.autoPublish).toBeUndefined();await login(page);await expect(page.getByRole('textbox',{name:'貼文內容'})).toHaveValue(/5100 分/);await expect(page.getByRole('button',{name:'發布貼文',exact:true})).toBeVisible();
+});
+
+test('PT-2/6: blur freezes the round, genuine context loss rebuilds it, and restart needs an explicit choice',async({page})=>{
+  test.setTimeout(90000);await openParty(page,'holiday');await partyAdvance(page,300);await page.getByRole('button',{name:/第 [1-6] 格：休假/}).click();await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page),score=await page.locator('.pt-root').getAttribute('data-party-score');await page.clock.runFor(6000);expect(await partyElapsed(page)).toBe(at);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();const lost=await page.locator('.pt-canvas canvas').evaluate(c=>{const gl=(c as HTMLCanvasElement).getContext('webgl2');const ext=gl?.getExtension('WEBGL_lose_context');ext?.loseContext();return !!ext;});expect(lost).toBe(true);await expect(page.getByRole('alert')).toContainText('本局已暫停');await page.getByRole('button',{name:'重建 3D 場景',exact:true}).click();await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,at+200);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('group',{name:'確認重新開始'})).toBeVisible();await page.getByRole('button',{name:'保留這局',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);await page.getByRole('button',{name:'重新開始',exact:true}).click();await page.getByRole('button',{name:'確定重來',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(await partyElapsed(page)).toBe(0);
+});
+
+test('PT-2/6: a render exception from a paused UI action is contained, with the same score restored after retry',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openParty(page,'holiday');await partyAdvance(page,300);await page.getByRole('button',{name:/第 [1-6] 格：休假/}).click();await page.getByRole('button',{name:'暫停',exact:true}).click();const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic PT render fault');};});await page.getByRole('button',{name:'減少動態關',exact:true}).click();await expect(page.getByRole('alert')).toContainText('本局仍保留');await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','failed');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');expect(errors).toEqual([]);await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'重建 3D 場景',exact:true}).click();await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,500);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+});
+
+test('PT-6: compact and landscape 200% text preserves the start/control owners for every party game',async({page})=>{
+  test.setTimeout(120000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  for(const viewport of [{width:320,height:568},{width:667,height:375}])for(const g of PARTY_GAMES){
+    await page.setViewportSize(viewport);await page.goto(`/play?game=${g.id}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();
+    await page.evaluate(()=>{const styles=[...document.querySelectorAll('.ad-root,.ad-root *')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
+    const issues=await page.locator('.pt-root').evaluate(root=>{const problems:string[]=[];for(const b of root.querySelectorAll('button')){const r=b.getBoundingClientRect();if(r.width<44||r.height<44)problems.push(`small:${b.textContent}`);const owner=b.closest('.pt-panel,.pt-controls,.pt-tools,.pt-heading');if(owner){const o=owner.getBoundingClientRect();if(r.left<o.left-1||r.right>o.right+1||r.top<o.top-1||r.bottom>o.bottom+1)problems.push(`owner:${b.textContent}`);}}return problems;});expect(issues).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始派對！',exact:true}).click();await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
+  }expect(errors).toEqual([]);
+});
+
+test('PT-6: a failed lazy 3D renderer offers retry and a working return to the lobby',async({page})=>{
+  await page.route('**/assets/stage-*.js',route=>route.abort());await page.goto('/play?game=chair&seed=42');await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');await expect(page.getByRole('button',{name:'重建 3D 場景',exact:true})).toBeVisible();await page.getByRole('button',{name:'先回遊戲大廳',exact:true}).click();await expect(page.getByRole('button',{name:'全部遊戲 70',exact:true})).toBeVisible();
+});
+
+test('PT-6: landscape play keeps the real canvas and every primary control in the same viewport',async({page})=>{
+  await page.setViewportSize({width:667,height:375});for(const g of PARTY_GAMES){await page.goto(`/play?game=${g.id}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.getByRole('button',{name:'開始派對！',exact:true}).click();const boxes=await page.locator('.pt-canvas,.pt-controls button').evaluateAll(elements=>elements.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom};}));for(const r of boxes){expect(r.left).toBeGreaterThanOrEqual(0);expect(r.top).toBeGreaterThanOrEqual(0);expect(r.right).toBeLessThanOrEqual(667);expect(r.bottom).toBeLessThanOrEqual(375);}}
+});
+
+test('PT-6: lobby previews fail gracefully, keep Three cold and release the context on return',async({page})=>{
+  const code:string[]=[];page.on('request',r=>{if(/\/(?:PartyGame|stage|three)-[^/]+\.js/.test(r.url()))code.push(r.url());});await page.route('**/games/absurd-daily/party/tofu.webp',route=>route.abort());await page.goto('/play');await page.getByRole('button',{name:'反應手速 5',exact:true}).click();await expect(page.locator('.pt-party-card')).toHaveCount(3);await page.getByRole('button',{name:'豆腐開工',exact:true}).scrollIntoViewIfNeeded();await expect(page.locator('.pt-party-art-fallback')).toContainText('豆腐疊高高');expect(code).toEqual([]);
+  await page.locator('.pt-party-art-fallback').evaluate(e=>{(e as HTMLElement).style.fontSize='40px';(e as HTMLElement).style.lineHeight='64px';});expect(await page.locator('.pt-party-art-fallback').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))).toBe(40);const fallback=await page.locator('.pt-party-art-fallback').boundingBox(),owner=await page.locator('.pt-party-art:has(.pt-party-art-fallback)').boundingBox();expect(fallback!.y+fallback!.height).toBeLessThanOrEqual(owner!.y+owner!.height);
+  await page.getByRole('button',{name:'豆腐開工',exact:true}).click();await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();const gl=await page.locator('.pt-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2'));await page.getByRole('button',{name:'回遊戲大廳',exact:true}).click();await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await expect.poll(()=>gl.evaluate(g=>g?.isContextLost())).toBe(true);await expect(page.getByRole('button',{name:'反應手速 5',exact:true})).toHaveAttribute('aria-pressed','true');await gl.dispose();
+});
+
+test.describe('PT-6 touchscreen input',()=>{
+  test.use({hasTouch:true});
+  test('PT-6: a real touch tap raycasts the visible holiday character',async({page})=>{
+    await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');await partyAdvance(page,250);const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;const anchor=JSON.parse((await page.locator('.pt-canvas').getAttribute('data-anchors'))!)[hole],b=(await page.locator('.pt-canvas').boundingBox())!;await page.touchscreen.tap(b.x+anchor.x*b.width,b.y+anchor.y*b.height);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-live-label')).toContainText('已守住 1 個假日');
+  });
+});
 
 async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // Keep lazy Three startup on a running clock, then freeze gameplay time.
@@ -303,6 +387,6 @@ test('CK-3: the playroom browses all game types, pages dishes and separates favo
   await page.setViewportSize({width:390,height:844});await page.goto('/play');await expect(page.locator('.ck-recipe-card')).toHaveCount(8);await page.getByRole('button',{name:'再看看 8 道料理',exact:true}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(16);
   const open=await page.getByRole('button',{name:'開始製作黃金蛋炒飯',exact:true}).boundingBox(),favorite=await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).boundingBox();expect(open!.y+open!.height).toBeLessThanOrEqual(favorite!.y);await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page).toHaveURL(/\/play$/);
   await page.getByRole('button',{name:'觀察攝影 1',exact:true}).click();await expect(page.locator('.ad-game-card')).toHaveCount(1);await expect(page.locator('.ck-recipe-card')).toHaveCount(0);
-  await page.getByRole('button',{name:'反應手速 2',exact:true}).click();await expect(page.locator('.ad-game-card')).toHaveCount(2);await page.getByRole('button',{name:'料理小遊戲 64',exact:true}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(16);
+  await page.getByRole('button',{name:'反應手速 5',exact:true}).click();await expect(page.locator('.ad-game-card')).toHaveCount(2);await expect(page.locator('.pt-party-card')).toHaveCount(3);await page.getByRole('button',{name:'料理小遊戲 64',exact:true}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(16);
   await page.getByRole('button',{name:/♡ 我的收藏/}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(1);await page.getByRole('button',{name:'這道我來做',exact:true}).click();await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(page.getByRole('combobox',{name:'食譜篩選',exact:true})).toHaveValue('favorite');await expect(page.locator('.ck-recipe-card')).toHaveCount(1);
 });

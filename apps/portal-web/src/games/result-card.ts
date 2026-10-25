@@ -1,5 +1,6 @@
 import { type GameId } from './domain';
-export type ArcadeGameId = GameId | 'kitchen';
+import {partyOf,type PartyGameId} from './party/catalog';
+export type ArcadeGameId = GameId | PartyGameId | 'kitchen';
 export type RunResult = {
     game: ArcadeGameId;
     recipe?: string;
@@ -49,7 +50,7 @@ export async function resultExports(result: RunResult, logo?: HTMLImageElement |
         ctx.textBaseline = 'top';
         ctx.fillStyle = '#a34438';
         ctx.font = 'bold 23px monospace';
-        ctx.fillText(result.game === 'kitchen' ? 'FREE TWAI / LITTLE RECIPE BOOK' : 'ODD JOBS / DAILY NONSENSE', 48, wide ? 43 : 48);
+        ctx.fillText(result.game === 'kitchen' ? 'FREE TWAI / LITTLE RECIPE BOOK' : partyOf(result.game) ? 'FREE TWAI / DAY OFF PARTY' : 'ODD JOBS / DAILY NONSENSE', 48, wide ? 43 : 48);
         if (logo?.complete && logo.naturalWidth)
             contain(ctx, logo, wide ? 1090 : 798, wide ? 35 : 38, 70, 54);
         ctx.fillStyle = '#49362f';
