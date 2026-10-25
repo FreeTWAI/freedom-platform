@@ -1,3 +1,5 @@
+import * as React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {newTextHistory,recordText,breakTextGroup,undoText,redoText,TEXT_HISTORY_LIMIT} from '../../apps/portal-web/src/modules/text-edit-history';
@@ -63,4 +65,62 @@ test('optimizer CSS is eager so a stylesheet download cannot reject the deferred
   assert(!eager.has('src/modules/SocialPostOptimizer.tsx'),'optimizer JavaScript must not enter the initial module graph');
   const css=new Set([...eager].flatMap(key=>manifest[key].css??[]));
   assert(result.output.some(asset=>asset.type==='asset'&&css.has(asset.fileName)&&String(asset.source).includes('.social-post-optimizer')),'optimizer styles must be in the initial stylesheet graph');
+});
+
+// Execute the real TSX with only imported UI dependencies and the hydrated origin
+// hook supplied. This is component/unit evidence, not a browser or hydration test.
+async function gameTextHarness(){
+
+ const {readFileSync}=await import('node:fs'),{runInNewContext}=await import('node:vm'),{transformSync}=await import('esbuild');
+ let origin:string|undefined,injected=false;
+ const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>}};
+ const hooks={...React,useState:(initial:unknown)=>{if(origin!==undefined&&!injected){injected=true;return [origin,()=>{}];}return React.useState(initial);}};
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8');
+ runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,URL,require:(name:string)=>{
+  if(name==='react')return hooks;if(name==='react/jsx-runtime')return requireJsx;
+  if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};
+  if(name==='./MemberAvatar')return {MemberAvatar:()=>null};throw Error('Unexpected import '+name);
+ }});
+ function render(text:string,hydratedOrigin?:string,mentions:unknown[]=[]){origin=hydratedOrigin;injected=false;return renderToStaticMarkup(React.createElement(module.exports.SocialRichText,{client:{},text,mentions,onTag:()=>{}}));}
+ return {...module.exports,render};
+}
+import * as requireJsx from 'react/jsx-runtime';
+
+test('game challenge links accept only exact current-origin canonical games and uint32 seeds',async()=>{
+ const {gameChallengeLink:parse}=await gameTextHarness(),origin='https://workshop.example.test';
+ for(const game of ['photo','stamp','cash'])for(const seed of ['1','42','4294967295']){
+  const href=`/play?game=${game}&seed=${seed}`,label=origin+href;
+  assert.equal(parse(label,origin)?.href,href);
+  const punctuated=parse('（'+label+'）。',origin);assert(punctuated);assert.equal(punctuated.prefix,'（');assert.equal(punctuated.label,label);assert.equal(punctuated.suffix,'）。');
+ }
+ const route='/play?game=cash&seed=42',valid=origin+route;
+ for(const token of [
+  'https://evil.test'+route,'http://workshop.example.test'+route,origin+':443'+route,origin+'.evil.test'+route,
+  'https://user@workshop.example.test'+route,'https://evil.test/?next='+valid,'prefix'+valid,'//workshop.example.test'+route,'javascript:'+valid,
+  valid+'#tag',valid+'?',valid+'&seed=7',valid+'&extra=1',valid+'/suffix',valid+'.evil',valid+'\\',valid+'\u200b',valid+'\u0000',valid+'\n',valid+'\t',valid+'\u0085',valid+'\u202e',
+  origin+'/play?seed=42&game=cash',origin+'/play?game=cash&seed=0',origin+'/play?game=cash&seed=01',origin+'/play?game=cash&seed=-1',origin+'/play?game=cash&seed=4294967296',origin+'/play?game=cash&seed=1.5',origin+'/play?game=cash&seed=1e2',origin+'/play?game=other&seed=42',
+  origin+'/pl%61y?game=cash&seed=42',origin+'/play?game=%63ash&seed=42',origin+'/play?game=cash&seed=%34%32',origin+'/play/../play?game=cash&seed=42',
+ ])assert.equal(parse(token,origin),null,JSON.stringify(token));
+ for(const current of ['', 'null',origin+'/',origin+'/path','file://',origin+'?x=1'])assert.equal(parse(valid,current),null);
+ const local='http://localhost:4311';assert.equal(parse(local+route,local)?.href,route);
+});
+
+test('real rich text preserves escaped text, mentions, hashtags and newlines with safe manual challenge anchors',async()=>{
+ const {render}=await gameTextHarness(),origin='https://workshop.example.test',url=origin+'/play?game=cash&seed=42';
+ const text=`<img src=x onerror=alert(1)>\n@Alice Smith #離譜日常\n（${url}）。\n${url}&seed=7`;
+ const html=render(text,origin,[{user_id:'synthetic-member',display_name:'Alice Smith'}]);
+ assert.equal((html.match(/<a /g)??[]).length,1);assert(html.includes('href="/play?game=cash&amp;seed=42"'));
+ for(const attribute of ['target="_blank"','rel="noopener noreferrer"','referrerPolicy="no-referrer"','在新分頁開啟'])assert(html.includes(attribute),attribute);
+ assert(!html.includes('<img'));assert(html.includes('&lt;img src=x onerror=alert(1)&gt;\n'));
+ assert(html.includes('>@Alice Smith</button>'));assert(html.includes('>#離譜日常</button>'));
+ assert(html.includes('）。\n'));assert(html.includes(url.replace('&','&amp;')+'&amp;seed=7'));
+ const server=render(url);assert(!server.includes('<a '));assert.equal(render(url),server,'server render is deterministic without window');
+});
+
+
+test('URL-shaped text inside an existing multi-word mention remains one member link',async()=>{
+ const {render}=await gameTextHarness(),origin='https://freetwai.com',url=origin+'/play?game=cash&seed=1',name='A '+url;
+ const html=render('@'+name+'\n'+url,origin,[{user_id:'synthetic-member',display_name:name}]);
+ assert(html.includes('>@A '+url.replace('&','&amp;')+'</button>'));
+ assert.equal((html.match(/<a /g)??[]).length,1,'only the standalone challenge is linked');
 });

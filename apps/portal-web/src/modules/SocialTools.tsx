@@ -4,6 +4,7 @@ import {MemberAvatar} from './MemberAvatar';
 import {useLanguage,type InterfaceLanguage} from '../language';
 
 const textToolMessages={
+ newTab:['在新分頁開啟','Opens in a new tab','新しいタブで開きます','새 탭에서 열립니다','Se abre en una pestaña nueva'],
  emoji:['插入 emoji','Insert emoji','絵文字を挿入','이모지 삽입','Insertar emoji'],
  insert:['插入 {emoji}','Insert {emoji}','{emoji}を挿入','{emoji} 삽입','Insertar {emoji}'],
  mention:['標註會員','Mention a member','メンバーをメンション','회원 멘션','Mencionar a un miembro'],
@@ -39,11 +40,42 @@ export function SocialMemberLink({client,member,children}:{client:PortalClient;m
  function close(){++seq.current;dialog.current?.close();trigger.current?.focus();}
  return <><button ref={trigger} type="button" className="social-text-link" onClick={()=>void show()}>{children??member.display_name}</button><dialog ref={dialog} className="social-publish-dialog social-member-dialog" aria-labelledby={id} onCancel={e=>{e.preventDefault();close();}}><header className="social-publish-head"><h2 id={id}>會員名片</h2><button className="btn btn-ghost" type="button" onClick={close}>關閉名片</button></header>{busy&&<p role="status">載入中…</p>}{error&&<p role="alert">{error}</p>}{card&&<div className="social-member-summary"><MemberAvatar nickname={card.nickname} avatarUrl={card.avatar_url}/><strong>{card.nickname}</strong>{card.primary_guild&&<p>{card.primary_guild.name}</p>}</div>}</dialog></>;
 }
+/** Only the canonical challenge URL emitted by AbsurdDaily is linkable.
+ * Do not normalize untrusted input: URL parsers accept encoded paths, credentials,
+ * backslashes and other spellings that must remain plain text here.
+ */
+export function gameChallengeLink(token:string,origin:string){
+ if(/[\u0000-\u0020\u007f-\u009f\p{Cf}%\\]/u.test(token)||!/^https?:\/\//.test(origin))return null;
+ try{if(new URL(origin).origin!==origin)return null;}catch{return null;}
+ const match=/^([（(「『【]*)(https?:\/\/.*?)([.,!;，。！？、；：)）」』】]*)$/u.exec(token);
+ if(!match||!match[2].startsWith(origin+'/play?'))return null;
+ const route=match[2].slice(origin.length);
+ const challenge=/^\/play\?game=(photo|stamp|cash)&seed=([1-9][0-9]{0,9})$/.exec(route);
+ if(!challenge||Number(challenge[2])>4294967295)return null;
+ return {prefix:match[1],label:match[2],suffix:match[3],href:`/play?game=${challenge[1]}&seed=${challenge[2]}`};
+}
 export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalClient;text:string;mentions?:Mention[];onTag?:(tag:string)=>void}){
+ const {language}=useLanguage();
+ // Identical server/first hydration output; no browser globals during SSR.
+ const [origin,setOrigin]=useState('');
+ useEffect(()=>{setOrigin(window.location.origin);},[]);
  const names=new Map(mentions.map(item=>[`@${item.display_name}`,item]));
  const escaped=[...names.keys()].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
  const pattern=new RegExp(`(${[...escaped,'(?<![\\p{L}\\p{N}_])#[\\p{L}\\p{N}_]{1,50}(?![\\p{L}\\p{N}_])'].join('|')})`,'gu');
- return <>{text.split(pattern).map((part,index)=>names.has(part)?<SocialMemberLink key={index} client={client} member={names.get(part)!}>{part}</SocialMemberLink>:part.startsWith('#')&&/^#[\p{L}\p{N}_]{1,50}$/u.test(part)&&onTag?<button type="button" className="social-text-link" key={index} onClick={()=>onTag(part.slice(1))}>{part}</button>:part)}</>;
+ const plain=(text:string,key:number)=><span key={key}>{text.split(pattern).map((part,index)=>names.has(part)?<SocialMemberLink key={index} client={client} member={names.get(part)!}>{part}</SocialMemberLink>:part.startsWith('#')&&/^#[\p{L}\p{N}_]{1,50}$/u.test(part)&&onTag?<button type="button" className="social-text-link" key={index} onClick={()=>onTag(part.slice(1))}>{part}</button>:part)}</span>;
+ const mentionRanges=escaped.length?[...text.matchAll(new RegExp(escaped.join('|'),'gu'))].map(match=>({start:match.index!,end:match.index!+match[0].length})):[];
+ const parts:ReactNode[]=[];let cursor=0;
+ for(const match of text.matchAll(/[^ \t\r\n]+/gu)){
+  const start=match.index!;
+  // A nickname can contain spaces and URL-shaped text; keep its existing mention.
+  if(mentionRanges.some(range=>range.start<start+match[0].length&&range.end>start))continue;
+  const link=gameChallengeLink(match[0],origin);if(!link)continue;
+  parts.push(plain(text.slice(cursor,start)+link.prefix,start));
+  parts.push(<a key={`game-${start}`} className="social-text-link" href={link.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" aria-label={`${link.label} (${textToolMessages.newTab[textToolLanguageIndex[language]]})`}>{link.label}</a>);
+  cursor=start+match[0].length-link.suffix.length;
+ }
+ parts.push(plain(text.slice(cursor),text.length));
+ return <>{parts}</>;
 }
 export function SocialTextTools({client,text,onChange,mentions,onMentions,disabled,maxLength=1000}:{client:PortalClient;text:string;onChange:(s:string)=>void;mentions:Mention[];onMentions:(v:Mention[])=>void;disabled:boolean;maxLength?:number}){
  const {language}=useLanguage();

@@ -5,6 +5,8 @@ import {randomUUID} from 'node:crypto';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
+import {cashDeck} from '../../apps/portal-web/src/games/domain.js';
+import {GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 
 async function composer(page:Page,email='maker@local.test'){
   await page.goto('/');
@@ -290,6 +292,62 @@ test('unknown publication locks history, retry confirms the original command and
   await dialog.getByRole('button',{name:'重試發布',exact:true}).click();await expect(dialog).not.toBeVisible();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(area).toHaveValue('');
   await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();await area.press('Control+z');await expect(area).toHaveValue('');
+});
+
+test('a completed cash game publishes its same-seed challenge only on confirmation and opens it only on a normal link click',async({page,e2eAuthPool})=>{
+  test.setTimeout(120_000);
+  const id=randomUUID(),email=`social-game-${id}@example.test`,opened:Page[]=[],writes:string[]=[];
+  expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(e2eSchema(process.env.FREEDOM_E2E_SCHEMA));
+  // A dedicated member keeps this real publication off the shared maker quota.
+  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    VALUES($1,$2,$3,'同題挑戰測試會員',$4,$5,false)`,[id,DEMO_COMMUNITY,email,hashPassword(DEMO_PASSWORD),randomUUID()]);
+  page.context().on('page',popup=>opened.push(popup));
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/social-posts/notes')writes.push(request.postData()!);});
+  try{
+    // Exercise the real producer, not an injected GameDraft or seeded wall post.
+    await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
+    await page.goto('/play?game=cash&seed=42');
+    const challengeUrl=new URL('/play?game=cash&seed=42',page.url()).href;
+    await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+    await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
+    await page.getByRole('button',{name:'開始這一局',exact:true}).click();
+    for(const card of cashDeck(42)){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
+    await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+    await page.getByRole('button',{name:'發到自由工坊',exact:true}).click();
+    await page.waitForURL('**/?game-share=1#home');await page.clock.resume();
+    const draft=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!) as GameDraft,GAME_HANDOFF_KEY);
+    expect(draft.game).toBe('cash');expect(draft.seed).toBe(42);expect(draft.text).toContain(`\n${challengeUrl}\n`);
+    expect(draft.image).toMatch(/^data:image\/jpeg;base64,/);expect(writes).toEqual([]);expect(opened).toEqual([]);
+    await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
+    await page.getByRole('button',{name:'登入',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),area=dialog.getByLabel('貼文內容',{exact:true});
+    await expect(dialog).toBeVisible();await expect(area).toHaveValue(draft.text);
+    await expect(dialog.locator('.social-publish-identity')).toContainText('同題挑戰測試會員');
+    await expect(dialog.getByRole('img',{name:'待發布圖片預覽',exact:true})).toBeVisible();
+    const text=`${draft.text}\n<strong data-game-share-test="escaped">原文 & 換行</strong>\n第二行`;
+    await area.fill(text);expect(writes).toEqual([]);expect(opened).toEqual([]);
+    const published=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/social-posts/notes');
+    await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();
+    const response=await published;expect(response.status()).toBe(201);
+    const {post_id}=await response.json();await expect(dialog).toBeHidden();
+    expect(writes).toHaveLength(1);expect(JSON.parse(writes[0]).text).toBe(text);
+    expect((await e2eAuthPool.query('SELECT note FROM community_social_posts WHERE post_id=$1 AND author_user_id=$2',[post_id,id])).rows).toEqual([{note:text}]);
+    const post=page.locator(`#social-post-${post_id}`),body=post.locator('.social-note');
+    await expect(post).toBeVisible();await post.getByRole('button',{name:'顯示全文',exact:true}).click();
+    expect(await body.textContent()).toBe(text);await expect(body).toHaveCSS('white-space','pre-wrap');await expect(body.locator('strong')).toHaveCount(0);
+    const link=body.getByRole('link',{name:`${challengeUrl} (在新分頁開啟)`,exact:true});
+    await expect(link).toBeVisible();await expect(link).toHaveAttribute('href','/play?game=cash&seed=42');
+    await expect(link).toHaveAttribute('target','_blank');await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');
+    expect(opened).toEqual([]);
+    const [popup]=await Promise.all([page.waitForEvent('popup'),link.click()]);
+    await popup.waitForURL(challengeUrl);await popup.waitForLoadState('domcontentloaded');
+    expect(popup.url()).toBe(challengeUrl);expect(opened).toEqual([popup]);
+    expect(await popup.evaluate(()=>({opener:window.opener,referrer:document.referrer}))).toEqual({opener:null,referrer:''});
+    expect(writes).toHaveLength(1);
+  }finally{
+    await Promise.all([...opened,page].map(tab=>tab.close()));
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE author_user_id=$1',[id]);
+  }
 });
 
 test('signing out and signing in again cannot recover the previous session draft',async({page})=>{
