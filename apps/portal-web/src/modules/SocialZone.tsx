@@ -336,6 +336,9 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   // dropped before it can write the list, cursor or canHide.
   const refreshSequence = useRef(0);
   const refreshShorts = useCallback(async (loadedCount: number): Promise<readonly string[] | null> => {
+    const ownsScope = () => client === currentClient.current && feedSession === client.sessionGeneration && feedScope.current.client === client && feedScope.current.session === feedSession && feedScope.current.platform === 'shorts' && feedScope.current.tag === tag && feedScope.current.directPost === null;
+    // A queued visibility callback must not re-read or replace a newer login/feed.
+    if (!ownsScope()) return null;
     const sequence = loadSequence.current, generation = ++refreshSequence.current;
     try {
       const kept: Post[] = [];
@@ -347,14 +350,14 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         if (tag) query.set('tag', tag);
         if (next) query.set('cursor', next);
         const page = await client.get<Page>(`/social-posts?${query}`);
-        if (sequence !== loadSequence.current || generation !== refreshSequence.current) return null;
+        if (!ownsScope() || sequence !== loadSequence.current || generation !== refreshSequence.current) return null;
         kept.push(...page.items.filter(post => !kept.some(item => item.post_id === post.post_id)));
         next = page.next_cursor; canHideNow = page.can_hide;
       }
       setItems(kept); setCursor(next ?? null); setCanHide(canHideNow);
       return kept.map(post => post.post_id);
     } catch { return null; }
-  }, [client, tag]);
+  }, [client, feedSession, tag]);
   useEffect(()=>{
     const changed=()=>{const next=sharedPostFromLocation();if(next!==directPost){++loadSequence.current;feedScope.current={...feedScope.current,directPost:next};setDirectPost(next);}};
     window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);
