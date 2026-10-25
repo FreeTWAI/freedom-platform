@@ -177,7 +177,8 @@ test('creation navigation keeps three task choices and all child routes discover
   await links.getByRole('link',{name:'合作紀錄',exact:true}).click();await expect(page).toHaveURL(/#engagement$/);
   await expect(page.getByRole('heading',{name:'合作紀錄',level:1,exact:true})).toBeVisible();
   await openFeatureSearch(page);
-  const group=page.getByRole('navigation',{name:'主要工作區'}).locator('.nav-more-content > .nav-section').filter({has:page.getByText('創作與合作',{exact:true})});
+  const group=page.getByRole('navigation',{name:'主要工作區'}).locator('.nav-more-content > .nav-section').filter({has:page.locator('summary').filter({hasText:/^創作與合作(?:⌄)?$/})});
+  await expect(group).toHaveCount(1);
   await expect(group.locator('.nav-section-items > button')).toHaveText(['任務協作','作品與合作','私人 AI 工作室']);
   await expect(group.getByRole('button',{name:'作品與合作',exact:true})).toHaveAttribute('aria-current','page');
   // Old member vocabulary remains searchable even though the main group is simpler.

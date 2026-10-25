@@ -171,3 +171,25 @@ test('task collaboration and community tasks keep distinct names in every langua
     assert.ok(interfaceText(language,'nav.private-ai'));
   }
 });
+
+// Exercise the actual outside-dismiss handler. Model the pointerdown default
+// focus step after dispatch; real browser focus remains covered by phone E2E.
+function outsideDismissHarness(){
+  const source=readFileSync(new URL('../../apps/portal-web/src/Navigation.tsx',import.meta.url),'utf8');
+  const handler=source.match(/const dismissOutside = \(event: Event\) => \{[\s\S]*?\n    \};/);assert.ok(handler);
+  class Target {constructor(readonly where:string){} closest(selector:string){return this.where==='backdrop'&&selector==='.mobile-nav-backdrop'?this:null;}}
+  const state={focus:'navigation',closed:[] as boolean[]};
+  const context={Node:Target,Element:Target,element:{contains:(node:Target)=>node.where==='inside'},toggle:{contains:(node:Target)=>node.where==='toggle'},closeMobile:{current:(returnFocus:boolean)=>{state.closed.push(returnFocus);if(returnFocus)state.focus='toggle';}}};
+  const dispatch=runInNewContext(transformSync(handler[0]+'\nglobalThis.dispatch=dismissOutside;',{loader:'ts'}).code,context)|| (context as any).dispatch;
+  return {state,event(type:string,where:string){const event={type,target:new Target(where),defaultPrevented:false,preventDefault(){this.defaultPrevented=true;}};dispatch(event);if(type==='pointerdown'&&!event.defaultPrevented)state.focus=where==='backdrop'?'body':where;return event;}};
+}
+test('backdrop pointerdown cancels its native focus step before restoring the menu toggle',()=>{
+  const h=outsideDismissHarness(),event=h.event('pointerdown','backdrop');assert.equal(event.defaultPrevented,true);assert.equal(h.state.focus,'toggle');assert.deepEqual(h.state.closed,[true]);
+});
+test('outside controls keep native pointer focus and focusin never cancels a default action',()=>{
+  const h=outsideDismissHarness();assert.equal(h.event('pointerdown','settings').defaultPrevented,false);assert.equal(h.state.focus,'settings');assert.deepEqual(h.state.closed,[false]);
+  assert.equal(h.event('focusin','settings').defaultPrevented,false);assert.equal(h.state.focus,'settings');
+});
+test('inside navigation and the menu toggle are not outside dismissals',()=>{
+  for(const where of ['inside','toggle']){const h=outsideDismissHarness();assert.equal(h.event('pointerdown',where).defaultPrevented,false);assert.deepEqual(h.state.closed,[]);}
+});

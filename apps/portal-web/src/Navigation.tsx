@@ -51,6 +51,9 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     const dismissOutside = (event: Event) => {
       if (event.target instanceof Node && !element.contains(event.target) && !toggle?.contains(event.target)) {
         const backdrop = event.target instanceof Element && event.target.closest('.mobile-nav-backdrop');
+        // Cancel only the backdrop's pointer focus default; otherwise it can
+        // move focus to body after the toggle has been restored.
+        if (backdrop && event.type === 'pointerdown') event.preventDefault();
         closeMobile.current?.(Boolean(backdrop));
       }
     };
