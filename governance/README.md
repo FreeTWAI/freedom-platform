@@ -114,23 +114,23 @@ The fixed registry in `runtime-suites.mjs` maps these existing IDs:
 
 
 The full pinned browser plan keeps its six mode passes. Its default mode (#784)
-first enumerates all cases without sharding, then runs exactly two concurrent
+first enumerates all cases without sharding, then runs exactly three concurrent
 native Playwright shards, each still `workers: 1` / `fullyParallel: false`.
 The host assigns separate generated `fp_e2e_*` schemas and localhost ports
-14311/14312; run only one full pinned plan per host. Existing dedicated fixture
+14311/14312/14313; run only one full pinned plan per host. Existing dedicated fixture
 passes and narrow guide/guild plans remain unsharded and retain their obligations.
 No candidate CLI profile, file list, shard count or timeout override is accepted.
 
-The current 60-minute default-mode budget from #796 includes discovery and both
+The current 60-minute default-mode budget from #796 includes discovery and all three
 concurrent processes; discovery keeps its independent 60-second maximum. A failed shard
-cancels its peer by interrupting the Playwright CLI with SIGINT. Playwright then
+cancels its peers by interrupting the Playwright CLI with SIGINT. Playwright then
 runs its configured SIGTERM webServer teardown; the existing 20-second SIGKILL
 escalation remains bounded. Direct SIGTERM to the CLI skips that teardown and
 can leave its separate webServer process group alive. The real-Playwright
-cancellation regression requires both HTTP servers to receive SIGTERM and exit
+cancellation regression requires all three HTTP servers to receive SIGTERM and exit
 before the runner returns. Timeout or
 cancellation remains failed even if every interrupted child exits zero.
-Default evidence requires both ordered `partitions` with host-bound current/total,
+Default evidence requires all three ordered `partitions` with host-bound current/total,
 actual exit status and raw-report SHA-256. Their disjoint case union must equal
 the unsharded inventory; a successful subset, duplicate, invented or omitted case
 cannot pass. Receipts retain inventory/case fingerprints without raw test titles.
@@ -139,7 +139,7 @@ scratch can be discarded or the next fixture pass can start. Ordered-prefix
 validation defers only the whole-plan skipped-to-passed/file coverage obligations;
 it does not invent future pass results or admit an incomplete plan. Aggregation
 errors retain their original reason, including `case_listing_mismatch` even when
-both shards exited zero. Failure artifacts prioritize the inventory and both raw
+all shards exited zero. Failure artifacts prioritize the inventory and all three raw
 shard reports before optional traces under the existing 128 MiB / 512-entry,
 regular-file/no-symlink diagnostic-copy policy; they are not admission evidence.
 Reviewed central-pin adoption remains a separate maintainer action. Local or
