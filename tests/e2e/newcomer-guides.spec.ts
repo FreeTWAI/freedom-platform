@@ -368,7 +368,13 @@ test('real six-frame playback finishes, cancels under motion controls and keeps 
   expect(observed.sources.every(source=>SPIRIT_CHARACTERS.home.frames.includes(source))).toBe(true);
   await expect(actor(page).locator('img')).toHaveAttribute('src',SPIRIT_CHARACTERS.home.hero);
   expect(await actor(page).locator('img').evaluate(image=>getComputedStyle(image).animationName)).toBe('none');
-  await ask(page,'你好'); await expect(actor(page)).toHaveAttribute('data-animating','true');
+  await ask(page,'你好');
+  // Submission clears the input and disables its button. Text completion no
+  // longer clicks skip (which used to focus this control), so establish the
+  // widget keyboard scope explicitly before testing animation cancellation.
+  const endConversation = panel(page).getByRole('button',{name:'結束交談',exact:true});
+  await endConversation.focus(); await expect(endConversation).toBeFocused();
+  await expect(actor(page)).toHaveAttribute('data-animating','true');
   await page.keyboard.press('Escape'); await expect(panel(page)).toHaveCount(0); await expect(widget(page).locator('.page-spirit-launcher')).toBeFocused();
   await openSpirit(page); await openPreferences(page); await panel(page).getByRole('checkbox',{name:'靜態省電',exact:true}).check(); await ask(page,'你好');
   await expect(actor(page)).toHaveAttribute('data-animating','false'); await expect(actor(page).locator('img')).toHaveAttribute('src',SPIRIT_CHARACTERS.home.hero);
