@@ -13,7 +13,7 @@ async function setupGuilds(page: Page, masterId?: string) {
   let memberReads = 0, announcementReads = 0;
   const directory = () => names.map((name, index) => ({
     guild_key: keys[index], name, purpose: index === 1 ? '把很長的協作專業說明、不同人數的公會幹部與技能書排成一致的卡片。' : '交流專長，一起完成作品。',
-    first_step: '閱讀入門技能', track_count: 1,
+    first_step: '閱讀入門技能', track_count: 1, tags: [index % 2 === 0 ? 'technology' : 'creation'],
     is_primary: keys[index] === preferences.primary_guild_key,
     is_secondary: preferences.secondary_guild_keys.includes(keys[index]),
     secondary_position: preferences.secondary_guild_keys.indexOf(keys[index]) + 1,
@@ -96,8 +96,11 @@ test('six synthetic guilds partition featured, other joined and unjoined members
 test('the secondary-guild editor sends a versioned command and reloads the synthetic saved preference without changing memberships', async ({ page }) => {
   const fixture = await setupGuilds(page); await login(page);
   const membershipsBefore = fixture.directory().map(guild => guild.membership);
+  await page.locator('.guild-tools-disclosure > summary').click();
   await page.getByRole('button', { name: '設定次要公會', exact: true }).click();
   const editor = page.locator('#secondary-guild-editor');
+  await page.locator('.guild-tools-disclosure > summary').click();
+  await expect(editor).toBeVisible(); // Closing optional tools must not hide an active editor.
   await expect(editor.getByRole('checkbox')).toHaveCount(4);
   const choice = (index: number) => editor.getByRole('checkbox', { name: new RegExp(`^${names[index]}`) });
   await expect(choice(1)).toBeChecked(); await expect(choice(2)).toBeChecked();
@@ -120,6 +123,7 @@ test('the secondary-guild editor sends a versioned command and reloads the synth
   await expect(group(page, '主要與次要公會').locator('.guild-card')).toHaveCount(3);
   expect(await guildIds(page, '主要與次要公會')).toEqual([keys[0], keys[1], keys[3]]);
   expect(fixture.directory().map(guild => guild.membership)).toEqual(membershipsBefore);
+  await page.locator('.guild-tools-disclosure > summary').click();
   await page.getByRole('button', { name: '設定次要公會', exact: true }).click();
   await choice(1).uncheck(); await choice(3).uncheck();
   await editor.getByRole('button', { name: '儲存次要公會', exact: true }).click();
@@ -318,4 +322,66 @@ test('switching guild sections preserves a pending roster command and its unknow
   expect(commands[1]).toEqual(commands[0]);
   expect(commands[0].body).toEqual({ member_tier: 'full' });
   expect(commands[0].version).toBe('"1"');
+});
+
+test('directory disclosures preserve filters, joined totals and the visible create guide anchor without writes', async ({ page }) => {
+  const fixture = await setupGuilds(page); await login(page);
+  const directory = group(page, '公會目錄');
+  const topics = directory.locator('.guild-topic-disclosure');
+  const summary = topics.locator('summary');
+  const tools = directory.locator('.guild-tools-disclosure');
+  await expect(topics).not.toHaveAttribute('open');
+  await expect(tools).not.toHaveAttribute('open');
+  await expect(directory.getByRole('group', { name: '公會主題', exact: true })).toBeHidden();
+  await expect(directory.getByRole('button', { name: '前往技能書架', exact: true })).toBeHidden();
+  await expect(directory.locator('[data-guide-anchor="guilds:create-application"]')).toBeVisible();
+  await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：6 個公會');
+  await summary.focus(); await page.keyboard.press('Enter');
+  await expect(topics).toHaveAttribute('open');
+  await topics.getByRole('button', { name: 'AI 與技術', exact: true }).click();
+  await summary.focus(); await page.keyboard.press('Space');
+  await expect(topics).not.toHaveAttribute('open');
+  await expect(summary).toHaveText('主題篩選 · AI 與技術');
+  await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：3 個公會');
+  await expect(directory.getByLabel('我的公會概況', { exact: true })).toContainText('已加入 5 個公會');
+  await directory.getByRole('searchbox', { name: '搜尋公會' }).fill(names[4]);
+  await directory.getByRole('button', { name: '已加入', exact: true }).click();
+  await expect(directory.locator('.guild-card')).toHaveCount(1);
+  await tools.locator('summary').click();
+  await expect(tools.getByRole('button', { name: '前往技能書架', exact: true })).toBeVisible();
+  await expect(tools).toContainText('主要 1 個・次要最多 2 個');
+  await tools.locator('summary').click();
+  await expect(directory.getByRole('searchbox', { name: '搜尋公會' })).toHaveValue(names[4]);
+  await expect(directory.getByRole('button', { name: '已加入', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await summary.click();
+  await expect(topics.getByRole('button', { name: 'AI 與技術', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await topics.getByRole('button', { name: '全部主題', exact: true }).click();
+  await directory.getByRole('searchbox', { name: '搜尋公會' }).fill('沒有這個合成公會');
+  await expect(directory.locator('.guild-filter-result')).toHaveText('符合篩選：0 個公會');
+  await expect(directory.getByLabel('我的公會概況', { exact: true })).toContainText('已加入 5 個公會');
+  expect(fixture.writes).toHaveLength(0);
+  expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 0 });
+});
+
+test('directory discovery precedes optional controls with readable wrapping and 44px targets', async ({ page }) => {
+  await setupGuilds(page); await login(page);
+  const directory = group(page, '公會目錄');
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 960 });
+    for (const fontSize of ['16px', '32px']) {
+      await page.evaluate(value => { document.documentElement.style.fontSize = value; }, fontSize);
+      expect(await directory.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      for (const control of await directory.locator('.guild-hub-heading button, .guild-directory-tools button, .guild-directory-tools input, .guild-directory-options summary').all()) {
+        const box = await control.boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+      }
+      if (fontSize === '16px') {
+        const top = (await directory.boundingBox())!.y;
+        const firstCard = (await directory.locator('.guild-card').first().boundingBox())!.y;
+        expect(firstCard - top).toBeLessThan(480);
+      }
+    }
+  }
 });
