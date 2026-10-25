@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
-import {test,expect,type Browser,type Page} from './fixtures.js';
+import {test,expect,type Browser,type BrowserContext,type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
@@ -13,9 +13,8 @@ const widths=[{width:1280,height:900},{width:820,height:900},{width:390,height:8
 type Person={user_id:string;email:string;display_name:string;tier:'intern'|'full';expert?:boolean;master?:boolean};
 type Fixture={guildName:string;people:Person[];master:Person;intern:Person;extra:Person};
 
-async function seed(db:Pool):Promise<Fixture>{
+function createFixture():Fixture{
  const run=randomUUID().slice(0,8);
- const guildName=(await db.query('SELECT name FROM positioning_guild_catalog WHERE guild_key=$1',[guildKey])).rows[0].name as string;
  const people:Person[]=[
   {user_id:randomUUID(),email:`tier-master-${run}@example.test`,display_name:`層級會長 ${run}`,tier:'full',master:true},
   {user_id:randomUUID(),email:`tier-intern-${run}@example.test`,display_name:`層級實習 ${run}`,tier:'intern'},
@@ -23,14 +22,17 @@ async function seed(db:Pool):Promise<Fixture>{
   {user_id:randomUUID(),email:`tier-expert-b-${run}@example.test`,display_name:`層級專家乙 ${run}`,tier:'full',expert:true},
   {user_id:randomUUID(),email:`tier-extra-${run}@example.test`,display_name:`層級候補 ${run}`,tier:'full'},
  ];
- const master=people[0];
+ return {guildName:'',people,master:people[0],intern:people[1],extra:people[4]};
+}
+async function seed(db:Pool,fixture:Fixture){
+ const {people,master}=fixture;
+ fixture.guildName=(await db.query('SELECT name FROM positioning_guild_catalog WHERE guild_key=$1',[guildKey])).rows[0].name as string;
  for(const person of people){
   await db.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required) VALUES($1,$2,$3,$4,$5,$6,false)`,[person.user_id,DEMO_COMMUNITY,person.email,person.display_name,hashPassword(DEMO_PASSWORD),randomUUID()]);
   await db.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,$4,'active',$5)`,[randomUUID(),DEMO_COMMUNITY,person.user_id,guildKey,person.tier]);
   if(person.expert)await db.query('INSERT INTO positioning_guild_experts(community_id,guild_key,user_id,active,appointed_by_user_id) VALUES($1,$2,$3,true,$4)',[DEMO_COMMUNITY,guildKey,person.user_id,master.user_id]);
  }
  await db.query('INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3)',[DEMO_COMMUNITY,guildKey,master.user_id]);
- return {guildName,people,master,intern:people[1],extra:people[4]};
 }
 async function cleanup(db:Pool,fixture:Fixture){
  const ids=fixture.people.map(person=>person.user_id);
@@ -45,8 +47,7 @@ async function cleanup(db:Pool,fixture:Fixture){
  await db.query('DELETE FROM sessions WHERE user_id=ANY($1::uuid[])',[ids]);
  await db.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);
 }
-async function open(browser:Browser,baseURL:string,person:Person,viewport:{width:number;height:number}){
- const context=await browser.newContext({baseURL,viewport});
+async function open(context:BrowserContext,person:Person){
  await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
  const page=await context.newPage();
  await page.goto('/');
@@ -55,6 +56,25 @@ async function open(browser:Browser,baseURL:string,person:Person,viewport:{width
  await page.getByRole('button',{name:'登入',exact:true}).click();
  await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
  return {context,page};
+}
+async function withFixture(db:Pool,browser:Browser,baseURL:string,person:'intern'|'master',run:(fixture:Fixture,session:Awaited<ReturnType<typeof open>>)=>Promise<void>){
+ // Record every intended ID before the first insert so partial seeds are owned too.
+ const fixture=createFixture();
+ let context:BrowserContext|undefined;
+ const errors:unknown[]=[];
+ try{
+  await seed(db,fixture);
+  context=await browser.newContext({baseURL,viewport:widths[0]});
+  const session=await open(context,fixture[person]);
+  await run(fixture,session);
+ }catch(error){errors.push(error);}
+ finally{
+  try{await context?.close();}catch(error){errors.push(error);}
+  // A timed-out/disposed browser must not strand the shared guild officer key.
+  try{await cleanup(db,fixture);}catch(error){errors.push(error);}
+ }
+ if(errors.length===1)throw errors[0];
+ if(errors.length>1)throw new AggregateError(errors,'Guild member tier fixture failed',{cause:errors[0]});
 }
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 async function memberRow(page:Page,name:string){
@@ -70,9 +90,7 @@ async function memberRow(page:Page,name:string){
 
 test('an intern sees the calm notice and a disabled guild-exchange submit at phone, tablet and desktop',async({browser,baseURL,e2eAuthPool})=>{
  test.setTimeout(120_000);
- const fixture=await seed(e2eAuthPool);
- const session=await open(browser,baseURL!,fixture.intern,widths[0]);
- try{
+ await withFixture(e2eAuthPool,browser,baseURL!,'intern',async(fixture,session)=>{
   for(const viewport of widths){
    await session.page.setViewportSize(viewport);
    await navigate(session.page,'職業公會');
@@ -93,14 +111,12 @@ test('an intern sees the calm notice and a disabled guild-exchange submit at pho
    await expect(session.page.getByText(internWrite)).toBeVisible();
    await noOverflow(session.page);
   }
- }finally{await session.context.close();await cleanup(e2eAuthPool,fixture);}
+ });
 });
 
 test('the guild master promotes an intern, appoints an expert, and sees the 3/3 refusal',async({browser,baseURL,e2eAuthPool})=>{
  test.setTimeout(120_000);
- const fixture=await seed(e2eAuthPool);
- const session=await open(browser,baseURL!,fixture.master,widths[0]);
- try{
+ await withFixture(e2eAuthPool,browser,baseURL!,'master',async(fixture,session)=>{
   await navigate(session.page,'職業公會');
   const card=session.page.getByRole('article',{name:fixture.guildName,exact:true});
   await card.getByRole('button',{name:'查看成員',exact:true}).click();
@@ -123,5 +139,5 @@ test('the guild master promotes an intern, appoints an expert, and sees the 3/3 
    await expect(dialog.getByText(cap).first()).toBeVisible();
    await noOverflow(session.page);
   }
- }finally{await session.context.close();await cleanup(e2eAuthPool,fixture);}
+ });
 });
