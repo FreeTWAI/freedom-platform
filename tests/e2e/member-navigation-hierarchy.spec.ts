@@ -17,6 +17,13 @@ test('home and global navigation reach the same supply catalog and preserve hist
   await expect(page).toHaveURL(/#stores\/supply$/);
   await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:1,exact:true})).toBeVisible();
   await navigate(page,'我的商店');await expect(page).toHaveURL(/#stores$/);
+  const navigation=page.getByRole('navigation',{name:'主要工作區'});
+  await page.getByRole('button',{name:'開啟選單',exact:true}).click();await expect(navigation).toBeVisible();
+  await page.goBack();await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(navigation).toBeHidden();await expect(page.locator('#main-content')).toBeFocused();
+  await page.getByRole('button',{name:'開啟選單',exact:true}).click();await expect(navigation).toBeVisible();
+  await page.goForward();await expect(page).toHaveURL(/#stores$/);
+  await expect(navigation).toBeHidden();await expect(page.locator('#main-content')).toBeFocused();
   await page.goBack();await expect(page).toHaveURL(/#stores\/supply$/);
   await page.reload();await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:1,exact:true})).toBeVisible();
   await navigate(page,'我的供貨商品庫');
@@ -158,4 +165,27 @@ test('personal space is the only account content entry and legacy management ret
   await page.reload();await expect(page.getByRole('heading',{name:'草稿與已發布內容',exact:true})).toBeVisible();
   await page.getByRole('link',{name:'返回我的個人空間',exact:true}).click();await expect(page).toHaveURL(/#profile$/);
   await page.goBack();await expect(page).toHaveURL(/#my-content$/);
+});
+
+test('creation navigation keeps three task choices and all child routes discoverable on a phone',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await login(page);
+  await navigate(page,'作品與合作');
+  await expect(page.getByRole('heading',{name:'作品與合作',level:1,exact:true})).toBeVisible();
+  const links=page.getByRole('navigation',{name:'作品與合作',exact:true});
+  await links.getByRole('link',{name:'投稿開源工具',exact:true}).click();await expect(page).toHaveURL(/#opensource$/);
+  await expect(page.getByRole('heading',{name:'開源投稿',level:1,exact:true})).toBeVisible();
+  await links.getByRole('link',{name:'合作紀錄',exact:true}).click();await expect(page).toHaveURL(/#engagement$/);
+  await expect(page.getByRole('heading',{name:'合作紀錄',level:1,exact:true})).toBeVisible();
+  await openFeatureSearch(page);
+  const group=page.getByRole('navigation',{name:'主要工作區'}).locator('.nav-more-content > .nav-section').filter({has:page.getByText('創作與合作',{exact:true})});
+  await expect(group.locator('.nav-section-items > button')).toHaveText(['任務協作','作品與合作','私人 AI 工作室']);
+  await expect(group.getByRole('button',{name:'作品與合作',exact:true})).toHaveAttribute('aria-current','page');
+  // Old member vocabulary remains searchable even though the main group is simpler.
+  await page.getByLabel('搜尋功能').fill('我的工作');
+  await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'任務協作',exact:true}).click();
+  await expect(page).toHaveURL(/#workbench$/);await expect(page.getByRole('heading',{name:'任務協作',level:1,exact:true})).toBeVisible();
+  await navigate(page,'私人 AI 工作室');await expect(page).toHaveURL(/#private-ai$/);
+  await expect(page.getByRole('heading',{name:'私人 AI 工作室',level:1,exact:true})).toBeVisible();
+  await expect(links).toHaveCount(0);
+  await page.goBack();await expect(page).toHaveURL(/#workbench$/);
 });

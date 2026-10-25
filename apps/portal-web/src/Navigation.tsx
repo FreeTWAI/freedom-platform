@@ -8,12 +8,12 @@ import { TAB_TITLES } from './features/metadata';
 export { TAB_TITLES } from './features/metadata';
 
 const primary: TabId[] = ['home', 'profile', 'guilds', 'skills'];
-const keywords:Partial<Record<TabId,string>>={ar:'相機 圖案 掃描 衣服 海報 名片',messages:'聊天室 對話 私訊',members:'人才 找夥伴 媒合',skills:'學習 資源 免費',tasks:'任務 貢獻 參與','private-ai':'私人 AI 草稿 模型 執行',workbench:'工作 任務',showcase:'作品 分享 展示 需求 找人',opensource:'投稿 提交 上傳 GitHub 開源 工具 技能',supplier:'商品 商店 供應商',retail:'電商 販售 商店',account:'個人資料 設定 暱稱',friends:'朋友 好友 私訊',business:'業務 工作區 邀請',reservations:'預留 訂單 查詢 取消',stores:'商店 開店 店鋪 商品 上架 發布'};
+const keywords:Partial<Record<TabId,string>>={ar:'相機 圖案 掃描 衣服 海報 名片',messages:'聊天室 對話 私訊',members:'人才 找夥伴 媒合',skills:'學習 資源 免費',tasks:'任務 貢獻 參與','private-ai':'私人工作與 AI 私人 AI 工作室 草稿 模型 執行',workbench:'我的工作 任務協作 認領任務 提交成果',showcase:'作品與需求 作品與合作 分享 展示 需求 找人',opensource:'投稿 提交 上傳 GitHub 開源 工具 技能',supplier:'商品 商店 供應商',retail:'電商 販售 商店',account:'個人資料 設定 暱稱',friends:'朋友 好友 私訊',business:'業務 工作區 邀請',reservations:'預留 訂單 查詢 取消',stores:'商店 開店 店鋪 商品 上架 發布'};
 const groups: { label: string; pages: TabId[] }[] = [
   { label: '社群參與', pages: ['ar','events', 'tasks', 'highlights'] },
   { label: '認識夥伴', pages: ['members', 'friends', 'positioning', 'squads', 'cocreation'] },
   { label: '分享推廣', pages: ['services', 'promotion'] },
-  { label: '創作與合作', pages: ['workbench', 'private-ai', 'opensource', 'showcase', 'engagement'] },
+  { label: '創作與合作', pages: ['workbench', 'showcase', 'private-ai'] },
   { label: '供貨與銷售', pages: ['reservations', 'stores', 'supplier', 'retail', 'marketing'] },
   { label: '管理', pages: ['guild-workspace', 'business'] },
 ];
@@ -29,8 +29,9 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
   const nav = useRef<HTMLElement>(null), moreTrigger = useRef<HTMLElement>(null);
   const closeMobile = useRef(onCloseMobile);
   closeMobile.current = onCloseMobile;
-  const [expanded, setExpanded] = useState<string[]>(() => groups.filter(group => group.pages.includes(current)).map(group => group.label));
-  useEffect(() => { setExpanded(groups.filter(group => group.pages.includes(current)).map(group => group.label)); }, [current]);
+  const activeGroupTab = current === 'opensource' || current === 'engagement' ? 'showcase' : current;
+  const [expanded, setExpanded] = useState<string[]>(() => groups.filter(group => group.pages.includes(activeGroupTab)).map(group => group.label));
+  useEffect(() => { setExpanded(groups.filter(group => group.pages.includes(activeGroupTab)).map(group => group.label)); }, [activeGroupTab]);
   useEffect(() => { setMoreOpen(false); }, [current]);
   useEffect(() => { if (moreOpen) searchRef.current?.focus(); else setQuery(''); }, [moreOpen]);
   useEffect(() => { const close=(event:PointerEvent)=>{if(!nav.current?.contains(event.target as Node))setMoreOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[]);
@@ -77,8 +78,8 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
   const searchMatches = (Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''}`.toLocaleLowerCase().includes(normalizedQuery));
   const supplyMatches = guildLaunchpadEnabled && `${t('stores.supplyTitle')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalizedQuery);
   const supplySelected = /^#stores\/(?:supply$|[^/]+\/[^/]+\/supply(?:-orders)?(?:[/?]|$))/.test(currentHash);
-  const item = (id: TabId, title: InterfaceMessage = `nav.${id}`, hash = `#${id}`) => {
-    const active = (current === id || (id === 'profile' && current === 'my-content')) && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
+  const item = (id: TabId, title: InterfaceMessage = `nav.${id}`, hash = `#${id}`, grouped = false) => {
+    const active = (current === id || (id === 'profile' && current === 'my-content') || (grouped && id === 'showcase' && activeGroupTab === 'showcase')) && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
     return <button key={hash} type="button" className={`nav-item${active ? ' is-active' : ''}`}
       aria-current={active ? 'page' : undefined} onClick={() => {setMoreOpen(false);setQuery('');onSelect(id, hash)}}>
       <WorkshopIcon name={id}/><span>{t(title)}</span>
@@ -99,7 +100,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
       </summary>
       <div className="nav-section-items">
         {group.label === '供貨與銷售' && guildLaunchpadEnabled && item('stores', 'stores.supplyTitle', '#stores/supply')}
-        {group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id))}
+        {group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id, `nav.${id}`, `#${id}`, true))}
         {group.label === '管理' && <a className="nav-item" href="/admin">{t('nav.admin')} <span aria-hidden="true">↗</span></a>}
       </div>
     </details>)}

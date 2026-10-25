@@ -36,7 +36,7 @@ test('workbench and task board load bounded work pages without losing microsecon
   const ids=await seedWorks(e2eAuthPool);
   await page.setViewportSize({width: 1280, height: 900});
   await login(page);
-  await navigate(page, '我的工作');
+  await navigate(page, '任務協作');
   await expect(paginationHeadings(page)).toHaveCount(24);
   const workbenchMore = page.getByRole('button', {name: '載入較早的社群工作', exact: true});
   await expect(workbenchMore).toBeVisible();

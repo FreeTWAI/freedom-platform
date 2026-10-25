@@ -699,14 +699,18 @@ function Workspace({
   const workspaceTopbar = useRef<HTMLElement>(null)
   const previousTab = useRef(tab)
   useEffect(() => {
-    if (previousTab.current === tab) return
+    setMobileOpen(false)
+    if (previousTab.current === tab) {
+      // Accepted same-page history changes must not leave focus in hidden navigation.
+      if (document.activeElement?.closest('#workspace-navigation')) mainContent.current?.focus({ preventScroll: true })
+      return
+    }
     previousTab.current = tab
     if(tab!=='social')setNotificationTarget(current=>current?.tab==='social'?null:current)
     logConsoleEvent({channel:consoleChannel('guide_navigation'),kind:'guide',source:'導覽',message:`已進入「${tabTitle(tab)}」。${TAB_GUIDANCE[tab]}`})
-    setMobileOpen(false)
     mainContent.current?.focus({ preventScroll: true })
     workspaceTopbar.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
-  }, [tab])
+  }, [tab, locationHash])
   const selectTab = useCallback((next: TabId, destinationHash?: string) => {
     if(next==='messages'){openMessages();return}
     const nextHash = destinationHash ?? `#${next}`

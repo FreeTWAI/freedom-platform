@@ -764,7 +764,7 @@ test('gallery loads one selected view and closes cleanly with Escape without cro
   await gallery.getByRole('combobox',{name:'角色',exact:true}).selectOption('skills');await expect(gallery.locator('img')).toHaveAttribute('src',SPIRIT_CHARACTERS.skills.views[0]);
   await page.keyboard.press('Escape');await expect(gallery).toHaveCount(0);
   await expect(panel(page).getByRole('button',{name:'角色六視圖',exact:true})).toBeFocused();
-  await closeSpirit(page);await navigate(page,'私人工作與 AI');await expect(widget(page)).toHaveCount(0);
+  await closeSpirit(page);await navigate(page,'私人 AI 工作室');await expect(widget(page)).toHaveCount(0);
 });
 
 test('default-off or mismatched release never imports the engine or requests art; late responses cannot remount after theme change',async({page})=>{
