@@ -1,7 +1,8 @@
 # 共用發布入口
 
 這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
-`Shared release` Actions。**目前是可審查的控制流程，尚未完成可執行的發布工具移植，
+`Shared release` Actions，並移植 PostgreSQL 備份還原、資料庫鎖及 Cloudflare 傳輸元件。
+**完整發布工具尚未串接完成，
 也尚未部署。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
 
 2026-10-25 查核：`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 都有此 repo
@@ -69,12 +70,30 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 備份必須包含遠端讀回、隔離資料庫與物件還原、清理；最後驗證自然備份排程仍能執行。
 任一不完整結果都不能標成成功。失敗不自動重跑 mutation、不自動 rollback。
 中斷時 receipt／Deployment 可能停在 running／in_progress，代表要讀回核對，不能視為已回滾。
+容器若未確認停止，控制程式會回報清理未確認，保留私人工作磁碟到一次性 runner 銷毀，
+不會刪除可能仍在執行的 PostgreSQL 資料目錄。它不會把這種結果算成成功。
 
 只上傳固定欄位的公開 JSON 收據，不上傳 operator stdout/stderr、DB dump、物件、
 原始設定或 provider response。operator 每階段可寫進度，controller 只輸出白名單內的
 階段名稱和狀態。這不是對惡意發布工具的防洩漏沙箱；image 本身仍須審查與釘選。
 
 ## 還差什麼才算完成
+
+`portable/` 現在已有可執行、可測試的元件：
+
+- `postgres.mjs`：原生 PG18 快照 dump，以及磁碟上的全新隔離還原，僅開私人 Unix socket。
+  完整讀完及驗證備份串流後才執行單一交易還原；正式資料庫 URL 不能作為還原目的地。
+  遠端連線要求完整 TLS 驗證，SQL role 與 PlanetScale 分支登入名稱分開核對。
+- `lease.mjs`：沿用舊每日備份的 advisory lock，整個發布持續使用同一連線；
+  連線中斷會撤銷工作訊號，不能回報成功交接。
+- `cloudflare.mjs`／`intent.mjs`：來源媒體唯讀；遠端備份使用唯一 key、寫入前先同步
+  私人磁碟上的操作意圖、只上傳一次，再完整下載比對。REST 寫入仍標示
+  `atomicCreateOnly=false`，不能宣稱 provider 保證原子防覆寫。意圖紀錄只保護相同私人
+  工作目錄中的重試；跨 runner 的對帳與證據保存仍屬完整 operator 的工作。
+  Worker binding digest 可供前後比較；公開健康檢查只接受指定 SHA，不帶部署 token。
+
+上述元件尚未自行組成完整備份或部署。原生 PostgreSQL 實測使用合成資料；Cloudflare
+案例使用注入的 HTTP 回覆，沒有接觸遠端 bucket、Worker 或正式資料庫。
 
 現行發布程式綁定私人主機的絕對路徑、歷次 operator kit、保留 floor 和 systemd 排程。
 本 PR 沒有把它假裝成可攜式工具。接續移植須沿用現有
@@ -88,9 +107,14 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 完成一次。正式環境另依既有發布條件啟用。不得因此宣稱 UF:INT-18、AP:OPS-07、
 UF:INT-23 或第二操作者還原要求已完成。
 
-本機入口：`node --test deploy/cloudflare/test/shared-release.test.mjs`。
-案例使用合成 GitHub／operator 回覆，涵蓋拒絕條件、順序、收據白名單與中斷清理；
-不是 GitHub hosted、Cloudflare 或正式資料庫的實跑證據。
+本機入口：`node --test deploy/cloudflare/test/shared-release.test.mjs`，涵蓋 GitHub 准入、
+收據、私有程序、Cloudflare 傳輸失敗及清理拒絕條件。
+
+真實 PG18 隔離驗證：先備妥 `verify.yml` 已釘選的 PostgreSQL 18 image，再執行
+`node deploy/shared-release/test/postgres-integration.mjs --source .`。這個 fixture 才使用 Docker；
+發布元件本身不呼叫 Docker。案例驗證指定快照、隔離還原、截斷備份拒絕、串流失敗、
+舊鎖互斥、失去鎖後停止及四個資料庫的清理。已接入既有 deploy-preflight CI job，
+重用既有 image。這仍不是 hosted staging 發布或正式資料的還原證據。
 
 參考：[GitHub Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)、
 [關閉預設 Deployment 並保留 Environment](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/deploy-to-environment)、

@@ -11,7 +11,10 @@ The image must be public, independently reviewed and pinned by digest. Its fixed
 entrypoint is `/usr/local/bin/freedom-release`; arguments are only `--request`,
 `--config`, `--credentials`, `--result`, followed by fixed paths in `/release`.
 It runs as UID/GID 1001, no Linux capabilities, no Docker socket, a read-only root,
-read-only source/input mounts, a 2 GiB tmpfs and a private output directory.
+read-only source/input mounts, a 2 GiB tmpfs, a private output directory and
+a private disk-backed `/release/work` mount. PostgreSQL restore data and mutation
+intents require the disk mount, never tmpfs. The controller deletes the work
+directory only after confirming the container has stopped.
 Install Node, the approved PostgreSQL client/server, Wrangler and the static
 operator import closure into the image. Temporary isolated restore services must
 run unprivileged inside this owned container, not against a live database.
@@ -61,7 +64,19 @@ cross-kit imports become an image-owned reviewed closure; private credential-fil
 lookup becomes the supplied credentials file; host-bound restoration becomes an
 unprivileged isolated service; host filesystem floor/scheduler state needs a
 shared durable, independently controlled location. These are open implementation
-items, not fulfilled by the controller tests.
+items, not fulfilled by the controller tests. Native dump/isolated restore,
+legacy-session lease, bounded R2 transport and exact-source public health polling
+now exist under `portable/`. They are not yet the complete daily backup adapter,
+migration transaction, Worker deployer, durable floor or scheduler handoff.
+The PostgreSQL fixture runs real PG18 with synthetic data; Cloudflare tests inject
+responses. Neither establishes remote operation or provider credentials.
+
+`publishArchive` persists an exclusive disk intent before provider work and refuses
+reuse of that UUID in the same work directory. It preserves the existing unique
+single-writer REST limitation (`atomicCreateOnly=false`); the enclosing operator
+must hold the shared lease, allocate a fresh unpredictable set ID, preserve private
+intent/outcome evidence outside the ephemeral runner, and reconcile unknown
+effects. Public health success alone does not set `schemaVerified` or `smokePassed`.
 
 ## Result and progress
 

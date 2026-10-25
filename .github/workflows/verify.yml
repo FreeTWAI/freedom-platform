@@ -718,3 +718,5 @@ jobs:
         run: docker pull mirror.gcr.io/library/postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
       - name: Verify both migration entrypoints against isolated PostgreSQL
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.migration-postgres
+      - name: Verify native snapshot dump and isolated restore for the shared release operator
+        run: node .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .

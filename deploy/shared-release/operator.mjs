@@ -7,13 +7,14 @@ import { PHASES, requireRelease, isSha, isDigest } from './admission.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value, null, 2) + '\n';
-export const operatorCommand = (image, source, privateDir, resultDir, name) => [
+export const operatorCommand = (image, source, privateDir, resultDir, name, workDir) => [
   'run', '--name', name, '--init', '--read-only', '--cap-drop=ALL',
   '--security-opt=no-new-privileges', '--pids-limit=512', '--user=1001:1001',
   '--tmpfs=/tmp:rw,nosuid,nodev,size=2g,uid=1001,gid=1001',
   '--mount', `type=bind,src=${source},dst=/release/source,readonly`,
   '--mount', `type=bind,src=${privateDir},dst=/release/input,readonly`,
   '--mount', `type=bind,src=${resultDir},dst=/release/output`,
+  '--mount', `type=bind,src=${workDir},dst=/release/work`,
   '--entrypoint=/usr/local/bin/freedom-release', image,
   '--request', '/release/input/request.json', '--config', '/release/input/config.json',
   '--credentials', '/release/input/credentials.json', '--result', '/release/output/result.json',
@@ -101,7 +102,8 @@ export function operatorProgress(value, admission, installation, requestDigest) 
 export async function runOperator({ admission, installation, sourceRoot, temporaryRoot,
   config, credentials, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
-  requireRelease(![source, privateDir, resultDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
+  const workDir = join(temporaryRoot, 'work');
+  requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
   requireRelease(typeof config === 'string' && Buffer.byteLength(config) <= 262_144
     && digest(config) === installation.configSha256, 'release_config_pin_mismatch');
   let parsedConfig;
@@ -118,7 +120,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });
   await mkdir(resultDir, { recursive: false, mode: 0o700 });
-  let confirmed = false, progress = [], timer, progressTask = Promise.resolve();
+  await mkdir(workDir, { recursive: false, mode: 0o700 });
+  let containerAttempted = false, progress = [], timer, progressTask = Promise.resolve();
   const readProgress = async () => {
     try {
       const value = operatorProgress(await boundedJson(join(resultDir, 'result.json')), admission, installation, digest(requestBytes));
@@ -133,9 +136,9 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     requireRelease(process.getuid?.() === 1001 || run !== quietCommand, 'release_runner_uid_invalid');
     await run('docker', ['pull', installation.image], 10 * 60_000);
     timer = setInterval(() => { progressTask = progressTask.then(readProgress); }, 10_000);
-    await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name));
+    containerAttempted = true;
+    await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name, workDir));
     const result = validateOperatorResult(await boundedJson(join(resultDir, 'result.json')), admission, installation, digest(requestBytes));
-    confirmed = true;
     return result;
   } catch (error) {
     await readProgress();
@@ -148,11 +151,19 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await progressTask;
     // Killing the Docker client does not reliably kill its container. Settle it explicitly.
     // Remote commit ambiguity still requires operator observation; never retry the release.
+    let stopped = !containerAttempted;
     try {
-      await run('docker', ['rm', '--force', name], 30_000).catch(error => { if (confirmed) throw error; });
+      if (containerAttempted) await run('docker', ['rm', '--force', name], 30_000);
+      stopped = true;
+    } catch {
+      throw Object.assign(new Error('release_operator_cleanup_unconfirmed'),
+        { code: 'release_operator_cleanup_unconfirmed', operatorProgress: progress });
     } finally {
       await rm(privateDir, { recursive: true, force: true });
       await rm(resultDir, { recursive: true, force: true });
+      // An unconfirmed stop may leave PostgreSQL alive. Keep its private disk
+      // until the ephemeral runner is destroyed; never delete a live cluster.
+      if (stopped) await rm(workDir, { recursive: true, force: true });
     }
   }
 }
