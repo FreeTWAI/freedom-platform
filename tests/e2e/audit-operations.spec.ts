@@ -31,7 +31,7 @@ async function layoutProblems(page: Page) {
 }
 const guildCaps = { managed_guilds: [{ guild_key: 'synthetic-guild', name: '測試公會' }], managed_books: [{ book_id: 'video-autopilot', title: '測試剪輯技能' }], can_discuss: true, can_review_pulls: true };
 const viewports = [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]] as const;
-const memberPages: [string, string][] = [['supplier', '我有東西要賣'], ['retail', '我可以賣東西'], ['marketing', '行銷工作室'], ['workbench', '我的工作'], ['showcase', '作品與需求'], ['engagement', '合作紀錄'], ['guild-workspace', '公會管理']];
+const memberPages: [string, string][] = [['supplier', '我有東西要賣'], ['retail', '我可以賣東西'], ['marketing', '行銷工作室'], ['workbench', '任務協作'], ['showcase', '作品與合作'], ['engagement', '合作紀錄'], ['guild-workspace', '公會管理']];
 
 test('supplier reply needs an explicit choice and manual-quantity products do not ask for stock', async ({ page }) => {
   await login(page);
@@ -109,7 +109,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   // client shares, reviewer asks; neither overlaps the maker/client journey in journeys.spec.
   const title = '稽核・合作提示範例';
   await login(page, 'client@local.test');
-  await navigate(page, '作品與需求');
+  await navigate(page, '作品與合作');
   await expect(page.getByLabel('作品連結（選填）', { exact: true })).toBeVisible();
   await expect(page.getByLabel('成果引用（例如 artifact:template-v1）', { exact: true })).toBeHidden();
   await page.getByLabel('作品標題', { exact: true }).fill(title);
@@ -122,9 +122,9 @@ test('cooperation cards say who acts next and link between showcase and records'
   await navigate(page, '合作紀錄');
   await settled(page);
   if (await page.getByText('還沒有合作紀錄', { exact: true }).count()) {
-    await page.getByRole('link', { name: '作品與需求', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '作品與需求', level: 1, exact: true })).toBeVisible();
-  } else await navigate(page, '作品與需求');
+    await page.getByRole('link', { name: '作品與合作', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '作品與合作', level: 1, exact: true })).toBeVisible();
+  } else await navigate(page, '作品與合作');
   const showcase = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
   await showcase.getByRole('button', { name: '我想找你合作', exact: true }).click();
   await showcase.getByLabel('你的需求', { exact: true }).fill('稽核需求：調整一個欄位');
@@ -133,7 +133,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   await expect(opportunity.getByText('已送出需求，等待作品作者提出合作範圍與價格。', { exact: true })).toBeVisible();
 
   await switchTo(page, 'client@local.test');
-  await navigate(page, '作品與需求');
+  await navigate(page, '作品與合作');
   const mine = page.getByRole('article').filter({ hasText: '稽核需求：調整一個欄位' });
   await mine.getByRole('button', { name: '提出合作', exact: true }).click();
   await mine.getByLabel('合作範圍', { exact: true }).fill('稽核合作範圍');

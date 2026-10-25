@@ -3,7 +3,8 @@
 Independent, deterministic site-direction component, not a language model or a
 replacement for the opted-in character guides. It makes no network requests,
 uses no model credentials, logs nothing and stores no questions persistently.
-It is not yet mounted in the site. Do not claim global availability or AI chat.
+The source candidate now mounts in the logged-in member Workspace only. This is
+not a deployment, anonymous-site availability or generative-AI claim.
 
 The host must inject reviewed public page titles/help and the currently available
 page IDs. Reuse canonical page-help/feature metadata through a reviewed host
@@ -20,7 +21,7 @@ input/replies. Hand-opened dialogs restore focus only to their connected launche
 route/account/blocking changes must not steal the new destination's focus. The
 host must coordinate native dialogs and other surfaces before integration.
 
-Integration currently awaits coordination of App/PageTools/portal-shell changes.
+The member host is a coordinated shell adapter; PageTools itself stays unchanged.
 Do not mount through module side effects, body injection or CSS workarounds.
 Do not edit existing character release gates, profile choices, private model
 consent, shared navigation, active collaborators' files or production flags.
@@ -61,10 +62,9 @@ as arrival; actual `pageId` changes close the old session.
 The runtime test file covers model validation, Unicode normalization, ambiguity,
 unknown input, allowlisted/current availability, canonical data isolation and
 source-level UI boundaries. Source assertions are not real UI interaction tests.
-The component is typechecked but remains unmounted: the normal production build
-cannot demonstrate its integrated runtime behavior. Host integration still needs
-reviewed canonical-data adaptation, overlay coordination and actual browser
-coverage for keyboard/IME, focus, route refusal, account changes, 320/390px and
+The normal production build now includes the member host, but build success
+cannot demonstrate its integrated runtime behavior. The source includes canonical
+data adaptation and overlay coordination; it still needs actual browser coverage for keyboard/IME, focus, route refusal, account changes, 320/390px and
 short viewport layouts. No model provider, API, database, dependency, persistent
 storage, telemetry or character-guide gate was added.
 
@@ -112,7 +112,7 @@ claim arrival. Three synthetic-handler regressions cover the live count as
 availability changes and both recovery paths; actual assistive-technology
 announcements remain unverified until browser/AT acceptance is performed.
 
-## Pure canonical-data adapter (still unmounted)
+## Pure canonical-data adapter
 
 `knowledge.ts` exports `buildHelperKnowledge({ metadata, pageHelp,
 availablePageIds, guildLaunchpadEnabled })`, returning `{ knowledge,
@@ -141,7 +141,52 @@ no cache and an earlier snapshot does not update itself.
 Runtime tests execute the adapter using structurally representative synthetic
 public records, including missing/malformed/prototype/accessor inputs, strict
 stores gating, current availability, source preservation, fresh updates and
-consumption by the real helper model. They do **not** import or parse the shared
-canonical files. Actual canonical-source/host wiring and browser acceptance remain
-**not_run** pending shared-owner coordination. This adapter is theme-neutral and
+consumption by the real helper model. These adapter-only cases do **not** import or parse the shared canonical files.
+The separate shell-owned host runtime file now imports and checks the actual
+canonical exports. Browser acceptance remains **not_run**. This adapter is theme-neutral and
 does not fulfill the separately requested theme-dependent character integration.
+
+
+## Member Workspace host candidate
+
+`PlatformHelperHost.tsx` is owned by portal-shell and imports the canonical
+`pageHelp` and `PORTAL_FEATURE_METADATA` within that shell. It passes the current
+registered page IDs through the helper adapter and keeps the strict stores flag.
+App mounts it only in the existing logged-in Workspace `topbar-actions`, beside
+the share action and outside business forms. No PageTools, shared layout CSS,
+Navigation, anonymous/login view, provider or character-guide gate is changed.
+
+The accepted `locationHash` plus client session generation form a React key, never
+a DOM attribute or log. This clears question state on same-tab deep-link changes
+and new logins. The canonical page ID remains independent of this route key.
+Only the original guarded `selectTab` handles navigation; no success is inferred
+from its void return. A refused leave keeps the original route and helper open.
+For a helper-requested same-tab route, App records only an actual change in its
+guard-approved hash, then transfers focus after the keyed dialog unmounts. A
+refused/same-hash request, an unrelated route or an intervening modal does not
+receive this focus handoff; ordinary navigation effects are unchanged.
+
+Known mobile-menu, messages, pending and expired-access states block the host.
+A narrow DOM monitor additionally observes visible native/ARIA modals, existing
+shell menus/popovers and real console/chat surfaces, excluding the helper's own
+subtree. It reads only structural visibility, not member text or form values; it
+never clicks, closes or rewrites another UI. Hidden surfaces do not block. The
+member console is headless: an old expanded preference without a visible console
+is not treated as a blocker. Observer/listener cleanup is covered synthetically.
+
+The new runtime tests execute actual canonical projection, explicit shell gates,
+visibility/own-surface exclusion and real host handlers with synthetic hooks.
+The actual App navigation callback and post-commit focus effect are also evaluated
+in a synthetic VM for accepted/refused/same-hash/foreign-modal/unrelated routes;
+that does not simulate native inert behavior or establish browser focus acceptance.
+`platform-helper-host.spec.ts` authors real Workspace login, help/route/focus,
+page-tools/share/chat mutual exclusion, actual event draft-leave guard, login and
+same-tab reset, stores-off/missing and base-theme narrow-screen checks. These
+browser assertions have only been discovered, not executed locally. Existing
+isolated component tests remain separate; no browser, mobile keyboard, assistive
+technology or real member acceptance is inferred from runtime/build results.
+
+This adds a per-member-page normal-flow entry, not an always-floating bubble or
+an anonymous-site bot. Existing theme colors are inherited. Theme-dependent
+characters still require a separate approved design/integration with the existing
+GuideHost release and asset gates; this candidate does not claim that work done.

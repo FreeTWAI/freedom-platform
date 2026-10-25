@@ -14,7 +14,7 @@ test('the community showcase list loads 20 at a time and a deep link past the fi
     await page.goto('/');
     await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
     await page.getByRole('button',{name:'登入',exact:true}).click();
-    await navigate(page,'作品與需求');
+    await navigate(page,'作品與合作');
     const more=page.getByRole('button',{name:'載入更多作品',exact:true});
     await expect(more).toBeVisible();
     const cards=page.locator('[id^="showcase-"]');
@@ -62,7 +62,7 @@ test('a new cooperation request refreshes the first page without leaving an olde
     await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
     await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
     await page.getByRole('button',{name:'登入',exact:true}).click();
-    await navigate(page,'作品與需求');
+    await navigate(page,'作品與合作');
     const cards=page.locator('[id^="showcase-"]');await expect(cards).toHaveCount(20);
     const first=page.locator(`#showcase-${ids[24]}`);
     await first.getByRole('button',{name:'我想找你合作',exact:true}).click();

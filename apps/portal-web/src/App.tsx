@@ -34,6 +34,7 @@ import {readEventParticipationToken} from './modules/EventParticipation'
 import {DevelopmentAccessProvider} from './modules/DevelopmentAccess'
 import { GameConsoleProvider, GameConsolePopout, useGameConsole } from './GameConsole'
 import {PageTools} from './PageTools'
+import {PlatformHelperHost} from './PlatformHelperHost';
 import {GuideHost} from './modules/newcomer-guides/GuideHost'
 import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
@@ -697,16 +698,28 @@ function Workspace({
   const menuToggle = useRef<HTMLButtonElement>(null)
   const mainContent = useRef<HTMLElement>(null)
   const workspaceTopbar = useRef<HTMLElement>(null)
+  const helperFocusPending = useRef<string | null>(null)
   const previousTab = useRef(tab)
   useEffect(() => {
-    if (previousTab.current === tab) return
+    setMobileOpen(false)
+    if (previousTab.current === tab) {
+      // Accepted same-page history changes must not leave focus in hidden navigation.
+      if (document.activeElement?.closest('#workspace-navigation')) mainContent.current?.focus({ preventScroll: true })
+      return
+    }
     previousTab.current = tab
     if(tab!=='social')setNotificationTarget(current=>current?.tab==='social'?null:current)
     logConsoleEvent({channel:consoleChannel('guide_navigation'),kind:'guide',source:'導覽',message:`已進入「${tabTitle(tab)}」。${TAB_GUIDANCE[tab]}`})
-    setMobileOpen(false)
     mainContent.current?.focus({ preventScroll: true })
     workspaceTopbar.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
-  }, [tab])
+  }, [tab, locationHash])
+  useEffect(() => {
+    const expectedHash = helperFocusPending.current
+    helperFocusPending.current = null
+    // A same-tab helper route has committed and its keyed native dialog is gone.
+    // A newer modal owns focus; never take it back from that surface.
+    if (expectedHash === locationHash && !document.querySelector('dialog[open],[aria-modal="true"]')) mainContent.current?.focus({preventScroll:true})
+  }, [locationHash])
   const selectTab = useCallback((next: TabId, destinationHash?: string) => {
     if(next==='messages'){openMessages();return}
     const nextHash = destinationHash ?? `#${next}`
@@ -731,6 +744,13 @@ function Workspace({
     // returns to the actual page and cannot reopen an abandoned full-screen chat.
     closeMessagesThen(navigate)
   }, [openMessages,closeMessagesThen])
+  const navigateFromHelper = useCallback((next: TabId) => {
+    const previousHash = acceptedHash.current
+    selectTab(next)
+    // The guard's accepted hash, not the void callback, proves a route change.
+    // Focus only after the keyed helper dialog has been removed from the DOM.
+    if (next === tab && acceptedHash.current !== previousHash && acceptedHash.current === `#${next}`) helperFocusPending.current = acceptedHash.current
+  }, [selectTab, tab])
   function navigateNotification(action:BellAction){
     const destination=orderNotificationDestination(action)
     if(destination?.tab==='stores'){selectTab('stores',destination.hash);return}
@@ -916,7 +936,7 @@ function Workspace({
         </a>
         <div className="shell">
           <header className="community-header">
-          <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
+          <aside className="sidebar" onKeyDown={event => { if (event.key === 'Escape' && mobileOpen && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { setMobileOpen(false); menuToggle.current?.focus(); } }}>
             <div className="sidebar-heading"><a className="brand brand-home" href="/#home" aria-label={`自由工坊 · ${t('nav.home')}`} onClick={event => activateHomeLink(event, () => {
               selectTab('home');
               // The existing leave guard must accept before changing the canonical URL or scroll.
@@ -928,7 +948,7 @@ function Workspace({
               workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
             })}><strong>自由工坊</strong></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
-            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen}/>
+            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
           <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
@@ -938,7 +958,9 @@ function Workspace({
                 {launchpadOpen ? null : <h1 id="workspace-page-title">{consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : t(`nav.${tab}`)}</h1>}
               </div>
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
-              <div className="topbar-actions"><ShareLauncher onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
+              <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}
+                sessionGeneration={client.sessionGeneration} availablePageIds={Object.keys(TAB_TITLES)} guildLaunchpadEnabled={site?.guild_launchpad_enabled}
+                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper}/><ShareLauncher onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
             </header>
             <div className="workspace-content">
               <GuideHost pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}

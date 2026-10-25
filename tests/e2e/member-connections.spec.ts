@@ -82,7 +82,7 @@ test('home recommends a shared-guild member and guild topic filtering works in a
     await page.locator('.home-personal > summary').click();
     const recommendation=page.getByRole('region',{name:'認識一位工坊夥伴'});await expect(recommendation.getByRole('heading',{name:'共讀推薦夥伴',exact:true})).toBeVisible();await expect(recommendation.getByText('你們都加入了人類圖研究所')).toBeVisible();
     await recommendation.getByRole('button',{name:'查看名片'}).click();await expect(recommendation.locator('.member-card')).toBeVisible();await recommendation.getByRole('button',{name:'換一位'}).click();await expect(recommendation.locator('.connection-person h3')).not.toHaveText('共讀推薦夥伴');
-    await navigate(page,'職業公會');await page.getByRole('button',{name:'AI 與技術',exact:true}).click();await expect(page.locator('.guild-card')).toHaveCount(8);await expect(page.locator('.guild-card').filter({hasText:'音樂創作與MV公會'})).toHaveCount(0);
+    await navigate(page,'職業公會');await page.locator('.guild-topic-disclosure > summary').click();await page.getByRole('button',{name:'AI 與技術',exact:true}).click();await expect(page.locator('.guild-card')).toHaveCount(8);await expect(page.locator('.guild-card').filter({hasText:'音樂創作與MV公會'})).toHaveCount(0);
     const settingsButton=page.getByRole('button',{name:'設定',exact:true});
     for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
       if(await settingsButton.getAttribute('aria-expanded')!=='true')await settingsButton.click();

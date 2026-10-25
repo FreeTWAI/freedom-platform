@@ -9,7 +9,11 @@
     "tests/e2e/platform-helper.spec.ts",
     "tests/e2e/platform-helper-fixture.ts"
   ],
-  "public_exports": [],
+  "public_exports": [
+    "apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx",
+    "apps/portal-web/src/modules/platform-helper/knowledge.ts",
+    "apps/portal-web/src/modules/platform-helper/model.ts"
+  ],
   "dependencies": [],
   "contract_families": [],
   "client_profiles": [
