@@ -749,3 +749,32 @@ test('reselecting the visible hashtag does not strand a failed or pending feed p
     await expect(feed.locator(`#social-post-${b.post_id}`)).toBeVisible();await expect(feed.getByRole('button',{name:'正在載入…',exact:true})).toHaveCount(0);expect(queries).toHaveLength(6);
   }finally{release();await page.unrouteAll({behavior:'wait'});}
 });
+
+test('a delayed creation receipt cannot restore a post deleted while its composer is closed',async({page,e2eAuthPool})=>{
+  await loginCommentAuthor(page,e2eAuthPool);
+  const text=`E2E pending publication removal ${randomUUID()}`;
+  const matchesCreation=(url:URL)=>url.pathname==='/api/v1/social-posts/notes';
+  let release!:()=>void,ready!:(postId:string)=>void,failed!:(cause:unknown)=>void,finished!:()=>void,started=false,creates=0;
+  const held=new Promise<void>(resolve=>{release=resolve;}),committed=new Promise<string>((resolve,reject)=>{ready=resolve;failed=reject;}),released=new Promise<void>(resolve=>{finished=resolve;});
+  await page.route(matchesCreation,async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    creates++;started=true;
+    try{
+      const response=await route.fetch();expect(response.status()).toBe(201);
+      const ack=await response.json();expect(ack).toMatchObject({kind:'note',note:text,revision:1});expect(ack.post_id).toMatch(/^[0-9a-f-]{36}$/);
+      ready(ack.post_id);await held;await route.fulfill({response});
+    }catch(cause){failed(cause);throw cause;}finally{finished();}
+  });
+  try{
+    await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const postId=await committed;
+    await page.getByRole('button',{name:'關閉發文',exact:true}).click();
+    await page.getByRole('button',{name:'更新動態',exact:true}).click();const post=page.locator(`#social-post-${postId}`);await expect(post).toBeVisible();
+    await post.getByLabel('貼文選項',{exact:true}).click();await post.getByRole('button',{name:'刪除',exact:true}).click();
+    const deleted=page.waitForResponse(response=>response.request().method()==='DELETE'&&new URL(response.url()).pathname===`/api/v1/social-posts/${postId}`);
+    await page.getByRole('dialog',{name:'刪除貼文？',exact:true}).getByRole('button',{name:'確定刪除',exact:true}).click();
+    const ack=await deleted;expect(ack.status()).toBe(200);expect(await ack.json()).toMatchObject({post_id:postId,state:'deleted'});await expect(post).toHaveCount(0);
+    release();await released;await expect(page.getByText('已確認原發布，貼文已在此頁移除。',{exact:true})).toBeVisible();await expect(post).toHaveCount(0);
+    await page.getByRole('button',{name:'更新動態',exact:true}).click();await expect(page.locator('.social-zone')).toHaveAttribute('aria-busy','false');await expect(post).toHaveCount(0);expect(creates).toBe(1);
+    const rows=(await e2eAuthPool.query('SELECT state,edit_revision FROM community_social_posts WHERE post_id=$1',[postId])).rows;expect(rows).toHaveLength(1);expect(rows[0].state).toBe('deleted');expect(Number(rows[0].edit_revision)).toBe(1);
+  }finally{release();if(started)await released;await page.unroute(matchesCreation);}
+});

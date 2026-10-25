@@ -332,7 +332,7 @@ function feedHarness() {
   assert.ok(retryMarkup,'feed error retry remains wired');
   const calls:{path:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
   const writes:{path:string;method:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
-  const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},confirmedWrites:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
+  const state:any={pending:{current:null},items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},confirmedWrites:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
   for(const [setter,key] of [['setLoading','loading'],['setMore','more'],['setError','error'],['setCursor','cursor'],['setCanHide','canHide'],['setItems','items']])state[setter]=(value:any)=>{state[key]=typeof value==='function'?value(state[key]):value;};
   state.crypto={randomUUID};state.ApiError=ApiError;state.refreshSequence={current:0};state.saving=false;state.actionError='';
   state.selection={current:{platform:'note',tag:'',version:0}};state.URL=URL;state.window={location:{href:'https://workshop.example.test/?social-post=post-2#social'},history:{replaceState:()=>{}}};state.setTag=(value:string)=>{state.tag=value;};state.setDirectPost=(value:string|null)=>{state.directPost=value;};
@@ -473,7 +473,7 @@ test('read-only action recovery retains uncertainty and an explicit new thumbnai
   const failed=h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();h.writes[0].reject(new Error('upload outcome unknown'));await failed;
   h.ui.recoverAction();h.calls[1].resolve(h.page(['A'],null));await microtasks();assert.equal(h.state.actionError,'upload outcome unknown');assert.equal(h.state.saving,false);assert.equal(h.writes.length,1);
   const explicit=h.ui.uploadLinkThumb({post_id:'A'},jpeg());await microtasks();assert.equal(h.writes[1].path,'/api/v1/social-posts/A/thumbnail');assert.equal(h.writes[1].method,'PUT');assert.equal(h.state.actionError,'');
-  h.writes[1].resolve({ok:true,json:async()=>({post_id:'A',thumbnail_url:'/updated'})});await explicit;assert.equal(h.state.notice,'縮圖已更新。');assert.equal(h.state.saving,false);assert.equal(h.writes.filter(w=>w.method==='POST').length,0);
+  h.writes[1].resolve({ok:true,json:async()=>({post_id:'A',kind:'link',thumbnail_url:'/api/v1/social-posts/A/thumbnail'})});await explicit;assert.equal(h.state.notice,'縮圖已更新。');assert.equal(h.state.saving,false);assert.equal(h.writes.filter(w=>w.method==='POST').length,0);
 });
 
 for(const action of ['upload','hide'])for(const change of ['session','client'])test(`actual ${change} effect resets old ${action} saving state without letting its completion unlock a new action`,async()=>{

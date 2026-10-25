@@ -230,7 +230,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [optimizationJob]=useState(()=>socialPostJobForSession(client));
   const optimization=useSyncExternalStore(optimizationJob.subscribe,optimizationJob.snapshot,optimizationJob.snapshot);
   const [originalDraft,setOriginalDraft]=useState<{before:string;after:string}|null>(null);
-  const pending = useRef<({kind:'note';text:string;topic?:string;location_name?:string;mention_ids?:string[];image?:{mime_type:string;data_base64:string}}|{kind:'link';body:{url:string;title?:string;note?:string};photo:File|null;thumbnailKey:string;created?:Post})&{key:string;generation:number;uncertain?:boolean}|null>(null);
+  const pending = useRef<({kind:'note';text:string;topic?:string;location_name?:string;mention_ids?:string[];image?:{mime_type:string;data_base64:string}}|{kind:'link';body:{url:string;title?:string;note?:string};photo:File|null;thumbnailKey:string;created?:Post})&{key:string;generation:number;uncertain?:boolean;removed?:Set<string>}|null>(null);
   const publishLock=useRef<object|null>(null);
   useEffect(()=>{
     ++imageSequence.current;pending.current=null;publishLock.current=null;
@@ -327,7 +327,10 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       const page = confirmedPage;
       failedFeedLoad.current = null;
       const fresh = !directPost&&(nextPlatform === '' || nextPlatform === 'note') ? newPosts.current.filter(post => (nextPlatform===''||post.kind==='note')&&(!tag||post.tags?.includes(tag.toLocaleLowerCase()))&&!page.items.some(item => item.post_id === post.post_id)) : [];
-      setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [...fresh, ...page.items]);
+      setItems(current => nextCursor ? [...current, ...page.items.filter(post => !current.some(item => item.post_id === post.post_id))] : [
+        ...fresh.map(post => { const known=current.find(item=>item.post_id===post.post_id);return known&&known.revision>=post.revision?known:post; }).filter(post=>!tag||post.tags?.includes(tag.toLocaleLowerCase())),
+        ...page.items,
+      ]);
       newPosts.current = newPosts.current.filter(post => !page.items.some(item => item.post_id === post.post_id));
       setCursor(page.next_cursor);
       setCanHide(page.can_hide);
@@ -465,15 +468,21 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   }
   function finishPublication(created:Post,selectedVersion:number,interactionVersion:number,generation:number) {
     ++confirmedWrites.current;
-    newPosts.current=[created,...newPosts.current.filter(post=>post.post_id!==created.post_id)];
+    // Only this pending publication can retain a same-session confirmed removal.
+    const removed=pending.current?.generation===generation&&pending.current.removed?.has(created.post_id);
+    const known=newPosts.current.find(post=>post.post_id===created.post_id);
+    const retained=known&&known.revision>=created.revision?known:created;
+    if(!removed)newPosts.current=[retained,...newPosts.current.filter(post=>post.post_id!==created.post_id)];
     const current=selection.current;
-    if(directPost&&current.version===selectedVersion)clearDirectPost();
-    if((current.platform===''||current.platform===(created.kind==='note'?'note':created.platform))&&(!current.tag||created.tags?.includes(current.tag.toLocaleLowerCase())))
-      setItems(items=>[created,...items.filter(post=>post.post_id!==created.post_id)]);
-    else if(!current.tag&&current.version===selectedVersion){setItems([created]);setCursor(null);selectPlatform(created.kind==='note'?'note':'');}
+    if(!removed){
+      if(directPost&&current.version===selectedVersion)clearDirectPost();
+      if((current.platform===''||current.platform===(retained.kind==='note'?'note':retained.platform))&&(!current.tag||retained.tags?.includes(current.tag.toLocaleLowerCase())))
+        setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);const next=known&&known.revision>=retained.revision?known:retained;return [...(!current.tag||next.tags?.includes(current.tag.toLocaleLowerCase())?[next]:[]),...items.filter(post=>post.post_id!==retained.post_id)];});
+      else if(!current.tag&&current.version===selectedVersion){setItems(items=>{const known=items.find(post=>post.post_id===retained.post_id);return [known&&known.revision>=retained.revision?known:retained];});setCursor(null);selectPlatform(retained.kind==='note'?'note':'');}
+    }
     if(importedGame.current?.generation===generation){try{clearGameDraft(sessionStorage,importedGame.current.createdAt);}catch{/* Publication is already acknowledged. */}importedGame.current=null;}
     pending.current=null;setTextHistory(newTextHistory());setMentions([]);setLocationName('');setCheckIn(false);
-    void selectComposeImage(null);setOriginalDraft(null);setUrl('');setTitle('');setLinkPreview(false);setNotice('貼文已發布。');
+    void selectComposeImage(null);setOriginalDraft(null);setUrl('');setTitle('');setLinkPreview(false);setNotice(removed?'已確認原發布，貼文已在此頁移除。':'貼文已發布。');
     if(composerVersion.current===interactionVersion)closeComposer();
   }
   async function publishLink() {
@@ -570,13 +579,20 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
       const payload = await response.json() as Post & {detail?: string};
       if (!current()) return;
       if (!response.ok) throw new ApiError({message: payload.detail || '縮圖未能換上。', status: response.status});
-      setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...payload, thumbnail_url: `${payload.thumbnail_url ?? item.thumbnail_url}?v=${Date.now()}`} : item));
+      if(payload.post_id!==post.post_id||payload.kind!=='link'||payload.thumbnail_url!==`/api/v1/social-posts/${post.post_id}/thumbnail`)throw new Error('尚未確認縮圖結果，請更新動態確認。');
+      ++confirmedWrites.current;
+      const thumbnail_url=`${payload.thumbnail_url}?v=${Date.now()}`;
+      const update=(item:Post)=>item.post_id===post.post_id?{...item,thumbnail_url}:item;
+      newPosts.current=newPosts.current.map(update);
+      setItems(current=>current.map(update));
       setNotice('縮圖已更新。');
     } catch (cause) { if (current()) setActionError(cause instanceof Error ? cause.message : '縮圖未能換上。'); }
     finally { if (current()) setSaving(false); }
   }
   async function remove(post: Post) {
-    if (!client.csrfToken) return;
+    if (!client.csrfToken || client !== currentClient.current || feedSession !== client.sessionGeneration) return;
+    const generation=client.sessionGeneration, publication=pending.current;
+    const current=()=>client===currentClient.current&&generation===client.sessionGeneration;
     ++refreshSequence.current;
     setSaving(true); setDeleteError('');
     try {
@@ -584,21 +600,23 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
         method: 'DELETE', credentials: 'same-origin', body: '{}',
         headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
       });
+      if (!current()) return;
       if (!response.ok) { const problem = await response.json().catch(() => ({})) as {detail?: string}; throw new ApiError({message: problem.detail || '貼文未能刪除。', status: response.status}); }
+      if(publication&&publication===pending.current&&publication.generation===generation)(publication.removed??=new Set()).add(post.post_id);
       { ++confirmedWrites.current; ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); };
       newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id);
       deleteDialog.current?.close(); setConfirming(null); setNotice('貼文已刪除。');
       composerTrigger.current?.focus({preventScroll: true});
-    } catch (cause) { setDeleteError(cause instanceof Error ? cause.message : '貼文未能刪除。'); }
-    finally { setSaving(false); }
+    } catch (cause) { if(current())setDeleteError(cause instanceof Error ? cause.message : '貼文未能刪除。'); }
+    finally { if(current())setSaving(false); }
   }
   async function hide(post: Post) {
     if (client !== currentClient.current || feedSession !== client.sessionGeneration) return;
-    const generation = client.sessionGeneration;
+    const generation = client.sessionGeneration, publication=pending.current;
     const current = () => client === currentClient.current && generation === client.sessionGeneration;
     ++refreshSequence.current;
     setSaving(true); setActionError('');
-    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); if (!current()) return; { ++confirmedWrites.current; ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id); setNotice('貼文已隱藏。'); }
+    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); if (!current()) return; if(publication&&publication===pending.current&&publication.generation===generation)(publication.removed??=new Set()).add(post.post_id); { ++confirmedWrites.current; ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; newPosts.current = newPosts.current.filter(item => item.post_id !== post.post_id); setNotice('貼文已隱藏。'); }
     catch (cause) { if (current()) setActionError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
     finally { if (current()) setSaving(false); }
   }

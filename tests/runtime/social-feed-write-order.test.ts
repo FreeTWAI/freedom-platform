@@ -110,3 +110,78 @@ for(const operation of ['publish','hide'])for(const network of [false,true])test
   assert.equal(h.c.confirmedWrites.current,0);h.requests[0].resolve(page([h.initial]));await read;
   assert.equal(h.requests.length,1);assert.equal(h.state.items[0],h.initial);assert.equal(h.state.loading,false);
 });
+
+for(const revision of [1,2])test(`late creation receipt preserves existing revision ${revision} and independent metadata`,()=>{
+  const h=harness(),known={...h.initial,revision,note:'known',like_count:7,mine:false};h.state.items=[known];
+  h.c.finish({...h.initial,like_count:0,mine:true},0,0,1);assert.equal(h.state.items[0],known);
+});
+test('creation cache never downgrades its known edit, including a later cache-only load',async()=>{
+  const h=harness(),known={...h.initial,revision:3,note:'known',like_count:7};h.c.newPosts.current=[known];h.state.items=[];
+  h.c.finish(h.initial,0,0,1);assert.equal(h.c.newPosts.current[0],known);assert.equal(h.state.items[0],known);
+  const read=h.c.load('note');h.requests[0].resolve(page([]));await read;assert.equal(h.state.items[0],known);
+});
+test('fresh cache cannot overwrite a newer visible post when the page omits that ID',async()=>{
+  const h=harness(),known={...h.initial,revision:2,note:'known',like_count:7};h.state.items=[known];h.c.newPosts.current=[h.initial];
+  const read=h.c.load('note');h.requests[0].resolve(page([]));await read;assert.equal(h.state.items[0],known);
+});
+for(const operation of ['remove','hide'])test(`late creation ACK cannot revive a confirmed ${operation} in its own pending publication`,async()=>{
+  const h=harness();h.c.pending.current={kind:'note',generation:1,key:'pending'};await h.c[operation](h.initial);h.c.finish(h.initial,0,0,1);
+  assert.equal(h.state.items.length,0);assert.equal(h.c.newPosts.current.length,0);assert.equal(h.c.pending.current,null);
+});
+for(const operation of ['remove','hide'])test(`${operation} cannot mark a replacement pending publication or session`,async()=>{
+  const h=harness();let resolve:any;const waiting=new Promise(r=>resolve=r);h.c.pending.current={kind:'note',generation:1,key:'first'};
+  if(operation==='remove')h.c.accessAwareFetch=()=>waiting;else h.c.client.post=()=>waiting;
+  const action=h.c[operation](h.initial);h.c.client.sessionGeneration=2;const next={kind:'note',generation:2,key:'next'};h.c.pending.current=next;
+  resolve({ok:true});await action;assert.equal(h.state.items.length,1);assert.equal(h.c.pending.current,next);assert.equal((next as any).removed,undefined);assert.equal(h.c.confirmedWrites.current,0);
+});
+test('ordinary absence and a failed removal do not suppress a confirmed creation',async()=>{
+  const h=harness();h.state.items=[];h.c.pending.current={kind:'note',generation:1,key:'pending'};h.c.accessAwareFetch=async()=>{throw Error('unknown');};
+  await h.c.remove(h.initial);h.c.finish(h.initial,0,0,1);assert.equal(h.state.items.length,1);assert.equal(h.c.newPosts.current.length,1);
+});
+function thumbnailHarness(){
+  const h=harness();h.initial.kind='link';h.c.saving=false;h.c.prepareSocialImage=async(f:unknown)=>f;h.c.setActionError=(v:string)=>h.state.actionError=v;
+  const thumb=between('async function uploadLinkThumb(post: Post, next: File) {','\n  async function remove(');
+  runInNewContext(transformSync(`globalThis.thumb=async function(post,next){${thumb}`,{loader:'ts',format:'cjs'}).code,h.c);return h;
+}
+test('thumbnail ACK projects only its thumbnail onto current and retained post metadata',async()=>{
+  const h=thumbnailHarness();let resolve:any;h.c.accessAwareFetch=()=>new Promise(r=>resolve=r);const uploading=h.c.thumb(h.initial,{type:'image/png'});await tick();
+  const known={...h.initial,revision:2,note:'known',like_count:7,mine:false};h.state.items=[known];h.c.newPosts.current=[known];
+  resolve({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail',like_count:0,mine:true})});await uploading;
+  for(const item of [h.state.items[0],h.c.newPosts.current[0]]){assert.equal(item.revision,2);assert.equal(item.note,'known');assert.equal(item.like_count,7);assert.equal(item.mine,false);assert.match(item.thumbnail_url,/^\/api\/v1\/social-posts\/p\/thumbnail\?v=\d+$/);}
+  assert.equal(h.c.confirmedWrites.current,1);
+});
+for(const invalid of [{post_id:'other'},{kind:'note'},{thumbnail_url:null},{thumbnail_url:'https://example.com/wrong'}])test(`invalid thumbnail receipt ${JSON.stringify(invalid)} remains unconfirmed`,async()=>{
+  const h=thumbnailHarness();h.c.accessAwareFetch=async()=>({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail',...invalid})});
+  await h.c.thumb(h.initial,{type:'image/png'});assert.equal(h.state.items[0],h.initial);assert.equal(h.c.confirmedWrites.current,0);assert.ok(h.state.actionError);
+});
+
+test('creation and cache projection updaters are replayable without mutating refs or their input',async()=>{
+  const h=harness(),known={...h.initial,revision:2,note:'known'};h.state.items=[known];const callbacks:any[]=[];
+  h.c.setItems=(value:any)=>{assert.equal(typeof value,'function');callbacks.push(value);};h.c.finish(h.initial,0,0,1);
+  const cache=h.c.newPosts.current,first=callbacks.shift(),input=Object.freeze([Object.freeze(known)]);
+  assert.equal(first(input)[0],known);assert.equal(first(input)[0],known);assert.equal(h.c.newPosts.current,cache);
+  const read=h.c.load('note');h.requests[0].resolve(page([]));await read;const freshCache=h.c.newPosts.current,next=callbacks.shift();
+  assert.equal(next(input)[0],known);assert.equal(next(input)[0],known);assert.equal(h.c.newPosts.current,freshCache);
+});
+test('newer known tags do not leak a retained creation into an obsolete category',async()=>{
+  const h=harness();h.c.tag='old';h.c.feedScope.current.tag='old';h.c.selection.current.tag='old';const known={...h.initial,revision:2,tags:['new']};h.state.items=[known];
+  h.c.finish({...h.initial,tags:['old']},0,0,1);assert.equal(h.state.items.length,0);
+  h.state.items=[known];const read=h.c.load('note');h.requests[0].resolve(page([]));await read;assert.equal(h.state.items.length,0);
+});
+for(const operation of ['remove','hide'])test(`${operation} started under another pending command never marks its successor`,async()=>{
+  const h=harness();let resolve:any;const waiting=new Promise(r=>resolve=r);h.c.pending.current={kind:'note',generation:1,key:'first'};
+  if(operation==='remove')h.c.accessAwareFetch=()=>waiting;else h.c.client.post=()=>waiting;
+  const action=h.c[operation](h.initial),next={kind:'note',generation:1,key:'next'};h.c.pending.current=next;resolve({ok:true});await action;
+  assert.equal((next as any).removed,undefined);h.c.finish(h.initial,0,0,1);assert.equal(h.state.items.length,1);
+});
+for(const change of ['removed','session'])test(`thumbnail late ACK respects ${change} without reviving items`,async()=>{
+  const h=thumbnailHarness();let resolve:any;h.c.accessAwareFetch=()=>new Promise(r=>resolve=r);const uploading=h.c.thumb(h.initial,{type:'image/png'});await tick();
+  h.state.items=[];h.c.newPosts.current=[];if(change==='session')h.c.client.sessionGeneration++;
+  resolve({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})});await uploading;
+  assert.equal(h.state.items.length,0);assert.equal(h.c.newPosts.current.length,0);assert.equal(h.c.confirmedWrites.current,change==='session'?0:1);
+});
+test('thumbnail confirmation invalidates an older list read with one same-query revalidation',async()=>{
+  const h=thumbnailHarness(),read=h.c.load('note');h.c.accessAwareFetch=async()=>({ok:true,json:async()=>({...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'})});
+  await h.c.thumb(h.initial,{type:'image/png'});h.requests[0].resolve(page([h.initial]));await tick();assert.equal(h.requests.length,2);assert.equal(h.requests[1].path,h.requests[0].path);
+  h.requests[1].resolve(page([{...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'}]));await read;assert.equal(h.state.loading,false);
+});
