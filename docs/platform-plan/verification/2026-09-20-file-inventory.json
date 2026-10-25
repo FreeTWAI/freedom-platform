@@ -20604,8 +20604,8 @@
     },
     {
       "path": "modules/community/content-search.ts",
-      "bytes": 21513,
-      "sha256": "b3cbbcfc9a15dd7aa077c74f148dc3d5d78c20e2ad9f9ea952008853edec2167"
+      "bytes": 21539,
+      "sha256": "642095fd794a7d3e2a8988619f365d45d62245ba0f9762512fc638d0bd7ed876"
     },
     {
       "path": "modules/community/discovery.ts",
@@ -25469,8 +25469,8 @@
     },
     {
       "path": "tests/runtime/community-search.test.ts",
-      "bytes": 42224,
-      "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
+      "bytes": 47844,
+      "sha256": "96df87561f8d6ddbb80cff9543a444ae98e908bac776d1219799d3f7713cc8d6"
     },
     {
       "path": "tests/runtime/contribution-roles.test.ts",

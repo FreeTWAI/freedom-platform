@@ -138,7 +138,7 @@ async function workRows(pool: SearchDatabase, actor: Actor | null, text: string,
     ${publishedWorkFrom}
     AND NOT EXISTS (SELECT 1 FROM skill_submissions d WHERE d.upgrades_submission_id=s.submission_id AND d.status='published')
     AND lower(v.repository_full_name) <> ALL($8::text[])
-    AND ${textSql([title, description])} AND ${topicSql('work', 's.submission_id::text')} AND ${cursorSql(sort, 'work')}
+    AND ${textSql([title, description, 'v.repository_full_name'])} AND ${topicSql('work', 's.submission_id::text')} AND ${cursorSql(sort, 'work')}
     AND ${relationSql('work', 's.submission_id', 's.owner_ref')}
     ORDER BY s.published_at DESC,s.submission_id LIMIT $7`;
   return (await pool.query(sql, [text, text ? likeOf(text) : '', cursor?.sort ?? null, cursor?.kind ?? null, cursor?.id ?? null, topics, limit, catalogRepositoryKeys, actor?.community_id ?? null, ...relationValues(filter, 'work'), actor?.community_id ?? null])).rows as Row[];
