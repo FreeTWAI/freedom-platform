@@ -335,17 +335,18 @@ function feedHarness() {
   const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
   for(const [setter,key] of [['setLoading','loading'],['setMore','more'],['setError','error'],['setCursor','cursor'],['setCanHide','canHide'],['setItems','items']])state[setter]=(value:any)=>{state[key]=typeof value==='function'?value(state[key]):value;};
   state.crypto={randomUUID};state.ApiError=ApiError;state.refreshSequence={current:0};state.saving=false;state.actionError='';
+  state.selection={current:{platform:'note',tag:'',version:0}};state.URL=URL;state.window={location:{href:'https://workshop.example.test/?social-post=post-2#social'},history:{replaceState:()=>{}}};state.setTag=(value:string)=>{state.tag=value;};state.setDirectPost=(value:string|null)=>{state.directPost=value;};
   state.setSaving=(value:boolean)=>{state.saving=value;};state.setActionError=(value:string)=>{state.actionError=value;};state.setNotice=(value:string)=>{state.notice=value;};
   state.prepareSocialImage=async(file:File)=>{if(state.prepareFailure)throw new Error('prepare failed');return file;};
   state.accessAwareFetch=(path:string,init:RequestInit)=>new Promise((resolve,reject)=>writes.push({path,method:init.method!,resolve,reject}));
   const client={sessionGeneration:1,csrfToken:'fixture-csrf',get:(path:string)=>new Promise((resolve,reject)=>calls.push({path,resolve,reject})),post:(path:string)=>new Promise((resolve,reject)=>writes.push({path,method:'POST',resolve,reject}))};
   const actionRetry=composerSource.match(/onClick=\{([^}]+)\}>重新載入貼文狀態/)?.[1]??retryMarkup[1];
   const actionFunction=composerSource.includes('function refreshAfterAction()')?composerFunction('refreshAfterAction'):'';
-  const make=runInNewContext(`(function(client,feedSession,tag,directPost,platform){${composerCode.slice(start,end)}\n${composerFunction('retryFeed')}\n${composerFunction('uploadLinkThumb')}\n${composerFunction('hide')}\n${actionFunction}\nreturn {load,retry:${retryMarkup[1]},recoverAction:${actionRetry},uploadLinkThumb,hide};})`,state);
+  const make=runInNewContext(`(function(client,feedSession,tag,directPost,platform){${composerCode.slice(start,end)}\n${composerFunction('retryFeed')}\n${composerFunction('uploadLinkThumb')}\n${composerFunction('hide')}\n${composerFunction('clearDirectPost')}\n${composerFunction('selectTag')}\n${actionFunction}\nreturn {load,retry:${retryMarkup[1]},recoverAction:${actionRetry},uploadLinkThumb,hide,selectTag};})`,state);
   const render=(patch:Record<string,unknown>={})=>{
     state.feedScope.current={client,session:client.sessionGeneration,platform:'note',tag:'',directPost:null,...state.feedScope.current,...patch};
-    const scope=state.feedScope.current;state.currentClient.current=scope.client;
-    return make(scope.client,scope.session,scope.tag,scope.directPost,scope.platform) as {load:(platform:string,cursor?:string)=>Promise<void>;retry:()=>void;recoverAction:()=>void;uploadLinkThumb:(post:any,file:File)=>Promise<void>;hide:(post:any)=>Promise<void>};
+    const scope=state.feedScope.current;state.currentClient.current=scope.client;state.selection.current={...state.selection.current,platform:scope.platform,tag:scope.tag};
+    return make(scope.client,scope.session,scope.tag,scope.directPost,scope.platform) as {load:(platform:string,cursor?:string)=>Promise<void>;retry:()=>void;recoverAction:()=>void;uploadLinkThumb:(post:any,file:File)=>Promise<void>;hide:(post:any)=>Promise<void>;selectTag:(next:string)=>void};
   };
   const page=(ids:string[],cursor:string|null='B')=>({items:ids.map(post_id=>({post_id,kind:'note',tags:[]})),next_cursor:cursor,can_hide:false});
   return {state,client,calls,writes,render,page,ui:render()};
@@ -486,4 +487,28 @@ for(const action of ['upload','hide'])for(const change of ['session','client'])t
   const next=action==='hide'?newer.hide({post_id:'B'}):newer.uploadLinkThumb({post_id:'B'},jpeg());await microtasks();assert.equal(h.writes.length,2);assert.equal(h.state.saving,true);
   h.writes[0].reject(new Error('old outcome'));await old;assert.equal(h.state.saving,true,'obsolete finally cannot unlock the new action');assert.equal(h.state.actionError,'');
   h.writes[1].reject(new Error('new outcome'));await next;assert.equal(h.state.saving,false);assert.equal(h.state.actionError,'new outcome');
+});
+
+for(const phase of ['pending','failed'])test(`repeated same hashtag clicks preserve ${phase} pagination and its exact retry cursor`,async()=>{
+  const h=feedHarness(),ui=h.render({tag:'work'}),first=ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const next=ui.load('note','B');if(phase==='failed'){h.calls[1].reject(new Error('offline'));await next;}
+  const sequence=h.state.loadSequence.current,version=h.state.selection.current.version;
+  ui.selectTag('work');ui.selectTag('work');assert.equal(h.state.loadSequence.current,sequence);assert.equal(h.state.selection.current.version,version);assert.equal(h.calls.length,2);
+  if(phase==='failed'){ui.retry();assert.equal(h.calls[2].path,'/social-posts?kind=note&cursor=B&tag=work');h.calls[2].resolve(h.page(['B'],null));await microtasks();}
+  else{h.calls[1].resolve(h.page(['B'],null));await next;}
+  assert.equal(h.state.more,false);assert.equal(h.state.error,'');assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A','B']);assert.equal(h.state.cursor,null);
+});
+
+test('a genuinely different hashtag still invalidates old pagination and repeated selection does not invalidate its new read',async()=>{
+  const h=feedHarness(),ui=h.render({tag:'work'}),first=ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const old=ui.load('note','B'),sequence=h.state.loadSequence.current;ui.selectTag('news');assert.equal(h.state.loadSequence.current,sequence+1);assert.equal(h.state.feedScope.current.tag,'news');
+  ui.selectTag('news');assert.equal(h.state.loadSequence.current,sequence+1,'same-tick duplicate does not invalidate the selected intent');
+  const newer=h.render(),fresh=newer.load('note');assert.equal(h.calls[2].path,'/social-posts?kind=note&tag=news');newer.selectTag('news');
+  h.calls[1].resolve(h.page(['old'],null));await old;assert.equal(h.state.loading,true);h.calls[2].resolve(h.page(['new'],null));await fresh;assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['new']);assert.equal(h.state.loading,false);
+});
+
+test('selecting the same hashtag from a direct post still exits that lookup and loads the tagged wall',async()=>{
+  const h=feedHarness(),ui=h.render({tag:'work',directPost:'post-2'}),first=ui.load('note');h.calls[0].resolve(h.page(['A'],null));await first;
+  const sequence=h.state.loadSequence.current;ui.selectTag('work');assert.ok(h.state.loadSequence.current>sequence);assert.equal(h.state.feedScope.current.directPost,null);assert.equal(h.state.feedScope.current.tag,'work');
+  const newer=h.render(),wall=newer.load('note');assert.equal(h.calls[1].path,'/social-posts?kind=note&tag=work');h.calls[1].resolve(h.page(['tagged'],null));await wall;assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['tagged']);
 });

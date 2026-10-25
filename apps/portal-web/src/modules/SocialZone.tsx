@@ -426,7 +426,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     ++loadSequence.current;feedScope.current={...feedScope.current,directPost:null};focusing.current=null;setDirectPost(null);setNotice('');
     const location=new URL(window.location.href);location.searchParams.delete('social-post');window.history.replaceState(null,'',location);
   }
-  function selectTag(next:string){if(directPost)clearDirectPost();selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;feedScope.current={...feedScope.current,tag:next};setTag(next);}
+  function selectTag(next:string){if(!directPost&&selection.current.tag===next)return;if(directPost)clearDirectPost();selection.current={...selection.current,tag:next,version:selection.current.version+1};++loadSequence.current;feedScope.current={...feedScope.current,tag:next};setTag(next);}
   function openComposer() { ++composerVersion.current; setComposerOpen(true); }
   function closeComposer() { ++composerVersion.current; composer.current?.close(); setComposerOpen(false); composerTrigger.current?.focus({preventScroll: true}); }
   function closeOptions() { options.current?.close(); setOptionsOpen(false); optionsTrigger.current?.focus({preventScroll: true}); }

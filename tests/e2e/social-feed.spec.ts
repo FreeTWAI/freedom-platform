@@ -660,3 +660,27 @@ test('failed feed pagination retries the same cursor, keeps existing card nodes 
     await feed.getByRole('button',{name:'更新動態',exact:true}).click();await expect(feed.locator(`#social-post-${b.post_id}`)).toHaveCount(0);expect(cursors.at(-1)).toBeNull();
   }finally{await page.unrouteAll({behavior:'wait'});}
 });
+
+test('reselecting the visible hashtag does not strand a failed or pending feed page',async({page})=>{
+  await login(page);await page.keyboard.press('Escape');const feed=page.locator('.social-zone');await expect(feed).toHaveAttribute('aria-busy','false');
+  const makePost=(post_id:string,note:string)=>({post_id,kind:'note',url:null,platform:'other',platform_label:'其他',title:note,note,created_at:'2026-10-25T00:00:00Z',edited_at:null,revision:1,author:{user_id:'20000000-0000-4000-8000-000000000009',display_name:'標籤重選合成案例',avatar_url:null},thumbnail_url:null,total_points:0,my_points:0,mine:false,like_count:0,comment_count:0,liked:false,tags:['work'],mentions:[]});
+  const a=makePost('20000000-0000-4000-8000-000000000001','第一頁仍可點選 #work'),b=makePost('20000000-0000-4000-8000-000000000002','第二頁正常接續 #work');
+  const queries:string[]=[];let fail=true,hold=false,held=false,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/api/v1/social-posts*',async route=>{
+    const request=route.request(),url=new URL(request.url());if(request.method()!=='GET'||url.pathname!=='/api/v1/social-posts'){await route.continue();return;}
+    queries.push(url.search);const cursor=url.searchParams.get('cursor');
+    if(cursor==='page-B'&&fail){fail=false;await route.fulfill({status:503,json:{title:'Service unavailable',status:503}});return;}
+    if(cursor==='page-B'&&hold){held=true;await gate;}
+    await route.fulfill({json:{items:cursor==='page-B'?[b]:[a],next_cursor:cursor==='page-B'?null:'page-B',can_hide:false}});
+  });
+  try{
+    await feed.getByRole('button',{name:'更新動態',exact:true}).click();const hashtag=feed.locator(`#social-post-${a.post_id}`).getByRole('button',{name:'#work',exact:true});await hashtag.click();
+    await expect.poll(()=>queries.length).toBe(2);await expect(feed).toHaveAttribute('aria-busy','false');
+    await feed.getByRole('button',{name:'載入更多',exact:true}).click();const retry=feed.getByRole('alert').getByRole('button',{name:'重試',exact:true});await expect(retry).toBeVisible();
+    await hashtag.click();await hashtag.click();await retry.click();await expect(feed.locator(`#social-post-${b.post_id}`)).toBeVisible();
+    expect(queries).toEqual(['?kind=note','?kind=note&tag=work','?kind=note&cursor=page-B&tag=work','?kind=note&cursor=page-B&tag=work']);
+    await feed.getByRole('button',{name:'更新動態',exact:true}).click();await expect(feed.locator(`#social-post-${b.post_id}`)).toHaveCount(0);hold=true;
+    await feed.getByRole('button',{name:'載入更多',exact:true}).click();await expect.poll(()=>held).toBe(true);await hashtag.click();await hashtag.click();release();
+    await expect(feed.locator(`#social-post-${b.post_id}`)).toBeVisible();await expect(feed.getByRole('button',{name:'正在載入…',exact:true})).toHaveCount(0);expect(queries).toHaveLength(6);
+  }finally{release();await page.unrouteAll({behavior:'wait'});}
+});
