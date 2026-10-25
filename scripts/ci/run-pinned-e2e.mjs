@@ -121,7 +121,7 @@ export async function cleanupE2ePass(temp, output, passId, failed) {
     const shardReports = E2E_DEFAULT_SHARDS.map(shard => `shard-${shard.current}/report.json`);
     // Inventory and every result report stay ahead of traces. Failure,
     // timed-out, and interrupted attachments from the non-sharded report and
-    // both shard reports then precede ordinary screenshots.
+    // all shard reports then precede ordinary screenshots.
     for (const path of ['report.json', 'listing.json', ...shardReports, 'last-run.json',
       ...E2E_DEFAULT_SHARDS.map(shard => `shard-${shard.current}/last-run.json`)]) await copy(path);
     const priority = new Set();
