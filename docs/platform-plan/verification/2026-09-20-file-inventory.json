@@ -2839,8 +2839,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/Community.tsx",
-      "bytes": 13129,
-      "sha256": "5bc6cbdbdedf9011cb2dc6a82e42a50fd80fac218907d4a20c262928bf52ac87"
+      "bytes": 14006,
+      "sha256": "0a38df0c92b48f9bc6cdf4009c0169608daa3b1154d1ad1a2c40d80f1ea60253"
     },
     {
       "path": "apps/portal-web/src/modules/CommunityHistory.css",
@@ -2864,8 +2864,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/CommunitySkillBooks.tsx",
-      "bytes": 12640,
-      "sha256": "566a0b336f2360e51622efce703f51e33350ac536d25fd7ae87d14723da7ad21"
+      "bytes": 13345,
+      "sha256": "a58daf2a9decfa7d30f58adb7d58bde159bd0b527b70554e562bde7f95ed0b12"
     },
     {
       "path": "apps/portal-web/src/modules/ContributionOutcomes.css",
@@ -24914,8 +24914,8 @@
     },
     {
       "path": "tests/e2e/skill-book-library.spec.ts",
-      "bytes": 47737,
-      "sha256": "55a2e0c287885bcb14184c0685686b6917b9d95302d8c49379847565cc0539fe"
+      "bytes": 50190,
+      "sha256": "c2fcfc09cc237d5fa42bdcaedca89a07bbe50a7218cd35820b6466aa3d008767"
     },
     {
       "path": "tests/e2e/skill-book-upgrade.spec.ts",
@@ -27389,8 +27389,8 @@
     },
     {
       "path": "tests/runtime/skill-book-guides.test.ts",
-      "bytes": 6684,
-      "sha256": "f34b298435a04b34d2c16286fde76e4839356602af6346d8d1d018dc6741baa1"
+      "bytes": 7909,
+      "sha256": "7c47c921938b7108f89eb4ad49ded200c14e9a78137ac8db321a62110b6b8ad6"
     },
     {
       "path": "tests/runtime/skill-book-star-gate.test.ts",
@@ -28191,6 +28191,11 @@
       "path": "tests/runtime/guild-workspace-writer.test.ts",
       "bytes": 22918,
       "sha256": "b2f22fda983e6ff7babdd820e15ceaa90a3d6e24cf0ba72dad2cd2a85197a483"
+    },
+    {
+      "path": "modules/community/discovery-portal/skill-book-uses.ts",
+      "bytes": 1337,
+      "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
     }
   ]
 }
