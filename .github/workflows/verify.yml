@@ -198,7 +198,7 @@ jobs:
   runtime-full:
     name: runtime-full (partition ${{ matrix.partition }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     needs: select
     if: ${{ !cancelled() && (needs.select.result != 'success' || needs.select.outputs.runtime_full == 'true') }}
     # Independent runners and PostgreSQL services: eight partitions, each one

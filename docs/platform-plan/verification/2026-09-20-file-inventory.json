@@ -185,7 +185,7 @@
     {
       "path": ".github/workflows/verify.yml",
       "bytes": 36798,
-      "sha256": "9c7ec11d2a7bf9ee55007c2340c6db8f6058fff2b1dcccad94bb99b7a621d685"
+      "sha256": "d500e7de9c7a2610f32efb463eb001526551fd7badf6da4b2e212cafbf36327a"
     },
     {
       "path": "apps/freedom.module.json",
@@ -15234,8 +15234,8 @@
     },
     {
       "path": "docs/development/runtime-ci-postgres.md",
-      "bytes": 21534,
-      "sha256": "4b2c295d9e89aec35f278a707a88940b1fc37718d233337c4f7693933e3d18aa"
+      "bytes": 21574,
+      "sha256": "3201948c25a1ba1e75ef034ba6ad45a0f015e1c78660b040154ecb4115938abe"
     },
     {
       "path": "docs/development/service-cover-worker.md",
@@ -20559,8 +20559,8 @@
     },
     {
       "path": "modules/community/content-search.ts",
-      "bytes": 21513,
-      "sha256": "b3cbbcfc9a15dd7aa077c74f148dc3d5d78c20e2ad9f9ea952008853edec2167"
+      "bytes": 21539,
+      "sha256": "642095fd794a7d3e2a8988619f365d45d62245ba0f9762512fc638d0bd7ed876"
     },
     {
       "path": "modules/community/discovery.ts",
@@ -22369,8 +22369,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-matrix.md",
-      "bytes": 38173,
-      "sha256": "d4f51dae6aa5065000718d1d24126278c34982451aa420636e4f939b5b1e1c31"
+      "bytes": 41396,
+      "sha256": "1fe8cb79bb96ce57f3a2491cff8c0974fbe28c0277aa0701b1164c4833179314"
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
@@ -22379,8 +22379,8 @@
     },
     {
       "path": "packages/contribution-tools/runtime-weights.mjs",
-      "bytes": 5574,
-      "sha256": "7196f934a167cc18146b9b8d4f6032ac26135437eb09b30d390cd4fec0617f31"
+      "bytes": 5584,
+      "sha256": "40f3b292db2d9bf0b2c0423bfb4294e31834cf4c62690f48485bdb43ae7ae46f"
     },
     {
       "path": "packages/contribution-tools/schema.mjs",
@@ -22389,8 +22389,8 @@
     },
     {
       "path": "packages/contribution-tools/suite-runner.mjs",
-      "bytes": 40002,
-      "sha256": "02dd377120b19d38296f118468eb7b0e6617178d5bf7bc9b5f5b91b1845ddca4"
+      "bytes": 40015,
+      "sha256": "55953f9032ce0c71c9f77b7a0e7a75033969df746dac357e288f4692d296b51e"
     },
     {
       "path": "packages/contribution-tools/surface-audit.md",
@@ -22414,8 +22414,8 @@
     },
     {
       "path": "packages/contribution-tools/test-reporter.mjs",
-      "bytes": 10086,
-      "sha256": "4209a74f8ffe4ace9cfac6c2e93daba0632446b2e9f5bcf6fac70231b18b0903"
+      "bytes": 10097,
+      "sha256": "80468c9200e8a3ab957360a1aa5c9027652717491d6f679d9babf300ae6c2669"
     },
     {
       "path": "packages/contribution-tools/trusted-ci.mjs",
@@ -22655,7 +22655,7 @@
     {
       "path": "packages/contribution-tools/test/runtime-matrix.test.mjs",
       "bytes": 20059,
-      "sha256": "3c36dbd31b462ac9ea83782c8b0957bcbd82d4d1e1cf95c00a57a4d685283aeb"
+      "sha256": "2fc50c725d36f8c515c11b8f0cb1b1f56d2476b9823569f33b9606b7debef812"
     },
     {
       "path": "packages/contribution-tools/test/runtime-sharding.test.mjs",
@@ -22664,8 +22664,8 @@
     },
     {
       "path": "packages/contribution-tools/test/runtime-weights.test.mjs",
-      "bytes": 16665,
-      "sha256": "12a372da9b49c50b9c287aef38220a0b003806ae8a85311fc4addc7d3cebb3a5"
+      "bytes": 16824,
+      "sha256": "6371b6b05d5f751ee3d419564b69c2c0ae5bf66466e1d8387d0468392d3dbf4d"
     },
     {
       "path": "packages/contribution-tools/test/suite-runner.test.mjs",
@@ -22689,8 +22689,8 @@
     },
     {
       "path": "packages/contribution-tools/test/test-reporter-progress.test.mjs",
-      "bytes": 28708,
-      "sha256": "d46daf745ebb330b176ce73d7df9ce32adfda8ea3d1600944ce01bb95e410e23"
+      "bytes": 28848,
+      "sha256": "b8ba9e4861788374cb0a212c811b3dda05fe4833ff8adbf0ee71358d31123fe7"
     },
     {
       "path": "packages/contribution-tools/test/trusted-ci.test.mjs",
@@ -23804,8 +23804,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 15493,
-      "sha256": "9a944854426155d78040b8688387e7a997e360bdd0fb9cd945da16512045f1bc"
+      "bytes": 18255,
+      "sha256": "42bdc0bc830b66e8cfa19c3c88a82b5e2dd43acc978e5af52c43d5999e2b94d0"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -23849,8 +23849,8 @@
     },
     {
       "path": "tests/e2e/ai-sister-guides.spec.ts",
-      "bytes": 17538,
-      "sha256": "6f3421b842fbe02214fa31fc08be966aed65a011933ed291adf26365de3172c8"
+      "bytes": 17602,
+      "sha256": "b61778b5bef6fae31450c0829ce96909f12014ac9cb4f3791250b58602e914c0"
     },
     {
       "path": "tests/e2e/audit-identity-final.spec.ts",
@@ -24399,8 +24399,8 @@
     },
     {
       "path": "tests/e2e/message-load-older.spec.ts",
-      "bytes": 21884,
-      "sha256": "97640c35321b1d872c1eba4fc09bf7cf7c40c9b9834acd6fb1026ff344fb60c7"
+      "bytes": 22071,
+      "sha256": "f2f6abed0dfb2bf6ef8349b4d6a727b6bba45d6c965248cad4b24700eff77604"
     },
     {
       "path": "tests/e2e/message-retraction.spec.ts",
@@ -24439,8 +24439,8 @@
     },
     {
       "path": "tests/e2e/newcomer-guides.spec.ts",
-      "bytes": 71245,
-      "sha256": "a52e49977ee152051f2516c9cc9521a942c6885a3247d514933be1c9c7fc9c61"
+      "bytes": 72820,
+      "sha256": "c534eb5bfaac6a3e0a91ce62e8f65fe554b9cbb56fbe6a7ce2687661c8c52829"
     },
     {
       "path": "tests/e2e/notification-bell-actions.spec.ts",
@@ -24684,8 +24684,8 @@
     },
     {
       "path": "tests/e2e/social-image.spec.ts",
-      "bytes": 10095,
-      "sha256": "175661372e5793067e011798209d6976931d1a2051209c2195b13f8e8aa4549f"
+      "bytes": 10276,
+      "sha256": "5a85a94a39d0ede52f1adeebb1018ef5944c055e20bff17563f42c971e03bbdd"
     },
     {
       "path": "tests/e2e/social-links.spec.ts",
@@ -25424,8 +25424,8 @@
     },
     {
       "path": "tests/runtime/community-search.test.ts",
-      "bytes": 42224,
-      "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
+      "bytes": 47844,
+      "sha256": "96df87561f8d6ddbb80cff9543a444ae98e908bac776d1219799d3f7713cc8d6"
     },
     {
       "path": "tests/runtime/contribution-roles.test.ts",
@@ -26644,8 +26644,8 @@
     },
     {
       "path": "tests/runtime/newcomer-guides.test.ts",
-      "bytes": 6063,
-      "sha256": "f40b78766a11817784ee39b0098025762b2866831ae64233b6cfa8be42f79d43"
+      "bytes": 8218,
+      "sha256": "9598cf60e4c4613044cadfd4d932dedaa7640357b773c6e8d83f3f0b6c473b9a"
     },
     {
       "path": "tests/runtime/notification-events.test.ts",
