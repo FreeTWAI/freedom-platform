@@ -1,0 +1,31 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "platform-helper",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "apps/portal-web/src/modules/platform-helper/**",
+    "tests/runtime/platform-helper.test.ts",
+    "docs/development/platform-helper.md",
+    "tests/e2e/platform-helper.spec.ts",
+    "tests/e2e/platform-helper-fixture.ts"
+  ],
+  "public_exports": [],
+  "dependencies": [],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "DESIGN.md",
+    "docs/development/platform-helper.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}
