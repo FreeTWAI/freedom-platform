@@ -121,6 +121,7 @@ test.describe('guild leader drafts while skill editing needs an AI guild', () =>
   test('an unsaved council thread survives the guild link', async ({ page }) => {
     const { root, joins } = await stub(page);
     await root.getByRole('button', { name: '公會長議事區', exact: true }).click();
+    await root.getByRole('button', { name: '新增討論', exact: true }).click();
     await root.getByRole('textbox', { name: '討論標題', exact: true }).fill('合成議題');
     await root.getByRole('textbox', { name: '討論內容', exact: true }).fill('還沒送出的議事內容');
     await leaveInNewTab(page, root, 'council');

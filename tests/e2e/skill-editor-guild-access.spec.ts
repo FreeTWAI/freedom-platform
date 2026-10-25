@@ -205,6 +205,8 @@ test('a guild leader missing the AI guild keeps the council and sees the editor 
   await expect(root.getByText(recoveryText, { exact: true })).toBeVisible();
   await expect(root.getByRole('button', { name: '公會長議事區', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(root.getByRole('heading', { name: '公會長議事區', exact: true })).toBeVisible();
+  await expect(root.getByRole('textbox', { name: '討論標題', exact: true })).toHaveCount(0);
+  await root.getByRole('button', { name: '新增討論', exact: true }).click();
   await expect(root.getByRole('button', { name: '建立討論', exact: true })).toBeEnabled();
   expect(calls.editorGets).toBe(0);
   expect(calls.joins).toEqual([]);

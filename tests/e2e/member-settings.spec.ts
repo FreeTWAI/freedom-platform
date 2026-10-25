@@ -5,7 +5,7 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 // Synthetic data only. Messages/notifications follow the root-confirmed DTO in
 // the coordinator contract; they are route fixtures until the backend API lands.
 const me='20000000-0000-4000-8000-000000000001',peerA='20000000-0000-4000-8000-000000000002',peerB='20000000-0000-4000-8000-000000000003';
-const settingsItems=['我的個人空間','我的內容','待辦清單','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
+const settingsItems=['我的個人空間','入門指南','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
 
 test.beforeEach(async({page})=>{
   // Nothing in these cases may leave the isolated local server.
@@ -56,7 +56,7 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   await expect(page.getByRole('button',{name:'我的名片',exact:true})).toHaveCount(0);
   // Personal pages are not side-navigation entries.
   const nav=page.getByRole('navigation',{name:'主要工作區',includeHidden:true});
-  for(const name of ['待辦清單','我的名片'])await expect(nav.getByRole('button',{name,exact:true,includeHidden:true})).toHaveCount(0);
+  for(const name of ['入門指南','我的名片'])await expect(nav.getByRole('button',{name,exact:true,includeHidden:true})).toHaveCount(0);
   await expect(nav.getByRole('button',{name:'我的訊息',exact:true,includeHidden:true})).toHaveCount(0);await expect(page.locator('.floating-messages')).toBeVisible();
   await expect(page.getByRole('button',{name:'通知，2 則未讀'})).toBeVisible();
 
@@ -66,8 +66,8 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   await expect(menu.getByRole('menuitem',{name:'我的訊息',exact:true})).toHaveCount(0);
   await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
   await expect(menu.getByRole('menuitemradio')).toHaveCount(0);
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的內容',exact:true})).toBeFocused();
-  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'待辦清單',exact:true})).toBeFocused();
+  await expect(menu.getByRole('menuitem',{name:'我的內容',exact:true})).toHaveCount(0);
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'入門指南',exact:true})).toBeFocused();
   await page.keyboard.press('End');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
@@ -81,8 +81,8 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
 
   // Keyboard opening from the toggle, then selecting a page moves focus into main.
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
-  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('待辦清單');
+  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
   await expect(page.locator('#main-content')).toBeFocused();await expect(menu).toHaveCount(0);
 
   // Tab leaves the menu normally and closes it.
@@ -134,7 +134,7 @@ for(const width of [320,390])test(`settings menu and personal pages fit a ${widt
   for(const item of await page.getByRole('menuitem').all()){
     const box=(await item.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
   }
-  await page.getByRole('menuitem',{name:'待辦清單',exact:true}).click();
+  await page.getByRole('menuitem',{name:'入門指南',exact:true}).click();
   await expect(page.getByRole('button',{name:'連結 GitHub',exact:true})).toBeVisible();
   expect((await page.getByRole('button',{name:'連結 GitHub',exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -175,7 +175,7 @@ test('GitHub todo follows the real connection state and never completes by hand'
   await task.getByRole('button',{name:'連結 GitHub',exact:true}).click();
   await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);expect(connects).toEqual([{return_to:'#todos'}]);
   await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/#todos$/);
-  await expect(page.getByRole('heading',{level:1})).toHaveText('待辦清單');
+  await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
   await expect(task.getByRole('status')).toHaveText('已完成');await expect(task).toContainText('@synthetic-owner');
   expect(starWrites).toBe(0);
   await task.getByRole('button',{name:'到我的名片管理 GitHub 連結',exact:true}).click();await expect(page).toHaveURL(/#account$/);
@@ -314,9 +314,9 @@ test('a late read after leaving the page never navigates, and a failed count ref
   await page.route(/\/api\/v1\/me\/conversations(\?.*)?$/,route=>route.fulfill({json:{items:[],unread_count:0,next_offset:null}}));
   await login(page,'#messages');await openNotifications(page);
   await page.locator('li',{hasText:'合成通知 1'}).getByRole('button',{name:'前往小隊集合',exact:true}).click();
-  await openPage(page,'待辦清單');await expect(page).toHaveURL(/#todos$/);
+  await openPage(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
   release();await page.waitForTimeout(300);
-  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('待辦清單');
+  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
   await openNotifications(page);
   countFails=true;
   const second=page.locator('li',{hasText:'合成通知 2'});await second.getByRole('button',{name:'標為已讀',exact:true}).click();

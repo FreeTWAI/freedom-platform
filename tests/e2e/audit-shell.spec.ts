@@ -223,10 +223,10 @@ for (const viewport of VIEWPORTS) {
       await page.keyboard.press('Enter');
       await expect(menu).toHaveAttribute('aria-expanded', 'true');
       await expect(nav).toBeVisible();
-      await page.keyboard.press('Tab');
+      // Opening the mobile menu focuses its current primary destination.
       await expect(nav.getByRole('button', { name: '會員首頁', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
-      await expect(nav.getByRole('button', { name: '我的內容', exact: true })).toBeFocused();
+      await expect(nav.getByRole('button', { name: '我的個人空間', exact: true })).toBeFocused();
       // Every group opens inside the menu; the last destination can be scrolled into view and chosen.
       for (const summary of await nav.locator('.nav-section > summary').all()) {
         if (!await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open)) await summary.click();
@@ -259,7 +259,7 @@ for (const viewport of VIEWPORTS) {
       expect(await focusedIsVisiblyOutlined(page)).toBe(true);
       await page.keyboard.press('Tab');
       await expect(nav.getByRole('button',{name:'會員首頁',exact:true})).toBeFocused();
-      for (const name of ['我的內容', '職業公會', '技能書架', '搜尋社群內容']) {
+      for (const name of ['我的個人空間', '職業公會', '技能書架', '搜尋社群內容']) {
         await page.keyboard.press('Tab');
         await expect(nav.getByRole('button', { name, exact: true })).toBeFocused();
         expect(await focusedIsVisiblyOutlined(page)).toBe(true);
