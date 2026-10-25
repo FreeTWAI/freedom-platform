@@ -331,17 +331,24 @@ function feedHarness() {
   const retryMarkup=composerSource.match(/<button\b[^>]*onClick=\{([^}]+)\}>重試<\/button>/);
   assert.ok(retryMarkup,'feed error retry remains wired');
   const calls:{path:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
+  const writes:{path:string;method:string;resolve:(value:any)=>void;reject:(error:unknown)=>void}[]=[];
   const state:any={items:[],cursor:null,error:'',loading:false,more:false,canHide:false,loadSequence:{current:0},pendingFeedLoad:{current:false},activeFeedLoad:{current:null},failedFeedLoad:{current:null},focusing:{current:null},newPosts:{current:[]},feedScope:{current:null},currentClient:{current:null},URLSearchParams,Error,useCallback:(fn:any)=>fn};
   for(const [setter,key] of [['setLoading','loading'],['setMore','more'],['setError','error'],['setCursor','cursor'],['setCanHide','canHide'],['setItems','items']])state[setter]=(value:any)=>{state[key]=typeof value==='function'?value(state[key]):value;};
-  const client={sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>calls.push({path,resolve,reject}))};
-  const make=runInNewContext(`(function(client,feedSession,tag,directPost,platform){${composerCode.slice(start,end)}\n${composerFunction('retryFeed')}\nreturn {load,retry:${retryMarkup[1]}};})`,state);
+  state.crypto={randomUUID};state.ApiError=ApiError;state.refreshSequence={current:0};state.saving=false;state.actionError='';
+  state.setSaving=(value:boolean)=>{state.saving=value;};state.setActionError=(value:string)=>{state.actionError=value;};state.setNotice=(value:string)=>{state.notice=value;};
+  state.prepareSocialImage=async(file:File)=>{if(state.prepareFailure)throw new Error('prepare failed');return file;};
+  state.accessAwareFetch=(path:string,init:RequestInit)=>new Promise((resolve,reject)=>writes.push({path,method:init.method!,resolve,reject}));
+  const client={sessionGeneration:1,csrfToken:'fixture-csrf',get:(path:string)=>new Promise((resolve,reject)=>calls.push({path,resolve,reject})),post:(path:string)=>new Promise((resolve,reject)=>writes.push({path,method:'POST',resolve,reject}))};
+  const actionRetry=composerSource.match(/onClick=\{([^}]+)\}>重新載入貼文狀態/)?.[1]??retryMarkup[1];
+  const actionFunction=composerSource.includes('function refreshAfterAction()')?composerFunction('refreshAfterAction'):'';
+  const make=runInNewContext(`(function(client,feedSession,tag,directPost,platform){${composerCode.slice(start,end)}\n${composerFunction('retryFeed')}\n${composerFunction('uploadLinkThumb')}\n${composerFunction('hide')}\n${actionFunction}\nreturn {load,retry:${retryMarkup[1]},recoverAction:${actionRetry},uploadLinkThumb,hide};})`,state);
   const render=(patch:Record<string,unknown>={})=>{
     state.feedScope.current={client,session:client.sessionGeneration,platform:'note',tag:'',directPost:null,...state.feedScope.current,...patch};
     const scope=state.feedScope.current;state.currentClient.current=scope.client;
-    return make(scope.client,scope.session,scope.tag,scope.directPost,scope.platform) as {load:(platform:string,cursor?:string)=>Promise<void>;retry:()=>void};
+    return make(scope.client,scope.session,scope.tag,scope.directPost,scope.platform) as {load:(platform:string,cursor?:string)=>Promise<void>;retry:()=>void;recoverAction:()=>void;uploadLinkThumb:(post:any,file:File)=>Promise<void>;hide:(post:any)=>Promise<void>};
   };
   const page=(ids:string[],cursor:string|null='B')=>({items:ids.map(post_id=>({post_id,kind:'note',tags:[]})),next_cursor:cursor,can_hide:false});
-  return {state,client,calls,render,page,ui:render()};
+  return {state,client,calls,writes,render,page,ui:render()};
 }
 
 test('feed JSX retry keeps failed cursor and loaded cards through repeated failures, then appends deduplicated IDs',async()=>{
@@ -420,4 +427,63 @@ test('a pending explicit refresh cannot be superseded by the old load-more curso
   h.calls[2].resolve(h.page(['fresh'],'D'));await refresh;const next=h.ui.load('note','D');assert.equal(h.calls[3].path,'/social-posts?kind=note&cursor=D');h.calls[3].resolve(h.page(['next'],null));await next;
   assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['fresh','next']);
   assert.match(composerSource,/disabled=\{loading \|\| more\} onClick=\{\(\) => void load\(platform, cursor\)\}/);
+});
+
+for(const action of ['prepare','upload','hide'])test(`existing-post ${action} error after successful feed has read-only recovery and never replays the write`,async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  if(action==='prepare')h.state.prepareFailure=true;
+  const attempt=action==='hide'?h.ui.hide({post_id:'A'}):h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();
+  if(action!=='prepare'){assert.equal(h.writes.length,1);h.writes[0].reject(new Error('result unknown'));}await attempt;
+  assert.ok(h.state.actionError||h.state.error);const before=h.writes.length;
+  h.ui.recoverAction();h.ui.recoverAction();assert.equal(h.calls.length,2,'action recovery starts one read-only refresh');assert.equal(h.calls[1].path,'/social-posts?kind=note');assert.equal(h.writes.length,before,'no PUT/POST replay');
+  assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['A'],'visible cards retained until read completes');
+  h.calls[1].resolve(h.page(['fresh'],null));await microtasks();assert.ok(h.state.actionError,'a GET does not confirm the previous write outcome');assert.equal(h.state.error,'');assert.deepEqual(plain(h.state.items.map((p:any)=>p.post_id)),['fresh']);
+  assert.match(composerSource,/onClick=\{refreshAfterAction\}>重新載入貼文狀態/);
+});
+
+for(const order of ['feed-first','action-first'])test(`feed and action errors retain separate origins and recovery in ${order} order`,async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const failFeed=async()=>{const read=h.ui.load('note','B');h.calls.at(-1)!.reject(new Error('page B failed'));await read;};
+  const failAction=async()=>{const write=h.ui.hide({post_id:'A'});h.writes.at(-1)!.reject(new Error('hide outcome unknown'));await write;};
+  if(order==='feed-first'){await failFeed();await failAction();}else{await failAction();await failFeed();}
+  assert.equal(h.state.error,'page B failed');assert.equal(h.state.actionError,'hide outcome unknown');h.ui.retry();assert.equal(h.calls.at(-1)!.path,'/social-posts?kind=note&cursor=B');assert.equal(h.writes.length,1);
+  h.calls.at(-1)!.resolve(h.page(['B'],null));await microtasks();assert.equal(h.state.error,'');assert.equal(h.state.actionError,'hide outcome unknown');
+  h.ui.recoverAction();h.calls.at(-1)!.reject(new Error('refresh failed'));await microtasks();assert.equal(h.state.error,'refresh failed');assert.equal(h.state.actionError,'hide outcome unknown');
+  h.ui.retry();assert.equal(h.calls.at(-1)!.path,'/social-posts?kind=note');h.calls.at(-1)!.resolve(h.page(['A'],null));await microtasks();assert.equal(h.state.actionError,'hide outcome unknown');assert.equal(h.writes.length,1);
+});
+
+for(const action of ['upload','hide'])for(const change of ['session','client'])for(const outcome of ['success','failure'])test(`late ${action} ${outcome} cannot update another ${change} scope or clear its action/loading state`,async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const pending=action==='hide'?h.ui.hide({post_id:'A'}):h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();assert.equal(h.writes.length,1);
+  const patch=change==='session'?{session:++h.client.sessionGeneration}:{client:{sessionGeneration:1,get:h.client.get,post:h.client.post,csrfToken:'new'}};h.render(patch);
+  h.state.items=[{post_id:'new-scope'}];h.state.notice='new notice';h.state.actionError='new action error';h.state.saving=true;
+  if(outcome==='success')h.writes[0].resolve(action==='hide'?{}:{ok:true,json:async()=>({post_id:'A',thumbnail_url:'/old'})});else h.writes[0].reject(new Error('old failure'));await pending;
+  assert.deepEqual(plain(h.state.items),[{post_id:'new-scope'}]);assert.equal(h.state.notice,'new notice');assert.equal(h.state.actionError,'new action error');assert.equal(h.state.saving,true);
+  const reads=h.calls.length;h.ui.recoverAction();await h.ui.hide({post_id:'A'});await h.ui.uploadLinkThumb({post_id:'A'},png());assert.equal(h.calls.length,reads);assert.equal(h.writes.length,1);
+});
+
+test('thumbnail preparation interrupted by logout cannot upload or display an old failure',async()=>{
+  const h=feedHarness();let release!:(file:File)=>void;h.state.prepareSocialImage=()=>new Promise(resolve=>release=resolve);
+  const pending=h.ui.uploadLinkThumb({post_id:'A'},png());h.client.sessionGeneration++;h.state.actionError='new session';release(png());await pending;assert.equal(h.writes.length,0);assert.equal(h.state.actionError,'new session');
+});
+
+test('read-only action recovery retains uncertainty and an explicit new thumbnail choice remains usable on that post',async()=>{
+  const h=feedHarness(),first=h.ui.load('note');h.calls[0].resolve(h.page(['A']));await first;
+  const failed=h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();h.writes[0].reject(new Error('upload outcome unknown'));await failed;
+  h.ui.recoverAction();h.calls[1].resolve(h.page(['A'],null));await microtasks();assert.equal(h.state.actionError,'upload outcome unknown');assert.equal(h.state.saving,false);assert.equal(h.writes.length,1);
+  const explicit=h.ui.uploadLinkThumb({post_id:'A'},jpeg());await microtasks();assert.equal(h.writes[1].path,'/api/v1/social-posts/A/thumbnail');assert.equal(h.writes[1].method,'PUT');assert.equal(h.state.actionError,'');
+  h.writes[1].resolve({ok:true,json:async()=>({post_id:'A',thumbnail_url:'/updated'})});await explicit;assert.equal(h.state.notice,'縮圖已更新。');assert.equal(h.state.saving,false);assert.equal(h.writes.filter(w=>w.method==='POST').length,0);
+});
+
+for(const action of ['upload','hide'])for(const change of ['session','client'])test(`actual ${change} effect resets old ${action} saving state without letting its completion unlock a new action`,async()=>{
+  const h=feedHarness();
+  const effect=composerSource.match(/useEffect\(\(\)=>\{(\s*\+\+imageSequence\.current;pending\.current=null;publishLock\.current=null;[\s\S]*?)\},\[client,client\.sessionGeneration\]\)/);assert.ok(effect);
+  Object.assign(h.state,{imageSequence:{current:0},pending:{current:null},publishLock:{current:null},newTextHistory:()=>({value:''})});
+  for(const name of ['setTextHistory','setOriginalDraft','setComposeFile','setPreparingImage','setUrl','setTitle','setLinkPreview','setTopic','setMentions','setLocationName','setCheckIn','setPublishing','setPublishError'])h.state[name]=()=>{};
+  const old=action==='hide'?h.ui.hide({post_id:'A'}):h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();assert.equal(h.state.saving,true);
+  const patch=change==='session'?{session:++h.client.sessionGeneration}:{client:{sessionGeneration:1,get:h.client.get,post:h.client.post,csrfToken:'new'}};
+  const newer=h.render(patch);runInNewContext(`(()=>{${effect[1]}})()`,h.state);assert.equal(h.state.saving,false,'actual new-session effect unlocks controls');assert.equal(h.state.actionError,'');
+  const next=action==='hide'?newer.hide({post_id:'B'}):newer.uploadLinkThumb({post_id:'B'},jpeg());await microtasks();assert.equal(h.writes.length,2);assert.equal(h.state.saving,true);
+  h.writes[0].reject(new Error('old outcome'));await old;assert.equal(h.state.saving,true,'obsolete finally cannot unlock the new action');assert.equal(h.state.actionError,'');
+  h.writes[1].reject(new Error('new outcome'));await next;assert.equal(h.state.saving,false);assert.equal(h.state.actionError,'new outcome');
 });

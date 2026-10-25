@@ -186,6 +186,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -235,7 +236,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     ++imageSequence.current;pending.current=null;publishLock.current=null;
     setTextHistory(newTextHistory());setOriginalDraft(null);setComposeFile(null);setPreparingImage(false);
     setUrl('');setTitle('');setLinkPreview(false);setTopic('mood');setMentions([]);setLocationName('');setCheckIn(false);
-    setPublishing(false);setPublishError('');setNotice('');newPosts.current=[];
+    setPublishing(false);setPublishError('');setSaving(false);setActionError('');setNotice('');newPosts.current=[];
     return()=>{++imageSequence.current;publishLock.current=null;};
   },[client,client.sessionGeneration]);
   const gameInbox=useGameDraftInbox(client.sessionGeneration);
@@ -323,6 +324,10 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     const failed = failedFeedLoad.current, scope = feedScope.current;
     if (!failed || failed.sequence !== loadSequence.current || failed.client !== client || failed.client !== currentClient.current || failed.session !== client.sessionGeneration || failed.session !== scope.session || failed.platform !== scope.platform || failed.tag !== scope.tag || failed.directPost !== scope.directPost) return;
     void load(failed.platform, failed.cursor, true);
+  }
+  function refreshAfterAction() {
+    // A read can refresh visibility, but cannot prove an uncertain write succeeded.
+    void load(platform, undefined, true);
   }
   useEffect(() => { void load(platform); }, [load, platform]);
   // Quiet re-check for the Short feed (no spinner, so the viewer keeps their place): a hidden or withdrawn post drops out
@@ -532,23 +537,25 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     } finally { if(client===currentClient.current&&generation===client.sessionGeneration&&publishLock.current===lock){publishLock.current=null;setPublishing(false);} }
   }
   async function uploadLinkThumb(post: Post, next: File) {
-    if (!client.csrfToken) return;
+    if (!client.csrfToken || client !== currentClient.current || feedSession !== client.sessionGeneration) return;
     if (saving) return;
     const generation = client.sessionGeneration;
-    setSaving(true); setError('');
+    const current = () => client === currentClient.current && generation === client.sessionGeneration;
+    setSaving(true); setActionError('');
     try {
       next = await prepareSocialImage(next);
-      if (generation !== client.sessionGeneration) return;
+      if (!current()) return;
       const response = await accessAwareFetch(`/api/v1/social-posts/${post.post_id}/thumbnail`, {
         method: 'PUT', credentials: 'same-origin', body: next,
         headers: {Accept: 'application/json', 'Content-Type': next.type, 'X-CSRF-Token': client.csrfToken, 'Idempotency-Key': crypto.randomUUID()},
       });
       const payload = await response.json() as Post & {detail?: string};
+      if (!current()) return;
       if (!response.ok) throw new ApiError({message: payload.detail || '縮圖未能換上。', status: response.status});
       setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...payload, thumbnail_url: `${payload.thumbnail_url ?? item.thumbnail_url}?v=${Date.now()}`} : item));
       setNotice('縮圖已更新。');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '縮圖未能換上。'); }
-    finally { setSaving(false); }
+    } catch (cause) { if (current()) setActionError(cause instanceof Error ? cause.message : '縮圖未能換上。'); }
+    finally { if (current()) setSaving(false); }
   }
   async function remove(post: Post) {
     if (!client.csrfToken) return;
@@ -568,11 +575,14 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     finally { setSaving(false); }
   }
   async function hide(post: Post) {
+    if (client !== currentClient.current || feedSession !== client.sessionGeneration) return;
+    const generation = client.sessionGeneration;
+    const current = () => client === currentClient.current && generation === client.sessionGeneration;
     ++refreshSequence.current;
-    setSaving(true); setError('');
-    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; setNotice('貼文已隱藏。'); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
-    finally { setSaving(false); }
+    setSaving(true); setActionError('');
+    try { await client.post(`/social-posts/${post.post_id}/hide`, {}); if (!current()) return; { ++refreshSequence.current; setItems(current => current.filter(item => item.post_id !== post.post_id)); }; setNotice('貼文已隱藏。'); }
+    catch (cause) { if (current()) setActionError(cause instanceof Error ? cause.message : '貼文未能隱藏。'); }
+    finally { if (current()) setSaving(false); }
   }
   // One-tap like from a Short slide: same endpoint, per-post command and idempotency key as the card's like button.
   async function likeShort(postId: string) {
@@ -676,6 +686,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     <SocialPostEditor client={client} post={editingPost} onClose={()=>setEditingPost(null)} onSaved={saved=>{setItems(current=>current.map(item=>item.post_id===saved.post_id?{...item,...saved,thumbnail_url:item.thumbnail_url}:item));setNotice('貼文已更新。');}}/>
     {notice && <p className="social-feedback" role="status">{notice===composerMessages.published[0]?composerText('published'):notice}</p>}
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
+    {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p><p>重新載入只更新貼文狀態，不會重送操作或確認圖片已更新。若要更換縮圖，請重新選取圖片。</p><button type="button" className="btn btn-ghost" disabled={loading || more || saving} onClick={refreshAfterAction}>重新載入貼文狀態</button><button type="button" className="btn btn-ghost" onClick={() => setActionError('')}>關閉提示</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
       <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
       <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
