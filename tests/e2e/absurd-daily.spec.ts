@@ -103,6 +103,37 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   expect(posts).toEqual([]);
 });
 
+test('AD-5 final cash capture failure retries the completed scene without replaying classification',async({page})=>{
+  test.setTimeout(120_000);await openGame(page,'cash');
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  const deck=cashDeck(42);
+  for(const card of deck.slice(0,29)){
+    await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');
+    await page.clock.fastForward(175);
+  }
+  await page.evaluate(()=>{
+    const original=HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL=function(...args){
+      if(this.width===960&&this.height===720&&args[0]==='image/jpeg'){
+        HTMLCanvasElement.prototype.toDataURL=original;
+        throw Error('Synthetic final capture failure');
+      }
+      return original.apply(this,args);
+    };
+  });
+  await page.keyboard.press(deck[29].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-notice')).toContainText('完成次數不會重算');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 30 / 30');
+  await expect(page.locator('.ad-result-heading')).toHaveCount(0);
+  await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
+  await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  const image=page.locator('.ad-result-photo > img');
+  await expect(image).toHaveJSProperty('naturalWidth',960);
+  await expect(image).toHaveJSProperty('naturalHeight',720);
+  await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
 test('AD-7 guest result survives login, shows current author, and publishes only after confirmation',async({page,e2eAuthPool})=>{
   await page.goto('/?game-share=1#home');const draft=await artifact();await putArtifact(page,draft);
   try {
