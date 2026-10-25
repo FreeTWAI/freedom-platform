@@ -196,6 +196,8 @@ for(const advertised of [true,false])test(`one pending receipt in 200 loaded mes
   await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
   for(let count=40;count<=200;count+=20){await older(page).click();await expect(panel.locator('.messages-bubbles li')).toHaveCount(count);}
   await allMessages(page,ids);const draft=panel.locator('.messages-compose textarea');await draft.fill('回條核對保留草稿');
+  // Loaded rows remain visible during a quiet receipt refresh; exclude that refresh from the manual-read baseline.
+  await expect(reread(page)).toHaveAttribute('aria-disabled','false');
   const historyBefore=historyReads.length,receiptBefore=receiptReads.length;
   const completedRead=page.waitForResponse(response=>{const url=new URL(response.url());return advertised?url.pathname===root+'/receipts':url.pathname===root+'/messages'&&url.searchParams.get('offset')==='180';});
   await reread(page).click();await (await completedRead).finished();await expect(reread(page)).toHaveAttribute('aria-disabled','false');
