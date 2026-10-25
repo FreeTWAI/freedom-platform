@@ -103,13 +103,15 @@ try {
   const { verifyBackup } = await import(pathToFileURL(join(sourceRoot, 'deploy/shared-release/test/backup-integration.mjs')));
   const backup = await verifyBackup({ root, openCluster, execute });
   await clusters.at(-1).dispose();
+  const { verifyMigration } = await import(pathToFileURL(join(sourceRoot, 'deploy/shared-release/test/migration-integration.mjs')));
+  const migration = await verifyMigration({ root, openCluster });
   for (const cluster of clusters) await assert.rejects(stat(cluster.root), { code: 'ENOENT' });
   console.log(JSON.stringify({ format: 'freedom.shared-release-postgres-fixture/v1', status: 'passed',
     evidence: 'real-local-postgres18', image, network: 'none', diskBacked: true,
     snapshotExcludesLaterWrite: true, dumpReadbackVerified: true, isolatedRestoreVerified: true,
     truncatedRestoreRejected: true, failedStreamBeforeRestore: true, ownedClustersRemoved: clusters.length,
     legacyLeaseExclusion: true, lostLeaseStopsWork: true,
-    backup,
+    backup, migration,
     cloudflare: 'not_run', offsiteBackup: 'not_run', production: 'not_run' }));
 } finally {
   const results = await Promise.allSettled(clusters.map(cluster => cluster.dispose()));

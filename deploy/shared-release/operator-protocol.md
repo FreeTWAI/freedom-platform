@@ -25,7 +25,7 @@ and CodeQL runs, admission time, operator digest, config digest and required pha
 The result binds the SHA-256 of the **exact request file bytes**. The image must
 check the clean source SHA/tree before loading any application tools or migrations.
 
-`credentials.json` supplies `cloudflareApiToken`, `migrationDatabaseUrl` and
+`credentials.json` supplies `cloudflareApiToken`, `migrationDatabaseUrl`, `runtimeDatabaseUrl` and
 `backupDatabaseUrl`; staging also requires `stagingAccessClientId` and
 `stagingAccessClientSecret`. Preserve whole-host Access. Send those service
 headers only to the fixed staging health origin, never to a redirected endpoint
@@ -89,12 +89,25 @@ the same release lease before/after this backup. It checks complete ledger and
 material-policy digests on source and restored databases and the Worker binding
 digest on the source. Its required expectations are inputs from the installed
 controller, not authenticated external-floor evidence: the durable floor reader,
-approved policy authority, migration transaction, Worker deployer and scheduler
+approved policy authority, Worker deployer and scheduler
 handoff are still open. Do not install it as an independently enabled deployer.
 The integration fixture uses real PG18, native local R2 and synthetic data;
 Cloudflare transport uses disk-backed injected HTTP responses. It covers capture
 snapshot isolation, full archive readback, object restoration, corruption and
 lost mutation replies. It does not establish remote operation or credentials.
+
+`preparePortableMigration` and `runPortableMigration` now wrap the installed
+migration runner with canonical runtime grants in the same transaction. The
+canonical grants and read-only verifier are read from the admitted Git object;
+the port has no private-host imports. It checks the complete before/after ledger,
+material policy and GC state, role ownership, RLS inventory, PUBLIC/sequence/table
+privileges, then probes actual runtime and backup logins in read-only transactions.
+Private create-only intents prevent replay. A lost COMMIT reply remains unknown;
+`observeMigrationOutcome` reads the transaction status and ledger without granting
+permission to resume. The native PG18 fixture verifies atomic rollback and a
+committed transaction whose reply was lost. The enclosing operator must still
+provide authenticated floor assertion/advancement and a reviewed verification
+contract; its fixture floor callback is not live retained-floor evidence.
 
 `publishArchive` persists an exclusive disk intent before provider work and refuses
 reuse of that UUID in the same work directory. It preserves the existing unique

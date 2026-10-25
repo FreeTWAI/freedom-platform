@@ -79,6 +79,7 @@ export async function main(env = process.env) {
       config: env.RELEASE_CONFIG_JSON, credentials: {
         cloudflareApiToken: env.CLOUDFLARE_API_TOKEN,
         migrationDatabaseUrl: env.MIGRATION_DATABASE_URL, backupDatabaseUrl: env.BACKUP_DATABASE_URL,
+        runtimeDatabaseUrl: env.RUNTIME_DATABASE_URL,
         ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
           stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });

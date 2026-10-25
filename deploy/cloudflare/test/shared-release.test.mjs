@@ -320,7 +320,7 @@ async function operatorFixture(t, outcome = 'passed') {
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, 'source'), temporaryRoot = join(root, 'work');
   await mkdir(source); await mkdir(temporaryRoot);
-  const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', backupDatabaseUrl: 'fixture-backup',
+  const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', runtimeDatabaseUrl: 'fixture-runtime', backupDatabaseUrl: 'fixture-backup',
     stagingAccessClientId: 'fixture-access-id', stagingAccessClientSecret: 'fixture-access-secret' };
   const run = async (cmd, args) => {
     calls.push([cmd, ...args]);

@@ -112,7 +112,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     && parsedConfig.target === admission.target,
   'release_config_binding_invalid');
   requireRelease(credentials && typeof credentials === 'object' && !Array.isArray(credentials), 'release_credentials_missing');
-  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'backupDatabaseUrl']) {
+  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl', 'backupDatabaseUrl']) {
     requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0, 'release_credentials_missing');
   }
   if (admission.target === 'staging-next') {

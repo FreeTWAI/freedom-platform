@@ -48,6 +48,7 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | Secret | `RELEASE_CONFIG_JSON` | 此環境的目標資源、保留旗標、schema floor 與備份設定；格式見 [operator protocol](operator-protocol.md) |
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
 | Secret | `MIGRATION_DATABASE_URL` | 此環境的專用 migration role，保留現有角色、目標與 TLS 核對 |
+| Secret | `RUNTIME_DATABASE_URL` | 此環境既有 app role，migration 後用獨立唯讀交易確認實際登入與讀取權限 |
 | Secret | `BACKUP_DATABASE_URL` | 此環境的專用 snapshot／備份 role，包含既有 maintenance pin 所需權限 |
 | Secret（僅 staging） | `CF_ACCESS_CLIENT_ID`／`CF_ACCESS_CLIENT_SECRET` | 既有 staging Access 應用准許的團隊 service token，僅傳送到固定 staging health origin |
 
@@ -59,8 +60,11 @@ Staging 保留整站 Access；不得為了 health 檢查關閉保護。Access se
 Cloudflare 管理 API token 是分開的憑證。正式公開 health 不接受這組 Access 憑證。
 
 2026-10-25 本輪已把兩個環境設成只接受 main，並寫入 `RELEASE_ENABLED=false`。
-當時兩個環境都沒有部署 secrets；本輪沒有讀取、搬移或分發私人金鑰。
-尚未安裝 image、config 或上述服務憑證。
+兩環境的 migrator、app、backup 服務帳號各自完成實際唯讀連線、DB／role 與
+PG18／TLS 核對後，已分別寫入上述三個 Database URL secrets（共六組）。
+沒有變更角色、重設密碼或執行 live migration。現有 Cloudflare token 經 API
+確認屬於個人帳號；它沒有被複製到共用 secrets。團隊 Cloudflare token、Access
+service token、image 與 config 仍待安裝，發布尚未啟用。
 
 ## 執行與失敗處理
 
