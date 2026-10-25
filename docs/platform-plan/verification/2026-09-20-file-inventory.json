@@ -4329,8 +4329,8 @@
     },
     {
       "path": "apps/portal-web/src/storefront/checkout-page.tsx",
-      "bytes": 33997,
-      "sha256": "22e570de56187ecb0dc486883a0adc2d4a97679b5c41119bae9e3ac888ea9191"
+      "bytes": 34356,
+      "sha256": "a336b3573ff33b5b09f039c6f42269dc752e4631ae04ba06bcb401a1a8bfa320"
     },
     {
       "path": "apps/portal-web/src/storefront/delivery-copy.ts",
@@ -24754,8 +24754,8 @@
     },
     {
       "path": "tests/e2e/storefront-offline-checkout.spec.ts",
-      "bytes": 152119,
-      "sha256": "02f12493fd8dd2cd8ba34cec5e6bca5af49042b59f19a39ab7301ccf213ff2be"
+      "bytes": 155194,
+      "sha256": "cc65628e39af170551c5bb2de5a2716bdcfb75466649aa3607cf7d7df4efecfe"
     },
     {
       "path": "tests/e2e/storefront-order-email.spec.ts",
@@ -25874,8 +25874,8 @@
     },
     {
       "path": "tests/runtime/hosted-checkout-http.test.ts",
-      "bytes": 67993,
-      "sha256": "42a590cd82e55c71bebc702c8885106f0b1640072591c04ffa38cd85a61b8705"
+      "bytes": 69071,
+      "sha256": "da59df5d8525d23b798480a4988500559b58117ec8a9b07c644f5f017c5b765d"
     },
     {
       "path": "tests/runtime/hosted-checkout-purchase-state.test.ts",

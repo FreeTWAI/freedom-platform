@@ -630,6 +630,16 @@ test('newly published policy between quote and freeze rejects stale consents, wh
   const latest=await policyQuote(s);assert.notEqual(latest.required_consents[0].policy_version_id,old.required_consents[0].policy_version_id);
   await checkout(s,{publication_revision:latest.publication_revision,consents:policyRefs(latest)});
 });
+test('removing every published policy body rejects old consents and accepts an empty set',async()=>{
+  const s=await x.store();await seedPublishedPolicies(s);install(undefined,{},true);
+  const old=await policyQuote(s);assert.equal(old.required_consents.length,4);
+  await revisePolicies(s,p=>{for(const kind of POLICY_KINDS)p[kind].body='';});
+  expect(await http('POST',root(s)+'/checkouts',{...x.input(s.product.sku,1),consents:policyRefs(old)},undefined,{'Idempotency-Key':randomUUID()}),422,'consents_mismatch');
+  const latest=await policyQuote(s);assert.deepEqual(latest.required_consents,[]);
+  const f=await checkout(s,{publication_revision:latest.publication_revision,consents:[]});assert.deepEqual(f.c.terms.consents,[]);
+  const order=expect(await http('POST',root(s)+`/checkouts/${f.c.checkout_ref}/orders`,{terms_sha256:f.c.terms_sha256,client_order_id:randomUUID()},f.browser),201).order;
+  assert.deepEqual((await x.h.pool.query("SELECT terms->'consents' AS consents FROM commerce_checkout_orders WHERE order_id=$1",[order.order_ref])).rows[0].consents,[]);
+});
 test('only nonempty current publication policy kinds are required and another tenant never appears',async()=>{
   const a=await x.store(),b=await x.store();await seedPublishedPolicies(a);const foreign=await seedPublishedPolicies(b);install(undefined,{},true);
   await revisePolicies(a,p=>{p.returns.body='';p.privacy.body='';});

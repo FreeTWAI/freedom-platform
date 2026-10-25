@@ -1529,6 +1529,55 @@ test('paid offline cancellation stays pending until the owner records the full r
   }finally{await buyer.close();await seller.close();await store.close();}
 });
 
+test('removing every published checkout policy updates the notice and focus, then accepts empty consents', async ({browser, e2eAuthPool}, info) => {
+  const store = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {storePoliciesEnabled: true});
+  const context = await browser.newContext({baseURL: store.origin, viewport: {width: 390, height: 900}});
+  try {
+    const legal = emptySellerPolicies();
+    const savePolicies = async () => {
+      const current = await store.sellerGet(store.root + '/seller-policies');
+      await store.sellerPut(store.root + '/seller-policies', legal, current.version);
+      await store.republish();
+    };
+    for (const kind of POLICY_KINDS) legal.policies[kind].body = `合成結帳${kind}政策`;
+    await savePolicies();
+    await openBuyer(e2eAuthPool, context, store);
+    const page = await context.newPage();
+    await start(page, store);
+    const checkbox = page.getByRole('checkbox', {name: /^我已閱讀並同意本店的/});
+    const submit = page.getByRole('button', {name: '核對訂單', exact: true});
+    await expect(submit).toBeDisabled();
+    await checkbox.check();
+    await expect(submit).toBeEnabled();
+    for (const kind of POLICY_KINDS) legal.policies[kind].body = '';
+    await savePolicies();
+    const refused = page.waitForResponse(r => r.url().endsWith(`/stores/${store.slug}/checkouts`) && r.request().method() === 'POST');
+    await submit.click();
+    const mismatch = await refused;
+    expect(mismatch.request().postDataJSON().consents).toHaveLength(4);
+    expect(mismatch.status()).toBe(422);
+    expect((await mismatch.json()).code).toBe('consents_mismatch');
+    const notice = page.getByRole('alert');
+    await expect(notice).toHaveText('商店政策剛更新，目前不需勾選同意，請確認訂單內容後再送出。');
+    await expect(page.locator('#shop-checkout')).toHaveAttribute('aria-busy', 'false');
+    await expect(checkbox).toHaveCount(0);
+    await expect(notice).toBeFocused();
+    await expect(submit).toBeEnabled();
+    await expect(page.getByLabel('收件人姓名', {exact: true})).toHaveValue('合成買家甲');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({path: info.outputPath('checkout-policy-removed-390.png'), fullPage: true});
+    const retried = page.waitForRequest(r => r.url().endsWith(`/stores/${store.slug}/checkouts`) && r.method() === 'POST');
+    const frozen = await freeze(page, store);
+    expect((await retried).postDataJSON().consents).toEqual([]);
+    expect(frozen.terms.consents).toEqual([]);
+    await expect(notice).toHaveCount(0);
+    await expect(page.getByRole('heading', {name: '結帳', exact: true})).toBeFocused();
+    const order = await place(page, '銀行匯款');
+    const retained = (await e2eAuthPool.query("SELECT terms->'consents' AS consents FROM commerce_checkout_orders WHERE order_id=$1", [order.order_ref])).rows[0].consents;
+    expect(retained).toEqual([]);
+  } finally {await context.close(); await store.close();}
+});
+
 test('published checkout policies require explicit consent, open public pages and recover from a newly published version', async ({browser, e2eAuthPool}, info) => {
   const store = await setupCartFixtureStore(e2eAuthPool, browser, true, true, {storePoliciesEnabled: true});
   const context = await browser.newContext({baseURL: store.origin});
