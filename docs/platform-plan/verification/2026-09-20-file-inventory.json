@@ -21664,8 +21664,8 @@
     },
     {
       "path": "modules/opportunity-project-work/freedom.module.json",
-      "bytes": 7481,
-      "sha256": "629d921f01ef156225ae9ec20642bbc97c408f8e66ab5e40d81ee8c984d7f433"
+      "bytes": 7520,
+      "sha256": "24f5bc967a2a4bc8010c1cb19264aa9a29fe88d5ec441436b7dd5433a72ce1f9"
     },
     {
       "path": "modules/opportunity-project-work/private-commands.ts",
@@ -23981,6 +23981,11 @@
       "path": "tests/e2e/contribution-roles.spec.ts",
       "bytes": 13004,
       "sha256": "d96c3a926c4725543406a8b78f7da23541af1782bd78b0541f3fd9c7be704e31"
+    },
+    {
+      "path": "tests/e2e/core-services.spec.ts",
+      "bytes": 3657,
+      "sha256": "a84c087be10e4ef744e2cf77b19b81eb565e1db70abe83bc95dd3dff8d0f8560"
     },
     {
       "path": "tests/e2e/development-access.spec.ts",
