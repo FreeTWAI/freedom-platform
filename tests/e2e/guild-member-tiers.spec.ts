@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
-import {test,expect,type Browser,type BrowserContext,type Page} from './fixtures.js';
+import {test,expect,type Browser,type BrowserContext,type Page,type TestInfo} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
@@ -88,9 +88,75 @@ async function memberRow(page:Page,name:string){
  return row;
 }
 
-test('an intern sees the calm notice and a disabled guild-exchange submit at phone, tablet and desktop',async({browser,baseURL,e2eAuthPool})=>{
+// Diagnostic-only: preserve immediate navigation/click semantics. Never collect
+// text, values, arbitrary attributes, URLs or raw hashes (which can be secrets).
+function activityDiagnostics(){
+ const records:Record<string,string|number|boolean|null>[]=[];
+ let unavailable=false;
+ const receive=(value:unknown)=>{
+  if(records.length>=200||!value||typeof value!=='object')return;
+  const input=value as Record<string,unknown>,record:Record<string,string|number|boolean|null>={};
+  const choices:Record<string,string[]>={kind:['initial','mutation','pointerdown','pointerup','click','click-bubble','scroll','hashchange','popstate'],route:['events','other'],target:['submit','form','calendar','other'],tag:['BUTTON','FORM','SELECT','INPUT','DIV','SPAN','SECTION','OTHER']};
+  for(const [key,allowed] of Object.entries(choices))if(typeof input[key]==='string'&&allowed.includes(input[key] as string))record[key]=input[key] as string;
+  if(!record.kind)return;
+  for(const key of ['time','x','y','scrollX','scrollY','buttonX','buttonY','buttonWidth','buttonHeight'])if(typeof input[key]==='number'&&Number.isFinite(input[key]))record[key]=input[key] as number;
+  for(const key of ['button','disabled','form','calendar','trusted'])if(typeof input[key]==='boolean')record[key]=input[key] as boolean;
+  records.push(record);
+ };
+ return {
+  receive,
+  async install(page:Page){
+   try{
+    await page.exposeBinding('__guildActivityDiagnostic',(_source,value:unknown)=>receive(value));
+    await page.evaluate(()=>{
+     const buttonSelector='[data-guide-anchor="events:submit-event"]',formSelector='.experience-panel > form.experience-editor',calendarSelector='[data-guide-anchor="events:calendar"]';
+     const emit=(kind:string,event?:Event)=>{
+      const button=document.querySelector<HTMLButtonElement>(buttonSelector),rect=button?.getBoundingClientRect();
+      const element=event?.target instanceof Element?event.target:null;
+      const pointer=event instanceof MouseEvent?event:null;
+      const record={kind,time:performance.now(),route:location.hash==='#events'?'events':'other',
+       target:element?.closest(buttonSelector)?'submit':element?.closest(formSelector)?'form':element?.closest(calendarSelector)?'calendar':'other',
+       tag:element&&['BUTTON','FORM','SELECT','INPUT','DIV','SPAN','SECTION'].includes(element.tagName)?element.tagName:'OTHER',
+       x:pointer?.clientX,y:pointer?.clientY,scrollX,scrollY,button:Boolean(button),disabled:button?.disabled,
+       buttonX:rect?.x,buttonY:rect?.y,buttonWidth:rect?.width,buttonHeight:rect?.height,
+       form:Boolean(document.querySelector(formSelector)),calendar:Boolean(document.querySelector(calendarSelector)),trusted:event?.isTrusted};
+      // Received records survive disposal in Node; in-flight bindings may be
+      // lost when the page closes. This is best-effort evidence, not a full trace.
+      void (window as unknown as {__guildActivityDiagnostic:(value:unknown)=>Promise<void>}).__guildActivityDiagnostic(record).catch(()=>{});
+     };
+     let last='',count=0;
+     const observe=(kind:string,event?:Event)=>{
+      if(count>=200)return;
+      if(kind!=='initial'&&location.hash!=='#events'&&kind!=='hashchange'&&kind!=='popstate')return;
+      if(kind==='mutation'){
+       const state=[Boolean(document.querySelector(buttonSelector)),Boolean(document.querySelector(formSelector)),Boolean(document.querySelector(calendarSelector))].join(':');
+       if(state===last)return;last=state;
+      }
+      count++;emit(kind,event);
+     };
+     for(const kind of ['pointerdown','pointerup','click'])document.addEventListener(kind,event=>{
+      observe(kind,event);
+     },{capture:true,passive:true});
+     document.addEventListener('click',event=>observe('click-bubble',event),{passive:true});
+     window.addEventListener('scroll',event=>observe('scroll',event),{passive:true});
+     window.addEventListener('hashchange',event=>observe('hashchange',event));
+     window.addEventListener('popstate',event=>observe('popstate',event));
+     new MutationObserver(()=>observe('mutation')).observe(document.body,{childList:true,subtree:true});
+     observe('initial');
+    });
+   }catch{unavailable=true;}
+  },
+  async attach(info:TestInfo){
+   try{await info.attach('guild-activity-timing',{body:Buffer.from(JSON.stringify({version:1,delivery:'best-effort-until-page-disposal',unavailable,limit:200,records})),contentType:'application/json'});}catch{/* Diagnostics must never replace the original failure. */}
+  },
+ };
+}
+
+test('an intern sees the calm notice and a disabled guild-exchange submit at phone, tablet and desktop',async({browser,baseURL,e2eAuthPool},testInfo)=>{
  test.setTimeout(120_000);
- await withFixture(e2eAuthPool,browser,baseURL!,'intern',async(fixture,session)=>{
+ const diagnostics=activityDiagnostics();
+ try{await withFixture(e2eAuthPool,browser,baseURL!,'intern',async(fixture,session)=>{
+  await diagnostics.install(session.page);
   for(const viewport of widths){
    await session.page.setViewportSize(viewport);
    await navigate(session.page,'職業公會');
@@ -111,7 +177,7 @@ test('an intern sees the calm notice and a disabled guild-exchange submit at pho
    await expect(session.page.getByText(internWrite)).toBeVisible();
    await noOverflow(session.page);
   }
- });
+ });}catch(error){await diagnostics.attach(testInfo);throw error;}
 });
 
 test('the guild master promotes an intern, appoints an expert, and sees the 3/3 refusal',async({browser,baseURL,e2eAuthPool})=>{
