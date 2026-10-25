@@ -184,8 +184,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 36477,
-      "sha256": "eeb9aed672757ddc15c23ba6b8b841691a65377f38a064505d8fa1873e222935"
+      "bytes": 36798,
+      "sha256": "9c7ec11d2a7bf9ee55007c2340c6db8f6058fff2b1dcccad94bb99b7a621d685"
     },
     {
       "path": "apps/freedom.module.json",
@@ -2979,8 +2979,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/FriendsPanel.tsx",
-      "bytes": 11223,
-      "sha256": "811f0e3b7d9795f50be22a7e6e250706873abbe83de341dc4a63b1f6fe9b32b2"
+      "bytes": 11380,
+      "sha256": "39a3c4e315067632ee813ee93ca4aa915712dcf783dd27782409523b799999a3"
     },
     {
       "path": "apps/portal-web/src/modules/GitHubAuthorFollow.tsx",
@@ -14964,8 +14964,8 @@
     },
     {
       "path": "docs/development/e2e-harness.md",
-      "bytes": 35979,
-      "sha256": "0e172cd9c19affa8072e9cade85e7f783d360c9101eac7330d7410dd31065bff"
+      "bytes": 40388,
+      "sha256": "c6fa2eee59592b9f90cfd974db64f933cecda8bec1df1b2fe7d1ef289857619d"
     },
     {
       "path": "docs/development/event-banner-worker.md",
@@ -17324,8 +17324,8 @@
     },
     {
       "path": "governance/README.md",
-      "bytes": 32349,
-      "sha256": "19d8c5fb9d9dbe3760518903c4ed725c95c31aa262a4e3bc4033eafb474e9fa6"
+      "bytes": 32377,
+      "sha256": "475e9c99af7225ae38ef1df60bc1b3cdad75b51013bd65685948d925dbfa6404"
     },
     {
       "path": "governance/schemas/coding-context.schema.json",
@@ -20564,8 +20564,8 @@
     },
     {
       "path": "modules/community/content-search.ts",
-      "bytes": 21513,
-      "sha256": "b3cbbcfc9a15dd7aa077c74f148dc3d5d78c20e2ad9f9ea952008853edec2167"
+      "bytes": 21539,
+      "sha256": "642095fd794a7d3e2a8988619f365d45d62245ba0f9762512fc638d0bd7ed876"
     },
     {
       "path": "modules/community/discovery.ts",
@@ -22344,8 +22344,8 @@
     },
     {
       "path": "packages/contribution-tools/pinned-e2e.mjs",
-      "bytes": 20039,
-      "sha256": "85a1cbc346007aa9052a0a26aa0a9817a8ec08dc29254ad9e05fbd8f97cd9085"
+      "bytes": 20097,
+      "sha256": "2de8a5629a272109fda91f6014d1cb833a41f0320271a3d6c99ade193488e469"
     },
     {
       "path": "packages/contribution-tools/pinned-suites.mjs",
@@ -22369,13 +22369,13 @@
     },
     {
       "path": "packages/contribution-tools/runtime-file-weights.mjs",
-      "bytes": 25189,
-      "sha256": "6cb9c694595fa73883c2f32508b3f63f458ac487d2cb5c0df6210f33ed0a908f"
+      "bytes": 26381,
+      "sha256": "b9fbb86f744683073c6d25ec18223550e155e6de1f924c1490e9c77fa957edcb"
     },
     {
       "path": "packages/contribution-tools/runtime-matrix.md",
-      "bytes": 32746,
-      "sha256": "ccf799088e658cfae4c4989cea022f1d50011ce3906222267d1d0da40e3fabc0"
+      "bytes": 38173,
+      "sha256": "d4f51dae6aa5065000718d1d24126278c34982451aa420636e4f939b5b1e1c31"
     },
     {
       "path": "packages/contribution-tools/runtime-suites.mjs",
@@ -22634,8 +22634,8 @@
     },
     {
       "path": "packages/contribution-tools/test/pinned-e2e.test.mjs",
-      "bytes": 60027,
-      "sha256": "79ff64bcb72ad6e472d49c2fef4f2e7a07303e851eeca87257be84e9ce0d8d5e"
+      "bytes": 62404,
+      "sha256": "e85826e87cfcd61d29b00da2aee3c598ef1e9a1da3f53fea2d2b5359eb0476f1"
     },
     {
       "path": "packages/contribution-tools/test/pinned-suite.test.mjs",
@@ -22664,13 +22664,13 @@
     },
     {
       "path": "packages/contribution-tools/test/runtime-sharding.test.mjs",
-      "bytes": 9317,
-      "sha256": "8e47c6a84c223e2ed3a886a5b5476cd21bfbcf3eb25441dbc20dc0839ec058bf"
+      "bytes": 11112,
+      "sha256": "4347f526274c4c6b55d0ba2733f9c8cbae3ddd491a5157f1b3509237d55a149e"
     },
     {
       "path": "packages/contribution-tools/test/runtime-weights.test.mjs",
       "bytes": 16665,
-      "sha256": "7d2f91b1578462f353f55fb34f86c7567b10d1a84b9685c9c7ac51c31bc97a15"
+      "sha256": "12a372da9b49c50b9c287aef38220a0b003806ae8a85311fc4addc7d3cebb3a5"
     },
     {
       "path": "packages/contribution-tools/test/suite-runner.test.mjs",
@@ -22731,6 +22731,11 @@
       "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261021.json",
       "bytes": 20614,
       "sha256": "91b9ba9ad89ad7d9ee9d23a881fe3e242cb95754626e9db69dc2669ee433c003"
+    },
+    {
+      "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-20261024.json",
+      "bytes": 21513,
+      "sha256": "17e8ce36161b97b84cffba4741e6b555908650d2635c9bf7b96d9029006e49b1"
     },
     {
       "path": "packages/contribution-tools/test/fixtures/runtime-hosted-costs-37567098443.json",
@@ -23699,8 +23704,8 @@
     },
     {
       "path": "scripts/ci/run-pinned-e2e.mjs",
-      "bytes": 20544,
-      "sha256": "7de5cc941f23be0c02a1cf832d2496755a1573ab7ef05fdcc68fd595f72da87a"
+      "bytes": 20543,
+      "sha256": "8edc848d1a768aa0575cb2fc5e6b0210a7b42c4befc8dc6afecc28befc43f1ff"
     },
     {
       "path": "scripts/ci/run-pinned-suite.mjs",
@@ -24074,8 +24079,8 @@
     },
     {
       "path": "tests/e2e/friends-confirm.spec.ts",
-      "bytes": 6779,
-      "sha256": "bca44bf9ed5cdba4797be881cbaa2f6f6f1533c5c313615a7477fb92ffbbb502"
+      "bytes": 9183,
+      "sha256": "0acdb790df551ddd686818f56f7beaafa34fe3c4c37d248ee60a151be11af0f6"
     },
     {
       "path": "tests/e2e/friends-directory-interaction.spec.ts",
@@ -25424,8 +25429,8 @@
     },
     {
       "path": "tests/runtime/community-search.test.ts",
-      "bytes": 42224,
-      "sha256": "de05155864e4d90df6b4fa67791e095b3cc39eb56c1d9c49e90a7458919e381f"
+      "bytes": 47844,
+      "sha256": "96df87561f8d6ddbb80cff9543a444ae98e908bac776d1219799d3f7713cc8d6"
     },
     {
       "path": "tests/runtime/contribution-roles.test.ts",
