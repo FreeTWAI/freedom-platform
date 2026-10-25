@@ -136,16 +136,24 @@ export function createCloudflareRecoveryTransport({ accountId, target, mediaBuck
   });
 }
 
-/** Only GET retries for edge propagation; never attaches the Cloudflare token. */
-export async function waitForPublicRelease({ target, sourceSha, signal, fetchImpl = fetch,
+/** Only GET retries for edge propagation. Staging keeps whole-host Access;
+ * its service credential goes only to the fixed staging origin, never redirects. */
+export async function waitForPublicRelease({ target, sourceSha, access, signal, fetchImpl = fetch,
   sleep = ms => delay(ms, undefined, { signal }), record = async () => {} }) {
   check(Object.hasOwn(targets, target ?? '') && isSha(sourceSha), 'release_health_input_invalid');
+  const headers = { 'Cache-Control': 'no-store' };
+  if (target === 'staging-next') {
+    check(access && [access.clientId, access.clientSecret].every(value => typeof value === 'string'
+      && value.length > 0 && value.length <= 1024 && !/[\r\n\0]/.test(value)), 'release_staging_access_required');
+    headers['CF-Access-Client-Id'] = access.clientId;
+    headers['CF-Access-Client-Secret'] = access.clientSecret;
+  } else check(access === undefined, 'release_health_access_target_invalid');
   for (let attempt = 1; attempt <= 10; attempt++) {
     signal?.throwIfAborted();
     let observed = { attempt, statusCode: null, sourceSha: null, matched: false };
     try {
       const response = await fetchImpl(targets[target].origin + '/api/v1/health', { method: 'GET', redirect: 'error',
-        headers: { 'Cache-Control': 'no-store' },
+        headers: { ...headers },
         signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]) });
       observed.statusCode = response.status;
       const body = JSON.parse((await boundedResponseBytes(response, 16_384)).toString('utf8'));

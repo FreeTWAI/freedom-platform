@@ -26,7 +26,10 @@ The result binds the SHA-256 of the **exact request file bytes**. The image must
 check the clean source SHA/tree before loading any application tools or migrations.
 
 `credentials.json` supplies `cloudflareApiToken`, `migrationDatabaseUrl` and
-`backupDatabaseUrl`. It never supplies a GitHub PAT or the job token. Credentials
+`backupDatabaseUrl`; staging also requires `stagingAccessClientId` and
+`stagingAccessClientSecret`. Preserve whole-host Access. Send those service
+headers only to the fixed staging health origin, never to a redirected endpoint
+or the Cloudflare management API. It never supplies a GitHub PAT or the job token. Credentials
 are environment-specific service credentials. Provider responses, diagnostics,
 source media, backups and credentials stay private. The image must not write them
 to `result.json`; the controller discards raw process output.
@@ -77,6 +80,16 @@ single-writer REST limitation (`atomicCreateOnly=false`); the enclosing operator
 must hold the shared lease, allocate a fresh unpredictable set ID, preserve private
 intent/outcome evidence outside the ephemeral runner, and reconcile unknown
 effects. Public health success alone does not set `schemaVerified` or `smokePassed`.
+
+The controller adds `operatorEvidence: validated-seven-phases/v1` only after its
+full operator-result validation succeeds. A production prerequisite authenticates
+the staging receipt through the completed main Shared release run/attempt and
+GitHub-owned artifact association/digest, plus the exact Deployment ID and all
+seven projected phase successes. Generic Deployment metadata alone is not trusted.
+The download reader uses the hosted runner's Python standard ZIP reader in isolated
+mode, in memory, with one regular receipt member and bounded compressed/expanded
+sizes; no artifact paths are extracted or executed. The GitHub token is never
+forwarded to the artifact download origin.
 
 ## Result and progress
 

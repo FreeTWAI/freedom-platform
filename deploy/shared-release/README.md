@@ -21,7 +21,7 @@
 3. 在 Summary 看版本、原始發起人、此次執行者、兩個 CI run 及結果收據。
    同一版本最新的 main push Verify、CodeQL 必須全部成功；PR 的綠燈不替代主線驗證。
 4. 確認環境已安裝後，選同一版本與 `deploy`。正式 `next` 會要求同一版本、
-   同一發布工具 digest 最新的 staging 發布成功。
+   同一發布工具 digest 最新的 staging 發布成功，而且成功收據須來自可信的完整 workflow 執行。
 5. 查看每個階段和 GitHub Deployment。失敗先看收據；migration 或 provider 結果
    不明時，由操作人讀回實際狀態再處理，不能直接反覆點 Re-run。
 
@@ -44,11 +44,14 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
 | Secret | `MIGRATION_DATABASE_URL` | 此環境的專用 migration role，保留現有角色、目標與 TLS 核對 |
 | Secret | `BACKUP_DATABASE_URL` | 此環境的專用 snapshot／備份 role，包含既有 maintenance pin 所需權限 |
+| Secret（僅 staging） | `CF_ACCESS_CLIENT_ID`／`CF_ACCESS_CLIENT_SECRET` | 既有 staging Access 應用准許的團隊 service token，僅傳送到固定 staging health origin |
 
 不要把個人 token 或含憑證的 JSON 放進 workflow inputs、repo 或公開 artifacts。
 由秘密管理器把值寫入 Environment secrets；操作人只需能啟動 workflow。
 權限能否細分到單一 Worker／bucket，須依 Cloudflare 實際 token 類型核對，不能僅靠
 變數命名宣稱已隔離。以實際部署、備份工具使用的 API 決定最小權限。
+Staging 保留整站 Access；不得為了 health 檢查關閉保護。Access service token 與
+Cloudflare 管理 API token 是分開的憑證。正式公開 health 不接受這組 Access 憑證。
 
 2026-10-25 本輪已把兩個環境設成只接受 main，並寫入 `RELEASE_ENABLED=false`。
 當時兩個環境都沒有部署 secrets；本輪沒有讀取、搬移或分發私人金鑰。
@@ -59,6 +62,15 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 workflow/controller 固定在 `job.workflow_sha`；應用程式使用所選版本的獨立 checkout。
 兩者都須位於 main 歷史。選版工作沒有環境 secrets。執行工作重新查 GitHub 權限與 CI，
 再使用該環境的設定。GitHub Deployment 明確登記所選應用版本，避免誤記為 controller 版本。
+
+Deployment payload 和 success status 可由有寫入權的流程建立，單靠這兩者不能證明 staging
+做過完整發布。正式環境會另向 GitHub 查 Shared release 的 workflow ID／path、main
+controller、成功 run／attempt、四人帳號 ID 及該次 admission／deploy jobs；再下載該 run
+專屬的 `release-result-<run>-<attempt>` artifact，核對 GitHub 提供的 digest，讀取唯一且有
+大小上限的 `receipt.json`。收據必須綁定同一 Deployment ID、source／tree、operator、
+staging config、操作者及全部七階段成功。最後重讀 run 與最新 Deployment，拒絕已重跑或
+被新紀錄取代的結果。Artifact 缺失、到期、舊 attempt、plan-only 或不完整收據都不放行。
+這依賴受保護 main 的已審查 workflow 與 GitHub artifact 歸屬，不能替代 operator／provider 實跑。
 
 發布工具在一次性的 GitHub hosted runner 容器內執行，不 SSH 回個人電腦，不掛 Docker
 socket 或家目錄。整次發布只有一個 operator process，以維持資料庫 lease／heartbeat
@@ -90,7 +102,8 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   私人磁碟上的操作意圖、只上傳一次，再完整下載比對。REST 寫入仍標示
   `atomicCreateOnly=false`，不能宣稱 provider 保證原子防覆寫。意圖紀錄只保護相同私人
   工作目錄中的重試；跨 runner 的對帳與證據保存仍屬完整 operator 的工作。
-  Worker binding digest 可供前後比較；公開健康檢查只接受指定 SHA，不帶部署 token。
+  Worker binding digest 可供前後比較；健康檢查只接受指定 SHA，不帶管理 API token，
+  staging 則使用只送到固定 origin 的 Access service headers，拒絕跟隨重新導向。
 
 上述元件尚未自行組成完整備份或部署。原生 PostgreSQL 實測使用合成資料；Cloudflare
 案例使用注入的 HTTP 回覆，沒有接觸遠端 bucket、Worker 或正式資料庫。
@@ -109,6 +122,9 @@ UF:INT-23 或第二操作者還原要求已完成。
 
 本機入口：`node --test deploy/cloudflare/test/shared-release.test.mjs`，涵蓋 GitHub 准入、
 收據、私有程序、Cloudflare 傳輸失敗及清理拒絕條件。
+私人意圖檔案例優先使用 repo 的 `.freedom` 磁碟，再檢查 `/var/tmp`。若工具環境把兩處
+都映射成 tmpfs，可設 `FREEDOM_RELEASE_TEST_DISK_ROOT` 指向可寫的磁碟目錄；仍會保留
+生產元件的磁碟與權限檢查，不會以略過測試或放寬 guard 取得成功。
 
 真實 PG18 隔離驗證：先備妥 `verify.yml` 已釘選的 PostgreSQL 18 image，再執行
 `node deploy/shared-release/test/postgres-integration.mjs --source .`。這個 fixture 才使用 Docker；

@@ -169,8 +169,8 @@
     },
     {
       "path": ".github/workflows/shared-release.yml",
-      "bytes": 5459,
-      "sha256": "a9c7715951e60297e0e5803d132b8ae3f8131df32a774b306e600a8e2c4f6739"
+      "bytes": 5599,
+      "sha256": "ae596608089f113d62c17a23df34c483426aabc5afb6e40f49fe02725c45106f"
     },
     {
       "path": ".github/workflows/skill-book-upstreams.yml",
@@ -14559,8 +14559,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 33196,
-      "sha256": "6fa133125ab4d304bf13f5c8cec108738bef2b2bc9e769d7661f39724c08d589"
+      "bytes": 47274,
+      "sha256": "14b1a90166d22e3a3980ef67f983748d6f3d8976376938dceefb9b205ffe8973"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14604,18 +14604,23 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 9119,
-      "sha256": "3ae171dc0ab756377fdf8e1920cb8a6508f8f8f36c85f85a77cf57cfb0276c7b"
+      "bytes": 10833,
+      "sha256": "865d06a1f62fbfc750f64fe104536364627ad1911092cdefdbcb6022fe59438b"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
-      "bytes": 8455,
-      "sha256": "32d8d9bc3b0703e3c033fcb9f89c7cfc9a1c2ce4b6f693b95a323bb9c6208b11"
+      "bytes": 14773,
+      "sha256": "cd76b1e218b6eef3eee36093704989250f781abf5f8306a4604eebf068c2901f"
+    },
+    {
+      "path": "deploy/shared-release/artifacts.mjs",
+      "bytes": 3351,
+      "sha256": "b4f1d1b8a00c8e9c8f1cc006730f4eebe573c7ddb820bdd85c5a277e26b343c9"
     },
     {
       "path": "deploy/shared-release/cli.mjs",
-      "bytes": 6941,
-      "sha256": "815d02cfc70196e07dea1ef4700a5b3aa70a72d63387a2dbd2e35e3547a32c57"
+      "bytes": 7248,
+      "sha256": "933eeba40aed257abbffbcdbf51ee5451dd2ec6897c4c73d3d6fba8c378252ab"
     },
     {
       "path": "deploy/shared-release/freedom.module.json",
@@ -14624,18 +14629,23 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 8452,
-      "sha256": "f7f1c895bda692cd68226fa5b6b7725934062d327d67d1b3858bb3340b739528"
+      "bytes": 9382,
+      "sha256": "a15d67a78483462ccc469a7f9e1f418c5477c5aef47d8e6249986a8500b68b51"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 10763,
-      "sha256": "b8e1d461c5646fbfc13357be3a2de85fc561bc1f605936be31b06d7df9ffaff8"
+      "bytes": 11105,
+      "sha256": "bb81541e8cd07e8f9be32226f3dd17dcfc835e12e46bf7eacb0ebbf6655329d3"
+    },
+    {
+      "path": "deploy/shared-release/receipt-archive.py",
+      "bytes": 1294,
+      "sha256": "d33826283e617290a7c2282bf9cf220ba0606b6c81b38c5a7c4df6bf9c07cc82"
     },
     {
       "path": "deploy/shared-release/portable/cloudflare.mjs",
-      "bytes": 10433,
-      "sha256": "b6126b7e1dfaf2a61d4837a2d76fe7708de617573319bbc766c07093f81a10b7"
+      "bytes": 10997,
+      "sha256": "7c31f293c9111485d20cae0d20fa970442ee43012f3177fbe372d2072be85bbe"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",

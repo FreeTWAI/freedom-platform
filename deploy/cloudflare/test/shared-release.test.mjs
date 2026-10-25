@@ -1,14 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
+import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
+
+async function diskFixture(t, prefix) {
+  const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
+    : [resolve('.freedom'), '/var/tmp'];
+  for (const candidate of candidates) {
+    let root, fs;
+    try { root = await realpath(candidate); fs = await statfs(root); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    if ([0x01021994, 0x858458f6].includes(fs.type >>> 0)) continue;
+    const path = await mkdtemp(join(root, prefix));
+    t.after(() => rm(path, { recursive: true, force: true })); return path;
+  }
+  throw Error('A disk-backed fixture directory is required; set FREEDOM_RELEASE_TEST_DISK_ROOT');
+}
 
 const sha = 'a'.repeat(40), main = 'b'.repeat(40), tree = 'c'.repeat(40);
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -126,17 +142,114 @@ test('deployment is disabled by default and accepts only the configured digest-p
     assert.throws(() => admitInstallation({ ...good, ...patch }));
 });
 
-test('production requires the newest same-source staging deployment with the same operator to be successful', async () => {
-  const staging = { id: 1, sha, environment: 'staging-next',
-    payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image } };
-  const api = async path => path.includes('/statuses?') ? [{ state: 'success' }] : [staging];
-  await requireStaging(api, { ...request(), target: 'next' }, installation);
-  for (const mutate of [() => [], () => [{ ...staging, payload: {} }], () => [{ ...staging, sha: main }],
-    () => [{ ...staging, payload: { ...staging.payload, operatorImage: 'other' } }]]) {
-    await assert.rejects(requireStaging(mutate, { ...request(), target: 'next' }, installation));
+function stagingFixture() {
+  const original = { login: 'teddashh', id: OPERATORS.teddashh }, triggeredBy = { login: 'arumwu', id: OPERATORS.arumwu };
+  const runId = 33, runAttempt = 2;
+  const deployment = { id: 1, sha, environment: 'staging-next', payload: {
+    format: 'freedom.shared-release/v1', operatorImage: installation.image, configSha256: '3'.repeat(64),
+    controllerSha: main, runId, runAttempt, actor: original, triggeredBy } };
+  const run = { id: runId, run_attempt: runAttempt, workflow_id: 3, path: '.github/workflows/shared-release.yml',
+    event: 'workflow_dispatch', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID },
+    head_branch: 'main', head_sha: main, status: 'completed', conclusion: 'success', actor: original,
+    triggering_actor: triggeredBy, run_started_at: new Date(0).toISOString(), updated_at: new Date(120000).toISOString() };
+  const jobs = ['admission', 'deploy'].map(name => ({ name, run_id: runId, run_attempt: runAttempt,
+    head_sha: main, status: 'completed', conclusion: 'success', steps: [
+      { name: 'Execute the installed environment operator', status: 'completed', conclusion: 'success' },
+      { name: 'Save public release receipt', status: 'completed', conclusion: 'success' }] }));
+  const artifact = { id: 81, name: `release-result-${runId}-${runAttempt}`, expired: false, digest: 'sha256:' + '4'.repeat(64),
+    size_in_bytes: 500, workflow_run: { id: runId, repository_id: REPOSITORY_ID, head_repository_id: REPOSITORY_ID,
+      head_sha: main, head_branch: 'main' } };
+  const receipt = { ...request(), format: 'freedom.shared-release/v1', status: 'passed',
+    providerOutcome: 'release_and_recovery_confirmed', operatorEvidence: 'validated-seven-phases/v1',
+    sourceTree: tree, target: 'staging-next', mode: 'deploy', runId, runAttempt, deploymentId: 1,
+    operatorImage: installation.image, configSha256: deployment.payload.configSha256, original, triggeredBy,
+    completedAt: new Date(90000).toISOString(), phases: resultFixture().phases.map(({ name, status, startedAt, completedAt }) =>
+      ({ name, status, startedAt, completedAt })) };
+  const state = { deployment, run, jobs, artifact, receipt, statuses: [{ state: 'success',
+    log_url: `https://github.com/${REPOSITORY}/actions/runs/${runId}/attempts/${runAttempt}` }],
+    artifacts: [artifact], deployments: [deployment], reads: 0, calls: [] };
+  const api = async path => {
+    state.calls.push(path);
+    if (path.includes('/deployments?')) return state.deployments;
+    if (path.includes('/statuses?')) return state.statuses;
+    if (path.endsWith('/workflows/shared-release.yml')) return { id: 3, path: '.github/workflows/shared-release.yml', state: 'active' };
+    if (path.endsWith('/actions/runs/33')) return state.run;
+    if (path.includes('/compare/')) return { status: 'ahead', merge_base_commit: { sha: main } };
+    if (path.includes('/jobs?')) return { total_count: state.jobs.length, jobs: state.jobs };
+    if (path.includes('/artifacts?')) return { total_count: state.artifacts.length, artifacts: state.artifacts };
+    throw Error('Unexpected staging fixture path');
+  };
+  api.readArtifact = async actual => { state.reads++; assert.equal(actual.id, state.artifact.id); return state.receipt; };
+  return { state, api, admission: { ...request(), target: 'next', sourceTree: tree, mainShaObserved: main } };
+}
+
+test('production authenticates latest staging workflow, exact attempt, controller, artifact and all successful phases', async () => {
+  const { api, state, admission } = stagingFixture();
+  assert.deepEqual(await requireStaging(api, admission, installation), { deploymentId: 1, runId: 33, runAttempt: 2,
+    controllerSha: main, artifactId: 81, artifactDigest: state.artifact.digest });
+  assert.equal(state.reads, 1);
+  assert.equal(state.calls.filter(path => path.endsWith('/actions/runs/33')).length, 2);
+  assert.equal(state.calls.filter(path => path.includes('/deployments?')).length, 2);
+});
+
+test('matching caller-written Deployment and success without a trusted workflow/artifact never authorize production', async () => {
+  const { state, admission } = stagingFixture();
+  const manufactured = async path => path.includes('/statuses?') ? state.statuses
+    : path.includes('/deployments?') ? state.deployments : {};
+  await assert.rejects(requireStaging(manufactured, admission, installation), { code: 'release_staging_workflow_invalid' });
+  const fixture = stagingFixture(); fixture.state.artifacts = [];
+  await assert.rejects(requireStaging(fixture.api, fixture.admission, installation), { code: 'release_staging_artifact_invalid' });
+});
+
+test('wrong workflow, branch, repository, event, controller, actors and changed rerun cannot authenticate staging', async () => {
+  for (const patch of [{ workflow_id: 77 }, { path: '.github/workflows/forged.yml' }, { event: 'push' },
+    { head_branch: 'other' }, { head_sha: sha }, { repository: { id: 2 } }, { head_repository: { id: 2 } },
+    { run_attempt: 3 }, { status: 'in_progress' }, { conclusion: 'failure' },
+    { actor: { login: 'someone', id: 999 } }, { triggering_actor: { login: 'arumwu', id: 999 } }]) {
+    const fixture = stagingFixture(); Object.assign(fixture.state.run, patch);
+    await assert.rejects(requireStaging(fixture.api, fixture.admission, installation), { code: 'release_staging_run_invalid' });
+    assert.equal(fixture.state.reads, 0);
   }
-  await assert.rejects(requireStaging(async path => path.includes('/statuses?') ? [{ state: 'failure' }]
-    : [staging, { ...staging, id: 2 }], { ...request(), target: 'next' }, installation), { code: 'release_staging_not_successful' });
+});
+
+test('plan-only/skipped execution, stale/wrong-run/expired or duplicate artifacts cannot supply staging evidence', async () => {
+  const mutations = [state => { state.jobs[1].conclusion = 'skipped'; },
+    state => { state.jobs[1].steps[0].conclusion = 'skipped'; }, state => { state.jobs[0].run_attempt = 1; },
+    state => { state.artifact.workflow_run.id = 44; }, state => { state.artifact.workflow_run.head_sha = sha; },
+    state => { state.artifact.workflow_run.repository_id = 2; }, state => { state.artifact.name = 'release-result-33-1'; },
+    state => { state.artifact.expired = true; }, state => { delete state.artifact.digest; },
+    state => { state.artifacts.push({ ...state.artifact, id: 82 }); }];
+  for (const mutate of mutations) {
+    const fixture = stagingFixture(); mutate(fixture.state);
+    await assert.rejects(requireStaging(fixture.api, fixture.admission, installation)); assert.equal(fixture.state.reads, 0);
+  }
+});
+
+test('artifact receipt must bind the deployment, source, operator, config, actors and seven ordered completed phases', async () => {
+  for (const patch of [{ status: 'plan_passed' }, { providerOutcome: 'unknown_until_confirmed' }, { operatorEvidence: undefined },
+    { sourceSha: main }, { sourceTree: sha }, { controllerSha: sha }, { target: 'next' }, { mode: 'plan' },
+    { runId: 44 }, { runAttempt: 1 }, { deploymentId: 2 }, { operatorImage: 'other' }, { configSha256: '0'.repeat(64) },
+    { original: { login: 'Hao0321', id: OPERATORS.Hao0321 } }, { phases: [] }, { completedAt: new Date(0).toISOString() }]) {
+    const fixture = stagingFixture(); Object.assign(fixture.state.receipt, patch);
+    await assert.rejects(requireStaging(fixture.api, fixture.admission, installation), { code: 'release_staging_receipt_invalid' });
+  }
+  for (const mutate of [phases => phases.reverse(), phases => { phases[2].status = 'failed'; },
+    phases => { phases[4].startedAt = new Date(0).toISOString(); }]) {
+    const fixture = stagingFixture(); mutate(fixture.state.receipt.phases);
+    await assert.rejects(requireStaging(fixture.api, fixture.admission, installation), { code: 'release_staging_receipt_invalid' });
+  }
+});
+
+test('newer failed staging and a rerun started while reading the artifact defeat prior success', async () => {
+  const fixture = stagingFixture(); fixture.state.deployments.push({ ...fixture.state.deployment, id: 2 });
+  fixture.state.statuses = [{ state: 'failure' }];
+  await assert.rejects(requireStaging(fixture.api, fixture.admission, installation), { code: 'release_staging_not_successful' });
+  const rerun = stagingFixture();
+  rerun.api.readArtifact = async () => { rerun.state.run.run_attempt++; return rerun.state.receipt; };
+  await assert.rejects(requireStaging(rerun.api, rerun.admission, installation), { code: 'release_staging_run_invalid' });
+  const newer = stagingFixture();
+  newer.api.readArtifact = async () => { newer.state.deployments.push({ ...newer.state.deployment, id: 2 }); return newer.state.receipt; };
+  await assert.rejects(requireStaging(newer.api, newer.admission, installation), { code: 'release_staging_evidence_changed' });
 });
 
 function resultFixture(admission = request(), requestSha256 = 'e'.repeat(64)) {
@@ -205,7 +318,8 @@ async function operatorFixture(t, outcome = 'passed') {
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, 'source'), temporaryRoot = join(root, 'work');
   await mkdir(source); await mkdir(temporaryRoot);
-  const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', backupDatabaseUrl: 'fixture-backup' };
+  const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', backupDatabaseUrl: 'fixture-backup',
+    stagingAccessClientId: 'fixture-access-id', stagingAccessClientSecret: 'fixture-access-secret' };
   const run = async (cmd, args) => {
     calls.push([cmd, ...args]);
     if (args[0] === 'run') {
@@ -261,7 +375,7 @@ test('remote PostgreSQL credentials bind the expected role/database and require 
   for (const bad of [uri.replace('verify-full', 'require'), uri.replace('verify-full', 'disable'),
     uri.replace('/fp_target?', '/other?'), uri.replace('fp_target_backup:', 'other:'),
     uri + '&options=-csearch_path=other', uri + '&host=elsewhere', uri + '&sslmode=disable', uri + '#fragment',
-    uri.replace('fixture-password', '%xx'), uri.replace('fixture-password', '%00')])
+    'postgresql://fp_target_backup:%xx@db.example.invalid:5432/fp_target?sslmode=verify-full', 'postgresql://fp_target_backup:%00@db.example.invalid:5432/fp_target?sslmode=verify-full'])
     assert.throws(() => remotePostgresEnvironment(bad, target));
 });
 
@@ -373,8 +487,7 @@ test('source media is read-only and full bytes must match its metadata before en
 });
 
 test('archive publication records durable intent before one PUT, then reads all bytes back without trusting the upload response', async t => {
-  const intentDirectory = await mkdtemp('/var/tmp/fp-archive-intent-');
-  t.after(() => rm(intentDirectory, { recursive: true, force: true }));
+  const intentDirectory = await diskFixture(t, 'fp-archive-intent-');
   const events = [], original = Buffer.from('sealed-recovery-set'), bytes = Buffer.from(original); let uploaded;
   const fetchImpl = async (url, options) => {
     const file = join(intentDirectory, `staging-next-${setId}.json`);
@@ -400,8 +513,7 @@ test('archive publication records durable intent before one PUT, then reads all 
 
 test('existing archive, failed durable intent and lost PUT response cannot cause overwrite or retry', async t => {
   for (const failure of ['exists', 'intent', 'lost-response', 'readback']) {
-    const root = await mkdtemp('/var/tmp/fp-archive-failure-');
-    t.after(() => rm(root, { recursive: true, force: true }));
+    const root = await diskFixture(t, 'fp-archive-failure-');
     const intentDirectory = failure === 'intent' ? join(root, 'missing-directory') : root;
     const events = []; let uploaded = false;
     const transport = createCloudflareRecoveryTransport({ ...cfConfig, fetchImpl: async (url, options) => {
@@ -440,10 +552,88 @@ test('public health retries only bounded unauthenticated GETs and requires the s
     assert.equal(options.redirect, 'error'); assert.equal(options.headers.Authorization, undefined);
   }
   let failed = 0;
-  await assert.rejects(waitForPublicRelease({ target: 'staging-next', sourceSha: sha, sleep: async () => {},
+  await assert.rejects(waitForPublicRelease({ target: 'next', sourceSha: sha, sleep: async () => {},
     fetchImpl: async () => { failed++; return Response.json({ status: 'ok', release_sha: sha }, { status: 503 }); } }),
   { code: 'release_health_source_not_propagated' });
   assert.equal(failed, 10);
+});
+
+test('staging health requires Access credentials only for its fixed origin and never follows a login redirect', async () => {
+  const access = { clientId: 'fixture-access-id', clientSecret: 'fixture-access-secret' };
+  let requests = 0; const observations = [];
+  const fetchImpl = async (url, options) => {
+    requests++; assert.equal(url, 'https://staging.freetwai.com/api/v1/health'); assert.equal(options.redirect, 'error');
+    assert.equal(options.headers['CF-Access-Client-Id'], access.clientId);
+    assert.equal(options.headers['CF-Access-Client-Secret'], access.clientSecret);
+    assert.equal(options.headers.Authorization, undefined);
+    return requests === 1 ? new Response('private login response', { status: 302, headers: { Location: 'https://other.example' } })
+      : Response.json({ status: 'ok', release_sha: sha });
+  };
+  await assert.rejects(waitForPublicRelease({ target: 'staging-next', sourceSha: sha, fetchImpl }), { code: 'release_staging_access_required' });
+  await assert.rejects(waitForPublicRelease({ target: 'next', sourceSha: sha, access, fetchImpl }), { code: 'release_health_access_target_invalid' });
+  assert.equal(requests, 0);
+  const result = await waitForPublicRelease({ target: 'staging-next', sourceSha: sha, access, fetchImpl,
+    sleep: async () => {}, record: async value => observations.push(value) });
+  assert.equal(result.attempts, 2); assert.equal(observations[0].matched, false);
+  assert.ok(!JSON.stringify(observations).includes('fixture-access'));
+});
+
+function zipFixture(entries, symlink = false) {
+  return execFileSync('python3', ['-I', '-c', `import io,json,sys,zipfile
+value=json.load(sys.stdin); output=io.BytesIO()
+with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED) as archive:
+ for name,text in value['entries']:
+  info=zipfile.ZipInfo(name);info.compress_type=zipfile.ZIP_DEFLATED
+  info.external_attr=(0o120777 if value['symlink'] else 0o100600)<<16
+  with archive.open(info,'w',force_zip64=True) as stream: stream.write(text.encode())
+sys.stdout.buffer.write(output.getvalue())`], { input: JSON.stringify({ entries, symlink }), maxBuffer: 1_000_000 });
+}
+
+test('artifact receipt decoding bounds decompression, rejects paths/duplicates/symlinks and never extracts files', () => {
+  const bytes = zipFixture([['receipt.json', '{"status":"passed"}']]);
+  assert.deepEqual(decodeReceiptArchive(bytes), { status: 'passed' });
+  const invalid = [Buffer.from('not zip'), bytes.subarray(0, 35), zipFixture([['../receipt.json', '{}']]),
+    zipFixture([['receipt.json', '{}'], ['receipt.json', '{}']]), zipFixture([['receipt.json', '{}']], true),
+    zipFixture([['receipt.json', 'x'.repeat(100000)]]), zipFixture([['receipt.json', 'not JSON']])];
+  for (const value of invalid) assert.throws(() => decodeReceiptArchive(value), { code: 'release_staging_archive_invalid' });
+});
+
+test('GitHub artifact download validates metadata digest and does not forward the job token to the artifact host', async () => {
+  const bytes = zipFixture([['receipt.json', '{"status":"passed"}']]);
+  const artifact = { id: 81, size_in_bytes: bytes.length, digest: 'sha256:' + hash(bytes) };
+  const calls = [];
+  const api = githubClient('fixture-token', async (url, options) => {
+    calls.push({ url, options });
+    return calls.length === 1 ? new Response(null, { status: 302,
+      headers: { Location: 'https://fixture.blob.core.windows.net/results/artifact.zip?sig=private-link' } }) : new Response(bytes);
+  });
+  assert.deepEqual(await api.readArtifact(artifact), { status: 'passed' });
+  assert.equal(calls[0].url, `https://api.github.com/repos/${REPOSITORY}/actions/artifacts/81/zip`);
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer fixture-token');
+  assert.equal(calls[0].options.redirect, 'manual');
+  assert.equal(calls[1].options.headers, undefined); assert.equal(calls[1].options.redirect, 'error');
+});
+
+test('artifact redirects, changed bytes, oversized archives and expired downloads are rejected without exposing URLs', async () => {
+  const bytes = zipFixture([['receipt.json', '{}']]);
+  const artifact = { id: 81, size_in_bytes: bytes.length, digest: 'sha256:' + hash(bytes) };
+  for (const scenario of ['origin', 'userinfo', 'insecure', 'redirect', 'digest', 'size', 'expired']) {
+    let calls = 0;
+    const api = githubClient('fixture-token', async () => {
+      calls++;
+      if (calls === 1) {
+        if (scenario === 'expired') return new Response('private provider diagnostic', { status: 410 });
+        const location = scenario === 'origin' ? 'https://evil.example/secret' : scenario === 'userinfo'
+          ? 'https://username:password@fixture.blob.core.windows.net/secret' : scenario === 'insecure'
+            ? 'http://fixture.blob.core.windows.net/secret' : 'https://fixture.blob.core.windows.net/secret';
+        return new Response(null, { status: 302, headers: { Location: location } });
+      }
+      if (scenario === 'redirect') return new Response('login', { status: 302, headers: { Location: 'https://other.example' } });
+      return new Response(scenario === 'digest' ? Buffer.alloc(bytes.length) : scenario === 'size' ? Buffer.alloc(1_000_001) : bytes);
+    });
+    await assert.rejects(api.readArtifact(artifact), error => /^release_staging_[a-z_]+$/.test(error.message));
+    if (['origin', 'userinfo', 'insecure', 'expired'].includes(scenario)) assert.equal(calls, 1);
+  }
 });
 
 test('config pin/target drift and missing credentials stop before Docker or provider work', async t => {
@@ -451,6 +641,8 @@ test('config pin/target drift and missing credentials stop before Docker or prov
   for (const patch of [{ config: '{}' }, { credentials: {} }, { config: undefined }])
     await assert.rejects(runOperator({ ...fixture.options, ...patch }));
   assert.equal(fixture.calls.length, 0);
+  await assert.rejects(runOperator({ ...fixture.options, credentials: { ...fixture.options.credentials,
+    stagingAccessClientSecret: undefined } }), { code: 'release_staging_access_required' });
 });
 
 test('GitHub transport neither follows redirects nor prints response bodies or tokens on failure', async () => {

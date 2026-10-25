@@ -34,7 +34,7 @@ export async function main(env = process.env) {
     const installation = admitInstallation(env);
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
-    await requireStaging(api, admission, installation);
+    receipt.stagingEvidence = await requireStaging(api, admission, installation);
     const source = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     const git = args => execFileSync('git', ['-C', source, ...args], {
       encoding: 'utf8', timeout: 30_000, maxBuffer: 1_000_000, stdio: ['ignore', 'pipe', 'ignore'],
@@ -53,7 +53,8 @@ export async function main(env = process.env) {
       environment: request.target, production_environment: request.target === 'next',
       transient_environment: false, description: 'Shared release; exact-source checks recorded in Actions',
       payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image,
-        controllerSha: request.controllerSha, runId: request.runId, runAttempt: request.runAttempt,
+        controllerSha: request.controllerSha, configSha256: installation.configSha256,
+        runId: request.runId, runAttempt: request.runAttempt,
         actor: admission.original, triggeredBy: admission.triggeredBy },
     } });
     requireRelease(Number.isSafeInteger(deployment.id) && deployment.id > 0
@@ -78,8 +79,11 @@ export async function main(env = process.env) {
       config: env.RELEASE_CONFIG_JSON, credentials: {
         cloudflareApiToken: env.CLOUDFLARE_API_TOKEN,
         migrationDatabaseUrl: env.MIGRATION_DATABASE_URL, backupDatabaseUrl: env.BACKUP_DATABASE_URL,
+        ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
+          stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });
     receipt.providerOutcome = 'release_and_recovery_confirmed';
+    receipt.operatorEvidence = 'validated-seven-phases/v1';
     await status('success', 'Release, health, backup restore and scheduled backup handoff confirmed');
     receipt.status = 'passed';
   } catch (error) {

@@ -115,6 +115,12 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
   for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'backupDatabaseUrl']) {
     requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0, 'release_credentials_missing');
   }
+  if (admission.target === 'staging-next') {
+    for (const key of ['stagingAccessClientId', 'stagingAccessClientSecret']) {
+      requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0
+        && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
+    }
+  }
   const requestBytes = json({ ...admission, operatorImage: installation.image,
     configSha256: installation.configSha256, requiredPhases: PHASES });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;

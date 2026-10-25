@@ -1,4 +1,5 @@
 // GitHub facts are acquired using the job token, never supplied as dispatch inputs.
+import { artifactReader } from './artifacts.mjs';
 export const REPOSITORY = 'FreeTWAI/freedom-platform';
 export const REPOSITORY_ID = 1378081342;
 export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
@@ -37,7 +38,7 @@ export function requestFromEnvironment(env) {
 
 export function githubClient(token, fetchImpl = fetch) {
   requireRelease(typeof token === 'string' && token.length > 0, 'release_github_token_missing');
-  return async (path, { method = 'GET', body } = {}) => {
+  const api = async (path, { method = 'GET', body } = {}) => {
     requireRelease(path.startsWith(`/repos/${REPOSITORY}/`) && !/[\r\n#]/.test(path), 'release_api_path_invalid');
     const response = await fetchImpl(`https://api.github.com${path}`, {
       method, redirect: 'error', signal: AbortSignal.timeout(30_000),
@@ -57,6 +58,7 @@ export function githubClient(token, fetchImpl = fetch) {
     try { return JSON.parse(Buffer.concat(parts).toString('utf8')); }
     catch { throw Object.assign(new Error('release_github_response_invalid'), { code: 'release_github_response_invalid' }); }
   };
+  return Object.assign(api, { readArtifact: artifactReader(REPOSITORY, token, fetchImpl) });
 }
 
 async function admitActor(api, login, claimedId) {
@@ -116,13 +118,86 @@ export function admitInstallation(env) {
 
 export async function requireStaging(api, admission, installation) {
   if (admission.target !== 'next') return;
-  const deployments = await api(`/repos/${REPOSITORY}/deployments?sha=${admission.sourceSha}&environment=staging-next&per_page=100`);
-  requireRelease(Array.isArray(deployments), 'release_staging_evidence_missing');
-  // A later failed staging attempt cannot be hidden by selecting an older success.
-  const deployment = deployments.filter(item => item.sha === admission.sourceSha && item.environment === 'staging-next')
-    .sort((a, b) => b.id - a.id)[0];
-  requireRelease(positiveId(deployment?.id) && deployment.payload?.format === 'freedom.shared-release/v1'
-    && deployment.payload.operatorImage === installation.image, 'release_staging_evidence_missing');
-  const statuses = await api(`/repos/${REPOSITORY}/deployments/${deployment.id}/statuses?per_page=1`);
-  requireRelease(statuses[0]?.state === 'success', 'release_staging_not_successful');
+  const prefix = `/repos/${REPOSITORY}`;
+  const latestDeployment = async () => {
+    const deployments = await api(`${prefix}/deployments?sha=${admission.sourceSha}&environment=staging-next&per_page=100`);
+    requireRelease(Array.isArray(deployments) && deployments.every(item => positiveId(item?.id)), 'release_staging_evidence_missing');
+    // Never filter for success: a newer failed/untrusted record blocks promotion.
+    return deployments.filter(item => item.sha === admission.sourceSha && item.environment === 'staging-next')
+      .sort((a, b) => b.id - a.id)[0];
+  };
+  const deployment = await latestDeployment(), binding = deployment?.payload;
+  requireRelease(positiveId(deployment?.id) && binding?.format === 'freedom.shared-release/v1'
+    && binding.operatorImage === installation.image && isSha(binding.controllerSha)
+    && isDigest(binding.configSha256) && positiveId(binding.runId) && positiveId(binding.runAttempt), 'release_staging_evidence_missing');
+  const runUrl = `https://github.com/${REPOSITORY}/actions/runs/${binding.runId}/attempts/${binding.runAttempt}`;
+  const successfulStatus = async () => {
+    const statuses = await api(`${prefix}/deployments/${deployment.id}/statuses?per_page=1`);
+    requireRelease(Array.isArray(statuses) && statuses.length === 1 && statuses[0].state === 'success'
+      && statuses[0].log_url === runUrl, 'release_staging_not_successful');
+  };
+  await successfulStatus();
+  const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
+  requireRelease(positiveId(workflow.id) && workflow.path === workflowPath && workflow.state === 'active', 'release_staging_workflow_invalid');
+  const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
+    && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
+  const checkRun = run => {
+    requireRelease(run?.id === binding.runId && run.run_attempt === binding.runAttempt
+      && run.workflow_id === workflow.id && run.path === workflowPath && run.event === 'workflow_dispatch'
+      && run.repository?.id === REPOSITORY_ID && run.head_repository?.id === REPOSITORY_ID
+      && run.head_branch === 'main' && run.head_sha === binding.controllerSha
+      && run.status === 'completed' && run.conclusion === 'success'
+      && sameActor(run.actor, binding.actor) && sameActor(run.triggering_actor, binding.triggeredBy), 'release_staging_run_invalid');
+  };
+  const run = await api(`${prefix}/actions/runs/${binding.runId}`); checkRun(run);
+  const comparison = await api(`${prefix}/compare/${binding.controllerSha}...${admission.mainShaObserved}`);
+  requireRelease(['ahead', 'identical'].includes(comparison.status)
+    && comparison.merge_base_commit?.sha === binding.controllerSha, 'release_staging_controller_untrusted');
+  const jobs = await api(`${prefix}/actions/runs/${binding.runId}/attempts/${binding.runAttempt}/jobs?per_page=100`);
+  requireRelease(jobs.total_count === 2 && Array.isArray(jobs.jobs) && jobs.jobs.length === 2
+    && ['admission', 'deploy'].every(name => jobs.jobs.filter(job => job.name === name && job.run_id === binding.runId
+      && job.run_attempt === binding.runAttempt && job.head_sha === binding.controllerSha
+      && job.status === 'completed' && job.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
+  const deployJob = jobs.jobs.find(job => job.name === 'deploy');
+  requireRelease(Array.isArray(deployJob.steps) && ['Execute the installed environment operator', 'Save public release receipt']
+    .every(name => deployJob.steps.filter(step => step.name === name && step.status === 'completed'
+      && step.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
+  const name = `release-result-${binding.runId}-${binding.runAttempt}`;
+  const artifacts = await api(`${prefix}/actions/runs/${binding.runId}/artifacts?name=${name}&per_page=100`);
+  requireRelease(artifacts.total_count === 1 && Array.isArray(artifacts.artifacts) && artifacts.artifacts.length === 1,
+    'release_staging_artifact_invalid');
+  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
+  requireRelease(positiveId(artifact.id) && artifact.name === name && artifact.expired === false
+    && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') && owner?.id === binding.runId
+    && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
+    && owner.head_sha === binding.controllerSha && owner.head_branch === 'main'
+    && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
+  const receipt = await api.readArtifact(artifact);
+  requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
+    && receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1'
+    && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
+    && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
+    && receipt.controllerSha === binding.controllerSha && receipt.target === 'staging-next' && receipt.mode === 'deploy'
+    && receipt.runId === binding.runId && receipt.runAttempt === binding.runAttempt
+    && receipt.deploymentId === deployment.id && receipt.operatorImage === installation.image
+    && receipt.configSha256 === binding.configSha256 && sameActor(receipt.original, run.actor)
+    && sameActor(receipt.triggeredBy, run.triggering_actor), 'release_staging_receipt_invalid');
+  const start = Date.parse(run.run_started_at), completed = Date.parse(receipt.completedAt), end = Date.parse(run.updated_at);
+  let previous = Date.parse(receipt.admittedAt);
+  requireRelease(Number.isFinite(start) && Number.isFinite(previous) && Number.isFinite(completed) && Number.isFinite(end)
+    && previous >= start && completed >= previous && completed <= end && end <= Date.now() + 60_000
+    && Array.isArray(receipt.phases) && receipt.phases.length === PHASES.length, 'release_staging_receipt_invalid');
+  for (const [index, phase] of receipt.phases.entries()) {
+    const from = Date.parse(phase.startedAt), to = Date.parse(phase.completedAt);
+    requireRelease(phase.name === PHASES[index] && phase.status === 'passed' && Number.isFinite(from)
+      && Number.isFinite(to) && from >= previous && to >= from && to <= completed, 'release_staging_receipt_invalid');
+    previous = to;
+  }
+  // Re-read mutable provider facts after downloading: a re-run or newer staging
+  // deployment during verification must not inherit an older attempt's result.
+  checkRun(await api(`${prefix}/actions/runs/${binding.runId}`));
+  requireRelease((await latestDeployment())?.id === deployment.id, 'release_staging_evidence_changed');
+  await successfulStatus();
+  return Object.freeze({ deploymentId: deployment.id, runId: binding.runId, runAttempt: binding.runAttempt,
+    controllerSha: binding.controllerSha, artifactId: artifact.id, artifactDigest: artifact.digest });
 }
