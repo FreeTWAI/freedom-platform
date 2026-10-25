@@ -13,6 +13,7 @@ export function NewbieVillage(){
   useEffect(()=>{if(focusQuestion.current){questionRef.current?.focus();focusQuestion.current=false}},[index,showResult]);
   const finish=(quest:Quest)=>setP(old=>({...old,done:[...new Set([...old.done,quest])]}));
   const result=calculateResult(p.answers),career=CLASSES_V2[result.primary],extra=EXTRA_DATA_V2[result.primary];
+  const [primaryGuild,secondaryGuild]=CAREER_GUILDS[result.primary];
   const q=QUESTIONS_V2[index],selected=p.answers[index];
   const suggestedCareers=[...new Set([result.primary,...DIMENSIONS.map(d=>result.dimensionWinners[d])])];
   const baseline=p.baseline||lifestyleBaseline(p.answers),action=p.action||career.actions[0];
@@ -38,6 +39,15 @@ export function NewbieVillage(){
       {q.options.map((option,i)=><label className="nv-option" key={i} lang="zh-Hant"><input type={q.multi?'checkbox':'radio'} name={`nv-question-${index}`} checked={selected.includes(i)} disabled={!!q.multi&&!selected.includes(i)&&selected.length===(q.maxSelect??1)} onChange={()=>toggle(i)}/><span>{option.text}</span></label>)}</fieldset>
       <div className="nv-actions"><button className="btn btn-secondary btn-small" disabled={index===0} onClick={()=>changeQuestion(index-1)}>{t('nv.previous')}</button><button className="btn btn-small" disabled={!selected.length} onClick={()=>{if(index<14)changeQuestion(index+1);else if(completeAnswers(p.answers)){finish('quiz');focusQuestion.current=true;setShowResult(true)}}}>{t(index===14?'nv.results':'nv.next')}</button></div></>:<>
       <h3 tabIndex={-1} ref={questionRef}>{t('nv.resultTitle')}</h3><h4 lang="zh-Hant">{career.name}</h4><p lang="zh-Hant">{career.plainIntro}</p>
+      <section className="card stack nv-next-step" aria-labelledby="nv-next-step-title" data-testid="nv-next-step">
+        <h4 id="nv-next-step-title">{t('nv.nextStep')}</h4>
+        <ol lang="zh-Hant">{career.actions.map(a=><li key={a}>{a}</li>)}</ol>
+        <div className="nv-actions">
+          <a className="btn btn-secondary btn-small" href={`#guilds/${primaryGuild.guildId}`}>{t('nv.primaryGuild')}：<span lang="zh-Hant">{primaryGuild.name}</span></a>
+          {secondaryGuild&&<a className="btn btn-secondary btn-small" href={`#guilds/${secondaryGuild.guildId}`}>{t('nv.secondaryGuild')}：<span lang="zh-Hant">{secondaryGuild.name}</span></a>}
+        </div>
+        <p className="muted">{t('nv.coachingSoon')}</p>
+      </section>
       <div className="nv-dimensions" lang="zh-Hant">{DIMENSIONS.map(d=><div key={d}><strong>{DIMENSION_META_V2[d].label}</strong><p>{CLASSES_V2[result.dimensionWinners[d]].name}</p></div>)}</div>
       <h4>{t('nv.baseline')}</h4><p className="nv-preserve" lang="zh-Hant">{baseline}</p>
       <svg viewBox="0 0 400 400" role="img" aria-label="六軸雷達：答題分數加權的職業特徵示意，不是能力診斷" className="nv-radar">

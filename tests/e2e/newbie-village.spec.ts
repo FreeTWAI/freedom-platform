@@ -1,5 +1,5 @@
 import {test,expect} from './fixtures.js';
-import {QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
+import {CLASSES_V2,CAREER_GUILDS,calculateResult,QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('freedom-interface-language-v1','zh-Hant'));
@@ -74,4 +74,29 @@ test('NEWBIE-003 blocked storage stays usable and reports that progress cannot p
   await page.locator('#nv-quiz input').first().check();
   await page.getByRole('button',{name:'下一題',exact:true}).click();
   await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[1].q);
+});
+
+test('NEWBIE-004 quiz result offers first-week actions, guilds and a coaching preview',async({page})=>{
+  await page.goto('/#newbie-village');
+  await expect(page.getByTestId('nv-next-step')).toHaveCount(0);
+  const answers=QUESTIONS_V2.map(()=>[0]);
+  for(let i=0;i<QUESTIONS_V2.length;i++){
+    await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[i].q);
+    await page.locator('#nv-quiz input').first().check();
+    await page.locator('#nv-quiz').getByRole('button',{name:i===14?'查看結果':'下一題',exact:true}).click();
+  }
+  const career=calculateResult(answers).primary;
+  const card=page.getByTestId('nv-next-step');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('heading',{name:'下一步',exact:true})).toBeVisible();
+  await expect(card.locator('ol')).toHaveAttribute('lang','zh-Hant');
+  await expect(card.locator('ol > li')).toHaveCount(3);
+  await expect(card.locator('ol > li')).toHaveText(CLASSES_V2[career].actions);
+  const [primary,secondary]=CAREER_GUILDS[career];
+  const primaryLink=card.getByRole('link',{name:/主公會/});
+  await expect(primaryLink).toHaveAttribute('href',/^#guilds\/guild_/);
+  await expect(primaryLink).toHaveAttribute('href',`#guilds/${primary.guildId}`);
+  if(secondary)await expect(card.getByRole('link',{name:/副公會/})).toHaveAttribute('href',`#guilds/${secondary.guildId}`);
+  await expect(card.locator('p')).toHaveText('陪跑服務即將推出：之後可以找人陪你一起走第一週。');
+  await expect(card.locator('p a, p button, input, form')).toHaveCount(0);
 });
