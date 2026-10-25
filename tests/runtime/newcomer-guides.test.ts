@@ -70,3 +70,34 @@ test('retired message page rejects both packs before loading guide content',asyn
   await assert.rejects(DRAGON_PACK.loadPage('messages'),/Unsupported guide page/);
   await assert.rejects(AI_SISTER_PACK.loadPage('messages'),/Unsupported guide page/);
 });
+
+// Run the actual helper bodies with controlled locators, without a database or
+// browser. The old code fails when natural completion removes the skip button
+// between isVisible() and click(); no wall-clock delay is needed to reproduce it.
+for(const [file,name] of [['newcomer-guides.spec.ts','finishLine'],['ai-sister-guides.spec.ts','openGuide']]){
+  const source=readFileSync(new URL(`../e2e/${file}`,import.meta.url),'utf8');
+  const match=source.match(new RegExp(`async function ${name}\\(page: ?Page\\) ?\\{([\\s\\S]*?)\\n\\}`));
+  assert.ok(match,`${name} helper must be present`);
+  const run=new Function('page','panel','expect','widget',`return (async()=>{${match[1]}})();`);
+  const widget=()=>({getByRole:()=>({click:async()=>{}})});
+  test(`${name} accepts natural completion without clicking a disappearing skip button`,async()=>{
+    let typing=true,clicked=false,checked=false;
+    const line={};
+    const panel=()=>({
+      getByRole:()=>({isVisible:async()=>{typing=false;return true;},click:async()=>{clicked=true;throw new Error('skip button disappeared');}}),
+      locator:(selector:string)=>{assert.equal(selector,'.page-spirit-line');return line;}
+    });
+    await run({},panel,(target:unknown)=>({toHaveAttribute:async(attribute:string,value:string,options?:{timeout:number})=>{
+      if(attribute==='data-load-state'){assert.equal(value,'ready');return;}
+      assert.equal(target,line);assert.equal(attribute,'data-typing');assert.equal(value,'false');assert.equal(options?.timeout,4000);
+      // Model natural completion during Playwright's retrying assertion.
+      typing=false;assert.equal(typing,false);checked=true;
+    }}),widget);
+    assert.equal(clicked,false);assert.equal(checked,true);
+  });
+  test(`${name} does not suppress incomplete or missing-line assertion failures`,async()=>{
+    for(const failure of [new Error('still typing'),new Error('line missing')]){
+      await assert.rejects(run({},()=>({getByRole:()=>({isVisible:async()=>false}),locator:()=>({})}),()=>({toHaveAttribute:async(attribute:string)=>{if(attribute==='data-typing')throw failure;}}),widget),error=>error===failure);
+    }
+  });
+}

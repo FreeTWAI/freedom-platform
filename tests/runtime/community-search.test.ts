@@ -94,17 +94,19 @@ test('published work search shares live consent and owner visibility and skills 
   for (const book of books.items) assert.equal(book.path, `/development/skills/${book.id}`);
 });
 
-test('published work labels use public pinned source and UTC time while preserving distinct submissions and current visibility', async () => {
-  const owner = randomUUID(), project = randomUUID(), version = randomUUID(), digest = 'c'.repeat(64);
+test('HTTP work search matches visible pinned repository names without changing publication, identity or page boundaries', async () => {
+  const community = randomUUID(), owner = randomUUID(), project = randomUUID(), version = randomUUID(), currentVersion = randomUUID(), digest = 'c'.repeat(64);
   const email = `search-label-${owner}@local.test`, name = '搜尋標籤私人會員名稱';
-  const title = '同名投稿來源時間回歸', repository = 'example/search-labels';
+  const title = '同名投稿來源時間回歸', repository = 'SearchOwner/repo_search-labels';
+  const currentRepository = 'SearchOwner/current-private-source', draftRepository = 'SearchOwner/unpublished-draft';
+  await pool.query('INSERT INTO communities VALUES($1,$2)', [community, '公開作品搜尋來源社群']);
   const first = randomUUID(), tied = [randomUUID(), randomUUID()].sort();
   await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
     SELECT $1,$2,$3,$4,password_hash,$5,false FROM users WHERE user_id=$6`,
-  [owner, DEMO_COMMUNITY, email, name, randomUUID(), DEMO_USERS[0].user_id]);
+  [owner, community, email, name, randomUUID(), DEMO_USERS[0].user_id]);
   await pool.query(`INSERT INTO oss_projects(project_id,community_id,owner_ref,title,description,use_notes,repository_id,repository_full_name,repository_url,relationship)
     VALUES($1,$2,$3,$4,'公開摘要','公開用法','8801002',$5,$6,'curator')`,
-  [project, DEMO_COMMUNITY, owner, title, repository, `https://github.com/${repository}`]);
+  [project, community, owner, title, repository, `https://github.com/${repository}`]);
   await pool.query(`INSERT INTO oss_project_versions(version_id,project_id,repository_id,commit_sha,default_branch,repository_full_name,repository_url,readme_url,license_spdx,is_fork,archived,source_snapshot,source_sha256,facts_sha256,inspected_at)
     VALUES($1,$2,'8801002',$3,'main',$4,$5,$6,'MIT',false,false,'{}',$7,$7,now())`,
   [version, project, 'd'.repeat(40), repository, `https://github.com/${repository}`, `https://github.com/${repository}#readme`, digest]);
@@ -113,44 +115,112 @@ test('published work labels use public pinned source and UTC time while preservi
   for (const id of [first, ...tied]) {
     await pool.query(`INSERT INTO skill_submissions(submission_id,community_id,owner_ref,status,payload,payload_sha256,consent_to_share,project_id,project_version_id,published_at,grant_consumed_at)
       VALUES($1,$2,$3,'published',$4,$5,true,$6,$7,$8,now())`,
-    [id, DEMO_COMMUNITY, owner, payload, digest, project, version, id === first ? '2026-01-01T12:00:00.123Z' : '2026-01-01T12:00:01.456Z']);
+    [id, community, owner, payload, digest, project, version, id === first ? '2026-01-01T12:00:00.123Z' : '2026-01-01T12:00:01.456Z']);
   }
-  // Project metadata can change; a published submission keeps its pinned source.
-  await pool.query("UPDATE oss_projects SET repository_full_name='example/current-project-name' WHERE project_id=$1", [project]);
-  const query = { q: title, kinds: 'work' };
-  const found = communitySearchPageSchema.parse(await searchCommunityContent(pool, null, query));
-  assert.deepEqual(found.items.map(row => row.id), [...tied, first]);
-  assert.deepEqual(found.items.map(row => row.label), [
-    `${repository} · 發布 2026-01-01 12:00:01.456 UTC`,
-    `${repository} · 發布 2026-01-01 12:00:01.456 UTC`,
-    `${repository} · 發布 2026-01-01 12:00:00.123 UTC`,
-  ]);
-  for (const row of found.items) {
-    assert.equal(row.path, `/development/submissions/${row.id}`);
-    assert.equal(row.author_id, null);
-  }
-  assert.equal(JSON.stringify(found).includes(name), false);
-  assert.equal(JSON.stringify(found).includes(email), false);
-  // A descriptive label is not identity: even identical labels retain both IDs.
-  const seen: string[] = []; let cursor: string | undefined;
-  do {
-    const page = await searchCommunityContent(pool, null, { ...query, limit: '1', cursor });
-    seen.push(...page.items.map(row => row.id)); cursor = page.next_cursor ?? undefined;
-    assert.ok(seen.length <= 3, 'cursor cannot repeat a submission');
-  } while (cursor);
-  assert.deepEqual(seen, [...tied, first]);
+  // A newer observation and mutable project metadata are not the published pin.
+  await pool.query(`INSERT INTO oss_project_versions(version_id,project_id,repository_id,commit_sha,default_branch,repository_full_name,repository_url,readme_url,license_spdx,is_fork,archived,source_snapshot,source_sha256,facts_sha256,inspected_at)
+    SELECT $1,project_id,repository_id,$2,default_branch,$3,$4,$4,license_spdx,is_fork,archived,source_snapshot,$5,$5,now()
+    FROM oss_project_versions WHERE version_id=$6`,
+  [currentVersion, 'e'.repeat(40), currentRepository, `https://github.com/${currentRepository}`, 'f'.repeat(64), version]);
+  await pool.query('UPDATE oss_projects SET current_version_id=$2,repository_full_name=$3,repository_url=$4 WHERE project_id=$1',
+    [project, currentVersion, currentRepository, `https://github.com/${currentRepository}`]);
+  await pool.query(`INSERT INTO skill_submissions(submission_id,community_id,owner_ref,status,payload,payload_sha256,grant_consumed_at)
+    VALUES($1,$2,$3,'ready_for_review',$4,$5,now())`,
+  [randomUUID(), community, owner, JSON.stringify({ title: '私人草稿', description: '尚未公開', repository_url: `https://github.com/${draftRepository}` }), digest]);
 
-  await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=now() WHERE project_id=$1', [project]);
-  assert.deepEqual((await searchCommunityContent(pool, null, query)).items, []);
-  await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=NULL WHERE project_id=$1', [project]);
-  await pool.query('UPDATE users SET active=false WHERE user_id=$1', [owner]);
-  assert.deepEqual((await searchCommunityContent(pool, null, query)).items, []);
-  await pool.query('UPDATE users SET active=true,onboarding_required=true,onboarding_completed_at=NULL WHERE user_id=$1', [owner]);
-  assert.deepEqual((await searchCommunityContent(pool, null, query)).items, []);
-  await pool.query('UPDATE users SET onboarding_required=false WHERE user_id=$1', [owner]);
-  assert.deepEqual((await searchCommunityContent(pool, null, query)).items.map(row => row.id), [...tied, first]);
-  await pool.query("UPDATE skill_submissions SET status='revoked',revoked_at=now(),consent_to_share=false WHERE submission_id=$1", [first]);
-  assert.deepEqual((await searchCommunityContent(pool, null, query)).items.map(row => row.id), tied);
+  let app = createApp(pool, 'http://127.0.0.1', 'local', { communitySearchEnabled: true });
+  const server = serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.fetch(request) });
+  try {
+    if (!server.listening) await once(server, 'listening');
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    app = createApp(pool, origin, 'local', { communitySearchEnabled: true });
+    const read = async (raw: Record<string, string | undefined>, cookie?: string) => {
+      const params = new URLSearchParams(Object.entries(raw).filter((entry): entry is [string, string] => entry[1] !== undefined));
+      const response = await fetch(`${origin}/api/v1/community-search?${params}`, { headers: cookie ? { Cookie: cookie } : {} });
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+      return communitySearchPageSchema.parse(await response.json());
+    };
+    const sign = async (email: string) => {
+      const response = await fetch(`${origin}/api/v1/auth/login`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
+      assert.equal(response.status, 200, await response.clone().text());
+      return response.headers.get('set-cookie')!.split(';')[0];
+    };
+    const query = { q: repository, kinds: 'work' };
+    const found = await read(query);
+    assert.deepEqual(found.items.map(row => row.id), [...tied, first]);
+    assert.deepEqual(found.items.map(row => row.label), [
+      `${repository} · 發布 2026-01-01 12:00:01.456 UTC`,
+      `${repository} · 發布 2026-01-01 12:00:01.456 UTC`,
+      `${repository} · 發布 2026-01-01 12:00:00.123 UTC`,
+    ]);
+    for (const row of found.items) {
+      assert.equal(row.path, `/development/submissions/${row.id}`);
+      assert.equal(row.author_id, null);
+    }
+    assert.equal(JSON.stringify(found).includes(name), false);
+    assert.equal(JSON.stringify(found).includes(email), false);
+    const ids = [...tied, first];
+    for (const q of [title, '同一版本的公開摘要', repository.toUpperCase(), 'searchowner/', 'REPO_SEARCH', '_']) {
+      assert.deepEqual((await read({ ...query, q })).items.map(row => row.id), ids, q);
+    }
+    // The literal underscore matches; wildcard lookalikes, private URLs and SQL text do not.
+    for (const q of ['%', '\\', 'repo%search', 'repo_search_labels', currentRepository, draftRepository, `https://github.com/${repository}`, "' OR 1=1 --"]) {
+      assert.deepEqual((await read({ ...query, q })).items, [], q);
+    }
+    assert.deepEqual((await read({ q: repository })).items.map(row => row.id), ids);
+    assert.deepEqual((await read({ ...query, kinds: 'post' })).items, []);
+    assert.deepEqual((await read({ ...query, topics: 'tools' })).items, []);
+    await pool.query(`INSERT INTO community_content_topic_sets(set_id,community_id,content_kind,content_id,topics,updated_by)
+      VALUES($1,$2,'work',$3,ARRAY['tools'],$4)`, [randomUUID(), community, first, owner]);
+    assert.deepEqual((await read({ ...query, topics: 'tools' })).items.map(row => row.id), [first]);
+    const ownerCookie = await sign(email), foreignCookie = await sign(DEMO_USERS[0].email);
+    for (const [cookie, expectedAuthor] of [[ownerCookie, owner], [foreignCookie, null]] as const) {
+      const page = await read(query, cookie);
+      assert.deepEqual(page.items.map(row => row.id), ids);
+      assert.ok(page.items.every(row => row.author_id === expectedAuthor));
+      assert.equal(JSON.stringify(page).includes(email), false);
+      assert.deepEqual((await read({ ...query, q: draftRepository }, cookie)).items, []);
+    }
+    const invalidQueries: Record<string, string>[] = [{ q: 'x'.repeat(81) }, { q: 'line\nfeed' }, { q: repository, limit: '21' }];
+    for (const raw of invalidQueries) {
+      const response = await fetch(`${origin}/api/v1/community-search?${new URLSearchParams(raw)}`);
+      assert.equal(response.status, 422);
+      assert.equal((await response.json() as { code: string }).code, 'validation_failed');
+    }
+    // A descriptive label is not identity: even identical labels retain both IDs.
+    const seen: string[] = []; let cursor: string | undefined;
+    do {
+      const page = await read({ ...query, limit: '1', cursor });
+      seen.push(...page.items.map(row => row.id)); cursor = page.next_cursor ?? undefined;
+      assert.ok(seen.length <= 3, 'cursor cannot repeat a submission');
+    } while (cursor);
+    assert.deepEqual(seen, [...tied, first]);
+
+    await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=now() WHERE project_id=$1', [project]);
+    assert.deepEqual((await read(query)).items, []);
+    assert.deepEqual((await read(query, ownerCookie)).items, []);
+    assert.deepEqual((await read(query, foreignCookie)).items, []);
+    await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=NULL WHERE project_id=$1', [project]);
+    await pool.query('UPDATE users SET active=false WHERE user_id=$1', [owner]);
+    assert.deepEqual((await read(query)).items, []);
+    await pool.query('UPDATE users SET active=true,onboarding_required=true,onboarding_completed_at=NULL WHERE user_id=$1', [owner]);
+    assert.deepEqual((await read(query)).items, []);
+    await pool.query('UPDATE users SET onboarding_required=false WHERE user_id=$1', [owner]);
+    assert.deepEqual((await read(query)).items.map(row => row.id), [...tied, first]);
+    await pool.query('UPDATE users SET email=$2 WHERE user_id=$1', [owner, `search-label-${owner}@example.invalid`]);
+    assert.deepEqual((await read(query)).items, []);
+    assert.deepEqual((await read(query, ownerCookie)).items, []);
+    await pool.query('UPDATE users SET email=$2 WHERE user_id=$1', [owner, email]);
+    await pool.query("UPDATE skill_submissions SET status='ready_for_review',project_version_id=NULL,consent_to_share=false WHERE submission_id=$1", [first]);
+    assert.deepEqual((await read(query)).items.map(row => row.id), tied);
+    await pool.query("UPDATE skill_submissions SET status='published',project_version_id=$2,consent_to_share=true WHERE submission_id=$1", [first, version]);
+    await pool.query("UPDATE skill_submissions SET status='revoked',revoked_at=now(),consent_to_share=false WHERE submission_id=$1", [first]);
+    assert.deepEqual((await read(query)).items.map(row => row.id), tied);
+  } finally {
+    if ('closeAllConnections' in server) server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
 
 test('HTTP optional auth, feature flag and topic version boundaries remain enforced', async () => {
