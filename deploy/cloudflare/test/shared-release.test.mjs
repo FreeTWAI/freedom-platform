@@ -13,6 +13,10 @@ import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
 import { backupObjectStore, backupTar, bytesStream, newBackupDirectories } from '../../shared-release/portable/backup-storage.mjs';
 import { openCapturePolicy } from '../../shared-release/portable/capture-policy.mjs';
+import { createWorkerDeployer, renderWorkerConfig } from '../../shared-release/portable/deploy.mjs';
+import { parseJsonc } from '../lib/wrangler.mjs';
+import { buildApplication, directoryDigest } from '../../shared-release/portable/build.mjs';
+import { git as fixtureGit } from './migration-fixtures.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -748,9 +752,166 @@ test('uncertain capture-policy mutation must settle its exact backend before GC-
     disabled = true; throw Error('must not disable while an earlier UPDATE can still commit');
   } };
   const policy = await openCapturePolicy({ pool, database: 'fixture', role: 'operator',
+    lease: { signal: new AbortController().signal, assertHeld() {} },
     revision: 'shared-backup-11111111-1111-1111-1111-111111111111', before: 'a'.repeat(64),
     intent: { async putIfAbsent() { intentWritten = true; return 'created'; } } });
   await assert.rejects(policy.enable(), /synthetic unknown commit/); assert.equal(released, true);
   await assert.rejects(policy.cleanup(), /release_capture_policy_unsettled/); assert.equal(disabled, false);
   await assert.rejects(policy.enable(), /release_capture_policy_retry_forbidden/);
+});
+
+test('capture policy refuses a new enable after ownership is lost during intent persistence or before enable', async () => {
+  for (const point of ['intent', 'before-enable', 'ownership-check']) {
+    const controller = new AbortController(); let enables = 0, released = 0, held = true;
+    const lease = { signal: controller.signal, assertHeld() { if (!held) throw Error('synthetic ownership lost'); } };
+    const client = { on() {}, removeListener() {}, release() { released++; }, async query(input) {
+      if (input.text.startsWith('SELECT set_config')) return { rows: [] };
+      if (input.text.startsWith('SELECT current_database')) return { rows: [{ database: 'fixture', role: 'operator', session_role: 'operator', pid: 4321 }] };
+      if (input.text.includes('SET enabled=true')) enables++;
+      throw Error('enable UPDATE must not be submitted');
+    } };
+    const policy = await openCapturePolicy({ pool: { async connect() { return client; } }, lease,
+      database: 'fixture', role: 'operator', revision: 'shared-backup-11111111-1111-1111-1111-111111111111', before: 'a'.repeat(64),
+      intent: { async putIfAbsent() { if (point === 'intent') controller.abort(Error('synthetic setup abort')); return 'created'; } } });
+    if (point === 'before-enable') controller.abort(Error('synthetic setup abort'));
+    if (point === 'ownership-check') held = false;
+    await assert.rejects(policy.enable(), /synthetic (setup abort|ownership lost)/);
+    assert.equal(enables, 0); assert.equal(released, 1);
+    await assert.rejects(policy.enable(), /release_capture_policy_retry_forbidden/);
+  }
+});
+
+async function deployFixture(t) {
+  const workRoot = await diskFixture(t, 'fp-deploy-'), controller = new AbortController();
+  const oldVersion = '11111111-1111-4111-8111-111111111111', newVersion = '22222222-2222-4222-8222-222222222222';
+  const sourceSha = 'a'.repeat(40), previous = 'b'.repeat(40), worker = 'freedom-platform-staging-next';
+  let published = false, polls = 0, cacheEnabled = false, failPoll = false;
+  const bindings = source => [
+    ...Object.entries({ APP_ORIGIN: 'https://staging.freetwai.com', FREEDOM_ENV: 'staging',
+      FREEDOM_DATABASE_NAME: 'freedom_staging_next', FREEDOM_TRUST_CF_CONNECTING_IP: 'true',
+      FREEDOM_RELEASE_SHA: source, FREEDOM_COMMERCE_CHECKOUT_ENABLED: 'false' }).map(([name, text]) => ({ name, text, type: 'plain_text' })),
+    { name: 'ASSETS', type: 'assets' }, { name: 'IMAGES', type: 'images' },
+    { name: 'HYPERDRIVE', type: 'hyperdrive', id: 'c'.repeat(32) },
+    { name: 'EMAIL', type: 'send_email', allowed_sender_addresses: ['no-reply@mail.freetwai.com'] },
+    { name: 'MEDIA', type: 'r2_bucket', bucket_name: 'fixture-media' },
+    { name: 'GUIDE_STATIC', type: 'r2_bucket', bucket_name: 'fixture-guide' },
+    { name: 'TOTP_ENCRYPTION_KEY', type: 'secret_text' },
+  ];
+  const runtime = { compatibility_date: '2026-09-21', compatibility_flags: ['nodejs_compat'], usage_model: 'standard',
+    assets: { html_handling: 'auto-trailing-slash', not_found_handling: 'none', serve_directly: false, raw_run_worker_first: true, base_path: '/' } };
+  const fetchImpl = async (address, options) => {
+    const url = new URL(address); assert.equal(url.origin, 'https://api.cloudflare.com');
+    assert.equal(options.method, 'GET'); assert.equal(options.redirect, 'error');
+    let result;
+    if (url.pathname.endsWith('/deployments')) {
+      if (published) polls++;
+      if (published && failPoll) { failPoll = false; throw Error('synthetic provider GET failure'); }
+      result = { deployments: [{ versions: [{ version_id: published && polls > 1 ? newVersion : oldVersion, percentage: 100 }] }] };
+    } else if (url.pathname.includes('/versions/')) {
+      result = { resources: { bindings: bindings(url.pathname.endsWith(newVersion) ? sourceSha : previous),
+        script_runtime: runtime, script: { placement: { mode: 'targeted', target: [{ id: 12, region: 'aws:ap-northeast-1', type: 'region' }] } } } };
+    } else if (url.pathname.endsWith('/settings')) result = { bindings: bindings(published && polls > 1 ? sourceSha : previous), logpush: false, tail_consumers: [] };
+    else if (url.pathname.endsWith('/schedules')) result = { schedules: [{ cron: '*/10 * * * *' }] };
+    else if (url.pathname.endsWith('/subdomain')) result = { enabled: false, previews_enabled: false };
+    else if (url.pathname.endsWith('/domains')) result = [];
+    else if (url.pathname.endsWith('/routes')) result = [{ id: 'fixture-route', pattern: 'staging.freetwai.com/*', script: worker }];
+    else if (url.pathname.includes('/hyperdrive/configs/')) result = { caching: { disabled: !cacheEnabled } };
+    else throw Error('unexpected provider path');
+    return new Response(JSON.stringify({ success: true, result }));
+  };
+  const deployer = createWorkerDeployer({ accountId: 'a'.repeat(32), zoneId: 'b'.repeat(32), target: 'staging-next',
+    token: 'synthetic-deploy-token', signal: controller.signal, fetchImpl });
+  const before = await deployer.inspect();
+  const source = parseJsonc(await readFile(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'));
+  return { deployer, before, sourceSha, oldVersion, newVersion, controller,
+    args: { sourceSha, before, source, sourceRoot: '/fixture/source', workRoot,
+      lease: { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } } },
+    publish() { published = true; }, failNextPoll() { failPoll = true; }, enableCache() { cacheEnabled = true; } };
+}
+
+test('Worker publish preserves bindings/secrets/routes, records stale reads, and deploys once', async t => {
+  const f = await deployFixture(t); let calls = 0, sleeps = 0;
+  const config = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  assert.equal(config.keep_vars, true); assert.deepEqual(config.routes, []);
+  assert.equal(config.vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED, 'false');
+  assert.equal(config.vars.FREEDOM_RELEASE_SHA, f.sourceSha);
+  assert(!('TOTP_ENCRYPTION_KEY' in config.vars));
+  assert.deepEqual(config.alias, { sharp: '/fixture/source/packages/shared/sharp-unavailable.ts',
+    './model-step-node-transport.js': '/fixture/source/modules/agent-execution/model-step-worker-transport-unavailable.ts' });
+  const result = await f.deployer.publish({ ...f.args, async execute(input) {
+    calls++; assert.equal(input.sourceSha, f.sourceSha);
+    assert.deepEqual(JSON.parse(await readFile(input.configPath)), config);
+    f.publish(); return { versionId: f.newVersion };
+  }, async sleep(ms) { assert.equal(ms, 3000); sleeps++; } });
+  assert.equal(calls, 1); assert.equal(sleeps, 1); assert.equal(result.observations, 2);
+  assert.equal(result.providerConfirmed, true);
+  assert.equal(JSON.parse(await readFile(join(f.args.workRoot, 'deploy-observation-1.json'))).matched, false);
+  assert.equal(JSON.parse(await readFile(join(f.args.workRoot, 'deploy-observation-2.json'))).matched, true);
+});
+
+test('uncertain Worker publish is not retried and an existing intent refuses another mutation', async t => {
+  const f = await deployFixture(t); let calls = 0;
+  const execute = async () => { calls++; throw Error('synthetic lost provider reply'); };
+  await assert.rejects(f.deployer.publish({ ...f.args, execute }), /synthetic lost provider reply/);
+  assert.equal(JSON.parse(await readFile(join(f.args.workRoot, 'deploy-intent.json'))).automaticRetry, false);
+  await assert.rejects(f.deployer.publish({ ...f.args, execute }), { code: 'EEXIST' });
+  assert.equal(calls, 1);
+});
+
+test('Worker propagation retains a failed GET and retries only the read', async t => {
+  const f = await deployFixture(t); let calls = 0;
+  const result = await f.deployer.publish({ ...f.args, execute: async () => {
+    calls++; f.publish(); f.failNextPoll(); return { versionId: f.newVersion };
+  }, sleep: async () => {} });
+  assert.equal(calls, 1); assert.equal(result.observations, 2);
+  const first = JSON.parse(await readFile(join(f.args.workRoot, 'deploy-observation-1.json')));
+  assert.equal(first.error, 'provider_observation_failed'); assert.equal(first.matched, false);
+});
+
+test('Worker admission refuses enabled Hyperdrive cache and cancelled ownership', async t => {
+  const f = await deployFixture(t); f.enableCache();
+  await assert.rejects(f.deployer.inspect(), /release_deploy_hyperdrive_cache_enabled/);
+  f.controller.abort(Error('synthetic lease lost'));
+  await assert.rejects(f.deployer.publish({ ...f.args, execute() { throw Error('must not publish'); } }), /synthetic lease lost/);
+});
+
+test('application build copies only the selected commit, binds outputs and rejects source/output drift', async t => {
+  const f = await deployFixture(t), root = await diskFixture(t, 'fp-build-');
+  const sourceRoot = join(root, 'source'); await mkdir(sourceRoot, { mode: 0o700 });
+  await mkdir(join(sourceRoot, 'apps/platform-api/src'), { recursive: true });
+  await writeFile(join(sourceRoot, 'apps/platform-api/src/worker.ts'), 'export default {};\n');
+  await writeFile(join(sourceRoot, 'package.json'), '{"name":"synthetic-build","private":true}\n');
+  await writeFile(join(sourceRoot, 'package-lock.json'), '{"lockfileVersion":3}\n');
+  await writeFile(join(sourceRoot, 'wrangler.jsonc'), JSON.stringify(f.args.source));
+  await writeFile(join(sourceRoot, '.gitignore'), 'node_modules/\napps/portal-web/dist/\n');
+  fixtureGit(sourceRoot, ['init', '-q', '-b', 'main']); fixtureGit(sourceRoot, ['add', '.']);
+  fixtureGit(sourceRoot, ['commit', '-qm', 'Synthetic build source']);
+  const sourceSha = fixtureGit(sourceRoot, ['rev-parse', 'HEAD']), sourceTree = fixtureGit(sourceRoot, ['rev-parse', 'HEAD^{tree}']);
+  const calls = [];
+  const execute = async (program, args, options) => {
+    calls.push([program, args]);
+    assert.deepEqual(Object.keys(options).sort(), ['cache', 'cwd', 'signal']);
+    if (program === '/usr/bin/git') return execFileSync(program, args, { cwd: options.cwd,
+      env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }, stdio: 'ignore' });
+    if (program === '/usr/local/bin/npm' && args[0] === 'ci') return;
+    if (program === '/usr/local/bin/npm' && args[0] === 'run') {
+      const dist = join(options.cwd, 'apps/portal-web/dist'); await mkdir(dist, { recursive: true });
+      await writeFile(join(dist, 'index.html'), '<!doctype html><title>Synthetic</title>'); return;
+    }
+    assert.equal(program, process.execPath); assert(args.includes('--dry-run'));
+    const out = args[args.indexOf('--outdir') + 1]; await mkdir(out); await writeFile(join(out, 'worker.js'), 'export default {};\n');
+  };
+  const built = await buildApplication({ sourceRoot, sourceSha, sourceTree, workRoot: root,
+    target: 'staging-next', before: f.before, signal: f.controller.signal, execute });
+  assert.equal(built.sourceSha, sourceSha); assert.notEqual(built.root, sourceRoot);
+  assert.equal(built.providerMutation, false); assert.equal(calls.length, 6);
+  await built.assertUnchanged();
+  await writeFile(join(built.root, 'apps/portal-web/dist/index.html'), 'Changed');
+  await assert.rejects(built.assertUnchanged(), /release_build_outputs_changed/);
+  await symlink(join(sourceRoot, 'package.json'), join(built.root, 'apps/portal-web/dist/link'));
+  await assert.rejects(directoryDigest(join(built.root, 'apps/portal-web/dist')), /release_build_output_invalid/);
+  await writeFile(join(sourceRoot, 'apps/platform-api/src/worker.ts'), 'changed source');
+  await assert.rejects(buildApplication({ sourceRoot, sourceSha, sourceTree, workRoot: root,
+    target: 'staging-next', before: f.before, signal: f.controller.signal, execute }), /release_build_source_changed/);
+  assert.equal(calls.length, 6);
 });

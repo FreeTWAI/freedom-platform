@@ -107,7 +107,8 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
         environment: context.environment, database: context.database, schema: 'public', exposure: 'quarantine',
       })))) === 'created', 'release_backup_control_exists');
       policy = await openCapturePolicy({ pool, database: context.database, role, before: before.policySha256,
-        revision: 'shared-backup-' + context.setId, intent: await createFileArchiveStore(intents) });
+        revision: 'shared-backup-' + context.setId, intent: await createFileArchiveStore(intents), lease });
+      assertHeld();
       await policy.enable(); assertHeld();
       const source = transport.sourceObjects({ assertObjectKey, validateMetadata });
       const dump = join(root, 'database.dump');

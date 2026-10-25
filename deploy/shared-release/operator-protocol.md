@@ -89,7 +89,7 @@ the same release lease before/after this backup. It checks complete ledger and
 material-policy digests on source and restored databases and the Worker binding
 digest on the source. Its required expectations are inputs from the installed
 controller, not authenticated external-floor evidence: the durable floor reader,
-approved policy authority, Worker deployer and scheduler
+approved policy authority and scheduler
 handoff are still open. Do not install it as an independently enabled deployer.
 The integration fixture uses real PG18, native local R2 and synthetic data;
 Cloudflare transport uses disk-backed injected HTTP responses. It covers capture
@@ -108,6 +108,21 @@ permission to resume. The native PG18 fixture verifies atomic rollback and a
 committed transaction whose reply was lost. The enclosing operator must still
 provide authenticated floor assertion/advancement and a reviewed verification
 contract; its fixture floor callback is not live retained-floor evidence.
+
+`buildApplication` copies the selected Git commit into a fresh independent build
+directory, installs its lockfile, builds the portal and runs the image's fixed
+Wrangler dry-run without inherited provider/DB/job credentials. It verifies the
+source before/after and records asset/bundle digests. `createWorkerDeployer`
+compares the active version, complete bindings, topology, runtime, Tokyo placement
+and disabled Hyperdrive cache. It renders from preserved live bindings, keeps
+secrets with `--keep-vars`, leaves routes unchanged and publishes once. Bounded
+provider GETs retain stale/failed observations; an uncertain publish is never
+replayed. The mutation journal must still be retained outside the runner by the
+enclosing operator. Local actual build/dry-run and live read-only provider checks
+are separate evidence from synthetic publish tests; none proves a real deployment.
+Capture-policy enable now receives the release lease and checks ownership directly
+before its UPDATE, including after asynchronous intent persistence. Conditional
+cleanup of an already-attempted write remains available after ownership loss.
 
 `publishArchive` persists an exclusive disk intent before provider work and refuses
 reuse of that UUID in the same work directory. It preserves the existing unique

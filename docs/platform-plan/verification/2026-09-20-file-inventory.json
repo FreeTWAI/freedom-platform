@@ -14559,8 +14559,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 53113,
-      "sha256": "96799835ef9e38856af3e838b3668df95489f07765dea295717f1d98e1e514aa"
+      "bytes": 65180,
+      "sha256": "3554e9fb698543f87c5e57c023dd29b0dc59708c3559dbfb7e11c40db8c6c9e6"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 14490,
-      "sha256": "8975a83ba67fec71bdd540ce5724f7856dc277dd3b0111f2546aca0eca14a9b3"
+      "bytes": 15585,
+      "sha256": "21e71ec9e8b66818344e790107bd1f15bd9a03b60cb02e6a922a76487070c536"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14629,8 +14629,8 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 12047,
-      "sha256": "7e4d4bb1e1cbbeb8e5b7fec37ec186b1c96755b5c29cab8b0d49406d811234d5"
+      "bytes": 13153,
+      "sha256": "c250d2677236efb2cadc42588206d5d0c19cefd86ddfedae7a3ace98835de61f"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
@@ -14654,8 +14654,13 @@
     },
     {
       "path": "deploy/shared-release/portable/backup.mjs",
-      "bytes": 11337,
-      "sha256": "184ddd8b8cbd33a437f1c0481a5924bd2befd24ce1ce028a2afe8be72a704269"
+      "bytes": 11364,
+      "sha256": "ecbd537bd98b805e73b313a0f798c09b092c0dba7abe9c9fb49805c6a5edd36e"
+    },
+    {
+      "path": "deploy/shared-release/portable/build.mjs",
+      "bytes": 7980,
+      "sha256": "75bce41f76184869d612c2c7ca8cb82470226e848561ac56baa151cf9490bb95"
     },
     {
       "path": "deploy/shared-release/portable/canonical-sql.mjs",
@@ -14664,13 +14669,18 @@
     },
     {
       "path": "deploy/shared-release/portable/capture-policy.mjs",
-      "bytes": 4550,
-      "sha256": "98eaa6bef44c089e7d4e7fb6501ae3ec44dc353cdc8955b64cff44b6fd83327a"
+      "bytes": 5039,
+      "sha256": "1ec912e82479db13a7558df6bc97c7a55e84db51daf49f7b230047cfced6bfa1"
     },
     {
       "path": "deploy/shared-release/portable/cloudflare.mjs",
       "bytes": 11009,
       "sha256": "779e7f27ff65eed6c60bde0c427e03d54247c95514d08ea40c2c343c6a3c65c4"
+    },
+    {
+      "path": "deploy/shared-release/portable/deploy.mjs",
+      "bytes": 16093,
+      "sha256": "3a0430c65e449b71385764dcb21c5af4b87cc1de321ec6200c1fd7e496b2f50b"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",

@@ -128,6 +128,17 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 - `capture-policy.mjs`：先寫私人操作意圖，再條件式開啟擷取保護。若 UPDATE 結果不明，
   先確認該次 PID／database／role／隨機 application name 的 backend 已停止，才關閉
   自己 revision 的保護；不能讓較晚提交的 UPDATE 在清理後重新開啟維運。
+  實際啟用 UPDATE 前立即重查 lease／abort；準備或寫意圖期間失鎖時，不送出新的啟用寫入。
+- `migration.mjs`／`canonical-sql.mjs`：使用已釘選來源的 migration runner，將 runtime
+  grants 放在同一交易。核對 ledger、RLS、權限和 GC，再以實際 app／backup 角色唯讀探測。
+  COMMIT 回覆不明時保留交易 ID，只提供讀回判斷，不允許直接重跑。
+- `build.mjs`：複製指定 commit 與 lockfile，以固定工具建置前端及 Worker dry-run，
+  核對來源未變與輸出 digest；建置程序不繼承部署憑證。已實跑 `0ec26d5c` 的本機
+  npm 安裝、build、Wrangler dry-run，這不是 image／hosted runner 的驗收。
+- `deploy.mjs`：讀回 active version、bindings、route、crons、workers.dev、Tokyo placement
+  與 Hyperdrive cache；保留現有旗標、秘密與綁定，只發布一次。Provider 清單延遲或
+  GET 失敗會留下觀察紀錄並有界重讀，不再次發布。兩環境已完成實際唯讀核對；
+  mutation 仍只驗了合成 provider，沒有實際部署。
 - `backup-storage.mjs`／`backup-tar.py`：使用既有 create-only 檔案存放器保存媒體，
   大小受限的 TAR 只接受固定範圍的普通檔案。下載副本先核對整體 digest，再檢查
   全部 member；拒絕重複路徑、穿越路徑、symlink 與特殊檔案，不使用 `extractall`。

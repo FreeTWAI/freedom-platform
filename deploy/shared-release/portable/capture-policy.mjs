@@ -6,10 +6,13 @@ import { bytesStream } from './backup-storage.mjs';
 /** Owned temporary capture policy. A timed-out UPDATE may still commit: settle
  * that exact backend before attempting conditional GC-off cleanup. The enclosing
  * release keeps its separate advisory-lock session throughout this operation. */
-export async function openCapturePolicy({ pool, database, role, revision, before, intent }) {
+export async function openCapturePolicy({ pool, database, role, revision, before, intent, lease }) {
   check(/^[a-z][a-z0-9_]{0,62}$/.test(database) && /^[a-z][a-z0-9_]{0,62}$/.test(role)
-    && /^shared-backup-[a-f0-9-]{36}$/.test(revision) && /^[a-f0-9]{64}$/.test(before ?? ''),
+    && /^shared-backup-[a-f0-9-]{36}$/.test(revision) && /^[a-f0-9]{64}$/.test(before ?? '')
+    && lease?.signal instanceof AbortSignal && typeof lease.assertHeld === 'function',
   'release_capture_policy_input_invalid');
+  const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
+  assertHeld();
   const client = await pool.connect(), application = 'fp-capture-' + randomUUID();
   let pid, attempted = false, settled = false, released = false, cleaned = false, broken = false;
   const onError = () => { broken = true; };
@@ -36,6 +39,7 @@ export async function openCapturePolicy({ pool, database, role, revision, before
     throw new Error('release_capture_policy_unsettled');
   };
   try {
+    assertHeld();
     await query("SELECT set_config('application_name',$1,false),set_config('statement_timeout','30000',false),set_config('lock_timeout','5000',false)", [application]);
     const row = (await query(`SELECT current_database() database,current_user role,session_user session_role,pg_backend_pid() pid`)).rows[0];
     check(row?.database === database && row.role === role && row.session_role === role
@@ -47,8 +51,12 @@ export async function openCapturePolicy({ pool, database, role, revision, before
   } catch (error) { release(true); throw error; }
   return Object.freeze({
     async enable() {
-      check(!attempted && !released, 'release_capture_policy_retry_forbidden'); attempted = true;
+      check(!attempted && !released, 'release_capture_policy_retry_forbidden');
       try {
+        // Intent persistence and connection setup can yield after the caller's
+        // check. Fence the actual new mutation, with no await between this check
+        // and client.query. Cleanup still settles an earlier attempted mutation.
+        assertHeld(); attempted = true;
         const result = await query(`UPDATE asset_maintenance_policy p SET enabled=true,revision=$1,
           orphan_retention_seconds=2592000,retired_retention_seconds=2592000,delete_lease_seconds=60,
           capture_seconds=600,pin_seconds=86400,max_capture_objects=1000
@@ -56,7 +64,7 @@ export async function openCapturePolicy({ pool, database, role, revision, before
           AND encode(pg_catalog.sha256(convert_to((to_jsonb(p)-'generation')::text,'UTF8')),'hex')=$2 RETURNING revision`, [revision, before]);
         settled = true;
         check(!broken && result.rowCount === 1 && result.rows[0]?.revision === revision, 'release_capture_policy_changed');
-      } finally { release(!settled); }
+      } finally { release(attempted && !settled); }
     },
     async cleanup() {
       if (cleaned) return;
