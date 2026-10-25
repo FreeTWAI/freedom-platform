@@ -197,29 +197,29 @@ test('eight-partition cases', async t => {
   fBadIndex[7].partition_index = 8;
   assert.equal((await aggregateRuntimePartitions(root, fBadIndex, { partitionCount: 8 })).reason, 'runtime_partition_identity');
 
-  // Eight partitions keep the 1,500-second budget per fragment.
+  // Eight partitions keep the 2,100-second budget per fragment.
   const full = structuredClone(fragments);
-  full[0].ended_at = '2026-10-03T00:25:00.000Z';
+  full[0].ended_at = '2026-10-03T00:35:00.000Z';
   assert.equal((await aggregateRuntimePartitions(root, full, { partitionCount: 8 })).status, 'passed');
   const long = structuredClone(fragments);
-  long[0].ended_at = '2026-10-03T00:25:00.001Z';
+  long[0].ended_at = '2026-10-03T00:35:00.001Z';
   assert.equal((await aggregateRuntimePartitions(root, long, { partitionCount: 8 })).reason, 'runtime_partition_window_exceeded');
 
-  // Eight complete budgets plus 30 minutes of queue gaps is a finite 230m span.
+  // Eight complete budgets plus 30 minutes of queue gaps is a finite 310m span.
   const sequential = structuredClone(fragments);
   sequential.forEach((fragment, index) => {
-    const start = Date.parse('2026-10-03T00:00:00.000Z') + index * 1_500_000;
+    const start = Date.parse('2026-10-03T00:00:00.000Z') + index * 2_100_000;
     fragment.started_at = new Date(start).toISOString();
-    fragment.ended_at = new Date(start + 1_500_000).toISOString();
+    fragment.ended_at = new Date(start + 2_100_000).toISOString();
   });
   assert.equal((await aggregateRuntimePartitions(root, sequential, { partitionCount: 8 })).status, 'passed');
   const exactWindow = structuredClone(fragments);
-  exactWindow[7].started_at = '2026-10-03T03:25:00.000Z';
-  exactWindow[7].ended_at = '2026-10-03T03:50:00.000Z';
+  exactWindow[7].started_at = '2026-10-03T04:35:00.000Z';
+  exactWindow[7].ended_at = '2026-10-03T05:10:00.000Z';
   assert.equal((await aggregateRuntimePartitions(root, exactWindow, { partitionCount: 8 })).status, 'passed');
   const wide = structuredClone(exactWindow);
-  wide[7].started_at = '2026-10-03T03:25:00.001Z';
-  wide[7].ended_at = '2026-10-03T03:50:00.001Z';
+  wide[7].started_at = '2026-10-03T04:35:00.001Z';
+  wide[7].ended_at = '2026-10-03T05:10:00.001Z';
   assert.equal((await aggregateRuntimePartitions(root, wide, { partitionCount: 8 })).reason, 'runtime_full_window_exceeded');
 
   await assert.rejects(runRuntimePartition(root, { partitionCount: 8, partitionIndex: 8 }), /invalid_runtime_partition/);

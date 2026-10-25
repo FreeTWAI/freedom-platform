@@ -1,5 +1,59 @@
 # Diagnostic runtime matrix
 
+## Capacity, 2026-10-25
+
+八分區的 absolute budget 從 **1,500 → 2,100 秒（25 → 35 分鐘）**，吸收 hosted
+runner 速度差異；本節取代下方具日期紀錄中的八分區容量與 reporter 上限，歷史觀察保留。
+10 月 24 日權重的投影已平衡於 1,142.662–1,148.066 秒，但實際 progress span 如下：
+
+| Run（attempt 1） | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| #1027 PR Verify 40145018567，新權重，秒 | 1,032 | 1,428 | 1,359 | 1,016 | 1,263 | 1,426 | 900 | 1,387 |
+| main 53d528fc Verify 40135849585，舊權重，分鐘 | 15.5 | 18.8 | 22.8 | 22.7 | 22.5 | 22.9 | 18.4 | 16.7 |
+
+第一列由 `/tmp/fp-diag/pr1027-rt/` 八份 logs 的首末 `freedom.test-progress` timestamp
+差值獨立重算；第二列是本次任務提供的歷史數據。main `f987bb74` 的 Verify
+40124240773 在 partition 0 attempt 1 與 partition 2 attempt 2 曾觸及 1,500 秒而
+`test_timeout`（任務提供，未另取得該 run logs）。兩組權重的 hosted spread 仍相近，
+與 runner 速度差異相符；再次平衡投影不能保證足夠 headroom。
+
+同一批 #1027 logs，以首筆 job timestamp 到執行 `scripts/runtime-full.mjs` 的 command
+行 timestamp 計算 setup（包含 command 前的 build／integration 等工作）：
+
+| Partition | Job ID | Setup（秒） |
+| --- | --- | ---: |
+| 0 | 121026780103 | 214.644 |
+| 1 | 121026780127 | 163.045 |
+| 2 | 121026780207 | 168.440 |
+| 3 | 121026780142 | 185.858 |
+| 4 | 121026780114 | 158.651 |
+| 5 | 121026780084 | 161.466 |
+| 6 | 121026780091 | 167.760 |
+| 7 | 121026780108 | 166.555 |
+
+範圍為 158.651–214.644 秒，約 2:39–3:35（最慢 <3.6 分鐘）。
+
+| 項目 | 舊值 → 新值 |
+| --- | --- |
+| `PARTITION_BUDGET_MS[8]` | 1,500,000 → 2,100,000 ms |
+| `MATRIX_WINDOW_MS[8]` | 8 × 1,500,000 + 1,800,000 = 13,800,000 → 8 × 2,100,000 + 1,800,000 = 18,600,000 ms（230 → 310 分鐘） |
+| `PROGRESS_MAX_ELAPSED_MS` | 1,500,000 → 2,100,000 ms |
+| `runtime-full.timeout-minutes` | 40 → 45 分鐘 |
+
+45 分鐘 job 扣除最多約 3.6 分鐘 setup 與 35 分鐘 partition，仍約有 6.4 分鐘供
+upload／額外開銷；這是有界餘裕，不保證任意 runner 都能完成。八分區預算仍包含
+20 秒 provisioning 與 64 秒 cleanup reserve，測試最多約 2,016 秒。
+四／六分區維持 1,200／1,500 秒，aggregate 維持 1,800／10,800 秒；queue gaps
+仍限 1,800 秒，local full、scheduler、weights、fixtures 與個別測試 timeout 都不變。
+October 21 投影最大值 <1,416 秒（含新增檔），October 24 最大值 <1,210 秒、spread
+<10 秒、加入未量測檔後 <1,220 秒，全部維持原 assertions。
+
+Progress decoder 接受 2,100,000 ms、拒絕 2,100,001 ms；reporter 在新上限 clamp。
+權重 parser 的 strict input 仍拒絕三代飽和值 **1,200,000、1,500,000、2,100,000**，
+explicit partial input 只省略受飽和端點影響的檔案，不將舊 clamp 當實測 duration。
+八分區 fragment 與 aggregate 也各自接受恰好上限、拒絕多一毫秒。
+這些本機 regression 不代表新的 hosted matrix、部署或原需求驗收已完成。
+
 ## 慢速 DROP 的有界等待（2026-10-20）
 
 目前清理使用一個 **60 秒** absolute deadline，suite 預留 **64 秒**；本節取代下方
@@ -34,13 +88,13 @@ rmtree 沒有逐檔 `CHECK_FOR_INTERRUPTS`，不能假設 termination ACK 會立
 大量檔案在 runner filesystem 的移除延遲是合理推論；log 沒有分開量到 barrier／rmtree，
 不能將 unavailable observer 當作進度或根因證明。
 
-八／六分區仍限 1,500 秒：最多 20 秒 provisioning + 約 1,416 秒測試 + 64 秒 reserve。
+目前八／六分區分別限 2,100／1,500 秒：最多 20 秒 provisioning + 約 2,016／1,416 秒測試 + 64 秒 reserve。
 reserve 比原本多 40 秒；以 [commerce 計畫](../../docs/platform-plan/execution/commerce/work-plan.md)
 的 1,150.196 秒最長觀察保守估算，扣完 provisioning 仍有約 266 秒測試餘裕；
-該 run 的測試／清理失敗紀錄保留。40 分鐘 Actions job 為 2,400 秒，partition 外仍留 900 秒供
+該 run 的測試／清理失敗紀錄保留。八分區 45 分鐘 Actions job 為 2,700 秒，partition 外仍留 600 秒供
 setup／build／integration／artifact；不保證任意 runner 延遲都能完成。四分區維持
 1,200 秒、本機 full 維持 900 秒，因此扣相同 provisioning 後分別約 1,116／816 秒；
-這些入口也少 40 秒測試時間，並未增加外層 deadline 或擴張 aggregate window。
+這些入口也少 40 秒測試時間；本次八分區容量另依上節調整。
 
 正向 fresh absence、owner／session／nonce identity、owner／cleaner settlement、
 所有資料庫仍存在即失敗的規則保留，不重試 DROP，不改 service container 或 durability。
