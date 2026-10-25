@@ -652,9 +652,9 @@
   "todos": {
     "pageId": "todos",
     "name": "序星",
-    "title": "待辦清單",
+    "title": "入門指南",
     "accent": "#9A91AF",
-    "intro": "我是序星，這頁的待辦想先整理哪一件？",
+    "intro": "我是序星，這頁的入門步驟想先了解哪一項？",
     "backdropColor": null,
     "portrait": "todos/portrait",
     "hero": "todos/hero",

@@ -30,7 +30,7 @@ export const PORTAL_FEATURE_METADATA = {
   "stores": { title: "我的商店", guidance: "管理商店展示與店主預留紀錄；預留不代表付款或履約。" },
   "reservations": { title: "我的訂單", guidance: "查看本人預留；預留不代表付款或出貨。" },
   "community": { title: "自由工坊社群", guidance: "查看自由工坊的社群入口和公開資訊。" },
-  "todos": { title: "待辦清單", guidance: "查看會員待辦事項與可直接前往的操作。" },
+  "todos": { title: "入門指南", guidance: "整理個人資料、加入公會與領取技能書，依需要完成入門步驟。" },
   "messages": { title: "我的訊息", guidance: "查看收到的訊息與對話。" },
   "events": { title: "社群活動", guidance: "查看社群活動、審核結果與報名狀態。" },
   "tasks": { title: "社群任務", guidance: "探索工坊工作、GitHub Issue／PR 歷史與已連結 GitHub 的會員排行，查看有來源的驗收紀錄。" },

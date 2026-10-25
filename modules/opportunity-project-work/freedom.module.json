@@ -45,6 +45,7 @@
     "tests/runtime/private-result-schema.test.ts",
     "tests/runtime/private-result-races.test.ts",
     "apps/portal-web/src/modules/MemberTasks.tsx",
+    "tests/e2e/member-todos-real.spec.ts",
     "tests/runtime/flows.test.ts",
     "tests/e2e/work-pagination.spec.ts",
     "apps/portal-web/src/modules/WorkbenchPanel.tsx",

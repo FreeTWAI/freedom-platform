@@ -5,12 +5,12 @@ import './MemberSettings.css';
 import {LANGUAGES,useLanguage} from '../language';
 import {useAppInstall} from '../AppInstall';
 
-export const SETTINGS_PAGES=[['profile','我的個人空間'],['account','我的名片'],['todos','待辦清單']] as const satisfies readonly (readonly [TabId,string])[];
+export const SETTINGS_PAGES=[['profile','我的個人空間'],['account','我的名片'],['todos','入門指南']] as const satisfies readonly (readonly [TabId,string])[];
 type Panel='main'|'language'|'appearance';
 type Item={key:string;label:string;run:()=>void;checked?:boolean;current?:boolean;lang?:string;disabled?:boolean;panel?:Panel};
 
 /** One short account menu, with reversible preference panels. Page drafts stay mounted. */
-export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false,personalContentEnabled=false}:{current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean;personalContentEnabled?:boolean}){
+export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false}:{current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean;personalContentEnabled?:boolean}){
   const {theme,selectTheme}=useWorkshopTheme();
   const {preference,selectLanguage,t}=useLanguage();
   const install=useAppInstall();
@@ -18,10 +18,10 @@ export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabl
   const root=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),items=useRef<(HTMLButtonElement|null)[]>([]),returnIndex=useRef(0);
   const menuId=useId();
   const close=(returnFocus:boolean)=>{setOpen(false);if(returnFocus)button.current?.focus();};
-  const page=(id:TabId,label:string):Item=>({key:id,label,current:current===id,run:()=>{close(false);onSelect(id);}});
+  const page=(id:TabId,label:string):Item=>({key:id,label,current:current===id||(id==='profile'&&current==='my-content'),run:()=>{close(false);onSelect(id);}});
   const enter=(next:Panel)=>{returnIndex.current=main.findIndex(item=>item.panel===next);setFocusIndex(0);setPanel(next);};
   const back=()=>{setPanel('main');setFocusIndex(returnIndex.current);};
-  const main:Item[]=[page('profile',t('nav.profile')),...(personalContentEnabled?[page('my-content',t('nav.my-content'))]:[]),page('todos',t('nav.todos')),page('account',t('settings.account')),
+  const main:Item[]=[page('profile',t('nav.profile')),page('todos',t('nav.todos')),page('account',t('settings.account')),
     {key:'language',label:t('settings.language'),panel:'language',run:()=>enter('language')},
     {key:'appearance',label:t('settings.appearance'),panel:'appearance',run:()=>enter('appearance')},
     ...(!install.installed?[{key:'install',label:t('install.title'),run:()=>{close(false);install.open(button.current);}}]:[]),

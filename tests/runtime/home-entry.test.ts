@@ -48,3 +48,30 @@ test('an already-cancelled home-link activation does not navigate or cancel agai
   assert.equal(event.defaultPrevented, true);
   assert.deepEqual(calls, []);
 });
+
+// Render the real shared navigation without a browser or any member data.
+// Browser focus, viewport fitting and history have separate E2E coverage.
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {Navigation} from '../../apps/portal-web/src/Navigation.js';
+import {interfaceText} from '../../apps/portal-web/src/language.js';
+import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata.js';
+
+for (const personalContentEnabled of [false, true]) test(`personal space is the single primary personal entry, content capability ${personalContentEnabled}`, () => {
+  const html=renderToStaticMarkup(createElement(Navigation, {
+    current:'my-content',onSelect:()=>{},canManageGuild:false,guildLaunchpadEnabled:false,
+    communitySearchEnabled:false,personalContentEnabled,mobileOpen:false,
+  }));
+  const primary=html.split('<div class="nav-primary">')[1].split('</div>')[0];
+  assert.match(primary,/我的個人空間/);
+  assert.doesNotMatch(primary,/我的內容/);
+  assert.equal((primary.match(/aria-current="page"/g)??[]).length,1);
+  assert.match(primary,/aria-current="page"[^>]*>.*?我的個人空間/);
+  assert.doesNotMatch(html,/mobile-nav-backdrop/);
+});
+
+test('getting-started display label retains the todos route key in all interface languages',()=>{
+  assert.equal(TAB_TITLES.todos,'入門指南');
+  for(const language of ['zh-Hant','en','ja','ko','es'] as const)assert.ok(interfaceText(language,'nav.todos'));
+  assert.equal(interfaceText('zh-Hant','nav.todos'),'入門指南');
+});

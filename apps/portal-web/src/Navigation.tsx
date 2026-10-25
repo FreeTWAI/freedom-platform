@@ -7,7 +7,7 @@ import type {InterfaceMessage} from './interface-messages';
 import { TAB_TITLES } from './features/metadata';
 export { TAB_TITLES } from './features/metadata';
 
-const primary: TabId[] = ['home', 'my-content', 'guilds', 'skills'];
+const primary: TabId[] = ['home', 'profile', 'guilds', 'skills'];
 const keywords:Partial<Record<TabId,string>>={ar:'相機 圖案 掃描 衣服 海報 名片',messages:'聊天室 對話 私訊',members:'人才 找夥伴 媒合',skills:'學習 資源 免費',tasks:'任務 貢獻 參與','private-ai':'私人 AI 草稿 模型 執行',workbench:'工作 任務',showcase:'作品 分享 展示 需求 找人',opensource:'投稿 提交 上傳 GitHub 開源 工具 技能',supplier:'商品 商店 供應商',retail:'電商 販售 商店',account:'個人資料 設定 暱稱',friends:'朋友 好友 私訊',business:'業務 工作區 邀請',reservations:'預留 訂單 查詢 取消',stores:'商店 開店 店鋪 商品 上架 發布'};
 const groups: { label: string; pages: TabId[] }[] = [
   { label: '社群參與', pages: ['ar','events', 'tasks', 'highlights'] },
@@ -18,8 +18,8 @@ const groups: { label: string; pages: TabId[] }[] = [
   { label: '管理', pages: ['guild-workspace', 'business'] },
 ];
 
-export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEnabled, communitySearchEnabled, personalContentEnabled, mobileOpen, currentHash = `#${current}` }: {
-  current: TabId; onSelect: (id: TabId, hash?: string) => void; currentHash?: string; canManageGuild: boolean; guildLaunchpadEnabled: boolean; communitySearchEnabled: boolean; personalContentEnabled: boolean; mobileOpen: boolean;
+export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEnabled, communitySearchEnabled, personalContentEnabled, mobileOpen, onCloseMobile, currentHash = `#${current}` }: {
+  current: TabId; onSelect: (id: TabId, hash?: string) => void; currentHash?: string; canManageGuild: boolean; guildLaunchpadEnabled: boolean; communitySearchEnabled: boolean; personalContentEnabled: boolean; mobileOpen: boolean; onCloseMobile?: (returnFocus: boolean) => void;
 }) {
   const {t}=useLanguage();
   const groupKeys:Record<string,InterfaceMessage>={'社群參與':'nav.participation','認識夥伴':'nav.people','分享推廣':'nav.promotionGroup','創作與合作':'nav.creation','供貨與銷售':'nav.commerce','管理':'nav.management'};
@@ -27,24 +27,66 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
   const [moreOpen, setMoreOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const nav = useRef<HTMLElement>(null), moreTrigger = useRef<HTMLElement>(null);
+  const closeMobile = useRef(onCloseMobile);
+  closeMobile.current = onCloseMobile;
   const [expanded, setExpanded] = useState<string[]>(() => groups.filter(group => group.pages.includes(current)).map(group => group.label));
   useEffect(() => { setExpanded(groups.filter(group => group.pages.includes(current)).map(group => group.label)); }, [current]);
   useEffect(() => { setMoreOpen(false); }, [current]);
   useEffect(() => { if (moreOpen) searchRef.current?.focus(); else setQuery(''); }, [moreOpen]);
   useEffect(() => { const close=(event:PointerEvent)=>{if(!nav.current?.contains(event.target as Node))setMoreOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[]);
+  useEffect(() => {
+    if (!mobileOpen) { setMoreOpen(false); return; }
+    const element = nav.current, header = element?.closest<HTMLElement>('.community-header');
+    if (!element || !header) return;
+    const toggle = header.querySelector<HTMLElement>('.mobile-menu-toggle');
+    const measure = () => {
+      if (window.matchMedia('(min-width:861px)').matches) { closeMobile.current?.(false); return; }
+      const viewport = window.visualViewport;
+      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight);
+      const top = header.getBoundingClientRect().bottom;
+      header.style.setProperty('--mobile-navigation-top', `${top}px`);
+      header.style.setProperty('--mobile-navigation-height', `${Math.max(0, bottom - top)}px`);
+    };
+    const dismissOutside = (event: Event) => {
+      if (event.target instanceof Node && !element.contains(event.target) && !toggle?.contains(event.target)) {
+        const backdrop = event.target instanceof Element && event.target.closest('.mobile-nav-backdrop');
+        closeMobile.current?.(Boolean(backdrop));
+      }
+    };
+    measure();
+    (element.querySelector<HTMLElement>('.nav-primary [aria-current]') ?? element.querySelector<HTMLElement>('.nav-primary button'))?.focus();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    window.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('scroll', measure);
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('focusin', dismissOutside);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('scroll', measure);
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('focusin', dismissOutside);
+      header.style.removeProperty('--mobile-navigation-top');
+      header.style.removeProperty('--mobile-navigation-height');
+    };
+  }, [mobileOpen]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const searchMatches = (Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''}`.toLocaleLowerCase().includes(normalizedQuery));
   const supplyMatches = guildLaunchpadEnabled && `${t('stores.supplyTitle')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalizedQuery);
   const supplySelected = /^#stores\/(?:supply$|[^/]+\/[^/]+\/supply(?:-orders)?(?:[/?]|$))/.test(currentHash);
   const item = (id: TabId, title: InterfaceMessage = `nav.${id}`, hash = `#${id}`) => {
-    const active = current === id && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
+    const active = (current === id || (id === 'profile' && current === 'my-content')) && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
     return <button key={hash} type="button" className={`nav-item${active ? ' is-active' : ''}`}
       aria-current={active ? 'page' : undefined} onClick={() => {setMoreOpen(false);setQuery('');onSelect(id, hash)}}>
       <WorkshopIcon name={id}/><span>{t(title)}</span>
     </button>;
   };
-  return <nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key!=='Escape'||!moreOpen)return;event.stopPropagation();if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;event.preventDefault();setMoreOpen(false);moreTrigger.current?.focus()}}>
-    <div className="nav-primary">{primary.filter(id => id !== 'my-content' || personalContentEnabled).map(id => item(id))}{communitySearchEnabled && item('community-search')}</div>
+  return <>{mobileOpen && <div className="mobile-nav-backdrop" aria-hidden="true"/>}<nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key!=='Escape'||!moreOpen)return;event.stopPropagation();if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;event.preventDefault();setMoreOpen(false);moreTrigger.current?.focus()}}>
+    <div className="nav-mobile-heading"><strong>{t('nav.main')}</strong><button type="button" className="btn btn-ghost btn-small" onClick={() => closeMobile.current?.(true)}>{t('nav.collapse')}</button></div>
+    <div className="nav-primary">{primary.map(id => item(id))}{communitySearchEnabled && item('community-search')}</div>
     <details className="nav-section nav-more" open={moreOpen}>
       <summary ref={moreTrigger} aria-expanded={moreOpen} onClick={event => { event.preventDefault(); setMoreOpen(value => !value); }}>{t('nav.more')}<span aria-hidden="true">⌄</span></summary>
       <div className="nav-more-content">
@@ -65,5 +107,5 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     </>}
       </div>
     </details>
-  </nav>;
+  </nav></>;
 }

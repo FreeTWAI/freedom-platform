@@ -72,7 +72,7 @@ test('two synthetic members exchange a private message and a friend notification
     await expectZero(r);
 
     // The GitHub task shows whatever the local server really reports; it is never started from here.
-    await settings(r).click();await r.getByRole('menuitem',{name:'待辦清單',exact:true}).click();await expect(r).toHaveURL(/#todos$/);
+    await settings(r).click();await r.getByRole('menuitem',{name:'入門指南',exact:true}).click();await expect(r).toHaveURL(/#todos$/);
     const task=r.locator('[data-task="github"]');
     await expect(task.getByRole('status')).toHaveText(/^(尚未啟用|待完成|已完成)$/);
     await noOverflow(r);await shot(r,'tasks-320');
@@ -105,7 +105,7 @@ test('two synthetic members exchange a private message and a friend notification
     await r.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await expect(settings(r).locator('.settings-dot')).toHaveCount(0);await expect(settings(r)).toHaveAccessibleName('設定');
     await settings(r).click();
-    const expectedSettings=['我的個人空間','我的內容','待辦清單','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
+    const expectedSettings=['我的個人空間','入門指南','資料與帳號設定','語言 / Language','外觀主題','加入主畫面','登出'];
     const menuItems=r.getByRole('menuitem');await expect(menuItems).toHaveCount(expectedSettings.length);
     for(const [index,name] of expectedSettings.entries())await expect(menuItems.nth(index)).toHaveAccessibleName(name);
     await noOverflow(r);await shot(r,'settings-320');
