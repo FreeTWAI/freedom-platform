@@ -60,6 +60,7 @@ const GitHubCallback = lazy(() => import('./modules/GitHubCallback').then(m => (
 const MemberMessages = lazy(() => import('./modules/MemberMessages').then(m => ({default: m.MemberMessages})))
 const PublicEventPage = lazy(() => import('./modules/PublicEventPage').then(m => ({default: m.PublicEventPage})))
 const WelcomePreview = lazy(() => import('./modules/WelcomePreview').then(m => ({default: m.WelcomePreview})))
+const TesterMap = lazy(() => import('./modules/TesterMap').then(m => ({default: m.TesterMap})))
 import { HostedOrderPage } from './features/commerce'
 
 const DEMO_ACCOUNTS = [
@@ -284,6 +285,7 @@ function MemberApp() {
   if (resetToken || phase !== 'ready' || !session) {
     if(!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
     if(!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
+    if(!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
     if(!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
     if(!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;

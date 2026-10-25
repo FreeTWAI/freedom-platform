@@ -83,6 +83,14 @@ export function RepositoryLibrary({ client, ids, excludeIds, access, title = '�
   </section>;
 }
 
+function CommunityTestWeek({ onOpen }: { onOpen: () => void }) {
+  const {t}=useLanguage();
+  return <section className="card stack community-test-week" aria-labelledby="community-test-week-title">
+    <h3 id="community-test-week-title">{t('community.testWeek')}</h3>
+    <p>{t('community.testWeekBody')}</p>
+    <div className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={onOpen}>{t('community.testerMap')}</button></div>
+  </section>;
+}
 export function CommunityPanel({ client, onNavigate }: { client: PortalClient; onNavigate: (id: TabId) => void }) {
   const [data, setData] = useState<CommunityCatalog | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0);
   useEffect(() => {
@@ -97,6 +105,7 @@ export function CommunityPanel({ client, onNavigate }: { client: PortalClient; o
       <BrandPoster compact/>
     </header>
     <CommunityLinks/>
+    <CommunityTestWeek onOpen={() => onNavigate('tester-map')}/>
     <section className="card stack community-project" aria-labelledby="community-erp-demo-title">
       <h3 id="community-erp-demo-title">ERP／CRM 產業範本試用</h3>
       <p>mars-tw 的 MIT 個人開源專案，提供零售、批發、服務、餐飲、製造、電商、專案及一般企業八種範本。每位訪客建立自己的模擬工作區，只使用測試幣與虛構商品。</p>
