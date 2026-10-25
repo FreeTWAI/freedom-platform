@@ -6,6 +6,17 @@ import {test,expect,type Page} from './fixtures.js';
 import {navigate,signOut} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 
+// A rejected departure intentionally leaves the mobile menu open. Dismiss it
+// visibly before returning to the unchanged form; do not bypass its leave guard.
+async function closeRejectedMobileNavigation(page:Page){
+  const close=page.getByRole('button',{name:'關閉選單',exact:true});
+  if(await close.isVisible()){
+    await close.click();
+    await expect(page.getByRole('navigation',{name:'主要工作區'})).toBeHidden();
+    await expect(page.getByRole('button',{name:'開啟選單',exact:true})).toBeFocused();
+  }
+}
+
 test.use({timezoneId:'America/New_York'});
 const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
   eventFixture:async({page,e2eAuthPool},use,info)=>{
@@ -287,6 +298,7 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   let prompts=0;page.on('dialog',async dialog=>{prompts++;await dialog.accept();});
   await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toBe(0);
   await expect(page.getByRole('status').filter({hasText:'尚未確認原操作的結果'})).toBeVisible();
+  await closeRejectedMobileNavigation(page);
   await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
   try{
     await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();await refreshReached;
@@ -397,6 +409,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
     await expect(editor.getByLabel('活動名稱',{exact:true})).toHaveValue(titles[1]+' 修改二');
     page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'我的內容');
     await expect(page).toHaveURL(new RegExp(`/events/${id}$`));
+    await closeRejectedMobileNavigation(page);
     await editor.getByRole('button',{name:'重試保存',exact:true}).click();
     rejectVideo=false;await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
     await expect(editor).toHaveCount(0);

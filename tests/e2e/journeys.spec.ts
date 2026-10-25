@@ -6,8 +6,8 @@ async function login(page:Page,email:string) {
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
-  await navigate(page, '我的工作');
-  await expect(page.getByRole('heading',{name:'我的工作',exact:true})).toBeVisible();
+  await navigate(page, '任務協作');
+  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
 }
 async function switchAccount(page:Page,email:string) {await signOut(page);await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await login(page,email);}
 const artifactLabel='成果引用（例如 artifact:template-v1）';
@@ -18,8 +18,8 @@ test('localhost alias permits browser login and logout',async({page,baseURL})=>{
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
-  await navigate(page, '我的工作');
-  await expect(page.getByRole('heading',{name:'我的工作',exact:true})).toBeVisible();
+  await navigate(page, '任務協作');
+  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
   await signOut(page);
   await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
 });
@@ -53,7 +53,7 @@ test('member completes work, reviewer accepts it, result survives reload and log
 });
 
 test('showcase and opportunity become a bilateral cooperation and attributed receipt report',async({page})=>{
-  await login(page,'maker@local.test');await navigate(page, '作品與需求');
+  await login(page,'maker@local.test');await navigate(page, '作品與合作');
   await page.getByLabel('作品標題',{exact:true}).fill('瀏覽器驗證的週報模板');
   await page.getByLabel('一句話介紹',{exact:true}).fill('用合成資料產生可重用週報。');
   await page.getByText('連接既有成果紀錄（進階選填）',{exact:true}).click();
@@ -61,14 +61,14 @@ test('showcase and opportunity become a bilateral cooperation and attributed rec
   await page.getByLabel('我同意以社群可見方式分享這件作品').check();
   await page.getByRole('button',{name:'發布作品',exact:true}).click();
   await expect(page.getByRole('heading',{name:'瀏覽器驗證的週報模板',exact:true})).toBeVisible();
-  await switchAccount(page,'client@local.test');await navigate(page, '作品與需求');
+  await switchAccount(page,'client@local.test');await navigate(page, '作品與合作');
   const showcase=page.locator('article.card').filter({has:page.getByRole('heading',{name:'瀏覽器驗證的週報模板',exact:true})});
   await expect(showcase).toHaveCount(1);
   await showcase.getByRole('button',{name:'我想找你合作',exact:true}).click();
   await page.getByLabel('你的需求',{exact:true}).fill('希望調整三個週報欄位。');
   await page.getByRole('button',{name:'送出合作需求',exact:true}).click();
   await expect(page.getByText('希望調整三個週報欄位。',{exact:true})).toBeVisible();
-  await switchAccount(page,'maker@local.test');await navigate(page, '作品與需求');
+  await switchAccount(page,'maker@local.test');await navigate(page, '作品與合作');
   await page.getByRole('button',{name:'提出合作',exact:true}).click();
   await page.getByLabel('合作範圍',{exact:true}).fill('調整三個欄位並提供使用說明');
   await page.getByLabel('完成條件',{exact:true}).fill('合成範例產出正確週報');
@@ -102,7 +102,7 @@ test('phone viewport, wrong password, logout, and unavailable API remain honest'
   await page.setViewportSize({width:390,height:844});await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('wrong');
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('alert')).toContainText('帳號或密碼不正確');
-  await login(page,'maker@local.test');await navigate(page, '作品與需求');
+  await login(page,'maker@local.test');await navigate(page, '作品與合作');
   const size=await page.evaluate(()=>({w:window.innerWidth,scroll:document.documentElement.scrollWidth}));expect(size.scroll).toBeLessThanOrEqual(size.w);
   await page.screenshot({path:'test-results/workspace-mobile.png',fullPage:true});
   await page.route('**/api/v1/engagements',r=>r.abort());await navigate(page, '合作紀錄');
