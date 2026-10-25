@@ -113,7 +113,7 @@ test('real rich text preserves escaped text, mentions, hashtags and newlines wit
  for(const attribute of ['target="_blank"','rel="noopener noreferrer"','referrerPolicy="no-referrer"','在新分頁開啟'])assert(html.includes(attribute),attribute);
  assert(!html.includes('<img'));assert(html.includes('&lt;img src=x onerror=alert(1)&gt;\n'));
  assert(html.includes('>@Alice Smith</button>'));assert(html.includes('>#離譜日常</button>'));
- assert(html.includes('）。\n'));assert(html.includes(url.replace('&','&amp;')+'&amp;seed=7'));
+ assert(html.includes('）。\n'));assert(html.includes(url.replaceAll('&','&amp;')+'&amp;seed=7'));
  const server=render(url);assert(!server.includes('<a '));assert.equal(render(url),server,'server render is deterministic without window');
 });
 
@@ -121,6 +121,6 @@ test('real rich text preserves escaped text, mentions, hashtags and newlines wit
 test('URL-shaped text inside an existing multi-word mention remains one member link',async()=>{
  const {render}=await gameTextHarness(),origin='https://freetwai.com',url=origin+'/play?game=cash&seed=1',name='A '+url;
  const html=render('@'+name+'\n'+url,origin,[{user_id:'synthetic-member',display_name:name}]);
- assert(html.includes('>@A '+url.replace('&','&amp;')+'</button>'));
+ assert(html.includes('>@A '+url.replaceAll('&','&amp;')+'</button>'));
  assert.equal((html.match(/<a /g)??[]).length,1,'only the standalone challenge is linked');
 });
