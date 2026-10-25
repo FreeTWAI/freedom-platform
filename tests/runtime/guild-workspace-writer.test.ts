@@ -202,7 +202,7 @@ function councilReadHarness(){
  return {reads,render,html:()=>renderToStaticMarkup(render()),
   reload:()=>button('重讀討論').props.onClick(),
   open:()=>button('新增討論').props.onClick(),
-  select:()=>nodes(render()).find(n=>n.type==='button'&&String(n.props.className).includes('guild-thread-select')).props.onClick(),
+  select:(id?:string)=>nodes(render()).find(n=>n.type==='button'&&String(n.props.className).includes('guild-thread-select')&&(!id||n.key===id)).props.onClick(),
   draft:()=>{for(const node of nodes(render()).filter(n=>n.type==='input'||n.type==='textarea'))node.props.onChange({target:{value:node.type==='input'?'Retained council title':'Retained council body'}});},
   fields:()=>nodes(render()).filter(n=>n.type==='input'||n.type==='textarea').map(n=>({value:n.props.value,disabled:n.props.disabled})),
   submit:()=>nodes(render()).find(n=>n.type==='form').props.onSubmit({preventDefault(){}}),
@@ -240,4 +240,29 @@ test('obsolete council list failure cannot overwrite a newer success',async()=>{
  const h=councilReadHarness();h.render();h.reload();h.reads[1].resolve({items:[storedThread]});await settleCouncil();
  h.reads[0].reject(new Error('obsolete council error'));await settleCouncil();
  assert.match(h.html(),/Previously loaded discussion/);assert.doesNotMatch(h.html(),/obsolete council error|目前沒有討論/);
+});
+
+test('council detail failure and recovery preserve the unknown reply error and original frozen draft',async()=>{
+ const h=councilReadHarness();h.render();h.reads[0].resolve({items:[storedThread]});await settleCouncil();
+ h.select();h.render();h.reads[1].resolve(storedThread);await settleCouncil();h.draft();h.submit();await settleCouncil();
+ const original=h.fields();h.reload();h.reads[2].resolve({items:[storedThread]});h.reads[3].reject(new Error('detail failed'));await settleCouncil();
+ assert.match(h.html(),/detail failed/);assert.match(h.html(),/unknown council write/);assert.match(h.html(),/上次送出的結果尚未確認/);
+ h.reload();h.reads[4].resolve({items:[storedThread]});h.reads[5].resolve(storedThread);await settleCouncil();
+ assert.doesNotMatch(h.html(),/detail failed/);assert.match(h.html(),/unknown council write/);assert.deepEqual(h.fields(),original);assert.ok(h.fields().every(f=>f.disabled));
+});
+for(const obsolete of ['success','failure'] as const)test(`council changing thread clears its old detail error and ignores an obsolete ${obsolete}`,async()=>{
+ const h=councilReadHarness(),other={...storedThread,thread_id:'new-thread',title:'New selected detail'};h.render();h.reads[0].resolve({items:[storedThread,other]});await settleCouncil();
+ h.select(storedThread.thread_id);h.render();h.reads[1].reject(new Error('previous detail failed'));await settleCouncil();assert.match(h.html(),/previous detail failed/);
+ h.reload();h.reads[2].resolve({items:[storedThread,other]});await settleCouncil();h.select(other.thread_id);h.render();
+ assert.doesNotMatch(h.html(),/previous detail failed/);h.reads[4].resolve(other);await settleCouncil();
+ if(obsolete==='success')h.reads[3].resolve(storedThread);else h.reads[3].reject(new Error('obsolete detail error'));await settleCouncil();
+ assert.match(h.html(),/<h4>New selected detail<\/h4>/);assert.doesNotMatch(h.html(),/previous detail failed|obsolete detail error/);
+});
+for(const obsolete of ['success','failure'] as const)test(`council old client detail ${obsolete} cannot replace the current error or mark it loaded`,async()=>{
+ const h=councilReadHarness();h.render();h.reads[0].resolve({items:[storedThread]});await settleCouncil();h.select();h.render();
+ h.replaceClient();h.reads[2].resolve({items:[storedThread]});h.reads[3].reject(new Error('current detail failed'));await settleCouncil();
+ if(obsolete==='success')h.reads[1].resolve(storedThread);else h.reads[1].reject(new Error('obsolete client detail error'));await settleCouncil();
+ assert.match(h.html(),/current detail failed/);assert.doesNotMatch(h.html(),/<h4>Previously loaded discussion<\/h4>|obsolete client detail error/);
+ h.reload();h.reads[4].resolve({items:[storedThread]});h.reads[5].resolve(storedThread);await settleCouncil();
+ assert.doesNotMatch(h.html(),/current detail failed/);assert.match(h.html(),/<h4>Previously loaded discussion<\/h4>/);
 });

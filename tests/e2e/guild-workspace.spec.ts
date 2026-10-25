@@ -410,3 +410,26 @@ for(const mode of ['create','reply'] as const)test(`council list refresh recover
   await submit.click();await expect(council.getByRole('status')).toContainText(mode==='create'?'討論已建立':'回覆已發布');
   expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
 });
+
+test('council detail recovery clears its read error without losing an unknown reply or its original retry',async({page})=>{
+  const thread={thread_id:'detail-recovery',title:'詳情重讀測試',body:'合成議題',author_name:'測試會長',created_at:'2026-10-25T10:00:00Z',replies:[] as {reply_id:string;body:string;author_name:string;created_at:string}[]};
+  let detailReads=0;const writes:{body:unknown;key:string|undefined}[]=[];
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{managed_guilds:[],managed_books:[],can_discuss:true}}));
+  await page.route('**/api/v1/guild-council/threads',route=>route.fulfill({json:{items:[thread]}}));
+  await page.route('**/api/v1/guild-council/threads/detail-recovery',route=>{detailReads++;return detailReads===2?route.fulfill({status:503,json:{detail:'討論詳情暫時無法讀取。'}}):route.fulfill({json:thread});});
+  await page.route('**/api/v1/guild-council/threads/detail-recovery/replies',route=>{
+    writes.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
+    if(writes.length===1){thread.replies.push({reply_id:'once',body:'未確認的原回覆',author_name:'測試會長',created_at:thread.created_at});return route.fulfill({status:503,json:{detail:'回覆結果尚未確認。'}});}
+    return route.fulfill({json:thread});
+  });
+  await login(page);await navigate(page,'公會管理');const council=page.locator('.guild-council');await council.getByRole('button',{name:/詳情重讀測試/}).click();
+  const reply=council.getByLabel('回覆討論',{exact:true});await reply.fill('未確認的原回覆');await council.getByRole('button',{name:'發布回覆',exact:true}).click();
+  await expect(council.getByRole('alert')).toBeVisible();const writeError=await council.getByRole('alert').innerText();await expect(reply).toBeDisabled();
+  await council.getByRole('button',{name:'重讀討論',exact:true}).click();await expect(council.getByRole('alert')).toHaveCount(2);
+  expect(await council.getByRole('alert').allTextContents()).toContain(writeError);await expect(council.getByText('內容暫時無法載入，請重讀討論。',{exact:true})).toBeVisible();
+  await expect(council.getByText('上次送出的結果尚未確認。請用原內容重試，確認前不能收合、切換討論或另開新討論。',{exact:true})).toBeVisible();
+  await council.getByRole('button',{name:'重讀討論',exact:true}).click();await expect(reply).toHaveValue('未確認的原回覆');await expect(reply).toBeDisabled();
+  await expect(council.getByRole('alert')).toHaveCount(1);await expect(council.getByRole('alert')).toHaveText(writeError);expect(writes).toHaveLength(1);
+  await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('status')).toContainText('回覆已發布');await expect(reply).toBeEnabled();await expect(reply).toHaveValue('');
+  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);await expect(council.locator('.guild-council-reply')).toHaveCount(1);
+});

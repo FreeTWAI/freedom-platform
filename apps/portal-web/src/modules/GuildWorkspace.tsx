@@ -113,7 +113,7 @@ function SkillBookEditor({api,books,locked,onGuildRequired,recovery,book,onBookC
 function Council({api}:{api:ReaderWriter}){
   const labelId=useId();
   const [creating,setCreating]=useState(false),[unconfirmed,setUnconfirmed]=useState(false),[items,setItems]=useState<CouncilThread[]|null>(null),[selected,setSelected]=useState<string|null>(null),[current,setCurrent]=useState<CouncilThread|null>(null),[detailLoading,setDetailLoading]=useState(false),[title,setTitle]=useState(''),[body,setBody]=useState(''),[reply,setReply]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),lock=useRef(false),generation=useRef(0),detailGeneration=useRef(0);
-  const [readError,setReadError]=useState('');
+  const [readError,setReadError]=useState(''),[detailReadError,setDetailReadError]=useState('');
   const titleInput=useRef<HTMLInputElement>(null),createButton=useRef<HTMLButtonElement>(null),returnFocus=useRef(false);
   useEffect(()=>{if(creating)titleInput.current?.focus();},[creating]);
   useEffect(()=>{if(!creating&&!busy&&returnFocus.current){returnFocus.current=false;createButton.current?.focus();}},[creating,busy]);
@@ -121,13 +121,14 @@ function Council({api}:{api:ReaderWriter}){
   function closeComposer(){if(lock.current||unconfirmed)return;returnFocus.current=true;setCreating(false);}
   const load=useCallback(async()=>{const sequence=++generation.current;setLoading(true);setReadError('');try{const data=await api.get<{items:CouncilThread[]}>('/guild-council/threads');if(sequence===generation.current){setItems(data.items);setReadError('');}}catch(cause){if(sequence===generation.current)setReadError(failure(cause));}finally{if(sequence===generation.current)setLoading(false);}},[api]);
   useEffect(()=>{setItems(null);setReadError('');void load();return()=>{generation.current++;};},[load]);
-  const loadDetail=useCallback(async(id:string)=>{const sequence=++detailGeneration.current;setDetailLoading(true);setCurrent(null);try{const data=await api.get<CouncilThread>(`/guild-council/threads/${encodeURIComponent(id)}`);if(sequence===detailGeneration.current)setCurrent(data);}catch(cause){if(sequence===detailGeneration.current)setError(failure(cause));}finally{if(sequence===detailGeneration.current)setDetailLoading(false);}},[api]);
-  useEffect(()=>{setError('');setCurrent(null);if(selected)void loadDetail(selected);return()=>{detailGeneration.current++;};},[selected,loadDetail]);
+  const loadDetail=useCallback(async(id:string)=>{const sequence=++detailGeneration.current;setDetailLoading(true);setCurrent(null);setDetailReadError('');try{const data=await api.get<CouncilThread>(`/guild-council/threads/${encodeURIComponent(id)}`);if(sequence===detailGeneration.current){setCurrent(data);setDetailReadError('');}}catch(cause){if(sequence===detailGeneration.current)setDetailReadError(failure(cause));}finally{if(sequence===detailGeneration.current)setDetailLoading(false);}},[api]);
+  useEffect(()=>{setError('');setDetailReadError('');setCurrent(null);if(selected)void loadDetail(selected);return()=>{detailGeneration.current++;};},[selected,loadDetail]);
   async function submit(event:FormEvent,isReply:boolean){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await api.post(isReply?`/guild-council/threads/${encodeURIComponent(selected!)}/replies`:'/guild-council/threads',isReply?{body:reply}:{title,body});if(isReply){setReply('');await loadDetail(selected!);}else{setTitle('');setBody('');returnFocus.current=true;setCreating(false);}setUnconfirmed(false);await load();setNotice(isReply?'回覆已發布。':'討論已建立。');}catch(cause){const status=(cause as {status?:unknown}|null)?.status;setUnconfirmed(previous=>previous||!(typeof status==='number'&&status>=400&&status<500));setError(failure(cause));}finally{lock.current=false;setBusy(false);}}
   const frozen=busy||unconfirmed,hasDraft=Boolean(title||body);
   return <section className="stack guild-council">
     <header><h3>公會長議事區</h3><p className="field-hint">僅正式公會長與平台管理員可見。</p></header>
     {readError&&<div role="alert" className="banner banner-error"><p>{readError}</p>{items!==null&&<p>目前顯示上次成功讀取的討論列表，請重讀討論。</p>}</div>}
+    {detailReadError&&<p role="alert" className="banner banner-error">{detailReadError}</p>}
     {error&&<p role="alert" className="banner banner-error">{error}</p>}
     {unconfirmed&&<p className="field-hint">上次送出的結果尚未確認。請用原內容重試，確認前不能收合、切換討論或另開新討論。</p>}
     {notice&&<p role="status" className="banner status-note">{notice}</p>}
