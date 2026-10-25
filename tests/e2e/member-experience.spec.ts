@@ -99,7 +99,11 @@ test('completed member submits an event and sees accepted-work facts without pro
   await page.locator('.page-tools-menu > summary').click();
   await expect(page.locator('.game-console')).toHaveCount(0);
   await expect(page.locator('.development-context')).toHaveCount(0);
-  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('.floating-messages')!).backgroundColor)).toBe('rgb(255, 255, 255)');
+  const launcher=page.locator('.floating-messages');await launcher.blur();await page.mouse.move(1,1);
+  const launcherStyle=await launcher.evaluate(node=>({background:getComputedStyle(node).backgroundColor,opacity:getComputedStyle(node).opacity,color:getComputedStyle(node).color,supported:CSS.supports('background','color-mix(in srgb,white 75%,transparent)')}));
+  expect(launcherStyle.background).toBe(launcherStyle.supported?'color(srgb 1 1 1 / 0.75)':'rgb(255, 255, 255)');
+  expect(launcherStyle.opacity).toBe('1');expect(launcherStyle.color).toBe('rgb(28, 38, 54)');
+  await launcher.focus();expect(await launcher.evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(255, 255, 255)');await launcher.blur();
   await page.screenshot({path:'test-results/member-home-light.png',fullPage:true});
   await navigate(page,'社群活動');
   await expect(page.getByRole('heading',{name:'社群活動',level:1})).toBeVisible();

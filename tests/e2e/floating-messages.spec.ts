@@ -31,7 +31,7 @@ test('chat size controls preserve drafts and fit resized desktop and mobile view
   expect((await panel.boundingBox())!.width).toBe(800);expect((await panel.boundingBox())!.height).toBe(700);
   await width.focus();await width.press('ArrowLeft');await expect(width).toHaveValue('780');
   await expect(draft).toHaveValue('調整聊天室大小仍保留的草稿');
-  await bubble.click();await bubble.click();expect((await panel.boundingBox())!.width).toBe(780);
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await bubble.click();expect((await panel.boundingBox())!.width).toBe(780);
   await page.setViewportSize({width:768,height:650});
   const box=(await panel.boundingBox())!;expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(768);expect(box.y).toBeGreaterThanOrEqual(0);
   await page.setViewportSize({width:390,height:844});await expect(width).toBeHidden();await expect(height).toBeHidden();
@@ -61,10 +61,10 @@ test('chat launcher counts chat sources only, does not open history or mark anyt
   await login(page);const launcher=page.locator('.floating-messages');await expect(launcher).toHaveAccessibleName('開啟聊天室，10 則未讀');expect([...counted].sort()).toEqual(['direct','guild','squad','world']);expect(history).toBe(0);expect(writes).toBe(0);
   unread=0;await page.evaluate(()=>window.dispatchEvent(new Event('freedom-inbox-updated')));await expect(launcher).toHaveAccessibleName('開啟聊天室');await expect(launcher.locator('.floating-messages-badge')).toHaveCount(0);
   fail=true;await page.evaluate(()=>window.dispatchEvent(new Event('freedom-inbox-updated')));await expect(launcher).toHaveAccessibleName('開啟聊天室，未讀數尚未確認');await expect(launcher.locator('.floating-messages-badge')).toHaveText('?');expect(writes).toBe(0);expect(history).toBe(0);
-  await launcher.click();await expect(page.locator('.messages-categories')).toBeVisible();await expect(launcher).toBeVisible();await expect(launcher).toHaveAttribute('aria-expanded','true');await expect(page.locator('.game-console')).toHaveCount(0);
+  await launcher.click();await expect(page.locator('.messages-categories')).toBeVisible();await expect(launcher).toBeHidden();await expect(launcher).toHaveAttribute('aria-expanded','true');await expect(page.locator('.game-console')).toHaveCount(0);
 });
 
-test('one bubble toggles the persistent inbox across pages and themes at phone, tablet and desktop widths',async({page})=>{
+test('launcher and panel close preserve the persistent inbox across pages and themes at phone, tablet and desktop widths',async({page})=>{
   await login(page);const homeUrl=page.url(),bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
   for(const [name,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
     await page.getByRole('button',{name:'設定',exact:true}).click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);
@@ -78,7 +78,8 @@ test('one bubble toggles the persistent inbox across pages and themes at phone, 
         const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),control=(await close.boundingBox())!;
         expect(control.width).toBeGreaterThanOrEqual(44);expect(control.height).toBeGreaterThanOrEqual(44);await expect(close).toBeInViewport();
       }else{
-        const box=(await bubble.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);expect(inbox.y+inbox.height).toBeLessThanOrEqual(box.y);
+        await expect(bubble).toBeHidden();
+        const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),box=(await close.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);await expect(close).toBeInViewport();
         await expect(page.locator('.shell')).toHaveJSProperty('inert',false);
       }
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -89,7 +90,7 @@ test('one bubble toggles the persistent inbox across pages and themes at phone, 
   }
   await page.setViewportSize({width:1440,height:900});await bubble.click();
   await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
-  const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('跨頁與收合後保留的草稿');await bubble.click();await expect(panel).toBeHidden();
+  const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('跨頁與收合後保留的草稿');await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();
   await page.getByRole('button',{name:'技能書架',exact:true}).click();await bubble.click();await expect(draft).toHaveValue('跨頁與收合後保留的草稿');
   await page.setViewportSize({width:390,height:844});await expect(bubble).toBeHidden();await expect(draft).toBeVisible();await page.screenshot({path:'test-results/unified-messages-draft-phone.png'});
   await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();await expect(bubble).toBeFocused();await expect(page.locator('.community-header')).toBeVisible();
@@ -134,10 +135,10 @@ test('closed history stays idle and legacy inbox/popout links open the same pane
   const acknowledged=await initialRead;expect(acknowledged.status()).toBe(200);
   expect(acknowledged.request().postDataJSON()).toEqual({through_message_id:message.message_id});
   await expect(panel.getByText('正在同步已讀…',{exact:true})).toBeHidden();
-  await bubble.click();await expect(panel).toBeHidden();const before={history,reads};
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();const before={history,reads};
   await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));});
   await page.waitForTimeout(1300);expect({history,reads}).toEqual(before);
-  await page.goto('/#messages');await expect(panel).toBeVisible();await expect(bubble).toBeVisible();await expect(page.locator('.member-messages')).toHaveCount(1);
+  await page.goto('/#messages');await expect(panel).toBeVisible();await expect(bubble).toBeHidden();await expect(page.locator('.member-messages')).toHaveCount(1);
   await page.goto('/?game-console=popout&scope=legacy-fixture');await expect(panel).toBeVisible();await expect(page).toHaveURL(/\/#messages$/);await expect(page.locator('.game-console')).toHaveCount(0);
 });
 
@@ -149,7 +150,7 @@ for(const kind of ['world','direct'] as const)test(`a delayed ${kind} read ackno
     if(kind==='world')await panel.getByRole('tab',{name:/世界聊天/}).click();
     else await panel.getByRole('list',{name:'對話列表'}).getByRole('button',{name:/合成已讀夥伴/}).click();
     await expect.poll(()=>fixture.counts().reads).toBe(1);
-    await bubble.click();await expect(panel).toBeHidden();const before=fixture.counts();
+    await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();const before=fixture.counts();
     fixture.release();await fixture.ack;
     await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));});
     await page.waitForTimeout(1300);expect(fixture.counts()).toEqual(before);
@@ -378,18 +379,17 @@ test('75 percent launcher background retains text contrast over arbitrary underl
 });
 
 
-test('desktop dragged launcher docks outside the open panel and restores its saved position on close',async({page})=>{
+test('desktop dragged launcher stays hidden while the panel is open and restores its saved position on close',async({page})=>{
   await page.setViewportSize({width:1440,height:900});await login(page);
   const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
-  await bubble.click();const originalPanel=(await panel.boundingBox())!;await bubble.click();
+  await bubble.click();const originalPanel=(await panel.boundingBox())!;await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();
   const initial=(await bubble.boundingBox())!;
   await page.mouse.move(initial.x+30,initial.y+30);await page.mouse.down();
   await page.mouse.move(1400,originalPanel.y+30,{steps:10});await page.mouse.up();
   const saved=(await bubble.boundingBox())!,preference=await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY);
   expect(saved.y).toBeLessThan(originalPanel.y+originalPanel.height);expect(saved.y+saved.height).toBeGreaterThan(originalPanel.y);
   await bubble.click();await expect(panel).toBeVisible();
-  const docked=(await bubble.boundingBox())!,opened=(await panel.boundingBox())!;
-  expect(docked.y).toBeGreaterThanOrEqual(opened.y+opened.height);
+  await expect(bubble).toBeHidden();
   const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),search=panel.getByLabel('搜尋會員',{exact:true});
   for(const control of [close,search])expect(await control.evaluate(node=>{
     const box=node.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===node||node.contains(hit);
@@ -398,15 +398,36 @@ test('desktop dragged launcher docks outside the open panel and restores its sav
   await close.click();await expect(panel).toBeHidden();await expect(bubble).toBeFocused();
   expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
   expect((await bubble.boundingBox())!.y).toBe(saved.y);
-  await bubble.click();await bubble.click();await expect(panel).toBeHidden();expect((await bubble.boundingBox())!.y).toBe(saved.y);
+  await bubble.click();await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();expect((await bubble.boundingBox())!.y).toBe(saved.y);
   for(const viewport of [{width:1440,height:360},{width:780,height:400}]){
     await page.setViewportSize(viewport);const before=(await bubble.boundingBox())!;
     await bubble.focus();await bubble.press('Enter');await expect(panel).toBeVisible();
-    const launcher=(await bubble.boundingBox())!,box=(await panel.boundingBox())!;
-    expect(launcher.y).toBeGreaterThanOrEqual(box.y+box.height);
+    await expect(bubble).toBeHidden();
     expect(await close.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
     await close.focus();await close.press('Enter');await expect(bubble).toBeFocused();
     expect((await bubble.boundingBox())!.y).toBe(before.y);
     expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
   }
+});
+
+test('desktop layout with a reduced visual viewport hides launcher and keeps panel close operable',async({page})=>{
+  await page.setViewportSize({width:1024,height:768});
+  await page.addInitScript(()=>{
+    const viewport=Object.assign(new EventTarget(),{width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0,scale:1});
+    Object.defineProperty(window,'visualViewport',{configurable:true,value:viewport});
+  });
+  await login(page);const bubble=page.locator('.floating-messages'),panel=page.locator('.floating-message-panel');
+  const initial=(await bubble.boundingBox())!;
+  await page.mouse.move(initial.x+30,initial.y+30);await page.mouse.down();await page.mouse.move(980,280,{steps:10});await page.mouse.up();
+  const preference=await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY);
+  await page.evaluate(()=>{Object.assign(window.visualViewport!,{width:1024,height:400,offsetTop:0});window.visualViewport!.dispatchEvent(new Event('resize'));});
+  await expect.poll(async()=>(await bubble.boundingBox())!.y).toBeLessThan(340);
+  const before=(await bubble.boundingBox())!;await bubble.click();await expect(panel).toBeVisible();await expect(bubble).toBeHidden();
+  expect(await page.evaluate(()=>({layoutWidth:innerWidth,layoutHeight:innerHeight,visualHeight:visualViewport!.height}))).toEqual({layoutWidth:1024,layoutHeight:768,visualHeight:400});
+  const close=panel.getByRole('button',{name:'收合聊天室',exact:true});
+  expect(await close.evaluate(node=>{const r=node.getBoundingClientRect();return r.y>=0&&r.bottom<=visualViewport!.height&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+  await close.click();await expect(bubble).toBeFocused();expect((await bubble.boundingBox())!.y).toBe(before.y);
+  expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
+  await bubble.press('Enter');await expect(bubble).toBeHidden();await page.keyboard.press('Escape');await expect(panel).toBeHidden();await expect(bubble).toBeFocused();
+  expect(await page.evaluate(key=>localStorage.getItem(key),LAUNCHER_PLACEMENT_KEY)).toBe(preference);
 });

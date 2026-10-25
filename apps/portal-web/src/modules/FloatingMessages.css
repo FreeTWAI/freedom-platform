@@ -46,7 +46,6 @@
   html .floating-message-panel .messages-thread[data-chat-open=true]>.chat-header{padding-top:10px}
   html .floating-message-panel .messages-thread[data-chat-open=true] .chat-search-trigger,
   html .floating-message-panel .messages-thread[data-chat-open=true] .messages-refresh{top:10px}
-  .floating-messages[aria-expanded=true]{display:none}
 }
 
 @media(max-width:760px){.floating-messages{top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 76px - var(--app-safe-bottom,0px));bottom:auto}}
@@ -92,3 +91,7 @@
   .floating-messages:focus-visible{outline-color:Highlight}
   .floating-messages-badge{background:Highlight;color:HighlightText;border-color:Canvas}
 }
+
+/* An open panel owns its close control. Hide the external launcher at every
+   width so visual/layout viewport differences cannot overlay panel controls. */
+.floating-messages[aria-expanded=true]{display:none}

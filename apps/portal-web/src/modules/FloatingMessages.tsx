@@ -39,9 +39,7 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
     window.addEventListener('resize',update);viewport?.addEventListener('resize',update);viewport?.addEventListener('scroll',update);
     return()=>{insets.disconnect();window.removeEventListener('resize',update);viewport?.removeEventListener('resize',update);viewport?.removeEventListener('scroll',update);};
   },[mobile,open]);
-  // The open desktop panel reserves the original bottom-right dock. Never let
-  // a saved mid-screen position cover its controls; closing restores the preference.
-  const point=bounds?(open?launcherPoint(DEFAULT_LAUNCHER_PLACEMENT,bounds):(moving??launcherPoint(placement,bounds))):null;
+  const point=bounds?(moving??launcherPoint(placement,bounds)):null;
   const finishDrag=(event:PointerEvent<HTMLButtonElement>)=>{
     const current=drag.current;if(!current||current.id!==event.pointerId)return;
     if(current.moved&&bounds){
@@ -67,7 +65,7 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
   },[mobile,open]);
   useEffect(()=>{
     if(open&&!wasOpen.current)heading.current?.focus({preventScroll:true});
-    // On phones the launcher becomes focusable only after the close render.
+    // The launcher becomes focusable only after the close render.
     if(!open&&wasOpen.current)trigger.current?.focus({preventScroll:true});
     wasOpen.current=open;
   },[open]);
