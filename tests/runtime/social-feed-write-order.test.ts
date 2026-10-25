@@ -220,3 +220,18 @@ test('thumbnail confirmation invalidates an older list read with one same-query 
   await h.c.thumb(h.initial,{type:'image/png'});h.requests[0].resolve(page([h.initial]));await tick();assert.equal(h.requests.length,2);assert.equal(h.requests[1].path,h.requests[0].path);
   h.requests[1].resolve(page([{...h.initial,thumbnail_url:'/api/v1/social-posts/p/thumbnail'}]));await read;assert.equal(h.state.loading,false);
 });
+
+function deletionForwarder(){
+  const fixture=readFileSync(new URL('../e2e/social-feed.spec.ts',import.meta.url),'utf8'),start=fixture.indexOf('async function forwardSocialDeletion('),end=fixture.indexOf('\n}\n',start)+2;assert.ok(start>=0&&end>start);
+  const context:any={};runInNewContext(transformSync(`${fixture.slice(start,end)};globalThis.forward=forwardSocialDeletion`,{loader:'ts',format:'cjs'}).code,context);return context.forward;
+}
+test('held-publication deletion receipt reads the original server body before forwarding once',async()=>{
+  const events:string[]=[],body={post_id:'p',state:'deleted'},response={status:()=>200,json:async()=>{events.push('body');return body;}},route={fetch:async()=>{events.push('fetch');return response;},fulfill:async(value:any)=>{events.push('fulfill');assert.equal(value.response,response);}};
+  const receipt=await deletionForwarder()(route);assert.equal(receipt.status,200);assert.equal(receipt.body,body);assert.deepEqual(events,['fetch','body','fulfill']);
+});
+test('deletion forwarder never invents a successful receipt after body failure',async()=>{
+  let fulfilled=false;await assert.rejects(()=>deletionForwarder()({fetch:async()=>({status:()=>200,json:async()=>{throw Error('body unavailable');}}),fulfill:async()=>{fulfilled=true;}}),/body unavailable/);assert.equal(fulfilled,false);
+});
+test('deletion forwarder preserves a server rejection for the original status assertion',async()=>{
+  const body={code:'not_found'},receipt=await deletionForwarder()({fetch:async()=>({status:()=>404,json:async()=>body}),fulfill:async()=>{}});assert.equal(receipt.status,404);assert.equal(receipt.body,body);
+});
