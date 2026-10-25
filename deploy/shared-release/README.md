@@ -50,7 +50,7 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
 | Secret | `MIGRATION_DATABASE_URL` | 此環境的專用 migration role，保留現有角色、目標與 TLS 核對 |
 | Secret | `RUNTIME_DATABASE_URL` | 此環境既有 app role，migration 後用獨立唯讀交易確認實際登入與讀取權限 |
-| Secret | `BACKUP_DATABASE_URL` | 此環境的專用 snapshot／備份 role，包含既有 maintenance pin 所需權限 |
+| Secret | `BACKUP_DATABASE_URL` | 此環境的 SELECT-only snapshot／備份 role；policy／capture pin 寫入使用既有 migrator 連線，不擴充 backup role 權限 |
 | Secret（僅 staging） | `CF_ACCESS_CLIENT_ID`／`CF_ACCESS_CLIENT_SECRET` | 既有 staging Access 應用准許的團隊 service token，僅傳送到固定 staging health origin |
 
 不要把個人 token 或含憑證的 JSON 放進 workflow inputs、repo 或公開 artifacts。

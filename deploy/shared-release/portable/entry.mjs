@@ -79,6 +79,7 @@ export async function main(args = process.argv.slice(2)) {
       database: config.database.name, schema: 'public', sourceRelease: sourceSha, operatorSource: request.controllerSha,
       setId: randomUUID(), createdAt: new Date().toISOString(), runDirectory: workRoot, signal: lease.signal };
     const value = await runPortableBackup({ context, workRoot, pool: pools.backup, role: connections.backup.role,
+      maintenancePool: pools.migrator, maintenanceRole: connections.migrator.role,
       runtimeRole: connections.runtime.role, lease, transport, connection: connections.backup.env, binDirectory: BIN,
       expected: { sourceSha, bindingsSha256: state.bindingsSha256, ledgerSha256: migrationLedgerDigest(state.schemaLedger),
         materialPolicySha256: state.materialPolicySha256, schemaVersion: state.schemaVersion },

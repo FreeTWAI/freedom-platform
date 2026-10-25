@@ -47,7 +47,7 @@ export async function observeBackupControl(pool) {
 /** A complete daily capture/seal/readback/isolated-restore adapter, under a lease
  * acquired by the enclosing release. It does not release that lease between
  * backup-before and migration. It retains private dumps/archives and all pins. */
-export async function runPortableBackup({ context, workRoot, pool, role, runtimeRole, lease, transport,
+export async function runPortableBackup({ context, workRoot, pool, role, maintenancePool, maintenanceRole, runtimeRole, lease, transport,
   expected, connection, binDirectory, retainIntent, verifyRetainedFloor, execute = runPostgresProcess }) {
   check(context?.schema === 'public' && context.gcSafety === undefined
     && context.signal === lease?.signal && isSha(context.sourceRelease)
@@ -57,6 +57,9 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
     && isDigest(expected.ledgerSha256) && isDigest(expected.materialPolicySha256)
     && Number.isSafeInteger(expected.schemaVersion) && expected.schemaVersion > 0
     && /^[a-z][a-z0-9_]{0,62}$/.test(role) && /^[a-z][a-z0-9_]{0,62}$/.test(runtimeRole)
+    && /^[a-z][a-z0-9_]{0,62}$/.test(maintenanceRole)
+    && maintenanceRole !== role && maintenanceRole !== runtimeRole && maintenancePool !== pool
+    && maintenancePool?.options?.max >= 4
     && role !== runtimeRole && pool.options.max >= 4 && connection.PGDATABASE === context.database
     && typeof retainIntent === 'function' && typeof verifyRetainedFloor === 'function',
   'release_backup_input_invalid');
@@ -108,7 +111,9 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
         format: 'freedom.shared-backup-control/v1', ...expected, setId: context.setId,
         environment: context.environment, database: context.database, schema: 'public', exposure: 'quarantine',
       })))) === 'created', 'release_backup_control_exists');
-      policy = await openCapturePolicy({ pool, database: context.database, role, before: before.policySha256,
+      // Policy and capture pins are operator writes. Snapshot export and dump
+      // retain the separate SELECT-only backup connection.
+      policy = await openCapturePolicy({ pool: maintenancePool, database: context.database, role: maintenanceRole, before: before.policySha256,
         revision: 'shared-backup-' + context.setId, intent: await createFileArchiveStore(intents), lease,
         retainIntent: value => retainIntent('capture-policy', value) });
       assertHeld();
@@ -116,7 +121,7 @@ export async function runPortableBackup({ context, workRoot, pool, role, runtime
       const source = transport.sourceObjects({ assertObjectKey, validateMetadata });
       const dump = join(root, 'database.dump');
       return { pool, archive, dump: { async open() { return Readable.toWeb(createReadStream(dump)); } },
-        options: { maintenance: createAssetMaintenance(pool, { store: source, enabled: true }), source, destination: objects,
+        options: { maintenance: createAssetMaintenance(maintenancePool, { store: source, enabled: true }), source, destination: objects,
           maxObjects: 1000, maxBytes: 64 * 1024 * 1024,
           databaseSnapshot: { async write(input) {
             assertHeld(); const value = await writeSnapshotDump({ binDirectory, connection, output: dump, input, execute, signal: context.signal });

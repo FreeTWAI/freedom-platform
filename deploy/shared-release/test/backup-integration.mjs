@@ -20,16 +20,33 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export async function verifyBackup({ root, openCluster, execute }) {
   const source = await openCluster('backup-source');
-  await source.pool.query('CREATE SCHEMA public');
-  await migrate(source.pool);
+  await source.pool.query('CREATE ROLE fp_fixture_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT');
+  await source.pool.query('CREATE ROLE fp_fixture_backup LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS NOINHERIT');
+  await source.pool.query('CREATE SCHEMA public AUTHORIZATION fp_fixture_migrator');
+  await source.pool.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
   await source.pool.query('CREATE ROLE fp_fixture_runtime NOLOGIN');
-  const pool = new Pool({ host: source.socket, port: 5432, user: source.connection.PGUSER,
+  const pool = new Pool({ host: source.socket, port: 5432, user: 'fp_fixture_migrator',
     database: source.databaseName, max: 6, connectionTimeoutMillis: 5000, query_timeout: 45_000 });
+  const backupPool = new Pool({ ...pool.options, user: 'fp_fixture_backup' });
+  const backupConnection = { ...source.connection, PGUSER: 'fp_fixture_backup' };
   const sourceObjects = new Miniflare(convertV4MiniflareOptions({ modules: true,
     script: 'export default {fetch(){return new Response(null,{status:503})}}', compatibilityDate: '2026-09-21',
     r2Buckets: ['SOURCE'], outboundService: () => { throw new Error('fixture network forbidden'); } }));
   let lease;
   try {
+    await migrate(pool);
+    await pool.query('GRANT USAGE ON SCHEMA public TO fp_fixture_backup');
+    await pool.query('GRANT SELECT ON ALL TABLES IN SCHEMA public TO fp_fixture_backup');
+    await pool.query('GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO fp_fixture_backup');
+    const assertBackupReadOnly = async () => {
+      const rows = (await backupPool.query(`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relkind='r'
+        AND has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')`)).rows;
+      assert.deepEqual(rows, []);
+      await assert.rejects(backupPool.query('UPDATE asset_maintenance_policy SET enabled=true WHERE false'), { code: '42501' });
+      await assert.rejects(backupPool.query('DELETE FROM asset_backup_pins WHERE false'), { code: '42501' });
+    };
+    await assertBackupReadOnly();
     await sourceObjects.ready;
     const bucket = await sourceObjects.getR2Bucket('SOURCE'), store = createR2ObjectStore(bucket);
     async function asset(retired = false) {
@@ -55,7 +72,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
       return { assetId, key };
     }
     await asset(); await asset(true);
-    lease = await acquireReleaseLease(pool, { database: source.databaseName, role: source.connection.PGUSER, heartbeatMs: 50 });
+    lease = await acquireReleaseLease(pool, { database: source.databaseName, role: 'fp_fixture_migrator', heartbeatMs: 50 });
     const remote = join(root, 'synthetic-cloudflare'); await mkdir(remote, { mode: 0o700 });
     let uploads = 0, restores = 0, late, mode = 'normal';
     const fetchImpl = async (address, options) => {
@@ -93,8 +110,9 @@ export async function verifyBackup({ root, openCluster, execute }) {
     const run = async (override = {}) => runPortableBackup({
       context: { environment: 'staging', database: source.databaseName, schema: 'public', sourceRelease: expected.sourceSha,
         operatorSource: 'b'.repeat(40), setId: randomUUID(), createdAt: new Date().toISOString(), runDirectory: root, signal: lease.signal },
-      workRoot: root, pool, role: source.connection.PGUSER, runtimeRole: 'fp_fixture_runtime', lease, transport, expected,
-      connection: source.connection, binDirectory: '/usr/local/bin',
+      workRoot: root, pool: backupPool, role: 'fp_fixture_backup',
+      maintenancePool: pool, maintenanceRole: 'fp_fixture_migrator', runtimeRole: 'fp_fixture_runtime', lease, transport, expected,
+      connection: backupConnection, binDirectory: '/usr/local/bin',
       // Fixture-only control ports. The installed entry supplies the R2 floor.
       async retainIntent(operation, value) {
         assert(['capture-policy', 'archive'].includes(operation)); assert.equal(value.automaticRetry, false);
@@ -107,11 +125,13 @@ export async function verifyBackup({ root, openCluster, execute }) {
       }, ...override,
     });
     assert.deepEqual((await pool.query('SELECT current_database() database,current_user role,session_user session_role,current_schema() schema')).rows[0],
-      { database: source.databaseName, role: source.connection.PGUSER, session_role: source.connection.PGUSER, schema: 'public' });
+      { database: source.databaseName, role: 'fp_fixture_migrator', session_role: 'fp_fixture_migrator', schema: 'public' });
     assert.equal((await pool.query(`WITH sequences AS MATERIALIZED (
       SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S')
       SELECT count(*)::int count FROM sequences WHERE has_sequence_privilege($1,oid,'UPDATE')`, ['fp_fixture_runtime'])).rows[0].count, 0);
     const gc = await observeMediaGcState(pool); assert.equal(gc.maintenanceEnabled, false); assert.equal(gc.domainMaintenanceEnabled, false); assert.equal(gc.deletionFences, 0);
+    await assert.rejects(run({ maintenancePool: undefined }), { code: 'release_backup_input_invalid' });
+    await assert.rejects(run({ maintenancePool: backupPool, maintenanceRole: 'fp_fixture_backup' }), { code: 'release_backup_input_invalid' });
     await assert.rejects(run({ transport: { ...transport, target: 'next' } }), { code: 'release_backup_input_invalid' });
     const good = await run(); assert.equal(good.status, 'passed', JSON.stringify(good));
     assert.equal(good.objects.count, 2); assert(late); assert.equal(good.restore, 'database_and_objects_restored');
@@ -147,19 +167,20 @@ export async function verifyBackup({ root, openCluster, execute }) {
           return result;
         } };
     } };
-    const uncertain = await run({ pool: uncertainPool });
+    const uncertain = await run({ maintenancePool: uncertainPool });
     assert(lost); assert.equal(uncertain.status, 'failed'); assert.equal(uncertain.stage, 'capture');
     assert.equal(uncertain.cleanupVerified, true); assert.equal(uploads, count); assert.equal(restores, 1);
     assert.equal((await pool.query('SELECT enabled FROM asset_maintenance_policy')).rows[0].enabled, false);
     const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
-    return { databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
+    await assertBackupReadOnly();
+    return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
       remoteTarReadback: 'synthetic-provider', corruptionStopsBeforeRestore: true, lostPutIsNotRetried: true,
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
       crossEnvironmentTransportRefused: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };
   } finally {
-    const cleanup = await Promise.allSettled([lease?.release(), sourceObjects.dispose(), pool.end()]);
+    const cleanup = await Promise.allSettled([lease?.release(), sourceObjects.dispose(), pool.end(), backupPool.end()]);
     assert(cleanup.every(value => value.status === 'fulfilled'), 'backup fixture cleanup failed');
   }
 }
