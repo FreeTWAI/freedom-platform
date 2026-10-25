@@ -85,6 +85,45 @@ test.describe('sharing around Short, feature ON', () => {
     }
   });
 
+  test('an uncertain Short like explicitly confirms its original intent after refresh and a later rejection',async({page,e2eAuthPool})=>{
+    await page.setViewportSize({width:320,height:760});await prepare(page);
+    const ids=await seed(e2eAuthPool,[{title:`Short retry ${Date.now()}`,url:`https://www.youtube.com/shorts/${SHORT}?retry=${Date.now()}`}]);
+    const path=`/api/v1/social-posts/${ids[0]}/like`,matchesLike=(url:URL)=>url.pathname===path;
+    const writes:{key:string|undefined;body:unknown}[]=[];
+    await page.route(matchesLike,async route=>{
+      const request=route.request();if(request.method()!=='POST'){await route.continue();return;}
+      writes.push({key:request.headers()['idempotency-key'],body:request.postDataJSON()});
+      if(writes.length===1){const response=await route.fetch();expect(response.status()).toBe(200);expect(await response.json()).toMatchObject({post_id:ids[0],liked:true,like_count:1});await route.abort('failed');}
+      else if(writes.length===2)await route.fulfill({status:403,contentType:'application/problem+json',body:JSON.stringify({status:403,code:'onboarding_required',detail:'原按讚確認暫時被拒絕。'})});
+      else if(writes.length===4){const response=await route.fetch();expect(response.status()).toBe(200);expect(await response.json()).toMatchObject({post_id:ids[0],liked:false,like_count:0});await route.abort('failed');}
+      else await route.continue();
+    });
+    try{
+      await navigate(page,'社群分享');await selectSocialFeed(page,'Short');
+      const slide=page.locator(`.short-video-slide[data-post-id="${ids[0]}"]`);
+      await slide.getByRole('button',{name:'按讚 · 0',exact:true}).click();
+      await expect(slide.getByRole('button',{name:'確認上次按讚 · 0',exact:true})).toBeEnabled();
+      // This remounts the Short feed but must retain the parent-owned uncertain command.
+      await page.getByRole('button',{name:'更新動態',exact:true}).click();
+      const retry=slide.getByRole('button',{name:'確認上次按讚 · 1',exact:true});await expect(retry).toBeEnabled();await expect(retry).toHaveAttribute('aria-pressed','true');
+      await retry.click();await expect(page.locator('.social-feedback')).toHaveText('原按讚確認暫時被拒絕。');await expect(retry).toBeEnabled();
+      await retry.click();await expect(slide.getByRole('button',{name:'收回讚 · 1',exact:true})).toBeEnabled();
+      expect(writes).toHaveLength(3);expect(writes[0].key).toBeTruthy();expect(writes[0].body).toEqual({liked:true});expect(writes[1]).toEqual(writes[0]);expect(writes[2]).toEqual(writes[0]);
+      expect(Number((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_likes WHERE post_id=$1',[ids[0]])).rows[0].n)).toBe(1);
+      await slide.getByRole('button',{name:'收回讚 · 1',exact:true}).click();
+      await expect(slide.getByRole('button',{name:'確認上次收回讚 · 1',exact:true})).toBeEnabled();
+      await page.getByRole('button',{name:'更新動態',exact:true}).click();
+      const confirmUnlike=slide.getByRole('button',{name:'確認上次收回讚 · 0',exact:true});await expect(confirmUnlike).toBeVisible();await expect(confirmUnlike).toBeEnabled();
+      const box=(await confirmUnlike.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(320);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+      const otherControls=slide.locator('.short-video-actions button').filter({hasNotText:'確認上次收回讚'});
+      for(const control of [...await otherControls.all(),...await page.locator('.short-video-controls button').all()]){const other=(await control.boundingBox())!;const overlapX=Math.min(box.x+box.width,other.x+other.width)-Math.max(box.x,other.x),overlapY=Math.min(box.y+box.height,other.y+other.height)-Math.max(box.y,other.y);expect(overlapX>0&&overlapY>0).toBe(false);}
+      await confirmUnlike.click();await expect(slide.getByRole('button',{name:'按讚 · 0',exact:true})).toBeEnabled();
+      expect(writes).toHaveLength(5);expect(writes[3].key).not.toBe(writes[0].key);expect(writes[3].body).toEqual({liked:false});expect(writes[4]).toEqual(writes[3]);
+      expect(Number((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_likes WHERE post_id=$1',[ids[0]])).rows[0].n)).toBe(0);
+    }finally{try{await page.unroute(matchesLike);}finally{await cleanup(e2eAuthPool,ids);}}
+  });
+
   test('keys pressed on the action buttons and inside the share dialog keep their meaning; Space on the feed itself still pauses', async ({page, e2eAuthPool}) => {
     await prepare(page);
     const stamp = Date.now();

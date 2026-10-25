@@ -402,7 +402,7 @@ test('Short pagination error retains the same child type/key but disables automa
   const line=composerSource.split('\n').find(line=>line.includes('<ShortVideoFeed posts={items}'))!.trim();assert.ok(line.startsWith('{')&&line.endsWith('}'));
   const code=transformSync(`globalThis.element=(${line.slice(1,-1)});`,{loader:'tsx',target:'es2023'}).code;
   const ShortVideoFeed=()=>null;
-  const render=()=>runInNewContext(`${code};element`,{...h.state,platform:'shorts',directPost:null,load:ui.load,ShortVideoFeed,React:{createElement:(type:any,props:any)=>({type,key:props.key??null,props})},shortLiking:null});
+  const render=()=>runInNewContext(`${code};element`,{...h.state,platform:'shorts',directPost:null,load:ui.load,ShortVideoFeed,React:{createElement:(type:any,props:any)=>({type,key:props.key??null,props})},shortLiking:null,shortLikeRetries:{}});
   const first=ui.load('shorts');h.calls[0].resolve(h.page(['A']));await first;const before=render();assert.equal(before.props.hasMore,true);
   const next=ui.load('shorts','B');h.calls[1].reject(new Error('offline'));await next;const failed=render();
   assert.equal(failed.type,before.type);assert.equal(failed.key,before.key);assert.equal(failed.props.posts,h.state.items);assert.equal(failed.props.hasMore,false);

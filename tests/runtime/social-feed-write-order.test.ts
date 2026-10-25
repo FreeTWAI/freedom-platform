@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {webcrypto} from 'node:crypto';
 import {transformSync} from 'esbuild';
 import {ApiError} from '../../apps/portal-web/src/api';
+import {playableShortVideos,playerCommand,shortVideoEmbedUrl,SHORT_VIDEO_EMBED_ORIGIN} from '../../apps/portal-web/src/modules/short-video-embed';
 
 const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialZone.tsx',import.meta.url),'utf8');
 function between(start:string,end:string){const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return source.slice(a+start.length,b);}
@@ -238,7 +239,9 @@ test('deletion forwarder preserves a server rejection for the original status as
 
 function counterHarness(){
   const h=harness();Object.assign(h.initial,{kind:'link',platform:'youtube',like_count:0,liked:false,comment_count:1,read_count:1});
-  Object.assign(h.c,{items:h.state.items,post:h.initial,shortLiking:null,shortLikeCommands:{current:new Map()},setShortLiking(){}});
+  Object.assign(h.c,{items:h.state.items,post:h.initial,shortLiking:null,shortLikeCommands:{current:new Map()},shortLikeRetries:{},setShortLiking(){},setShortLikeRetries:(v:any)=>h.c.shortLikeRetries=typeof v==='function'?v(h.c.shortLikeRetries):v});
+  const helper=source.includes('  function setShortRetry(')?between('  function setShortRetry(', '  async function likeShort('):null;
+  if(helper)runInNewContext(transformSync('function setShortRetry('+helper,{loader:'ts',format:'cjs'}).code,h.c);
   const like=between('async function likeShort(postId: string) {','\n  const feedText=');
   const a=source.indexOf('onUpdate={update =>'),b=source.indexOf('}/>',a);assert.ok(a>=0&&b>a);
   runInNewContext(transformSync(`globalThis.like=async function(postId){${like};globalThis.interaction=${source.slice(a+'onUpdate={'.length,b)};`,{loader:'ts',format:'cjs'}).code,h.c);
@@ -248,7 +251,7 @@ for(const operation of ['short-like','card-like','comment','read'])for(const mod
   const h=counterHarness();h.c.feedScope.current.platform=mode==='quiet'?'shorts':'note';
   const read=mode==='quiet'?h.c.quiet(1):h.c.load('note',mode==='append'?'original-cursor':undefined);
   const update=operation.includes('like')?{liked:true,like_count:1}:operation==='comment'?{comment_count:2}:{read_count:2};
-  if(operation==='short-like'){h.c.client.post=async()=>update;await h.c.like('p');}else h.c.interaction(update);
+  if(operation==='short-like'){h.c.client.post=async()=>({post_id:'p',...update});await h.c.like('p');}else h.c.interaction(update);
   assert.equal(h.c.confirmedWrites.current,1);assert.equal(h.requests.length,1,'confirmation starts no independent read');
   h.requests[0].resolve(page([h.initial]));await tick();
   if(mode==='quiet'){assert.equal(await read,null);assert.equal(h.requests.length,1);}else{
@@ -286,4 +289,59 @@ for(const operation of ['comment-send','comment-remove','read-mark'])for(const n
     await h.c.action(operation==='comment-send'?{preventDefault(){}}:{comment_id:'comment'});
   }
   assert.equal(attempts,1);assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.state.items[0],h.initial);assert.equal(h.requests.length,0);
+});
+
+test('Short uncertain command survives later rejection and a refreshed liked snapshot until its exact acknowledgment',async()=>{
+  const h=counterHarness(),sent:any[]=[];
+  h.c.client.post=async(_path:string,body:any,options:any)=>{sent.push({body,key:options.idempotencyKey});throw new ApiError({message:sent.length===1?'unknown':'not eligible',network:sent.length===1,status:sent.length===1?503:403});};
+  await h.c.like('p');const original=h.c.shortLikeCommands.current.get('p');assert.ok(original.uncertain);assert.equal(h.c.shortLikeRetries.p.liked,true);
+  h.c.items=h.state.items=[{...h.initial,liked:true,like_count:1}];await h.c.like('p');assert.equal(h.c.shortLikeCommands.current.get('p'),original);assert.equal(h.c.shortLikeRetries.p.liked,true);assert.equal(original.inFlight,false);
+  h.c.client.post=async(_path:string,body:any,options:any)=>{sent.push({body,key:options.idempotencyKey});return {post_id:'p',...body,like_count:body.liked?1:0};};
+  await h.c.like('p');assert.equal(h.c.shortLikeCommands.current.size,0);assert.equal(h.c.shortLikeRetries.p,undefined);
+  assert.equal(sent.length,3);for(const call of sent){assert.equal(call.key,original.key);assert.equal(call.body.liked,true);}
+  h.c.items=h.state.items;await h.c.like('p');assert.notEqual(sent[3].key,original.key);assert.equal(sent[3].body.liked,false);assert.equal(h.state.items[0].liked,false);
+});
+for(const invalid of [{post_id:'q'},{liked:false},{like_count:-1},{like_count:1.2}])test(`Short invalid ACK ${JSON.stringify(invalid)} retains the original command without advancing epoch`,async()=>{
+  const h=counterHarness();h.c.client.post=async()=>({post_id:'p',liked:true,like_count:1,...invalid});await h.c.like('p');assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.state.items[0],h.initial);assert.ok(h.c.shortLikeCommands.current.get('p')?.uncertain);assert.equal(h.c.shortLikeRetries.p.liked,true);
+});
+test('Short first explicit rejection permits a new command and does not leave retry UI',async()=>{
+  const h=counterHarness(),keys:string[]=[];h.c.client.post=async(_path:string,_body:any,options:any)=>{keys.push(options.idempotencyKey);throw new ApiError({message:'rejected',status:422});};await h.c.like('p');assert.equal(h.c.shortLikeCommands.current.size,0);assert.equal(h.c.shortLikeRetries.p,undefined);await h.c.like('p');assert.notEqual(keys[0],keys[1]);
+});
+test('Short unknown commands for separate posts keep independent keys and desired states',async()=>{
+  const h=counterHarness();h.c.items=h.state.items=[h.initial,{...h.initial,post_id:'q',liked:true}];h.c.client.post=async()=>{throw new ApiError({message:'unknown',network:true});};await h.c.like('p');await h.c.like('q');
+  assert.equal(h.c.shortLikeCommands.current.size,2);assert.notEqual(h.c.shortLikeCommands.current.get('p').key,h.c.shortLikeCommands.current.get('q').key);assert.equal(h.c.shortLikeRetries.p.liked,true);assert.equal(h.c.shortLikeRetries.q.liked,false);
+});
+function shortButtons(retry:Record<string,boolean>,busy:string|null=null){
+  const code=readFileSync(new URL('../../apps/portal-web/src/modules/ShortVideoFeed.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
+  const jsx=(type:any,props:any,...children:any[])=>({type,props:props??{},children});
+  const c:any={exports:{},module:{exports:{}},React:{createElement:jsx},useState:(v:any)=>[typeof v==='function'?v():v,()=>{}],useRef:(v:any)=>({current:v}),useCallback:(v:any)=>v,useEffect(){},useLayoutEffect(){},playableShortVideos,playerCommand,shortVideoEmbedUrl,SHORT_VIDEO_EMBED_ORIGIN,formatIsoLocal:(v:string)=>v};c.exports=c.module.exports;
+  runInNewContext(transformSync(code,{loader:'tsx',format:'cjs',jsx:'transform'}).code,c);
+  const tree=c.module.exports.ShortVideoFeed({posts:[{post_id:'p',url:'https://www.youtube.com/shorts/aqz-KE-bpKQ',kind:'link',platform:'youtube',title:'short',thumbnail_url:null,author:{display_name:'member'},created_at:'2026-10-25T00:00:00Z',liked:true,like_count:1}],hasMore:false,loadingMore:false,onLoadMore(){},onRefresh:async()=>['p'],onManage(){},onLike(){},onComment(){},likeBusy:busy,likeRetry:retry,renderShare:()=>null});
+  const buttons:any[]=[];function visit(node:any){if(Array.isArray(node)){node.forEach(visit);return;}if(!node||typeof node!=='object')return;if(node.type==='button')buttons.push(node);node.children?.forEach(visit);}visit(tree);return buttons;
+}
+for(const desired of [true,false])test(`actual Short control names the pending ${desired?'like':'unlike'} instead of a new toggle`,()=>{
+  const label=desired?'確認上次按讚':'確認上次收回讚',button=shortButtons({p:desired}).find(b=>b.props['aria-label']===`${label} · 1`);assert.ok(button);assert.equal(button.props.disabled,false);assert.equal(button.props['aria-pressed'],true);assert.ok(button.children.includes(label));
+  assert.equal(shortButtons({p:desired},'p').find(b=>b.props['aria-label']===`${label} · 1`)!.props.disabled,true);
+});
+
+test('Short same-post duplicate activation keeps one in-flight command',async()=>{
+  const h=counterHarness();let resolve:any,calls=0;h.c.client.post=()=>{calls++;return new Promise(r=>resolve=r);};const first=h.c.like('p');await h.c.like('p');assert.equal(calls,1);assert.equal(h.c.shortLikeCommands.current.get('p').inFlight,true);resolve({post_id:'p',liked:true,like_count:1});await first;assert.equal(h.c.shortLikeCommands.current.size,0);
+});
+test('Short confirmation clears only its own retry state while another post remains unknown',async()=>{
+  const h=counterHarness();h.c.items=[h.initial,{...h.initial,post_id:'q'}];h.c.client.post=async()=>{throw new ApiError({message:'unknown',network:true});};await h.c.like('p');await h.c.like('q');const q=h.c.shortLikeCommands.current.get('q');
+  h.c.client.post=async()=>({post_id:'p',liked:true,like_count:1});await h.c.like('p');assert.equal(h.c.shortLikeRetries.p,undefined);assert.equal(h.c.shortLikeCommands.current.get('q'),q);assert.equal(h.c.shortLikeRetries.q.liked,true);
+});
+test('actual Short session reset clears old commands and retry labels without admitting a late completion',async()=>{
+  const h=counterHarness();h.c.client.post=async()=>{throw new ApiError({message:'unknown',network:true});};await h.c.like('p');let resolve:any;h.c.client.post=()=>new Promise(r=>resolve=r);const retry=h.c.like('p');h.c.client.sessionGeneration++;
+  const reset=between('useEffect(()=>{shortLikeCommands.current.clear();','},[client,feedSession]);');runInNewContext('shortLikeCommands.current.clear();'+reset,h.c);
+  assert.equal(h.c.shortLikeCommands.current.size,0);assert.equal(Object.keys(h.c.shortLikeRetries).length,0);resolve({post_id:'p',liked:true,like_count:1});await retry;assert.equal(h.c.confirmedWrites.current,0);assert.equal(h.state.items[0],h.initial);
+});
+test('Short rendered retry map excludes old client or generation even before the session effect runs',()=>{
+  const h=counterHarness(),expression=source.match(/likeRetry=\{(.*?)\} renderShare=/)?.[1];assert.ok(expression);
+  h.c.shortLikeRetries={p:{client:h.c.client,generation:1,liked:true},q:{client:{},generation:1,liked:false},r:{client:h.c.client,generation:0,liked:true}};
+  assert.deepEqual(Object.keys(runInNewContext(expression,h.c)),['p']);
+});
+
+test('Short timed-out response remains uncertain even if a caller omits the network flag',async()=>{
+  const h=counterHarness();h.c.client.post=async()=>{throw new ApiError({message:'timeout',status:408,timedOut:true});};await h.c.like('p');assert.ok(h.c.shortLikeCommands.current.get('p')?.uncertain);assert.equal(h.c.shortLikeRetries.p.liked,true);assert.equal(h.c.confirmedWrites.current,0);
 });

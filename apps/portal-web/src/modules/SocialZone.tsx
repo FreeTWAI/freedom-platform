@@ -268,7 +268,9 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     if(draft&&!text&&!composeFile&&!publishing&&!preparingImage&&!pending.current&&!gameImportError&&importedGame.current?.createdAt!==draft.createdAt)void importGame(draft);
   },[gameInbox.draft,text,composeFile,publishing,preparingImage,gameImportError]);
   const [shortPostId, setShortPostId] = useState<string | null>(null), [shortComments, setShortComments] = useState(false);
-  const [shortLiking, setShortLiking] = useState<string | null>(null), shortLikeCommands = useRef(new Map<string, {liked: boolean; key: string}>());
+  const [shortLiking, setShortLiking] = useState<string | null>(null);
+  const shortLikeCommands=useRef(new Map<string,{client:PortalClient;generation:number;liked:boolean;key:string;inFlight:boolean;uncertain:boolean}>());
+  const [shortLikeRetries,setShortLikeRetries]=useState<Record<string,{client:PortalClient;generation:number;liked:boolean}>>({});
   const shortPost = platform === 'shorts' ? items.find(item => item.post_id === shortPostId) : undefined;
   const shortDialog = useRef<HTMLDialogElement>(null);
   const shortTrigger = useRef<HTMLElement | null>(null);
@@ -282,6 +284,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const composerVersion = useRef(0);
   const newPosts = useRef<Post[]>([]);
   const feedSession = client.sessionGeneration;
+  useEffect(()=>{shortLikeCommands.current.clear();setShortLikeRetries({});setShortLiking(null);},[client,feedSession]);
   const feedScope = useRef({client, session: feedSession, platform, tag, directPost});
   feedScope.current = {client, session: feedSession, platform, tag, directPost};
   type FeedLoad = {client: PortalClient; session: number; platform: string; tag: string; directPost: string | null; cursor?: string; sequence: number};
@@ -624,22 +627,33 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     finally { if (current()) setSaving(false); }
   }
   // One-tap like from a Short slide: same endpoint, per-post command and idempotency key as the card's like button.
+  function setShortRetry(postId:string,liked:boolean|undefined) {
+    setShortLikeRetries(current=>{const next={...current};if(liked===undefined)delete next[postId];else next[postId]={client,generation:feedSession,liked};return next;});
+  }
   async function likeShort(postId: string) {
-    const current=()=>client===currentClient.current&&feedSession===client.sessionGeneration;
+    const ownsSession=()=>client===currentClient.current&&feedSession===client.sessionGeneration;
     const post = items.find(item => item.post_id === postId);
-    if (!post || shortLiking || !current()) return;
-    const command = shortLikeCommands.current.get(post.post_id) ?? {liked: !post.liked, key: crypto.randomUUID()};
-    shortLikeCommands.current.set(post.post_id, command); setShortLiking(post.post_id); setNotice('');
+    if (!post || shortLiking || !ownsSession()) return;
+    const existing=shortLikeCommands.current.get(postId);
+    const command=existing&&existing.client===client&&existing.generation===feedSession?existing:{client,generation:feedSession,liked:!post.liked,key:crypto.randomUUID(),inFlight:false,uncertain:false};
+    if(command.inFlight)return;
+    command.inFlight=true;shortLikeCommands.current.set(postId,command);setShortLiking(postId);setNotice('');
+    const current=()=>ownsSession()&&shortLikeCommands.current.get(postId)===command;
     try {
-      const value = await client.post<{liked: boolean; like_count: number}>(`/social-posts/${post.post_id}/like`, {liked: command.liked}, {idempotencyKey: command.key});
+      const value=await client.post<{post_id:string;liked:boolean;like_count:number}>(`/social-posts/${postId}/like`,{liked:command.liked},{idempotencyKey:command.key});
       if(!current())return;
+      if(!value||value.post_id!==postId||typeof value.liked!=='boolean'||value.liked!==command.liked||!Number.isSafeInteger(value.like_count)||value.like_count<0)
+        throw new ApiError({message:'按讚回應未完整收到，請確認上次操作。',network:true});
       ++confirmedWrites.current;
-      setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...value} : item)); shortLikeCommands.current.delete(post.post_id);
+      setItems(current=>current.map(item=>item.post_id===postId?{...item,liked:value.liked,like_count:value.like_count}:item));
+      shortLikeCommands.current.delete(postId);setShortRetry(postId,undefined);
     } catch (cause) {
       if(!current())return;
-      if (cause instanceof ApiError && !cause.network) shortLikeCommands.current.delete(post.post_id);
-      setNotice(cause instanceof Error ? cause.message : '尚未確認按讚結果，請再按一次重試。');
-    } finally { if(current())setShortLiking(null); }
+      const rejected=!command.uncertain&&cause instanceof ApiError&&!cause.network&&!cause.timedOut&&cause.status>=400&&cause.status<500;
+      if(rejected){shortLikeCommands.current.delete(postId);setShortRetry(postId,undefined);}
+      else{command.uncertain=true;setShortRetry(postId,command.liked);}
+      setNotice(cause instanceof Error?cause.message:'尚未確認按讚結果，請確認上次操作。');
+    } finally { command.inFlight=false;if(ownsSession())setShortLiking(current=>current===postId?null:current); }
   }
   const feedText=FEED_MESSAGES[language];
   const filterLabel=(id:string,label:string)=>id==='note'?feedText.note:id===''?feedText.all:label;
@@ -744,7 +758,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && (!error || Boolean(failedFeedLoad.current?.cursor)) && <ShortVideoFeed posts={items} hasMore={Boolean(cursor) && !error} loadingMore={more} onLoadMore={() => { if (cursor && !error && !failedFeedLoad.current) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
+    {platform === 'shorts' && !directPost && !loading && (!error || Boolean(failedFeedLoad.current?.cursor)) && <ShortVideoFeed posts={items} hasMore={Boolean(cursor) && !error} loadingMore={more} onLoadMore={() => { if (cursor && !error && !failedFeedLoad.current) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} likeRetry={Object.fromEntries(Object.entries(shortLikeRetries).filter(([,state])=>state.client===client&&state.generation===feedSession).map(([id,state])=>[id,state.liked]))} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
     {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label={shortComments ? '貼文留言' : '貼文選項與檢舉'} onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
       <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => shortDialog.current?.close()}>關閉</button>
       {renderCard(shortPost, {inline: false, commentsOpen: shortComments})}
