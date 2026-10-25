@@ -14,6 +14,36 @@ async function composer(page:Page,email='maker@local.test'){
   return page.getByRole('dialog',{name:'建立貼文',exact:true});
 }
 
+test('mention search does not offer old-query members after failure or a late superseded response',async({page})=>{
+  const dialog=await composer(page),draft=dialog.getByLabel('貼文內容',{exact:true});
+  await draft.fill('保留我的貼文草稿');
+  const alice={user_id:randomUUID(),nickname:'Alice 搜尋結果'},carol={user_id:randomUUID(),nickname:'Carol 搜尋結果'};
+  let releaseSlow=()=>{},slowStarted=()=>{},writes=0;
+  const gate=new Promise<void>(resolve=>{releaseSlow=resolve}),started=new Promise<void>(resolve=>{slowStarted=resolve});
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/social-posts/notes')writes++;});
+  await page.route('**/api/v1/members?*',async route=>{
+    const query=new URL(route.request().url()).searchParams.get('search');
+    if(query==='Bob')return route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'會員搜尋暫時無法載入。'})});
+    if(query==='Slow'){slowStarted();await gate;return route.fulfill({json:{items:[alice]}});}
+    return route.fulfill({json:{items:query==='Alice'?[alice]:query==='Carol'?[carol]:[]}});
+  });
+  try{
+    await dialog.getByRole('button',{name:'標註會員',exact:true}).click();
+    const search=dialog.getByLabel('搜尋標註會員',{exact:true}),choices=dialog.locator('.social-mention-choice');
+    await search.fill('Alice');await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:alice.nickname,exact:true})).toBeVisible();
+    await search.fill('Bob');await expect(dialog.locator('.social-text-picker').getByRole('alert')).toBeVisible();
+    await expect(search).toHaveValue('Bob');await expect(choices).toHaveCount(0);await expect(draft).toHaveValue('保留我的貼文草稿');
+    await search.fill('Slow');await started;await expect(choices).toHaveCount(0);
+    await search.fill('Carol');await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:carol.nickname,exact:true})).toBeVisible();
+    const late=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/members'&&new URL(response.url()).searchParams.get('search')==='Slow');
+    releaseSlow();await (await late).finished();
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:carol.nickname,exact:true})).toBeVisible();await expect(dialog.locator('.social-text-picker').getByRole('alert')).toHaveCount(0);
+    await choices.click();await expect(draft).toHaveValue('保留我的貼文草稿 @Carol 搜尋結果 ');await expect(draft).toBeFocused();
+    expect(writes).toBe(0);
+  }finally{releaseSlow();}
+});
+
 // Keep expected accessible names independent of the product's translation catalog.
 const composerLanguages=[
   {id:'en',name:'English',title:'Create post',close:'Close composer',content:'Post content',topic:'Post topic',location:'Location',undo:'Undo',redo:'Redo'},
