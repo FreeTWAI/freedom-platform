@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { saveGameDraft } from './result-bridge';
 import { resultExports, type RunResult, type ArcadeGameId } from './result-card';
 import { ResultShare } from './ResultShare';
 import { gameShareText } from './result-share';
 import type { Stage, StageView } from './stage';
+import {syncDiagnostics} from './diagnostics';
 import './arcade.css';
 import './toy-theme.css';
 import './illustration-theme.css';
+import './toy-console.css';
 import { ArcadeLobby, type LobbyState } from './cooking/ArcadeLobby';
-import { recipeOf, type Recipe } from './cooking/catalog';
+import { RECIPES, recipeOf, type Recipe } from './cooking/catalog';
 import { emptyCookbook, readCookbook, readCookingRun, updateCookbook, COOKBOOK_KEY, type Cookbook, type CookingStorage } from './cooking/storage';
 import type { CookingRun } from './cooking/domain';
-import {partyOf,type PartyGameId} from './party/catalog';
+import {PARTY_GAMES,partyOf,type PartyGameId} from './party/catalog';
 type PartyComponent = typeof import('./party/PartyGame')['PartyGame'];
 function PartyLoader(props:Parameters<PartyComponent>[0]) {
     const [Game,setGame]=useState<PartyComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
@@ -70,12 +72,11 @@ function GameBoard({ game, seed, onBack, onResult }: {
     const pendingResult = useRef<Omit<RunResult, 'image'> | null>(null), [captureError, setCaptureError] = useState(false);
     const updateUi = () => repaint(n => n + 1), lastUi = useRef(0);
     const view = (): StageView => { const l = live.current; return { game, seed, seconds: game === 'photo' ? (l.clock.elapsed - l.roundAt) / 1000 : l.clock.elapsed / 1000, client: l.client, pan: l.pan, fov: l.fov, stamp: l.stamps, stampPoint: l.stampPoint, raised: l.raised, cash: l.cash, motion: motionRef.current }; };
-    function render() { stage.current?.update(view()); if (stage.current && host.current) {
+    function draw() { stage.current?.update(view()); if (stage.current && host.current) {
         const stats = stage.current.stats();
-        host.current.dataset.renderCalls = String(stats.calls);
-        host.current.dataset.renderTriangles = String(stats.triangles);
-        host.current.dataset.renderTextures = String(stats.textures);
+        syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderTextures:stats.textures});
     } }
+    function render(){try{draw();return true;}catch{stop();live.current.paused=true;setReady(false);setError('3D 畫面暫時中斷。按重試恢復這一局。');void audio.current?.suspend().catch(()=>{});updateUi();return false;}}
     function sfx(kind: 'photo' | 'stamp' | 'cash' | 'wrong') {
         if (!soundRef.current)
             return;
@@ -99,7 +100,7 @@ function GameBoard({ game, seed, onBack, onResult }: {
     function finish(result: RunResult) { if (live.current.done)
         return; live.current.done = true; stop(); onResult(result); }
     function settle(summary: Omit<RunResult, 'image'>) { stop(); pendingResult.current = summary; try {
-        render();
+        if(!render())throw Error('Scene unavailable');
         if (!stage.current)
             throw Error('Scene unavailable');
         finish({ ...summary, image: stage.current.capture() });
@@ -130,7 +131,7 @@ function GameBoard({ game, seed, onBack, onResult }: {
         if (!ready || !l.started || l.paused || l.done || l.film >= RULES.film || !stage.current)
             return;
         try {
-            render();
+            if(!render())return;
             const { visible, blocked, lift } = stage.current.framing(), grade = gradePhoto(CLIENTS[l.client].id, visible, (l.clock.elapsed - l.roundAt) / 1000, blocked, lift), image = stage.current.capture();
             l.photos.push({ ...grade, image });
             l.film++;
@@ -174,7 +175,7 @@ function GameBoard({ game, seed, onBack, onResult }: {
     } if (!l.done && l.clock.running)
         frame.current = requestAnimationFrame(loop.current); };
     function start() { if (!ready)
-        return; const l = live.current; l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true }); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
+        return; const l = live.current; l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true });section.current?.querySelector('.ad-play-layout')?.scrollIntoView({block:'start',behavior:'instant'}); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
     function setPaused() { const l = live.current; if (!l.started || l.done)
         return; stop(); l.paused = true; void audio.current?.suspend().catch(() => { }); updateUi(); }
     useEffect(() => { const change = () => { motionRef.current = !matchMedia('(prefers-reduced-motion: reduce)').matches; render(); }; const media = matchMedia('(prefers-reduced-motion: reduce)'); media.addEventListener('change', change); const hidden = () => { if (document.hidden)
@@ -240,7 +241,7 @@ function GameBoard({ game, seed, onBack, onResult }: {
             applyStamp(l.stampPoint);
         }
     } }
-    function pointerDown(event: PointerEvent) { syncClock(); const l = live.current; if (!ready || !l.started || l.paused || l.done || l.pointer || pendingResult.current)
+    function pointerDown(event: PointerEvent) { syncClock(); const l = live.current; if (!ready || !l.started || l.paused || l.done || l.pointer || pendingResult.current || event.button!==0 || !event.isPrimary)
         return; event.preventDefault(); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
         l.stamps = beginStamps(l.stamps, l.clock.elapsed);
         const p = stage.current?.point(event.clientX, event.clientY);
@@ -275,11 +276,11 @@ function GameBoard({ game, seed, onBack, onResult }: {
             setNotice('往右滑收鈔，往左滑退票券。也能用下方按鈕。');
     } }
     const l = live.current, remaining = Math.max(0, RULES.photoMs - (l.clock.elapsed - l.roundAt)), cashCard = cashDeck(seed)[Math.min(l.cash.index, 29)];
-    return <section ref={section} className="ad-board" tabIndex={-1} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
+    return <section ref={section} className="ad-board" data-playing={l.started&&!l.paused} tabIndex={-1} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
     <div className="ad-toolbar"><button className="ad-secondary" onClick={onBack}>← 遊樂場</button><span className="ad-seed">同題 #{seed}</span><button className="ad-secondary" aria-pressed={sound} onClick={() => { soundRef.current = !sound; setSound(!sound); if (!sound)
         sfx(game); }}>聲音 {sound ? '開' : '關'}</button>{l.started && !l.paused && <button className="ad-secondary" onClick={setPaused}>暫停</button>}</div>
     <div className="ad-game-title"><div><h1>{GAMES.find(g => g.id === game)!.title}</h1><p>{game === 'photo' ? CLIENTS[l.client].title : game === 'stamp' ? documentTitle(Math.min(l.stamps.index, 11), l.stamps.practice) : '收鈔往右，票券往左'}</p></div><output className="ad-counter" aria-live="off">{game === 'photo' ? `${l.client + 1}/3 · ${Math.ceil(remaining / 1000)} 秒` : game === 'stamp' ? l.stamps.practice ? '練習中' : `${Math.min(l.stamps.index, 12)}/12` : `${l.cash.amount / 10000} / 100 萬`}</output></div>
-    <div className="ad-play-layout"><div className="ad-stage-wrap"><div className="ad-stage" ref={host} data-game-stage={ready ? 'ready' : 'loading'} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { l.pointer = null; l.raised = false; render(); }} onLostPointerCapture={() => { l.pointer = null; l.raised = false; }}/>
+    <div className="ad-play-layout"><div className="ad-stage-wrap"><div className="ad-stage" ref={host} data-game-stage={ready ? 'ready' : 'loading'} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={e => {if(l.pointer?.id===e.pointerId){l.pointer = null;l.raised = false;render();}}} onLostPointerCapture={e => {if(l.pointer?.id===e.pointerId){l.pointer = null;l.raised = false;}}}/>
       {game === 'photo' && ready && l.started && <div className="ad-viewfinder" aria-hidden="true"><i /><i /><i /><i /><span>FREE TWAI　●　LIVE</span></div>}
       {flash > 0 && motionRef.current && <div key={flash} className="ad-flash" aria-hidden="true"/>}
       {(!ready || !l.started || l.paused) && <div className="ad-stage-cover">{error ? <><p role="alert">{error}</p><button onClick={() => setRetry(n => n + 1)}>重試場景</button></> : !ready ? <p role="status">正在佈置現場…</p> : <><strong>{l.paused ? '休息一下，怪事等你。' : GAMES.find(g => g.id === game)!.subtitle}</strong><p>{hints[game]}</p><button onClick={start}>{l.paused ? '繼續這一局' : game === 'stamp' ? '先蓋一張練習紙' : '開始這一局'}</button></>}</div>}
@@ -292,10 +293,11 @@ function GameBoard({ game, seed, onBack, onResult }: {
     </div></div>
   </section>;
 }
-function Result({ result, onBack, onReplay }: {
+function Result({ result, onBack, onReplay, onNext }: {
     result: RunResult;
     onBack: () => void;
     onReplay: () => void;
+    onNext: () => void;
 }) {
     const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), linkRef = useRef<HTMLInputElement>(null);
     const link = result.game === 'kitchen' || partyOf(result.game) ? new URL(`/play?${new URLSearchParams({game:result.game,...(result.recipe?{recipe:result.recipe}:{}),seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, gameOf(result.game)!, result.seed);
@@ -352,20 +354,23 @@ function Result({ result, onBack, onReplay }: {
     catch {
         setStatus('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。');
     } }
-    return <section className="ad-result"><div className="ad-result-heading"><p className="ad-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{selected.caption}</h1><p>{selected.details}</p></div><div className="ad-result-layout"><div className="ad-result-photo"><img src={selected.image} alt={result.game === 'kitchen' ? `${selected.title}插畫與本局料理成績` : `本局真正拍到的畫面：${selected.caption}`} width="960" height="720"/>{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel"><h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
+    return <section className="ad-result"><div className="ad-result-heading"><p className="ad-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{selected.caption}</h1><p>{selected.details}</p></div><div className="ad-result-layout"><div className="ad-result-photo"><img src={selected.image} alt={result.game === 'kitchen' ? `${selected.title}插畫與本局料理成績` : `本局真正拍到的畫面：${selected.caption}`} width="960" height="720"/>{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel"><h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onNext}>{result.game==='kitchen'?'換一道料理 →':'換個玩法 →'}</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
 }
 export function AbsurdDaily() {
     const [game,setGame]=useState<ArcadeGameId|null>(initialGame),[recipe,setRecipe]=useState(()=>recipeOf(new URLSearchParams(location.search).get('recipe'))),[seed,setSeed]=useState(()=>seedOf(new URLSearchParams(location.search).get('seed'))),[result,setResult]=useState<RunResult|null>(null),[run,setRun]=useState(0),[fresh,setFresh]=useState(false);
     const [book,setBook]=useState<Cookbook>(()=>readCookbook(localBook).book??emptyCookbook()),[saveNotice,setSaveNotice]=useState(()=>readCookbook(localBook).notice),[bookFailed,setBookFailed]=useState(()=>!readCookbook(localBook).available);
+    const main=useRef<HTMLElement>(null),returnPoint=useRef<{top:number;key:string}|null>(null),restoreLobby=useRef(false);
     const bookRef=useRef(book), bookDirty=useRef(bookFailed);bookRef.current=book;
     const [lobby,setLobby]=useState<LobbyState>({category:'all',query:'',filter:'all',limit:8,collection:'all'});
     const changeBook=(change:Parameters<typeof updateCookbook>[2])=>{const saved=updateCookbook(localBook,bookRef.current,change,Date.now(),bookDirty.current);bookRef.current=saved.book;bookDirty.current=!saved.available;setBook(saved.book);setSaveNotice(saved.notice);setBookFailed(!saved.available);};
-    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null)=>{const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,nextSeed=keepSeed?seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed)}).toString():'';url.hash='';history.pushState(null,'',url);window.scrollTo({top:0,behavior:'instant'});},[seed]);
-    useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const back=()=>{setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
+    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null,origin='')=>{if(game===null&&next)returnPoint.current={top:window.scrollY,key:origin};restoreLobby.current=next===null;const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,nextSeed=keepSeed?seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed)}).toString():'';url.hash='';history.pushState(null,'',url);},[game,seed]);
+    useLayoutEffect(()=>{if(!game&&restoreLobby.current){restoreLobby.current=false;const point=returnPoint.current;if(point){const card=[...document.querySelectorAll<HTMLElement>('[data-arcade-open]')].find(e=>e.dataset.arcadeOpen===point.key);card?.focus({preventScroll:true});window.scrollTo({top:point.top,behavior:'instant'});return;}}main.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});},[game,run,result]);
+    const nextGame=()=>{if(game==='kitchen'&&recipe){const next=RECIPES[(RECIPES.findIndex(r=>r.id===recipe.id)+1)%RECIPES.length];choose('kitchen',false,next);}else{const choices=[...GAMES,...PARTY_GAMES];choose(choices[(choices.findIndex(g=>g.id===game)+1)%choices.length].id);}};
+    useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const previousScroll=history.scrollRestoration;history.scrollRestoration='manual';const back=()=>{restoreLobby.current=initialGame()===null;setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{history.scrollRestoration=previousScroll;window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
     const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;
     const partyGame:PartyGameId|null=partyOf(game);
-    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>遊戲大廳</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">
+    return <div className="ad-root ad-toy-console"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>遊戲大廳</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main" ref={main} tabIndex={-1}>
       {saveNotice&&<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="ad-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>}
-      {result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={g=>choose(g)} onRecipe={r=>choose('kitchen',false,r)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
+      {result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)} onNext={nextGame}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={(g,key)=>choose(g,false,null,key)} onRecipe={(r,key)=>choose('kitchen',false,r,key)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
     </main><footer className="ad-footer">自由工坊原創遊戲 · 作品由你確認後分享</footer></div>;
 }

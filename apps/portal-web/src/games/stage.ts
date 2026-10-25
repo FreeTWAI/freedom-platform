@@ -1,6 +1,7 @@
 import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {bakeRigidGroup} from './stage-batch';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
 export type StageView = {
     game: GameId;
@@ -229,6 +230,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             mesh(p, cone, LIME, 0, 2.06, .48, .12, .40, .05).rotation.z = Math.PI;
             rb(p, PAPER, .37, 2.13, .48, .25, .15, .025);
         }
+        bakeRigidGroup(p,geometries);
         return p;
     }
     function pigeon(parent: Group, x: number, y: number, index = 0) {
@@ -245,6 +247,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         rb(b, '#b87e46', 0, -.04, .59, .16, .014, .06);
         for (let i = 0; i < 3; i++)
             ball(b, f, (i - 1) * .08, .43 + (i === 1 ? .025 : 0), -.01, .055, .14, .05).rotation.z = (i - 1) * -.3;
+        bakeRigidGroup(b,geometries);
         return b;
     }
     function buildPhoto(view: StageView) {
@@ -268,6 +271,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             ball(board, '#fa789a', 0, 1.54, .285, .16, .06, .02);
             label(board, '我也要拍', 'BACKGROUND MAIN CHARACTER', 0, .93, .20, 1.35, .34);
             anchors.push({ id: 'board', object: board, points: [new Vector3(-.91, 3.12, .2), new Vector3(.91, .04, .3)] });
+            bakeRigidGroup(board,geometries);
         }
         if (client === 'umbrella') {
             const u = group(clientRoot);
@@ -282,6 +286,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             ball(u, LIME, .8, 4.73, .06, .09, .19, .09);
             mesh(u, torus, LIME, .68, 1.47, .06, .16, .20, .13).rotation.x = Math.PI / 2;
             anchors.push({ id: 'umbrella', object: clientRoot, points: [new Vector3(-.66, 4.94, 0), new Vector3(2.28, 4.1, .6)] });
+            bakeRigidGroup(u,geometries);
         }
         if (client === 'pigeons') {
             birds = [pigeon(clientRoot, 0, 2.96, 0), pigeon(clientRoot, -.20, 2.08, 1), pigeon(clientRoot, .21, 1.08, 2)];
@@ -319,6 +324,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             mesh(pen, cone, '#a77952', 0, .80, 0, .026, .10, .026);
         }
         rb(world, LIME, -2.25, .055, 1.6, .08, .08, 1.0).rotation.y = -.4;
+        bakeRigidGroup(world,geometries,new Set([lamp.children[lamp.children.length-1]]));
     }
     function buildStamp() { desk(); paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat); paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh); stampRoot = group(world, 0, .4, 0); rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43); rb(stampRoot, INK, 0, .005, 0, .49, .025, .47); mesh(stampRoot, cylinder, BLUE, 0, .44, 0, .11, .6, .11); ball(stampRoot, BLUE, 0, .8, 0, .23, .18, .20); rb(stampRoot, LIME, 0, .81, .18, .22, .06, .05); tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
         const page = rb(tower, PAPER, Math.sin(i) * .04, i * .065, 0, 1.35, .055, 1.7);

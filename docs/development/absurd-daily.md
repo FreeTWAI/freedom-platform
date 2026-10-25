@@ -127,3 +127,21 @@
 最終本機回歸：完整遊戲檔 **28 passed／0 skipped（5.8分鐘）**。之後補上UI動作的繪圖拋錯恢復、缺圖大字owner，再build並跑派對子集 **10 passed／0 skipped（3.9分鐘）**；包含原分數保留與重建繼續。兩次聯集為29種不同案例，沒有宣稱最後重跑29項全檔。最後型別／build均通過；32項純規則仍與本次domain／素材一致。完整pitfall記於PARTY PT-8，不覆寫首輪失敗。
 
 最後production build的畫面矩陣共 **59張、0幾何失敗**：5種viewport（320×568／390×844／667×375／768×1024／1440×900）×3種DOM文字比例×3款ready，加手機直／橫向playing／paused與兩張大廳。檢查document overflow、按鈕44px、owner bounds及pageerror；200%可增加文件高度，不宣稱全部內容同屏。冷大廳的資源紀錄另核對實際emitted Three引擎chunk的hash，未載入引擎或PartyGame／stage。可審查原始像素見[桌面派對目錄](../../modules/absurd-daily/review/party-lobby-desktop.png)與[手機操作](../../modules/absurd-daily/review/party-phone.png)；其餘PNG、geometry及資源記錄保留E槽。
+
+## 2026-10-25：全遊戲操作與渲染修整
+
+接續 #1051 `de4fa06ca`，以 [PLAYABILITY 規格](../../modules/absurd-daily/PLAYABILITY.md) UX-1..6 獨立交付。70個入口共用原位置返回／焦點恢復、同題再玩與下一道／下一玩法。64料理沿9種原domain操作增加明確時機、具體失手提示與pointer／keyboard owner；重新做確認先暫停保存。沒有改舊checkpoint格式、規則分數或平台貢獻。
+
+6款3D只合批rigid群組，保留動態子物件、照片anchors、raycast與陰影；蒸籠proxy移到只供raycaster的layer。相同1440×900／seed42／1000ms樣本的draw calls：photo 211→80、stamp96→70、cash92→64、chair141→87、tofu56→52、holiday186→86。診斷DOM mutations分別186→3、186→3、186→3、558→68、558→122、558→63。這是Chromium SwiftShader的同時刻結構量測，不是峰值或手機FPS；合批增加有界geometry，不宣稱GPU記憶體下降。texture數不增加；新geometry與原context一起釋放。原始before／after JSON與實際PNG在E槽。
+
+程序預覽隨本次renderer重新擷取，3張640×480 WebP共49,872 bytes；party-art除renderer外追加合批helper／domain／catalog的來源hash。此數字是更新後的圖像體積，前節46,506仍為 #1051 的歷史證據。料理插畫8張atlas保持原樣，沒引入另一套引擎或素材框架。真人美術、趣味／留存與實機仍EXTERNAL_PENDING；最終回歸與畫面結果隨本批PR記錄。
+
+### 使用者否決後：玩具料理台與遊戲機介面
+
+上述49,872 bytes與效能表是本批前段優化版本；使用者隨後否決美術、直覺性與好玩程度，並提供 [Threads參考](https://www.threads.com/@min61min41min81/post/De1IzELFK6H)。本機實際取得公開OG封面，觀察料理台、工具、圖示食材與三段火力的層次；完整影片未取得。參考圖只存E槽研究，未複製為產品素材。
+
+[PLAYABILITY UX-7](../../modules/absurd-daily/PLAYABILITY.md#ux-7-使用者否決後的完整遊戲介面重做先規格後實作)先規格再實作。64道／9種操作現在使用原創程序鍋具、木板、烤箱、麵糰與貓掌手套；保留原插畫完成菜。單句動作提示、主場景與工具盤取代長表單，詳細食譜／鍵盤在可展開區。翻面、撈泡沫與出爐能直接點場景；所有輸入仍走既有domain，沒有改分數、保存格式、會員貢獻或自動發文。
+
+大廳先呈現可玩的項目，料理推薦只在料理分類。6款3D與成果頁共用新的玩具配色／控制層次；推車／會議桌有跳／躲標示，蒸籠角色有休假／開會標示，豆腐落點輪廓使用目前權威位置。三張真實派對縮圖重新擷取為53,318 bytes，綁定新renderer來源hash。
+
+Three仍為既有引擎，料理新增10.64KB／gzip4.62KB的延後場景程式；共享引擎539.51KB／gzip134.57KB。料理第一次進場會增加引擎載入，大廳不載入；不把新增立體畫面稱作全站減重。640×448、DPR≤1.5、512陰影、15秒期限；初始佈景未就緒不能開始，失敗自動用可操作插畫，同一盤仍保留。每幀讀取本局run以維持道具跟手，文字刷新頻率不限制動畫。ready／paused／完成不持續跑場景RAF，卸載釋放context。

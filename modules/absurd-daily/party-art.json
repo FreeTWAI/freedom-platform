@@ -1,8 +1,8 @@
 {
   "format": "freedom.party-art/v1",
-  "created_at": "2026-10-25T07:20:18.629Z",
+  "created_at": "2026-10-25T08:33:50.148Z",
   "source": "apps/portal-web/src/games/party/stage.ts",
-  "source_sha256": "c0d9317a216754d9dfe31d58fe8e4e68f0529f1959f06d438911a83072712c40",
+  "source_sha256": "e34c020c43e35367a7e1c67e67a541eb0e1ecd92a9fa830f871fb693fdf284cd",
   "provenance": "Original procedural Three models captured from the actual production web renderer with Playwright and Chromium. No Nintendo or third-party game assets.",
   "native_canvas": {
     "width": 640,
@@ -15,10 +15,10 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
       "width": 640,
       "height": 480,
-      "bytes": 11446,
-      "sha256": "a314c02713224e6b380f5e492946af786440c59725e2f652d9633a4dc6eb0d43",
+      "bytes": 12752,
+      "sha256": "0adf8209cb2031be733c2bc61e20c20457c54387f7a5f8212c4c159f1f428f47",
       "source_png": "polished-chair-scene.png",
-      "source_sha256": "ca3bda900cd31007e5e05b81bb2b38c25cbf36dbe301c83c6dca2c434c2000a4",
+      "source_sha256": "de1d101cd72fe167230c897753d9bbf3174bf08d18f9572778650b4d764a38e5",
       "seed": 42,
       "elapsed_ms": 1072
     },
@@ -27,10 +27,10 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
       "width": 640,
       "height": 480,
-      "bytes": 16376,
-      "sha256": "be6b2f41e5cc335cbcee1a6129bacea1d00429f0626c9748c03b762d11c91450",
+      "bytes": 18560,
+      "sha256": "4cced85dec94c79bb15977458ef586e23ce3bba8617069e23579d367bdd35ff3",
       "source_png": "polished-tofu-scene.png",
-      "source_sha256": "51e3255bcc9f46d4d067eaad8e989914e4a4a50311f3bf9fb59c31ff73100ea2",
+      "source_sha256": "1f80334ff04d350e4a6aab8415fded02a8af30094d3c2248a4bf63232d5efe99",
       "seed": 42,
       "elapsed_ms": 176
     },
@@ -39,13 +39,31 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
       "width": 640,
       "height": 480,
-      "bytes": 18684,
-      "sha256": "adf35b7fa19b74464b01bdd2fce955b85532bcb790b7f99f6ef0508598be9662",
+      "bytes": 22006,
+      "sha256": "7bbe26b9c20ebdae30a97695a6b2257a1278fc030c58353ff078e60faaeea467",
       "source_png": "polished-holiday-scene.png",
-      "source_sha256": "e1eeb090a871ab507c97ee9aaa53a5933ade9e501f5b37a040c8f92815d00907",
+      "source_sha256": "267e769f77314419951560860adfe7c25122b39af88833a1602921b3cd1dca17",
       "seed": 42,
       "elapsed_ms": 320
     }
   ],
-  "usage": "自由工坊遊戲與本次公開 PR 預覽，沿用根 README 的視覺素材政策。"
+  "usage": "自由工坊遊戲與本次公開 PR 預覽，沿用根 README 的視覺素材政策。",
+  "source_inputs": [
+    {
+      "path": "apps/portal-web/src/games/party/stage.ts",
+      "sha256": "e34c020c43e35367a7e1c67e67a541eb0e1ecd92a9fa830f871fb693fdf284cd"
+    },
+    {
+      "path": "apps/portal-web/src/games/stage-batch.ts",
+      "sha256": "d0213d99a03f5325af54b923ee730c0f824621f6d66b0971d28a868c83e0f2b4"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/domain.ts",
+      "sha256": "b9599a91c79f68a97354cc0de0d8bd156511fa06dfde62ace461ec3da19b23bc"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/catalog.ts",
+      "sha256": "17281aa0e2ff9ca0ee648001f1e9b8ae7937003ce22633564096626217e86200"
+    }
+  ]
 }

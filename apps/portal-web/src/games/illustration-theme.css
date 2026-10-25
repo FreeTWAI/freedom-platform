@@ -1,4 +1,17 @@
 /* CK-2: matte illustrated cookbook. Shares the portal logo, owns the game palette. */
+/* UX-1/2/3: reachable focus, explicit timing and close-by controls. */
+.ad-root>a.ad-skip{position:fixed;inset:auto auto auto 16px;top:0;transform:translateY(calc(-100% - 24px));z-index:1000}
+.ad-root>a.ad-skip:focus{transform:translateY(12px)}
+.ad-root #ad-main{outline:none}
+.ck-timing{border:1px solid #dec6a6;border-radius:10px;background:#fcf2df;padding:12px;display:grid;gap:8px;line-height:1.6}
+.ck-timing strong{font-size:14px;color:#664c35}.ck-timing small{font-size:13px;color:#796354}
+.ck-timing-bar{height:12px;background:#dfceb4;position:relative;border-radius:8px;margin:4px 6px}
+.ck-timing-bar i{position:absolute;inset-block:0;background:#d9b455;border:1px solid #a4863b;border-radius:3px}
+.ck-timing-bar b{position:absolute;top:-4px;width:6px;height:20px;transform:translateX(-50%);background:#9c4836;border:1px solid #fffcf5;border-radius:4px}
+.ck-game-layout,.ad-play-layout{scroll-margin-top:12px}
+@media(max-width:850px){.ck-game[data-cooking-state=playing] .ck-action-controls{order:-1}.ck-game[data-cooking-state=playing] .ck-game-controls{gap:12px}}
+@media(orientation:landscape) and (max-height:500px) and (min-width:560px){.ck-game[data-cooking-state=playing] .ck-game-layout{grid-template-columns:minmax(0,1.25fr) minmax(220px,1fr)}.ck-game[data-cooking-state=playing] .ck-scene-wrap{max-width:calc((100dvh - 24px) * 10 / 7)}.ck-game[data-cooking-state=playing] .ck-game-controls{padding:12px}.ck-game[data-cooking-state=playing] .ck-action-controls{flex-direction:column}.ad-board[data-playing=true] .ad-stage-wrap{max-width:calc((100dvh - 24px) * 4 / 3)}.ad-board[data-playing=true] .ad-controls{padding:12px}}
+@media(prefers-reduced-motion:reduce){.ad-root button,.ad-root .ad-button{transition:none}.ad-root button:hover,.ad-root .ad-button:hover{transform:none}}
 /* CK-8: portal themes cannot recolor game CTAs; enlarged text owns more space. */
 :root .ad-root .ad-brand,:root .ad-root .ad-home-link{color:#49362f}
 :root .ad-root a.ad-button,:root .ad-root a.ad-button:hover{color:#fffaf0}

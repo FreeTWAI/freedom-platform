@@ -1,10 +1,37 @@
 import sharp from 'sharp';
-import {test,expect,type Page} from './fixtures.js';
+import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
 import {chairWave} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
+
+test('UX-1: returning to the playroom restores the expanded recipe card, focus and scroll, including browser Back',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/play');await page.getByRole('button',{name:'料理小遊戲 64',exact:true}).click();await page.getByRole('button',{name:'再看看 8 道料理',exact:true}).click();const card=page.locator('.ck-recipe-open').nth(15);await card.evaluate(e=>e.scrollIntoView({block:'center'}));const before=await page.evaluate(()=>scrollY),key=await card.getAttribute('data-arcade-open');await card.click();await expect(page.locator('.ck-game')).toBeVisible();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(page.locator('.ck-recipe-open')).toHaveCount(16);await expect(page.locator(`[data-arcade-open="${key}"]`)).toBeFocused();expect(Math.abs(await page.evaluate(()=>scrollY)-before)).toBeLessThan(32);
+  await page.locator(`[data-arcade-open="${key}"]`).click();await page.goBack();await expect(page.locator(`[data-arcade-open="${key}"]`)).toBeFocused();expect(Math.abs(await page.evaluate(()=>scrollY)-before)).toBeLessThan(32);expect(await page.locator('.ad-skip').evaluate(e=>e.getBoundingClientRect().bottom)).toBeLessThanOrEqual(0);await page.locator('.ad-skip').focus();expect(await page.locator('.ad-skip').evaluate(e=>e.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+});
+
+test('UX-2: a whole stirring gesture inside one animation frame still shows the completed step immediately on release',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await openKitchen(page,'rice-balls');const svg=page.locator('.ck-scene'),p=await scenePoint(page,.8,.52);await page.mouse.move(p.x,p.y);await page.mouse.down();await svg.evaluate(el=>{const r=el.getBoundingClientRect();for(let i=1;i<=64;i++){const a=i*Math.PI/16;el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerId:1,isPrimary:true,button:0,buttons:1,clientX:r.left+(.5+.3*Math.cos(a))*r.width,clientY:r.top+(.52+.3*Math.sin(a))*r.height}));}});await page.mouse.up();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','step-result');await expect(page.getByRole('button',{name:/^下一步：/})).toBeVisible();await page.getByRole('button',{name:/^下一步：/}).click();await expect(svg).toHaveAttribute('data-cooking-scene','knead');
+});
+
+test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and restart confirmation freezes progress',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await openKitchen(page,'margherita-pizza');const hold=page.getByRole('button',{name:'按住揉壓，適時放開',exact:true});await hold.scrollIntoViewIfNeeded();const b=(await hold.boundingBox())!;await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.clock.runFor(750);await hold.dispatchEvent('pointerup',{pointerId:99,isPrimary:false,button:0});await expect(page.locator('.ck-meter-copy')).toHaveText('0 / 4');await page.mouse.up();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 4');
+  await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.clock.runFor(750);await page.locator('.ck-scene').dispatchEvent('pointercancel',{pointerId:99,isPrimary:false,button:0});await page.mouse.up();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');await page.getByRole('button',{name:'重新做',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);await page.clock.runFor(6000);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.elapsed,COOKING_RUN_KEY)).toBe(saved.run.elapsed);await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();
+});
+
+test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
+  test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
+});
+
+test('UX-4: all six 3D scenes keep bounded real draw calls and avoid unchanged diagnostic mutations',async({page})=>{
+  test.setTimeout(120000);await page.setViewportSize({width:1440,height:900});await page.clock.install({time:new Date('2026-10-25T06:00:00Z')});
+  for(const [game,budget]of [['photo',95],['stamp',75],['cash',70],['chair',100],['tofu',56],['holiday',100]] as const){const party=['chair','tofu','holiday'].includes(game);await page.goto(`/play?game=${game}&seed=42`);await expect(page.locator(party?'[data-party-stage="ready"]':'[data-game-stage="ready"]')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:party?'開始派對！':game==='stamp'?'先蓋一張練習紙':'開始這一局',exact:true}).click();const host=page.locator(party?'.pt-canvas':'.ad-stage'),counter=await host.evaluateHandle(el=>{const record={count:0};new MutationObserver(records=>{record.count+=records.length;}).observe(el,{attributes:true});return record;});await page.clock.runFor(1000);expect(Number(await host.getAttribute('data-render-calls'))).toBeLessThanOrEqual(budget);expect(await counter.evaluate(c=>c.count)).toBeLessThan(party?160:12);await counter.dispose();}
+});
+
+test('UX-4: a real legacy UI draw failure is contained and retries with practice progress preserved',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:new Date('2026-10-25T09:00:00Z')});await page.goto('/play?game=stamp&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();await page.clock.pauseAt(new Date('2026-10-25T09:01:00Z'));await page.getByRole('button',{name:'先蓋一張練習紙',exact:true}).click();await page.getByRole('button',{name:'啪！蓋章',exact:true}).click();await page.clock.runFor(300);const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic UX draw fault');};});await page.locator('.ad-board').press('ArrowLeft');await expect(page.getByRole('alert')).toContainText('按重試恢復這一局');expect(errors).toEqual([]);await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'重試場景',exact:true}).click();await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();await expect(page.locator('.ad-counter')).toContainText('0/12');
+});
 
 async function openParty(page:Page,game:PartyGameId){
   await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.goto(`/play?game=${game}&seed=42`);
@@ -309,17 +336,65 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
   await expect(page.locator('.ad-game-card')).toHaveCount(3);
 });
 
-import {recipeOf,type Recipe} from '../../apps/portal-web/src/games/cooking/catalog.js';
+import {RECIPES,recipeOf,type Recipe,type Technique} from '../../apps/portal-web/src/games/cooking/catalog.js';
+import {actCooking,advanceCooking,currentStep,newCookingRun,type CookingAction,type CookingRun} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {COOKBOOK_KEY,COOKING_RUN_KEY} from '../../apps/portal-web/src/games/cooking/storage.js';
 async function openKitchen(page:Page,id:string){
   await page.clock.install({time:new Date('2026-10-25T02:00:00Z')});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);
-  await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await expect(page.locator('.ck-visual-3d')).toBeVisible();
   await page.clock.pauseAt(new Date('2026-10-25T02:01:00Z'));await page.getByRole('button',{name:'開始料理',exact:true}).click();
 }
+
+// UX-7: derive checkpoints by actually completing every previous domain step.
+// No invented score, report, elapsed time or privileged application endpoint.
+function kitchenCheckpoint(kind:Technique){
+  const recipe=RECIPES.find(r=>r.steps.some((s,i)=>s.kind===kind&&(kind!=='bake'||i<r.steps.length-1)))!,target=recipe.steps.findIndex(s=>s.kind===kind);let run=newCookingRun(recipe,42,'toy_checkpoint'),now=0;
+  const act=(action:Omit<CookingAction,'step'>)=>{run=actCooking(run,{...action,step:run.step} as CookingAction,now);};
+  const time=(ms:number)=>{const end=now+ms;while(now<end){now=Math.min(end,now+50);run=advanceCooking(run,now);}};
+  act({kind:'start'});
+  for(let i=0;i<target;i++){
+    const s=currentStep(run);
+    if(['slice','mix','plate','fold'].includes(s.kind))for(let j=0;j<s.goal;j++){time(160);if(s.kind==='fold')run=actCooking(run,{kind:'fold',index:run.active.count,direction:s.directions[j],step:run.step},now);else act({kind:s.kind==='slice'?'cut-key':s.kind==='mix'?'stir-key':'place-key'});}
+    if(s.kind==='knead')for(let j=0;j<s.goal;j++){act({kind:'hold-start'});time(s.holdMs);act({kind:'hold-end'});time(160);}
+    if(s.kind==='pour'){act({kind:'hold-start'});time(s.durationMs*s.target);act({kind:'hold-end'});}
+    if(['pan','boil','bake'].includes(s.kind)){run=actCooking(run,{kind:'heat',value:s.heat,step:run.step},now);for(let t=0;t<400&&run.status==='playing';t++){time(50);if(s.kind==='pan'&&run.active.amount>=.55)act({kind:'flip'});if(s.kind==='boil'&&run.active.foam>=.2)act({kind:'skim'});if(s.kind==='bake'&&run.active.amount>=.8)act({kind:'take-out'});}}
+    expect(run.status).toBe('step-result');act({kind:'next'});
+  }
+  act({kind:'pause'});return {recipe,run};
+}
+
+test('UX-7: the real pan, boiling pot and oven accept direct scene taps with the same persisted rules',async({page})=>{
+  test.setTimeout(120000);await page.setViewportSize({width:390,height:844});await page.clock.install();await page.goto('/play');
+  for(const kind of ['pan','boil','bake'] as const){await page.goto('/play');const f=kitchenCheckpoint(kind);await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.goto(`/play?game=kitchen&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'中火',exact:true}).click();await page.clock.runFor(currentStep(f.run).durationMs*(kind==='bake'?.8:.55));await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.click(p.x,p.y);await page.locator('.ck-game').press('Escape');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);if(kind==='pan')expect(saved.active.flipped).toBe(true);if(kind==='boil'){expect(saved.active.count).toBe(1);expect(saved.active.foam).toBe(0);}if(kind==='bake'){expect(saved.reports).toHaveLength(f.run.step+1);expect(saved.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);}}
+});
+
+test('UX-7: loading never starts the clock; late completion requires retry and real context loss keeps the same dish',async({page})=>{
+  test.setTimeout(90000);await page.clock.install();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+  let capture!:(route:Route)=>void;const requested=new Promise<Route>(resolve=>{capture=resolve;});await page.route('**/assets/kitchen-stage-*.js',route=>{capture(route);});
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/play?game=kitchen&recipe=egg-fried-rice&seed=42',{waitUntil:'domcontentloaded'});const route=await requested,response=await route.fetch(),url=route.request().url();
+  await expect(page.locator('.ck-visual-loading')).toBeVisible();await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeDisabled();expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBeNull();await page.clock.fastForward(14999);await expect(page.locator('.ck-visual-loading')).toBeVisible();await page.clock.fastForward(1);await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await route.fulfill({response});await page.evaluate(async value=>{await import(value);},url);await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');
+  const old=await page.locator('.ck-kitchen-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await old.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(1);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(await old.evaluate(gl=>gl.isContextLost())).toBe(true);await old.dispose();
+  const active=await page.locator('.ck-kitchen-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);expect(await active.evaluate(gl=>gl.isContextLost())).toBe(true);await active.dispose();expect(errors).toEqual([]);
+});
+
+test.describe('UX-7 real touch cooking',()=>{
+  test.use({hasTouch:true,isMobile:true,viewport:{width:390,height:844}});
+  test('the rendered dough receives a native touch hold and releases once at the real timing target',async({page})=>{
+    await openKitchen(page,'margherita-pizza');await expect(page.locator('.ck-visual-3d')).toBeVisible();const p=await scenePoint(page,.5,.5),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p.x,y:p.y}]});await page.clock.runFor(750);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 4');const canvas=page.locator('.ck-kitchen-canvas canvas');expect(await canvas.evaluate(c=>c.width)).toBeLessThanOrEqual(960);expect(await canvas.evaluate(c=>c.height)).toBeLessThanOrEqual(672);const stats=await page.locator('.ck-kitchen-canvas').evaluate(el=>({...el.dataset}));expect(Number(stats.renderCalls)).toBeGreaterThan(0);expect(Number(stats.renderCalls)).toBeLessThanOrEqual(100);expect(Number(stats.renderGeometries)).toBeLessThan(100);expect(Number(stats.renderTextures)).toBeLessThanOrEqual(3);await cdp.detach();
+  });
+});
+
+test('UX-7: a failed kitchen renderer loads the usable illustration, and a draw fault preserves the same dish',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());await page.goto('/play?game=kitchen&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-light')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.unroute('**/assets/kitchen-stage-*.js');await page.reload();await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'繼續料理',exact:true}).click();
+  const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic toy kitchen draw fault');};});await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(errors).toEqual([]);
+});
 async function scenePoint(page:Page,x:number,y:number){const box=await page.locator('.ck-scene').boundingBox();expect(box).toBeTruthy();return {x:box!.x+x*box!.width,y:box!.y+y*box!.height};}
 async function playRecipe(page:Page,recipe:Recipe){
   for(let index=0;index<recipe.steps.length;index++){
     const s=recipe.steps[index];await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);
+    if(['knead','pan','boil','bake','pour'].includes(s.kind)){await expect(page.getByRole('meter')).toBeVisible();await expect(page.getByRole('meter')).toHaveAttribute('aria-valuetext',/目標/);}
     if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const x=.22+.56*(i+1)/(s.goal+1),from=await scenePoint(page,x,.23),to=await scenePoint(page,x,.78);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
     if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs);await page.keyboard.up('Space');await page.clock.runFor(160);}
@@ -332,8 +407,22 @@ async function playRecipe(page:Page,recipe:Recipe){
     if(s.kind==='plate')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const start=await scenePoint(page,.1275,.535),angle=-Math.PI/2+i*2*Math.PI/s.goal,target=await scenePoint(page,.5+.23*Math.cos(angle),.53+.18*Math.sin(angle));await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(target.x,target.y,{steps:6});await page.mouse.up();}
     if(index<recipe.steps.length-1){await expect(page.getByRole('button',{name:/^下一步：/})).toBeVisible();await page.getByRole('button',{name:/^下一步：/}).click();}
   }
+  // UX-T3: only after persisted settlement, let native WebP decoding/toBlob run on real frames.
+  expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
   await expect(page.locator('.ad-result')).toBeVisible();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.locator('.ad-result-heading')).toContainText(recipe.name);
+  await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));
 }
+test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and folding into a shareable result',async({page})=>{
+  const recipe=recipeOf('rice-balls')!,errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await page.setViewportSize({width:390,height:844});await page.goto('/play?game=kitchen&recipe=rice-balls&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  for(const [index,s]of recipe.steps.entries()){
+    if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const a=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(a),.52+.3*Math.sin(a));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
+    if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.waitForTimeout(s.holdMs);await page.keyboard.up('Space');await page.waitForTimeout(160);}
+    if(s.kind==='fold')for(const direction of s.directions){await page.waitForTimeout(160);await page.locator('.ck-game').focus();await page.keyboard.press(`Arrow${direction[0].toUpperCase()+direction.slice(1)}`);}
+    if(index<recipe.steps.length-1)await page.getByRole('button',{name:/^下一步：/}).click();
+  }
+  await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toHaveAttribute('href',/^blob:/);const book=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),COOKBOOK_KEY);expect(book.best['rice-balls'].score).toBeGreaterThanOrEqual(85);expect(posts).toBe(0);expect(errors).toEqual([]);
+});
+
 for(const id of ['egg-fried-rice','rice-balls','chocolate-brownie','pearl-milk-tea'])test(`CK-5: ${id} completes through real scene gestures and keyboard cooking controls`,async({page})=>{
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openKitchen(page,id);await playRecipe(page,recipeOf(id)!);
   await socialEntries(page,'kitchen');

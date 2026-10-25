@@ -3,6 +3,7 @@ import {PARTY_GAMES,PARTY_RULES as R,type PartyGameId} from './catalog';
 import {actParty,advanceParty,holidayOpen,holidayTargets,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyAction,type PartyRun} from './domain';
 import type {RunResult} from '../result-card';
 import type {PartyStage} from './stage';
+import {syncDiagnostics} from '../diagnostics';
 import './party.css';
 
 /** PT-2/6: UI owns input and lifecycle; the pure domain owns every score. */
@@ -14,7 +15,7 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
   const [,repaint]=useState(0),[ready,setReady]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[retry,setRetry]=useState(0),[restart,setRestart]=useState(false),[sound,setSound]=useState(false),[motion,setMotion]=useState(motionRef.current);
   function refresh(){repaint(n=>n+1);}
   function stop(){cancelAnimationFrame(frame.current);frame.current=0;last.current=null;gesture.current=null;}
-  function draw(){if(!stage.current)return;const s=live.current;stage.current.update(s,motionRef.current);if(host.current){const stats=stage.current.stats();host.current.dataset.renderCalls=String(stats.calls);host.current.dataset.renderTriangles=String(stats.triangles);host.current.dataset.renderGeometries=String(stats.geometries);host.current.dataset.renderTextures=String(stats.textures);host.current.dataset.anchors=JSON.stringify(stage.current.anchors());host.current.dataset.elapsed=String(s.elapsed);host.current.dataset.round=String(s.game==='holiday'?s.round:0);host.current.dataset.lane=String(s.game==='chair'?s.lane:0);host.current.dataset.tofuOffset=s.game==='tofu'?String(tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)]):'';}}
+  function draw(){if(!stage.current)return;const s=live.current;stage.current.update(s,motionRef.current);if(host.current){const stats=stage.current.stats();syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderGeometries:stats.geometries,renderTextures:stats.textures,anchors:JSON.stringify(stage.current.anchors()),elapsed:s.elapsed,round:s.game==='holiday'?s.round:0,lane:s.game==='chair'?s.lane:0,tofuOffset:s.game==='tofu'?tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)]:''});}}
   function safeDraw(){try{draw();return true;}catch{live.current=pauseParty(live.current);stop();setReady(false);setError('場景暫時無法顯示。本局仍保留，重建後可繼續。');refresh();return false;}}
   function pauseRun(message='這局先停在這裡。'){const next=pauseParty(live.current);if(next===live.current)return;live.current=next;stop();setNotice(message);safeDraw();refresh();}
   function kick(){if(!frame.current&&live.current.status==='playing')frame.current=requestAnimationFrame(t=>loop.current(t));}
@@ -62,13 +63,14 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
     else if(live.current.game==='holiday'){const hole=stage.current?.pick(e.clientX,e.clientY);if(hole!==null&&hole!==undefined)action({kind:'pick',hole,round:live.current.round});}
   }
   const s=live.current,playing=s.status==='playing',done=s.status==='done',duration=game==='chair'?R.chairMs:game==='tofu'?R.tofuMs:R.holidayMs;
+  const aligned=s.game==='tofu'&&!s.fall&&Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)])<=R.tofuPerfect;
   const roundTargets=s.game==='holiday'?holidayTargets(s.seed,s.round):null,open=s.game==='holiday'&&holidayOpen(s),summary=partySummary(s);
   return <section className={`pt-root pt-${game}`} onKeyDown={key} data-party-state={s.status} data-party-score={s.score}>
     <header className="pt-heading"><div><p className="pt-kicker">日常派對 / {spec.tag}</p><h1>{spec.title}</h1><p>{spec.subtitle}</p></div><button className="ad-secondary" onClick={onBack}>回遊戲大廳</button></header>
     <div className="pt-layout"><div className="pt-play-area">
       <div className="pt-scoreboard" aria-label="本局狀態"><div><small>本局得分</small><strong>{s.score}<span>分</span></strong></div><div><small>{s.game==='tofu'?'豆腐樓層':'剩餘時間'}</small><strong>{s.game==='tofu'?`${s.layers.length-1} / ${R.tofuGoal}`:Math.ceil((duration-s.elapsed)/1000)}{s.game!=='tofu'&&<span>秒</span>}</strong></div><div><small>{s.game==='chair'?'下班意志':s.game==='tofu'?'還能失手':'最長連擊'}</small><strong>{s.game==='chair'?`${'♥'.repeat(s.lives)}${'♡'.repeat(R.chairLives-s.lives)}`:s.game==='tofu'?`${R.tofuMisses-s.misses} 次`:`${s.bestCombo} 次`}</strong></div></div>
       <div className="pt-scene-frame"><div ref={host} className="pt-canvas" tabIndex={0} role="application" aria-label={`${spec.title} 3D 場景。${spec.keys}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={down} onPointerUp={up} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
-        {playing&&<span className="pt-live-label">{s.game==='chair'?`假日票 ${s.tickets} 張`:s.game==='tofu'?`完美貼齊 ${s.perfects} 次`:`已守住 ${s.game==='holiday'?s.saved:0} 個假日`}</span>}
+        {playing&&<span className="pt-live-label">{s.game==='chair'?`假日票 ${s.tickets} 張`:s.game==='tofu'?s.fall?'豆腐穩穩落下…':aligned?'對齊了！現在落下':`完美貼齊 ${s.perfects} 次 · 等對齊再落下`:`已守住 ${s.game==='holiday'?s.saved:0} 個假日`}</span>}
       </div>
       {(error||!ready)&&<div className="pt-panel" role={error?'alert':'status'}><span className="pt-panel-symbol" aria-hidden="true">✳</span><h2>{error?'場景先休息一下。':'正在搭建你的迷你世界…'}</h2><p>{error||'角色和道具就快到齊了。'}</p>{error&&<button onClick={()=>setRetry(n=>n+1)}>重建 3D 場景</button>}<button className="ad-secondary" onClick={onBack}>先回遊戲大廳</button></div>}
       {ready&&!error&&!playing&&<div className="pt-panel" aria-label={done?'本局完成':s.status==='paused'?'遊戲暫停':'開玩說明'}><span className="pt-panel-symbol" aria-hidden="true">{done?'✦':s.status==='paused'?'Ⅱ':'↗'}</span><div><p className="pt-kicker">{done?'本局完成':s.status==='paused'?'休息一下再出發':`${spec.duration} · 一看就會玩`}</p><h2>{done?summary.caption:s.status==='paused'?'這局幫你留著。':game==='chair'?'會議可以等，下班不能。':game==='tofu'?'手要穩，豆腐要嫩。':'把假日，好好搶回來。'}</h2><p>{done?summary.details:s.status==='paused'?notice:spec.rule}</p></div><button onClick={done?result:begin}>{done?'查看這局成果':s.status==='paused'?'繼續這一局':'開始派對！'}<span aria-hidden="true"> ↗</span></button></div>}

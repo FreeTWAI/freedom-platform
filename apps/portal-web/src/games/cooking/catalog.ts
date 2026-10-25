@@ -120,3 +120,5 @@ export function recipeOf(id:unknown):Recipe|null{return typeof id==='string'?byI
 export const RECIPE_IDS=RECIPES.map(r=>r.id);
 export function recipeSearch(recipe:Recipe,query:string){const terms=query.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);const haystack=[recipe.name,...recipe.ingredients,...recipe.steps.map(s=>s.title),...recipe.steps.map(s=>TECHNIQUES[s.kind].name)].join(' ').normalize('NFKC').toLocaleLowerCase();return terms.every(term=>haystack.includes(term));}
 export const COOKING_RULES={actionCooldownMs:120,maxSimulatedTickMs:1000,minCutDistance:.18,minStirRadius:.12,maxStirRadius:.48,maxStirDelta:.8,minHoldMs:180,plateRadius:.18,saveThrottleMs:750,maxSaveBytes:65536} as const;
+/** UX-7: renderer budgets are independent of simulation and never load in the lobby. */
+export const KITCHEN_VIEW={width:640,height:448,maxDpr:1.5,shadowSize:512,loaderMs:15000} as const;

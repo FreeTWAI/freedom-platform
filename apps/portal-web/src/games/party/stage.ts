@@ -1,10 +1,11 @@
 import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,NearestFilter,NoToneMapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {bakeRigidGroup} from '../stage-batch';
 import {PARTY_RULES as R,type PartyGameId} from './catalog';
-import {chairJump,chairWave,holidayOpen,holidayTargets,tofuPosition,type PartyRun,type TofuLayer} from './domain';
+import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,type PartyRun,type TofuLayer} from './domain';
 
 export type PartyStage={update:(s:PartyRun,motion:boolean)=>void;capture:()=>string;pick:(x:number,y:number)=>number|null;anchors:()=>{hole:number;x:number;y:number}[];stats:()=>{calls:number;triangles:number;geometries:number;textures:number};dispose:()=>void};
-const C={ink:'#443b37',cream:'#fff1d6',sage:'#709a87',leaf:'#426f58',peach:'#e6a08a',gold:'#e7bd6e',lilac:'#ada1c4',navy:'#59637f',wood:'#bc8b63'};
+const C={ink:'#45433b',cream:'#fff0c9',sage:'#74ae98',leaf:'#397c5e',peach:'#e99773',gold:'#f0bb53',lilac:'#b6a0c8',navy:'#627799',wood:'#c59663'};
 
 /** PT-6: one bounded, original miniature set per mount. No network assets. */
 export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>void):PartyStage {
@@ -17,9 +18,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
   try {
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
-    const scene=new Scene();scene.background=new Color(game==='holiday'?'#eae1ed':game==='chair'?'#e4eadd':'#f1e4cf');
+    const scene=new Scene();scene.background=new Color(game==='holiday'?'#e6dcef':game==='chair'?'#d4e8d6':'#f5dcb3');
     const camera=game==='chair'?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
-    const ray=new Raycaster(),world=new Group();scene.add(world);
+    const ray=new Raycaster(),world=new Group();ray.layers.set(1);scene.add(world);
     scene.add(new HemisphereLight('#fff9ed','#a7a28e',1.1));key.position.set(-5,10,7);key.castShadow=true;key.shadow.mapSize.set(512,512);Object.assign(key.shadow.camera,{left:-8,right:8,top:9,bottom:-15,near:.5,far:30});key.shadow.normalBias=.04;scene.add(key);
     const gradient=new DataTexture(new Uint8Array([105,190,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
     const geo=<T extends BufferGeometry>(g:T):T=>{geometries.add(g);return g;};
@@ -35,12 +36,15 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     const face=canvasTexture(ctx=>{ctx.strokeStyle=C.ink;ctx.fillStyle=C.ink;ctx.lineCap='round';ctx.lineWidth=9;for(const x of [82,174]){ctx.beginPath();ctx.ellipse(x,107,8,12,0,0,Math.PI*2);ctx.fill();}ctx.beginPath();ctx.arc(128,126,23,.15,Math.PI-.15);ctx.stroke();ctx.fillStyle='#d98c7d';ctx.beginPath();ctx.ellipse(57,132,14,7,0,0,7);ctx.ellipse(199,132,14,7,0,0,7);ctx.fill();});
     function sign(p:Group,title:string,sub:string,x:number,y:number,z:number,w=2.6){const t=canvasTexture(ctx=>{ctx.fillStyle=C.leaf;ctx.fillRect(0,0,512,152);ctx.fillStyle=C.cream;ctx.font='800 43px system-ui';ctx.textAlign='center';ctx.fillText(title,256,66);ctx.font='500 22px system-ui';ctx.fillText(sub,256,112);},512,152);rb(p,C.wood,x,y,z-.06,w+.16,w*.31+.16,.14);return decal(p,t,x,y,z+.03,w,w*152/512);}
     function leaf(p:Group,x:number,y:number,z:number,scale=1){const l=ball(p,C.leaf,x,y,z,.14*scale,.32*scale,.07*scale);l.rotation.z=-.65;rb(p,C.gold,x-.02,y-.1*scale,z,.035*scale,.27*scale,.03*scale);}
-    function plant(p:Group,x:number,z:number){const g=group(p,x,0,z);mesh(g,cylinder,C.peach,0,.25,0,.3,.5,.3);for(let i=0;i<3;i++){const a=i*2.2;const l=ball(g,i%2?C.sage:C.leaf,Math.cos(a)*.23,.7+i*.14,Math.sin(a)*.23,.17,.5,.13);l.rotation.z=(i-1)*.45;}return g;}
+    function plant(p:Group,x:number,z:number){const g=group(p,x,0,z);mesh(g,cylinder,C.peach,0,.25,0,.3,.5,.3);for(let i=0;i<3;i++){const a=i*2.2;const l=ball(g,i%2?C.sage:C.leaf,Math.cos(a)*.23,.7+i*.14,Math.sin(a)*.23,.17,.5,.13);l.rotation.z=(i-1)*.45;}bakeRigidGroup(g,geometries);return g;}
     const floor=canvasTexture(ctx=>{ctx.fillStyle='#f6e9d1';ctx.fillRect(0,0,512,512);ctx.strokeStyle='#e1d3b9';ctx.lineWidth=2;for(let i=0;i<=8;i++){ctx.beginPath();ctx.moveTo(i*64,0);ctx.lineTo(i*64,512);ctx.moveTo(0,i*64);ctx.lineTo(512,i*64);ctx.stroke();}},512,512);
     rb(world,'#d4b58f',0,-.25,-1.4,12,.5,game==='chair'?26:11);
     const ground=decal(world,floor,0,.012,-1.4,12,game==='chair'?26:11);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;
     const papers=Array.from({length:12},(_,i)=>{const p=mesh(world,box,[C.cream,C.gold,C.peach][i%3],0,0,0,.12,.025,.19);p.visible=false;return p;});
     let chair:Group|null=null,wheels:Mesh[]=[],runnerProps:{hazard:Group;cart:Group;meeting:Group;ticket:Group}[]=[],tofus:Group[]=[],activeTofu:Group|null=null,crumb:Group|null=null;
+    const landing=new Group(),landingMaterial=new MeshBasicMaterial({color:C.gold,transparent:true,opacity:.65,depthWrite:false});materials.add(landingMaterial);world.add(landing);landing.visible=false;
+    // UX-7: the footprint projects the real moving layer, never a second physics state.
+    const landingEdges=Array.from({length:4},()=>{const edge=new Mesh(round,landingMaterial);landing.add(edge);return edge;});
     const holes:Group[]=[],sprites:{body:Group;leaf:Group;tie:Group;label:Mesh}[]=[],proxies:Mesh[]=[],anchorPositions:Vector3[]=[];
     const ghostMaterials=new MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});materials.add(ghostMaterials);
     function tofu(p:Group){const g=group(p);rb(g,C.cream,0,0,0,1,.94,1);rb(g,'#e5d5b5',0,-.3,0,1.01,.12,1.01);const stamp=decal(g,face,-.04,.482,.02,.48,.48);stamp.rotation.x=-Math.PI/2;leaf(g,.31,.54,-.22,.55);return g;}
@@ -58,13 +62,16 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       ball(seat,C.sage,0,1.33,.12,.38,.47,.29);ball(seat,C.cream,0,1.94,.11,.44,.42,.38);decal(seat,face,0,1.93,.49,.72,.68);
       for(const side of [-1,1]){const ear=ball(seat,C.cream,side*.25,2.37,.07,.115,.32,.11);ear.rotation.z=-side*.2;ball(seat,C.peach,side*.26,2.41,.15,.05,.17,.025);ball(seat,C.sage,side*.38,1.38,.36,.13,.28,.12);rb(seat,C.navy,side*.23,1.01,.53,.23,.18,.46);rb(seat,C.gold,side*.23,.94,.77,.25,.16,.24);}
       const cup=group(seat,.5,1.22,.44);mesh(cup,cylinder,C.peach,0,0,0,.09,.19,.09);mesh(cup,torus,C.peach,.11,0,0,.07,.07,.07);
+      bakeRigidGroup(seat,geometries,new Set(wheels));
       runnerProps=Array.from({length:4},()=>{
         const hazard=group(world),cart=group(hazard),meeting=group(hazard);
         for(const [model,low] of [[cart,true],[meeting,false]] as const){
-          rb(model,low?C.sage:C.wood,0,low?.5:.85,0,1.2,low?.25:.18,.82);
+          rb(model,low?C.peach:C.lilac,0,low?.5:.85,0,1.2,low?.25:.18,.82);
           for(const side of [-1,1])rb(model,C.ink,side*.46,low?.25:.4,0,.08,low?.5:.8,.54);
           rb(model,C.cream,-.23,low?.73:1,.06,.45,.06,.45);rb(model,C.peach,.29,low?.8:1.06,0,.22,.27,.22);
           if(!low){rb(model,C.navy,0,1.25,-.22,.72,.52,.07);decal(model,face,0,1.26,-.17,.56,.42);}
+          sign(model,low?'跳！':'躲！',low?'UP':'LEFT / RIGHT',0,low?1.15:1.75,.5,.95);
+          bakeRigidGroup(model,geometries);
         }
         const ticket=group(world);rb(ticket,C.gold,0,.85,0,.7,.86,.13);rb(ticket,C.cream,0,.85,.075,.58,.71,.02);leaf(ticket,0,.9,.12,.8);
         return {hazard,cart,meeting,ticket};
@@ -76,18 +83,21 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       const chop=rb(world,C.wood,3.4,.15,1.3,.09,.1,3);chop.rotation.y=.3;const chop2=rb(world,C.wood,3.7,.15,1.3,.09,.1,3);chop2.rotation.y=.3;
       tofus=Array.from({length:R.tofuGoal+1},()=>tofu(world));activeTofu=tofu(world);crumb=tofu(world);
     }else{
-      camera.position.set(5.8,7.7,10);camera.lookAt(0,.15,0);
+      camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
       sign(world,'今日公休委員會','SAVE YOUR WEEKEND',0,1.4,-4.8,3.5);plant(world,-4,-3.5);plant(world,4,-3.5);
+      const badgeTextures=([C.leaf,C.navy] as const).map((color,i)=>canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=color;ctx.font='900 64px "Microsoft JhengHei",sans-serif';ctx.textAlign='center';ctx.fillText(i?'開會':'休假',128,88);},256,128));
       for(let i=0;i<6;i++){
         const x=(i%3-1)*2.5,z=Math.floor(i/3)*2.6-1.35,hole=group(world,x,0,z);holes.push(hole);
-        mesh(hole,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(hole,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(hole,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
-        for(let k=0;k<8;k++){const a=k*Math.PI/4;const line=rb(hole,'#a97754',Math.cos(a)*.91,.22,Math.sin(a)*.91,.035,.28,.08);line.rotation.y=-a;}
+        const rim=group(hole);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
+        for(let k=0;k<8;k++){const a=k*Math.PI/4;const line=rb(rim,'#a97754',Math.cos(a)*.91,.22,Math.sin(a)*.91,.035,.28,.08);line.rotation.y=-a;}bakeRigidGroup(rim,geometries);
         const body=group(hole,0,.15,0);ball(body,C.cream,0,.52,0,.61,.54,.58);decal(body,face,0,.55,.55,.86,.76);
         const leaves=group(body);leaf(leaves,.07,1.15,0,1.35);leaf(leaves,-.14,1.13,0,.8);
         const tie=group(body);rb(tie,C.navy,0,1.06,0,.88,.13,.73);rb(tie,C.navy,0,1.21,-.04,.64,.25,.6);const t=rb(tie,C.peach,0,.16,.56,.18,.36,.06);t.rotation.z=.2;
+        decal(leaves,badgeTextures[0],0,.29,.59,.65,.32);decal(tie,badgeTextures[1],0,.29,.59,.65,.32);
+        bakeRigidGroup(leaves,geometries);bakeRigidGroup(tie,geometries);
         const labelTexture=canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=C.ink;ctx.font='900 72px system-ui';ctx.textAlign='center';ctx.fillText(String(i+1),128,92);},256,128);
         const label=decal(hole,labelTexture,0,.25,1.005,.51,.27);sprites.push({body,leaf:leaves,tie,label});
-        const proxy=new Mesh(cylinder,ghostMaterials);proxy.scale.set(1,.95,1);proxy.position.set(x,.85,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,.85,z));
+        const proxy=new Mesh(cylinder,ghostMaterials);proxy.layers.set(1);proxy.scale.set(1,.95,1);proxy.position.set(x,.85,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,.85,z));
       }
     }
     function setTofu(g:Group,l:TofuLayer,y:number){g.visible=true;g.position.set(l.x,y,l.z);g.scale.set(l.width,R.tofuHeight,l.depth);}
@@ -105,6 +115,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         tofus.forEach((g,i)=>{g.visible=i<s.layers.length;if(g.visible)setTofu(g,s.layers[i],.52+i*R.tofuHeight);});
         const n=s.layers.length,topY=.52+n*R.tofuHeight,fall=s.fall,phase=fall?Math.min(1,(s.elapsed-fall.at)/R.tofuFallMs):0;
         activeTofu.visible=s.status!=='done';if(activeTofu.visible)setTofu(activeTofu,fall?fall.from:tofuPosition(s),topY+(1-phase*phase)*1.7);
+        const projected=fall?fall.from:tofuPosition(s),top=s.layers[s.layers.length-1];landing.visible=s.status!=='done'&&!fall;
+        landing.position.set(projected.x,topY-R.tofuHeight/2+.018,projected.z);landingMaterial.color.set(Math.abs(projected[tofuAxis(s)]-top[tofuAxis(s)])<=R.tofuPerfect?C.leaf:C.gold);
+        landingEdges.forEach((e,i)=>{const alongX=i<2;e.position.set(alongX?0:(i===2?-1:1)*projected.width/2,0,alongX?(i===0?-1:1)*projected.depth/2:0);e.scale.set(alongX?projected.width:.045,.025,alongX?.045:projected.depth);});
         if(fall&&!fall.kept){activeTofu.position.y=topY+1.7-phase*phase*3.5;activeTofu.rotation.z=motion?phase*.5:0;}else activeTofu.rotation.z=0;
         const age=s.elapsed-s.feedbackAt;crumb.visible=motion&&!!s.feedback&&!s.feedback.includes('完美')&&age<600;
         if(crumb.visible){const top=s.layers[s.layers.length-1];setTofu(crumb,{...top,x:top.x+1.6+age/400,width:.35},topY-age/220);crumb.rotation.z=age/170;}
