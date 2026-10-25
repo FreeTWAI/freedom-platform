@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
+import {useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import type {PortalClient} from '../api';
 import {MemberAvatar} from './MemberAvatar';
 import {useLanguage,type InterfaceLanguage} from '../language';
@@ -51,14 +51,43 @@ export function SocialTextTools({client,text,onChange,mentions,onMentions,disabl
  const localizedError=()=>error===textToolMessages.limit[0]?t('limit'):error===textToolMessages.unavailable[0]?t('unavailable'):error;
  const [mode,setMode]=useState<'emoji'|'mention'|null>(null),[dismissed,setDismissed]=useState<string|null>(null),[search,setSearch]=useState(''),[items,setItems]=useState<Mention[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const id=useId(),trigger=useRef<HTMLButtonElement>(null);
+ const [emojiSelection,setEmojiSelection]=useState<{value:string;start:number;end:number}|null>(null);
+ const composing=useRef(false),caret=useRef<{value:string;position:number;session:number}|null>(null);
+ const area=()=>trigger.current?.closest('form')?.querySelector('textarea');
+ useEffect(()=>{
+  const input=area();if(!input)return;
+  const select=()=>setEmojiSelection({value:input.value,start:input.selectionStart,end:input.selectionEnd});
+  const start=()=>{composing.current=true;},end=()=>{composing.current=false;select();};
+  input.addEventListener('select',select);input.addEventListener('compositionstart',start);input.addEventListener('compositionend',end);
+  return()=>{input.removeEventListener('select',select);input.removeEventListener('compositionstart',start);input.removeEventListener('compositionend',end);caret.current=null;composing.current=false;};
+ },[client]);
+ useLayoutEffect(()=>{
+  const pending=caret.current;if(!pending)return;caret.current=null;
+  const input=area();
+  if(disabled||client.sessionGeneration!==pending.session||text!==pending.value||!input||input.disabled||input.value!==pending.value)return;
+  input.focus({preventScroll:true});input.setSelectionRange(pending.position,pending.position);
+ },[text,mode,disabled,client]);
+ function toggleEmoji(){
+  const input=area();if(composing.current)return;
+  setEmojiSelection(input?{value:input.value,start:input.selectionStart,end:input.selectionEnd}:null);
+  setMode(mode==='emoji'?null:'emoji');
+ }
+ function insertEmoji(emoji:string){
+  const input=area();if(disabled||composing.current||!input||input.disabled||input.value!==text)return;
+  const start=input.selectionStart,end=input.selectionEnd,value=text.slice(0,start)+emoji+text.slice(end);
+  if(value.length>maxLength)return;
+  caret.current={value,position:start+emoji.length,session:client.sessionGeneration};
+  onChange(value);setMode(null);
+ }
+ const selectedLength=emojiSelection?.value===text?emojiSelection.end-emojiSelection.start:0;
  const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);
  const query=mode==='mention'?search:text===dismissed?undefined:at?.[1],showMention=mode==='mention'||query!==undefined;
  useEffect(()=>{if(!showMention||disabled)return;let active=true;setItems([]);setBusy(true);setError('');const timer=setTimeout(()=>{void client.get<{items:{user_id:string;nickname:string}[]}>(`/members?limit=6&search=${encodeURIComponent(query??'')}`).then(page=>{if(active)setItems(page.items.map(item=>({user_id:item.user_id,display_name:item.nickname})));}).catch(e=>{if(active)setError(e instanceof Error?e.message:'會員暫時無法載入。');}).finally(()=>{if(active)setBusy(false);});},200);return()=>{active=false;clearTimeout(timer);};},[client,showMention,query,disabled]);
  function choose(member:Mention){const value=at?text.slice(0,text.lastIndexOf('@'))+`@${member.display_name} `:`${text}${text&&!text.endsWith(' ')?' ':''}@${member.display_name} `;if(value.length>maxLength||mentions.length>=10&&!mentions.some(m=>m.user_id===member.user_id)){setError('文字或標註人數已達上限。');return;}onChange(value);onMentions([...new Map([...mentions,member].map(m=>[m.user_id,m])).values()]);setMode(null);setSearch('');setDismissed(value);const area=trigger.current?.closest('form')?.querySelector('textarea');area?.focus();}
  return <div className="social-text-tools">
- <div className="social-tool-buttons"><button ref={trigger} type="button" className="social-icon-button" aria-label={t('emoji')} title={t('emoji')} disabled={disabled} aria-expanded={mode==='emoji'} aria-controls={id} onClick={()=>setMode(mode==='emoji'?null:'emoji')}><SocialIcon name="smile"/></button><button type="button" className="social-icon-button" disabled={disabled} aria-label={t('mention')} title={t('mention')} aria-expanded={showMention} aria-controls={id} onClick={()=>setMode(mode==='mention'?null:'mention')}>@</button></div>
+ <div className="social-tool-buttons"><button ref={trigger} type="button" className="social-icon-button" aria-label={t('emoji')} title={t('emoji')} disabled={disabled} aria-expanded={mode==='emoji'} aria-controls={id} onClick={toggleEmoji}><SocialIcon name="smile"/></button><button type="button" className="social-icon-button" disabled={disabled} aria-label={t('mention')} title={t('mention')} aria-expanded={showMention} aria-controls={id} onClick={()=>setMode(mode==='mention'?null:'mention')}>@</button></div>
  {!disabled&&(mode==='emoji'||showMention)&&<section className="social-text-picker" id={id} aria-label={mode==='emoji'?'emoji':t('mention')} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setMode(null);setDismissed(text);trigger.current?.focus();}}}>
- {mode==='emoji'?<div className="social-emoji-grid">{['😀','😂','😍','🥰','👍','👏','🎉','❤️','🙏','💪','🔥','✨'].map(emoji=><button key={emoji} type="button" aria-label={t('insert').replace('{emoji}',emoji)} disabled={text.length+emoji.length>maxLength} onClick={()=>{onChange(text+emoji);setMode(null);trigger.current?.focus();}}>{emoji}</button>)}</div>:<><label className="field">{t('search')}<input type="search" aria-label={t('searchLabel')} maxLength={40} value={query??''} onChange={e=>{setMode('mention');setSearch(e.target.value);}}/></label>{busy?<p role="status">{t('searching')}</p>:items.map(member=><button className="social-mention-choice" type="button" key={member.user_id} onClick={()=>choose(member)}><MemberAvatar nickname={member.display_name}/><span>{member.display_name}</span></button>)}{!busy&&!items.length&&!error&&<p>{t('empty')}</p>}{error&&<p role="alert">{localizedError()}</p>}</>}
+ {mode==='emoji'?<div className="social-emoji-grid">{['😀','😂','😍','🥰','👍','👏','🎉','❤️','🙏','💪','🔥','✨'].map(emoji=><button key={emoji} type="button" aria-label={t('insert').replace('{emoji}',emoji)} disabled={text.length-selectedLength+emoji.length>maxLength} onClick={()=>insertEmoji(emoji)}>{emoji}</button>)}</div>:<><label className="field">{t('search')}<input type="search" aria-label={t('searchLabel')} maxLength={40} value={query??''} onChange={e=>{setMode('mention');setSearch(e.target.value);}}/></label>{busy?<p role="status">{t('searching')}</p>:items.map(member=><button className="social-mention-choice" type="button" key={member.user_id} onClick={()=>choose(member)}><MemberAvatar nickname={member.display_name}/><span>{member.display_name}</span></button>)}{!busy&&!items.length&&!error&&<p>{t('empty')}</p>}{error&&<p role="alert">{localizedError()}</p>}</>}
  </section>}
  </div>;
 }

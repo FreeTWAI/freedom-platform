@@ -4,6 +4,7 @@ import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
+import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 
 async function composer(page:Page,email='maker@local.test'){
   await page.goto('/');
@@ -42,6 +43,58 @@ test('mention search does not offer old-query members after failure or a late su
     await choices.click();await expect(draft).toHaveValue('保留我的貼文草稿 @Carol 搜尋結果 ');await expect(draft).toBeFocused();
     expect(writes).toBe(0);
   }finally{releaseSlow();}
+});
+
+for(const width of [390,1440])test(`emoji insertion follows the caret and selection and preserves history at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true}),picker=dialog.getByRole('button',{name:'插入 emoji',exact:true});
+  await area.fill('前言後文');await area.press('Home');await area.press('ArrowRight');await area.press('ArrowRight');
+  await picker.focus();await page.keyboard.press('Enter');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(area).toHaveValue('前言🎉後文');await expect(area).toBeFocused();
+  expect(await area.evaluate((input:HTMLTextAreaElement)=>[input.selectionStart,input.selectionEnd])).toEqual([4,4]);
+  await page.keyboard.type('！');await expect(area).toHaveValue('前言🎉！後文');
+  await picker.click();await dialog.getByRole('button',{name:'插入 😂',exact:true}).click();
+  await expect(area).toHaveValue('前言🎉！😂後文');await expect(area).toBeFocused();
+  await dialog.getByRole('button',{name:'復原上一步',exact:true}).click();await expect(area).toHaveValue('前言🎉！後文');
+  await dialog.getByRole('button',{name:'重做',exact:true}).click();await expect(area).toHaveValue('前言🎉！😂後文');
+  await area.fill('前言舊字後文');await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(2,4));
+  await picker.click();await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();
+  await expect(area).toHaveValue('前言🎉後文');await expect(area).toBeFocused();
+  const full='字'.repeat(2000);await area.fill(full);await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(998,1000));
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeEnabled();
+  await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue(full.slice(0,998)+'🎉'+full.slice(1000));
+  expect(await area.evaluate((input:HTMLTextAreaElement)=>[input.value.length,input.selectionStart,input.selectionEnd])).toEqual([2000,1000,1000]);
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeDisabled();
+  await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,2));
+  await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeEnabled();
+  await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,0));
+  await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeDisabled();
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toHaveCount(0);await expect(dialog).toBeVisible();
+});
+
+test('emoji controls honor a synthetic composition guard without changing the draft',async({page})=>{
+  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true});
+  await area.fill('輸入法草稿');await dialog.getByRole('button',{name:'插入 emoji',exact:true}).click();
+  await area.dispatchEvent('compositionstart');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue('輸入法草稿');
+  await area.dispatchEvent('compositionend');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();
+  await expect(area).toHaveValue('輸入法草稿🎉');await expect(area).toBeFocused();
+});
+
+test('comment emoji insertion replaces selection without sending and respects its shorter limit',async({page,e2eAuthPool})=>{
+  await composer(page);const session=await page.request.get('/api/v1/session');expect(session.status()).toBe(200);
+  const userId=(await session.json()).user.user_id,postId=randomUUID(),schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
+  expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(schema);
+  const inserted=await e2eAuthPool.query(`INSERT INTO "${schema}".community_social_posts(post_id,community_id,author_user_id,kind,platform,title,note,state,created_at,updated_at)
+    SELECT $1,community_id,user_id,'note','other','表情插入測試','只測留言草稿，不送出。','active',timestamptz '2000-01-01',timestamptz '2000-01-01' FROM "${schema}".users WHERE user_id=$2 RETURNING post_id`,[postId,userId]);
+  expect(inserted.rowCount).toBe(1);await page.goto(`/?social-post=${postId}#social`);
+  const post=page.locator(`#social-post-${postId}`);await post.getByRole('button',{name:'留言 · 0',exact:true}).click();
+  const area=post.getByLabel('寫留言',{exact:true}),picker=post.getByRole('button',{name:'插入 emoji',exact:true});let sends=0;
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname===`/api/v1/social-posts/${postId}/comments`)sends++;});
+  await area.fill('保留舊字結尾');await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(2,4));
+  await picker.click();await post.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue('保留🎉結尾');await expect(area).toBeFocused();
+  const full='字'.repeat(1000);await area.fill(full);await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,2));
+  await picker.click();await post.getByRole('button',{name:'插入 😂',exact:true}).click();await expect(area).toHaveValue('😂'+full.slice(2));
+  await picker.click();await expect(post.getByRole('button',{name:'插入 😂',exact:true})).toBeDisabled();expect(sends).toBe(0);
 });
 
 // Keep expected accessible names independent of the product's translation catalog.
