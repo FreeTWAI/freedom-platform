@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest } from './admission.mjs';
 
 export const BACKUP_PHASES = Object.freeze(['preflight', 'backup', 'handoff']);
-export const BACKUP_CRON = '43 5 * * *';
+export const BACKUP_CRON = '43 * * * *';
 const path = '.github/workflows/shared-backup.yml', prefix = `/repos/${REPOSITORY}`;
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const actor = value => Object.hasOwn(OPERATORS, value?.login ?? '') && value.id === OPERATORS[value.login];

@@ -1,7 +1,7 @@
 name: Shared backup
 on:
   schedule:
-    - cron: '43 5 * * *'
+    - cron: '43 * * * *'
   workflow_dispatch:
     inputs:
       target:

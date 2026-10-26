@@ -108,7 +108,9 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
    v2 接受新增／變更／刪除 migration 或跳過原座標約束。
 3. 補齊服務憑證後，先開 `BACKUP_ENABLED`，保持 `RELEASE_ENABLED=false`。
    各環境先手動執行 `Shared backup`，核對真實 dump 預算、遠端讀回、隔離還原及清理。
-4. 保留舊 timer，等新 `Shared backup` 在 **05:43 UTC** 自然觸發並完成兩個環境。
+4. 保留舊 timer，等新 `Shared backup` 在 **每小時第 43 分鐘（UTC）** 自然觸發並完成兩個環境。
+   每小時保留一個完整備份／還原驗證機會，避免首次安裝或更新 image 後必須等到隔日。
+   兩環境依序執行，與發布共用 concurrency group，不取消正在執行的備份或 migration。
    所有來源仍走 main／CI 准入；它備份當下實際部署版本，不擅自升級應用。
    新舊入口共用原 DB advisory lease，不會同時擷取。若因舊工作占鎖而拒絕，保留失敗，
    對齊排程後等下一次自然觸發；人工重跑不能冒充自然首試。

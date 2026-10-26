@@ -1340,9 +1340,14 @@ test('manual, failed, skipped, stale, foreign and forged backup evidence cannot 
 });
 
 test('backup and image entries validate their own main workflow identity and actual operator permissions', async () => {
+  const workflow = await readFile(new URL('../../../.github/workflows/shared-backup.yml', import.meta.url), 'utf8');
+  const cron = workflow.match(/^    - cron: '([^']+)'$/m)?.[1];
+  assert.equal(cron, '43 * * * *');
+  assert.equal(BACKUP_CRON, cron);
   const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-backup.yml@refs/heads/main`,
-    GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON };
+    GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON: cron };
   assert.equal(backupRequestFromEnvironment(env, sha).event, 'schedule');
+  assert.throws(() => backupRequestFromEnvironment({ ...env, BACKUP_CRON: '43 5 * * *' }, sha));
   assert.throws(() => backupRequestFromEnvironment({ ...env, BACKUP_CRON: '* * * * *' }, sha));
   assert.throws(() => backupRequestFromEnvironment({ ...env, GITHUB_REF: 'refs/heads/feature' }, sha));
   const imageEnv = { ...environment(), CONTROLLER_SHA: sha,
