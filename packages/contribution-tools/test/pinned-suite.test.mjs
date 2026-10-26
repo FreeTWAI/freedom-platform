@@ -726,3 +726,21 @@ test('A hung or cancelled failure helper preserves test_process_failed within th
   finally { clearInterval(timer); }
   assert.equal(await readFile(join(root, 'invocations'), 'utf8'), 'pytest\nhelper\npytest\nhelper\n');
 });
+
+
+test('Exact daily-backup suite requires nonempty complete execution, including through the CLI', async t => {
+  const root=await fixtureRoot(t),suite=PINNED_SUITES['ci.daily-backup'];
+  assert.deepEqual(suite.files,['tests/runtime/media-backup-daily.test.ts']);
+  await symlink(join(repoRoot,'node_modules'),join(root,'node_modules'),'dir');
+  const path=suite.files[0];
+  await put(root,path,"import {test} from 'node:test'; test('daily',()=>{});");
+  assert.equal((await runPinnedSuite(root,'ci.daily-backup')).status,'passed');
+  for(const source of ["export {};", "import {test} from 'node:test'; test.skip('daily',()=>{});",
+    "import {test} from 'node:test'; test.todo('daily');", "import {test} from 'node:test'; test('daily',()=>{throw Error('fail')});"]) {
+    await put(root,path,source);
+    assert.equal((await runPinnedSuite(root,'ci.daily-backup')).status,'failed');
+    const cp=spawnSync(process.execPath,[cli,'--root',root,'--suite','ci.daily-backup'],{encoding:'utf8'});
+    assert.equal(cp.status,1,cp.stdout+cp.stderr);
+  }
+  await rm(join(root,path));assert.equal((await runPinnedSuite(root,'ci.daily-backup')).status,'not_run');
+});

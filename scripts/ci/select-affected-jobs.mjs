@@ -1,5 +1,6 @@
 // Conservative job selection for .github/workflows/verify.yml.
-// A pull request narrows only inside the explicit docs allowlist or the fixed
+// Operator-only changes use existing deploy and integrity coverage on PR/main.
+// Other pull requests narrow inside the explicit docs allowlist or the fixed
 // frontend leaf or informational handoff profiles below. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
 // Leaf edits retain all runtime/browser/static
@@ -12,7 +13,7 @@
 // decision left unselected; failure and cancellation do not pass.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCTIONS, owns } from '../../packages/contribution-tools/context.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
@@ -109,12 +110,185 @@ export function heavyJobCondition(outputKey) {
 }
 
 export const GUILD_PRESENTATION_JOBS = Object.freeze(['guild-presentation', 'static-worker']);
+export const DELIVERY_TOOLING_JOBS = Object.freeze(['deploy-preflight']);
+const DELIVERY_TOOLING_REASON = 'delivery_tooling';
+// These operator-only files are covered by deploy-preflight/native restore;
+// selector/workflow controls are covered by the always-on selector/governance
+// suites and code-owner review. No product path or module declaration qualifies.
+const DELIVERY_FILES = new Set([
+  '.github/workflows/shared-release.yml', '.github/workflows/shared-backup.yml',
+  '.github/workflows/release-operator-image.yml', '.github/workflows/verify.yml',
+  'scripts/ci/select-affected-jobs.mjs', 'scripts/ci/select-affected-jobs.test.mjs',
+  'scripts/ci/affected-jobs.md', 'deploy/cloudflare/test/shared-release.test.mjs',
+  'deploy/cloudflare/test/media-restore-container.test.mjs',
+  'packages/media-migration/backup-daily.ts', 'packages/media-migration/backup-diagnostics.ts',
+  'tests/runtime/media-backup-daily.test.ts',
+  'packages/contribution-tools/pinned-suites.mjs', 'packages/contribution-tools/test/pinned-suite.test.mjs',
+]);
+function deliveryOwner(path) {
+  if (isModuleDescriptorPath(path)) return null;
+  if (!DELIVERY_FILES.has(path) && !path.startsWith('deploy/shared-release/')) return null;
+  if (path.startsWith('packages/media-migration/') || path.startsWith('tests/runtime/')
+    || path === 'deploy/cloudflare/test/media-restore-container.test.mjs') return 'media-migration';
+  return path.startsWith('scripts/ci/') || path.startsWith('packages/contribution-tools/')
+    || path === '.github/workflows/verify.yml' ? 'governance' : 'shared-release';
+}
+// Coverage is attached to these bounded paths, not to every file owned by a
+// coarse module. Existing governance and native operator checks cover these
+// obligations; a new suite or reverse consumer needs a separate mapping review.
+const DELIVERY_SUITES = Object.freeze({
+  governance: ['governance.unit', 'runtime.full'],
+  'contribution-experience': ['governance.unit'],
+  'shared-release': ['governance.unit', 'runtime.full'],
+  'media-migration': ['runtime.full'],
+});
+const MEDIA_PRODUCT_CONSUMERS = ['community', 'member-reporting', 'member-communications'];
+const DAILY_SOURCES = ['packages/media-migration/backup-daily.ts', 'packages/media-migration/backup-diagnostics.ts'];
+const DAILY_CLIENTS = ['scripts/media-backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
+  // This unchanged, opt-in archive drill is not selected by full Verify either.
+  // The required native shared-release fixture covers the production adapter.
+  'tests/integration/media-backup-archive.test.ts'];
+
+// Only this literal metadata addition qualifies. Removing it must recover the
+// complete baseline bytes: existing suites, discovery baselines, loaders and
+// timeouts cannot change, and registry code is never evaluated by selection.
+const DAILY_SUITE_DECLARATION = "  'ci.daily-backup': Object.freeze({ files: Object.freeze(['tests/runtime/media-backup-daily.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),\n";
+export function deliveryDailyRegistryAddition(before, after) {
+  return typeof before === 'string' && typeof after === 'string'
+    && before.length <= 128000 && after.length <= 128000
+    && !before.includes('ci.daily-backup')
+    && after.split(DAILY_SUITE_DECLARATION).length === 2
+    && after.replace(DAILY_SUITE_DECLARATION, '') === before;
+}
+
+export function deliveryVerifyWiringOnly(before, after) {
+  // Preserve every other job and all global execution controls byte-for-byte.
+  // This is a constrained textual comparison, not permissive YAML parsing.
+  const mask = text => {
+    if (typeof text !== 'string' || text.length > 128000 || /[\t\r]/.test(text)) return null;
+    const lines = text.split('\n'), out = []; let job = '', inJobs = false, seen = new Set();
+    for (const line of lines) {
+      if (/^\S/.test(line) && !line.startsWith('#')) {inJobs = line === 'jobs:'; job = '';}
+      const match = inJobs && /^  ([a-z][a-z0-9-]*):$/.exec(line);
+      if (match) {job = match[1]; if (seen.has(job)) return null; seen.add(job);}
+      else if (inJobs && /^ {1,3}\S/.test(line) && !line.trimStart().startsWith('#')) return null;
+      // YAML anchors/aliases/tags can let edited delivery blocks affect other jobs.
+      if (/(?:^\s*-?\s*|:\s*)[&*!][a-zA-Z]/.test(line) && !line.trimStart().startsWith('#')) return null;
+      if (!['select','deploy-preflight'].includes(job) && !line.trimStart().startsWith('#')) out.push(line);
+    }
+    return ['select','deploy-preflight'].every(id => seen.has(id)) ? out.join('\n') : null;
+  };
+  const left = mask(before), right = mask(after);
+  return left !== null && right !== null && left === right;
+}
+
+export function deliveryCoverageProven(graphs, paths, snapshots) {
+  const media = paths.some(path => deliveryOwner(path) === 'media-migration');
+  const control = paths.some(path => deliveryOwner(path) === 'governance');
+  const seeds = [...new Set(paths.map(deliveryOwner).filter(id => id && id !== 'media-migration'))];
+  if (media) seeds.push('shared-release'); // the actual production daily-backup consumer
+  for (const graph of graphs) {
+    const descriptors = [...graph.values()];
+    for (const path of paths) {
+      if (descriptors.some(d => d.instructions.includes(path) && d.module_id !== deliveryOwner(path))
+        || descriptors.some(d => d.public_exports.includes(path)) || RUNTIME_TEXT.has(path)) return false;
+    }
+    const impact = selectImpact({baseline: descriptors, candidate: descriptors, changedPaths: [], scopes: seeds});
+    const allowed = control ? ['governance','contribution-experience','shared-release'] : ['shared-release'];
+    if (impact.module_ids.some(id => !allowed.includes(id))) return false;
+    for (const id of [...impact.module_ids, ...(media ? ['media-migration'] : [])])
+      if (!graph.has(id) || !sameSet(graph.get(id).tests, DELIVERY_SUITES[id] ?? [])) return false;
+    if (media && descriptors.some(d => d.dependencies.includes('media-migration')
+      && !['shared-release', ...MEDIA_PRODUCT_CONSUMERS].includes(d.module_id))) return false;
+  }
+  const ts = loadGuildPresentationParsers()?.ts;
+  if (!ts) return false;
+  // Prove the other direct media consumers and the rest of the media module do
+  // not consume the daily subgraph. Unresolved/computed loaders in that boundary
+  // refuse narrowing. This uses installed parser code and immutable Git blobs.
+  for (const {graph, files, read} of snapshots) {
+    for (const path of ['tsconfig.json','package.json']) if (files.has(path)) {
+      const config = JSON.parse(read(path));
+      if (config.compilerOptions?.paths || config.compilerOptions?.baseUrl || config.imports || config.exports) return false;
+    }
+    // Literal incoming imports must not hide behind an unrelated owner or an
+    // omitted descriptor dependency. This is deliberately a bounded direct-edge
+    // check, not general dynamic-code or transitive dependency analysis.
+    let literalCount = 0, literalBytes = 0;
+    for (const [path, entry] of files) {
+      if (!/\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) || deliveryOwner(path)
+        || DAILY_SOURCES.includes(path) || DAILY_CLIENTS.includes(path)) continue;
+      if (++literalCount > 4096 || entry.type !== 'blob' || !['100644','100755'].includes(entry.mode)) return false;
+      const source = read(path); literalBytes += Buffer.byteLength(source);
+      if (Buffer.byteLength(source) > 2000000 || literalBytes > 64000000) return false;
+      for (const {fileName} of ts.preProcessFile(source, true, true).importedFiles) {
+        if (!fileName.startsWith('.')) continue;
+        const target = posix.normalize(posix.join(posix.dirname(path), fileName)).replace(/\.[cm]?js$/, '.ts');
+        if (target.startsWith('deploy/shared-release/')
+          || [...DAILY_SOURCES, ...DAILY_CLIENTS].some(p => p === target || p.replace(/\.ts$/, '') === target)) return false;
+      }
+    }
+    if (!media) continue;
+    const excluded = ['media-migration', ...MEDIA_PRODUCT_CONSUMERS].map(id => graph.get(id)).filter(Boolean);
+    let count = 0, bytes = 0;
+    for (const [path, entry] of files) {
+      if (!/\.(?:[cm]?js|jsx|tsx?)$/.test(path) || !excluded.some(d => owns(d, path))
+        || DAILY_SOURCES.includes(path) || DAILY_CLIENTS.includes(path)) continue;
+      if (++count > 2048 || !regularBlob(entry)) return false;
+      const source = read(path); bytes += Buffer.byteLength(source);
+      if (source.length > 524288 || bytes > 16000000) return false;
+      const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+      if (file.parseDiagnostics.length) return false;
+      let valid = true;
+      const localRequire = file.statements.some(node => ts.isVariableStatement(node)
+        && node.declarationList.flags & ts.NodeFlags.Const
+        && node.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === 'require'
+          && d.initializer && ts.isArrowFunction(d.initializer)));
+      const checkImport = specifier => {
+        if (typeof specifier !== 'string' || /[\\?#]/.test(specifier)) {valid = false; return;}
+        if (!specifier.startsWith('.')) return; // installed packages, no local aliases in this profile
+        const target = posix.normalize(posix.join(posix.dirname(path), specifier)).replace(/\.js$/, '.ts');
+        if ([...DAILY_SOURCES, ...DAILY_CLIENTS].some(p => p === target || p.replace(/\.ts$/, '') === target)
+          || target.startsWith('deploy/shared-release/')) valid = false;
+      };
+      const visit = node => {
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier)
+          checkImport(ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier.text : null);
+        if (ts.isImportTypeNode(node)) checkImport(ts.isLiteralTypeNode(node.argument)
+          && ts.isStringLiteral(node.argument.literal) ? node.argument.literal.text : null);
+        if (ts.isImportEqualsDeclaration(node)) valid = false;
+        if (ts.isCallExpression(node)) {
+          const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+          const requireCall = ts.isIdentifier(node.expression) && node.expression.text === 'require' && !localRequire;
+          if (dynamic || requireCall) {
+            const arg = node.arguments[0];
+            if (arg && ts.isStringLiteral(arg)) checkImport(arg.text);
+            else if (dynamic && arg && ts.isPropertyAccessExpression(arg) && arg.name.text === 'href'
+              && ts.isNewExpression(arg.expression) && ts.isIdentifier(arg.expression.expression)
+              && arg.expression.expression.text === 'URL' && arg.expression.arguments?.length === 2
+              && ts.isStringLiteral(arg.expression.arguments[0])
+              && files.has(arg.expression.arguments[0].text)
+              && ![...DAILY_SOURCES, ...DAILY_CLIENTS].includes(arg.expression.arguments[0].text)
+              && !arg.expression.arguments[0].text.startsWith('deploy/shared-release/')) {
+              // Existing restore ACL's fixed repository-relative manifest/migration imports.
+            } else valid = false;
+          }
+          if (ts.isIdentifier(node.expression) && ['eval','Function'].includes(node.expression.text)) valid = false;
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(file); if (!valid) return false;
+    }
+  }
+  return true;
+}
+
 function decision(mode, reason, selected) {
   if (!['full', 'docs', 'affected'].includes(mode) || !/^[a-z0-9_]+$/.test(reason)) throw new Error('invalid_selection_decision');
   return Object.freeze({
     mode, reason,
     jobs: Object.freeze(Object.fromEntries(SELECTABLE_JOBS.map(id => [id, mode === 'affected'
-      ? (reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
+      ? (reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS : reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
         : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
   });
 }
@@ -556,6 +730,8 @@ function loadTrees(repository, base, head) {
   } catch { return null; }
 }
 export function collectRepositoryDecision({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
+  const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
+  if (delivery) return delivery;
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
   const handoff = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideHandoffDocsProfile);
   if (handoff.profile === HANDOFF_DOCS_REASON) return decision('affected', handoff.reason, false);
@@ -574,6 +750,69 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
     baseline: baseline.descriptors, candidate: headGraph.descriptors,
     descriptorsProven: baseline.ok && headGraph.ok,
   });
+}
+
+// Compare the actual checkout, including merge resolutions, rather than trusting
+// a PR's path list. On main, only a direct successor of event.before qualifies;
+// a multi-commit push or missing topology falls back to existing full selection.
+function collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch}) {
+  if (!['pull_request', 'push'].includes(event) || typeof repository !== 'string' || !isAbsolute(repository)
+    || ![base, head, candidate].every(value => SHA.test(value))) return null;
+  try {
+    const root = resolve(repository);
+    for (const sha of [base, head, candidate]) if (!ensureCommit(root, sha, pullRequest, allowFetch)) return null;
+    if (runGit(root, ['rev-parse', 'HEAD']).toString().trim() !== candidate
+      || runGit(root, ['status', '--porcelain', '--untracked-files=all']).toString().trim()) return null;
+    const parents = runGit(root, ['cat-file', '-p', candidate]).toString().split('\n\n')[0]
+      .split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
+    if (parents[0] !== base || (event === 'pull_request' ? parents.length !== 2 || parents[1] !== head : head !== candidate)) return null;
+    const diff = loadTrees(root, base, candidate);
+    if (!diff?.ok || !diff.changes.length) return null;
+    const graphs = [base, candidate].map(sha => {
+      const loaded = loadModuleDescriptors(root, sha);
+      if (!loaded.ok) throw Error('missing_graph');
+      return validatedDescriptorGraph(loaded.descriptors);
+    });
+    if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) return null;
+    for (const [id, descriptor] of graphs[0]) {
+      const current = graphs[1].get(id);
+      // Adding ownership for an already-covered operator file does not change
+      // runtime dependencies. Governance tests already validate the descriptor.
+      // Never permit removed ownership or changed tests/dependencies/surfaces.
+      if (descriptor.owned_paths.some(path => !current.owned_paths.includes(path))
+        || current.owned_paths.some(path => !descriptor.owned_paths.includes(path) && deliveryOwner(path) !== id)
+        || JSON.stringify({...descriptor, owned_paths: []}) !== JSON.stringify({...current, owned_paths: []})) return null;
+    }
+    const blobs = new Map();
+    const read = (sha, path) => {
+      const oid = (sha === base ? diff.baseFiles : diff.candidateFiles).get(path)?.oid;
+      if (!oid) throw Error('source_blob_missing');
+      if (!blobs.has(oid)) blobs.set(oid, runGit(root, ['show', '--end-of-options', `${sha}:${path}`]).toString('utf8'));
+      return blobs.get(oid);
+    };
+    const paths = [];
+    let scoped = false;
+    for (const change of diff.changes) {
+      if (statusReason(change)) return null;
+      const before = diff.baseFiles.get(change.path), after = diff.candidateFiles.get(change.path);
+      if (!regularBlob(after) || before && (!regularBlob(before) || before.mode !== after.mode)) return null;
+      if (change.path === GENERATED_INVENTORY_PATH && change.status === 'M') continue;
+      if (isModuleDescriptorPath(change.path) && change.status === 'M') continue;
+      const owner = deliveryOwner(change.path);
+      const owners = graphs.map(graph => [...graph.values()].filter(d => owns(d, change.path)).map(d => d.module_id));
+      if (!owner || !sameSet(owners[1], [owner]) || owners[0].length && !sameSet(owners[0], [owner])) return null;
+      if (change.path === 'packages/contribution-tools/pinned-suites.mjs'
+        && (change.status !== 'M' || !deliveryDailyRegistryAddition(read(base, change.path), read(candidate, change.path)))) return null;
+      if (change.path === '.github/workflows/verify.yml'
+        && !deliveryVerifyWiringOnly(read(base, change.path), read(candidate, change.path))) return null;
+      paths.push(change.path); scoped = true;
+    }
+    if (!deliveryCoverageProven(graphs, paths, [
+      {graph: graphs[0], files: diff.baseFiles, read: path => read(base, path)},
+      {graph: graphs[1], files: diff.candidateFiles, read: path => read(candidate, path)},
+    ])) return null;
+    return scoped ? decision('affected', DELIVERY_TOOLING_REASON, false) : null;
+  } catch { return null; }
 }
 
 // Host event SHAs, not a candidate profile/file list, authorize the pilot.
@@ -645,6 +884,7 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
     const profile = outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
+      : outputs.reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS
       : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
         : outputs.reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS : null;
     if (!profile || SELECTABLE_JOBS.some(id => jobs[id] !== profile.includes(id))) return { ok: false, reason: 'decision_inconsistent' };
