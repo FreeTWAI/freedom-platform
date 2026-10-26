@@ -3709,8 +3709,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/TenantSettings.tsx",
-      "bytes": 45120,
-      "sha256": "0b6017f29581b74f39a5c4ced8fb456109c955dbd49ba072c07269ca207da375"
+      "bytes": 41892,
+      "sha256": "2974252aef4a0e031ba12fe3cc90ccd2c9d81d558d18da0653bfbc1d70181a03"
     },
     {
       "path": "apps/portal-web/src/modules/TotpSettings.tsx",
@@ -22229,8 +22229,8 @@
     },
     {
       "path": "modules/tenant-workspaces/README.md",
-      "bytes": 8619,
-      "sha256": "2ddb82f517d347d0faf2ba22b311154a813c05c47c912285b5b6d78308b3177c"
+      "bytes": 9650,
+      "sha256": "c7413f873c49f4011ee88a85b570a58fe6a34e68d1753870971d94a0e15e4362"
     },
     {
       "path": "modules/tenant-workspaces/authorization.ts",
@@ -22244,8 +22244,8 @@
     },
     {
       "path": "modules/tenant-workspaces/freedom.module.json",
-      "bytes": 2675,
-      "sha256": "7fd1b0890c956498ea76b4e40484d38af821b6ff499d8ee1eeeb682bde182ac5"
+      "bytes": 2846,
+      "sha256": "d6ccdc11537c59c1d1585cd1d82177b944d6f118c31d1816f05f925b78319734"
     },
     {
       "path": "modules/tenant-workspaces/high-risk-verification.ts",
@@ -28208,6 +28208,16 @@
       "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
     },
     {
+      "path": "apps/portal-web/src/modules/TenantMembersSection.tsx",
+      "bytes": 3065,
+      "sha256": "f7a7429b4ff3f6b0c27634eb29bec3dd65b10da3b45fabd3b18c7007452db19c"
+    },
+    {
+      "path": "apps/portal-web/src/modules/tenant-member-grants.ts",
+      "bytes": 1719,
+      "sha256": "fa1bf72b74a927ebad055520f19f977ba04ff036df024b4f866fdb6411b58bf8"
+    },
+    {
       "path": "tests/e2e/guild-member-operations.spec.ts",
       "bytes": 7560,
       "sha256": "86e4cab6f5fb4773d7253ad53626953edca26b18872435540e9c845a9e8dd2f2"
@@ -28226,6 +28236,11 @@
       "path": "tests/runtime/social-post-editor.test.ts",
       "bytes": 12578,
       "sha256": "95ec4ab8dccf88524de873ff2264caa2f6e856773c0b474cf2258c98e7e7a43b"
+    },
+    {
+      "path": "tests/runtime/tenant-members-section.test.ts",
+      "bytes": 13548,
+      "sha256": "ee3224d3f80fa0ecc21e6bf71c14548d664344fa804a831baa87237af7af4401"
     }
   ]
 }
