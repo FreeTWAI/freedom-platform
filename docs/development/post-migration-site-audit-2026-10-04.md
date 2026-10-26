@@ -59,4 +59,4 @@ FREEDOM_E2E_PORT=4344 npm run test:e2e -- \
 
 整合測試期間曾發現新案例依賴被前一個 journey 消耗的示範工作，已改為每次建立自己的一張合成工作；另一次誤啟動重疊 E2E 被占用埠拒絕，以及一次本機測試 DB 連線逾時。這些不列為通過；確認資料庫可用後，以單一 worker 完整重跑得到上述 53／53 結果。
 
-其他首頁／側欄／聊天與名片 PR 保留原負責分支處理。本輪修復未部署；線上仍以 health 的 release SHA 為準。合併時若 inventory 衝突，依實際整合樹重跑 `python3 scripts/update-inventory.py`，不得沿用另一分支的舊 hash。
+其他首頁／側欄／聊天與名片 PR 保留原負責分支處理。本輪修復未部署；線上仍以 health 的 release SHA 為準。日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。

@@ -1,6 +1,6 @@
 // Conservative job selection for .github/workflows/verify.yml.
 // A pull request narrows only inside the explicit docs allowlist or the fixed
-// frontend leaf or informational handoff profiles below. An ordinary modification of the exact root
+// frontend leaf, guild presentation or minimal profiles below. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
 // Leaf edits retain all runtime/browser/static
 // jobs and require unchanged, compatible baseline/candidate descriptor graphs.
@@ -48,23 +48,61 @@ export const ALWAYS_ON_INTEGRITY_COMMANDS = Object.freeze([
 export const DOCS_ALLOWLIST_PREFIXES = Object.freeze([
   'docs/development/', 'docs/design/', 'docs/plans/', 'docs/releases/',
 ]);
-// scripts/update-inventory.py rewrites this manifest for every hashed source
-// change. It remains under docs/platform-plan/ for every other classification.
+// Historical snapshot; CI and main source archives use Git objects. The exact
+// legacy manifest may still accompany otherwise qualifying changes.
 export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09-20-file-inventory.json';
 
-// Informational handoffs only. Runtime/spec/control documents and every dated
-// rollout JSON remain full; a filename or a candidate declaration is no schema.
-export const HANDOFF_DOCS_PATHS = Object.freeze([
-  'docs/platform-plan/execution/commerce/work-plan.md',
-  'docs/platform-plan/execution/supplier-console/work-plan.md',
-  'docs/platform-plan/execution/guild-launchpad/README.md',
-  'docs/platform-plan/execution/unified-foundation/closeout.md',
-  'docs/platform-plan/execution/unified-foundation/current-state.json',
+// These profiles select existing jobs only. Consumer evidence and exclusions are
+// documented in affected-jobs.md; ownership metadata alone does not execute docs.
+export const MINIMAL_JOB_PROFILES = Object.freeze({
+  plan_receipt_docs: Object.freeze([]),
+  plan_document_inputs: Object.freeze(['governance-consumers']),
+  module_app_markdown: Object.freeze([]),
+  shared_release_tooling: Object.freeze(['deploy-preflight']),
+});
+const minimalJobs = reason => Object.hasOwn(MINIMAL_JOB_PROFILES, reason) ? MINIMAL_JOB_PROFILES[reason] : null;
+const PLAN_INPUTS = new Set([
+  'execution/unified-foundation/current-state.json',
+  'execution/first-work-batch.md', 'execution/acceptance-matrix.md',
+  'execution/milestones.md', 'execution/spec-index.md',
+].map(path => 'docs/platform-plan/' + path));
+const MODULE_MARKDOWN_INPUTS = new Set([
+  'modules/agent-commerce/operations/notifications/README.md',
+  'modules/module-registry/platform-hold.md',
 ]);
-export const HANDOFF_DOCS_JOBS = Object.freeze(['governance-consumers']);
-const HANDOFF_DOCS_REASON = 'informational_handoff_docs';
-const handoffOwner = path => path === HANDOFF_DOCS_PATHS[1] ? 'supplier-console'
-  : HANDOFF_DOCS_PATHS.slice(3).includes(path) ? 'governance' : null;
+const SHARED_RELEASE_WORKFLOWS = new Set(['shared-release', 'shared-backup', 'release-operator-image']
+  .map(name => `.github/workflows/${name}.yml`));
+function planDocument(path) {
+  return path.startsWith('docs/platform-plan/') && /\.(?:md|json|yaml|yml|csv|txt)$/.test(path)
+    && !(path.startsWith('docs/platform-plan/contracts/') && !path.endsWith('.md'))
+    && !path.startsWith('docs/platform-plan/contracts/tests/')
+    && !path.startsWith('docs/platform-plan/execution/tools/')
+    && !hiddenSegment(path) && !path.endsWith('/AGENTS.md');
+}
+function planInput(path) {
+  return PLAN_INPUTS.has(path) || path.startsWith('docs/platform-plan/execution/specs/')
+    || path.startsWith('docs/platform-plan/execution/guild-launchpad/');
+}
+export function decideMinimalProfile(input) {
+  const fallback = {profile: 'full', reason: 'outside_minimal_profiles'};
+  if (input?.event !== 'pull_request' || input.diffComplete !== true
+    || !Array.isArray(input.changes) || !input.changes.length || input.changes.length > CHANGE_LIMIT
+    || input.nonExecutableBlobsProven === false || input.descriptorsProven === false
+    || !input.baseline?.length || !input.candidate?.length) return fallback;
+  const paths = input.changes.map(change => change?.path);
+  if (new Set(paths).size !== paths.length || input.changes.some(change => statusReason(change)
+    || !safeRepoPath(change.path))) return fallback;
+  try { for (const graph of [input.baseline, input.candidate]) validatedDescriptorGraph(graph); }
+  catch { return fallback; }
+  let reason;
+  if (paths.every(planDocument)) reason = paths.some(planInput) ? 'plan_document_inputs' : 'plan_receipt_docs';
+  else if (paths.every(path => path.startsWith('deploy/shared-release/')
+    || path === 'deploy/cloudflare/test/shared-release.test.mjs' || SHARED_RELEASE_WORKFLOWS.has(path))) reason = 'shared_release_tooling';
+  else if (paths.every(path => /^(?:modules|apps)\/.+\.md$/.test(path) && !hiddenSegment(path)
+    && !path.endsWith('/AGENTS.md') && !RUNTIME_TEXT.has(path) && !MODULE_MARKDOWN_INPUTS.has(path)
+    && !guildPresentationPath(path))) reason = 'module_app_markdown';
+  return reason ? {profile: reason, reason} : fallback;
+}
 
 // Host-owned paths and expected module obligations, never a candidate glob or
 // executable command. New files, public sharing/auth helpers, guide contracts,
@@ -114,8 +152,8 @@ function decision(mode, reason, selected) {
   return Object.freeze({
     mode, reason,
     jobs: Object.freeze(Object.fromEntries(SELECTABLE_JOBS.map(id => [id, mode === 'affected'
-      ? (reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
-        : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
+      ? (minimalJobs(reason) ?? (reason === 'guild_presentation_dependency_closure'
+        ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS)).includes(id) : selected]))),
   });
 }
 const full = reason => decision('full', reason, true);
@@ -174,6 +212,8 @@ export function decideAffectedJobs(input) {
   if (typeof event !== 'string' || !EVENT.test(event) || event !== 'pull_request') return full('non_pull_request');
   if (input.diffComplete !== true || !Array.isArray(input.changes) || input.changes.length > CHANGE_LIMIT) return full('diff_unproven');
   if (input.changes.length === 0) return full('empty_diff');
+  const minimal = decideMinimalProfile(input);
+  if (minimal.profile !== 'full') return decision('affected', minimal.reason, false);
   const reasons = [];
   const paths = [];
   let inventoryCompanion = false;
@@ -224,46 +264,6 @@ export function decideAffectedJobs(input) {
   }
   if (impact.module_ids.length || impact.tests.length) return full('baseline_candidate_union');
   return docs();
-}
-
-export function decideHandoffDocsProfile(input) {
-  const fallback = reason => ({profile: 'full', reason});
-  if (input?.event !== 'pull_request') return fallback('non_pull_request');
-  if (input.diffComplete !== true || !Array.isArray(input.changes) || !input.changes.length
-    || input.changes.length > CHANGE_LIMIT || input.nonExecutableBlobsProven !== true) return fallback('handoff_diff_unproven');
-  const paths = input.changes.map(change => change?.path);
-  if (new Set(paths).size !== paths.length || input.changes.some(change => statusReason(change) || change.status !== 'M'
-    || (!HANDOFF_DOCS_PATHS.includes(change.path) && change.path !== GENERATED_INVENTORY_PATH))) return fallback('outside_handoff_docs');
-  const documents = paths.filter(path => path !== GENERATED_INVENTORY_PATH);
-  if (!documents.length) return fallback('outside_handoff_docs');
-  if (input.descriptorsProven !== true || !input.baseline?.length || !input.candidate?.length) return fallback('descriptors_unproven');
-  try {
-    const graphs = [validatedDescriptorGraph(input.baseline), validatedDescriptorGraph(input.candidate)];
-    if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) throw Error();
-    for (const [id, value] of graphs[0]) if (JSON.stringify(value) !== JSON.stringify(graphs[1].get(id))) throw Error();
-    for (const descriptors of [input.baseline, input.candidate]) {
-      for (const path of documents) {
-        if (RUNTIME_TEXT.has(path) || descriptors.some(descriptor => descriptor.instructions.includes(path))) throw Error();
-        const owners = descriptors.filter(descriptor => owns(descriptor, path));
-        const expected = handoffOwner(path);
-        if (!sameSet(owners.map(owner => owner.module_id), expected ? [expected] : [])) throw Error();
-        if (owners.some(owner => owner.owner_role !== 'foundation' || !sameSet(owner.dependencies,
-          expected === 'supplier-console' ? ['agent-commerce', 'hosted-distribution', 'asset-lifecycle'] : [])
-          || !sameSet(owner.tests, expected === 'supplier-console' ? ['runtime.full', 'e2e.harness'] : ['governance.unit', 'runtime.full']))) throw Error();
-      }
-    }
-    // Preserve known ownership/reverse-consumer obligations before selecting the
-    // fixed documentation check. commerce-publication imports the supplier-console
-    // contract, making it a known consumer. General context impact is unchanged.
-    const owned = documents.filter(handoffOwner), supplier = owned.some(path => handoffOwner(path) === 'supplier-console');
-    const governance = owned.some(path => handoffOwner(path) === 'governance');
-    const impact = selectImpact({baseline: input.baseline, candidate: input.candidate, changedPaths: owned});
-    if (impact.unknown_paths.length || !sameSet(impact.module_ids,
-      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition', 'commerce-publication'] : []), ...(governance ? ['governance'] : [])])
-      || !sameSet(impact.tests, [...new Set([...(supplier ? ['e2e.harness', 'runtime.full', 'runtime.guild-blocks'] : []),
-        ...(governance ? ['governance.unit', 'runtime.full'] : [])])])) throw Error();
-    return {profile: HANDOFF_DOCS_REASON, reason: HANDOFF_DOCS_REASON};
-  } catch { return fallback('handoff_impact_unproven'); }
 }
 
 /** Explain the actual reverse-dependency closure before permitting the guild lane.
@@ -557,8 +557,8 @@ function loadTrees(repository, base, head) {
 }
 export function collectRepositoryDecision({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
-  const handoff = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideHandoffDocsProfile);
-  if (handoff.profile === HANDOFF_DOCS_REASON) return decision('affected', handoff.reason, false);
+  const minimal = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideMinimalProfile);
+  if (Object.hasOwn(MINIMAL_JOB_PROFILES, minimal.profile)) return decision('affected', minimal.reason, false);
   const guild = collectRepositoryGuildDecision({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (guild.profile === GUILD_PRESENTATION_PROFILE.id) return decision('affected', guild.reason, false);
   if (['guild_source_dependencies_unproven', 'guild_impact_unproven'].includes(guild.reason)) return full(guild.reason);
@@ -572,7 +572,7 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
   return decideAffectedJobs({
     event, diffComplete: true, changes: diff.changes,
     baseline: baseline.descriptors, candidate: headGraph.descriptors,
-    descriptorsProven: baseline.ok && headGraph.ok,
+    descriptorsProven: baseline.ok && headGraph.ok, nonExecutableBlobsProven: false,
   });
 }
 
@@ -600,7 +600,9 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
       baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
-      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true });
+      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true || decide === decideMinimalProfile && diff?.ok === true
+        && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
+          .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {
       const modules = new Set(diff.changes.map(change => guildPresentationPath(change.path)?.leaf.module).filter(Boolean));
       const parsers = loadGuildPresentationParsers();
@@ -644,9 +646,9 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'full' && !selectedAll) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
-    const profile = outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
+    const profile = minimalJobs(outputs.reason) ?? (outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
       : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
-        : outputs.reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS : null;
+        : null);
     if (!profile || SELECTABLE_JOBS.some(id => jobs[id] !== profile.includes(id))) return { ok: false, reason: 'decision_inconsistent' };
   }
   if (jobs['runtime-full'] !== jobs['runtime-aggregate']) return { ok: false, reason: 'runtime_selection_split' };
