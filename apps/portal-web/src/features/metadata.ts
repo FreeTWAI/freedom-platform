@@ -37,6 +37,7 @@ export const PORTAL_FEATURE_METADATA = {
   "social": { title: "社群分享", guidance: "發布近況與作品、按讚留言，也能分享外部社群連結。" },
   "services": { title: "社員服務", guidance: "列出社員的本業服務。用你的連結分享出去，點擊計入業務推廣排行榜。服務頁是公開的。" },
   "promotion": { title: "推廣排行榜", guidance: "查看六種分享的點擊排行。分數只供比較，不計入經驗或驗收。" },
+  "tester-map": { title: "測試員地圖", guidance: "依小組跟著分關任務測試平台功能，進度與勳章只存在本機；下方有完整功能清單與測試狀態。" },
   "highlights": { title: "活動集錦", guidance: "活動結束後會自動出現在這裡。這一頁是公開的，參加過的夥伴可以補上照片、海報和影片連結。" },
 } as const satisfies Record<TabId, PortalFeatureMetadata>;
 

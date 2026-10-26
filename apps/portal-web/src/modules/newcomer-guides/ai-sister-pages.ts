@@ -39,6 +39,7 @@ export const AI_SISTER_PAGE_SUPPORT={
   account:{...DRAGON_PAGE_SUPPORT.account,characterId:'member-selected',outfitId:'family'},
   todos:{...DRAGON_PAGE_SUPPORT.todos,characterId:'member-selected',outfitId:'philosophy'},
   'private-ai':{status:'disabled',reason:'本頁 AI Sister 內容與定位尚未完成審核'},
+  'tester-map':DRAGON_PAGE_SUPPORT['tester-map'],
   registration:{status:'disabled',reason:'登入前不載入會員導覽'},
   onboarding:{status:'disabled',reason:'尚未完成原有會員存取流程'},
   admin:{status:'disabled',reason:'管理員流程使用原有安全說明'},

@@ -38,6 +38,7 @@ export const DRAGON_PAGE_SUPPORT = {
   'account': {status:'supported',characterId:'account',contentId:'account',guideIds:["account:topic-1", "account:topic-2"],anchorContractVersion:1},
   'todos': {status:'supported',characterId:'todos',contentId:'todos',guideIds:["todos:topic-2"],anchorContractVersion:1},
   'private-ai': {status:'disabled',reason:'本頁龍娘內容與定位尚未完成審核'},
+  'tester-map': {status:'disabled',reason:'靜態測試清單沿用頁面說明，角色導覽尚未審核'},
   'registration': {status:'disabled',reason:'登入前不載入會員導覽'},
   'onboarding': {status:'disabled',reason:'尚未完成原有會員存取流程'},
   'admin': {status:'disabled',reason:'管理員流程使用原有安全說明'},
