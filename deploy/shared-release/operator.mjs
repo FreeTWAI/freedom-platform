@@ -139,12 +139,24 @@ export function operatorProgress(value, admission, installation, requestDigest) 
   return value.phases.map((phase, i) => {
     requireRelease(phase.name === phases[i] && ['passed', 'running', 'failed'].includes(phase.status)
       && (i === value.phases.length - 1 || phase.status === 'passed'), 'release_operator_progress_invalid');
-    return { name: phase.name, reportedStatus: phase.status };
+    const failure = phase.backupFailure;
+    // Even a validly bound operator result may contain private diagnostics.
+    // Publish only fixed daily-runner codes, never arbitrary error strings.
+    const stages = ['preflight', 'capture', 'seal', 'offsite', 'readback', 'restore', 'cleanup'];
+    const codes = ['daily_backup_phase_failed', 'daily_backup_target_mismatch', 'daily_backup_gc_not_disabled',
+      'daily_backup_evidence_required', 'daily_backup_remote_mismatch', 'daily_backup_restore_mismatch',
+      'daily_backup_cleanup_failed', 'daily_backup_aborted', 'daily_backup_ports_invalid',
+      'daily_backup_policy_mismatch', 'daily_backup_protection_lost'];
+    const diagnostic = ['backup', 'backup-before', 'backup-after'].includes(phase.name) && phase.status === 'failed'
+      && stages.includes(failure?.stage) && codes.includes(failure?.code) && typeof failure.cleanupVerified === 'boolean'
+      ? { backupFailure: { stage: failure.stage, code: failure.code, cleanupVerified: failure.cleanupVerified,
+        ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
+    return { name: phase.name, reportedStatus: phase.status, ...diagnostic };
   });
 }
 
 export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
-  config, credentials, scheduleEvidence, run = quietCommand, onProgress = async () => {} }) {
+  config, credentials, scheduleEvidence, recoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -165,7 +177,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
         && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
     }
   }
-  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence,
+  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence,
     configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : PHASES });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });

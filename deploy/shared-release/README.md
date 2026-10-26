@@ -3,7 +3,17 @@
 這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
 `Shared release` Actions，並串接資料庫／媒體備份、遠端讀回與隔離還原。
 完整發布 entry、OCI image 建置入口和自然備份 workflow 已接入原始碼，
-**尚未在 hosted runner 發布或啟用。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
+**尚未完成 hosted runner 的完整發布。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
+
+2026-10-26 安裝進度：兩環境的 account-owned Cloudflare token、原始 floor／config
+與私人 image 已安裝；[staging 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276457566)
+及 [production 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276554245) 通過。
+[staging 備份首跑](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276749439) 失敗，
+原收據未保存細部階段；遠端 journal 只有 capture-policy intent，尚無 archive intent。
+後續唯讀觀察確認維護開關關閉、刪除 fence 為零；本機另驗 343 張表的快照、PG18 dump
+及 66 個媒體物件成功，但沒有重現 hosted 失敗，不能拿這些結果替代完整備份驗收。
+目前 `BACKUP_ENABLED`／`RELEASE_ENABLED` 皆為 false，舊 timer 保留；下方 10 月 25 日
+的安裝與合成驗證段落為當時紀錄，不能代替這份進度。
 
 2026-10-25 查核：`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 都有此 repo
 的 admin 權限。現有 main ruleset 仍要求非作者審查、CODEOWNERS、最新推送後核准，
@@ -109,6 +119,21 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
 通過驗證，收據不超過 36 小時，image／config 與本次完全相同。改 pin 後須先驗新 pin
 的備份與自然排程。手動備份、舊 attempt、過期 artifact、失敗的新 run 都不放行。
 目前沒有自動排程補跑或未結案 floor 的自動重做功能；缺漏會明確拒絕。
+
+### 備份在上傳前失敗時的手動接續
+
+四位操作人可在 `Shared backup` 選同一環境，於 `recover_run_id` 填入原失敗 run ID，
+啟動一次新的完整 workflow。這不是 Re-run，也不把原失敗改成成功。
+控制程式先向 GitHub 核對原 run 已完成且失敗、main workflow、操作者、該環境 job
+及原 artifact；同 source／tree／config 才能接續，image 可更新到已審的修正版。
+Operator 取得原共用 DB lease 後，再讀回未變更的 Worker、ledger、政策與原 floor，
+確認原 capture backend 已結束、維護開關關閉且沒有刪除 fence，才追加
+`backup-abandoned` 歷史紀錄並開始新的備份。所有來源 pins 與原失敗證據保留。
+
+這條接續只適用於 **backup-only、已有 capture-policy intent、尚無 archive intent**。
+上傳結果不明、migration／deploy 失敗、舊程序仍存活、設定或狀態已改變都拒絕；
+不覆寫 seed、不刪 journal、不自動重送 PUT，也不能以此取得自然排程成功證據。
+新的失敗收據會顯示固定的備份階段、snapshot dump 進度與清理結果，不包含原始錯誤或憑證。
 
 ## 執行與失敗處理
 

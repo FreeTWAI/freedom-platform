@@ -23,7 +23,7 @@ import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared
 import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/portable/floor.mjs';
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
-import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup } from '../../shared-release/scheduled-admission.mjs';
+import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 
@@ -341,6 +341,25 @@ test('failed progress reports identify the phase without publishing arbitrary op
   assert.ok(!JSON.stringify(progress).includes('private-token'));
   value.phases[0].status = 'running';
   assert.throws(() => operatorProgress(value, request(), installation, 'e'.repeat(64)));
+});
+
+test('failed backup progress exposes only bounded stage and cleanup evidence', () => {
+  const value = resultFixture(); value.phases = value.phases.slice(0, 2);
+  value.phases[1].status = 'failed';
+  value.phases[1].backupFailure = { stage: 'capture', code: 'daily_backup_phase_failed', cleanupVerified: true,
+    secret: 'private-provider-diagnostic' };
+  const failure = operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1);
+  assert.deepEqual(failure, { name: 'backup-before', reportedStatus: 'failed',
+    backupFailure: { stage: 'capture', code: 'daily_backup_phase_failed', cleanupVerified: true } });
+  value.phases[1].backupFailure.snapshotDump = 'failed';
+  assert.equal(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure.snapshotDump, 'failed');
+  value.phases[1].backupFailure.snapshotDump = 'private-dump-error';
+  assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1), failure);
+  for (const patch of [{ stage: 'private-stage' }, { code: 'daily_backup_private_token' }, { cleanupVerified: 'true' }]) {
+    const changed = structuredClone(value); Object.assign(changed.phases[1].backupFailure, patch);
+    assert.deepEqual(operatorProgress(changed, request(), installation, 'e'.repeat(64)).at(-1),
+      { name: 'backup-before', reportedStatus: 'failed' });
+  }
 });
 
 async function operatorFixture(t, outcome = 'passed') {
@@ -1352,6 +1371,72 @@ test('scheduled backup uses the same floor and cannot overlap or change the comm
   const state = f.runBackup('backup', main); assert.equal(state.pending, null); assert.equal(state.sourceSha, main);
   const changed = structuredClone(begin); changed.record.data.request.sourceSha = sha;
   assert.throws(() => replayReleaseFloor([...f.chain, changed], f.options), /release_floor_backup_source_changed/);
+});
+
+function failedBackupFixture() {
+  const f = scheduledFixture();
+  Object.assign(f.state.run, { event: 'workflow_dispatch', conclusion: 'failure' });
+  f.state.jobs.splice(1); f.state.jobs[0].conclusion = 'failure'; f.state.jobs[0].steps[0].conclusion = 'failure';
+  Object.assign(f.state.receipt, { status: 'failed', event: 'workflow_dispatch', providerOutcome: 'unknown_until_confirmed' });
+  delete f.state.receipt.operatorEvidence; f.state.receipt.phases = [];
+  Object.assign(f.admission, { mode: 'backup', event: 'workflow_dispatch', recoverRunId: 77, sourceTree: tree });
+  return f;
+}
+
+test('manual recovery authenticates a failed backup, not a caller-supplied cleanup claim', async () => {
+  const f = failedBackupFixture(), proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.runId, 77); assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+  assert.equal(proof.cleanupVerified, undefined);
+  for (const mutate of [s => { s.run.status = 'in_progress'; }, s => { s.run.conclusion = 'success'; },
+    s => { s.run.head_repository.id = 2; }, s => { s.run.head_branch = 'feature'; },
+    s => { s.run.actor.id++; }, s => { s.run.run_attempt++; }, s => { s.jobs[0].steps[0].conclusion = 'skipped'; },
+    s => { s.jobs[0].steps[1].conclusion = 'failure'; }, s => { s.receipt.target = 'next'; },
+    s => { s.artifact.workflow_run.head_sha = sha; }, s => { s.artifact.expired = true; },
+    s => { s.receipt.sourceSha = main; }, s => { s.receipt.configSha256 = 'f'.repeat(64); }]) {
+    const bad = failedBackupFixture(); mutate(bad.state);
+    await assert.rejects(requireFailedBackup(bad.api, bad.admission, installation));
+  }
+  const changed = failedBackupFixture(); changed.api.readArtifact = async () => {
+    changed.state.run.run_attempt++; return structuredClone(changed.state.receipt);
+  };
+  await assert.rejects(requireFailedBackup(changed.api, changed.admission, installation));
+});
+
+test('backup recovery input is explicit, manual-only and cannot name the current run', () => {
+  const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-backup.yml@refs/heads/main`,
+    BACKUP_RECOVER_RUN_ID: '77' };
+  assert.equal(backupRequestFromEnvironment(env, sha).recoverRunId, 77);
+  for (const value of ['100', '0', '-1', '1e2', '77\n', 'abc']) {
+    assert.throws(() => backupRequestFromEnvironment({ ...env, BACKUP_RECOVER_RUN_ID: value }, sha));
+  }
+  assert.throws(() => backupRequestFromEnvironment({ ...env, GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON }, sha));
+});
+
+test('abandoned backup keeps history and floor; archive, release and unverified cleanup remain blocked', () => {
+  const f = floorFixture(), old = { ...f.request, sourceSha: main };
+  f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+  const capture = { format: 'freedom.shared-capture-policy-intent/v1', pid: 123, application: 'fp-capture-' + f.id,
+    revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false };
+  f.add(f.event('intent', 'backup', capture, { operation: 'capture-policy' }));
+  const prior = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { format: 'freedom.abandoned-backup/v1', recovery: { ...old, format: 'freedom.verified-failed-backup/v1',
+    receiptSha256: '9'.repeat(64), artifactId: 99, artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-10-26T00:00:00Z' },
+    settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: prior.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(prior.schemaLedger), materialPolicySha256: prior.materialPolicySha256,
+    maintenanceEnabled: false, domainMaintenanceEnabled: false, deletionFences: 0, captureBackendAbsent: true,
+    captureRevision: capture.revision, sourcePins: 'retained', archiveIntent: 'absent', observedAt: '2026-10-26T01:00:00Z' };
+  for (const patch of [{ maintenanceEnabled: true }, { domainMaintenanceEnabled: true }, { deletionFences: 1 },
+    { captureBackendAbsent: false }, { captureRevision: 'other' }, { sourceSha: sha }, { sourcePins: 'released' },
+    { materialPolicySha256: 'f'.repeat(64) }, { recovery: { ...proof.recovery, runId: 99 } }, { settledBy: old }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', { ...proof, ...patch })], f.options));
+  }
+  const archive = f.event('intent', 'backup', { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 123, automaticRetry: false }, { operation: 'archive' });
+  assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const g = floorFixture(); g.add(g.begin);
+  assert.throws(() => replayReleaseFloor([...g.chain, g.event('backup-abandoned', 'backup-before', proof)], g.options));
+  const state = f.add(f.event('backup-abandoned', 'backup', proof));
+  assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 4);
+  assert.equal(f.chain[2].record.data.kind, 'intent');
 });
 
 async function environmentCheckFixture(t) {
