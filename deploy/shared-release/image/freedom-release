@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/bin/node --import /opt/freedom/node_modules/tsx/dist/loader.mjs /opt/freedom/deploy/shared-release/portable/entry.mjs "$@"

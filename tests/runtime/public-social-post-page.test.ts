@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {publicSocialPostHtml,unavailableSocialPostHtml} from '../../modules/community/public-social-post-page.js';
 import type {PublicSocialPostPage} from '../../modules/community/public-social-posts.js';
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from '../../apps/portal-web/src/modules/public-post-return.js';
@@ -50,4 +51,59 @@ test('unavailable pages discard public content and OG and offer only a validated
     const missing=unavailableSocialPostHtml(invalid);
     assert.ok(!missing.includes(invalid));assert.ok(!missing.includes('social-post='));assert.ok(!missing.includes('property="og:'));
   }
+});
+
+// Execute the actual E2E transition, without launching a browser or duplicating
+// its wait/ACK logic. The two contexts can otherwise race a publication commit.
+const publicJourney=readFileSync(new URL('../e2e/public-social-posts.spec.ts',import.meta.url),'utf8');
+const reopenJourney=publicJourney.slice(publicJourney.indexOf("test('PUBLIC-POST-07"),publicJourney.indexOf("test('PUBLIC-POST-08"));
+const reopenTransition=reopenJourney.slice(reopenJourney.indexOf('  const dialog='),reopenJourney.indexOf('  await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(changed)'));
+const AsyncFunction=Object.getPrototypeOf(async()=>{}).constructor;
+function deferred<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(done=>{resolve=done;});return {promise,resolve};}
+function reopenHarness(source=reopenTransition){
+  const response=deferred<unknown>(),body=deferred<unknown>(),events:string[]=[];
+  const path='/api/v1/social-posts/'+id+'/public-sharing';
+  const locator={getByRole:()=>locator,getByLabel:()=>locator,click:async()=>{events.push('click');}};
+  const author={page:{getByRole:()=>locator,waitForResponse:(match:(value:unknown)=>boolean)=>{
+    const candidate=(method:string,pathname:string)=>({request:()=>({method:()=>method}),url:()=>`https://example.test${pathname}`});
+    assert.equal(match(candidate('GET',path)),false);
+    assert.equal(match(candidate('POST',path+'/other')),false);
+    assert.equal(match(candidate('POST',path.replace(id,other))),false);
+    assert.equal(match(candidate('POST',path)),true);
+    events.push('response-listener');return response.promise;
+  }}};
+  const expect=(actual:unknown)=>({
+    toBe:(expected:unknown)=>assert.equal(actual,expected),
+    toMatchObject:(expected:Record<string,unknown>)=>{for(const [key,value] of Object.entries(expected))assert.deepEqual((actual as Record<string,unknown>)[key],value);events.push('ack');},
+    toHaveValue:async(expected:string)=>{assert.equal(expected,'https://example.test/posts/'+id);events.push('public-link');},
+    // Invalidated consent keeps the close control visible even while saving.
+    toBeVisible:async()=>{events.push('visible');},
+  });
+  const run=new AsyncFunction('author','post','expect','publicPath','e2eOrigin',source);
+  const complete=run(author,{post_id:id,revision:1},expect,(value:string)=>'/posts/'+value,()=> 'https://example.test').then(()=>{events.push('visitor-navigation');});
+  return {response,body,events,complete,ack:{enabled:true,available:true,post_revision:2,public_path:'/posts/'+id}};
+}
+const flushReopen=()=>new Promise<void>(resolve=>setImmediate(resolve));
+
+test('reopen journey waits for its exact POST and complete ACK before public navigation',async()=>{
+  const h=reopenHarness();await flushReopen();
+  assert.deepEqual(h.events,['response-listener','click']);
+  h.response.resolve({status:()=>200,json:()=>h.body.promise});await flushReopen();
+  assert.deepEqual(h.events,['response-listener','click']);
+  h.body.resolve(h.ack);await h.complete;
+  assert.deepEqual(h.events,['response-listener','click','ack','public-link','visible','visitor-navigation']);
+});
+
+test('reopen journey rejects incomplete or unavailable ACKs before visiting public content',async()=>{
+  for(const ack of [{},{enabled:true,available:false,post_revision:2,public_path:null},{enabled:true,available:true,post_revision:1,public_path:'/posts/'+id},{enabled:true,available:true,post_revision:2,public_path:'/posts/'+other}]){
+    const h=reopenHarness(),rejected=assert.rejects(h.complete);
+    h.response.resolve({status:()=>200,json:async()=>ack});await rejected;
+    assert.ok(!h.events.includes('public-link'));assert.ok(!h.events.includes('visitor-navigation'));
+  }
+});
+
+test('reopen journey rejects a non-200 response before reading its body or navigating',async()=>{
+  const h=reopenHarness(),rejected=assert.rejects(h.complete);
+  h.response.resolve({status:()=>409,json:async()=>{assert.fail('rejected response must not confirm publication');}});
+  await rejected;assert.ok(!h.events.includes('ack'));assert.ok(!h.events.includes('visitor-navigation'));
 });

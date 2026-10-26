@@ -71,8 +71,11 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
 });
 
+// Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
+// Budget both full cash rounds for recovery/share assertions before teardown;
+// retain desktop rendering, real inputs, and all individual assertion deadlines.
 test('AD-5 sort exact million, recover denied storage, cancel system share, and hand off without a post',async({page})=>{
-  test.setTimeout(120_000);await openGame(page,'cash');const posts:string[]=[];
+  test.setTimeout(180_000);await openGame(page,'cash');const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
@@ -101,6 +104,37 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   const draft=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),GAME_HANDOFF_KEY);
   expect(draft.game).toBe('cash');expect(draft.image).toMatch(/^data:image\/jpeg;base64,/);expect(draft.text).toContain('/play?game=cash&seed=42');
   expect(posts).toEqual([]);
+});
+
+test('AD-5 final cash capture failure retries the completed scene without replaying classification',async({page})=>{
+  test.setTimeout(180_000);await openGame(page,'cash');
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  const deck=cashDeck(42);
+  for(const card of deck.slice(0,29)){
+    await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');
+    await page.clock.fastForward(175);
+  }
+  await page.evaluate(()=>{
+    const original=HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL=function(...args){
+      if(this.width===960&&this.height===720&&args[0]==='image/jpeg'){
+        HTMLCanvasElement.prototype.toDataURL=original;
+        throw Error('Synthetic final capture failure');
+      }
+      return original.apply(this,args);
+    };
+  });
+  await page.keyboard.press(deck[29].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-notice')).toContainText('完成次數不會重算');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 30 / 30');
+  await expect(page.locator('.ad-result-heading')).toHaveCount(0);
+  await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
+  await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  const image=page.locator('.ad-result-photo > img');
+  await expect(image).toHaveJSProperty('naturalWidth',960);
+  await expect(image).toHaveJSProperty('naturalHeight',720);
+  await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  expect(errors).toEqual([]);
 });
 
 test('AD-7 guest result survives login, shows current author, and publishes only after confirmation',async({page,e2eAuthPool})=>{
@@ -183,6 +217,8 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   await page.clock.fastForward(16);
   await expect(page.getByRole('alert')).toHaveText('3D 畫面暫時中斷。按重試恢復這一局。');
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  // Reconstruction has the same bounded readiness phase as initial load and import retry.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
   await expect(resume).toBeVisible();await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
   await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
