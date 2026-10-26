@@ -85,3 +85,25 @@ test('module and page sources contain no network primitives or HTTP URLs',()=>{
   files.push(new URL('../../apps/portal-web/src/modules/NewbieVillage.tsx',import.meta.url),new URL('../../apps/portal-web/src/modules/NewbieVillage.css',import.meta.url));
   for(const file of files)assert.doesNotMatch(readFileSync(file,'utf8'),/fetch|XMLHttpRequest|sendBeacon|https?:\/\//i,String(file));
 });
+test('float regression: product and engineer both 12.4 resolve to product by original career order',()=>{
+  const r=calculateResult([[4],[4],[1],[2],[2],[4],[0],[1],[0],[0],[3],[0],[4],[3,4],[4]]);
+  assert.equal(r.scores.product,12.4);assert.equal(r.scores.engineer,12.4);
+  assert.ok(CAREER_KEYS.indexOf('product')<CAREER_KEYS.indexOf('engineer'));
+  assert.equal(r.primary,'product');
+});
+test('career and dimension ties use exact tenths and stable original order (seeded sweep)',()=>{
+  let seed=20261026;const rnd=()=>(seed=(seed*1103515245+12345)%2147483648)/2147483648;
+  const exactWinner=(t:Record<string,number>)=>{const max=Math.max(...CAREER_KEYS.map(k=>t[k]));return CAREER_KEYS.find(k=>t[k]===max)};
+  let careerTies=0,dimTies=0;
+  for(let n=0;n<5000;n++){
+    const answers=QUESTIONS_V2.map(q=>{const a=[Math.floor(rnd()*q.options.length)];if((q.maxSelect??1)>1&&rnd()<.5){const b=Math.floor(rnd()*q.options.length);if(b!==a[0])a.push(b)}return a});
+    const total:Record<string,number>={},dims:Record<string,Record<string,number>>={};
+    for(const k of CAREER_KEYS)total[k]=0;for(const d of DIMENSIONS){dims[d]={};for(const k of CAREER_KEYS)dims[d][k]=0}
+    QUESTIONS_V2.forEach((q,i)=>{const w=answers[i].length>1?7:10;for(const j of answers[i])for(const [k,p] of Object.entries(q.options[j].scores)){total[k]+=p*w;dims[DIMENSION_MAP_V2[i]][k]+=p*w}});
+    const r=calculateResult(answers);
+    const maxT=Math.max(...Object.values(total));if(CAREER_KEYS.filter(k=>total[k]===maxT).length>1)careerTies++;
+    assert.equal(r.primary,exactWinner(total));
+    for(const d of DIMENSIONS){const m=Math.max(...Object.values(dims[d]));if(CAREER_KEYS.filter(k=>dims[d][k]===m).length>1)dimTies++;assert.equal(r.dimensionWinners[d],exactWinner(dims[d]))}
+  }
+  assert.ok(careerTies>0&&dimTies>0,`expected ties in sweep (career ${careerTies}, dimension ${dimTies})`);
+});
