@@ -1,14 +1,15 @@
 // Generic behavior adapted from mars-tw PR #106, source 46a40342509a9278c3a7b8a940bce27b7f464227.
 // Inline companion UI adapted from mars-tw 99b90451b1b047a34d443318a21e4aad973ae226.
-import {useCallback, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type CSSProperties, type FormEvent} from 'react'
 import type {GuidePage,GuideCharacter,GuidePack,GuideGalleryInfo} from '../contracts'
+import type {GuideHelperAction} from '../GuideHost'
 import {GuideGallery} from './GuideGallery'
 import {createPageSession, type SpiritPack} from './core'
 import {findGuideTarget, focusGuideTarget, type GuideDefinition} from './guides'
 import {readSpiritPreferences, writeSpiritPreferences, type SpiritPreferences} from './preferences'
 import './page-spirit.css'
 
-type Props = {pageId: string; scopeKey: string; page:GuidePage; label:string; gallery:readonly GuideCharacter[]; galleryInfo:GuideGalleryInfo; characterChoices?:GuidePack['characterChoices'];onSelectCharacter?:(id:string)=>void;focusCharacterChoice?:boolean;disabled?: boolean}
+type Props = {pageId: string; scopeKey: string; page:GuidePage; label:string; gallery:readonly GuideCharacter[]; galleryInfo:GuideGalleryInfo; characterChoices?:GuidePack['characterChoices'];onSelectCharacter?:(id:string)=>void;focusCharacterChoice?:boolean;helperAction?:GuideHelperAction;disabled?: boolean}
 type SpiritState = 'idle' | 'wave' | 'think' | 'cheer' | 'calm' | 'sleep'
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 type ViewMode = 'closed' | 'expanded' | 'compact' | 'guide' | 'characters'
@@ -34,7 +35,7 @@ function blockingSurface(own: HTMLElement | null) {
     || Array.from(document.querySelectorAll<HTMLElement>('.game-console-expanded,.floating-message-panel')).some(visible)
 }
 
-export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo, characterChoices, onSelectCharacter, focusCharacterChoice=false, disabled = false}: Props) {
+export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo, characterChoices, onSelectCharacter, focusCharacterChoice=false, helperAction, disabled = false}: Props) {
   const character = page.character
   const getSpiritGuide = (_pageId:string, topicId:string|null) => topicId?.startsWith(`${pageId}:`) ? page.guides[topicId] ?? null : null
   const [galleryOpen,setGalleryOpen] = useState(false)
@@ -53,6 +54,8 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
   const showFullButton = useRef<HTMLButtonElement>(null)
   const content = useRef<HTMLElement>(null)
   const mounted = useRef(false)
+  const helperReturn = useRef<{identity:string;origin:HTMLElement;dialogId:string}|null>(null)
+  const [helperReturnRevision,setHelperReturnRevision]=useState(0)
   const active = useRef({identity, open: false, mode: 'closed' as ViewMode, disabled, suppressed: false, energy: preferences.energy, instantText: preferences.instantText, reduced: false})
   active.current.identity = identity
   active.current.disabled = disabled
@@ -174,6 +177,31 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
       }
     })
   }, [cancelMotion, clearGuide, forgetFrames])
+
+  const requestHelper = (origin:HTMLElement) => {
+    if(!helperAction || !mounted.current || active.current.disabled || document.hidden || blockingSurface(wrapper.current))return
+    const expectedIdentity=active.current.identity,dialogId=helperAction.dialogId
+    helperReturn.current=null
+    const opened=helperAction.requestOpen(origin,reason=>{
+      helperReturn.current=null
+      if(reason!=='dismiss' || !mounted.current || active.current.identity!==expectedIdentity || active.current.disabled || document.hidden || blockingSurface(wrapper.current))return
+      helperReturn.current={identity:expectedIdentity,origin,dialogId}
+      setHelperReturnRevision(value=>value+1)
+    })
+    if(opened)close(false)
+  }
+  // The helper closes before the modal observer clears hard suppression. Restore
+  // only after React has committed enabled controls, never by polling or reopening.
+  useLayoutEffect(()=>{
+    const pending=helperReturn.current
+    if(!pending)return
+    if(!mounted.current || pending.identity!==identity || disabled || helperAction?.open || document.hidden || blockingSurface(wrapper.current)) {helperReturn.current=null;return}
+    const focused=document.activeElement,closedDialog=document.getElementById(pending.dialogId)
+    if(focused!==document.body && focused!==pending.origin && !(closedDialog instanceof HTMLDialogElement && !closedDialog.open && closedDialog.contains(focused))) {helperReturn.current=null;return}
+    if(hardSuppressed || suppressed || active.current.suppressed)return
+    helperReturn.current=null
+    if(pending.origin.isConnected && !pending.origin.matches(':disabled,[aria-disabled="true"]') && !pending.origin.closest('[inert],[hidden],[aria-hidden="true"]') && visible(pending.origin))pending.origin.focus({preventScroll:true})
+  },[helperReturnRevision,hardSuppressed,suppressed,disabled,identity,helperAction?.open])
 
   const toggleCharacters = useCallback(() => {
     if (active.current.disabled || document.hidden || blockingSurface(wrapper.current)) return
@@ -417,7 +445,7 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
     selectionFocused.current = false
     close(false, true)
     return () => {
-      mounted.current = false; active.current.open = false; packEpoch.current++
+      helperReturn.current=null; mounted.current = false; active.current.open = false; packEpoch.current++
       cancelMotion(false); forgetFrames(); session.current?.clear(); session.current = null; currentPack.current = null; packIdentity.current = ''
       clearGuide(); fullText.current = ''; lineIdentity.current = ''; canonical.current = []; canonicalCursor.current = -1; currentTopic.current = null
     }
@@ -461,8 +489,12 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
       const modalOpen = Array.from(document.querySelectorAll<HTMLElement>(MODAL_SELECTOR)).some(element => !own?.contains(element) && visible(element))
       const guidedFocus = active.current.mode === 'guide' && guideIdentity.current === active.current.identity
         && guideTarget.current?.isConnected && document.activeElement === guideTarget.current
-      const outsideInput = editing(document.activeElement) && !own?.contains(document.activeElement) && !guidedFocus
+      const pendingReturn=helperReturn.current
+      const dismissedHelper=pendingReturn?.identity===active.current.identity?document.getElementById(pendingReturn.dialogId):null
+      const ownClosedHelperInput=dismissedHelper instanceof HTMLDialogElement && !dismissedHelper.open && dismissedHelper.contains(document.activeElement)
+      const outsideInput = editing(document.activeElement) && !own?.contains(document.activeElement) && !guidedFocus && !ownClosedHelperInput
       const blocked = consoleOpen || modalOpen || outsideInput
+      if(blocked && helperReturn.current)helperReturn.current=null
       active.current.suppressed = blocked
       setSuppressed(previous => previous === blocked ? previous : blocked)
       setHardSuppressed(previous => previous === (consoleOpen || modalOpen) ? previous : consoleOpen || modalOpen)
@@ -488,6 +520,7 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
     })
     observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'open', 'aria-hidden', 'aria-modal', 'aria-disabled', 'aria-busy', 'disabled', 'inert', 'role', 'style', 'data-guide-anchor']})
     const focused = (event: FocusEvent) => {
+      if(helperReturn.current && event.target!==document.body && event.target!==helperReturn.current.origin)helperReturn.current=null
       const guidedFocus = active.current.mode === 'guide' && guideIdentity.current === active.current.identity && event.target === guideTarget.current && guideTarget.current?.isConnected
       if (event.target instanceof Element && !wrapper.current?.contains(event.target) && active.current.mode !== 'closed') {
         const modal = event.target.closest<HTMLElement>(MODAL_SELECTOR)
@@ -556,6 +589,7 @@ export function GuideEngine({pageId, scopeKey, page, label, gallery, galleryInfo
       <div className="page-spirit-entry-actions">
         <button ref={compactContinue} type="button" className="page-spirit-button page-spirit-primary" disabled={controlsDisabled} aria-expanded={questionsOpen} aria-controls={`${uid}-questions`} onClick={event => begin(event.currentTarget)}>{mode === 'compact' ? '繼續交談' : '問本頁'}</button>
         <button type="button" className="page-spirit-button" disabled={controlsDisabled} aria-expanded={guideMenuOpen} aria-controls={`${uid}-guides`} onClick={event => begin(event.currentTarget, 'guides')}>帶我看</button>
+        {helperAction&&<button type="button" className="page-spirit-button" disabled={controlsDisabled} aria-haspopup="dialog" aria-label="問路助手" aria-expanded={helperAction.open} aria-controls={helperAction.dialogId} onClick={event=>requestHelper(event.currentTarget)}>問路</button>}
         {characterChoices&&onSelectCharacter&&<button ref={characterButton} type="button" className="page-spirit-button page-spirit-change-character" disabled={controlsDisabled} aria-expanded={mode==='characters'} aria-controls={`${uid}-characters`} onClick={toggleCharacters}>換角色</button>}
       </div>
     </div>
