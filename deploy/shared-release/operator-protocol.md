@@ -77,7 +77,7 @@ The controller binds the exact UTF-8 config bytes; the entry validates all field
 | `deploy` | Build/package only the selected reviewed source using pinned tools; preserve current bindings/flags/secrets; invoke Wrangler once and retain provider confirmation |
 | `health` | Read the actual public health endpoint and schema evidence, verify exact release SHA and approved smoke observations; HTTP 200 alone is insufficient |
 | `backup-after` | Capture and offsite-readback the new source/schema, then restore DB and objects in owned isolated services, retain floor/material-policy/quarantine checks, cleanup |
-| `handoff` | Advance the external retained floor at the approved point, confirm scheduled backup ownership still works, settle all owned temporary resources and maintenance pins, release the lease |
+| `handoff` | Advance the external retained floor at the approved point, retain authenticated backup readiness and enabled daily scheduling, settle all owned temporary resources and maintenance pins, release the lease |
 
 Use the existing daily backup pipeline's source/object/restore semantics, not only
 `pg_dump`. Do not change application feature flags during this infrastructure port.
@@ -210,19 +210,24 @@ actually deployed, main/CI-admitted SHA under the same DB lease and shared journ
 Its fixed phases are `preflight`, `backup`, `handoff`; the backup includes complete
 readback, isolated DB/object restore and cleanup, without migration or deployment.
 The journal permits this only at the settled floor and cannot advance source pins.
-Manual runs are installation diagnostics. The natural schedule is 05:43 UTC for
-both targets, serially, sharing the release concurrency group.
+Manual and natural runs can establish release readiness after complete remote
+readback, isolated restore and cleanup. The natural schedule remains 05:43 UTC
+for both environments; manual execution is never labelled a natural run.
 
-Before release, the controller authenticates the latest natural schedule's first
-attempt, main workflow identity, both successful jobs, and the exact environment
-artifact/digest/actors. The receipt must be no older than 36 hours and match the
-installed image/config. A manual run, rerun, stale receipt or newer failed natural
-run cannot authorize handoff. This avoids a circular bootstrap: install backup
-first, observe natural success, then enable staging release. Keep the old backup
-until the successor has been verified; no automatic timer retirement is present.
+Before release, the controller authenticates the latest run affecting the target
+environment: first attempt, successful main workflow, operator identities, job,
+artifact and complete receipt no older than 36 hours, with the installed image
+and config. A newer failure or incomplete run blocks older success. Scheduled
+runs still require both jobs to pass; manual runs have the selected target job.
+The backup switch must be enabled and the daily workflow active. This implements
+the owner's immediate-deployment decision without waiting for the next daily
+clock tick. Natural-scheduler acceptance remains separate, and existing timers
+are retained until their successor has independently completed that handoff.
 
-The image receives this verified schedule evidence without a GitHub token and
-binds it into the final retained handoff event. Its health phase first observes
+The image receives `freedom.verified-backup-readiness/v1` without a GitHub token
+and retains it as `backup` in the final handoff event. The proof names its actual
+`event`, configured daily cron and whether this run proves natural scheduling.
+Old `schedule` journal records remain valid historical evidence. Its health phase first observes
 exact source, then reuses the existing read-only candidate health, protocol,
 assets and anonymous checks with bounded retries. Staging Access is tested both
 with service headers and without them; redirects are never followed. Login
@@ -263,7 +268,7 @@ Additional required successful evidence fields:
 | migration | `outcome`: `committed` or `unchanged`; `ledgerVerified`, `runtimeGrantsVerified`: true |
 | deploy | `sourceSha`: requested SHA; `providerConfirmed`: true |
 | health | `sourceSha`: requested SHA; `statusCode`: 200; `schemaVerified`, `smokePassed`: true |
-| handoff | `scheduledBackupsVerified`, `cleanupVerified`, `leaseReleased`, `retainedFloorAdvanced`: true |
+| handoff | `backupReadinessVerified`, `dailyBackupConfigured`, `cleanupVerified`, `leaseReleased`, `retainedFloorAdvanced`: true |
 
 Exit zero only after every actual operation and cleanup succeeds. On failure,
 persist a bound progress record and exit nonzero; never continue to later phases.

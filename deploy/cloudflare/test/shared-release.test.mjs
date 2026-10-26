@@ -23,7 +23,7 @@ import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared
 import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/portable/floor.mjs';
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
-import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
+import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireBackupReadiness, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 
@@ -293,7 +293,7 @@ function resultFixture(admission = request(), requestSha256 = 'e'.repeat(64)) {
   Object.assign(phases[2], { outcome: 'committed', ledgerVerified: true, runtimeGrantsVerified: true });
   Object.assign(phases[3], { sourceSha: sha, providerConfirmed: true });
   Object.assign(phases[4], { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true });
-  Object.assign(phases[6], { scheduledBackupsVerified: true, cleanupVerified: true,
+  Object.assign(phases[6], { backupReadinessVerified: true, dailyBackupConfigured: true, cleanupVerified: true,
     leaseReleased: true, retainedFloorAdvanced: true });
   return { format: 'freedom.shared-release-operator-result/v1', requestSha256,
     sourceSha: admission.sourceSha, target: admission.target, runId: admission.runId,
@@ -314,7 +314,7 @@ test('missing restore/cleanup/floor/grants/health/schedule evidence and uncertai
     [1, { sourceSha: sha }], [1, { exposure: 'public' }], [2, { outcome: 'unknown' }],
     [2, { runtimeGrantsVerified: false }], [3, { providerConfirmed: false }],
     [4, { sourceSha: main }], [4, { statusCode: 500 }], [4, { schemaVerified: false }],
-    [5, { restore: 'not_run' }], [6, { scheduledBackupsVerified: false }],
+    [5, { restore: 'not_run' }], [6, { backupReadinessVerified: false }], [6, { dailyBackupConfigured: false }],
     [6, { leaseReleased: false }], [6, { retainedFloorAdvanced: false }],
   ];
   for (const [index, patch] of changes) {
@@ -1227,6 +1227,16 @@ test('shared floor advances immediately after confirmed commit and keeps incompl
   f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
   f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
   f.runBackup('backup-after', sha);
+  const readiness = { format: 'freedom.verified-backup-readiness/v1', event: 'workflow_dispatch',
+    dailySchedule: { configured: true, cron: BACKUP_CRON }, runId: 10,
+    operatorImage: f.request.operatorImage, configSha256: f.request.configSha256,
+    receiptSha256: '9'.repeat(64), completedAt: '2026-10-25T00:00:00Z' };
+  assert.equal(replayReleaseFloor([...f.chain, f.event('passed', 'handoff', { cleanupVerified: true, backup: readiness })], f.options).state.pending, null);
+  for (const patch of [{ event: 'push' }, { dailySchedule: { configured: false, cron: BACKUP_CRON } },
+    { dailySchedule: { configured: true, cron: '43 * * * *' } }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'handoff', {
+      cleanupVerified: true, backup: { ...readiness, ...patch } })], f.options), /release_floor_schedule_unverified/);
+  }
   assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'handoff', { scheduledBackupsVerified: true })], f.options),
     /release_floor_schedule_unverified/);
   state = f.add(f.event('passed', 'handoff', { cleanupVerified: true, schedule: { format: 'freedom.verified-scheduled-backup/v1',
@@ -1339,7 +1349,61 @@ test('manual, failed, skipped, stale, foreign and forged backup evidence cannot 
   await assert.rejects(requireScheduledBackup(f.api, f.admission, installation), /release_schedule_run_invalid/);
 });
 
+function readinessFixture(event = 'workflow_dispatch') {
+  const f = scheduledFixture();
+  f.state.run.event = event; f.state.receipt.event = event;
+  if (event === 'workflow_dispatch') f.state.jobs.splice(1);
+  f.state.list = [f.state.run];
+  const original = f.api;
+  f.api = async path => {
+    if (path.endsWith('/runs?branch=main&per_page=100')) return { workflow_runs: structuredClone(f.state.list) };
+    if (path.includes('/runs/88/attempts/1/jobs?')) return { total_count: 1,
+      jobs: [{ name: 'backup (next)', status: 'completed', conclusion: 'success' }] };
+    return original(path);
+  };
+  f.api.readArtifact = original.readArtifact;
+  return f;
+}
+
+test('release readiness accepts authenticated manual restore without calling it a natural schedule', async () => {
+  for (const event of ['workflow_dispatch', 'schedule']) {
+    const f = readinessFixture(event), proof = await requireBackupReadiness(f.api, f.admission, installation);
+    assert.equal(proof.format, 'freedom.verified-backup-readiness/v1'); assert.equal(proof.event, event);
+    assert.equal(proof.naturalSchedule, event === 'schedule' ? 'confirmed_by_this_run' : 'not_proven_by_this_run');
+    assert.equal(proof.dailySchedule.cron, '43 5 * * *'); assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+  }
+  const f = readinessFixture();
+  f.state.list.unshift({ id: 88, run_attempt: 1, event: 'workflow_dispatch', status: 'completed' });
+  assert.equal((await requireBackupReadiness(f.api, f.admission, installation)).runId, 77);
+  // The natural-only acceptance API still refuses the same manual receipt.
+  await assert.rejects(requireScheduledBackup(f.api, f.admission, installation));
+});
+
+test('readiness refuses newer failed or running backups, changed attempts, pins, artifacts and cleanup', async () => {
+  for (const change of [s => { s.run.conclusion = 'failure'; }, s => { s.run.status = 'in_progress'; },
+    s => { s.run.run_attempt = 2; }, s => { s.receipt.event = 'schedule'; },
+    s => { s.receipt.operatorImage = 'ghcr.io/freetwai/freedom-release-operator@sha256:' + 'f'.repeat(64); },
+    s => { s.receipt.configSha256 = 'f'.repeat(64); }, s => { s.artifact.expired = true; },
+    s => { s.receipt.phases[2].status = 'failed'; }, s => { s.jobs[0].steps[0].conclusion = 'skipped'; },
+    s => { s.run.actor.id = 123; }, s => { s.run.head_repository.id = 123; },
+    s => { s.receipt.completedAt = '2026-01-01T00:00:00Z'; }]) {
+    const f = readinessFixture(); change(f.state);
+    await assert.rejects(requireBackupReadiness(f.api, f.admission, installation));
+  }
+  const f = readinessFixture(); f.api.readArtifact = async () => {
+    f.state.list.unshift({ id: 89, run_attempt: 1, event: 'schedule', status: 'in_progress' });
+    return structuredClone(f.state.receipt);
+  };
+  await assert.rejects(requireBackupReadiness(f.api, f.admission, installation), /release_backup_in_progress/);
+  const disabled = readinessFixture(), original = disabled.api;
+  disabled.api = async path => path.endsWith('/workflows/shared-backup.yml')
+    ? { id: 9, path: '.github/workflows/shared-backup.yml', state: 'disabled_manually' } : original(path);
+  await assert.rejects(requireBackupReadiness(disabled.api, disabled.admission, installation), /release_schedule_workflow_invalid/);
+});
+
 test('backup and image entries validate their own main workflow identity and actual operator permissions', async () => {
+  const backupWorkflow = await readFile(new URL('../../../.github/workflows/shared-backup.yml', import.meta.url), 'utf8');
+  assert.equal(backupWorkflow.match(/cron:\s*'([^']+)'/)[1], BACKUP_CRON);
   const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-backup.yml@refs/heads/main`,
     GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON };
   assert.equal(backupRequestFromEnvironment(env, sha).event, 'schedule');
@@ -1434,6 +1498,11 @@ test('abandoned backup keeps history and floor; archive, release and unverified 
   assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', proof)], f.options));
   const g = floorFixture(); g.add(g.begin);
   assert.throws(() => replayReleaseFloor([...g.chain, g.event('backup-abandoned', 'backup-before', proof)], g.options));
+  const preCapture = f.chain.slice(0, 2), earlyProof = { ...proof, captureIntent: 'absent', captureRevision: 'previous-run' };
+  const early = replayReleaseFloor([...preCapture, f.event('backup-abandoned', 'backup', earlyProof)], f.options).state;
+  assert.equal(early.pending, null); assert.deepEqual(early.schemaLedger, prior.schemaLedger);
+  assert.throws(() => replayReleaseFloor([...preCapture, f.event('backup-abandoned', 'backup', proof)], f.options));
+  assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', earlyProof)], f.options));
   const state = f.add(f.event('backup-abandoned', 'backup', proof));
   assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 4);
   assert.equal(f.chain[2].record.data.kind, 'intent');

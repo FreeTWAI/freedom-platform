@@ -95,7 +95,7 @@ export function validateOperatorResult(value, admission, installation, requestDi
   requireRelease(deploy.sourceSha === admission.sourceSha && deploy.providerConfirmed === true
     && health.sourceSha === admission.sourceSha && health.statusCode === 200
     && health.schemaVerified === true && health.smokePassed === true, 'release_health_unconfirmed');
-  requireRelease(handoff.scheduledBackupsVerified === true && handoff.cleanupVerified === true
+  requireRelease(handoff.backupReadinessVerified === true && handoff.dailyBackupConfigured === true && handoff.cleanupVerified === true
     && handoff.leaseReleased === true && handoff.retainedFloorAdvanced === true,
   'release_handoff_incomplete');
   // Fixed fields only: arbitrary operator text, paths and URLs never reach public receipts.
@@ -156,7 +156,7 @@ export function operatorProgress(value, admission, installation, requestDigest) 
 }
 
 export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
-  config, credentials, scheduleEvidence, recoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
+  config, credentials, backupEvidence, recoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -177,7 +177,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
         && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
     }
   }
-  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence,
+  const requestBytes = json({ ...admission, operatorImage: installation.image, backupEvidence, recoveryEvidence,
     configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : PHASES });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });

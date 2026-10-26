@@ -5,7 +5,17 @@
 完整發布 entry、OCI image 建置入口和自然備份 workflow 已接入原始碼，
 **尚未完成 hosted runner 的完整發布。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
 
-2026-10-26 安裝進度：兩環境的 account-owned Cloudflare token、原始 floor／config
+2026-10-26 接續更新：#1087 已合併，新 image 已安裝；兩環境手動備份
+[staging](https://github.com/FreeTWAI/freedom-platform/actions/runs/40312755913)、
+[production](https://github.com/FreeTWAI/freedom-platform/actions/runs/40313880145)
+均完成遠端讀回、隔離還原與清理。之後的
+[自然排程](https://github.com/FreeTWAI/freedom-platform/actions/runs/40315670754)
+在 staging 成功、production 前置檢查失敗；production 只留 `backup-begin`，沒有 capture／archive intent。
+本修補支援這種擷取前停止的明確恢復；仍須讀回實際狀態，不能把未開始擷取視為已清理。
+依 owner 要求直接啟用四人部署，發布准入採用最新完整備份證據，與自然排程驗收分開。
+每日 05:43 UTC 不變；本候選尚未安裝，四人發布實跑尚未完成。
+
+2026-10-26 較早安裝進度：兩環境的 account-owned Cloudflare token、原始 floor／config
 與私人 image 已安裝；[staging 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276457566)
 及 [production 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276554245) 通過。
 [staging 備份首跑](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276749439) 失敗，
@@ -108,16 +118,20 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
    v2 接受新增／變更／刪除 migration 或跳過原座標約束。
 3. 補齊服務憑證後，先開 `BACKUP_ENABLED`，保持 `RELEASE_ENABLED=false`。
    各環境先手動執行 `Shared backup`，核對真實 dump 預算、遠端讀回、隔離還原及清理。
-4. 保留舊 timer，等新 `Shared backup` 在 **05:43 UTC** 自然觸發並完成兩個環境。
+4. 保留舊 timer；新 `Shared backup` 繼續在 **05:43 UTC** 自然觸發。部署不必等下次時鐘觸發，
+   但需要目前環境最新一次備份完整成功；自然排程結果另外記錄。
    所有來源仍走 main／CI 准入；它備份當下實際部署版本，不擅自升級應用。
    新舊入口共用原 DB advisory lease，不會同時擷取。若因舊工作占鎖而拒絕，保留失敗，
    對齊排程後等下一次自然觸發；人工重跑不能冒充自然首試。
 5. 設定 staging 發布入口並完成真實七階段演練，再由另一位操作者使用自己的帳號執行。
    `next` 另核對相同版本 staging 成果。舊 timer 的退役只在接手確認後處理。
 
-每次發布要求最新自然備份 run 首次 attempt 成功、兩個環境 jobs 與該環境 artifact
-通過驗證，收據不超過 36 小時，image／config 與本次完全相同。改 pin 後須先驗新 pin
-的備份與自然排程。手動備份、舊 attempt、過期 artifact、失敗的新 run 都不放行。
+每次發布要求影響該環境的最新備份 run 首次 attempt 成功，對應 job 與 artifact
+通過驗證，收據不超過 36 小時，image／config 與本次完全相同。手動或自然備份均可；
+自然 run 仍須兩環境 jobs 全部成功。改 pin 後先驗新 pin 的完整備份；較新的失敗、
+未完成 run、重跑 attempt、過期 artifact 都不放行，不能退回較舊成功。
+`BACKUP_ENABLED=true` 與 active workflow 必須保留。收據明列手動／自然來源，
+手動成功不代表自然排程已驗收，舊 timer 退役仍須另外確認交接。
 目前沒有自動排程補跑或未結案 floor 的自動重做功能；缺漏會明確拒絕。
 
 ### 備份在上傳前失敗時的手動接續
@@ -130,7 +144,9 @@ Operator 取得原共用 DB lease 後，再讀回未變更的 Worker、ledger、
 確認原 capture backend 已結束、維護開關關閉且沒有刪除 fence，才追加
 `backup-abandoned` 歷史紀錄並開始新的備份。所有來源 pins 與原失敗證據保留。
 
-這條接續只適用於 **backup-only、已有 capture-policy intent、尚無 archive intent**。
+這條接續只適用於 **backup-only、尚無任何 intent，或只有 capture-policy intent**。
+沒有 intent 時，仍核對環境 DB／role、原 floor、Worker、維護開關與刪除 fence，
+並拒絕任何仍存活的 capture backend；兩種情況均不允許 archive intent。
 上傳結果不明、migration／deploy 失敗、舊程序仍存活、設定或狀態已改變都拒絕；
 不覆寫 seed、不刪 journal、不自動重送 PUT，也不能以此取得自然排程成功證據。
 新的失敗收據會顯示固定的備份階段、snapshot dump 進度與清理結果，不包含原始錯誤或憑證。
@@ -157,7 +173,7 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 排隊中較舊的 run 仍可能被 GitHub 的 concurrency 規則取代，需看 run 的實際狀態。
 
 階段固定為 preflight → backup-before → migration → deploy → health → backup-after → handoff。
-備份必須包含遠端讀回、隔離資料庫與物件還原、清理；最後驗證自然備份排程仍能執行。
+備份必須包含遠端讀回、隔離資料庫與物件還原、清理；最後保留經驗證的備份證據與每日排程啟用狀態；自然排程驗收另記。
 任一不完整結果都不能標成成功。控制程式失敗後不重啟發布、不自動 rollback。
 釘選的 Wrangler 4.138 自己會對部分網路／5xx／429 錯誤重試上傳，最多三次；
 「只啟動一次 Wrangler」不等於「只有一次 provider upload」。不明結果仍須讀回對帳。

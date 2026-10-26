@@ -81,20 +81,13 @@ export async function requireFailedBackup(api, admission, installation) {
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });
 }
 
-/** Only a natural scheduled main run can prove scheduler handoff. Neither a
- * manual backup, arbitrary R2 marker nor caller-written Deployment is authority. */
-export async function requireScheduledBackup(api, admission, installation) {
-  const workflow = await api(`${prefix}/actions/workflows/shared-backup.yml`);
-  check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', 'release_schedule_workflow_invalid');
-  const latest = async () => {
-    const page = await api(`${prefix}/actions/workflows/${workflow.id}/runs?event=schedule&branch=main&per_page=1`);
-    check(Number.isSafeInteger(page.total_count) && page.total_count > 0 && Array.isArray(page.workflow_runs)
-      && page.workflow_runs.length === 1 && positive(page.workflow_runs[0].id), 'release_schedule_run_missing');
-    return page.workflow_runs[0].id;
-  };
-  const id = await latest(), run = await api(`${prefix}/actions/runs/${id}`);
+/** Authenticate actual completed backup/restore evidence. Manual execution is
+ * never relabelled as natural scheduling. No caller-written success marker. */
+async function verifyBackupEvidence(api, admission, installation, { workflow, id, scheduled }) {
+  const run = await api(`${prefix}/actions/runs/${id}`);
   const checkRun = value => check(value.id === id && value.run_attempt === run.run_attempt && value.run_attempt === 1
-    && value.workflow_id === workflow.id && value.path === path && value.event === 'schedule'
+    && value.workflow_id === workflow.id && value.path === path
+    && (scheduled ? value.event === 'schedule' : ['schedule', 'workflow_dispatch'].includes(value.event))
     && value.repository?.id === REPOSITORY_ID && value.head_repository?.id === REPOSITORY_ID
     && value.head_branch === 'main' && isSha(value.head_sha) && value.head_sha === run.head_sha
     && value.status === 'completed' && value.conclusion === 'success' && actor(value.actor) && actor(value.triggering_actor),
@@ -104,8 +97,10 @@ export async function requireScheduledBackup(api, admission, installation) {
   check(['ahead', 'identical'].includes(compare.status) && compare.merge_base_commit?.sha === run.head_sha,
     'release_schedule_controller_untrusted');
   const jobs = await api(`${prefix}/actions/runs/${id}/attempts/${run.run_attempt}/jobs?per_page=100`);
-  check(jobs.total_count === 2 && Array.isArray(jobs.jobs) && jobs.jobs.length === 2, 'release_schedule_jobs_invalid');
-  for (const target of ['staging-next', 'next']) {
+  check(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length
+    && (run.event === 'schedule' ? jobs.jobs.length === 2 : jobs.jobs.length === 1)
+    && jobs.jobs.every(job => ['backup (staging-next)', 'backup (next)'].includes(job.name)), 'release_schedule_jobs_invalid');
+  for (const target of run.event === 'schedule' ? ['staging-next', 'next'] : [admission.target]) {
     const matching = jobs.jobs.filter(job => job.name === `backup (${target})` && job.run_id === id && job.run_attempt === run.run_attempt
       && job.head_sha === run.head_sha && job.status === 'completed' && job.conclusion === 'success');
     check(matching.length === 1 && Array.isArray(matching[0].steps) && ['Execute scheduled backup', 'Save public backup receipt'].every(name =>
@@ -120,7 +115,7 @@ export async function requireScheduledBackup(api, admission, installation) {
     && owner?.id === id && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
     && owner.head_branch === 'main' && owner.head_sha === run.head_sha, 'release_schedule_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
-  check(receipt?.format === 'freedom.shared-backup/v1' && receipt.status === 'passed' && receipt.event === 'schedule'
+  check(receipt?.format === 'freedom.shared-backup/v1' && receipt.status === 'passed' && receipt.event === run.event
     && receipt.mode === 'backup' && receipt.providerOutcome === 'backup_and_restore_confirmed'
     && receipt.operatorEvidence === 'validated-backup-phases/v1' && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
     && receipt.controllerSha === run.head_sha && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
@@ -137,9 +132,59 @@ export async function requireScheduledBackup(api, admission, installation) {
     check(phase.name === BACKUP_PHASES[i] && phase.status === 'passed' && Number.isFinite(from) && Number.isFinite(to)
       && from >= previous && to >= from && to <= finish, 'release_schedule_receipt_invalid'); previous = to;
   }
-  checkRun(await api(`${prefix}/actions/runs/${id}`)); check(await latest() === id, 'release_schedule_evidence_changed');
-  return Object.freeze({ format: 'freedom.verified-scheduled-backup/v1', runId: id, runAttempt: run.run_attempt,
+  checkRun(await api(`${prefix}/actions/runs/${id}`));
+  return Object.freeze({ format: scheduled ? 'freedom.verified-scheduled-backup/v1' : 'freedom.verified-backup-readiness/v1',
+    ...(scheduled ? {} : { event: run.event, sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree,
+      dailySchedule: { workflowId: workflow.id, cron: BACKUP_CRON, configured: true },
+      naturalSchedule: run.event === 'schedule' ? 'confirmed_by_this_run' : 'not_proven_by_this_run' }), runId: id, runAttempt: run.run_attempt,
     controllerSha: run.head_sha, operatorImage: installation.image, configSha256: installation.configSha256,
     artifactId: artifact.id, artifactDigest: artifact.digest,
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });
+}
+
+const activeBackupWorkflow = async api => {
+  const workflow = await api(`${prefix}/actions/workflows/shared-backup.yml`);
+  check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', 'release_schedule_workflow_invalid');
+  return workflow;
+};
+
+/** Retained for explicit natural-scheduler acceptance; manual runs do not count. */
+export async function requireScheduledBackup(api, admission, installation) {
+  const workflow = await activeBackupWorkflow(api);
+  const latest = async () => {
+    const page = await api(`${prefix}/actions/workflows/${workflow.id}/runs?event=schedule&branch=main&per_page=1`);
+    check(Number.isSafeInteger(page.total_count) && page.total_count > 0 && Array.isArray(page.workflow_runs)
+      && page.workflow_runs.length === 1 && positive(page.workflow_runs[0].id), 'release_schedule_run_missing');
+    return page.workflow_runs[0].id;
+  };
+  const id = await latest(), proof = await verifyBackupEvidence(api, admission, installation, { workflow, id, scheduled: true });
+  check(await latest() === id, 'release_schedule_evidence_changed');
+  return proof;
+}
+
+/** A release needs the latest backup attempt for its environment to have really
+ * restored and cleaned up. It can be manual or scheduled; a newer failure or
+ * unfinished run cannot be hidden by an older success. Daily scheduling stays
+ * active, but waiting for its next clock tick is not a release prerequisite. */
+export async function requireBackupReadiness(api, admission, installation) {
+  const workflow = await activeBackupWorkflow(api);
+  check(['staging-next', 'next'].includes(admission.target), 'release_target_invalid');
+  const latest = async () => {
+    const page = await api(`${prefix}/actions/workflows/${workflow.id}/runs?branch=main&per_page=100`);
+    check(Array.isArray(page.workflow_runs) && page.workflow_runs.length <= 100, 'release_backup_history_invalid');
+    for (const run of page.workflow_runs) {
+      if (!['schedule', 'workflow_dispatch'].includes(run.event)) continue;
+      check(positive(run.id) && positive(run.run_attempt), 'release_backup_history_invalid');
+      // An incomplete run may not yet expose its jobs; do not skip past it.
+      check(run.status === 'completed', 'release_backup_in_progress');
+      const jobs = await api(`${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`);
+      check(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length && jobs.jobs.length >= 1 && jobs.jobs.length <= 2
+        && jobs.jobs.every(job => ['backup (staging-next)', 'backup (next)'].includes(job.name)), 'release_backup_history_invalid');
+      if (jobs.jobs.some(job => job.name === `backup (${admission.target})`)) return run.id;
+    }
+    check(false, 'release_backup_evidence_missing');
+  };
+  const id = await latest(), proof = await verifyBackupEvidence(api, admission, installation, { workflow, id, scheduled: false });
+  check(await latest() === id && (await activeBackupWorkflow(api)).id === workflow.id, 'release_schedule_evidence_changed');
+  return proof;
 }

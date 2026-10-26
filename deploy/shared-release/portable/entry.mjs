@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
 import { PHASES, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha } from '../admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult } from '../operator.mjs';
-import { BACKUP_PHASES } from '../scheduled-admission.mjs';
+import { BACKUP_PHASES, BACKUP_CRON } from '../scheduled-admission.mjs';
 import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from './config.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
@@ -104,10 +104,12 @@ export async function main(args = process.argv.slice(2)) {
     await privateBackupRoot(WORK);
     await phase('preflight', async () => {
       await verifyApplicationSource(SOURCE, request.sourceSha, request.sourceTree);
-      const schedule = request.scheduleEvidence;
-      if (!isBackup) check(schedule?.format === 'freedom.verified-scheduled-backup/v1' && schedule.operatorImage === request.operatorImage
-        && schedule.configSha256 === request.configSha256 && Date.now() - Date.parse(schedule.completedAt) <= 36 * 3600000,
-      'release_entry_schedule_required');
+      const readiness = request.backupEvidence;
+      if (!isBackup) check(readiness?.format === 'freedom.verified-backup-readiness/v1'
+        && ['schedule', 'workflow_dispatch'].includes(readiness.event)
+        && readiness.dailySchedule?.configured === true && readiness.dailySchedule.cron === BACKUP_CRON
+        && readiness.operatorImage === request.operatorImage && readiness.configSha256 === request.configSha256
+        && Date.now() - Date.parse(readiness.completedAt) <= 36 * 3600000, 'release_entry_backup_readiness_required');
       lease = await acquireReleaseLease(pools.migrator, { database: config.database.name, role: connections.migrator.role, signal: controller.signal });
       const store = createControlStore({ accountId: config.accountId, bucket: config.backupBucket, target: config.target,
         ...config.floor, token: credentials.cloudflareApiToken, lease });
@@ -115,7 +117,8 @@ export async function main(args = process.argv.slice(2)) {
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
         token: credentials.cloudflareApiToken, signal: lease.signal });
       let recovery;
-      if (request.recoverRunId) recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, deployer, lease, request });
+      if (request.recoverRunId) recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, deployer, lease, request,
+        database: config.database.name, role: connections.migrator.role });
       const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       before = await deployer.inspect();
       check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
@@ -175,9 +178,10 @@ export async function main(args = process.argv.slice(2)) {
     await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
     await phase('handoff', async () => {
       await floor.assertCurrent(); lease.assertHeld();
-      await floor.passed('handoff', { cleanupVerified: true, schedule: request.scheduleEvidence });
+      await floor.passed('handoff', { cleanupVerified: true, backup: request.backupEvidence });
       await lease.release(); lease = null;
-      return { scheduledBackupsVerified: true, cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
+      return { backupReadinessVerified: true, dailyBackupConfigured: true, cleanupVerified: true,
+        leaseReleased: true, retainedFloorAdvanced: true };
     });
     validateOperatorResult(result, request, installation, result.requestSha256);
   } finally {

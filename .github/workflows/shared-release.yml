@@ -111,6 +111,7 @@ jobs:
           RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
           RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          BACKUP_ENABLED: ${{ vars.BACKUP_ENABLED }}
           RELEASE_OPERATOR_IMAGE: ${{ vars.RELEASE_OPERATOR_IMAGE }}
           RELEASE_CONFIG_SHA256: ${{ vars.RELEASE_CONFIG_SHA256 }}
           RELEASE_CONFIG_JSON: ${{ secrets.RELEASE_CONFIG_JSON }}

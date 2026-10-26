@@ -24,10 +24,14 @@ Backup before, migration, deploy, exact-source health, backup after and operator
 handoff must all succeed in order. The existing backup must include remote
 readback, isolated database/object restore and cleanup. Migration uncertainty or
 a failed deployment stops, retains the outcome and does not auto-retry/rollback.
-An operator handoff must preserve scheduled backups before a release completes.
-Only an authenticated successful natural schedule's first attempt, with both
-environment jobs and the exact image/config receipt, proves scheduler handoff.
-Manual backup or re-running a failed scheduled run is not that evidence.
+An operator handoff must preserve daily backups before a release completes.
+The owner's immediate-deployment decision separates release readiness from
+natural-scheduler acceptance. The latest backup affecting the target environment
+must be a successful first attempt with authenticated restore/cleanup evidence
+and the exact image/config receipt, whether manual or scheduled. A newer failure
+or unfinished run blocks older success. Daily backup must remain enabled and its
+workflow active. Only an actual natural run proves scheduler acceptance; retain
+that separate result honestly and never relabel a manual backup as natural.
 
 Environment credentials remain outside the source checkout and public Actions
 artifacts. Only allowlisted summaries are published. Never upload database dumps,

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { requireRelease as check, isSha, isDigest } from '../admission.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from './coordinate-fence.mjs';
+import { BACKUP_CRON } from '../scheduled-admission.mjs';
 
 const STAGES = ['backup-before', 'migration', 'deploy', 'health', 'backup-after', 'handoff'];
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -67,7 +68,9 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       && event.stage === stages[pending.stage], 'release_floor_stage_mismatch');
     if (event.kind === 'backup-abandoned') {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
-      check(pending.kind === 'backup' && pending.stage === 0 && capture && Object.keys(pending.intents).length === 1
+      const noCapture = Object.keys(pending.intents).length === 0;
+      check(pending.kind === 'backup' && pending.stage === 0
+        && (noCapture ? proof?.captureIntent === 'absent' : capture && Object.keys(pending.intents).length === 1)
         && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
           .every(key => recovery[key] === pending.request[key])
@@ -79,7 +82,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
         && proof.materialPolicySha256 === state.materialPolicySha256
         && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false && proof.deletionFences === 0
-        && proof.captureBackendAbsent === true && proof.captureRevision === capture.revision
+        && proof.captureBackendAbsent === true && (noCapture || proof.captureRevision === capture.revision)
         && proof.sourcePins === 'retained' && proof.archiveIntent === 'absent', 'release_floor_backup_recovery_invalid');
       request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
       check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
@@ -143,10 +146,13 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(proof?.sourceSha === pending.candidate.sourceSha && proof.statusCode === 200
         && proof.schemaVerified === true && proof.smokePassed === true, 'release_floor_health_unverified');
     } else if (event.stage === 'handoff') {
-      // The controller must authenticate this completed scheduled run/artifact
-      // with GitHub (as for staging provenance), not trust a generic R2 marker.
-      const schedule = proof?.schedule;
-      check(proof?.cleanupVerified === true && schedule?.format === 'freedom.verified-scheduled-backup/v1'
+      // Preserve old natural-run history; new records explicitly distinguish
+      // manual backup readiness from natural-scheduler acceptance.
+      const schedule = proof?.backup ?? proof?.schedule;
+      const readiness = schedule?.format === 'freedom.verified-backup-readiness/v1'
+        && ['schedule', 'workflow_dispatch'].includes(schedule.event)
+        && schedule.dailySchedule?.configured === true && schedule.dailySchedule.cron === BACKUP_CRON;
+      check(proof?.cleanupVerified === true && (readiness || schedule?.format === 'freedom.verified-scheduled-backup/v1')
         && Number.isSafeInteger(schedule.runId) && schedule.runId > 0
         && schedule.operatorImage === pending.request.operatorImage && schedule.configSha256 === pending.request.configSha256
         && isDigest(schedule.receiptSha256) && Number.isFinite(Date.parse(schedule.completedAt)),

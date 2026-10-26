@@ -211,6 +211,22 @@ export async function verifyBackup({ root, openCluster, execute }) {
       await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
     } finally { backend.release(true); }
     assert.equal(abandoned, 1);
+    // Preflight-only failure never wrote a capture intent; verify the actual
+    // database, unchanged floor and disabled policy before appending history.
+    state.pending.intents = {};
+    const earlyRecovery = { ...recovery, database: source.databaseName, role: 'fp_fixture_migrator' };
+    await assert.rejects(reconcileFailedBackup({ ...earlyRecovery, database: 'wrong_database' }), /release_backup_recovery_database_changed/);
+    await reconcileFailedBackup(earlyRecovery); assert.equal(abandoned, 2);
+    await pool.query('UPDATE asset_maintenance_policy SET enabled=true WHERE singleton');
+    await assert.rejects(reconcileFailedBackup(earlyRecovery), /release_backup_recovery_cleanup_unconfirmed/);
+    await pool.query('UPDATE asset_maintenance_policy SET enabled=false WHERE singleton');
+    const active = await pool.connect();
+    try {
+      await active.query("SELECT set_config('application_name',$1,false)", [failedCapture.application]);
+      await assert.rejects(reconcileFailedBackup(earlyRecovery), /release_backup_recovery_cleanup_unconfirmed/);
+    } finally { active.release(true); }
+    assert.equal(abandoned, 2);
+    assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
     const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
     await assertBackupReadOnly();
