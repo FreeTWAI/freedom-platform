@@ -24,6 +24,12 @@
    讀取、兩個 R2 bucket 列舉及 staging Access health。先安裝正確的 config secret／hash；
    此模式不需開啟發布／備份，也不需安裝 image 或 floor，不建立 Deployment、不修改資料。
    Summary 逐項列出結果；通過只表示這些唯讀請求成功，不證明寫入權限、DB、備份或可部署。
+   帳戶驗證被拒時，會另以唯讀請求辨識是否誤存有效的使用者 token；若是，顯示
+   `release_account_owned_token_required`，不把它當作帳戶服務憑證通過。帳戶 token
+   從 Cloudflare **Manage account → Account API tokens** 建立，與個人頭像下的
+   My Profile → API Tokens 不同（[Cloudflare 說明](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)）。
+   Access 回傳重新導向時顯示 `release_environment_redirect_rejected` 與 HTTP 狀態，
+   不跟隨 Location、不轉送憑證；檢查應用已儲存的 Service Auth 政策及指定的 service token。
 4. 確認環境已安裝後，選同一版本與 `deploy`。正式 `next` 會要求同一版本、
    同一發布工具 digest 最新的 staging 發布成功，而且成功收據須來自可信的完整 workflow 執行。
 5. 查看每個階段和 GitHub Deployment。失敗先看收據；migration 或 provider 結果

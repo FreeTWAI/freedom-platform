@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
@@ -1365,7 +1366,9 @@ async function environmentCheckFixture(t) {
     RELEASE_ENABLED: 'false', BACKUP_ENABLED: 'false' };
   const fetchImpl = async (address, options) => {
     const url = new URL(address); calls.push({ url, options });
-    assert.equal(options.method, 'GET'); assert.equal(options.redirect, 'error');
+    assert.equal(options.method, 'GET');
+    assert.equal(options.redirect, url.origin === 'https://staging.freetwai.com'
+      || url.pathname.endsWith('/tokens/verify') || url.pathname.includes('/r2/buckets/') ? 'manual' : 'error');
     if (url.origin === 'https://api.cloudflare.com') {
       assert.equal(options.headers.Authorization, 'Bearer ' + env.CLOUDFLARE_API_TOKEN);
       assert(!('CF-Access-Client-Id' in options.headers)); assert(!('CF-Access-Client-Secret' in options.headers));
@@ -1387,6 +1390,7 @@ test('credential check works with releases disabled, makes only GETs and never a
   assert.equal(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'check' }).mode, 'check');
   const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: f.fetchImpl });
   assert.equal(report.status, 'passed'); assert.equal(report.checks.length, 5);
+  assert.equal(report.cloudflareTokenKind, 'account');
   assert.equal(report.observedSourceSha, f.f.before.sourceSha);
   assert.equal(report.healthSourceSha, report.observedSourceSha);
   assert.equal(report.databaseCredentials, 'not_checked'); assert.equal(report.writePermissions, 'not_checked');
@@ -1408,7 +1412,56 @@ test('credential diagnostics retain named failures without leaking provider bodi
   assert.equal(report.status, 'failed');
   assert.deepEqual(report.checks.map(c => c.status), ['failed', 'passed', 'passed', 'failed', 'failed']);
   assert.equal(report.checks[0].httpStatus, 403); assert.equal(report.checks[4].httpStatus, 302);
+  assert.equal(report.checks[4].error, 'release_environment_redirect_rejected');
   assert(!JSON.stringify(report).includes('private-')); assert(!JSON.stringify(report).includes(f.env.CLOUDFLARE_API_TOKEN));
+});
+
+test('an active user token is identified without accepting it as an account service credential', async t => {
+  const f = await environmentCheckFixture(t), tokenPaths = [];
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: async (url, options) => {
+    if (url.endsWith('/tokens/verify')) {
+      tokenPaths.push(new URL(url).pathname);
+      if (url.includes('/accounts/')) return new Response('private-account-error', { status: 401 });
+      assert.equal(options.redirect, 'manual'); assert.equal(options.method, 'GET');
+      assert.equal(options.headers.Authorization, 'Bearer ' + f.env.CLOUDFLARE_API_TOKEN);
+      return Response.json({ success: true, result: { status: 'active', id: 'private-token-id' } });
+    }
+    return f.fetchImpl(url, options);
+  } });
+  assert.deepEqual(tokenPaths, ['/client/v4/accounts/' + 'a'.repeat(32) + '/tokens/verify', '/client/v4/user/tokens/verify']);
+  assert.equal(report.status, 'failed'); assert.equal(report.cloudflareTokenKind, 'user');
+  assert.equal(report.checks[0].error, 'release_account_owned_token_required');
+  assert.equal(report.checks[0].httpStatus, 401);
+  assert(!JSON.stringify(report).includes('private-'));
+});
+
+test('token verification transport and server errors never trigger a user-token fallback', async t => {
+  for (const failure of [() => { throw Error('private-network-detail'); }, () => new Response('private-api-detail', { status: 503 })]) {
+    const f = await environmentCheckFixture(t); let attempts = 0;
+    const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => {
+      if (url.endsWith('/tokens/verify')) { attempts++; assert(url.includes('/accounts/')); return failure(); }
+      return f.fetchImpl(url, options);
+    } });
+    assert.equal(attempts, 1); assert.equal(report.status, 'failed');
+    assert.equal(report.cloudflareTokenKind, undefined); assert(!JSON.stringify(report).includes('private-'));
+    assert(['release_environment_http_failed', 'release_environment_transport_failed'].includes(report.checks[0].error));
+  }
+});
+
+test('real HTTP redirect is reported without following it or forwarding Access credentials', async t => {
+  const f = await environmentCheckFixture(t), received = [];
+  const server = createServer((req, res) => {
+    received.push(req.url);
+    res.writeHead(302, { Location: '/credential-sink?private-location-data' }); res.end('private-redirect-body');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => url.startsWith('https://staging.')
+    ? fetch(`http://127.0.0.1:${server.address().port}/health`, options) : f.fetchImpl(url, options) });
+  assert.deepEqual(received, ['/health']);
+  assert.equal(report.checks.at(-1).httpStatus, 302);
+  assert.equal(report.checks.at(-1).error, 'release_environment_redirect_rejected');
+  assert.equal(report.status, 'failed'); assert(!JSON.stringify(report).includes('private-'));
 });
 
 test('credential checks reject wrong config pins before network and wrong health versions after reading', async t => {
