@@ -26109,8 +26109,8 @@
     },
     {
       "path": "tests/runtime/guild-launchpad.test.ts",
-      "bytes": 59997,
-      "sha256": "3b67cf9d612bb237fb894b2cf769baf2bc906b40b04560cddbac7fc302dbe23f"
+      "bytes": 60238,
+      "sha256": "442fdf7666e37da60112f9af12b5d4fd7cc846366c1b3295b6ccfa993d24c843"
     },
     {
       "path": "tests/runtime/guild-member-tier-fixture.test.ts",
