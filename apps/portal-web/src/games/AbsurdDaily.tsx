@@ -163,7 +163,11 @@ function GameBoard({ game, seed, onBack, onResult }: {
     } }
     function applyCash(accept: boolean, index = live.current.cash.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
         return; const outcome = sortCash(l.cash, index, accept, l.clock.elapsed); if (outcome.kind === 'ignored')
-        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(outcome.kind === 'wrong' ? '這張分錯了，退回來重新看看。' : accept ? '道具鈔收到。財富看起來很有希望。' : '這張不是錢，老闆先收回去。'); render(); updateUi(); if (l.cash.endedAt !== null) {
+        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(outcome.kind === 'wrong' ? '這張分錯了，退回來重新看看。' : accept ? '道具鈔收到。財富看起來很有希望。' : '這張不是錢，老闆先收回去。');
+        // Settlement stops the clock and refreshes the final scene before capture.
+        // Only ongoing actions need this immediate feedback draw.
+        if (l.cash.endedAt === null) render();
+        updateUi(); if (l.cash.endedAt !== null) {
         const elapsed = l.cash.endedAt - (l.cash.startedAt ?? l.cash.endedAt);
         settle({ game, seed, title: GAMES[2].title, caption: '數完一百萬，還收到了老闆畫的大餅。', details: `100 萬道具鈔 · 退回 ${l.cash.rejected} 張票券 · ${seconds(elapsed)} 秒 · 分錯 ${l.cash.mistakes} 次` });
     } }

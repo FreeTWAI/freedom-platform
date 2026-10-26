@@ -28,3 +28,7 @@
   .guild-workspace-tabs .btn { padding-inline: 8px; white-space: normal; min-width: 0; }
   .guild-maintainer-row { align-items: stretch; flex-direction: column; }
 }
+
+.guild-workspace-purpose { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.guild-council-list-only { grid-template-columns: minmax(0,1fr); }
+.guild-council .actions .btn { min-height: 44px; white-space: normal; }

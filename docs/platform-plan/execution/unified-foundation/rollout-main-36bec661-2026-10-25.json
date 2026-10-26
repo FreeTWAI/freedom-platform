@@ -1,0 +1,1287 @@
+{
+  "format": "freedom.main-rollout/v1",
+  "status": "deployed_production_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "recorded_at": "2026-10-25T05:26:05.958975+00:00",
+  "evidence_cutoff_at": "2026-10-25T05:21:36.837161+00:00",
+  "status_breakdown": {
+    "deployed": "Both environments run 36bec661 at schema 189; deploy helpers completed and active readbacks matched on attempt 1.",
+    "public_smoke": "Production only: 14 checks passed; exact-source health matched on attempt 1. Staging has deploy health/homepage/binding checks only.",
+    "backups_and_isolated_restores": "All four release backup sets passed on their first run; the later Persistent timer catch-up also passed and is recorded separately.",
+    "operator_dispatcher": "Both sources bound to 2fc4cb83; original timers restored on attempt 2, with unchanged schedules and service argv.",
+    "preserved_refusals": "S3 receive refused current-main mismatch; real-import attempt 1 refused a stale inline pin before Node started; timer restore attempt 1 refused after starting timers triggered a Persistent catch-up.",
+    "natural_scheduled_backup": "not_observed_for_new_wrapper",
+    "member_ux_acceptance": "not_run"
+  },
+  "source": {
+    "selected_release": "36bec661d8e87759cbb5af4796816032bfcc0073",
+    "tree": "00f8d638f4363efd9fc19b2017a1d428dd1f05ce",
+    "parents": [
+      "b13a9fa981d56b33c345cba0355f3a7f5cbadb9c",
+      "86c1c385d0551f31570e4868a608e07f7c2c093d"
+    ],
+    "merge_pr": 1027,
+    "included_prs": [
+      {
+        "pr": 1001,
+        "description": "Integrate paid-order cancellation, hosted supplier drop-shipment and retained contact rules; drop-shipment remains OFF."
+      },
+      {
+        "pr": 1015,
+        "description": "Integrate 16 reviewed social, chat, search, skills, home, profile, guild and journal PRs.",
+        "integrated_prs": [
+          993,
+          994,
+          995,
+          997,
+          998,
+          999,
+          1000,
+          1004,
+          1005,
+          1006,
+          1008,
+          1010,
+          1011,
+          1012,
+          1013,
+          1014
+        ]
+      },
+      {
+        "pr": 993,
+        "description": "Unify the composer across five languages and cover drafts and safe retries."
+      },
+      {
+        "pr": 994,
+        "description": "Keep confirmed comment edits and deletions across delayed reads."
+      },
+      {
+        "pr": 995,
+        "description": "Reuse unchanged chat history while editing drafts."
+      },
+      {
+        "pr": 997,
+        "description": "Use bounded receipt queries instead of downloading long chat histories repeatedly."
+      },
+      {
+        "pr": 998,
+        "description": "Retain private-list pagination on return and isolate login state."
+      },
+      {
+        "pr": 999,
+        "description": "Improve like feedback and safely retry unknown results."
+      },
+      {
+        "pr": 1000,
+        "description": "Restructure skill-book discovery and reading."
+      },
+      {
+        "pr": 1004,
+        "description": "Show free previews on the entry page before account flows."
+      },
+      {
+        "pr": 1005,
+        "description": "Expose feed categories and post-card sharing-link actions directly."
+      },
+      {
+        "pr": 1006,
+        "description": "Synchronize read confirmations and unread notifications."
+      },
+      {
+        "pr": 1008,
+        "description": "Separate Claude and Codex journal entries and support same-day articles for two communities."
+      },
+      {
+        "pr": 1010,
+        "description": "Restructure the owner personal space and simplify the avatar menu."
+      },
+      {
+        "pr": 1011,
+        "description": "Simplify home branding and make learning and guild exploration expandable."
+      },
+      {
+        "pr": 1012,
+        "description": "Unify community overview entry for joined guilds."
+      },
+      {
+        "pr": 1013,
+        "description": "Preview stickers before explicit send while preserving drafts and retries."
+      },
+      {
+        "pr": 1014,
+        "description": "Document explicitly owner-selected public-card featured posts; design only, not delivered functionality."
+      },
+      {
+        "pr": 1017,
+        "description": "Close open friend remove/decline confirmation when the result set changes; merged from a fork head."
+      },
+      {
+        "pr": 1027,
+        "description": "CI only: three browser shards and re-derived runtime weights."
+      }
+    ],
+    "previous_release": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+    "dist_sha256": "760f30a4a38700daceca6474f7db3021a62dd958c37a80f469d42e5540d3c494",
+    "dist_file_count": 450,
+    "schema": 189,
+    "migrations_applied": [
+      "188_paid_order_cancellation.sql",
+      "189_hosted_drop_ship.sql"
+    ],
+    "main_verify": {
+      "run_id": 40149666118,
+      "attempt": 2,
+      "job_count": 17,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40149666118",
+      "updated_at": "2026-10-25T03:48:06Z",
+      "last_job_completed_at": "2026-10-25T03:48:05Z",
+      "run_receipt_sha256": "a1b1b82238bbf28384dfd88ddf19e6055ad8f90dc64daf6501820053ad022d34",
+      "jobs_receipt_sha256": "e1a5b6405161f7b54dac659ccdfc2e446761acce007770ac03028405d55b1136",
+      "prior_attempt": {
+        "attempt": 1,
+        "status": "failed",
+        "reason": "test_timeout",
+        "partition": 1,
+        "completed_files": 60,
+        "total_files": 62,
+        "test_failures_reported": 0,
+        "basis": "Operator task history; no attempt-1 raw report or job list located in Q2/main-ci. Not independently verified by this documentation job."
+      },
+      "timestamp_note": "Operator task states success at 03:48:18Z; retained run updated_at is 03:48:06Z and last job completed_at is 03:48:05Z. Receipt retains file values rather than claiming 03:48:18Z as a CI timestamp."
+    },
+    "main_codeql": {
+      "run_id": 40149666157,
+      "attempt": 1,
+      "job_count": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40149666157",
+      "updated_at": "2026-10-25T01:30:29Z",
+      "last_job_completed_at": "2026-10-25T01:30:29Z",
+      "run_receipt_sha256": "347f78fe5a1eb593f891f89716ad6f8d11a3c92d6010d62b9fd971fa3ccde7e3",
+      "jobs_receipt_sha256": "4cd278849f84d4dc63cf2946ae253f975f81e93cfdef16a308de53b0c014df62"
+    },
+    "preparation": {
+      "source_receive_receipt_sha256": "29442c1e921b1853332ad133067e59b4c911144e25199513ed687c633ac46c9d",
+      "source_build_receipt_sha256": "44b959dd345be16a98270ff0934c8ef02f0fd537d4be20ab8fca10275047719e",
+      "archive_verification_sha256": "e818d1514ee018595557ca7968582dd6b93d94d00b4e5b2970f50a4374ffea1e",
+      "checkout_verification_sha256": "64045105ac491c193dfb40471a0e4b98f083ed4b8fe2d73503caad910dfce75f",
+      "binding_receipt_sha256": "920db0228e9433c7c177886ce1cf9b8b0748095e915e9a2c1a1ed08f73469371",
+      "limitation": "Preparation fullCiApproved=false and deploymentAuthorized=false are retained; main CI, owner intent and completed operations are separate evidence."
+    },
+    "first_parent_merges_log_sha256": "62d76ba260a3e07fbf8963ca919dc504ea46a5c4afd8535c9688ed47b00acf1f",
+    "first_parent_merges_log_basis": "git log --first-parent --merges --format=%H %s 54961dd83fbfba721ae54bcddd8e759b7a06915f..36bec661d8e87759cbb5af4796816032bfcc0073 (including trailing newline)",
+    "first_parent_merge_count": 4,
+    "first_parent_merge_prs": [
+      1001,
+      1015,
+      1017,
+      1027
+    ]
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
+      "release_sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+      "previous_release_sha": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+      "worker_version": "1d371697-64b6-4ea5-be3a-26f9fd547a97",
+      "previous_worker_version": "2276f314-2843-4304-b644-401f8f325ad8",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "ede8891fa1b4ad10fbf4b75e12571c6262c8b37455767c24263bd376a9ce50e3",
+      "deploy_attempts": 1,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+      "route_unchanged": true,
+      "route": {
+        "id": "407b27e7a6944a6ebdf6ddc9dba063fa",
+        "pattern": "staging.freetwai.com/*",
+        "script": "freedom-platform-staging-next"
+      },
+      "route_id_before": "407b27e7a6944a6ebdf6ddc9dba063fa",
+      "route_id_after": "407b27e7a6944a6ebdf6ddc9dba063fa",
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [
+        "188_paid_order_cancellation.sql",
+        "189_hosted_drop_ship.sql"
+      ],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+          "set_id": "ecade880-ac97-4eca-82ba-98f6c45f0e5f",
+          "created_at": "2026-10-25T03:58:06.724Z",
+          "completed_receipt_sha256": "97e17c157f7df66c6e170a75a6ede77b324d5ba5b371b56b125d41a2fd48de59",
+          "pointer_sha256": "01c83982b154109820336f2bfa2207e1d496e1054aa32bc6904adb4eaede3fb8",
+          "manifest_sha256": "afc4befe6ab71e359b9a76b1c1a2569414fd9d041d2742a8696b4be8b8894bc4",
+          "dump": {
+            "sha256": "9bec02dc399c1e5729dcca16c75ee31c9443e07d6a5d71aac94c646a726d66c8",
+            "byteSize": 3356918
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+          "evidence_directory": "freedom-release-54961dd8-20261024/after-staging-backup-runs/ecade880-ac97-4eca-82ba-98f6c45f0e5f",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema187_floor": {
+            "status": "passed",
+            "schema": 187,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema187_floor_sha256": "bf43ae02407850f1045c7187b42ae0a47f640d076f7eb017f7b6ef7a6110af9d",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "basis": "Fresh October 25 capture through predecessor Q installed after-wrapper, source/operator 54961dd8/schema187; Q2 holds the pointer and Q holds the run."
+        },
+        "after": {
+          "status": "passed",
+          "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+          "set_id": "ad86e455-c909-4570-bca5-9771c76482ca",
+          "created_at": "2026-10-25T04:17:52.191Z",
+          "completed_receipt_sha256": "75bfb2aaeb8188343e23eeaf13e0dbdb21631d0b5c4233654a2adbeed563ae46",
+          "pointer_sha256": "b5f93b3f4bd7be6cb7a99b2b3019873dde789d9e37c3e29fb9f8c6e894b1c16b",
+          "manifest_sha256": "2ffa97ac7e01970eedcb20b9168a46ee41329ffaad96dd8a14da5df5463efc40",
+          "dump": {
+            "sha256": "862d71ec6b4eb9638f7fc5aa3bd306c6ee7b0c16694a2d61f181d881306aa3b0",
+            "byteSize": 3397856
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+          "evidence_directory": "freedom-release-f987bb74-20261024/after-staging-backup-runs/ad86e455-c909-4570-bca5-9771c76482ca",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b"
+        }
+      },
+      "active_readback_attempts": [
+        {
+          "attempt": 1,
+          "observed_at": "2026-10-25T04:16:45.906Z",
+          "active": {
+            "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+            "supplier": "true",
+            "features": {
+              "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+              "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+              "FREEDOM_COMMERCE_QUARANTINE": "false",
+              "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+              "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+              "FREEDOM_EVENT_BANNER_ENABLED": "true",
+              "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+              "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+              "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+              "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+              "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+              "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+              "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+              "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+              "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+              "FREEDOM_PRIVATE_AI_ENABLED": "false",
+              "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+              "FREEDOM_SERVICE_COVER_ENABLED": "true",
+              "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+              "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+              "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+              "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true",
+              "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+            },
+            "percentage": 100,
+            "version": "1d371697-64b6-4ea5-be3a-26f9fd547a97"
+          },
+          "accepted": true
+        }
+      ],
+      "receipt_issuer": "Deploy helper completed successfully; no reconciliation receipt.",
+      "deploy_completed_at_approx": "2026-10-25T04:16:48.220392+00:00",
+      "deploy_completion_time_basis": "Receipt mtime only; no embedded deploy completion timestamp.",
+      "acceptance": {
+        "status": "not_run",
+        "scope": "No staging acceptance window; deploy health/homepage and final GET binding only.",
+        "member_ux_acceptance": "not_run",
+        "human_acceptance": false,
+        "temporary_access_cleanup": "revoked",
+        "access_grant_receipt_sha256": "acb4a9d28d7acc3db3838bd6dc46a24126c8e491ca3f7a5e0e2eae11b63efcbe",
+        "access_revoke_receipt_sha256": "99cad50ae733836ad5994d33e33bcdfa6660e74e1f46feed14603374debd9319"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "dispatcher_sha256": "2fc4cb838b0eeecb32827150447e12596e028e4a04e4bf3fc2562add60c548c1",
+        "installed_receipt_sha256": "81ed0af96a77c893f6dc0d89b91911c038d1d52c04b848b75302771749f23f27",
+        "backup_set_id": "ad86e455-c909-4570-bca5-9771c76482ca",
+        "completed_receipt_sha256": "75bfb2aaeb8188343e23eeaf13e0dbdb21631d0b5c4233654a2adbeed563ae46",
+        "wrapper": "run-after-staging-backup",
+        "wrapper_sha256": "f2bce1f1c002c92153824db2f3f25e92267a200d2266291a49a01e91fd8db59e",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapter_sha256": "709c63ff7970ea977e8a223e8def159d793bf44ff66e1fe394bce1f9635554b0",
+        "runtime_pins_sha256": "5d662c9bc5ee015990d7d557c0f40cc2cebe3fbace874fe4258fa02de3b9293c"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-26T03:31:57Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-25T05:11:03.542Z",
+      "worker_binding_receipt_sha256": "5b8c27752444e7bb6ad64a1c4ca6ccd36b854a0c6f51e94bb6e10e4dbdca0224",
+      "github_deployment": {
+        "at": "2026-10-25T05:21:32.770869+00:00",
+        "environment": "staging-next",
+        "sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "deploymentId": 7309017031,
+        "statusId": 20527935508,
+        "state": "success",
+        "environmentUrl": "https://staging.freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "target": "staging",
+        "pinsSha256": "364fdeac4dcf282c79951e331f5e026015ddf23bd8de0dc4804fc849ae7f9a07",
+        "wrapperSha256": "0747ccdf931e42113116b2156c501fa3e1f9d3fb3cd0acdadfb27e0eaa7349a5",
+        "planSha256": "55e3f8bebd1d96904d29fa37f3f7e35e6e1bb5249e7b65acc749745a19ba788c",
+        "renderedSha256": "6d0c7b60eb348f3792c3d7817f6e4f515f066a4d21ed0380f9676f9d09185b86",
+        "providerMutations": false
+      },
+      "migration": {
+        "status": "passed",
+        "role": "freedom_staging_next_migrator",
+        "schema_before": 187,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "transaction_id": "890305",
+        "single_transaction": true,
+        "commit_status": "confirmed",
+        "completed_receipt_sha256": "a34595962bbf2e713e4f1f7b8f86667e96e1e10f69d8ea2bf764b008d60e8a8c",
+        "floor_receipt_sha256": "d3d2015678d846b095e86859ee875b80121f039acb6e1184739441e969f093b1",
+        "rollback_floor": {
+          "environment": "staging",
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "completed_at_approx": "2026-10-25T04:15:50.739034+00:00",
+        "timestamp_basis": "File modification time of completed.json; no embedded migration completion timestamp.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_AR_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_DISCOVERY_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_RELATIONS_ENABLED": "OFF",
+        "FREEDOM_EVENT_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_EVENT_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_FIRST_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_MEMBER_REPORTING_ENABLED": "OFF",
+        "FREEDOM_PARTICIPATION_METRICS_ENABLED": "OFF",
+        "FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED": "OFF",
+        "FREEDOM_SQUAD_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF",
+        "FREEDOM_UNIFIED_SHARING_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_DROP_SHIP_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "55bd201412e14749628b60cbf92f231b26c1e31eef3b1bfc6ff7240a943b6ead",
+      "absent_flags_scope": "20 source-declared absent flags remain default OFF, including the newly declared FREEDOM_COMMERCE_DROP_SHIP_ENABLED. No new live FREEDOM_* setting or value change."
+    },
+    "production": {
+      "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+      "release_sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+      "previous_release_sha": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+      "worker_version": "d5753a1c-0668-478b-a55b-0a10b19e70dd",
+      "previous_worker_version": "8d7306e2-4420-4449-98f5-3251f07f5443",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "47454cb55ce21642535111f7b98d57f650d2013a668d66cf5cac255d94f9cb4c",
+      "deploy_attempts": 1,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+      "route_unchanged": true,
+      "route": {
+        "id": "703bcbfd976d46c6ac6d444f02055e6e",
+        "pattern": "freetwai.com/*",
+        "script": "freedom-platform-next"
+      },
+      "route_id_before": "703bcbfd976d46c6ac6d444f02055e6e",
+      "route_id_after": "703bcbfd976d46c6ac6d444f02055e6e",
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [
+        "188_paid_order_cancellation.sql",
+        "189_hosted_drop_ship.sql"
+      ],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+          "set_id": "058c207a-f9ae-47e0-a4f1-8dfdf764dec1",
+          "created_at": "2026-10-25T04:43:49.740Z",
+          "completed_receipt_sha256": "de6aa225e1d5cc95e4dc965bf3c55cb8b4969ab863d0dbf99103345d685c3aaa",
+          "pointer_sha256": "f8229e92e4d5e00a1874ff970af11a85d18b688fc364d21d0a9dd6158feacca3",
+          "manifest_sha256": "d4e54708634c0d9e2283017c0bec9ef2173ee83073231a01a8717a8c0846b166",
+          "dump": {
+            "sha256": "2ffd90d2081fd608f37cce5625fe6aebc8a6d756795bb12af711241e2c4bd128",
+            "byteSize": 7569715
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "54961dd83fbfba721ae54bcddd8e759b7a06915f",
+          "evidence_directory": "freedom-release-54961dd8-20261024/after-production-backup-runs/058c207a-f9ae-47e0-a4f1-8dfdf764dec1",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema187_floor": {
+            "status": "passed",
+            "schema": 187,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema187_floor_sha256": "bf43ae02407850f1045c7187b42ae0a47f640d076f7eb017f7b6ef7a6110af9d",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "62b3d3b08688144e080f866e616fde37f2e4532437cb0a5e726848bf7af79426",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "a2f4a5ae4a2b4484b9ad05c87d6a7791e763bddb8e4702eff4d23ef2d6269024",
+          "basis": "Fresh October 25 capture through predecessor Q installed after-wrapper, source/operator 54961dd8/schema187; Q2 holds the pointer and Q holds the run."
+        },
+        "after": {
+          "status": "passed",
+          "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+          "set_id": "4d310d7f-d28a-482f-b338-b828167b2829",
+          "created_at": "2026-10-25T05:00:49.080Z",
+          "completed_receipt_sha256": "33d6ad8bd6129bbe887ba223ab090212368d26f0bf75439aaf1033e52ee023c8",
+          "pointer_sha256": "48404a809e91d5738187726c1137a2182d94807bb3f3fa0a42a80371dfb4e92b",
+          "manifest_sha256": "3d7039734be68e25f85501c0b79760334f3374461434b12668d408bd59b8e65e",
+          "dump": {
+            "sha256": "e6282f81b99319e6e6825cb310dc8943f37023b14d5960da38f47ff8a9ec5ba4",
+            "byteSize": 7610072
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+          "evidence_directory": "freedom-release-f987bb74-20261024/after-production-backup-runs/4d310d7f-d28a-482f-b338-b828167b2829",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "92cee2bb7ff04d2cf484bb147d9b472d29923c97e3ecbe916f776ddbe076a4bd",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "044f7f49d906a5a54492b4066580684cda48d790caec7161cac6a17f152125e8"
+        }
+      },
+      "active_readback_attempts": [
+        {
+          "attempt": 1,
+          "observed_at": "2026-10-25T04:59:36.629Z",
+          "active": {
+            "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+            "supplier": "true",
+            "features": {
+              "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+              "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+              "FREEDOM_COMMERCE_QUARANTINE": "false",
+              "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+              "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+              "FREEDOM_EVENT_BANNER_ENABLED": "true",
+              "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+              "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+              "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+              "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+              "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+              "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+              "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+              "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+              "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+              "FREEDOM_PRIVATE_AI_ENABLED": "false",
+              "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+              "FREEDOM_SERVICE_COVER_ENABLED": "true",
+              "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+              "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+              "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+              "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+              "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+            },
+            "percentage": 100,
+            "version": "d5753a1c-0668-478b-a55b-0a10b19e70dd"
+          },
+          "accepted": true
+        }
+      ],
+      "receipt_issuer": "Deploy helper completed successfully; no reconciliation receipt.",
+      "deploy_completed_at_approx": "2026-10-25T04:59:40.451796+00:00",
+      "deploy_completion_time_basis": "Receipt mtime only; no embedded deploy completion timestamp.",
+      "acceptance": {
+        "status": "passed",
+        "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
+        "receipt_sha256": "c38d1b5741bfc7dd54a33d682195084ac1d59106b5358b1356e8920d9997e63e",
+        "started_at": "2026-10-25T04:59:55.056Z",
+        "completed_at": "2026-10-25T05:00:02.174Z",
+        "check_count": 14,
+        "checks": [
+          "public health exact release and no-store",
+          "Short videos enabled for everyone",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "homepage CSP permits only youtube-nocookie frame origin",
+          "Cloudflare Access blocks anonymous /admin before the Worker",
+          "Cloudflare Access blocks anonymous /admin/github/callback before the Worker",
+          "protected CSP excludes Short frames /pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "exact deployed source omits Short frames on admin and payment paths",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products",
+          "share script/styles and merchant styles match exact build; unhashed assets no-store",
+          "anonymous catalog introduction exposes purpose/start/source destination"
+        ],
+        "asset_hashes": {
+          "go.js": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644",
+          "go.css": "050e1c886d4965aea7923a5219248babf65c4e0c708e9bcc944efa9a68e4cca7",
+          "shops.css": "03dfebfb52ec4240e521420e83aad2eddafedb411b2ceaa76d0f6fd12f789864"
+        },
+        "protectedPaths": {
+          "/admin": "access_redirect_worker_not_reached",
+          "/admin/github/callback": "access_redirect_worker_not_reached",
+          "/pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA": "worker_csp_verified"
+        },
+        "liveAdminWorkerCsp": "not_observed_access_protected",
+        "adminCspSource": "exact_source_function",
+        "priorFailedAttempt": {
+          "path": "freedom-short-videos-20261020/production-public-smoke.attempt1-failed.json",
+          "sha256": "18c91e14c555af4846791e0504453b618844c6a4621cc281d81e0e3b7bf54773",
+          "status": "failed"
+        },
+        "member_login": false,
+        "human_acceptance": false,
+        "orders_created": 0,
+        "member_ux_acceptance": "not_run",
+        "priorFailedAttempt_scope": "Historical Short release failure and Access-fix background only; not an attempt of this release.",
+        "health_attempts": [
+          {
+            "attempt": 1,
+            "at": "2026-10-25T04:59:55.058Z",
+            "http": 200,
+            "status": "ok",
+            "release_sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+            "matched": true
+          }
+        ]
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "dispatcher_sha256": "2fc4cb838b0eeecb32827150447e12596e028e4a04e4bf3fc2562add60c548c1",
+        "installed_receipt_sha256": "81ed0af96a77c893f6dc0d89b91911c038d1d52c04b848b75302771749f23f27",
+        "backup_set_id": "4d310d7f-d28a-482f-b338-b828167b2829",
+        "completed_receipt_sha256": "33d6ad8bd6129bbe887ba223ab090212368d26f0bf75439aaf1033e52ee023c8",
+        "wrapper": "run-after-production-backup",
+        "wrapper_sha256": "6585089fb9a724e575590596eb46c6756a8427a592eeacf982be85e7bb95b955",
+        "adapter": "backup-adapter.after-production.mts",
+        "adapter_sha256": "0422a575085531bbe75a837aa7fff6f8e954ea7e01561345f60aa1a60fa52477",
+        "runtime_pins_sha256": "5d662c9bc5ee015990d7d557c0f40cc2cebe3fbace874fe4258fa02de3b9293c"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-26T04:34:48Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-25T05:11:03.542Z",
+      "worker_binding_receipt_sha256": "5b8c27752444e7bb6ad64a1c4ca6ccd36b854a0c6f51e94bb6e10e4dbdca0224",
+      "github_deployment": {
+        "at": "2026-10-25T05:21:36.837161+00:00",
+        "environment": "next",
+        "sha": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "deploymentId": 7309017615,
+        "statusId": 20527938074,
+        "state": "success",
+        "environmentUrl": "https://freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "36bec661d8e87759cbb5af4796816032bfcc0073",
+        "target": "production",
+        "pinsSha256": "66c384d557c159a9b3ef0c666843b021b060e57b33e77df517f1ff114b6dc78d",
+        "wrapperSha256": "eff88a2a7911ddeffafd0b318afe6dd7cadf6702c412a873ef9602ff690f9282",
+        "planSha256": "cffedf2dbd91f056985d40e3f0f40ee1e549f92b4bea53b7d48c84be7fa898dc",
+        "renderedSha256": "fef253bd958666b07118ac6649571cbb3a833c931df7cf46ac8c63c22e27cd7f",
+        "providerMutations": false
+      },
+      "migration": {
+        "status": "passed",
+        "role": "freedom_next_migrator",
+        "schema_before": 187,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "transaction_id": "892468",
+        "single_transaction": true,
+        "commit_status": "confirmed",
+        "completed_receipt_sha256": "70143a31fd83bf49a83a83da6f07c472afc5e4eac45ee84bfcf0b19d90c356fb",
+        "floor_receipt_sha256": "84cf8c4071f70b1e47cb4ea9b99c35aa9178320fa7c21e71958dce5a30f3e5e4",
+        "rollback_floor": {
+          "environment": "production",
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "completed_at_approx": "2026-10-25T04:58:45.684403+00:00",
+        "timestamp_basis": "File modification time of completed.json; no embedded migration completion timestamp.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_AR_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_DISCOVERY_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_RELATIONS_ENABLED": "OFF",
+        "FREEDOM_EVENT_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_EVENT_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_FIRST_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_MEMBER_REPORTING_ENABLED": "OFF",
+        "FREEDOM_PARTICIPATION_METRICS_ENABLED": "OFF",
+        "FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED": "OFF",
+        "FREEDOM_SQUAD_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF",
+        "FREEDOM_UNIFIED_SHARING_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_DROP_SHIP_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "55bd201412e14749628b60cbf92f231b26c1e31eef3b1bfc6ff7240a943b6ead",
+      "absent_flags_scope": "20 source-declared absent flags remain default OFF, including the newly declared FREEDOM_COMMERCE_DROP_SHIP_ENABLED. No new live FREEDOM_* setting or value change."
+    }
+  },
+  "attempts_preserved": [
+    {
+      "phase": "step-2-receive",
+      "attempt": 1,
+      "status": "refused",
+      "source": "53d528fc1c7160c9eab6bfcb6bbd1c356019dfd0",
+      "observed_at": "2026-10-25T00:44:05Z",
+      "code": "not_actual_current_merged_main",
+      "cause": "Main moved while S3 Verify was rerunning; the current-main guard refused the stale candidate before online operations.",
+      "log": "followup-2/s3-attempt/source-receive.log",
+      "log_sha256": "f485b6e4135ab8294597b772ac98c7105107f2118b8ecc956c633286e1b58705",
+      "archive_sha256": "8d5cf89fbb8ab4987824e5a5ae33ae31948269d52499e510eb0449aa5cffb6b5",
+      "fix": "Follow-up 2 retargeted to S5 at 01:14Z with new authorization; S3 candidate, intent and receive log remain preserved.",
+      "evidence": "ADAPTATION.txt#Follow-up 2"
+    },
+    {
+      "phase": "step-3b-real-import",
+      "attempt": 1,
+      "status": "refused_before_execution",
+      "exit_status": 65,
+      "observed_at": "2026-10-25T03:56:14.409047Z",
+      "attempted_at_approx": "2026-10-25T03:49:30Z",
+      "log": "attempt1-real-import-stale-pin/after-import-real-import.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log_bytes": 0,
+      "node_started": false,
+      "pinned_sha256": "c71c17dd1ab151ab2f15b3d026c8d84192b34974edcc34cca7cd8a57d4c95f61",
+      "actual_sha256": "a5319897b51501ef0878b8af1cf70748d6b40b64182ae1525c662ee255b12617",
+      "observation_sha256": "778fe007f43642ec9674aae0dc2823812199a6135af9c1f06320b98f1b8350df",
+      "cause": "The wrapper retained the predecessor hash of real-import-check.mjs after Follow-up 2 changed its WORKTREE constant; Node never started.",
+      "fix": "Follow-up 3 re-pinned only that wrapper line and added a permanent inline-pin audit to offline-audit.py.",
+      "retry": {
+        "attempt": 2,
+        "status": "passed",
+        "ran_at": "2026-10-25T04:12:18.523Z",
+        "receipt_sha256": "d1847c17e7f8de01b67432c7a24a3e428bc6f9535ff76290324cbcbae480495a"
+      },
+      "evidence": "ADAPTATION.txt#Follow-up 3"
+    },
+    {
+      "phase": "step-18-timer-restore",
+      "attempt": 1,
+      "status": "refused_after_timer_start_preserved",
+      "exit_status": 1,
+      "observed_at": "2026-10-25T05:12:26.393023Z",
+      "refusal": "daily_process_not_quiescent (check_timers restored=True)",
+      "log": "attempt1-timers-restore-persistent-catchup/timers-restore.log",
+      "log_sha256": "d4088495089d2e2ed9a5244780fa61f7d590940a2fb6d42ff3c9df446afa3dcd",
+      "observation_sha256": "c153b161a2153a492fc81a994d1ee4f5d4b0f1f436aea45643562e1d2de16f22",
+      "cause": "Starting the Persistent production timer triggered a catch-up of the missed 04:31Z slot at 05:11:11Z. Post-start quiescence check refused; timers were already started and no timers-restored receipt was written.",
+      "resolution": "Waited for the catch-up to pass and the service to become inactive, then runtime-stopped both timers and reran the full unchanged gate at 05:21:12-05:21:20Z. No enable, reset-failed or unit change.",
+      "resolution_sha256": "a0777d84e79f01942b5f05e3a12a955f6f802fe39c876a41b30b085ee3d0473a",
+      "retry": {
+        "attempt": 2,
+        "status": "restored",
+        "observed_at": "2026-10-25T05:21:20.775654+00:00",
+        "receipt_sha256": "92340c4b865e57551ffe5ce152de89e4f9404287d288631e6a567b031d5ca670"
+      }
+    }
+  ],
+  "daily_operator": {
+    "status": "both_sources_bound_original_timers_restored",
+    "source_by_environment": {
+      "staging": "36bec661d8e87759cbb5af4796816032bfcc0073",
+      "production": "36bec661d8e87759cbb5af4796816032bfcc0073"
+    },
+    "dispatcher_sha256": "2fc4cb838b0eeecb32827150447e12596e028e4a04e4bf3fc2562add60c548c1",
+    "installed_receipt_sha256": "81ed0af96a77c893f6dc0d89b91911c038d1d52c04b848b75302771749f23f27",
+    "live_binding_observed_at": "2026-10-25T05:11:03.542Z",
+    "live_binding_receipt_sha256": "5b8c27752444e7bb6ad64a1c4ca6ccd36b854a0c6f51e94bb6e10e4dbdca0224",
+    "timer_observed_at": "2026-10-25T05:21:20.775654+00:00",
+    "timer_receipt_sha256": "92340c4b865e57551ffe5ce152de89e4f9404287d288631e6a567b031d5ca670",
+    "unit_or_schedule_changed": false,
+    "service_argv_unchanged": true,
+    "restoration": {
+      "staging": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-26T03:31:57Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "production": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-26T04:34:48Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      }
+    },
+    "natural_scheduled_run": "not_observed_for_new_wrapper",
+    "transitions": [
+      {
+        "stage": "staging",
+        "before": "4dba0c67a4085d0cdf477819eca705aa6f4bc492c270b0f4703f8b8b796ab6cc",
+        "after": "aebaecdec58c00a18d007aa86f5d5a873b9b514c51f7f3c1b3119a7ff06a1955",
+        "materialize_receipt_sha256": "86a11102ce0dd61fd77178efb11261c76199541893e4e55ba1025f90a65e77f9",
+        "installed_receipt_sha256": "b767f3c43bae39e024739ead6020cbae05f73c94e601a6bde6a7251fad4c9859",
+        "transition_log_sha256": "a8e3b36bc6a28e454323ec8662dc1a84367b746588f1e5b973043049be68ce57",
+        "installed_at_approx": "2026-10-25T04:57:37.876919+00:00",
+        "timestamp_basis": "installed.json mtime; no embedded installation timestamp."
+      },
+      {
+        "stage": "both",
+        "before": "aebaecdec58c00a18d007aa86f5d5a873b9b514c51f7f3c1b3119a7ff06a1955",
+        "after": "2fc4cb838b0eeecb32827150447e12596e028e4a04e4bf3fc2562add60c548c1",
+        "materialize_receipt_sha256": "48779afad9f0700fe43d8c1025296a72d545e727543499236c8ba902d11200af",
+        "installed_receipt_sha256": "81ed0af96a77c893f6dc0d89b91911c038d1d52c04b848b75302771749f23f27",
+        "transition_log_sha256": "05d84ba8a275a5132a9d84a3e9acb310cbc3d0536f6dca6d16ada265f6243438",
+        "installed_at_approx": "2026-10-25T05:11:03.558431+00:00",
+        "timestamp_basis": "installed.json mtime; no embedded installation timestamp."
+      }
+    ],
+    "cutover": {
+      "original_snapshot_receipt_sha256": "5b273b472d34fa4fe00eee2bf859419ed7fc2dcb331d148ec6dc861a0397979b",
+      "snapshot_recorded_at": "2026-10-25T04:12:08.734563+00:00",
+      "timers_paused": true,
+      "services_quiescent": true,
+      "restored_by": "restore-timers.py"
+    },
+    "persistent_catch_up": {
+      "trigger": "Persistent catch-up of the missed production 04:31Z slot; not natural scheduled execution.",
+      "set_id": "b1d1ccc0-5c9d-40a0-aa43-a37dccf3730a",
+      "created_at": "2026-10-25T05:11:18.491Z",
+      "status": "passed",
+      "completed_receipt_sha256": "0b95bd2f98693f62e8eda7c36b1658daf32396a07285c47c05ccb7431163c5d5",
+      "manifest_sha256": "6ac3285d16c8f09713b43e69d3d725a5b87e0dbe6ded91bee44da552a7e02763",
+      "dump": {
+        "sha256": "71b032fa979bb34544cc70452384bb15313fa498395eb0d0b4e7e2e1fdcf7c78",
+        "byteSize": 7610430
+      },
+      "objects": {
+        "count": 53,
+        "bytes": 735662
+      },
+      "restore": "database_and_objects_restored",
+      "remote_readback": "verified",
+      "cleanup_verified": true,
+      "source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+      "operator_source": "36bec661d8e87759cbb5af4796816032bfcc0073",
+      "service_finished": "2026-10-25T05:20:55Z",
+      "evidence_directory": "freedom-release-f987bb74-20261024/after-production-backup-runs/b1d1ccc0-5c9d-40a0-aa43-a37dccf3730a"
+    },
+    "service_argv_comparison_basis": "Compare only argv[] in systemd ExecStart. Production PID and start/stop timestamps changed during Persistent catch-up; executable arguments and unit/schedule are unchanged."
+  },
+  "historical_evidence_preserved": [
+    "rollout-2026-10-09.json",
+    "rollout-2026-10-10.json",
+    "rollout-commerce-buyer-2026-10-17.json",
+    "rollout-commerce-cohorts-2026-10-20.json",
+    "rollout-main-54961dd8-2026-10-24.json",
+    "rollout-main-c140a346-2026-10-23.json",
+    "rollout-member-consoles-2026-10-19.json",
+    "rollout-merchant-readiness-2026-10-19.json",
+    "rollout-r15-2026-10-10.json",
+    "rollout-r16-2026-10-10.json",
+    "rollout-r17-2026-10-11.json",
+    "rollout-r18-2026-10-11.json",
+    "rollout-r19-2026-10-11.json",
+    "rollout-r20-2026-10-12.json",
+    "rollout-r21-2026-10-12.json",
+    "rollout-r22-2026-10-12.json",
+    "rollout-r23-2026-10-12.json",
+    "rollout-r24-2026-10-12.json",
+    "rollout-security-2026-10-14.json",
+    "rollout-short-videos-2026-10-20.json",
+    "rollout-three-outcomes-2026-10-19.json"
+  ],
+  "limitations": [
+    "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance.",
+    "The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF.",
+    "The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src.",
+    "Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP.",
+    "Before-backups use predecessor Q installed wrappers with a 180-second dump budget. Q2 after-adapters use a 900-second budget and reject signalled/killed children per retained kit adaptation; this docs job made no kit change.",
+    "S3 receive and real-import pin refusals remain preserved. Step ordering and network prechecks are operator observations, separate from completed receipts. Raw network hostnames and IPs are excluded.",
+    "Timer restore attempt 1 refused after starting timers triggered Persistent catch-up. Catch-up passed; the full unchanged restore gate passed on attempt 2. This is not a natural scheduled run.",
+    "Migration and installation times without embedded timestamps use explicitly labelled file mtimes. Backups use set creation timestamps; isolated restores do not establish fresh live-ledger observations.",
+    "Both COMMITs raise the rollback floor to 36bec661/schema189. Retain the full 188-row ledger, paid-cancellation and drop-shipment compatibility even with admission OFF, all prior capabilities/policies and ten production coordinate constraints; use compatible forward repair.",
+    "Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention mode all is a separate application setting. T-047 and second-operator recovery remain unresolved.",
+    "Natural scheduled execution remains not_observed_for_new_wrapper despite restored active/enabled timers and a successful Persistent catch-up. Original 168 requirement IDs and human outcomes retain their prior unaccepted states.",
+    "Verify attempt-1 timeout details come from operator task history; no corresponding raw report found in Q2. Attempt-2 success is independently pinned to 17 completed jobs; its stored timestamps differ from the task summary."
+  ],
+  "owner_authorization": {
+    "owner": "Ted",
+    "observed_at": "2026-10-25T01:14:37.562Z",
+    "standing_instruction_at": "2026-10-24T18:08:00.318Z",
+    "instruction": "當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了",
+    "consent_basis": "Release main 36bec661 to staging then production under the standing owner instruction, retaining backup/migrator/health/receipt and no staging acceptance window.",
+    "receipt_sha256": "b37e0b671eec2f47c2da4e8de48eb705f23a8a56fd3a8aea31534c1428d43bbb",
+    "authorization_sha256": "08537303ead1b0cadb31461b8dbc1128cd19586dfc01dac9cae14116731a0600",
+    "staging_acceptance_required": false,
+    "member_ux_acceptance": "not_run",
+    "limitation": "Intent state preparing is authorization evidence, not proof of completed operations; separate receipts record completion."
+  },
+  "kit_corrections": [
+    {
+      "follow_up": 2,
+      "evidence": "ADAPTATION.txt#Follow-up 2",
+      "scope": "Retarget S3 to S5 with new authorization after current-main refusal; preserve S3 inputs and log. Current-main guard and feature values unchanged."
+    },
+    {
+      "follow_up": 3,
+      "evidence": "ADAPTATION.txt#Follow-up 3",
+      "scope": "Re-pin only the stale real-import wrapper line; add permanent inline-pin audit. Existing rendered bytes retained; no re-render or re-bind required.",
+      "wrapper_pin_receipt_sha256": "23c99c80226a1f38d98d4b27a7a4bdbf04c6c728c2c37e603108831b7dd3e06f",
+      "inline_pin_audit_receipt_sha256": "e218e2a03ac8f107d6c34cceb70f7b99a4b3d7d5c89f8d4724db576d64d97494"
+    }
+  ],
+  "offline_verification": {
+    "attempts_record": "offline-verification.json",
+    "attempts_record_sha256": "875d4845ef79af8f5ae3b57019a04735fc61c6f6b049dc7241680b9112a8e371",
+    "scope": "Retained kit evidence only, not rerun by this docs job. Offline tests passed; full audit refused existing preparation outputs, as recorded. No assertions relaxed.",
+    "retained_final_audit_log_sha256": "bd8ed31f2b6399625e4651380e4854bdb8d14208cb399b1e0d582e2087cef9b8"
+  },
+  "io_gates": [
+    {
+      "path": "io-check-23144463-0f38-45ad-9f9c-b41dd93788fd.json",
+      "sha256": "402a82737bdc796590e2a64b6d7783ac2ce57457ce6bb8ff44411c5ab2055396",
+      "status": "passed",
+      "sampled_between": null
+    },
+    {
+      "path": "io-check-755339d9-c9b6-4734-b3ff-af27b9aa1957.json",
+      "sha256": "fddafddb9613e0ba132786445d28037bc59ad307517ace8d5e7b7167d81b89c1",
+      "status": "passed",
+      "sampled_between": null
+    },
+    {
+      "path": "io-check-82ba1b6d-64fa-4681-9efa-ef05e948b8e2.json",
+      "sha256": "1624dd5d79cc8cbc0c3df027f04959d5bb907da594d4b3f453249496401313a0",
+      "status": "passed",
+      "sampled_between": null
+    },
+    {
+      "path": "io-check-8795010e-084d-427c-ad57-02a824cd709a.json",
+      "sha256": "8312d35dca46763b952b95793e6d307997bf79839fc09ebbe01a76d038ad82e8",
+      "status": "passed",
+      "sampled_between": null
+    },
+    {
+      "path": "io-check-9366f2b2-8335-4f85-8dfe-b6681332de6c.json",
+      "sha256": "ad35d3acd60ea8209b4594474528380a777ef2f42ac7f9059e177a7fe5088107",
+      "status": "passed",
+      "sampled_between": null
+    },
+    {
+      "path": "io-check-f14c7dd3-a43d-4f20-85d2-5bc1b6f3eeb5.json",
+      "sha256": "b67649cea9a9339d3cbb6f9ce451b58beea9122a1729756aa72953ae202fada3",
+      "status": "passed",
+      "sampled_between": null
+    }
+  ],
+  "evidence_directory": "freedom-release-f987bb74-20261024",
+  "observations": [
+    {
+      "phase": "step-order",
+      "status": "observed",
+      "staging_before_started_at": "2026-10-25T03:57:56Z",
+      "staging_before_pointer_recorded_at_approx": "2026-10-25T04:13:46Z",
+      "observation": "Step 7 staging before-backup preceded step 3b retry and steps 4-6 bind/plan/seal. It uses predecessor Q installed wrapper and does not depend on the new bind; its pointer was recorded after bind.",
+      "timer_pause_at": "2026-10-25T04:12:08.734563+00:00",
+      "production_slot": "2026-10-25T04:31Z",
+      "timer_observation": "Step 8 snapshot/pause preceded the 3b retry. The production nightly did not execute in its 04:31Z slot; release before/after backups supplied coverage, followed later by Persistent catch-up.",
+      "basis": "Operator task chronology and network-precheck observation; backup created_at, pointer mtime and cutover snapshot independently retained.",
+      "pointer_log_sha256": "01c83982b154109820336f2bfa2207e1d496e1054aa32bc6904adb4eaede3fb8",
+      "pointer_mtime": "2026-10-25T04:13:48.247404+00:00"
+    },
+    {
+      "phase": "production-before-network-prechecks",
+      "status": "waited_for_clean_path",
+      "observation": "04:28Z and 04:31Z prechecks showed upstream latency spikes: database RTT up to 3594 ms and final-hop average up to 1725 ms. Backup was not started. Two consecutive clean RTT samples at 04:41:09Z and 04:42:06Z and a clean 04:42Z precheck preceded the 04:43:42Z start; the first backup run passed.",
+      "evidence": "orchestrator-network-prechecks/orchestrator-observation.json",
+      "observation_sha256": "b9c439ec39b6c2eb8399abcc358552750ac9141c0dc19d11f9473f3e67fcad8f",
+      "limitation": "Operator network observation; no hostnames or IPs copied from raw traces."
+    }
+  ],
+  "not_run": {
+    "member_ux_acceptance": {
+      "status": "not_run",
+      "reason": "No staging acceptance window per owner instruction; public smoke is not member UX acceptance."
+    },
+    "real_phone_and_safari": {
+      "status": "not_run",
+      "reason": "No real-device or Safari evidence was produced for this rollout."
+    },
+    "production_authenticated_member_journey": {
+      "status": "not_run",
+      "reason": "Production smoke was anonymous and read-only, with no member login or orders."
+    },
+    "live_rollback_drill": {
+      "status": "not_run",
+      "reason": "Isolated restore is not live rollback. Both environments retain the 36bec661/schema189 floor and require compatible forward repair."
+    },
+    "second_operator_restore": {
+      "status": "not_run",
+      "reason": "No new authorized second-operator recovery evidence; the prior outstanding item remains."
+    },
+    "original_requirement_and_human_outcome_acceptance": {
+      "status": "not_run",
+      "reason": "This operator receipt does not close the original 168 requirement IDs, T-047 or outstanding human outcomes."
+    }
+  }
+}

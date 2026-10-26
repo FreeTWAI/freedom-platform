@@ -44,6 +44,7 @@
     "tests/runtime/home-entry.test.ts",
     "tests/runtime/game-console-routing.test.ts",
     "tests/runtime/portal-client-recovery.test.ts",
+    "tests/e2e/session-recovery.spec.ts",
     "tests/runtime/page-tools-notification.test.ts",
     "tests/e2e/audit-shell.spec.ts",
     "tests/e2e/home-brand-navigation.spec.ts",
