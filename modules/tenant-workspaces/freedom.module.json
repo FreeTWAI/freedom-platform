@@ -19,7 +19,10 @@
     "tests/e2e/tenant-workspaces.spec.ts",
     "migrations/131_tenant_module_permissions.sql",
     "tests/runtime/tenant-instance-permissions.test.ts",
-    "tests/e2e/tenant-member-grants-role-change.spec.ts"
+    "tests/e2e/tenant-member-grants-role-change.spec.ts",
+    "apps/portal-web/src/modules/TenantMembersSection.tsx",
+    "apps/portal-web/src/modules/tenant-member-grants.ts",
+    "tests/runtime/tenant-members-section.test.ts"
   ],
   "public_exports": [
     "modules/tenant-workspaces/service.ts",
