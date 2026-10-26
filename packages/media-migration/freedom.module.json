@@ -17,6 +17,7 @@
     "scripts/media-backfill.ts",
     "scripts/media-restore-acl.ts",
     "scripts/run-media-restore-test.mjs",
+    "deploy/cloudflare/test/media-restore-container.test.mjs",
     "tests/runtime/media-verify.test.ts",
     "tests/runtime/media-backup-transfer.test.ts",
     "tests/runtime/operator-media-backfill.test.ts",
