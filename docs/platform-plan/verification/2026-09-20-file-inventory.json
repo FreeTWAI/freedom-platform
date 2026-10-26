@@ -14824,8 +14824,8 @@
     },
     {
       "path": "deploy/shared-release/test/migration-integration.mjs",
-      "bytes": 12127,
-      "sha256": "3dff251d96feccd70b34a4a0939739552f89b1b54533ea692527c7b979004f78"
+      "bytes": 12244,
+      "sha256": "d17cf257ceefb0d03c1ea686667a054f7e808c841e355cde67c0cf3a788c738b"
     },
     {
       "path": "deploy/shared-release/test/postgres-integration.mjs",

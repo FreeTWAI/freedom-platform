@@ -100,6 +100,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(result.outcome, 'committed'); assert.equal(result.commitStatus, 'confirmed');
     assert.deepEqual(result.applied, [pending]); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 1);
+    assert.deepEqual(result.probes.map(value => value.role), [runtime]);
     assert(result.probes.every(value => value.readOnly && value.tables > 300));
     assert.equal((await pool.query('SELECT count(*)::int count FROM shared_release_fixture')).rows[0].count, 1);
     const nextPlan = prepare(plan.afterLedger); let commits = 0;
@@ -141,7 +142,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     await assert.rejects(runPortableMigration({ ...args, plan: nextPlan, journalRoot: unknownRoot }), { code: 'EEXIST' });
     assert.equal(commits, 1); lease.assertHeld();
     return { status: 'passed', realMigratorRole: true, migrationAndGrantsAtomic: true, existingIntentRefusesReplay: true,
-      actualRuntimeAndBackupProbes: true, unknownCommitObservedWithoutReplay: true,
+      actualRuntimeProbe: true, directBackupRoleProbe: 'not_run_independent_release', unknownCommitObservedWithoutReplay: true,
       failedSharedIntentRollsBack: true, codeReleaseChecksSchemaWithoutMutationOrBackup: true,
       sourceInstallationVerified: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
   } finally {
