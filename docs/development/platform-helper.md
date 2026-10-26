@@ -238,3 +238,38 @@ scope; fallback entry selection and deferred guide-focus handshake remain shared
 integration work. New actual-source synthetic lifecycle tests cover controller
 leases, refusal, IME/repeated open, notifications, failed native opening and
 teardown; they are not React scheduling or browser acceptance.
+
+## Member character shortcut integration candidate
+
+The existing toolbar remains available. A second small “問路助手” shortcut is
+passed to an already verified-ready `GuideHost` engine; both target the same
+native helper dialog ID and share its current expanded state. “問本頁” and
+“帶我看” keep their original reviewed page explanation and guide behavior.
+Failure to open the helper does not close that explanation or discard composing
+input. This does not turn either reviewed dialogue system into generative AI.
+
+The optional `GuideHelperAction` is a type-only presentation contract: dialog ID,
+open state and an explicit request with a close-reason callback. The member host
+owns its lease, checks current session/accepted route and live blocking surfaces
+again at request time, and revokes it on teardown. App passes only a matching
+scope-tagged ready action. Old cleanup cannot erase a newer scope's action.
+No query, canonical answers, member identity or route is included in the action.
+The member route/session key also remounts GuideHost so same-tab accepted routing
+cannot retain the previous character interaction scope. Business page children
+are not keyed or remounted by this change.
+
+Only manual Close/Escape can request external focus restoration. The engine waits
+for modal suppression to clear and committed controls to become enabled, then
+rechecks identity, visibility, origin connection and absence of newer focus or
+blocking surfaces. Native close, teardown, navigation, theme/character changes,
+a newer opening or external focus cancels restoration. There is no polling,
+global controller event, automatic reopen or helper-triggered business action.
+
+Theme/profile/page support, release verification, pinned pack/assets and original
+attribution remain unchanged. Ordinary themes and release-OFF/error states keep
+the toolbar fallback; this change cannot activate an unpublished character pack.
+Two shortcuts are intentional; no second helper instance or floating bubble is
+created. Actual-source synthetic bridge/handler/layout tests are not React
+scheduling, native dialog/AT or real-browser focus acceptance. Browser cases cover
+the two verified character profiles, same dialog/ARIA, original actions, guarded
+navigation and small viewport/theme teardown; until executed they remain NOT_RUN.

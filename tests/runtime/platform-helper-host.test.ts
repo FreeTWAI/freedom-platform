@@ -53,8 +53,8 @@ test('member host forwards only allowed explicit navigation and keys route/sessi
 });
 test('member host monitor subscribes and cleans up without inspecting text or issuing requests',async()=>{
   let effect:()=>void|(()=>void)=()=>{};
-  const ref={current:null as any};
-  const {PlatformHelperHost}=await loadHost({useRef:()=>ref,useState:()=>[false,()=>{}],useLayoutEffect:(callback:typeof effect)=>{effect=callback;}});
+  const ref={current:null as any};let refs=0;
+  const {PlatformHelperHost}=await loadHost({useRef:(value:unknown)=>refs++===0?ref:{current:value},useState:()=>[false,()=>{}],useLayoutEffect:(callback:typeof effect)=>{effect=callback;}});
   let observed=0,disconnected=0;const attached:string[]=[],removed:string[]=[];
   const view={addEventListener:(name:string)=>attached.push(name),removeEventListener:(name:string)=>removed.push(name),MutationObserver:class{observe(){observed++;}disconnect(){disconnected++;}}};
   const doc={body:{},defaultView:view,querySelectorAll:()=>[],addEventListener:(name:string)=>attached.push(name),removeEventListener:(name:string)=>removed.push(name)};
@@ -96,4 +96,28 @@ test('actual Workspace helper callback and post-commit effect focus only accepte
     runInNewContext(transformSync(effect,{loader:'ts',format:'cjs'}).code,context);
     assert.equal(focuses,scenario==='accepted'?1:0,scenario);assert.equal(context.helperFocusPending.current,null);
   }
+});
+
+test('actual member helper bridge publishes one dialog state and revokes stale leases',async()=>{
+  const {createMemberHelperBridge}=await loadHost();assert.equal(typeof createMemberHelperBridge,'function');
+  const origin={} as HTMLElement;let current=true,blocked=false,opened=false,calls=0;const published:any[]=[],closed:string[]=[];
+  const controller={dialogId:'same-dialog',get open(){return opened;},requestOpen(){calls++;if(opened)return false;opened=true;return true;}};
+  const bridge=createMemberHelperBridge({controller,isCurrent:()=>current,isBlocked:()=>blocked,publish:(action:any)=>published.push(action)});
+  const action=published.at(-1);assert.equal(action.dialogId,'same-dialog');assert.equal(action.open,false);
+  assert.equal(action.requestOpen(origin,(reason:string)=>closed.push(reason)),true);
+  bridge.change({dialogId:'same-dialog',origin,open:true});assert.equal(published.at(-1).open,true);
+  assert.equal(action.requestOpen(origin,()=>closed.push('duplicate')),false);assert.equal(calls,1);
+  opened=false;bridge.change({dialogId:'foreign-dialog',origin,open:false,reason:'dismiss'});assert.deepEqual(closed,[]);
+  bridge.change({dialogId:'same-dialog',origin,open:false,reason:'dismiss'});assert.deepEqual(closed,['dismiss']);assert.equal(published.at(-1).open,false);
+  blocked=true;assert.equal(action.requestOpen(origin,()=>{}),false);blocked=false;current=false;assert.equal(action.requestOpen(origin,()=>{}),false);
+  current=true;bridge.dispose();assert.equal(published.at(-1),null);assert.equal(action.requestOpen(origin,()=>{}),false);
+});
+test('actual member helper bridge fails closed without queued callbacks and cancels only its own external origin',async()=>{
+  const {createMemberHelperBridge}=await loadHost();assert.equal(typeof createMemberHelperBridge,'function');
+  let accept=false,opened=false;const origin={} as HTMLElement,foreign={} as HTMLElement,published:any[]=[],closed:string[]=[];
+  const bridge=createMemberHelperBridge({controller:{dialogId:'one',get open(){return opened;},requestOpen(){opened=accept;return accept;}},isCurrent:()=>true,isBlocked:()=>false,publish:(a:any)=>published.push(a)});
+  const action=published.at(-1);assert.equal(action.requestOpen(origin,()=>closed.push('failed')),false);
+  accept=true;assert.equal(action.requestOpen(origin,(reason:string)=>closed.push(reason)),true);
+  bridge.change({dialogId:'one',origin:foreign,open:false,reason:'dismiss'});assert.deepEqual(closed,[]);
+  bridge.dispose();assert.deepEqual(closed,['teardown']);bridge.dispose();assert.deepEqual(closed,['teardown']);
 });
