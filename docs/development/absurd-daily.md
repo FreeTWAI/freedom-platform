@@ -247,3 +247,17 @@ UX-14最終受影響瀏覽器子集 **5 passed／0 skipped（2.4分鐘）**：�
 本批亦回應四項審查：StrictMode清理釋放舊匯出owner，重播可重試完成局，舊promise不能清掉新owner；holiday canvas保留pointer down時的round，跨回合release不可操作替代目標；未開始的自由料理預覽／初始載入失敗不接管別道checkpoint，明確開始或確認重做才接管；牛排mesh帶原portions索引，配菜不造成偏移。保留main的完成局少一次繪製與測試。
 
 首輪新runtime三項通過，涵蓋實際controller閉包跨回合、原生網格的交錯配菜索引及72素材hash／大小／尺寸／prompt。完整瀏覽器與最終像素結果在收尾時追加，舊43項／5條不作本版通過證據。
+
+### 本批收斂與實跑界線
+
+本機合入main `b267f472f`，保留其社群發文／會員操作與AD-6重建ready等待；衝突只有既有來源inventory，以原source_files邊界重新產生。沒有改寫其他作者或另造平行社群流程。
+
+- 完整56條瀏覽器首輪 **53 passed／3 failed（19.5分鐘）**。兩個新測試的Blob URL／凍結時間冷卻假設，以及一個仍期待舊ready備援的selector不符新版開場。改為真正下載PNG驗格式／尺寸、等待原冷卻、分別驗開場與開始後的備援。原trace保留，不標成完整全通過。
+- 31個實際畫面首輪 **18 passed／13 failed**，揭露八類手帳13／12px角色、四個大廳受舊lazy selector覆寫成cover，以及缺圖數鈔在320px／200%文字裁切。限定新root、補14px角色、缺圖owner改正常流增高，並清掉封面span繼承的badge inset。**17個相同失敗及相鄰場景全部通過**；沒有降低字級或owner門檻。實際桌面開場提示的對比亦補回靛藍底／奶油文字。
+- 大廳實際載入紀錄：1440／768／320／667px初始封面請求分別14／14／3／5張，均沒有Three或場景module請求；按分類捲動後逐圖decode，無404／pageerror。未一次下載72張，不稱為整站程式減重。
+- 更新後66道production factory重新輸出、來源hash及compiled factory收據一致：657,556bytes、最高31calls／93,468triangles／10geometries，0 pageerror，各context釋放。這次索引metadata修正未改食物外觀；生成收據與本輪來源重新綁定，不挪用舊收據。
+- 兩份runtime全檔首輪46通過／4失敗，是合入的數鈔closure fixture漏接現有draw拆分與診斷／錯誤回呼，導致VM找不到draw後又找不到setReady。加入真正draw與syncDiagnostics、補UI ports，保留原本一次結算、重試與事件順序斷言；**50 passed／0 skipped**。瀏覽器的正常數鈔、capture失敗、實際下載也在首輪通過，沒有為過測改回產品邏輯。
+
+實際新圖：[桌面大廳](../../modules/absurd-daily/review/illustrated-lobby-desktop-20261026.png)／[手機料理目錄](../../modules/absurd-daily/review/illustrated-kitchen-phone-20261026.png)／[炸熱狗開場](../../modules/absurd-daily/review/corn-dog-illustrated-ready-20261026.png)。PNG為production頁面，生成的完整mockup另存E槽；兩種證據分開。真人畫風接受、真人趣味與實體Safari／Android效能仍是外部待驗，不以本機軟體WebGL或像素檢查代簽。
+
+最後在`b267f472f`合入及版面修正後，**13 passed／0 skipped（4.4分鐘）**：包含原三個失敗、四項審查回歸、真正下載PNG、跨回合native輸入、主線AD-6重建等待、會員登入／既有草稿不覆寫／確認才發文、外部分享與clipboard失敗、派對200%及引導料理大字。這是受影響子集，不說完整56條已在同一最後版本全數重跑。兩輪隔離schema皆清到0連線／0剩餘schema，沒有使用正式資料。標準typecheck／production build通過、Three>500kB提示仍保留；descriptor source ownership為81模組、0issues／0unknown，本機context完整且0blockers，均不代替遠端CI、review、merge或deploy。

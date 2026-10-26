@@ -31,3 +31,5 @@ UX-13依使用者截圖修正：料理評分只顯示實際總分，移除雷達
 UX-13修正當時的實際旅程（器皿改版前）：[總分頁面](review/current-score-only-20261025.png)／[下載分享圖](review/current-corn-dog-share-20261025.png)。這是自動化實際操作得到的當局分數，與排版100分示意分開保存。
 
 UX-14器皿：[牛排鐵盤示例](review/native-steak-iron-20261025.png)／[陶盤示例](review/native-ceramic-20261025.png)。示例由production renderer產生，與真實玩家完成局分開標記。最新實際旅程：[手機牛排成品](review/current-steak-iron-phone-20261025.png)／[實際下載牛排PNG](review/current-steak-iron-share-20261025.png)。
+
+UX-15e新介面：[桌面大廳](review/illustrated-lobby-desktop-20261026.png)／[手機料理目錄](review/illustrated-kitchen-phone-20261026.png)／[炸熱狗開場](review/corn-dog-illustrated-ready-20261026.png)。均為實際production頁面，生成方向mockup與否決原圖分別封存E槽。50項runtime、最後13條受影響瀏覽器與17張修復追查通過；完整56條首輪的53通過／3失敗及31張首輪的18通過／13失敗仍保留，詳見開發紀錄，不把不同版本加總成一次完整全通過。

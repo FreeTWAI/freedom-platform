@@ -2,7 +2,7 @@
 .ad-root.ad-toy-console.ad-shotengai{--ad-bg:#f8f0d9;--ad-surface:#fffbed;--ad-raised:#e7b97e;--ad-ink:#302e29;--ad-muted:#645d50;--ad-line:#65533d;--ad-accent:#c34e35;background:#f8f0d9;color:var(--ad-ink)}
 .ad-root.ad-toy-console.ad-shotengai,.ad-root.ad-toy-console.ad-shotengai button,.ad-root.ad-toy-console.ad-shotengai input,.ad-root.ad-toy-console.ad-shotengai select{font-family:'Microsoft JhengHei','PingFang TC',system-ui,sans-serif}
 .ad-shotengai .sg-cover{display:block;position:relative;overflow:hidden;aspect-ratio:128/85;min-width:0;width:100%;background:#f2dfc4;isolation:isolate}
-.ad-shotengai .sg-cover>img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;max-width:none}
+.ad-root.ad-toy-console.ad-shotengai .sg-cover>img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;max-width:none}
 .ad-shotengai .sg-cover-fallback{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:inherit;height:100%;padding:20px;gap:8px;text-align:center;color:#382d29;font-size:14px;line-height:1.7}
 .ad-shotengai .sg-cover-fallback strong{font-size:20px}
 .ad-root.ad-toy-console.ad-shotengai button,.ad-root.ad-toy-console.ad-shotengai .ad-button{border:2px solid #574135;border-radius:10px;background:#b9432c;color:#fffdf4;box-shadow:0 3px 0 #574135;font-size:15px;line-height:1.6;transition:background-color .12s,border-color .12s,box-shadow .12s;transform:none}
@@ -40,7 +40,7 @@
 .ad-root.ad-toy-console.ad-shotengai .pt-party-art,.ad-root.ad-toy-console.ad-shotengai .ad-card-art{height:auto;aspect-ratio:128/85;border-bottom:2px solid #7f634d;background:#f2dfc4}
 .ad-root.ad-toy-console.ad-shotengai .pt-party-art>.sg-cover,.ad-root.ad-toy-console.ad-shotengai .ad-card-art>.sg-cover{height:100%;width:100%}
 .ad-root.ad-toy-console.ad-shotengai .pt-party-art>span:not(.sg-cover){font-size:14px;background:#fff9e9ed;color:#574135;border:1px solid #99734f}
-.ad-root.ad-toy-console.ad-shotengai .ck-feature-art .sg-cover{border:2px solid #9f7d58;border-radius:45% 45% 14px 14px;box-shadow:0 4px 0 #d1ad7d}
+.ad-root.ad-toy-console.ad-shotengai .ck-feature-art .sg-cover{border:2px solid #9f7d58;border-radius:7px 11px 6px 9px;box-shadow:0 4px 0 #d1ad7d}
 .ad-root.ad-toy-console.ad-shotengai .ck-feature-orbit,.ad-root.ad-toy-console.ad-shotengai .ck-dish-note{display:none}
 .ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-card{display:flex;flex-direction:column}
 .ad-root.ad-toy-console.ad-shotengai .sg-intro-copy{padding:24px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;position:relative;color:#382d29;background:#fff8e7}
@@ -94,4 +94,14 @@
 .ad-root.ad-toy-console.ad-shotengai .mk-tray{background:#e7b97e;border-color:#302e29;box-shadow:none}
 .ad-root.ad-toy-console.ad-shotengai .mk-ingredients button{background:#fffbed;border:2px solid #302e29;border-radius:3px 5px 2px 6px;box-shadow:2px 2px 0 #8a613e}
 .ad-root.ad-toy-console.ad-shotengai .mk-ingredients button:hover{background:#f7e9b8}
+.ad-root.ad-toy-console.ad-shotengai .ck-open-label{background:#29476a;border:1px solid #a6bcc8;color:#fff6dd}
+.ad-root.ad-toy-console.ad-shotengai .ck-passport-top,.ad-root.ad-toy-console.ad-shotengai .ck-book-button b{font-size:14px}
+.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-card-art{display:block;aspect-ratio:128/85;height:auto;min-height:0}
+.ad-root.ad-toy-console.ad-shotengai .pt-party-art>.sg-cover{position:relative;inset:auto;padding:0;border:0;border-radius:0;box-shadow:none;background:#f2dfc4}
+.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-card button,.ad-root.ad-toy-console.ad-shotengai .pt-party-card button,.ad-root.ad-toy-console.ad-shotengai .ck-feature button{background:#c34e35;color:#fffbed;border:2px solid #302e29;box-shadow:2px 2px 0 #302e29;border-radius:6px 9px 5px 8px}
+/* Missing art is normal-flow content; large text must enlarge its menu owner. */
+.ad-root.ad-toy-console.ad-shotengai .sg-cover:has(>.sg-cover-fallback){aspect-ratio:auto;height:auto;min-height:210px}
+.ad-root.ad-toy-console.ad-shotengai .sg-cover-fallback{height:auto;min-height:210px}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-visual:has(.sg-cover-fallback),.ad-root.ad-toy-console.ad-shotengai .pt-party-art:has(.sg-cover-fallback),.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-card-art:has(.sg-cover-fallback){display:block;height:auto;min-height:210px;aspect-ratio:auto}
+.ad-root.ad-toy-console.ad-shotengai .pt-party-art:has(.sg-cover-fallback)>span:not(.sg-cover),.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-card-art:has(.sg-cover-fallback)>.ad-art-copy{position:relative;inset:auto;display:block;margin:0 12px 12px}
 @media(prefers-reduced-motion:reduce){.ad-root.ad-toy-console.ad-shotengai *{transition:none!important;animation:none!important}}

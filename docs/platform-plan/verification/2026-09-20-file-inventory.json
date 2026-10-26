@@ -3309,8 +3309,8 @@
     },
     {
       "path": "apps/portal-web/src/games/shotengai.css",
-      "bytes": 17236,
-      "sha256": "e0e8e4f91d6faff1265b3511785d1092b468450205193f76a939565dca29f8de"
+      "bytes": 18919,
+      "sha256": "ca7b9261f514106f3d0d0ac53e16fa63b1fedc5461e45f998090cb97bb06e226"
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
@@ -15959,8 +15959,8 @@
     },
     {
       "path": "docs/development/absurd-daily.md",
-      "bytes": 39482,
-      "sha256": "4c4ce9de654f38b42c61232b6392f58118d8052be20c013159db09119297e4da"
+      "bytes": 42716,
+      "sha256": "02387ef477df366b396aac0db16a75cff0fbdd2129e9c50ba045a878a49a7f24"
     },
     {
       "path": "docs/development/agent-development-guide.md",
@@ -19494,18 +19494,18 @@
     },
     {
       "path": "modules/absurd-daily/PLAYABILITY.md",
-      "bytes": 34361,
-      "sha256": "76aa218fc6637412c0d3179b7a1b070a31f86e26290cdaa5146d12cbe6b8f5ef"
+      "bytes": 34974,
+      "sha256": "de5b99486bf20c52a51bf3de12cda07840226ee4199c7d0b8bb56bc3aa5b04ed"
     },
     {
       "path": "modules/absurd-daily/README.md",
-      "bytes": 5325,
-      "sha256": "d3669932d7d5c09b4607d6dcf36813174759cb2a2dcf1d0700e1badb492179cc"
+      "bytes": 5861,
+      "sha256": "bf08dcd884b17724daf208e805e838f21d633de7d2a88bece2275dc0c00181b7"
     },
     {
       "path": "modules/absurd-daily/cooking-3d-art.json",
       "bytes": 35080,
-      "sha256": "9b7745a291c8ddb200f764e9a148e5d06b6f5c9a83a4fb2c7e85cd1ac48d6ae3"
+      "sha256": "67da79293b9a0a8fd5420e61e6dd5b2617f1567334827034bfe97f73a5c95056"
     },
     {
       "path": "modules/absurd-daily/cooking-art.json",
@@ -19579,8 +19579,8 @@
     },
     {
       "path": "modules/absurd-daily/review/corn-dog-illustrated-ready-20261026.png",
-      "bytes": 197425,
-      "sha256": "301d5dfa9dbb2294f2f91cdb00f156ab461d6ae6eb0dd3b83723713502f6a6b2"
+      "bytes": 197813,
+      "sha256": "8a97dda0f24c1f30ea8970c58db39fd804dc45d7889b69bc86b491f2285567cb"
     },
     {
       "path": "modules/absurd-daily/review/current-corn-dog-share-20261025.png",
@@ -19611,6 +19611,16 @@
       "path": "modules/absurd-daily/review/current-steak-iron-share-20261025.png",
       "bytes": 629704,
       "sha256": "9676e6cd06d52c8f08d2103a0aa81b1779c520a9fed599b23eb77f4ada855f4a"
+    },
+    {
+      "path": "modules/absurd-daily/review/illustrated-kitchen-phone-20261026.png",
+      "bytes": 1279602,
+      "sha256": "001cf8b57e54d683fbd6cb22e1c101b57741ca396b72a00bb570a3b7a1aabfd5"
+    },
+    {
+      "path": "modules/absurd-daily/review/illustrated-lobby-desktop-20261026.png",
+      "bytes": 1787786,
+      "sha256": "68f47e65e255cd1adacecbd3be3e2e02f23f383c698e6a94d0ae74de2ff7eba3"
     },
     {
       "path": "modules/absurd-daily/review/native-ceramic-20261025.png",
@@ -26419,8 +26429,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 40746,
-      "sha256": "765f31f460ad1fdad181450f321e74492060a73119ba4f7eac048da34ca2e1ef"
+      "bytes": 40907,
+      "sha256": "20c212b8d2100f5e028de10d9f2bf87a9a9f0b770e76f6146d7976ba8340398f"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",

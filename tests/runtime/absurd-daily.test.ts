@@ -35,6 +35,7 @@ import {displayMarket} from '../../apps/portal-web/src/games/cooking/market-food
 import {createDishModel,type DishMesh} from '../../apps/portal-web/src/games/cooking/dish-model.js';
 import {createRequire} from 'node:module';
 import {coverOf} from '../../apps/portal-web/src/games/GameCover.js';
+import {syncDiagnostics} from '../../apps/portal-web/src/games/diagnostics.js';
 const {Box3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
 
@@ -197,7 +198,7 @@ test('UX-14: a steak sits on exposed cast iron, with open ear holes and a separa
 // coverage remains responsible for real WebGL, image export and input dispatch.
 function cashBoard(completedCards:number, failure?:'update'|'capture') {
   const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
-  const names=['render','stop','finish','settle','syncClock','applyCash'];
+  const names=['draw','render','stop','finish','settle','syncClock','applyCash'];
   const functions=names.map(name=>{
     const start=new RegExp(`^( *)function ${name}\\(`,'m').exec(source);assert.ok(start,name);
     const tail=source.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,`${name} end`);
@@ -219,6 +220,7 @@ function cashBoard(completedCards:number, failure?:'update'|'capture') {
   const api=runInNewContext(`${functions};({applyCash,settle})`,{
     live,stage,pendingResult,view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
     performance:{now:()=>7500},tick,pause,sortCash,seconds,GAMES,cancelAnimationFrame:()=>record('stop'),
+    syncDiagnostics,audio:{current:null},setReady:()=>{},setError:()=>{},
     sfx:()=>{},setNotice:(text:string)=>notices.push(text),updateUi:()=>{},onResult:(result:any)=>results.push(result),setCaptureError:(value:boolean)=>{captureError=value;},
   }) as {applyCash:(accept:boolean,index?:number)=>void;settle:(summary:any)=>void};
   return {...api,live,events,results,pendingResult,notices,get captureError(){return captureError;}};
