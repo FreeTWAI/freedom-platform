@@ -10,6 +10,25 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-25 main 1f7aee36 發布完成（遊戲結束少一次繪製）
+
+截至19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`／189；完整證據見[發布收據](rollout-main-1f7aee36-2026-10-25.json)。
+會員幾乎沒有可見變化：最多是 #1058 的 AbsurdDaily 最後分類後少一次重複繪製；其餘為測試、文件、無行為變更的重構或OFF旗標後的程式。
+前版以來兩個first-parent merges：#1064原樣整合 #1022／#1023／#1031／#1042；#1067原樣整合 #1053／#1058。
+#1042買家同意已發布商店政策仍無作用：兩環境 `FREEDOM_STORE_POLICIES_ENABLED` 不存在、OFF，checkout亦OFF；須由owner開啟兩者才會呈現。
+Main Verify 40219224039 attempt1的17個jobs、CodeQL 40219224127的3個jobs成功；無migration，READ ONLY核對188列ledger，schema189與 `36bec661`／189回退下限不變，Q4未建立新floor。
+27個既有旗標加contact retention `all`、各37 vars、路由與cron均不變；無新增線上 `FREEDOM_*` 名稱。
+Kit在 #1064 合併前以provisional batch head／授權建立；Follow-up0補安全診斷與rehearsal wrappers，Follow-up1改選S8／新授權，Follow-up2改選S9。
+S8 Verify 40208964551三次未成功：回條clock flake、native compile timeout後由orchestrator取消、guild-member-tiers timeout連帶duplicate key；細節為操作者歷史。#1053修首項，S8未receive／bind／deploy。
+兩組S8 staging before備份 `4b32ec82`（15:56:55.913Z）、`f2efe8e7`（17:22:07.856Z）均passed但未作pointer：前者無法滿足2h窗口，兩者亦早於S9的18:01:38.931Z授權，原證據保留。
+四組正式備份通過讀回、隔離DB／物件還原及清理：staging before `be5309c9`／after `f646857e`，production before `384c830a`／after `e7b182bc`；before在Q3 installed after-wrapper run dir，Q4保留pointer。
+每次備份前均執行IO／最終hop TCP mtr／DB RTT；staging before丟包10%，after 20次探測30%後重跑30次0%／RTT183ms；production before10%／177ms、after20%／179ms，延遲穩定，僅列操作者觀察，不改寫為乾淨路徑。
+兩次READ ONLY rehearsal均為 `rehearsed_readonly_not_deploy_authorized`／189／188列／floor36bec661；staging timers active，production已由step7暫停而inactive，常數 `timers_active_expected` 不代表實際active，符合RUNBOOK10b。
+Production公開唯讀smoke19:32:15.364Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過，最終綁定 `64bdeee1`；19:44:03.881729Z原timers恢復active／enabled、排程／argv不變；Deployments success為7318209181／20564861826、7318209366／20564862554。
+無staging acceptance window，會員UX為 `not_run`；自然排程仍 `not_observed_for_new_wrapper`，真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+保留Follow-up2 sandbox的managed mount modes拒絕歷史；完整offline audit其後於sandbox外RUNBOOK steps0／1均exit0，屬操作者歷史、非repo evidence；隔離還原不授權公開資料。
+
 ## 2026-10-25 main 758cabe2 發布完成（搜尋可見的 Repo 名稱）
 
 截至11:58 UTC，兩環境已部署 `758cabe2`／schema189，接續 `36bec661`／189；完整證據見[發布收據](rollout-main-758cabe2-2026-10-25.json)。
