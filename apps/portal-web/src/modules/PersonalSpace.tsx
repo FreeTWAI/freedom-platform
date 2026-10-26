@@ -81,11 +81,18 @@ function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:str
   const reader=useRef<ReturnType<typeof createPersonalPostPageReader>|null>(null);
   const cards=useRef<Record<string,HTMLElement|null>>({});
   const retryFocus=useRef<{id:string;button:HTMLButtonElement}|null>(null);
+  const retryHeights=useRef<Record<string,number>>({});
   useLayoutEffect(()=>{
     const abort=new AbortController();
-    const current=createPersonalPostPageReader(client,owner,items,abort.signal,(id,result)=>setPreviews(previous=>({...previous,[id]:result})));
+    const current=createPersonalPostPageReader(client,owner,items,abort.signal,(id,result)=>{
+      // Keep this card's measured space while shorter loading text replaces its error.
+      // Otherwise a page at the bottom is clamped upward before the retry settles.
+      if(result.state==='retrying'&&cards.current[id])retryHeights.current[id]=cards.current[id]!.getBoundingClientRect().height;
+      else delete retryHeights.current[id];
+      setPreviews(previous=>({...previous,[id]:result}));
+    });
     reader.current=current;setPreviews({});void current.load();
-    return()=>{abort.abort();retryFocus.current=null;if(reader.current===current)reader.current=null;};
+    return()=>{abort.abort();retryFocus.current=null;retryHeights.current={};if(reader.current===current)reader.current=null;};
   },[client,owner,items]);
   useLayoutEffect(()=>{
     const pending=retryFocus.current;if(!pending||previews[pending.id]?.state==='retrying')return;
@@ -100,7 +107,7 @@ function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:str
     const result=previews[item.id],post=result?.state==='ready'?result.post:null;
     const action=item.actions.includes('view')?'view':item.actions.find(value=>['manage','continue','edit'].includes(value));
     const social=item.kind==='social_post',path=social?(post?personalPostPath(item):null):(action?personalContentActionPath(item,action):null);
-    return <article ref={node=>{cards.current[item.id]=node;}} tabIndex={-1} className="card stack personal-space-entry" key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
+    return <article ref={node=>{cards.current[item.id]=node;}} tabIndex={-1} className="card stack personal-space-entry" style={result?.state==='retrying'?{minHeight:retryHeights.current[item.id]}:undefined} key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
       <div className="personal-space-entry-meta"><span>{t(kinds[item.kind])}</span><span>{states[item.status]?t(states[item.status]):item.status}</span><span>{audiences[item.visibility]?t(audiences[item.visibility]):item.visibility}</span></div>
       <h3>{post?.title||item.title||t('space.untitled')}</h3>
       {post&&<>{post.note&&<PersonalPostText text={post.note}/>}{post.thumbnail_url&&<PersonalPostPhoto url={post.thumbnail_url}/>}<time dateTime={post.created_at}>{new Date(post.created_at).toLocaleDateString(language)}</time></>}

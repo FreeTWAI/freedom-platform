@@ -3459,8 +3459,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/PersonalSpace.tsx",
-      "bytes": 12930,
-      "sha256": "f1dd554dc9ac6f340e35cd542f54bc7502a588d2d34cf6847c744af3ca4a9c4c"
+      "bytes": 13458,
+      "sha256": "31a78de85a46177aa5ff23baca3afdd04d6bf73c3b1b472a88fb13dd39b47efd"
     },
     {
       "path": "apps/portal-web/src/modules/PlatformLogo.tsx",
@@ -24774,8 +24774,8 @@
     },
     {
       "path": "tests/e2e/personal-space.spec.ts",
-      "bytes": 28828,
-      "sha256": "f27a331379e5e823376417fbfc8adb00351024995a90780b456d906e2225e291"
+      "bytes": 29200,
+      "sha256": "b6ce19621df2eb24a8c9e6bb7e367035463a8379e919aeb6f6f8fea79c03cadc"
     },
     {
       "path": "tests/e2e/platform-purpose.spec.ts",
