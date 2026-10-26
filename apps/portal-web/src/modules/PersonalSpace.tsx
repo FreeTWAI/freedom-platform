@@ -6,10 +6,10 @@ import type {SessionPayload} from '../types';
 import type {MemberCardData} from './Membership';
 import {MemberAvatar} from './MemberAvatar';
 import {personalContentActionPath,type PersonalContentItem} from './MyContent';
-import {PERSONAL_SPACE_PAGE_SIZE,isPersonalSpaceScope,personalPostPath,readPersonalPostPage,type PersonalPostResult} from './personal-space-model';
+import {PERSONAL_SPACE_PAGE_SIZE,personalSpaceGuilds,isPersonalSpaceScope,personalPostPath,createPersonalPostPageReader,type PersonalPostResult} from './personal-space-model';
 import './PersonalSpace.css';
 
-type Hero=Pick<MemberCardData,'nickname'|'avatar_url'|'positioning_title'> & {guilds:string[]};
+type Hero=Pick<MemberCardData,'nickname'|'avatar_url'|'positioning_title'> & {guilds:ReturnType<typeof personalSpaceGuilds>};
 type Snapshot={client:PortalClient;owner:string;generation:number;hero:Hero|null;items:PersonalContentItem[];profileError:boolean;contentError:boolean};
 const kinds={all:'space.kind.all',social_post:'space.kind.social_post',showcase:'space.kind.showcase',skill_submission:'space.kind.skill_submission',event:'space.kind.event'} as const;
 const states:Record<string,InterfaceMessage>={draft:'space.state.draft',active:'space.state.published',published:'space.state.published',hidden:'space.state.hidden',deleted:'space.state.deleted',withdrawn:'space.state.withdrawn',pending:'space.state.pending',rejected:'space.state.rejected',cancelled:'space.state.cancelled',awaiting_upload:'space.state.awaiting_upload',ready_for_review:'space.state.ready_for_review',revoked:'space.state.revoked'};
@@ -29,7 +29,7 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
       if(!valid())return;
       const member=profile.status==='fulfilled'&&profile.value.user_id===owner&&profile.value.is_self?profile.value:null;
       // Never retain the contacts/security fields returned by the member DTO in view state.
-      const hero=member?{nickname:member.nickname,avatar_url:member.avatar_url,positioning_title:member.positioning_title,guilds:[...new Set((member.joined_guilds??[member.primary_guild,...member.secondary_guilds].filter(Boolean)).map(g=>g!.name))]}:null;
+      const hero=member?{nickname:member.nickname,avatar_url:member.avatar_url,positioning_title:member.positioning_title,guilds:personalSpaceGuilds(member)}:null;
       setSnapshot({client,owner,generation:started,hero,items:content.status==='fulfilled'?content.value:[],profileError:!hero,contentError:content.status==='rejected'});setLoading(false);
     });
     return()=>{live=false;abort.abort();};
@@ -47,8 +47,19 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
   const retry=()=>{setSnapshot(null);setRevision(value=>value+1);};
   return <div className="personal-space stack">
     <section className="card personal-space-hero" aria-label={t('space.ownerSummary')}>
-      {current?.hero?<><MemberAvatar nickname={current.hero.nickname} avatarUrl={current.hero.avatar_url}/><div className="personal-space-identity"><p className="hint">{t('space.ownerOnly')}</p><h2>{current.hero.nickname}</h2>{current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}{current.hero.guilds.length>0&&<ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(name=><li key={name}>{name}</li>)}</ul>}</div></>:<div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a>
+      {current?.hero ? <>
+        <MemberAvatar nickname={current.hero.nickname} avatarUrl={current.hero.avatar_url}/>
+        <div className="personal-space-identity">
+          <p className="hint">{t('space.ownerOnly')}</p>
+          <h2>{current.hero.nickname}</h2>
+          {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
+        </div>
+      </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
+      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a></div>
+      {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
+        <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
+        <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>
+      </details>}
     </section>
     <p className="hint personal-space-private">{t('space.privacy')}</p>
     <section className="personal-space-content stack" aria-label={t('space.content')}>
@@ -67,18 +78,36 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
 function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:string;items:PersonalContentItem[]}){
   const {t,language}=useLanguage();
   const [previews,setPreviews]=useState<Record<string,PersonalPostResult>>({});
-  useEffect(()=>{const abort=new AbortController();void readPersonalPostPage(client,owner,items,abort.signal,(id,result)=>setPreviews(current=>({...current,[id]:result})));return()=>abort.abort();},[client,owner,items]);
+  const reader=useRef<ReturnType<typeof createPersonalPostPageReader>|null>(null);
+  const cards=useRef<Record<string,HTMLElement|null>>({});
+  const retryFocus=useRef<{id:string;button:HTMLButtonElement}|null>(null);
+  useLayoutEffect(()=>{
+    const abort=new AbortController();
+    const current=createPersonalPostPageReader(client,owner,items,abort.signal,(id,result)=>setPreviews(previous=>({...previous,[id]:result})));
+    reader.current=current;setPreviews({});void current.load();
+    return()=>{abort.abort();retryFocus.current=null;if(reader.current===current)reader.current=null;};
+  },[client,owner,items]);
+  useLayoutEffect(()=>{
+    const pending=retryFocus.current;if(!pending||previews[pending.id]?.state==='retrying')return;
+    retryFocus.current=null;
+    // Only replace focus lost with this control; never steal it back after the user moved on.
+    if(document.activeElement===document.body){
+      const card=cards.current[pending.id],target=pending.button.isConnected?pending.button:(card?.querySelector<HTMLAnchorElement>('a')??card);
+      target?.focus({preventScroll:true});
+    }
+  },[previews]);
   return <div className="personal-space-feed">{items.map(item=>{
     const result=previews[item.id],post=result?.state==='ready'?result.post:null;
     const action=item.actions.includes('view')?'view':item.actions.find(value=>['manage','continue','edit'].includes(value));
     const social=item.kind==='social_post',path=social?(post?personalPostPath(item):null):(action?personalContentActionPath(item,action):null);
-    return <article className="card stack personal-space-entry" key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
+    return <article ref={node=>{cards.current[item.id]=node;}} tabIndex={-1} className="card stack personal-space-entry" key={`${item.kind}:${item.id}`} aria-label={`${t(kinds[item.kind])}：${item.title}`}>
       <div className="personal-space-entry-meta"><span>{t(kinds[item.kind])}</span><span>{states[item.status]?t(states[item.status]):item.status}</span><span>{audiences[item.visibility]?t(audiences[item.visibility]):item.visibility}</span></div>
       <h3>{post?.title||item.title||t('space.untitled')}</h3>
       {post&&<>{post.note&&<PersonalPostText text={post.note}/>}{post.thumbnail_url&&<PersonalPostPhoto url={post.thumbnail_url}/>}<time dateTime={post.created_at}>{new Date(post.created_at).toLocaleDateString(language)}</time></>}
-      {social&&personalPostPath(item)&&!result&&<p role="status">{t('space.postLoading')}</p>}
+      {social&&personalPostPath(item)&&(!result||result.state==='retrying')&&<p role="status">{t('space.postLoading')}</p>}
       {social&&result?.state==='unavailable'&&<p>{t('space.postUnavailable')}</p>}
       {social&&result?.state==='error'&&<p role="status">{t('space.postError')}</p>}
+      {social&&(result?.state==='retrying'||(result?.state==='error'&&result.retryable))&&<button type="button" className="btn btn-secondary btn-small" disabled={result.state==='retrying'} aria-busy={result.state==='retrying'} onClick={event=>{if(document.activeElement===event.currentTarget)retryFocus.current={id:item.id,button:event.currentTarget};void reader.current?.retry(item.id);}}>{t('feedback.retry')}</button>}
       {path&&<a className="btn btn-secondary btn-small personal-space-source" href={path}>{social?t('space.openPost'):t('space.openSource')}</a>}
     </article>;
   })}</div>;

@@ -94,7 +94,7 @@ for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner c
  for(const [theme,label] of [['light','自由工坊－明亮'],['dark','自由工坊－夜航'],['versefolk','自由工坊－敘生'],['dragon','新手導覽－龍娘'],['ai-sister','新手導覽－AI Sister']]){
   await openSettingsPanel(page,'appearance');const choice=page.getByRole('menuitemradio',{name:label,exact:true});await choice.click();await expect(choice).toBeFocused();await closeSettingsMenu(page);await expect(page.locator('.settings-menu-button')).toBeFocused();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  for(const selector of ['.personal-space-private','.personal-space-entry-meta']){
+  for(const selector of ['.personal-space-private','.personal-space-entry-meta','.personal-space-hero-actions .btn-secondary']){
    const ratio=await page.locator(selector).first().evaluate(element=>{
     const rgb=(value:string)=>value.match(/[\d.]+/g)!.map(Number);
     const luminance=(c:number[])=>c.slice(0,3).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
@@ -151,4 +151,95 @@ test('PERSONAL-SPACE-UI-11: all five interface languages preserve the selected p
   await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();await expect(page.locator('.personal-space-entry')).toHaveCount(2);expect(reads).toHaveLength(8);expect(writes).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
+});
+
+test('PERSONAL-SPACE-UI-12: per-card retry preserves page, other cards and scroll and coalesces rapid clicks',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const reads=await synthetic(page,8);let attempts=0,inventoryReads=0;
+ page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/me/content')inventoryReads++;});
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(7)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[preview(7)]}}).catch(()=>{});});
+ try{
+  await login(page);await page.getByRole('button',{name:'下一頁',exact:true}).click();
+  const failed=page.getByRole('article',{name:'貼文：我的創作 7',exact:true}),other=page.getByRole('article',{name:'貼文：我的創作 8',exact:true});
+  const retry=failed.getByRole('button',{name:'再試一次',exact:true});await expect(retry).toBeVisible();await expect(other).toContainText('本人貼文正文 8');
+  await retry.scrollIntoViewIfNeeded();const before={scroll:await page.evaluate(()=>scrollY),reads:[...reads],inventory:inventoryReads};
+  // Same-task native activations exercise the window before React commits disabled.
+  await retry.focus();await retry.evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
+  await expect(retry).toBeDisabled();await expect(retry).toHaveAttribute('aria-busy','true');await expect.poll(()=>attempts).toBe(2);
+  await expect(other).toContainText('本人貼文正文 8');await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');
+  expect(await page.evaluate(()=>scrollY)).toBe(before.scroll);expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);
+  release();await expect(failed).toContainText('本人貼文正文 7');await expect(failed.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect(failed.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);
+  await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);await expect.poll(()=>attempts).toBe(2);
+ }finally{release();}
+});
+
+for(const destination of ['page','account'] as const)test(`PERSONAL-SPACE-UI-13: a delayed per-card retry cannot restore the old ${destination}`,async({page})=>{
+ await synthetic(page,8);let attempts=0,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[{...preview(1),note:'STALE_RETRY_SENTINEL'}]}}).catch(()=>{});});
+ try{
+  await login(page);const retry=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}).getByRole('button',{name:'再試一次',exact:true});await retry.click();await expect(retry).toBeDisabled();
+  if(destination==='page'){await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();}
+  else{
+   await page.locator('.settings-menu-button').click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
+   await page.route('**/api/v1/me/content',route=>route.fulfill({json:{items:[]}}));await login(page,'reviewer@local.test');await expect(page.getByRole('heading',{name:'這裡還沒有內容'})).toBeVisible();
+  }
+  release();await expect(page.locator('body')).not.toContainText('STALE_RETRY_SENTINEL');await expect.poll(()=>attempts).toBe(2);
+ }finally{release();}
+});
+
+test('PERSONAL-SPACE-UI-14: forbidden, missing, deleted and non-transient failures do not offer blind retry',async({page})=>{
+ await synthetic(page,6);
+ for(const [n,status] of [[1,403],[2,404],[3,410],[4,422]])await page.route(`**/api/v1/social-posts?post_id=${id(n)}`,route=>route.fulfill({status,json:{}}));
+ await page.route(`**/api/v1/social-posts?post_id=${id(5)}`,route=>route.fulfill({json:{items:[]}}));await login(page);
+ await expect(page.getByText('本人貼文正文 6',{exact:false})).toBeVisible();
+ for(const n of [1,2,3,4,5]){const card=page.getByRole('article',{name:`貼文：我的創作 ${n}`,exact:true});await expect(card).not.toContainText('正在讀取這則貼文');await expect(card.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);await expect(card.getByRole('link')).toHaveCount(0);}
+});
+
+test('PERSONAL-SPACE-UI-15: keyboard retry does not steal focus after the user moves to another card',async({page})=>{
+ await synthetic(page,2);let attempts=0,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,async route=>{if(++attempts===1)return route.fulfill({status:503,json:{}});await gate;await route.fulfill({json:{items:[preview(1)]}}).catch(()=>{});});
+ try{
+  await login(page);const first=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=first.getByRole('button',{name:'再試一次',exact:true});
+  await retry.focus();await page.keyboard.press('Enter');await expect(retry).toBeDisabled();await expect.poll(()=>attempts).toBe(2);
+  const other=page.getByRole('article',{name:'貼文：我的創作 2',exact:true}).getByRole('link',{name:'開啟貼文與留言'});await other.focus();release();
+  await expect(first).toContainText('本人貼文正文 1');await expect(other).toBeFocused();
+ }finally{release();}
+});
+
+test('PERSONAL-SPACE-UI-16: a repeated transient failure keeps keyboard retry available and focused',async({page})=>{
+ await synthetic(page,1);let attempts=0;
+ await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,route=>++attempts<=2?route.fulfill({status:503,json:{}}):route.fulfill({json:{items:[preview(1)]}}));
+ await login(page);const card=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=card.getByRole('button',{name:'再試一次',exact:true});
+ await retry.focus();await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeEnabled();await expect(retry).toBeFocused();
+ await page.keyboard.press('Enter');await expect(card).toContainText('本人貼文正文 1');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect.poll(()=>attempts).toBe(3);
+});
+
+
+for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px identity has its own row and eight long guild names stay optional`,async({page},testInfo)=>{
+ await page.setViewportSize({width,height:844});await synthetic(page,1);
+ const names=Array.from({length:8},(_,i)=>`第${i+1}個創作者跨領域協作與長名稱公會`);
+ let longIdentity=false;
+ await page.route(`**/api/v1/members/${owner}`,async route=>{
+  const response=await route.fetch();
+  await route.fulfill({response,json:{...await response.json(),nickname:longIdentity?'VeryLongUnbrokenCreatorName'.repeat(5):'合成創作者',positioning_title:longIdentity?'這是既有定位文字而非新增自介欄位。'.repeat(12):'影音創作者',category_primaries:undefined,primary_guild:{name:names[0],guild_key:'synthetic-0'},secondary_guilds:[{name:names[1],guild_key:'synthetic-1'}],joined_guilds:names.slice(2).map((name,i)=>({name,guild_key:`synthetic-${i+2}`}))}});
+ });
+ await login(page);
+ const hero=page.locator('.personal-space-hero'),identity=page.locator('.personal-space-identity'),action=page.locator('.personal-space-hero-actions'),details=page.locator('.personal-space-memberships'),summary=details.locator('summary');
+ await expect(identity.getByRole('heading',{name:'合成創作者',exact:true})).toBeVisible();
+ await expect(summary).toHaveText('已加入公會 (8)');await expect(details).not.toHaveAttribute('open');
+ await expect(details.locator('li')).toHaveCount(8);await expect(details.locator('li').first()).not.toBeVisible();
+ const identityBox=(await identity.boundingBox())!,avatarBox=(await hero.locator('.member-avatar').boundingBox())!,actionBox=(await action.boundingBox())!;
+ expect(identityBox.y).toBeCloseTo(avatarBox.y,0);expect(identityBox.width).toBeGreaterThan(120);
+ expect(actionBox.y).toBeGreaterThanOrEqual(Math.max(identityBox.y+identityBox.height,avatarBox.y+avatarBox.height));
+ expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);expect((await action.getByRole('link').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ expect((await hero.boundingBox())!.height).toBeLessThan(300);
+ expect((await page.locator('.personal-space-entry').first().boundingBox())!.y).toBeLessThan(844);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const screenshot=testInfo.outputPath(`personal-space-guild-summary-${width}.png`);await page.screenshot({path:screenshot,fullPage:true});await testInfo.attach(`personal-space-guild-summary-${width}`,{path:screenshot,contentType:'image/png'});
+ await summary.focus();await page.keyboard.press('Enter');await expect(details).toHaveAttribute('open','');await expect(summary).toBeFocused();
+ for(const name of names)await expect(details.getByText(name,{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.keyboard.press('Space');await expect(details).not.toHaveAttribute('open');await expect(summary).toBeFocused();
+ longIdentity=true;await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link')).toHaveAttribute('href','#account');
 });
