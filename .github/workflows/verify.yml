@@ -721,5 +721,7 @@ jobs:
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.migration-postgres
       - name: Verify native snapshot dump and isolated restore for the shared release operator
         run: node --import tsx .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .
-      - name: Verify daily backup orchestration and bounded failure diagnostics
-        run: node --import tsx --test tests/runtime/media-backup-daily.test.ts
+      - name: Typecheck delivery changes and their TypeScript consumers
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: Verify complete daily backup orchestration evidence
+        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.daily-backup

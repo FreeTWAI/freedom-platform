@@ -29,6 +29,29 @@ It does not reuse a green result for a different source or weaken deployment
 source/actor/lease/health checks. Ordinary code deployment and daily backups are
 separate operations; deployment need not repeat a full daily backup.
 
+Coverage refinements keep Verify edits confined to the `select` and
+`deploy-preflight` blocks; global execution controls and every other job must
+remain unchanged. The exact daily-backup test uses `ci.daily-backup` through the
+existing pinned completeness runner, which rejects empty, skipped, TODO and
+failed cases. Deployment preflight also retains TypeScript checking without
+running unrelated UI tests.
+
+The bounded mapping checks the actual governance/shared-release reverse closure,
+instruction consumers and declared suite obligations. For the two exact daily
+backup sources, the other direct media consumers and remaining media-owned
+source are parsed from both immutable trees to reject new references into the
+daily subgraph. New reverse consumers, new suites, public exports, local aliases
+or unresolved loaders invalidate that mapping; the unrelated transitive media
+product closure is not selected merely because it shares a coarse module.
+This is a bounded source/dependency policy, not a universal dynamic-code proof.
+
+Unowned product source remains the responsibility of the existing mandatory
+`ci.governance-unit` ownership test (`modules-repository.test.mjs`). Regression
+coverage adds an unowned importing consumer to a clean checkout, proves that
+this exact test fails, and proves that required source-integrity failure rejects
+the aggregate even with successful deployment checks. Owned importing consumers
+remain selector-level negatives. No redundant global ownership scan is added.
+
 The older profiles below retain their own event and path limits. In particular,
 the statements about full push selection below exclude this delivery profile.
 

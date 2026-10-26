@@ -13,7 +13,7 @@
 // decision left unselected; failure and cancellation do not pass.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCTIONS, owns } from '../../packages/contribution-tools/context.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
@@ -131,6 +131,126 @@ function deliveryOwner(path) {
     || path === 'deploy/cloudflare/test/media-restore-container.test.mjs') return 'media-migration';
   return path.startsWith('scripts/ci/') || path === '.github/workflows/verify.yml' ? 'governance' : 'shared-release';
 }
+// Coverage is attached to these bounded paths, not to every file owned by a
+// coarse module. Existing governance and native operator checks cover these
+// obligations; a new suite or reverse consumer needs a separate mapping review.
+const DELIVERY_SUITES = Object.freeze({
+  governance: ['governance.unit', 'runtime.full'],
+  'contribution-experience': ['governance.unit'],
+  'shared-release': ['governance.unit', 'runtime.full'],
+  'media-migration': ['runtime.full'],
+});
+const MEDIA_PRODUCT_CONSUMERS = ['community', 'member-reporting', 'member-communications'];
+const DAILY_SOURCES = ['packages/media-migration/backup-daily.ts', 'packages/media-migration/backup-diagnostics.ts'];
+const DAILY_CLIENTS = ['scripts/media-backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
+  // This unchanged, opt-in archive drill is not selected by full Verify either.
+  // The required native shared-release fixture covers the production adapter.
+  'tests/integration/media-backup-archive.test.ts'];
+
+export function deliveryVerifyWiringOnly(before, after) {
+  // Preserve every other job and all global execution controls byte-for-byte.
+  // This is a constrained textual comparison, not permissive YAML parsing.
+  const mask = text => {
+    if (typeof text !== 'string' || text.length > 128000 || /[\t\r]/.test(text)) return null;
+    const lines = text.split('\n'), out = []; let job = '', seen = new Set();
+    for (const line of lines) {
+      const match = /^  ([a-z][a-z0-9-]*):$/.exec(line);
+      if (match) {job = match[1]; if (seen.has(job)) return null; seen.add(job);}
+      else if (/^\S/.test(line) && !line.startsWith('#')) job = '';
+      // YAML anchors/aliases/tags can let edited delivery blocks affect other jobs.
+      if (/(?:^\s*-?\s*|:\s*)[&*!][a-zA-Z]/.test(line) && !line.trimStart().startsWith('#')) return null;
+      if (!['select','deploy-preflight'].includes(job) && !line.trimStart().startsWith('#')) out.push(line);
+    }
+    return ['select','deploy-preflight'].every(id => seen.has(id)) ? out.join('\n') : null;
+  };
+  const left = mask(before), right = mask(after);
+  return left !== null && right !== null && left === right;
+}
+
+export function deliveryCoverageProven(graphs, paths, snapshots) {
+  const media = paths.some(path => deliveryOwner(path) === 'media-migration');
+  const control = paths.some(path => deliveryOwner(path) === 'governance');
+  const seeds = [...new Set(paths.map(deliveryOwner).filter(id => id && id !== 'media-migration'))];
+  if (media) seeds.push('shared-release'); // the actual production daily-backup consumer
+  for (const graph of graphs) {
+    const descriptors = [...graph.values()];
+    for (const path of paths) {
+      if (descriptors.some(d => d.instructions.includes(path) && d.module_id !== deliveryOwner(path))
+        || descriptors.some(d => d.public_exports.includes(path)) || RUNTIME_TEXT.has(path)) return false;
+    }
+    const impact = selectImpact({baseline: descriptors, candidate: descriptors, changedPaths: [], scopes: seeds});
+    const allowed = control ? ['governance','contribution-experience','shared-release'] : ['shared-release'];
+    if (impact.module_ids.some(id => !allowed.includes(id))) return false;
+    for (const id of [...impact.module_ids, ...(media ? ['media-migration'] : [])])
+      if (!graph.has(id) || !sameSet(graph.get(id).tests, DELIVERY_SUITES[id] ?? [])) return false;
+    if (media && descriptors.some(d => d.dependencies.includes('media-migration')
+      && !['shared-release', ...MEDIA_PRODUCT_CONSUMERS].includes(d.module_id))) return false;
+  }
+  if (!media) return true;
+  const ts = loadGuildPresentationParsers()?.ts;
+  if (!ts) return false;
+  // Prove the other direct media consumers and the rest of the media module do
+  // not consume the daily subgraph. Unresolved/computed loaders in that boundary
+  // refuse narrowing. This uses installed parser code and immutable Git blobs.
+  for (const {graph, files, read} of snapshots) {
+    for (const path of ['tsconfig.json','package.json']) if (files.has(path)) {
+      const config = JSON.parse(read(path));
+      if (config.compilerOptions?.paths || config.compilerOptions?.baseUrl || config.imports || config.exports) return false;
+    }
+    const excluded = ['media-migration', ...MEDIA_PRODUCT_CONSUMERS].map(id => graph.get(id)).filter(Boolean);
+    let count = 0, bytes = 0;
+    for (const [path, entry] of files) {
+      if (!/\.(?:[cm]?js|jsx|tsx?)$/.test(path) || !excluded.some(d => owns(d, path))
+        || DAILY_SOURCES.includes(path) || DAILY_CLIENTS.includes(path)) continue;
+      if (++count > 2048 || !regularBlob(entry)) return false;
+      const source = read(path); bytes += Buffer.byteLength(source);
+      if (source.length > 524288 || bytes > 16000000) return false;
+      const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+      if (file.parseDiagnostics.length) return false;
+      let valid = true;
+      const localRequire = file.statements.some(node => ts.isVariableStatement(node)
+        && node.declarationList.flags & ts.NodeFlags.Const
+        && node.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === 'require'
+          && d.initializer && ts.isArrowFunction(d.initializer)));
+      const checkImport = specifier => {
+        if (typeof specifier !== 'string' || /[\\?#]/.test(specifier)) {valid = false; return;}
+        if (!specifier.startsWith('.')) return; // installed packages, no local aliases in this profile
+        const target = posix.normalize(posix.join(posix.dirname(path), specifier)).replace(/\.js$/, '.ts');
+        if ([...DAILY_SOURCES, ...DAILY_CLIENTS].some(p => p === target || p.replace(/\.ts$/, '') === target)
+          || target.startsWith('deploy/shared-release/')) valid = false;
+      };
+      const visit = node => {
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier)
+          checkImport(ts.isStringLiteral(node.moduleSpecifier) ? node.moduleSpecifier.text : null);
+        if (ts.isImportTypeNode(node)) checkImport(ts.isLiteralTypeNode(node.argument)
+          && ts.isStringLiteral(node.argument.literal) ? node.argument.literal.text : null);
+        if (ts.isImportEqualsDeclaration(node)) valid = false;
+        if (ts.isCallExpression(node)) {
+          const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+          const requireCall = ts.isIdentifier(node.expression) && node.expression.text === 'require' && !localRequire;
+          if (dynamic || requireCall) {
+            const arg = node.arguments[0];
+            if (arg && ts.isStringLiteral(arg)) checkImport(arg.text);
+            else if (dynamic && arg && ts.isPropertyAccessExpression(arg) && arg.name.text === 'href'
+              && ts.isNewExpression(arg.expression) && ts.isIdentifier(arg.expression.expression)
+              && arg.expression.expression.text === 'URL' && arg.expression.arguments?.length === 2
+              && ts.isStringLiteral(arg.expression.arguments[0])
+              && files.has(arg.expression.arguments[0].text)
+              && ![...DAILY_SOURCES, ...DAILY_CLIENTS].includes(arg.expression.arguments[0].text)
+              && !arg.expression.arguments[0].text.startsWith('deploy/shared-release/')) {
+              // Existing restore ACL's fixed repository-relative manifest/migration imports.
+            } else valid = false;
+          }
+          if (ts.isIdentifier(node.expression) && ['eval','Function'].includes(node.expression.text)) valid = false;
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(file); if (!valid) return false;
+    }
+  }
+  return true;
+}
+
 function decision(mode, reason, selected) {
   if (!['full', 'docs', 'affected'].includes(mode) || !/^[a-z0-9_]+$/.test(reason)) throw new Error('invalid_selection_decision');
   return Object.freeze({
@@ -631,6 +751,8 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
         || current.owned_paths.some(path => !descriptor.owned_paths.includes(path) && deliveryOwner(path) !== id)
         || JSON.stringify({...descriptor, owned_paths: []}) !== JSON.stringify({...current, owned_paths: []})) return null;
     }
+    const read = (sha, path) => runGit(root, ['show', '--end-of-options', `${sha}:${path}`]).toString('utf8');
+    const paths = [];
     let scoped = false;
     for (const change of diff.changes) {
       if (statusReason(change)) return null;
@@ -641,8 +763,14 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
       const owner = deliveryOwner(change.path);
       const owners = graphs.map(graph => [...graph.values()].filter(d => owns(d, change.path)).map(d => d.module_id));
       if (!owner || !sameSet(owners[1], [owner]) || owners[0].length && !sameSet(owners[0], [owner])) return null;
-      scoped = true;
+      if (change.path === '.github/workflows/verify.yml'
+        && !deliveryVerifyWiringOnly(read(base, change.path), read(candidate, change.path))) return null;
+      paths.push(change.path); scoped = true;
     }
+    if (!deliveryCoverageProven(graphs, paths, [
+      {graph: graphs[0], files: diff.baseFiles, read: path => read(base, path)},
+      {graph: graphs[1], files: diff.candidateFiles, read: path => read(candidate, path)},
+    ])) return null;
     return scoped ? decision('affected', DELIVERY_TOOLING_REASON, false) : null;
   } catch { return null; }
 }
