@@ -204,3 +204,13 @@ source-integrity, CodeQL, fixed guild integration/preview checks and strict
 main protections remain unchanged. This control-plane PR itself requires full CI;
 local regression results do not establish hosted savings or independent guild
 maintainer assignments.
+
+
+The exact `ci.daily-backup` registry metadata addition may accompany delivery
+changes. Removing that one literal declaration must reproduce the complete
+baseline registry bytes. Existing suite definitions, test discovery baselines,
+loaders, environment forwarding and timeouts therefore remain unchanged; edits
+to them keep broader selection. The existing pinned-suite contract test remains
+in mandatory `ci.governance-unit`, including empty/skipped/failed daily-suite
+regressions. Its test file may accompany the addition; the suite runner itself
+has no delivery exemption.

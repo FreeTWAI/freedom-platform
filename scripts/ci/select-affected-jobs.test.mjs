@@ -9,7 +9,7 @@ import { validateDescriptor, ROOT_INSTRUCTIONS, selectImpact, owns } from '../..
 import {
   ALWAYS_ON_INTEGRITY_COMMANDS, DOCS_ALLOWLIST_PREFIXES, GENERATED_INVENTORY_PATH, JOB_OUTPUT_KEYS, SELECTABLE_JOBS, FRONTEND_LEAF_PROFILES, FRONTEND_LEAF_JOBS,
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
-  deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
+  deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
   HANDOFF_DOCS_PATHS, HANDOFF_DOCS_JOBS, decideHandoffDocsProfile,
 } from './select-affected-jobs.mjs';
 
@@ -1391,7 +1391,7 @@ test('delivery tooling runs its existing coverage on PR and main without unrelat
   const merge = (base, head) => { const sha = git(['commit-tree', git(['rev-parse', `${head}^{tree}`]), '-p', base, '-p', head], 'integration\n'); git(['checkout', '-q', sha]); return sha; };
   git(['init', '-q', '-b', 'main']);
   const descriptors = [
-    moduleDescriptor('governance', ['scripts/ci/**', '.github/workflows/verify.yml'], {tests:['governance.unit','runtime.full']}),
+    moduleDescriptor('governance', ['scripts/ci/**', '.github/workflows/verify.yml', 'packages/contribution-tools/**'], {tests:['governance.unit','runtime.full']}),
     moduleDescriptor('media-migration', ['packages/media-migration/**', 'tests/runtime/media-backup-daily.test.ts'], {tests:['runtime.full']}),
     moduleDescriptor('shared-release', ['deploy/shared-release/**', '.github/workflows/shared-release.yml'], {dependencies: ['governance', 'media-migration'],tests:['governance.unit','runtime.full']}),
   ];
@@ -1400,7 +1400,12 @@ test('delivery tooling runs its existing coverage on PR and main without unrelat
     'packages/media-migration/backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
     'scripts/ci/select-affected-jobs.mjs', '.github/workflows/verify.yml', GENERATED_INVENTORY_PATH];
   for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('before'):'// before\n');
+  const registryPath='packages/contribution-tools/pinned-suites.mjs';
+  const registry=await readFile(join(root,registryPath),'utf8');
+  const dailyLine=registry.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  await put(registryPath,registry.replace(dailyLine,''));
   const base = commit('base');
+  await put(registryPath,registry);
   for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('after'):'// after\n');
   await put('packages/media-migration/backup-diagnostics.ts', 'new diagnostic helper\n');
   const head = commit('release and daily backup'), candidate = merge(base, head);
@@ -1439,6 +1444,11 @@ test('delivery tooling runs its existing coverage on PR and main without unrelat
     owned_paths: [...descriptors[1].owned_paths, restoreTest]}));
   const owner = commit('assign operator harness owner');
   assert.deepEqual(collectRepositoryDecision({...input, head: owner, candidate: merge(base, owner)}), selected);
+  for(const changed of [registry.replace('timeoutMs: 900000','timeoutMs: 900001'),registry.replace("loader: 'node'","loader: 'tsx'")]) {
+    git(['checkout','-q',candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await put(registryPath,changed);const wrong=commit('existing suite change');
+    assert.equal(collectRepositoryDecision({...input,head:wrong,candidate:merge(base,wrong)}).mode,'full');
+  }
   // Each counterexample starts from the admitted exact integration.
   for (const replacement of [deliveryWorkflow('after').replace('npm run test:e2e','exit 1'),
     deliveryWorkflow('after').replace('  pull_request:', '  push:')]) {
@@ -1565,4 +1575,23 @@ test('unowned importing consumer is rejected by mandatory governance ownership a
   const results={...allResults('skipped'),'deploy-preflight':'success'};
   assert.equal(evaluateVerifyAggregate(needsFor(selected,results)).ok,true);
   assert.equal(evaluateVerifyAggregate(needsFor(selected,results,{integrity:'failure'})).ok,false);
+});
+
+
+test('daily registry exception preserves all existing suites and required completeness coverage', async () => {
+  const after=await readFile(join(root,'packages/contribution-tools/pinned-suites.mjs'),'utf8');
+  const line=after.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  const before=after.replace(line,'');
+  assert.equal(deliveryDailyRegistryAddition(before,after),true);
+  for(const changed of [after.replace("loader: 'node'","loader: 'tsx'"),
+    after.replace('timeoutMs: 900000','timeoutMs: 900001'),after.replace("database: true","database: false"),
+    after.replace("pattern: /^[a-z]","pattern: /^[b-z]"),after+line,
+    after.replace('tests/runtime/media-backup-daily.test.ts','tests/runtime/other.test.ts'),
+    after.replace("'ci.worker-unit':","'ci.renamed-worker':")])
+    assert.equal(deliveryDailyRegistryAddition(before,changed),false);
+  assert.equal(deliveryDailyRegistryAddition(after,before),false);
+  assert.ok(PINNED_SUITES['ci.governance-unit'].baseline.includes('packages/contribution-tools/test/pinned-suite.test.mjs'));
+  assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(c=>c.includes('--suite ci.governance-unit')));
+  const integrity=jobBlock(await readFile(workflowPath,'utf8'),'source-integrity');
+  assert.match(integrity,/\n      - run: node \.freedom\/trusted\/scripts\/ci\/run-pinned-suite\.mjs --root \. --suite ci\.governance-unit\n/);
 });

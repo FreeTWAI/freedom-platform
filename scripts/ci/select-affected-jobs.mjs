@@ -123,13 +123,15 @@ const DELIVERY_FILES = new Set([
   'deploy/cloudflare/test/media-restore-container.test.mjs',
   'packages/media-migration/backup-daily.ts', 'packages/media-migration/backup-diagnostics.ts',
   'tests/runtime/media-backup-daily.test.ts',
+  'packages/contribution-tools/pinned-suites.mjs', 'packages/contribution-tools/test/pinned-suite.test.mjs',
 ]);
 function deliveryOwner(path) {
   if (isModuleDescriptorPath(path)) return null;
   if (!DELIVERY_FILES.has(path) && !path.startsWith('deploy/shared-release/')) return null;
   if (path.startsWith('packages/media-migration/') || path.startsWith('tests/runtime/')
     || path === 'deploy/cloudflare/test/media-restore-container.test.mjs') return 'media-migration';
-  return path.startsWith('scripts/ci/') || path === '.github/workflows/verify.yml' ? 'governance' : 'shared-release';
+  return path.startsWith('scripts/ci/') || path.startsWith('packages/contribution-tools/')
+    || path === '.github/workflows/verify.yml' ? 'governance' : 'shared-release';
 }
 // Coverage is attached to these bounded paths, not to every file owned by a
 // coarse module. Existing governance and native operator checks cover these
@@ -146,6 +148,18 @@ const DAILY_CLIENTS = ['scripts/media-backup-daily.ts', 'tests/runtime/media-bac
   // This unchanged, opt-in archive drill is not selected by full Verify either.
   // The required native shared-release fixture covers the production adapter.
   'tests/integration/media-backup-archive.test.ts'];
+
+// Only this literal metadata addition qualifies. Removing it must recover the
+// complete baseline bytes: existing suites, discovery baselines, loaders and
+// timeouts cannot change, and registry code is never evaluated by selection.
+const DAILY_SUITE_DECLARATION = "  'ci.daily-backup': Object.freeze({ files: Object.freeze(['tests/runtime/media-backup-daily.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),\n";
+export function deliveryDailyRegistryAddition(before, after) {
+  return typeof before === 'string' && typeof after === 'string'
+    && before.length <= 128000 && after.length <= 128000
+    && !before.includes('ci.daily-backup')
+    && after.split(DAILY_SUITE_DECLARATION).length === 2
+    && after.replace(DAILY_SUITE_DECLARATION, '') === before;
+}
 
 export function deliveryVerifyWiringOnly(before, after) {
   // Preserve every other job and all global execution controls byte-for-byte.
@@ -763,6 +777,8 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
       const owner = deliveryOwner(change.path);
       const owners = graphs.map(graph => [...graph.values()].filter(d => owns(d, change.path)).map(d => d.module_id));
       if (!owner || !sameSet(owners[1], [owner]) || owners[0].length && !sameSet(owners[0], [owner])) return null;
+      if (change.path === 'packages/contribution-tools/pinned-suites.mjs'
+        && (change.status !== 'M' || !deliveryDailyRegistryAddition(read(base, change.path), read(candidate, change.path)))) return null;
       if (change.path === '.github/workflows/verify.yml'
         && !deliveryVerifyWiringOnly(read(base, change.path), read(candidate, change.path))) return null;
       paths.push(change.path); scoped = true;
