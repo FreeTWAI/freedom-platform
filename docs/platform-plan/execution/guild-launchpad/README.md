@@ -8,7 +8,15 @@
 
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=758cabe2d7756d19f4b972ed66982b00ba2bae58 release.staging=758cabe2d7756d19f4b972ed66982b00ba2bae58 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=1f7aee36d9ba2424e4eeddf9f0399fec95aeca77 release.staging=1f7aee36d9ba2424e4eeddf9f0399fec95aeca77 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-25 19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`；會員最多只在AbsurdDaily結束時少一次重複繪製（#1058）。#1042仍在store policies absent／OFF與checkout OFF之後，買家目前看不到；其餘為測試、文件或無行為變更的重構。無migration，188列ledger及 `36bec661`／189回退下限、旗標／37 vars／路由／cron不變。四組正式備份讀回／隔離還原／清理通過，dispatcher `64bdeee1`綁定兩環境、原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-1f7aee36-2026-10-25.json)及[現況快照](../unified-foundation/current-state.json)。
+
+S8三次未成功CI嘗試、兩組passed但未採用的staging before備份與S8→S9改選均保留；網路probe loss、READ ONLY rehearsals的實際timer狀態分列觀察。Production公開smoke14項通過；admin僅Access302及精確來源CSP。會員UX、新wrapper自然排程、M1／完整計畫與真人成果仍未驗收。
+
+### 2026-10-25 11:58 歷史發布
+
+以下保留 `758cabe2` 當時觀察；最新部署以上方19:44收據為準。
 
 截至2026-10-25 11:58 UTC，兩環境已部署 `758cabe2`／schema189；#1021讓搜尋找到已顯示的精選Repo名稱，#1026僅測試／CI。無migration，188列ledger及 `36bec661`／189回退下限不變；旗標、contact retention `all`、37 vars與路由／cron不變。四組備份讀回／隔離還原／清理通過，dispatcher `a423a61e`綁定兩環境、原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-758cabe2-2026-10-25.json)及[現況快照](../unified-foundation/current-state.json)。
 
