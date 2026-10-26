@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {QUESTIONS_V2,DIMENSION_MAP_V2,DIMENSION_META_V2,RADAR_AXES_V2,CLASSES_V2,EXTRA_DATA_V2,CAREER_KEYS,CAREER_GUILDS,DIMENSIONS,calculateResult,lifestyleBaseline,validAnswer,completeAnswers,parseProgress,freshProgress,badges} from '../../modules/newbie-village/index.js';
+import {QUESTIONS_V2,DIMENSION_MAP_V2,DIMENSION_META_V2,RADAR_AXES_V2,CLASSES_V2,EXTRA_DATA_V2,CAREER_KEYS,CAREER_GUILDS,DIMENSIONS,directionDraft,DIRECTION_DRAFT_BASE_URL,calculateResult,lifestyleBaseline,validAnswer,completeAnswers,parseProgress,freshProgress,badges} from '../../modules/newbie-village/index.js';
 import {skillBooksForGuild} from '../../modules/community/catalog.js';
 const answers=QUESTIONS_V2.map(()=>[0]);
 // Digest of the six tables after the 18-guild extension (original 15 questions, original
@@ -83,7 +83,12 @@ test('module and page sources contain no network primitives or HTTP URLs',()=>{
   const root=new URL('../../modules/newbie-village/',import.meta.url);
   const files=readdirSync(root).filter(f=>/\.(ts|tsx|js|css)$/.test(f)).map(f=>new URL(f,root));
   files.push(new URL('../../apps/portal-web/src/modules/NewbieVillage.tsx',import.meta.url),new URL('../../apps/portal-web/src/modules/NewbieVillage.css',import.meta.url));
-  for(const file of files)assert.doesNotMatch(readFileSync(file,'utf8'),/fetch|XMLHttpRequest|sendBeacon|https?:\/\//i,String(file));
+  for(const file of files){
+    // Only this fixed URL declaration is allowed; draft links do not perform requests.
+    const source=readFileSync(file,'utf8'),allowed="export const DIRECTION_DRAFT_BASE_URL='https://freetwai.com';";
+    const checked=file.href===new URL('draft.ts',root).href?source.replace(allowed,''):source;
+    assert.doesNotMatch(checked,/fetch|XMLHttpRequest|sendBeacon|https?:\/\//i,String(file));
+  }
 });
 test('float regression: product and engineer both 12.4 resolve to product by original career order',()=>{
   const r=calculateResult([[4],[4],[1],[2],[2],[4],[0],[1],[0],[0],[3],[0],[4],[3,4],[4]]);
@@ -106,4 +111,23 @@ test('career and dimension ties use exact tenths and stable original order (seed
     for(const d of DIMENSIONS){const m=Math.max(...Object.values(dims[d]));if(CAREER_KEYS.filter(k=>dims[d][k]===m).length>1)dimTies++;assert.equal(r.dimensionWinners[d],exactWinner(dims[d]))}
   }
   assert.ok(careerTies>0&&dimTies>0,`expected ties in sweep (career ${careerTies}, dimension ${dimTies})`);
+});
+
+test('direction draft preserves wording and inserts primary and secondary guild links before the disclaimer',()=>{
+  assert.equal(DIRECTION_DRAFT_BASE_URL,'https://freetwai.com');
+  const dimensionWinners={personality:'content',lifestyle:'coach',capability:'product'} as const;
+  const draft=directionDraft({dimensionWinners,primary:'automation',baseline:'每週三小時',action:'完成小工具',checkin:'留下筆記'});
+  assert.equal(draft,[
+    '方向卡（本人選擇的草稿）',`做自己：${CLASSES_V2.content.name}`,`過生活：${CLASSES_V2.coach.name}`,`用強項：${CLASSES_V2.product.name}`,
+    '過生活底線：每週三小時','第一週行動：完成小工具','完成條件與回顧：留下筆記',
+    '主公會：AI 開發公會（https://freetwai.com/#guilds/guild_ai_vibe）',
+    '副公會：AI 導入與驗證公會（https://freetwai.com/#guilds/guild_ai_field）',
+    '公會僅供建議，由本人另行選擇。',
+  ].join('\n'));
+});
+test('direction draft omits secondary guild for the single-guild content career',()=>{
+  assert.equal(CAREER_GUILDS.content.length,1);
+  const draft=directionDraft({...calculateResult([]),baseline:'',action:'',checkin:''});
+  assert.ok(!draft.includes('副公會：'));
+  assert.deepEqual(draft.split('\n').slice(-2),['主公會：成長與行銷公會（https://freetwai.com/#guilds/guild_marketing）','公會僅供建議，由本人另行選擇。']);
 });
