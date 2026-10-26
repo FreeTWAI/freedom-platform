@@ -85,7 +85,10 @@ This is a persistent handler regression, not native dialog/browser evidence.
 `tests/e2e/platform-helper.spec.ts` uses the required `./fixtures.js`, including
 its existing locale, authentication-isolation schema and single-worker setup.
 `platform-helper-fixture.ts` bundles the real component, helper CSS and existing
-`styles.css` / `rpg-theme.css` using the already-installed esbuild package.
+global layout and all existing appearance styles using the already-installed
+esbuild package. The original fixture imported only `styles.css` /
+`rpg-theme.css`; its `data-theme="light"` attribute alone did not activate light
+colors. The contrast regression below corrects that fixture gap.
 The fixture is explicitly synthetic: no App mount, real member data, model/API
 calls, persistence or business mutation. Only its exact test HTML/JS/CSS paths
 are fulfilled through Playwright routing; all other page requests are aborted.
@@ -273,3 +276,39 @@ created. Actual-source synthetic bridge/handler/layout tests are not React
 scheduling, native dialog/AT or real-browser focus acceptance. Browser cases cover
 the two verified character profiles, same dialog/ARIA, original actions, guarded
 navigation and small viewport/theme teardown; until executed they remain NOT_RUN.
+
+## Scoped button contrast regression (2026-10-26)
+
+The helper owns a paired `--bg-elev` background / `--ink` foreground for its
+secondary buttons, including its toolbar launcher, close, submit, intent, fallback
+and destination actions. Hover and keyboard focus retain the pair and highlight
+the border with `--focus`; the existing focus outline and 44px targets remain.
+No global `.btn`, host, navigation, lifecycle, permission or other module is changed.
+
+The inherited global `.btn` pairs a fixed dark `#252d39` with theme-dependent
+`--ink`. Source-token arithmetic gives only 1.10:1 in light and 1.07:1 in versefolk.
+The scoped pair gives 15.22:1 light/AI Sister, 16.61:1 dark, 12.49:1 versefolk and
+15.39:1 dragon. These are declaration/token calculations, not observed browser
+colors or deployment evidence. Other secondary consumers still need their own
+owner/ancestor-cascade audit; this is not a whole-site contrast repair.
+
+Runtime regressions inspect the actual scoped CSS pairing, focus/hover contract,
+real theme tokens and fixture CSS imports. Before the fix two new source-contract
+cases fail (missing scoped pair and missing real light-theme import); afterward
+the helper and host runtime files pass 38 cases, zero skipped. The isolated fixture
+now includes the real appearance/layout sheets, preserving public art URLs only
+as external bundle references; its existing route barrier still aborts unrelated
+requests and it does not load character assets or activate release gates.
+
+Browser specifications add five-profile computed-color checks: the real member
+homepage initializes each profile through the existing local preference, then
+checks launcher and modal actions; isolated cases cover all button types, hover,
+keyboard-focus contrast and a clearly synthetic disabled-style probe. Helper
+buttons have no current business-disabled state. The probe checks retained colors
+and inherited opacity, not a WCAG contrast requirement for disabled controls or a
+real disabled workflow. Existing close/reopen, IME, lifecycle and narrow/enlarged
+text cases are retained. Full fixture bundling and 34-case discovery pass, but
+browser assertions remain **not_run** locally under the existing browser/socket
+restriction. Discovery is not browser execution. Exact-head hosted UI checks,
+Safari/physical-device/assistive-technology checks and deployed acceptance remain
+unverified; no production SHA is inferred from a screenshot.

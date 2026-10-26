@@ -1,4 +1,9 @@
 .platform-helper { display: inline-flex; align-items: center; gap: .5rem; }
+/* Keep foreground and surface paired across all existing appearance profiles.
+   Do not change the shared .btn cascade for unrelated modules. */
+.platform-helper .btn-secondary { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); }
+.platform-helper .btn-secondary:hover:not(:disabled),
+.platform-helper .btn-secondary:focus-visible { color: var(--ink); background: var(--bg-elev); border-color: var(--focus); }
 .platform-helper button { min-height: 44px; min-width: 44px; }
 .platform-helper-dialog { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 0; width: min(36rem, calc(100vw - 1.5rem)); max-width: calc(100vw - 1.5rem); max-height: calc(100dvh - 1.5rem); overflow: hidden; }
 .platform-helper-dialog[open] { display: flex; flex-direction: column; }

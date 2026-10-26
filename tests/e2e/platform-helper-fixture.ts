@@ -1,10 +1,21 @@
 /** Isolated synthetic host only. This is not App integration or member data. */
 import {StrictMode,createElement as h,useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {PlatformHelper} from '../../apps/portal-web/src/modules/platform-helper/PlatformHelper';
 import {HELPER_PAGE_IDS,type HelperKnowledge,type HelperPageId} from '../../apps/portal-web/src/modules/platform-helper/model';
 import '../../apps/portal-web/src/styles.css';
 import '../../apps/portal-web/src/rpg-theme.css';
+import '../../apps/portal-web/src/LayoutDesign.css';
+import '../../apps/portal-web/src/GameConsole.css';
+import '../../apps/portal-web/src/light-theme.css';
+import '../../apps/portal-web/src/versefolk-theme.css';
+import '../../apps/portal-web/src/module-light-theme.css';
+import '../../apps/portal-web/src/GameConsoleThemes.css';
+import '../../apps/portal-web/src/CalmExperience.css';
+import '../../apps/portal-web/src/dragon-theme.css';
+import '../../apps/portal-web/src/WorkspaceCompanionLayout.css';
+import '../../apps/portal-web/src/modules/SocialPostOptimizer.css';
+import '../../apps/portal-web/src/SocialLayout.css';
+import {PlatformHelper} from '../../apps/portal-web/src/modules/platform-helper/PlatformHelper';
 
 const knowledge:HelperKnowledge={
   skills:{id:'skills',title:'技能書架',summary:'合成測試：閱讀公開技能介紹。',steps:['合成測試：預覽技能書。'],note:'合成測試：預覽不代表已解鎖。'},
