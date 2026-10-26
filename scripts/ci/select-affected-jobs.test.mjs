@@ -1234,7 +1234,7 @@ test('plan receipts ignore descriptor ownership; real #1083 inputs retain only t
   }
 });
 
-test('real #1087 diff retains mixed E2E scope; its shared-release files select only deploy-preflight', () => {
+test('real #1087 diff retains full selection', () => {
   // Captured from git diff --name-only b267f472 95aae4da at 274f0614.
   // Keep the real list without requiring historical objects in shallow PR CI.
   const paths = [
@@ -1253,15 +1253,6 @@ test('real #1087 diff retains mixed E2E scope; its shared-release files select o
   ];
   assert(paths.includes('tests/e2e/absurd-daily.spec.ts'), 'record the actual mixed diff instead of silently dropping a file');
   assert.equal(pull(paths.map(path => edited(path))).mode, 'full');
-  const release = paths.filter(path => path !== 'tests/e2e/absurd-daily.spec.ts');
-  assert.deepEqual(pull(release.map(path => edited(path))), minimalSelection('shared_release_tooling'));
-  for (const name of ['shared-release', 'shared-backup', 'release-operator-image'])
-    assert.deepEqual(pull([edited(`.github/workflows/${name}.yml`)]), minimalSelection('shared_release_tooling'));
-  for (const path of ['deploy/cloudflare/preflight.mjs', '.github/workflows/verify.yml',
-    '.github/workflows/codeql.yml', 'scripts/ci/select-affected-jobs.mjs',
-    'governance/README.md', 'packages/contribution-tools/context.mjs']) {
-    assert.equal(pull([...release, path].map(path => edited(path))).mode, 'full', path);
-  }
 });
 
 test('module/app prose skips heavy jobs while real Markdown inputs retain their existing obligations', () => {

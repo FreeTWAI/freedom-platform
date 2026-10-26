@@ -20,8 +20,7 @@ on:
 # only after proving the exact clean integration tree and dependency closure.
 # Plan/receipt docs and unread module/app Markdown skip heavy jobs after exact
 # integration proof; known document inputs retain their consumer job/profile.
-# Shared-release tooling alone selects deploy-preflight. Historical inventory
-# metadata may accompany qualifying edits; CI uses Git objects.
+# Historical inventory metadata may accompany qualifying edits; CI uses Git objects.
 # Push, merge queue, rename, delete, unknown, other governance, security, and
 # shared-runtime changes keep the full set.
 # The selector, the verify aggregate, the runtime partition runner, the runtime aggregate and every node:test, pytest and browser suite runner come from job.workflow_sha, checked out at .freedom/trusted.

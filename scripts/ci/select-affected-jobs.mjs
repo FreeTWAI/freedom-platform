@@ -58,7 +58,6 @@ export const MINIMAL_JOB_PROFILES = Object.freeze({
   plan_receipt_docs: Object.freeze([]),
   plan_document_inputs: Object.freeze(['governance-consumers']),
   module_app_markdown: Object.freeze([]),
-  shared_release_tooling: Object.freeze(['deploy-preflight']),
 });
 const minimalJobs = reason => Object.hasOwn(MINIMAL_JOB_PROFILES, reason) ? MINIMAL_JOB_PROFILES[reason] : null;
 const PLAN_INPUTS = new Set([
@@ -70,8 +69,6 @@ const MODULE_MARKDOWN_INPUTS = new Set([
   'modules/agent-commerce/operations/notifications/README.md',
   'modules/module-registry/platform-hold.md',
 ]);
-const SHARED_RELEASE_WORKFLOWS = new Set(['shared-release', 'shared-backup', 'release-operator-image']
-  .map(name => `.github/workflows/${name}.yml`));
 function planDocument(path) {
   return path.startsWith('docs/platform-plan/') && /\.(?:md|json|yaml|yml|csv|txt)$/.test(path)
     && !(path.startsWith('docs/platform-plan/contracts/') && !path.endsWith('.md'))
@@ -96,8 +93,6 @@ export function decideMinimalProfile(input) {
   catch { return fallback; }
   let reason;
   if (paths.every(planDocument)) reason = paths.some(planInput) ? 'plan_document_inputs' : 'plan_receipt_docs';
-  else if (paths.every(path => path.startsWith('deploy/shared-release/')
-    || path === 'deploy/cloudflare/test/shared-release.test.mjs' || SHARED_RELEASE_WORKFLOWS.has(path))) reason = 'shared_release_tooling';
   else if (paths.every(path => /^(?:modules|apps)\/.+\.md$/.test(path) && !hiddenSegment(path)
     && !path.endsWith('/AGENTS.md') && !RUNTIME_TEXT.has(path) && !MODULE_MARKDOWN_INPUTS.has(path)
     && !guildPresentationPath(path))) reason = 'module_app_markdown';

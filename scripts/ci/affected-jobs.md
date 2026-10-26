@@ -26,7 +26,6 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: guild presentation | Guild presentation and static/worker |
 | `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
 | `affected`: plan_document_inputs | Governance consumers |
-| `affected`: shared_release_tooling | Deploy preflight |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does
@@ -54,14 +53,13 @@ Owner 原則：「當有其他的機制已經覆蓋到了, 就應該相信其他
 
 - `plan_receipt_docs`：全部變更為 `docs/platform-plan/**` 的 `.md/.json/.yaml/.yml/.csv/.txt`，即使 descriptor 擁有也不加 heavy job。排除 contracts 非 Markdown、contracts/tests、execution/tools、AGENTS；已知 Python 文件輸入改走下列 lane。
 - `plan_document_inputs`：上述文件包含 `execution/{first-work-batch.md,acceptance-matrix.md,milestones.md,spec-index.md}`、`execution/specs/**`、`execution/guild-launchpad/**` 或 `execution/unified-foundation/current-state.json` 時，只選 `governance-consumers`。證據：contracts 的 `test_{five_clock_invariants,work_reviewer_capacity,reviewer_appointment_entitlement,low_ops_contracts}.py`；execution/tools 的 `check_specs.py`、`check_package_dag.py` 與 `tests/test_guild_launchpad_status.py:21–24`。`ci.contracts-pytest` 在該 job 執行，guild-launchpad validator 也讀該 pack 的 Markdown／traceability／acceptance-progress。
-- `shared_release_tooling`：全部變更僅為 `deploy/shared-release/**`、`deploy/cloudflare/test/shared-release.test.mjs` 與 `.github/workflows/{shared-release,shared-backup,release-operator-image}.yml`，只選 `deploy-preflight`。該 job 的 `ci.deploy-preflight` 依目錄探索 `shared-release.test.mjs`，並執行 shared-release PostgreSQL integration。此 lane 不選 runtime-full／ui-e2e。
 - `module_app_markdown`：全部變更僅為 `modules/**/*.md` 或 `apps/**/*.md`，不選 heavy job。排除 AGENTS、隱藏路徑、runtime text、guild presentation 路徑，以及 runtime 測試確實讀取的 `modules/agent-commerce/operations/notifications/README.md`（`commerce-email-templates.test.ts:286`）與 `modules/module-registry/platform-hold.md`（`module-instance-lifecycle.test.ts:845`）；它們保留既有選擇。公會展示 Markdown 保留原 profile。
 
 消費者追查使用 `git grep` 搜尋所有 tracked JS／TS／Python／shell／workflow 的 `.md`、`docs/platform-plan`、`readFile/read_text/open/glob`。`scripts/generate-guild-blocks.mjs` 實際讀 descriptor JSON 的 surfaces 與 entry existence，沒有讀取一般模組 Markdown；`guild-presentation-profile.mjs` 讀 module tree（含 Markdown）並保留原 profile。rollout receipts、closeout、requirement-evidence、work-plan 與 tester-map COORDINATION 未找到 domain code／test 的內容讀取；文件連結、descriptor instructions 和歷史 hash 索引不等於 domain 輸入。此清單以目前 source 為界，新消費者需同步 selector。
 
-實際檔案列表與原派工的兩處差異保留：#1083 的 README／current-state 確為 Python 測試輸入，因此整組只選 governance-consumers；`git diff --name-only b267f472 95aae4da` 的 #1087 列表含 `tests/e2e/absurd-daily.spec.ts`，混合列表保留 full，去掉該 E2E 的 shared-release 集合才只選 deploy-preflight。
+實際檔案列表與原派工的兩處差異保留：#1083 的 README／current-state 確為 Python 測試輸入，因此整組只選 governance-consumers；`git diff --name-only b267f472 95aae4da` 的 #1087 列表含 `tests/e2e/absurd-daily.spec.ts`，整組保留 full。Shared-release 工具與 workflows 維持 full，對應的 `delivery_tooling` lane 由 #1094 負責。
 
-新 lanes 使用明確 reason 和全部七個 boolean outputs；aggregate 逐一核對確切 job 集合。只有完整 PR diff、有效 baseline/candidate graph、乾淨且 ordered-parent 的 integration tree 和非 executable regular blobs 才能窄化。code、被讀取的 data、其他 deploy、verify/codeql、governance、selector/tooling 控制檔與 status/mode 不明的變更維持 full。Push／merge_group 維持 full；既有前端 leaf 行為不變。
+新 lanes 使用明確 reason 和全部七個 boolean outputs；aggregate 逐一核對確切 job 集合。只有完整 PR diff、有效 baseline/candidate graph、乾淨且 ordered-parent 的 integration tree 和非 executable regular blobs 才能窄化。code、被讀取的 data、deploy、verify/codeql、governance、selector/tooling 控制檔與 status/mode 不明的變更維持 full。Push／merge_group 維持 full；既有前端 leaf 行為不變。
 
 ## Root README documentation policy proposal
 
