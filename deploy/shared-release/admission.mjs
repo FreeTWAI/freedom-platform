@@ -23,7 +23,7 @@ export function requestFromEnvironment(env) {
     && isSha(env.CONTROLLER_SHA), 'release_workflow_identity_invalid');
   requireRelease(isSha(env.RELEASE_SHA), 'release_exact_sha_required');
   requireRelease(['staging-next', 'next'].includes(env.RELEASE_TARGET), 'release_target_invalid');
-  requireRelease(['plan', 'deploy'].includes(env.RELEASE_MODE), 'release_mode_invalid');
+  requireRelease(['plan', 'check', 'deploy'].includes(env.RELEASE_MODE), 'release_mode_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
       && positiveId(Number(env[key])), 'release_run_identity_invalid');

@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      packages: read
     env:
       RELEASE_TARGET: ${{ matrix.target }}
       BACKUP_CRON: ${{ github.event.schedule }}

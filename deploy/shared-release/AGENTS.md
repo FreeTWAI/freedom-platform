@@ -10,6 +10,10 @@ GitHub Environment. No image, command, credential or deployment configuration is
 accepted as a workflow input. Missing operator installation refuses execution;
 a working plan must never be described as a working deployment.
 
+Private GHCR packages use the job's short-lived GITHUB_TOKEN with packages:read.
+Registry authentication stays on the hosted runner and is deleted before the
+operator starts; never pass it to the container or require a personal PAT.
+
 Only teddashh, arumwu, Hao0321 and detna-vibe-coding may request/re-run a release,
 with their current repository write authority checked again. Requests select an
 exact merged-main commit and staging-next or next. Exact-source successful main
