@@ -26068,6 +26068,16 @@
       "sha256": "e88fbd1c00608726d809e4fecef989f3366d657cade9c2bf86c49f7656e5a47a"
     },
     {
+      "path": "tests/runtime/guild-category-retry.test.ts",
+      "bytes": 19096,
+      "sha256": "110a0c0ad3f1b1a5c046144b07ad3986f5971d50cb2ee4749511720233a89780"
+    },
+    {
+      "path": "tests/runtime/guild-directory-focus.test.ts",
+      "bytes": 2891,
+      "sha256": "59ac425de8e3d01b56f8b0590ba932f5c1ca9e428cbbd645c624a1aa8ae5d263"
+    },
+    {
       "path": "tests/runtime/guild-entry-questions.test.ts",
       "bytes": 19546,
       "sha256": "c05386fbe51b871bbf97911f3819f2b5032ee25c131670274276da7f590efbdf"
@@ -26103,6 +26113,11 @@
       "sha256": "3b67cf9d612bb237fb894b2cf769baf2bc906b40b04560cddbac7fc302dbe23f"
     },
     {
+      "path": "tests/runtime/guild-member-tier-fixture.test.ts",
+      "bytes": 14507,
+      "sha256": "9c6295b7844f5835d63f3099c9d087f5e5eec36dc69488ecffb18b6a58d38c03"
+    },
+    {
       "path": "tests/runtime/guild-member-tiers.test.ts",
       "bytes": 22529,
       "sha256": "81e063e0bef5b40b588d529017d85a123e3b1822fcde6ea8eb86924548a8203a"
@@ -26116,6 +26131,11 @@
       "path": "tests/runtime/guild-profile.test.ts",
       "bytes": 23241,
       "sha256": "b68715d9e3e64e6df9ad2f92146ccbb1436db987e0ba4dd2bc6b06d371f7d205"
+    },
+    {
+      "path": "tests/runtime/guild-workspace-writer.test.ts",
+      "bytes": 22918,
+      "sha256": "b2f22fda983e6ff7babdd820e15ceaa90a3d6e24cf0ba72dad2cd2a85197a483"
     },
     {
       "path": "tests/runtime/guild-workspace.test.ts",
@@ -28176,26 +28196,6 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
-    },
-    {
-      "path": "tests/runtime/guild-member-tier-fixture.test.ts",
-      "bytes": 14507,
-      "sha256": "9c6295b7844f5835d63f3099c9d087f5e5eec36dc69488ecffb18b6a58d38c03"
-    },
-    {
-      "path": "tests/runtime/guild-category-retry.test.ts",
-      "bytes": 19096,
-      "sha256": "110a0c0ad3f1b1a5c046144b07ad3986f5971d50cb2ee4749511720233a89780"
-    },
-    {
-      "path": "tests/runtime/guild-directory-focus.test.ts",
-      "bytes": 2891,
-      "sha256": "59ac425de8e3d01b56f8b0590ba932f5c1ca9e428cbbd645c624a1aa8ae5d263"
-    },
-    {
-      "path": "tests/runtime/guild-workspace-writer.test.ts",
-      "bytes": 22918,
-      "sha256": "b2f22fda983e6ff7babdd820e15ceaa90a3d6e24cf0ba72dad2cd2a85197a483"
     }
   ]
 }
