@@ -12,6 +12,13 @@ test('human help covers every page and avoids source paths',()=>{
   }
 });
 
+test('social help follows the unified composer without requiring a link preview',()=>{
+  const steps=pageHelp.social.steps.join(' ');
+  assert.match(steps,/建立貼文.*貼上網址.*發布貼文/);
+  assert.match(steps,/不必開啟連結預覽/);
+  assert.doesNotMatch(steps,/分享外部連結/);
+});
+
 test('page label parser accepts only one known marker on an issue',()=>{
   assert.equal(pageLabelForIssue({body:'Hello <!-- freedom-page:account -->'}),'page:account');
   assert.equal(pageLabelForIssue({body:'<!-- freedom-page:unknown -->'}),null);
