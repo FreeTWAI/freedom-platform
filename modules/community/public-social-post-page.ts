@@ -1,10 +1,51 @@
 import {PUBLIC_REVALIDATION_MARKUP} from '../../packages/shared/public-revalidation.js';
+import {communityCatalog} from './catalog.js';
+import {getSkillCollaboration} from './skill-collaboration.js';
 import type {PublicSocialPostPage} from './public-social-posts.js';
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const login = (id: string) => `/?post_return=${id}#account`;
 const join = (id: string) => `/?post_return=${id}&join=1#account`;
+
+/** Pure projection of already-public text, not a URL preview or author claim.
+ * publicOrigin is the configured runtime origin, never the request Host header.
+ * Match whole tokens before URL normalization so encoded paths, credentials,
+ * protocol-relative URLs and nested/foreign URLs cannot become catalog links.
+ * Only a share introduction query is accepted; it is never forwarded. */
+export function publicPostCatalogResources(note: string, publicOrigin: string) {
+  let origin = '';
+  try {
+    const configured = new URL(publicOrigin);
+    if (['http:', 'https:'].includes(configured.protocol) && !configured.username && !configured.password
+      && configured.pathname === '/' && !configured.search && !configured.hash) origin = configured.origin;
+  } catch { /* Root-relative catalog references do not require an origin. */ }
+  const resources: {id: string; title: string; path: string}[] = [];
+  const seen = new Set<string>();
+  // Keep an entire URL token together, including its query punctuation. In
+  // particular, an external ?next=(/development/skills/...) is not a mention.
+  for (const [token] of note.matchAll(/\[[^\]\r\n]*\]\([^()\s]+\)|\S+/gu)) {
+    const mention = token.replace(/^[\p{Script=Han}]+：/u, '').replace(/[.,;!。，；！]+$/, '');
+    const markdown = /^\[[^\]\r\n]*\]\(([^()\s]+)\)$/.exec(mention);
+    const value = (markdown?.[1] ?? mention).replace(/^[<("'「『（【]+/u, '').replace(/[>)"'」』）】]+$/u, '');
+    const path = origin && value.startsWith(origin + '/') ? value.slice(origin.length) : value;
+    const match = /^\/development\/skills\/([a-z0-9][a-z0-9-]{0,99})(?:\?intro=[1-9][0-9]{0,2})?$/.exec(path);
+    if (!match || seen.has(match[1])) continue;
+    const book = communityCatalog.skill_books.find(item => item.id === match[1]);
+    if (!book || !getSkillCollaboration(book.id)) continue;
+    seen.add(book.id);
+    resources.push({id: book.id, title: book.title, path: `/development/skills/${book.id}`});
+    if (resources.length === 3) break;
+  }
+  return resources;
+}
+
+function catalogResourcesHtml(note: string, publicOrigin: string) {
+  const resources = publicPostCatalogResources(note, publicOrigin);
+  if (!resources.length) return '';
+  const links = resources.map(item => `<li><a class="catalog-resource-link" href="${escapeHtml(item.path)}"><span>${escapeHtml(item.title)}</span><span class="muted">免登入閱讀技能資源 <span aria-hidden="true">→</span></span></a></li>`).join('');
+  return `<section class="catalog-resources" aria-labelledby="catalog-resources-title"><h2 id="catalog-resources-title">貼文提到的技能資源</h2><p class="muted">來自工坊技能目錄；原作與授權見資源頁。</p><ul>${links}</ul></section>`;
+}
 
 function documentHtml(title: string, metadata: string, body: string) {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="light dark"><title>${escapeHtml(title)}</title>${metadata}<link rel="stylesheet" href="/social-post.css"><script src="/social-post.js" defer></script>${PUBLIC_REVALIDATION_MARKUP}</head><body><a class="skip-link" href="#post-content">跳到貼文</a><header class="site-header"><a class="brand" href="/" aria-label="自由工坊首頁"><img src="/brand/freedom-workshop.webp" width="1280" height="720" alt="自由工坊"></a><span class="site-label">工坊分享</span></header><main id="post-content" tabindex="-1">${body}</main><footer class="site-footer"><a href="/">回到自由工坊</a></footer></body></html>`;
@@ -29,8 +70,8 @@ export function publicSocialPostHtml(page: PublicSocialPostPage, publicOrigin: s
     ? `<h1 class="visually-hidden">${escapeHtml(post.author.display_name)}的貼文</h1><div class="post-text">${escapeHtml(post.note ?? post.title)}</div>`
     : `<h1>${escapeHtml(post.title)}</h1>${post.note ? `<div class="post-text">${escapeHtml(post.note)}</div>` : ''}${post.url ? `<a class="source-link" href="${escapeHtml(post.url)}" target="_blank" rel="noopener noreferrer">查看原文 <span aria-hidden="true">↗</span><span class="visually-hidden">（在新分頁開啟）</span></a>` : ''}`;
   const related = page.related.slice(0, 3).map(item => `<article class="preview-card"><p class="author">${escapeHtml(item.author.display_name)}</p><h3>${escapeHtml(item.title)}</h3><p class="preview-text">${escapeHtml(item.summary)}</p><a class="button secondary" data-related-post="${escapeHtml(item.post_id)}" href="${login(item.post_id)}">登入繼續閱讀</a></article>`).join('');
-  const body = `<article class="card shared-post" data-public-post="${escapeHtml(post.post_id)}" data-public-version="${escapeHtml(page.version)}"><header class="post-author"><span class="author-mark" aria-hidden="true">${escapeHtml(Array.from(post.author.display_name)[0] ?? '工')}</span><div><p class="author">${escapeHtml(post.author.display_name)}</p><p class="post-date"><time datetime="${escapeHtml(post.created_at)}">${escapeHtml(date)}</time>${post.edited_at ? ' · 已編輯' : ''}</p></div><span class="public-label">公開分享</span></header>${text}${post.image_url ? `<img class="post-image" src="${escapeHtml(post.image_url)}" alt="貼文附圖" width="640" height="360">` : ''}</article>
-<section class="card reading-invite" aria-labelledby="reading-invite-title"><div><h2 id="reading-invite-title" data-invite-title>繼續看看工坊裡的分享</h2><p data-invite-description>你已讀完這篇公開貼文。登入後可以看更多分享、按讚與加入討論。</p></div><div class="actions"><a class="button primary" data-post-login="${escapeHtml(post.post_id)}" href="${login(post.post_id)}">登入看更多與留言</a>${registrationEnabled ? `<a class="button secondary" data-post-join href="${escapeHtml(join(post.post_id))}">建立帳號</a>` : ''}</div></section>
+  const body = `<article class="card shared-post" data-public-post="${escapeHtml(post.post_id)}" data-public-version="${escapeHtml(page.version)}"><header class="post-author"><span class="author-mark" aria-hidden="true">${escapeHtml(Array.from(post.author.display_name)[0] ?? '工')}</span><div><p class="author">${escapeHtml(post.author.display_name)}</p><p class="post-date"><time datetime="${escapeHtml(post.created_at)}">${escapeHtml(date)}</time>${post.edited_at ? ' · 已編輯' : ''}</p></div><span class="public-label">公開分享</span></header>${text}${post.image_url ? `<img class="post-image" src="${escapeHtml(post.image_url)}" alt="貼文附圖" width="640" height="360">` : ''}${catalogResourcesHtml(post.note ?? '', publicOrigin)}</article>
+<section class="card reading-invite" aria-labelledby="reading-invite-title"><div><h2 id="reading-invite-title" data-invite-title>把心得或問題留給分享者</h2><p data-invite-description>有實作心得或問題？登入後回到這則貼文交流；留言依原有會員資格開放。</p></div><div class="actions"><a class="button primary" data-post-login="${escapeHtml(post.post_id)}" href="${login(post.post_id)}">登入回原貼文交流</a>${registrationEnabled ? `<a class="button secondary" data-post-join href="${escapeHtml(join(post.post_id))}">建立帳號</a>` : ''}</div></section>
 ${related ? `<section class="related" aria-label="更多工坊分享"><h2>更多工坊分享</h2><p class="muted" data-preview-description>先看看幾則分享，登入後就能繼續閱讀。</p><div class="preview-list">${related}</div></section>` : ''}<p class="reading-status muted" role="status" data-reading-status></p>`;
   return documentHtml(`${post.title}｜自由工坊`, metadata, body);
 }

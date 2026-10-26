@@ -1009,13 +1009,13 @@
     },
     {
       "path": "apps/portal-web/public/social-post.css",
-      "bytes": 4191,
-      "sha256": "0b605fb6c36390c2b6ec3ba37ea2d6b3dd5d5c21944e225b9c527592a0848403"
+      "bytes": 4686,
+      "sha256": "0871852a8124987d593122d34a7a89750542da67dac370faf4cf4d167d29603f"
     },
     {
       "path": "apps/portal-web/public/social-post.js",
-      "bytes": 5139,
-      "sha256": "4dd663602ca87e0e3c6229b9b429b3862019cf58acce9534094e0d49e7be8ccb"
+      "bytes": 5196,
+      "sha256": "e5994fbb1b584dad44b3c4f7c2dc44a997b6a70795cf4421006824c68d6c9839"
     },
     {
       "path": "apps/portal-web/public/art/versefolk-cooperation.webp",
@@ -3454,13 +3454,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/PersonalSpace.css",
-      "bytes": 1914,
-      "sha256": "9de04531e106d3fc1df3ff4abd03152a73940e366c7cd7c6d5a9e432e09f4cf0"
+      "bytes": 2937,
+      "sha256": "e2a244121a28f100eccd9ee2669fbffaf0aa94ce901072195213858c28f90be5"
     },
     {
       "path": "apps/portal-web/src/modules/PersonalSpace.tsx",
-      "bytes": 11236,
-      "sha256": "6603114890cc7202d3a1e73395a36f95b2cbbe72e3f824a0f56a002630e6d8f0"
+      "bytes": 12930,
+      "sha256": "f1dd554dc9ac6f340e35cd542f54bc7502a588d2d34cf6847c744af3ca4a9c4c"
     },
     {
       "path": "apps/portal-web/src/modules/PlatformLogo.tsx",
@@ -3899,8 +3899,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/personal-space-model.ts",
-      "bytes": 2536,
-      "sha256": "ab0243591ec8928a11ab2a78311c87071fd3b2d614f7ed256ce1a83cfe9c962c"
+      "bytes": 4798,
+      "sha256": "183dcb0a80267eeb2de7e7c3596bfecb695233eb65f56fe42b5f016ba56f5e18"
     },
     {
       "path": "apps/portal-web/src/modules/production-result-reader.ts",
@@ -20954,8 +20954,8 @@
     },
     {
       "path": "modules/community/public-social-post-page.ts",
-      "bytes": 5787,
-      "sha256": "112816222da03cdfd0e1c01889e3af77c6332342a2fa664a029d983fa540e976"
+      "bytes": 8700,
+      "sha256": "55d88d2cbaa731e6b89ab6022ae4ed5e0003ca3369613ab643b85b9e9cca05c6"
     },
     {
       "path": "modules/community/public-social-posts.ts",
@@ -24774,8 +24774,8 @@
     },
     {
       "path": "tests/e2e/personal-space.spec.ts",
-      "bytes": 18837,
-      "sha256": "7ed54f318e8b5290d332d7031aa91568e7d8ce3c24b035a60917900aa8423c4e"
+      "bytes": 28828,
+      "sha256": "f27a331379e5e823376417fbfc8adb00351024995a90780b456d906e2225e291"
     },
     {
       "path": "tests/e2e/platform-purpose.spec.ts",
@@ -24794,8 +24794,8 @@
     },
     {
       "path": "tests/e2e/public-social-posts.spec.ts",
-      "bytes": 34147,
-      "sha256": "79547879d59971d25a44f166675ee2e352c11aeffd381677f38777ead9141d4c"
+      "bytes": 38269,
+      "sha256": "b50d09e8719736bf17aec336d8840d4b64c3ddf3aae26e4f76db789d5ed90ea1"
     },
     {
       "path": "tests/e2e/quick-join.ts",
@@ -27079,8 +27079,8 @@
     },
     {
       "path": "tests/runtime/personal-space.test.ts",
-      "bytes": 5183,
-      "sha256": "8048414d84e9550e34882696384694e585e2862c9d1560e19a0ee202b65da5ef"
+      "bytes": 11750,
+      "sha256": "df11b5aee4218a0723e10c309d021555a87565b911a9ec66bcb64b9130857850"
     },
     {
       "path": "tests/runtime/platform-admin.test.ts",
@@ -27214,13 +27214,13 @@
     },
     {
       "path": "tests/runtime/public-social-post-page.test.ts",
-      "bytes": 8617,
-      "sha256": "c830ddf8530786507c130dad45c96ecf19d7f21620501439e63820363486272b"
+      "bytes": 13008,
+      "sha256": "13805138578a32821ea53aa842ca222b751f9cc2912e1c5ce44d9b5dbadd86dc"
     },
     {
       "path": "tests/runtime/public-social-post-script.test.ts",
-      "bytes": 3085,
-      "sha256": "77f752b608789bf7ab8925362f001f0e58891ad89688ef6965904c49fdebb2eb"
+      "bytes": 5752,
+      "sha256": "78545d9022b9662d494186901d92072fff29cc0f4dddd8ca81ab38e15bf46479"
     },
     {
       "path": "tests/runtime/public-social-posts-runtime-role.test.ts",
@@ -27229,8 +27229,8 @@
     },
     {
       "path": "tests/runtime/public-social-posts.test.ts",
-      "bytes": 29164,
-      "sha256": "9e87d773f563e91a98bc111431a895edcdb8bd53dbe9e1ece3b78c554a269532"
+      "bytes": 29247,
+      "sha256": "84b5d180f066dd73124e3e4efa32e180afdd7b37001b107582e9c4591eb95aed"
     },
     {
       "path": "tests/runtime/published-skills.test.ts",
