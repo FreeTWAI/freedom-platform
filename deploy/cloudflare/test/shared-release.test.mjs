@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -19,11 +20,12 @@ import { buildApplication, directoryDigest } from '../../shared-release/portable
 import { git as fixtureGit } from './migration-fixtures.mjs';
 import { createControlStore } from '../../shared-release/portable/control-store.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared-release/portable/coordinate-fence.mjs';
-import { replayReleaseFloor } from '../../shared-release/portable/floor.mjs';
-import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
+import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/portable/floor.mjs';
+import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
+import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -255,6 +257,7 @@ test('plan-only/skipped execution, stale/wrong-run/expired or duplicate artifact
 test('artifact receipt must bind the deployment, source, operator, config, actors and seven ordered completed phases', async () => {
   for (const patch of [{ status: 'plan_passed' }, { providerOutcome: 'unknown_until_confirmed' }, { operatorEvidence: undefined },
     { sourceSha: main }, { sourceTree: sha }, { controllerSha: sha }, { target: 'next' }, { mode: 'plan' },
+    { mode: 'check' }, { status: 'checks_passed' },
     { runId: 44 }, { runAttempt: 1 }, { deploymentId: 2 }, { operatorImage: 'other' }, { configSha256: '0'.repeat(64) },
     { original: { login: 'Hao0321', id: OPERATORS.Hao0321 } }, { phases: [] }, { completedAt: new Date(0).toISOString() }]) {
     const fixture = stagingFixture(); Object.assign(fixture.state.receipt, patch);
@@ -347,9 +350,16 @@ async function operatorFixture(t, outcome = 'passed') {
   await mkdir(source); await mkdir(temporaryRoot);
   const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', runtimeDatabaseUrl: 'fixture-runtime', backupDatabaseUrl: 'fixture-backup',
     stagingAccessClientId: 'fixture-access-id', stagingAccessClientSecret: 'fixture-access-secret' };
-  const run = async (cmd, args) => {
+  const registry = { username: 'teddashh', token: 'fixture-registry-secret' };
+  const run = async (cmd, args, timeout, options) => {
+    if (args[0] === '--config') {
+      assert.equal((await stat(args[1])).mode & 0o777, 0o700);
+      if (args[2] === 'login') assert.equal(options.input, registry.token);
+      else assert.equal(options, undefined);
+    }
     calls.push([cmd, ...args]);
     if (args[0] === 'run') {
+      await assert.rejects(stat(join(temporaryRoot, 'registry')), { code: 'ENOENT' });
       const input = await readFile(join(temporaryRoot, 'input/request.json'), 'utf8');
       assert.equal((await stat(join(temporaryRoot, 'input/credentials.json'))).mode & 0o777, 0o600);
       assert.deepEqual(JSON.parse(await readFile(join(temporaryRoot, 'input/credentials.json'), 'utf8')), credentials);
@@ -358,17 +368,18 @@ async function operatorFixture(t, outcome = 'passed') {
       else await writeFile(join(temporaryRoot, 'output/result.json'), JSON.stringify(resultFixture(request(), hash(input))));
     }
     if (args[0] === 'rm' && outcome.endsWith('cleanup-failed')) throw Error('cleanup failure');
-    if (args[0] === 'pull' && outcome === 'pull-failed') throw Error('pull failure');
+    if (args[2] === 'pull' && outcome === 'pull-failed') throw Error('pull failure');
   };
   return { calls, root, temporaryRoot, options: { admission: request(), installation, sourceRoot: source,
-    temporaryRoot, config, credentials, run } };
+    temporaryRoot, config, credentials, registry, run } };
 }
 
 test('one operator process owns the whole release; no credentials enter argv, host mounts or artifacts', async t => {
   const fixture = await operatorFixture(t);
   assert.equal((await runOperator(fixture.options)).length, 7);
-  assert.deepEqual(fixture.calls.map(call => call[1]), ['pull', 'run', 'rm']);
+  assert.deepEqual(fixture.calls.map(call => call[1] === '--config' ? call[3] : call[1]), ['login', 'pull', 'run', 'rm']);
   assert.ok(!JSON.stringify(fixture.calls).includes('fixture-token'));
+  assert.ok(!JSON.stringify(fixture.calls).includes('fixture-registry-secret'));
   assert.ok(!JSON.stringify(fixture.calls).includes('docker.sock'));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'output')));
@@ -382,10 +393,41 @@ test('one operator process owns the whole release; no credentials enter argv, ho
 test('an interrupted release is not retried and private input/output are removed', async t => {
   const fixture = await operatorFixture(t, 'interrupted');
   await assert.rejects(runOperator(fixture.options));
-  assert.deepEqual(fixture.calls.map(call => call[1]), ['pull', 'run', 'rm']);
+  assert.deepEqual(fixture.calls.map(call => call[1] === '--config' ? call[3] : call[1]), ['login', 'pull', 'run', 'rm']);
   await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'output')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'work')));
+});
+
+test('private registry login and pull failures remove credentials and cannot start an operator', async t => {
+  for (const failing of ['login', 'pull']) {
+    const fixture = await operatorFixture(t), calls = [];
+    await assert.rejects(pullOperatorImage({ image: installation.image, temporaryRoot: fixture.temporaryRoot,
+      registry: fixture.options.registry, run: async (command, args, timeout, options) => {
+        calls.push(args[2]);
+        assert.equal(command, 'docker');
+        if (args[2] === 'login') {
+          assert.equal(options.input, fixture.options.registry.token);
+          await writeFile(join(args[1], 'config.json'), 'synthetic private registry credentials');
+        } else assert.equal(args.at(-1), installation.image);
+        if (args[2] === failing) throw Error('private provider error with token');
+      } }), { code: 'release_registry_pull_failed', message: 'release_registry_pull_failed' });
+    assert.deepEqual(calls, failing === 'login' ? ['login'] : ['login', 'pull']);
+    await assert.rejects(stat(join(fixture.temporaryRoot, 'registry')), { code: 'ENOENT' });
+  }
+});
+
+test('registry input is validated before login; quiet subprocess sends token only through stdin', async t => {
+  const fixture = await operatorFixture(t); let calls = 0;
+  for (const patch of [{ image: 'ghcr.io/other/image:latest' }, { registry: undefined },
+    { registry: { username: 'teddashh', token: 'bad\nheader' } }, { registry: { username: '--invalid', token: '' } }]) {
+    await assert.rejects(pullOperatorImage({ image: installation.image, temporaryRoot: fixture.temporaryRoot,
+      registry: fixture.options.registry, run: async () => { calls++; }, ...patch }));
+  }
+  assert.equal(calls, 0);
+  const program = "let value='';process.stdin.on('data',b=>value+=b);process.stdin.on('end',()=>{"
+    + "if(value!=='synthetic-stdin-token'||Object.keys(process.env).some(k=>/TOKEN|DOCKER_CONFIG/.test(k)))process.exit(1);});";
+  await quietCommand(process.execPath, ['-e', program], 5000, { input: 'synthetic-stdin-token' });
 });
 
 test('remote PostgreSQL credentials bind the expected role/database and require full TLS verification', () => {
@@ -451,7 +493,7 @@ test('receipt symlinks and failed container cleanup cannot yield successful rele
     await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
     if (outcome.endsWith('cleanup-failed')) assert.equal((await stat(join(fixture.temporaryRoot, 'work'))).mode & 0o777, 0o700);
     else await assert.rejects(stat(join(fixture.temporaryRoot, 'work')));
-    if (outcome === 'pull-failed') assert.deepEqual(fixture.calls.map(call => call[1]), ['pull']);
+    if (outcome === 'pull-failed') assert.deepEqual(fixture.calls.map(call => call[3]), ['login', 'pull']);
   }
 });
 
@@ -848,7 +890,7 @@ async function deployFixture(t) {
     token: 'synthetic-deploy-token', signal: controller.signal, fetchImpl });
   const before = await deployer.inspect();
   const source = parseJsonc(await readFile(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'));
-  return { deployer, before, sourceSha, oldVersion, newVersion, controller,
+  return { deployer, before, sourceSha, oldVersion, newVersion, controller, fetchImpl,
     args: { sourceSha, before, source, sourceRoot: '/fixture/source', workRoot,
       async retainIntent(value) { assert.equal(value.sourceSha, sourceSha); assert.equal(value.automaticRetry, false); },
       lease: { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } } },
@@ -1051,6 +1093,79 @@ test('retained coordinate fence accepts only original live constraints and exact
   assert.throws(() => validateCoordinateAuthority(input), /release_coordinate_variant_binding_invalid/);
 });
 
+async function adoptionFixture(t) {
+  const sourceRoot = await mkdtemp(join(tmpdir(), 'fp-floor-adoption-'));
+  t.after(() => rm(sourceRoot, { recursive: true, force: true }));
+  fixtureGit(sourceRoot, ['init', '-q', '-b', 'main']); await mkdir(join(sourceRoot, 'migrations'));
+  const sql = 'CREATE TABLE fixture(id integer);\n';
+  await writeFile(join(sourceRoot, 'migrations/189_fixture.sql'), sql);
+  const commit = () => {
+    fixtureGit(sourceRoot, ['add', '.']); fixtureGit(sourceRoot, ['commit', '-qm', 'Synthetic floor fixture']);
+    return { sourceSha: fixtureGit(sourceRoot, ['rev-parse', 'HEAD']), sourceTree: fixtureGit(sourceRoot, ['rev-parse', 'HEAD^{tree}']) };
+  };
+  const previous = commit(), schemaLedger = [{ name: '189_fixture.sql', sha256: migrationDigest(sql) }];
+  const policies = [{ bucket: 'synthetic-media', revision: 'retained' }];
+  const legacy = { format: 'freedom.schema189-committed-floor/v1', restoreQuarantineRequired: true,
+    floor: { environment: 'staging', minimumSchema: 189, candidateRelease: previous.sourceSha },
+    migration: { release: previous.sourceSha, tree: previous.sourceTree, commitStatus: 'confirmed' }, schemaLedger,
+    retained172: { floor: { floor: { environment: 'staging', minimumSchema: 172 } },
+      materialPolicy: { format: 'freedom.backup-material-policy-observation/v1', policies } } };
+  await writeFile(join(sourceRoot, 'app.txt'), 'code-only update'); const current = commit();
+  const seed = { format: 'freedom.shared-floor-seed/v2', authority: { legacyFloorSha256: hash(JSON.stringify(legacy)) },
+    state: { ...current, deployedSourceSha: current.sourceSha, bindingsSha256: 'd'.repeat(64),
+      materialPolicySha256: hash(JSON.stringify(policies)), schemaLedger, schemaVersion: 189, pending: null } };
+  const open = (candidate = seed, authority = legacy) => openReleaseFloor({ sourceRoot, intentDirectory: sourceRoot,
+    store: { target: 'staging-next', load: async () => [{ sha256: hash(JSON.stringify(candidate)), record: { data: candidate } }],
+      readAuthority: async () => structuredClone(authority), append: async () => { throw Error('No writes during adoption'); } } });
+  return { sourceRoot, previous, current, legacy, seed, commit, open };
+}
+
+test('seed v2 adopts a code-only Git descendant while keeping original migration authority', async t => {
+  const f = await adoptionFixture(t), before = JSON.stringify(f.legacy);
+  assert.equal((await f.open()).state().sourceSha, f.current.sourceSha);
+  assert.equal(JSON.stringify(f.legacy), before);
+  // Immutable Git blobs are authoritative, not mutable working-tree SQL.
+  await writeFile(join(f.sourceRoot, 'migrations/189_fixture.sql'), 'uncommitted SQL is not authority');
+  assert.equal((await f.open()).state().sourceSha, f.current.sourceSha);
+  assert.notEqual(f.seed.state.schemaLedger[0].sha256, hash('CREATE TABLE fixture(id integer);\n'));
+});
+
+test('seed v1 retains exact-source compatibility and rejects code-only adoption', async t => {
+  const f = await adoptionFixture(t), seed = structuredClone(f.seed); seed.format = 'freedom.shared-floor-seed/v1';
+  await assert.rejects(f.open(seed), { code: 'release_floor_legacy_authority_invalid' });
+  Object.assign(seed.state, f.previous, { deployedSourceSha: f.previous.sourceSha });
+  assert.equal((await f.open(seed)).state().sourceSha, f.previous.sourceSha);
+});
+
+test('seed v2 rejects new, edited, removed and symlink migration catalogs', async t => {
+  for (const change of ['add', 'edit', 'remove', 'symlink']) {
+    const f = await adoptionFixture(t), path = join(f.sourceRoot, 'migrations/189_fixture.sql');
+    if (change === 'add') await writeFile(join(f.sourceRoot, 'migrations/190_new.sql'), 'SELECT 1;');
+    if (change === 'edit') await writeFile(path, 'SELECT 2;');
+    if (change === 'remove' || change === 'symlink') await rm(path);
+    if (change === 'symlink') await symlink('../app.txt', path);
+    const updated = f.commit(); Object.assign(f.seed.state, updated, { deployedSourceSha: updated.sourceSha });
+    await assert.rejects(f.open(), { code: change === 'symlink' ? 'release_floor_adoption_catalog_invalid' : 'release_floor_adoption_catalog_changed' });
+  }
+});
+
+test('seed v2 rejects unrelated ancestry, wrong trees, ledger substitution and changed original policies', async t => {
+  const f = await adoptionFixture(t);
+  const unrelated = fixtureGit(f.sourceRoot, ['commit-tree', f.current.sourceTree, '-m', 'Unrelated synthetic root']);
+  for (const sourceSha of [unrelated, 'f'.repeat(40)]) {
+    const seed = structuredClone(f.seed); Object.assign(seed.state, { sourceSha, deployedSourceSha: sourceSha });
+    await assert.rejects(f.open(seed), { code: 'release_floor_adoption_source_invalid' });
+  }
+  const wrongTree = structuredClone(f.seed); wrongTree.state.sourceTree = f.previous.sourceTree;
+  await assert.rejects(f.open(wrongTree), { code: 'release_floor_adoption_tree_invalid' });
+  const wrongLegacy = structuredClone(f.legacy); wrongLegacy.migration.tree = f.current.sourceTree;
+  await assert.rejects(f.open(f.seed, wrongLegacy), { code: 'release_floor_adoption_tree_invalid' });
+  const wrongLedger = structuredClone(f.legacy); wrongLedger.schemaLedger[0].sha256 = '0'.repeat(64);
+  await assert.rejects(f.open(f.seed, wrongLedger), { code: 'release_floor_legacy_ledger_changed' });
+  const wrongPolicy = structuredClone(f.legacy); wrongPolicy.retained172.materialPolicy.policies[0].revision = 'changed';
+  await assert.rejects(f.open(f.seed, wrongPolicy), { code: 'release_floor_legacy_policy_changed' });
+});
+
 function floorFixture() {
   const before = [{ name: '001_initial.sql', sha256: '1'.repeat(64) }];
   const after = [...before, { name: '002_next.sql', sha256: '2'.repeat(64) }];
@@ -1237,4 +1352,141 @@ test('scheduled backup uses the same floor and cannot overlap or change the comm
   const state = f.runBackup('backup', main); assert.equal(state.pending, null); assert.equal(state.sourceSha, main);
   const changed = structuredClone(begin); changed.record.data.request.sourceSha = sha;
   assert.throws(() => replayReleaseFloor([...f.chain, changed], f.options), /release_floor_backup_source_changed/);
+});
+
+async function environmentCheckFixture(t) {
+  const f = await deployFixture(t), calls = [];
+  const value = { format: 'freedom.shared-release-config/v1', target: 'staging-next', accountId: 'a'.repeat(32), zoneId: 'b'.repeat(32),
+    mediaBucket: 'fixture-media', backupBucket: 'fixture-backups',
+    database: { name: 'freedom_staging_next', host: 'fixture.pg.psdb.cloud', port: '5432', loginSuffix: 'fixture' },
+    floor: { epoch: '11111111-1111-4111-8111-111111111111', seedSha256: 'c'.repeat(64) },
+    migrationProfile: { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] } };
+  const config = JSON.stringify(value), env = { RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: hash(config),
+    CLOUDFLARE_API_TOKEN: 'fixture-management-secret', CF_ACCESS_CLIENT_ID: 'fixture-access-id', CF_ACCESS_CLIENT_SECRET: 'fixture-access-secret',
+    RELEASE_ENABLED: 'false', BACKUP_ENABLED: 'false' };
+  const fetchImpl = async (address, options) => {
+    const url = new URL(address); calls.push({ url, options });
+    assert.equal(options.method, 'GET');
+    assert.equal(options.redirect, url.origin === 'https://staging.freetwai.com'
+      || url.pathname.endsWith('/tokens/verify') || url.pathname.includes('/r2/buckets/') ? 'manual' : 'error');
+    if (url.origin === 'https://api.cloudflare.com') {
+      assert.equal(options.headers.Authorization, 'Bearer ' + env.CLOUDFLARE_API_TOKEN);
+      assert(!('CF-Access-Client-Id' in options.headers)); assert(!('CF-Access-Client-Secret' in options.headers));
+      if (url.pathname.endsWith('/tokens/verify')) return Response.json({ success: true, result: { status: 'active' } });
+      if (url.pathname.includes('/r2/buckets/')) return Response.json({ success: true, result: [{ key: 'private-object-do-not-publish' }] });
+      return f.fetchImpl(address, options);
+    }
+    assert.equal(url.href, 'https://staging.freetwai.com/api/v1/health');
+    assert.equal(options.headers['CF-Access-Client-Id'], env.CF_ACCESS_CLIENT_ID);
+    assert.equal(options.headers['CF-Access-Client-Secret'], env.CF_ACCESS_CLIENT_SECRET);
+    assert(!('Authorization' in options.headers));
+    return Response.json({ status: 'ok', release_sha: f.before.sourceSha, private: 'private-health-do-not-publish' });
+  };
+  return { env, value, fetchImpl, calls, f };
+}
+
+test('credential check works with releases disabled, makes only GETs and never attests a deployment', async t => {
+  const f = await environmentCheckFixture(t);
+  assert.equal(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'check' }).mode, 'check');
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: f.fetchImpl });
+  assert.equal(report.status, 'passed'); assert.equal(report.checks.length, 5);
+  assert.equal(report.cloudflareTokenKind, 'account');
+  assert.equal(report.observedSourceSha, f.f.before.sourceSha);
+  assert.equal(report.healthSourceSha, report.observedSourceSha);
+  assert.equal(report.databaseCredentials, 'not_checked'); assert.equal(report.writePermissions, 'not_checked');
+  assert.equal(report.deployment, 'not_run'); assert.equal(report.backupAndRestore, 'not_run');
+  assert(f.calls.length > 5);
+  const serialized = JSON.stringify(report);
+  for (const secret of [f.env.CLOUDFLARE_API_TOKEN, f.env.CF_ACCESS_CLIENT_SECRET, f.env.CF_ACCESS_CLIENT_ID,
+    'private-object-do-not-publish', 'private-health-do-not-publish', 'fixture-backups', 'fixture.pg.psdb.cloud']) assert(!serialized.includes(secret));
+});
+
+test('credential diagnostics retain named failures without leaking provider bodies or exception messages', async t => {
+  const f = await environmentCheckFixture(t);
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: async (url, options) => {
+    if (url.includes('/tokens/verify')) return new Response('private-api-body', { status: 403 });
+    if (url.includes('/r2/buckets/fixture-backups/')) throw Error('private-exception-' + f.env.CLOUDFLARE_API_TOKEN);
+    if (url.startsWith('https://staging.')) return new Response('private-access-body', { status: 302 });
+    return f.fetchImpl(url, options);
+  } });
+  assert.equal(report.status, 'failed');
+  assert.deepEqual(report.checks.map(c => c.status), ['failed', 'passed', 'passed', 'failed', 'failed']);
+  assert.equal(report.checks[0].httpStatus, 403); assert.equal(report.checks[4].httpStatus, 302);
+  assert.equal(report.checks[4].error, 'release_environment_redirect_rejected');
+  assert(!JSON.stringify(report).includes('private-')); assert(!JSON.stringify(report).includes(f.env.CLOUDFLARE_API_TOKEN));
+});
+
+test('an active user token is identified without accepting it as an account service credential', async t => {
+  const f = await environmentCheckFixture(t), tokenPaths = [];
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: async (url, options) => {
+    if (url.endsWith('/tokens/verify')) {
+      tokenPaths.push(new URL(url).pathname);
+      if (url.includes('/accounts/')) return new Response('private-account-error', { status: 401 });
+      assert.equal(options.redirect, 'manual'); assert.equal(options.method, 'GET');
+      assert.equal(options.headers.Authorization, 'Bearer ' + f.env.CLOUDFLARE_API_TOKEN);
+      return Response.json({ success: true, result: { status: 'active', id: 'private-token-id' } });
+    }
+    return f.fetchImpl(url, options);
+  } });
+  assert.deepEqual(tokenPaths, ['/client/v4/accounts/' + 'a'.repeat(32) + '/tokens/verify', '/client/v4/user/tokens/verify']);
+  assert.equal(report.status, 'failed'); assert.equal(report.cloudflareTokenKind, 'user');
+  assert.equal(report.checks[0].error, 'release_account_owned_token_required');
+  assert.equal(report.checks[0].httpStatus, 401);
+  assert(!JSON.stringify(report).includes('private-'));
+});
+
+test('token verification transport and server errors never trigger a user-token fallback', async t => {
+  for (const failure of [() => { throw Error('private-network-detail'); }, () => new Response('private-api-detail', { status: 503 })]) {
+    const f = await environmentCheckFixture(t); let attempts = 0;
+    const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => {
+      if (url.endsWith('/tokens/verify')) { attempts++; assert(url.includes('/accounts/')); return failure(); }
+      return f.fetchImpl(url, options);
+    } });
+    assert.equal(attempts, 1); assert.equal(report.status, 'failed');
+    assert.equal(report.cloudflareTokenKind, undefined); assert(!JSON.stringify(report).includes('private-'));
+    assert(['release_environment_http_failed', 'release_environment_transport_failed'].includes(report.checks[0].error));
+  }
+});
+
+test('real HTTP redirect is reported without following it or forwarding Access credentials', async t => {
+  const f = await environmentCheckFixture(t), received = [];
+  const server = createServer((req, res) => {
+    received.push(req.url);
+    res.writeHead(302, { Location: '/credential-sink?private-location-data' }); res.end('private-redirect-body');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => url.startsWith('https://staging.')
+    ? fetch(`http://127.0.0.1:${server.address().port}/health`, options) : f.fetchImpl(url, options) });
+  assert.deepEqual(received, ['/health']);
+  assert.equal(report.checks.at(-1).httpStatus, 302);
+  assert.equal(report.checks.at(-1).error, 'release_environment_redirect_rejected');
+  assert.equal(report.status, 'failed'); assert(!JSON.stringify(report).includes('private-'));
+});
+
+test('credential checks reject wrong config pins before network and wrong health versions after reading', async t => {
+  const f = await environmentCheckFixture(t);
+  for (const env of [{ ...f.env, RELEASE_CONFIG_SHA256: 'f'.repeat(64) }, { ...f.env, RELEASE_CONFIG_JSON: '{}' }]) {
+    await assert.rejects(checkEnvironment(env, 'staging-next', { fetchImpl() { assert.fail('no network for unpinned config'); } }), /release_config_pin_mismatch/);
+  }
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => url.startsWith('https://staging.')
+    ? Response.json({ status: 'ok', release_sha: 'f'.repeat(40) }) : f.fetchImpl(url, options) });
+  assert.equal(report.status, 'failed'); assert.equal(report.checks.at(-1).error, 'release_environment_health_source_mismatch');
+});
+
+test('production health never receives staging service credentials even when they exist in the environment', async t => {
+  const f = await environmentCheckFixture(t);
+  const config = JSON.stringify({ ...f.value, target: 'next', database: { ...f.value.database, name: 'freedom_next' } });
+  let health = 0;
+  const report = await checkEnvironment({ ...f.env, RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: hash(config) }, 'next', {
+    fetchImpl: async (url, options) => {
+      assert(!('CF-Access-Client-Id' in options.headers)); assert(!('CF-Access-Client-Secret' in options.headers));
+      if (url === 'https://freetwai.com/api/v1/health') {
+        health++; assert(!('Authorization' in options.headers)); return Response.json({ status: 'ok', release_sha: sha });
+      }
+      return new Response('', { status: 403 });
+    },
+  });
+  assert.equal(health, 1); assert.equal(report.checks.at(-1).name, 'public_health');
+  assert.equal(report.checks.at(-1).status, 'passed'); assert.equal(report.status, 'failed');
 });

@@ -20,6 +20,16 @@
    暫不提供會漂移的 `main`／tag／短 SHA 作為版本輸入。
 3. 在 Summary 看版本、原始發起人、此次執行者、兩個 CI run 及結果收據。
    同一版本最新的 main push Verify、CodeQL 必須全部成功；PR 的綠燈不替代主線驗證。
+   新存憑證後，選 `check` 可先驗 Cloudflare 帳戶 token、Worker／路由／Hyperdrive
+   讀取、兩個 R2 bucket 列舉及 staging Access health。先安裝正確的 config secret／hash；
+   此模式不需開啟發布／備份，也不需安裝 image 或 floor，不建立 Deployment、不修改資料。
+   Summary 逐項列出結果；通過只表示這些唯讀請求成功，不證明寫入權限、DB、備份或可部署。
+   帳戶驗證被拒時，會另以唯讀請求辨識是否誤存有效的使用者 token；若是，顯示
+   `release_account_owned_token_required`，不把它當作帳戶服務憑證通過。帳戶 token
+   從 Cloudflare **Manage account → Account API tokens** 建立，與個人頭像下的
+   My Profile → API Tokens 不同（[Cloudflare 說明](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)）。
+   Access 回傳重新導向時顯示 `release_environment_redirect_rejected` 與 HTTP 狀態，
+   不跟隨 Location、不轉送憑證；檢查應用已儲存的 Service Auth 政策及指定的 service token。
 4. 確認環境已安裝後，選同一版本與 `deploy`。正式 `next` 會要求同一版本、
    同一發布工具 digest 最新的 staging 發布成功，而且成功收據須來自可信的完整 workflow 執行。
 5. 查看每個階段和 GitHub Deployment。失敗先看收據；migration 或 provider 結果
@@ -44,7 +54,7 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | --- | --- | --- |
 | Variable | `RELEASE_ENABLED` | 安裝與 staging 真實演練完成前維持 `false` |
 | Variable | `BACKUP_ENABLED` | 獨立安裝備份入口；未設或非 `true` 時拒絕，不能由發布開關推定 |
-| Variable | `RELEASE_OPERATOR_IMAGE` | 已審查的公開 OCI image，固定 `ghcr.io/freetwai/freedom-release-operator@sha256:…`，不能用 tag |
+| Variable | `RELEASE_OPERATOR_IMAGE` | 已審查且本倉 Actions 可讀的 OCI image，固定 `ghcr.io/freetwai/freedom-release-operator@sha256:…`，不能用 tag |
 | Variable | `RELEASE_CONFIG_SHA256` | 下方 config 的完整 UTF-8 bytes SHA-256，包含檔尾換行 |
 | Secret | `RELEASE_CONFIG_JSON` | 此環境的資源、DB 身份、外部 floor seed 與 migration profile；不接受程式或旗標決策，格式見 [operator protocol](operator-protocol.md) |
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
@@ -72,9 +82,20 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
 1. 原始碼通過必要審查、合併及相同 main 版本 CI 後，由四人之一執行
    `Release operator image`。它只封裝已追蹤來源，實跑 image 內 PG18、R2、migration
    與 smoke 邊界驗證，再以短效 job token 發布 GHCR；不讀取部署秘密。
-2. 確認該 image 可公開拉取，把輸出的不可變 digest 安裝到兩個 Environment。
+2. 保持 GHCR 套件 Private，把輸出的不可變 digest 安裝到兩個 Environment。
+   發布 workflow 會將套件連結本倉；確認 Package settings 的 **Manage Actions access**
+   已給 `freedom-platform` Read 或更高權限（Codespaces access 是另一項設定）。
+   部署與備份 job 使用 `packages: read` 的短效 `GITHUB_TOKEN` 登入並下載固定 digest；
+   權杖只經 stdin 傳給 runner 上的 Docker，暫存登入資料在啟動 operator 前刪除。
+   不需要改組織的公開政策、建立個人 PAT 或另存 registry secret。
+   `Release operator image` 的 `verify-pull` 會在另一個乾淨 runner，使用只有
+   `packages: read` 的 job token 實測下載；不能以 image build／push 綠燈替代。
    從原操作者保留的 legacy floor、素材政策及座標約束建立獨立核對的私人 seed；
    不得以當下 DB 狀態自行核准新的還原下限。固定 config bytes 與 SHA-256 必須一致。
+   若網站只有程式更新、最後 migration 仍是舊版本，可用 seed v2 明確採納已部署的
+   後繼版本；先獨立核對該版 main／CI、provider、DB ledger 與原政策。Operator 再
+   驗 Git ancestry、兩個 tree 和完整 SQL catalog；原 legacy floor 不改寫，不能用
+   v2 接受新增／變更／刪除 migration 或跳過原座標約束。
 3. 補齊服務憑證後，先開 `BACKUP_ENABLED`，保持 `RELEASE_ENABLED=false`。
    各環境先手動執行 `Shared backup`，核對真實 dump 預算、遠端讀回、隔離還原及清理。
 4. 保留舊 timer，等新 `Shared backup` 在 **05:43 UTC** 自然觸發並完成兩個環境。
@@ -186,7 +207,7 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 
 這個備份 adapter 仍要求上層提供已核准的來源、ledger 與 material policy digest。
 比對 digest 不等於驗證外部 retained floor 的權威；共享紀錄程式已補上，live 權威
-seed、公開 image 安裝與自然排程交接仍未完成。原生 PostgreSQL／R2
+seed、image 安裝與自然排程交接仍未完成。原生 PostgreSQL／R2
 演練使用合成資料；Cloudflare HTTP 邊界使用磁碟上的合成遠端副本，沒有接觸遠端
 bucket、Worker 或正式資料庫。
 

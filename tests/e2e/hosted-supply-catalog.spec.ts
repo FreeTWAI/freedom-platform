@@ -460,6 +460,7 @@ test('supply product card shows offer state and requests waiting for the supplie
   let parentFollowUpReads = 0;
   const lateRequestsHeld = deferred(), lateRequestsStarted = deferred();
   let delayRequests = false;
+  let lateRequestsBody = '';
   await page.route(offersPath, async route => {
     if (route.request().method() !== 'GET') return route.continue();
     if (parentFail) parentFollowUpReads += 1;
@@ -479,11 +480,11 @@ test('supply product card shows offer state and requests waiting for the supplie
     if (parentFail) parentFollowUpReads += 1;
     if (delayRequests) {
       delayRequests = false;
-      const response = await route.fetch(), snapshot = await response.json();
+      expect(lateRequestsBody).not.toBe('');
       lateRequestsStarted.resolve(); await lateRequestsHeld.promise;
       // This visible suffix proves adoption of the delayed, pre-command child
       // snapshot before checking that it cannot restore the parent summary.
-      return route.fulfill({response, json: {...snapshot, truncated: true}});
+      return route.fulfill({status: 200, contentType: 'application/json', body: lateRequestsBody});
     }
     if (!truncateRequests) return route.continue();
     const response = await route.fetch();
@@ -786,7 +787,11 @@ test('supply product card shows offer state and requests waiting for the supplie
     await workspace(page, '供貨合作').click();
     const loadedAgain = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1${store.root}/supply-requests` && response.request().method() === 'GET');
     await page.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
-    expect((await loadedAgain).status()).toBe(200);
+    const loadedAgainResponse = await loadedAgain;
+    expect(loadedAgainResponse.status()).toBe(200);
+    // Reuse the verified pre-command list; the delayed delivery must not depend
+    // on another upstream fetch completing before its ordering barrier opens.
+    lateRequestsBody = JSON.stringify({...await loadedAgainResponse.json(), truncated: true});
     await expect(requests().locator('summary')).toHaveText('供貨申請（2・待你確認 1）');
     await expect(requests().getByRole('button', {name: '同意這一版', exact: true})).toBeVisible();
     await expect(page.getByText('有 1 件供貨申請等待你確認。', {exact: true})).toBeVisible();

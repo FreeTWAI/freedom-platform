@@ -71,8 +71,11 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
 });
 
+// Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
+// Budget both full cash rounds for recovery/share assertions before teardown;
+// retain desktop rendering, real inputs, and all individual assertion deadlines.
 test('AD-5 sort exact million, recover denied storage, cancel system share, and hand off without a post',async({page})=>{
-  test.setTimeout(120_000);await openGame(page,'cash');const posts:string[]=[];
+  test.setTimeout(180_000);await openGame(page,'cash');const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
@@ -104,7 +107,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
 });
 
 test('AD-5 final cash capture failure retries the completed scene without replaying classification',async({page})=>{
-  test.setTimeout(120_000);await openGame(page,'cash');
+  test.setTimeout(180_000);await openGame(page,'cash');
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   const deck=cashDeck(42);
   for(const card of deck.slice(0,29)){
