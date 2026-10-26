@@ -174,8 +174,8 @@
     },
     {
       "path": ".github/workflows/shared-backup.yml",
-      "bytes": 4183,
-      "sha256": "391b782d92f93a69e8c994f456453c46bb77e917e2c12b93e9c00dab427adc23"
+      "bytes": 4443,
+      "sha256": "f35fed4184e9f3f4f03015d2441dfaa4e0823b8edf5448dd7ac773db9a6f3bd0"
     },
     {
       "path": ".github/workflows/shared-release.yml",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 109269,
-      "sha256": "75fd6d835245d98a896001b267ceecf567e0f3063d61b45a1c18e5e13076fba7"
+      "bytes": 115696,
+      "sha256": "88b963ba405a10a38bb4da12f2ac29a78702a9f6bb18de30a3d07acc8d1e34d1"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14649,8 +14649,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 21409,
-      "sha256": "6f5b043823d8e08d9e94bcf615225315c2f97b3c251f48ecec097dd8047b5b12"
+      "bytes": 23519,
+      "sha256": "dad6f920ef1a872477a399ce6702a5185195bdc366e02e406d751481e49ac711"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14664,8 +14664,8 @@
     },
     {
       "path": "deploy/shared-release/backup-cli.mjs",
-      "bytes": 4955,
-      "sha256": "beecac3c78ed1bd0e0831bbd97a25dd933a6be06bf4d703ffbf7d4a8c5ceccb6"
+      "bytes": 5508,
+      "sha256": "a3397b58397ca8c4e88f3c3c8fe19a5937b86f121ec6b3f262a0c2f525ebbbb7"
     },
     {
       "path": "deploy/shared-release/cli.mjs",
@@ -14694,8 +14694,8 @@
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 14714,
-      "sha256": "5f6a0fdb80470397d127ec56300886761e863e049e8ae2a040998632e219de68"
+      "bytes": 15937,
+      "sha256": "89165f692fb0835de007a2e6dcfe40d06997e95a5929a1af78f4e1be2ae92c71"
     },
     {
       "path": "deploy/shared-release/receipt-archive.py",
@@ -14704,8 +14704,8 @@
     },
     {
       "path": "deploy/shared-release/scheduled-admission.mjs",
-      "bytes": 7406,
-      "sha256": "2b70cc0d1f91819dd8ecde5e50ac9255a0a1a17cb603b743c63ef38c9e0bd076"
+      "bytes": 12700,
+      "sha256": "eee240ddee649ea6480a3f220596437756a2e8863ea9312357812742a20eff9d"
     },
     {
       "path": "deploy/shared-release/image/Dockerfile",
@@ -14729,8 +14729,8 @@
     },
     {
       "path": "deploy/shared-release/portable/backup.mjs",
-      "bytes": 12250,
-      "sha256": "5587615e8d965d321d91df5fd4dde90b34f728e011981da426b9075220a1e843"
+      "bytes": 12458,
+      "sha256": "bf87b1e382c22037c2ca79d03db4e3a41afd0a8439e4dc845f31e5a833ec1126"
     },
     {
       "path": "deploy/shared-release/portable/build.mjs",
@@ -14779,13 +14779,13 @@
     },
     {
       "path": "deploy/shared-release/portable/entry.mjs",
-      "bytes": 14114,
-      "sha256": "a758fcde34dd8ba35b1da774a235287727c5d40babd64836c858cb0ff6d1efbc"
+      "bytes": 14691,
+      "sha256": "30c04240583cabd5345c99559488fd93552102f5e5782a79e27fe7cf146fa8c9"
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
-      "bytes": 17660,
-      "sha256": "eedba52d7178ef6485b28f26fae43d64f079ab9202124d9d4fe4bd8d5095eee3"
+      "bytes": 19822,
+      "sha256": "62f8acd63ae319ba1817209b68f075185d624f0a0a2c1089418c519342fceeb0"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -14814,8 +14814,8 @@
     },
     {
       "path": "deploy/shared-release/test/backup-integration.mjs",
-      "bytes": 14480,
-      "sha256": "6b4a76347c5907ba010e22047e81562701cef37b3baa514420844a077d80a857"
+      "bytes": 17852,
+      "sha256": "ae5d17ca12e98e4dd03aec85a758450ace47d2977636d3a718a705ca8160852c"
     },
     {
       "path": "deploy/shared-release/test/image-native.mjs",
@@ -28436,6 +28436,11 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
       "bytes": 93537,
       "sha256": "75de89ab7167ceb161833c6401a01c2603931627a6e253929095b84932aee1d3"
+    },
+    {
+      "path": "deploy/shared-release/portable/backup-recovery.mjs",
+      "bytes": 4676,
+      "sha256": "f0bdd6a4cf5fa77cb6f1bb863ce3b1e0764c6a2cf1cc9a42334579a795dfb57f"
     }
   ]
 }

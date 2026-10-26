@@ -9,6 +9,10 @@ on:
         required: true
         type: choice
         options: [staging-next, next]
+      recover_run_id:
+        description: 'Optional failed backup run to settle after readback, before a fresh backup (no archive upload may have started)'
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -36,6 +40,7 @@ jobs:
     env:
       RELEASE_TARGET: ${{ matrix.target }}
       BACKUP_CRON: ${{ github.event.schedule }}
+      BACKUP_RECOVER_RUN_ID: ${{ inputs.recover_run_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
