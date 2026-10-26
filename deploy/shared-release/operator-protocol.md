@@ -210,11 +210,8 @@ actually deployed, main/CI-admitted SHA under the same DB lease and shared journ
 Its fixed phases are `preflight`, `backup`, `handoff`; the backup includes complete
 readback, isolated DB/object restore and cleanup, without migration or deployment.
 The journal permits this only at the settled floor and cannot advance source pins.
-Manual runs are installation diagnostics. The natural schedule is minute 43 of
-every UTC hour for both targets, serially, sharing the release concurrency group.
-This keeps installation and image updates from waiting until the next day for
-scheduler acceptance; every run still performs complete backup/restore/cleanup.
-Running backups and migrations are never cancelled by a newer scheduled run.
+Manual runs are installation diagnostics. The natural schedule is 05:43 UTC for
+both targets, serially, sharing the release concurrency group.
 
 Before release, the controller authenticates the latest natural schedule's first
 attempt, main workflow identity, both successful jobs, and the exact environment
