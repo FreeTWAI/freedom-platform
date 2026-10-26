@@ -31,8 +31,8 @@ export function backupRequestFromEnvironment(env, sourceSha) {
  * This is permission to inspect its pending intent, never proof of DB cleanup. */
 export async function requireFailedBackup(api, admission, installation) {
   const id = admission.recoverRunId;
-  const codeOnly = admission.mode === 'deploy' && admission.releaseKind === 'code-only';
-  check((codeOnly || (admission.mode === 'backup' && admission.event === 'workflow_dispatch')) && positive(id) && id !== admission.runId,
+  const independentRelease = admission.mode === 'deploy' && admission.releaseKind === 'independent';
+  check((independentRelease || (admission.mode === 'backup' && admission.event === 'workflow_dispatch')) && positive(id) && id !== admission.runId,
     'release_backup_recovery_request_invalid');
   const workflow = await api(`${prefix}/actions/workflows/shared-backup.yml`);
   check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', 'release_backup_recovery_workflow_invalid');
@@ -67,7 +67,7 @@ export async function requireFailedBackup(api, admission, installation) {
     && receipt.event === run.event && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
-    && (codeOnly ? isSha(receipt.sourceSha) && isSha(receipt.sourceTree)
+    && (independentRelease ? isSha(receipt.sourceSha) && isSha(receipt.sourceTree)
       : receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree)
     && /^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(receipt.operatorImage ?? '')
     && receipt.configSha256 === installation.configSha256 && isDigest(receipt.configSha256)
@@ -81,7 +81,7 @@ export async function requireFailedBackup(api, admission, installation) {
     && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
     && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
     && progress[1].backupFailure?.stage === 'preflight' && progress[1].backupFailure?.snapshotDump === 'not_started';
-  check(!codeOnly || preCapture, 'release_backup_recovery_boundary_invalid');
+  check(!independentRelease || preCapture, 'release_backup_recovery_boundary_invalid');
   checkRun(await api(`${prefix}/actions/runs/${id}`));
   return Object.freeze({ format: 'freedom.verified-failed-backup/v1',
     ...(preCapture ? { failureBoundary: 'before_capture' } : {}), runId: id, runAttempt: run.run_attempt,

@@ -14479,8 +14479,8 @@
     },
     {
       "path": "deploy/cloudflare/test/media-restore-container.test.mjs",
-      "bytes": 2921,
-      "sha256": "61b68d8c2f7bd4588f9723d2f120a2c97aa59c28da1405b4925b5b1202d84b7f"
+      "bytes": 3544,
+      "sha256": "f9f8aa9dec6173290083568f010c09d7cff4e10ebe90517baf75ee4627c38e34"
     },
     {
       "path": "deploy/cloudflare/test/media-wrangler.test.mjs",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 131741,
-      "sha256": "357da250c12c54904f8eed2bc963c0405f2d92c22594a3196cde9b7d80002acf"
+      "bytes": 136389,
+      "sha256": "228e7c5cfbcaa657e04ae6644a4566c90f7175927fee2f88a4194f0f84d03c7a"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14644,18 +14644,18 @@
     },
     {
       "path": "deploy/shared-release/AGENTS.md",
-      "bytes": 3000,
-      "sha256": "78b0467dc3208f9cceaac1155716a757998ceaa4799a8375f7469449eeced806"
+      "bytes": 3159,
+      "sha256": "66e36864979f3a018067168db49c6c9590deffa398a936abfc4f7d085f673c90"
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 24841,
-      "sha256": "da7b8be00c1c480d3a51045346bad53e023ce2ad68e27d7aa00b4878c680cc0e"
+      "bytes": 25116,
+      "sha256": "3b8747b7a420f24dc9d44c9f1e79c301b523cadfaebdba515996b978963b32e1"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
-      "bytes": 15840,
-      "sha256": "7f563364fb738a92e4038e3a12e15dcdb4d74357d2bf9f1dc495799eecd96c17"
+      "bytes": 15868,
+      "sha256": "d230a2ba5ba0b135c3acd83cb85520cc0b8df4ef60d1f7b055a930bbd9200a4e"
     },
     {
       "path": "deploy/shared-release/artifacts.mjs",
@@ -14670,7 +14670,7 @@
     {
       "path": "deploy/shared-release/cli.mjs",
       "bytes": 8444,
-      "sha256": "f4dc52e0a51069f310ae9158c911010682244916b3d186d4418b84b575d3b011"
+      "sha256": "f76600ad3bbbf00110f688468084a4640125cefa615594e81cd8e71108a1634e"
     },
     {
       "path": "deploy/shared-release/environment-check.mjs",
@@ -14689,13 +14689,13 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 21782,
-      "sha256": "6caba434820d456fbf6af732af9ff506b6219dbe8935d4756db96eaa07d21139"
+      "bytes": 22161,
+      "sha256": "37df8ffd20381352660a3cd77b960e92c2cc9723afc3b81290cce69d96ba2dab"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 17651,
-      "sha256": "6ccac9437d3ded2e93d1e69e9b2949d4ca359049c3e147bc52f50152f976f350"
+      "bytes": 17786,
+      "sha256": "126c5bea6a645fffe63528a7518861737a4398c83139d8bacfdd492466ecf216"
     },
     {
       "path": "deploy/shared-release/receipt-archive.py",
@@ -14704,8 +14704,8 @@
     },
     {
       "path": "deploy/shared-release/scheduled-admission.mjs",
-      "bytes": 13420,
-      "sha256": "58bda96af97271e9e3d1c0440e2ed9123b180661d2598375f71754137e206f73"
+      "bytes": 13462,
+      "sha256": "22fa99148eb5281533338e2f0360e4bab027e8bcd542e590abf26ca4be01113d"
     },
     {
       "path": "deploy/shared-release/image/Dockerfile",
@@ -14779,13 +14779,13 @@
     },
     {
       "path": "deploy/shared-release/portable/entry.mjs",
-      "bytes": 15951,
-      "sha256": "36d7ce00fecbf3801c7db18c08716932d3777bcf2f500211bfdeaba091fa3153"
+      "bytes": 16888,
+      "sha256": "871ef487dc2b045224be251ee7ad4250ada1cf57d194fd152ffe89bff373a27c"
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
-      "bytes": 21127,
-      "sha256": "023ad3c360dee4ee6d164a6c1f36f68d367a910d666631648ebba37e6e67c352"
+      "bytes": 21160,
+      "sha256": "e83614f78c65f875c738d86074217af36ebf8ccda164eed112bd789e5bebd193"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -14799,8 +14799,8 @@
     },
     {
       "path": "deploy/shared-release/portable/migration.mjs",
-      "bytes": 18568,
-      "sha256": "58661b4318734ae19fa188fff2d502b0c08e653ce2cdd0c0f5586463c244b103"
+      "bytes": 19158,
+      "sha256": "8244bc7e000c0c1ac231f0f3852c1110f68f93fdba45fe729455d26d5427a214"
     },
     {
       "path": "deploy/shared-release/portable/postgres.mjs",
@@ -14824,8 +14824,8 @@
     },
     {
       "path": "deploy/shared-release/test/migration-integration.mjs",
-      "bytes": 11893,
-      "sha256": "6b9b420d20d0b86d80af25d30ecdee99dba370f272b445b83e44aaa50786007a"
+      "bytes": 12127,
+      "sha256": "3dff251d96feccd70b34a4a0939739552f89b1b54533ea692527c7b979004f78"
     },
     {
       "path": "deploy/shared-release/test/postgres-integration.mjs",

@@ -47,7 +47,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   for (const item of chain.slice(1)) {
     const event = item.record.data;
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
-    if (event.kind === 'begin' || event.kind === 'backup-begin' || event.kind === 'code-begin') {
+    if (event.kind === 'begin' || event.kind === 'backup-begin' || event.kind === 'release-begin-v2') {
       check(state.pending === null, 'release_floor_unsettled'); request(event.request);
       const backup = event.kind === 'backup-begin';
       if (backup) check(event.request.sourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
@@ -57,12 +57,11 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && ledger(candidate.schemaLedger) >= state.schemaVersion, 'release_floor_candidate_invalid');
       same(candidate.schemaLedger.slice(0, state.schemaLedger.length), state.schemaLedger, 'release_floor_ledger_rewind');
       check(isAncestor(state.sourceSha, candidate.sourceSha), 'release_floor_source_rewind');
-      const codeOnly = event.kind === 'code-begin';
-      if (codeOnly) {
-        check(event.request.releaseKind === 'code-only', 'release_floor_code_request_invalid');
-        same(candidate.schemaLedger, state.schemaLedger, 'release_floor_code_schema_changed');
+      const independentRelease = event.kind === 'release-begin-v2';
+      if (independentRelease) {
+        check(event.request.releaseKind === 'independent', 'release_floor_code_request_invalid');
       }
-      state.pending = { kind: backup ? 'backup' : codeOnly ? 'code' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
+      state.pending = { kind: backup ? 'backup' : independentRelease ? 'code' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
         previousSourceSha: state.deployedSourceSha, stage: 0, intents: {} };
       continue;
     }
@@ -97,7 +96,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const allowed = { 'backup-before': ['capture-policy', 'archive'], migration: ['commit'], deploy: ['publish'],
         health: [], 'backup-after': ['capture-policy', 'archive'], handoff: [], backup: ['capture-policy', 'archive'] }[event.stage];
       const key = event.stage + ':' + event.operation;
-      check(!(pending.kind === 'code' && event.stage === 'migration') && allowed.includes(event.operation) && !Object.hasOwn(pending.intents, key)
+      check(allowed.includes(event.operation) && !Object.hasOwn(pending.intents, key)
         && event.proof && typeof event.proof === 'object' && !Array.isArray(event.proof), 'release_floor_intent_invalid');
       const value = event.proof;
       check(value.automaticRetry === false, 'release_floor_intent_retry_forbidden');
@@ -120,7 +119,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     }
     if (event.kind === 'committed') {
       const commit = pending.intents['migration:commit'], proof = event.proof;
-      check(pending.kind !== 'code' && event.stage === 'migration' && !pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId)
+      check(event.stage === 'migration' && !pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId)
         && proof?.transactionId === commit.transactionId && proof.source === pending.candidate.sourceSha
         && proof.tree === pending.candidate.sourceTree && proof.afterDigest === migrationLedgerDigest(pending.candidate.schemaLedger),
       'release_floor_commit_unverified');
@@ -137,10 +136,11 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(pending.intents[event.stage + ':capture-policy'], 'release_floor_capture_intent_missing');
       verifyBackup(proof, pending.intents[event.stage + ':archive'], pending.intents[event.stage + ':capture-policy'],
         event.stage === 'backup-before' ? pending.previousSourceSha : pending.candidate.sourceSha);
-    } else if (event.stage === 'migration' && pending.kind === 'code') {
-      check(pending.kind === 'code' && proof?.outcome === 'unchanged' && proof.readOnly === true
+    } else if (event.stage === 'migration' && pending.kind === 'code' && !pending.committed) {
+      check(pending.kind === 'code' && Object.keys(pending.intents).length === 0 && proof?.outcome === 'unchanged' && proof.readOnly === true
         && proof.ledgerVerified === true && proof.runtimeGrantsVerified === true
-        && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger), 'release_floor_schema_unverified');
+        && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.ledgerSha256 === migrationLedgerDigest(pending.candidate.schemaLedger), 'release_floor_schema_unverified');
     } else if (event.stage === 'migration') {
       const commit = pending.intents['migration:commit'];
       check(pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId) && proof?.transactionId === commit.transactionId
@@ -155,7 +155,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.schemaVerified === true && proof.smokePassed === true, 'release_floor_health_unverified');
     } else if (event.stage === 'handoff') {
       if (pending.kind === 'code') {
-        check(proof?.cleanupVerified === true && proof.schemaUnchanged === true, 'release_floor_code_handoff_invalid');
+        check(proof?.cleanupVerified === true && proof.migrationVerified === true, 'release_floor_code_handoff_invalid');
         state.sourceSha = pending.candidate.sourceSha; state.sourceTree = pending.candidate.sourceTree;
       } else {
         const schedule = proof?.schedule;
@@ -183,7 +183,7 @@ function gitAncestor(sourceRoot, before, after) {
   } catch { return false; }
 }
 
-// A legacy schema floor can predate code-only releases. A separately provisioned
+// A legacy schema floor can predate independent releases. A separately provisioned
 // v2 seed may adopt that already deployed descendant, but never new schema bytes.
 // Read the immutable Git object, not the current checkout or live DB as authority.
 function verifyAdoptedSource(sourceRoot, legacy, baseline) {
@@ -268,7 +268,7 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       return verifyCoordinateFence(q, coordinates, { restored });
     },
     verifyConstraints(q, options) { return verifyCoordinateFence(q, coordinates, options); },
-    async beginCode(request, candidate) { return append({ kind: 'code-begin', request, candidate }); },
+    async beginIndependent(request, candidate) { return append({ kind: 'release-begin-v2', request, candidate }); },
     async begin(request, candidate) { return append({ kind: 'begin', request, candidate }); },
     async beginBackup(request) { return append({ kind: 'backup-begin', request }); },
     async abandonBackup(proof) {

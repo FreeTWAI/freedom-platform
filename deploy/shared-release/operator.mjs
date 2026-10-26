@@ -84,13 +84,14 @@ export function validateOperatorResult(value, admission, installation, requestDi
     'release_operator_phase_invalid');
     previous = end;
   }
-  if (admission.releaseKind === 'code-only') {
+  if (admission.releaseKind === 'independent') {
     const [preflight, schema, deploy, health, handoff] = value.phases;
     requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
       && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
       && isSha(preflight.previousSourceSha), 'release_operator_preflight_incomplete');
-    requireRelease(schema.outcome === 'unchanged' && schema.ledgerVerified === true
-      && schema.runtimeGrantsVerified === true && schema.readOnly === true, 'release_schema_unconfirmed');
+    requireRelease(((schema.outcome === 'unchanged' && schema.readOnly === true)
+      || (schema.outcome === 'committed' && schema.commitStatus === 'confirmed' && /^[1-9][0-9]*$/.test(schema.transactionId)))
+      && schema.ledgerVerified === true && schema.runtimeGrantsVerified === true, 'release_schema_unconfirmed');
     requireRelease(deploy.sourceSha === admission.sourceSha && deploy.providerConfirmed === true
       && health.sourceSha === admission.sourceSha && health.statusCode === 200
       && health.schemaVerified === true && health.smokePassed === true, 'release_health_unconfirmed');
@@ -189,7 +190,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
   'release_config_binding_invalid');
   requireRelease(credentials && typeof credentials === 'object' && !Array.isArray(credentials), 'release_credentials_missing');
   for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl',
-    ...(admission.releaseKind === 'code-only' && admission.mode !== 'backup' ? [] : ['backupDatabaseUrl'])]) {
+    ...(admission.releaseKind === 'independent' && admission.mode !== 'backup' ? [] : ['backupDatabaseUrl'])]) {
     requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0, 'release_credentials_missing');
   }
   if (admission.target === 'staging-next') {

@@ -1,14 +1,16 @@
 # 共用發布入口
 
-一般程式發布使用 `releaseKind: code-only`：preflight → migration（唯讀確認 schema 不變）→ deploy → health → handoff。
+一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
 不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
 日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
 GitHub 版本歷史只保存程式，不能當作資料庫備份。
 
-新 migration 或既有 ledger／schema 不相容時，普通發布以 `release_schema_change_requires_migration` 停止；
-另走已審查的 migration 操作及其資料保護規則，不能把 DDL 當作可逆程式更新。
+已核准 main 的待執行 migration 使用原 immutable catalog／SQL policy、交易執行器、lease、ledger prefix、
+COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，不能當作可逆程式更新；
+破壞性 SQL 仍須在來源審查中明確評估，未知 COMMIT 結果停止且不自動重試／回滾。
 跨環境 Actions concurrency 與 DB advisory lease 保留，正在執行的備份或 migration 不會被取消。
-舊 journal 仍依原七階段 replay；新 `code-begin` 只在健康查核後更新來源，schema ledger 不變。
+舊 journal 仍依原七階段 replay；新 `release-begin-v2` 保留四個 journal stages；有 migration 時確認 COMMIT 即更新 schema floor，
+無 migration 時先完成唯讀檢查才建立 journal，健康查核後完成發布。
 
 若前次備份留下 BEGIN-only journal，可在 deploy 選填 `recover_backup_run_id`。
 這只允許可信、已結束的失敗收據證明尚未進入 capture，且 journal 沒有任何 intent；

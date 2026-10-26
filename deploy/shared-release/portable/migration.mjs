@@ -9,6 +9,7 @@ import { readMigrationSources } from '../../../packages/db/migration-files.mjs';
 import { resolveMigrationPlan, migrationLedgerDigest, LEGACY_MIGRATIONS } from '../../../packages/db/migration-plan.mjs';
 import { requireRelease as check, isSha, isDigest } from '../admission.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
+import { checkMigrations } from '../../cloudflare/lib/migrations.mjs';
 import { readCanonicalSql, runCanonicalSql } from './canonical-sql.mjs';
 
 const IDENTITY = 'SELECT current_database() database,current_user role,session_user session_role,current_schema() schema';
@@ -22,6 +23,7 @@ const quote = value => { check(/^[a-z][a-z0-9_]{0,62}$/.test(value), 'release_mi
 export function preparePortableMigration({ sourceRoot, sourceCommit, profile, installationParent, beforeLedger }) {
   check(profile?.format === LEGACY_MIGRATIONS && Array.isArray(beforeLedger) && beforeLedger.length > 0,
     'release_migration_profile_invalid');
+  check(checkMigrations(join(sourceRoot, 'migrations'), profile).ok, 'release_migration_sql_policy_invalid');
   const installation = prepareMigrationInstallation({ sourceRoot, sourceCommit, profile, installationParent });
   const sources = readMigrationSources(join(sourceRoot, 'migrations'));
   const plan = resolveMigrationPlan(sources, profile, beforeLedger);
@@ -113,7 +115,7 @@ async function probe(pool, database, suffix, tables) {
  * control ports. No self-observed digest or no-op default is release authority.
  * journalRoot must persist privately after an uncertain COMMIT; never replay it. */
 export async function runPortableMigration({ pool, runtimePool, backupPool, database, plan, expected,
-  beforeBackup, previousSourceSha, journalRoot, lease, assertFloor, verifyRetainedConstraints, retainCommitIntent, retainCommittedFloor }) {
+  beforeBackup, previousSourceSha, journalRoot, lease, assertFloor, independent = false, beginMutation, verifyRetainedConstraints, retainCommitIntent, retainCommittedFloor }) {
   check(/^[a-z][a-z0-9_]{0,45}$/.test(database) && isSha(previousSourceSha)
     && plan?.canonical?.sourceCommit === plan.sourceCommit && isSha(plan.sourceCommit) && isSha(plan.sourceTree)
     && isDigest(expected?.materialPolicySha256) && Array.isArray(expected.rlsTables) && expected.rlsTables.length > 0
@@ -123,7 +125,10 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
   plan = structuredClone(plan); expected = structuredClone(expected); beforeBackup = structuredClone(beforeBackup);
   const role = database + '_migrator';
   const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
+  check(!independent || typeof beginMutation === 'function', 'release_migration_begin_required');
+  check(typeof independent === 'boolean', 'release_migration_input_invalid');
   const freshBackup = () => {
+    if (independent) return;
     const age = Date.now() - Date.parse(beforeBackup?.createdAt);
     check(beforeBackup?.status === 'passed' && beforeBackup.database === database && beforeBackup.sourceRelease === previousSourceSha
       && beforeBackup.restore === 'database_and_objects_restored' && beforeBackup.remoteReadback === 'verified'
@@ -145,7 +150,8 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
     check(baseline.materialPolicySha256 === expected.materialPolicySha256, 'release_migration_policy_changed');
     await q.query('ROLLBACK');
     await journal(journalRoot, 'intent', { source: plan.sourceCommit, tree: plan.sourceTree, database,
-      beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, backupSetId: beforeBackup.setId, automaticRetry: false });
+      beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, ...(independent ? { recoveryPolicy: 'routine-backup-independent/v1' } : { backupSetId: beforeBackup.setId }), automaticRetry: false });
+    if (independent) { assertHeld(); await beginMutation(); }
     const port = { async connect() { return { async query(text, values) {
       if (text === 'BEGIN') { await q.query(text); await q.query("SET LOCAL lock_timeout='10000'; SET LOCAL statement_timeout='120000'"); return { command: 'BEGIN', rows: [] }; }
       if (text.startsWith('CREATE TABLE IF NOT EXISTS schema_migrations')) {
@@ -186,8 +192,8 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
     await q.query('BEGIN READ ONLY'); const tables = await verify(q, { database, plan, expected });
     await verifyRetainedConstraints(q);
     same(await invariants(q), baseline, 'release_migration_post_commit_changed'); await q.query('ROLLBACK');
-    const probes = [await probe(runtimePool, database, '_app', tables.filter(row => row.readable).map(row => row.relname)),
-      await probe(backupPool, database, '_backup', tables.map(row => row.relname))];
+    const probes = [await probe(runtimePool, database, '_app', tables.filter(row => row.readable).map(row => row.relname))];
+    if (!independent) probes.push(await probe(backupPool, database, '_backup', tables.map(row => row.relname)));
     assertHeld();
     const receipt = { source: plan.sourceCommit, database, transactionId, applied: result.applied,
       outcome: plan.pending.length ? 'committed' : 'unchanged', commitStatus: outcome,

@@ -6,10 +6,10 @@ export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
   Hao0321: 126182090, 'detna-vibe-coding': 267743027 });
 export const PHASES = Object.freeze(['preflight', 'backup-before', 'migration', 'deploy',
   'health', 'backup-after', 'handoff']);
-export const CODE_PHASES = Object.freeze(['preflight', 'migration', 'deploy', 'health', 'handoff']);
+export const INDEPENDENT_PHASES = Object.freeze(['preflight', 'migration', 'deploy', 'health', 'handoff']);
 export const releasePhases = request => {
-  requireRelease(request.releaseKind === undefined || request.releaseKind === 'code-only', 'release_contract_invalid');
-  return request.releaseKind === 'code-only' ? CODE_PHASES : PHASES;
+  requireRelease(request.releaseKind === undefined || request.releaseKind === 'independent', 'release_contract_invalid');
+  return request.releaseKind === 'independent' ? INDEPENDENT_PHASES : PHASES;
 };
 export const requireRelease = (condition, code) => {
   if (!condition) throw Object.assign(new Error(code), { code });
@@ -39,7 +39,7 @@ export function requestFromEnvironment(env) {
   'release_backup_recovery_request_invalid');
   return { ...(recovery ? { recoverRunId: Number(recovery) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
-    mode: env.RELEASE_MODE, releaseKind: 'code-only', controllerSha: env.CONTROLLER_SHA,
+    mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID),
     triggeringActor: env.GITHUB_TRIGGERING_ACTOR,
     runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) };
@@ -183,9 +183,9 @@ export async function requireStaging(api, admission, installation) {
     && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
   requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
-    && (receipt.releaseKind === undefined || receipt.releaseKind === 'code-only')
-    && (receipt.releaseKind === 'code-only'
-      ? receipt.releaseKind === 'code-only' && receipt.providerOutcome === 'code_release_confirmed' && receipt.operatorEvidence === 'validated-code-release/v1'
+    && (receipt.releaseKind === undefined || receipt.releaseKind === 'independent')
+    && (receipt.releaseKind === 'independent'
+      ? receipt.releaseKind === 'independent' && receipt.providerOutcome === 'release_confirmed' && receipt.operatorEvidence === 'validated-independent-release/v1'
       : receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1')
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree

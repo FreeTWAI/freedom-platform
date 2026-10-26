@@ -96,9 +96,9 @@ export async function main(env = process.env) {
         ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
           stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });
-    receipt.providerOutcome = 'code_release_confirmed';
-    receipt.operatorEvidence = 'validated-code-release/v1';
-    await status('success', 'Code release, unchanged schema and health confirmed');
+    receipt.providerOutcome = 'release_confirmed';
+    receipt.operatorEvidence = 'validated-independent-release/v1';
+    await status('success', 'Release, schema verification and health confirmed');
     receipt.status = 'passed';
   } catch (error) {
     receipt.status = 'failed'; receipt.error = publicError(error);

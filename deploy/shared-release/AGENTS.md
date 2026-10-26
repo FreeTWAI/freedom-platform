@@ -20,10 +20,12 @@ exact merged-main commit and staging-next or next. Exact-source successful main
 Verify and CodeQL runs are required. The workflow/controller comes from the
 main workflow revision, independently of the selected application revision.
 
-Ordinary code releases use the explicit code-only contract: preflight, read-only
-unchanged-schema migration verification, deploy, exact-source health and handoff.
+Ordinary releases use the explicit independent contract: preflight, migration,
+deploy, exact-source health and handoff. No-pending-SQL releases verify read-only
+before journal begin; approved pending SQL uses the existing transaction runner,
+SQL policy, ledger prefix, commit intent and confirmed floor.
 They do not consume natural-backup evidence or perform full backup/restore.
-Schema changes require the separately guarded migration operation. Daily backups
+Schema changes remain data mutations, with no automatic retry or uncertain rollback. Daily backups
 remain independent, with full capture/readback/restore/cleanup. Git history is not
 a database backup. Keep shared concurrency and the DB lease; never cancel a live
 mutation. Historical seven-stage journal records must still replay unchanged.

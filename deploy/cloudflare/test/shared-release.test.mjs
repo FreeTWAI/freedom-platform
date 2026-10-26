@@ -1,3 +1,4 @@
+import { runPortableMigration } from '../../shared-release/portable/migration.mjs';
 import { reconcileFailedBackup } from '../../shared-release/portable/backup-recovery.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -66,7 +67,7 @@ const environment = () => ({ GITHUB_REPOSITORY: REPOSITORY, GITHUB_REPOSITORY_ID
   CONTROLLER_SHA: main, RELEASE_SHA: sha, RELEASE_TARGET: 'staging-next', RELEASE_MODE: 'plan',
   GITHUB_ACTOR: 'teddashh', GITHUB_ACTOR_ID: String(OPERATORS.teddashh),
   GITHUB_TRIGGERING_ACTOR: 'arumwu', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '2' });
-// Retain legacy receipt/journal fixtures; code-only coverage below is explicit.
+// Retain legacy receipt/journal fixtures; independent coverage below is explicit.
 const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: undefined, admittedAt: new Date(0).toISOString() });
 
 function fixtureApi(override = () => undefined) {
@@ -1131,7 +1132,7 @@ async function adoptionFixture(t) {
     migration: { release: previous.sourceSha, tree: previous.sourceTree, commitStatus: 'confirmed' }, schemaLedger,
     retained172: { floor: { floor: { environment: 'staging', minimumSchema: 172 } },
       materialPolicy: { format: 'freedom.backup-material-policy-observation/v1', policies } } };
-  await writeFile(join(sourceRoot, 'app.txt'), 'code-only update'); const current = commit();
+  await writeFile(join(sourceRoot, 'app.txt'), 'independent update'); const current = commit();
   const seed = { format: 'freedom.shared-floor-seed/v2', authority: { legacyFloorSha256: hash(JSON.stringify(legacy)) },
     state: { ...current, deployedSourceSha: current.sourceSha, bindingsSha256: 'd'.repeat(64),
       materialPolicySha256: hash(JSON.stringify(policies)), schemaLedger, schemaVersion: 189, pending: null } };
@@ -1141,7 +1142,7 @@ async function adoptionFixture(t) {
   return { sourceRoot, previous, current, legacy, seed, commit, open };
 }
 
-test('seed v2 adopts a code-only Git descendant while keeping original migration authority', async t => {
+test('seed v2 adopts a independent Git descendant while keeping original migration authority', async t => {
   const f = await adoptionFixture(t), before = JSON.stringify(f.legacy);
   assert.equal((await f.open()).state().sourceSha, f.current.sourceSha);
   assert.equal(JSON.stringify(f.legacy), before);
@@ -1151,7 +1152,7 @@ test('seed v2 adopts a code-only Git descendant while keeping original migration
   assert.notEqual(f.seed.state.schemaLedger[0].sha256, hash('CREATE TABLE fixture(id integer);\n'));
 });
 
-test('seed v1 retains exact-source compatibility and rejects code-only adoption', async t => {
+test('seed v1 retains exact-source compatibility and rejects independent adoption', async t => {
   const f = await adoptionFixture(t), seed = structuredClone(f.seed); seed.format = 'freedom.shared-floor-seed/v1';
   await assert.rejects(f.open(seed), { code: 'release_floor_legacy_authority_invalid' });
   Object.assign(seed.state, f.previous, { deployedSourceSha: f.previous.sourceSha });
@@ -1680,14 +1681,14 @@ test('BEGIN-only reconciliation requires independent read-only observations unde
 });
 
 function codeResult() {
-  const admission = { ...request(), releaseKind: 'code-only' }, value = resultFixture(admission);
+  const admission = { ...request(), releaseKind: 'independent' }, value = resultFixture(admission);
   value.phases = [value.phases[0], { ...value.phases[2], name: 'migration', outcome: 'unchanged', readOnly: true },
     value.phases[3], value.phases[4], value.phases[6]];
   delete value.phases[4].scheduledBackupsVerified;
   return { admission, value };
 }
 test('ordinary release validates schema, publication, health and lease cleanup without backup evidence', () => {
-  assert.equal(requestFromEnvironment(environment()).releaseKind, 'code-only');
+  assert.equal(requestFromEnvironment(environment()).releaseKind, 'independent');
   const { admission, value } = codeResult();
   assert.deepEqual(validateOperatorResult(value, admission, installation, 'e'.repeat(64)).map(p => p.name),
     ['preflight', 'migration', 'deploy', 'health', 'handoff']);
@@ -1699,10 +1700,10 @@ test('ordinary release validates schema, publication, health and lease cleanup w
   }
   assert.throws(() => validateOperatorResult(resultFixture(admission), admission, installation, 'e'.repeat(64)));
 });
-test('production accepts authenticated code-only staging receipt and rejects legacy or forged substitutes', async () => {
-  const f = stagingFixture(), admission = { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'code-only' };
-  Object.assign(f.state.receipt, { releaseKind: 'code-only', providerOutcome: 'code_release_confirmed',
-    operatorEvidence: 'validated-code-release/v1', phases: codeResult().value.phases });
+test('production accepts authenticated independent staging receipt and rejects legacy or forged substitutes', async () => {
+  const f = stagingFixture(), admission = { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'independent' };
+  Object.assign(f.state.receipt, { releaseKind: 'independent', providerOutcome: 'release_confirmed',
+    operatorEvidence: 'validated-independent-release/v1', phases: codeResult().value.phases });
   await requireStaging(f.api, admission, installation);
   const legacy = stagingFixture(); await requireStaging(legacy.api, admission, installation);
   for (const patch of [{ releaseKind: undefined }, { providerOutcome: 'release_and_recovery_confirmed' },
@@ -1711,12 +1712,15 @@ test('production accepts authenticated code-only staging receipt and rejects leg
     await assert.rejects(requireStaging(f.api, admission, installation)); Object.assign(f.state.receipt, old);
   }
 });
-test('code-only floor advances source after health while retaining ledger and rejecting schema changes or overlapping intents', () => {
+test('independent floor advances source after health while retaining ledger and rejecting schema changes or overlapping intents', () => {
   const f = floorFixture(), before = structuredClone(f.chain[0].record.data.state);
-  const begin = f.event('code-begin', undefined, undefined, { request: { ...f.request, releaseKind: 'code-only' },
+  const begin = f.event('release-begin-v2', undefined, undefined, { request: { ...f.request, releaseKind: 'independent' },
     candidate: { sourceSha: sha, sourceTree: tree, schemaLedger: before.schemaLedger } });
   const bad = structuredClone(begin); bad.record.data.candidate.schemaLedger.push({ name: '002_added.sql', sha256: '2'.repeat(64) });
-  assert.throws(() => replayReleaseFloor([...f.chain, bad], f.options), /release_floor_code_schema_changed/);
+  const pending = replayReleaseFloor([...f.chain, bad], f.options).state.pending;
+  assert.equal(pending.candidate.schemaLedger.length, 2); // Approved schema changes are reachable.
+  assert.throws(() => replayReleaseFloor([...f.chain, bad, f.event('passed', 'migration', { outcome: 'unchanged', readOnly: true,
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(before.schemaLedger) })], f.options));
   f.add(begin);
   assert.throws(() => replayReleaseFloor([...f.chain, begin], f.options), /release_floor_unsettled/);
   const schema = { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
@@ -1727,14 +1731,14 @@ test('code-only floor advances source after health while retaining ledger and re
     configSha256: '3'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
   f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
   f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
-  const final = f.add(f.event('passed', 'handoff', { cleanupVerified: true, schemaUnchanged: true }));
+  const final = f.add(f.event('passed', 'handoff', { cleanupVerified: true, migrationVerified: true }));
   assert.equal(final.sourceSha, sha); assert.equal(final.deployedSourceSha, sha); assert.equal(final.pending, null);
   assert.deepEqual(final.schemaLedger, before.schemaLedger); assert.equal(final.schemaVersion, before.schemaVersion);
   assert(!JSON.stringify(f.chain).includes('backup-before'));
 });
 test('deploy reconciliation accepts only an authenticated failed pre-capture backup, not capture or arbitrary input', async () => {
   const f = failedBackupFixture();
-  Object.assign(f.admission, { mode: 'deploy', releaseKind: 'code-only', sourceSha: main });
+  Object.assign(f.admission, { mode: 'deploy', releaseKind: 'independent', sourceSha: main });
   await assert.rejects(requireFailedBackup(f.api, f.admission, installation), /release_backup_recovery_boundary_invalid/);
   f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed' },
     { name: 'backup', reportedStatus: 'failed', backupFailure: { stage: 'preflight', snapshotDump: 'not_started' } }];
@@ -1750,13 +1754,14 @@ test('release source has no scheduler dependency, backup calls remain conditiona
   const cli = await readFile(new URL('../../shared-release/cli.mjs', import.meta.url), 'utf8');
   assert(!cli.includes('requireScheduledBackup')); assert(!cli.includes('scheduleEvidence'));
   const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
-  assert(entry.includes("if (!codeOnly) await phase('backup-after'"));
-  assert(entry.includes("if (codeOnly) check(plan.pending.length === 0"));
+  assert(entry.includes("if (!independentRelease) await phase('backup-after'"));
+  assert(entry.includes("const proof = plan.pending.length === 0"));
+  assert(entry.includes('independent: true'));
   const backup = await readFile(new URL('../../../.github/workflows/shared-backup.yml', import.meta.url), 'utf8');
   assert(backup.includes("cron: '43 5 * * *'")); assert(backup.includes('group: shared-release'));
 });
 
-test('code-only controller runs without backup credentials or schedule evidence and binds five phases', async t => {
+test('independent controller runs without backup credentials or schedule evidence and binds five phases', async t => {
   const fixture = await operatorFixture(t), { admission, value } = codeResult();
   fixture.options.admission = admission; delete fixture.options.credentials.backupDatabaseUrl;
   const oldRun = fixture.options.run;
@@ -1769,4 +1774,55 @@ test('code-only controller runs without backup credentials or schedule evidence 
     await writeFile(join(fixture.temporaryRoot, 'output/result.json'), JSON.stringify({ ...value, requestSha256: hash(input) }));
   };
   assert.equal((await runOperator(fixture.options)).length, 5);
+});
+
+test('independent release executes confirmed migration journal transitions without backup events', () => {
+  const f = floorFixture();
+  const begin = structuredClone(f.begin); begin.record.data.kind = 'release-begin-v2';
+  begin.record.data.request.releaseKind = 'independent'; f.add(begin);
+  const confirmed = { ...f.commit, ledger: f.after };
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('committed', 'migration', confirmed)], f.options), /release_floor_commit_unverified/);
+  f.add(f.event('intent', 'migration', f.commit, { operation: 'commit' }));
+  const uncertain = structuredClone(f.chain);
+  assert.throws(() => replayReleaseFloor([...uncertain, begin], f.options), /release_floor_unsettled/);
+  assert.throws(() => replayReleaseFloor([...uncertain, f.event('passed', 'migration', {
+    outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(f.before) })], f.options));
+  const state = f.add(f.event('committed', 'migration', confirmed));
+  assert.equal(state.schemaVersion, 2); assert.equal(state.sourceSha, sha);
+  f.add(f.event('passed', 'migration', { outcome: 'committed', transactionId: '123', commitStatus: 'confirmed',
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) }));
+  f.add(f.event('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id,
+    configSha256: '8'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+  f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
+  f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  assert.equal(f.add(f.event('passed', 'handoff', { cleanupVerified: true, migrationVerified: true })).pending, null);
+  assert(!f.chain.some(item => item.record.data.stage?.startsWith('backup')));
+  const { admission, value } = codeResult();
+  Object.assign(value.phases[1], { outcome: 'committed', commitStatus: 'confirmed', transactionId: '123' });
+  delete value.phases[1].readOnly;
+  assert.equal(validateOperatorResult(value, admission, installation, 'e'.repeat(64)).length, 5);
+  value.phases[1].commitStatus = 'unknown';
+  assert.throws(() => validateOperatorResult(value, admission, installation, 'e'.repeat(64)), /release_schema_unconfirmed/);
+});
+
+test('independent migration preflight read failure never begins a durable release', async t => {
+  const root = await diskFixture(t, 'migration-preflight-'); let began = 0, released = false;
+  const client = { on() {}, removeListener() {}, release() { released = true; }, async query(input) {
+    const sql = typeof input === 'string' ? input : input.text;
+    if (sql.startsWith('SELECT current_database()')) return { rows: [{ database: 'fixture', role: 'fixture_migrator',
+      session_role: 'fixture_migrator', schema: 'public' }] };
+    if (sql.includes('FROM schema_migrations')) throw Error('synthetic transient preflight read');
+    return { rows: [], command: sql };
+  } };
+  await assert.rejects(runPortableMigration({ pool: { connect: async () => client }, database: 'fixture',
+    plan: { sourceCommit: sha, sourceTree: tree, canonical: { sourceCommit: sha } },
+    expected: { materialPolicySha256: 'a'.repeat(64), rlsTables: ['fixture'], runtimeUnreadable: [], tablePrivileges: [] },
+    previousSourceSha: main, journalRoot: root, independent: true, beginMutation: async () => { began++; },
+    lease: { signal: new AbortController().signal, assertHeld() {} }, assertFloor: async () => {},
+    verifyRetainedConstraints: async () => {}, retainCommitIntent: async () => { assert.fail('no commit intent'); },
+    retainCommittedFloor: async () => { assert.fail('no committed floor'); } }), /synthetic transient preflight read/);
+  assert.equal(began, 0); assert.equal(released, true);
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  assert(entry.indexOf('unchangedProof = await verifyUnchangedSchema') < entry.indexOf('const begin = () => floor.beginIndependent'));
 });

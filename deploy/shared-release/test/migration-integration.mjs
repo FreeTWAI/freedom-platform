@@ -96,7 +96,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(intentCalls, 0); assert.equal(floorCalls, 0);
 
     const goodRoot = await journalRoot('migration-confirmed');
-    const result = await runPortableMigration({ ...args, journalRoot: goodRoot });
+    const result = await runPortableMigration({ ...args, independent: true, beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined, journalRoot: goodRoot });
     assert.equal(result.outcome, 'committed'); assert.equal(result.commitStatus, 'confirmed');
     assert.deepEqual(result.applied, [pending]); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 1);
@@ -129,7 +129,8 @@ INSERT INTO shared_release_fixture VALUES(1);
         } };
     } };
     const unknownRoot = await journalRoot('migration-unknown');
-    await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot }), /synthetic lost COMMIT reply/);
+    await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot, independent: true,
+      beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined }), /synthetic lost COMMIT reply/);
     assert.equal(commits, 1); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 2);
     const failure = JSON.parse(await readFile(join(unknownRoot, 'failed.json'))); assert.equal(failure.commitStatus, 'unknown');
