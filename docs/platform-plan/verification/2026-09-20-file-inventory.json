@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 105809,
-      "sha256": "3b82a6fa44e4da76c011db995d96ee3a23be388ebf2c3d6b7ccaefc059b97851"
+      "bytes": 109269,
+      "sha256": "75fd6d835245d98a896001b267ceecf567e0f3063d61b45a1c18e5e13076fba7"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14649,8 +14649,8 @@
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 20747,
-      "sha256": "7c43aedfdfee7da8800105629cddf277eb9dd1b4e835183d365c6616719bdfad"
+      "bytes": 21409,
+      "sha256": "6f5b043823d8e08d9e94bcf615225315c2f97b3c251f48ecec097dd8047b5b12"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
@@ -14674,8 +14674,8 @@
     },
     {
       "path": "deploy/shared-release/environment-check.mjs",
-      "bytes": 5279,
-      "sha256": "af5f8662eee9373e19a553c2e615c9f0e2a0dc765be3548acc698b4f9a9d30f7"
+      "bytes": 6372,
+      "sha256": "15a2cc05fa4f988f1d497f1c8765369f1c218c0f458689ae6e199b173467eaf6"
     },
     {
       "path": "deploy/shared-release/freedom.module.json",

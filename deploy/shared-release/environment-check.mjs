@@ -33,25 +33,46 @@ export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) 
     }
   };
   const read = async (url, headers) => {
-    const response = await fetchImpl(url, { method: 'GET', redirect: 'error', headers,
-      signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]) });
+    // Manual mode exposes the status without following Location or sending
+    // credentials to a second origin. redirect:error hides this useful result.
+    let response;
+    try {
+      response = await fetchImpl(url, { method: 'GET', redirect: 'manual', headers,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]) });
+    } catch { check(false, 'release_environment_transport_failed'); }
     if (response.status !== 200) {
       await response.body?.cancel();
-      throw Object.assign(Error('release_environment_http_failed'), { code: 'release_environment_http_failed', httpStatus: response.status });
+      const code = response.status >= 300 && response.status < 400
+        ? 'release_environment_redirect_rejected' : 'release_environment_http_failed';
+      throw Object.assign(Error(code), { code, httpStatus: response.status });
     }
     let body;
     try { body = JSON.parse((await boundedResponseBytes(response, 2_000_000)).toString('utf8')); }
     catch { check(false, 'release_environment_response_invalid'); }
     return body;
   };
-  const api = async path => {
+  const api = async (path, scope = `/accounts/${config.accountId}`) => {
     check(secret(env.CLOUDFLARE_API_TOKEN), 'release_cloudflare_credentials_missing');
-    const body = await read(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}${path}`,
+    const body = await read(`https://api.cloudflare.com/client/v4${scope}${path}`,
       { Authorization: 'Bearer ' + env.CLOUDFLARE_API_TOKEN, 'Cache-Control': 'no-store' });
     check(body.success === true && body.result !== undefined, 'release_environment_response_invalid'); return body.result;
   };
   await run('cloudflare_account_token', async () => {
-    check((await api('/tokens/verify')).status === 'active', 'release_account_token_inactive');
+    try {
+      check((await api('/tokens/verify')).status === 'active', 'release_account_token_inactive');
+      report.cloudflareTokenKind = 'account';
+    } catch (error) {
+      if (error.code !== 'release_environment_http_failed' || ![401, 403].includes(error.httpStatus)) throw error;
+      // Diagnose an accidentally installed personal token; do not accept it as
+      // an account-owned service credential or disclose its identifier.
+      let userToken;
+      try { userToken = await api('/tokens/verify', '/user'); } catch { throw error; }
+      if (userToken.status !== 'active') throw error;
+      report.cloudflareTokenKind = 'user';
+      throw Object.assign(Error('release_account_owned_token_required'), {
+        code: 'release_account_owned_token_required', httpStatus: error.httpStatus,
+      });
+    }
   });
   let live;
   await run('worker_routes_and_hyperdrive', async () => {
