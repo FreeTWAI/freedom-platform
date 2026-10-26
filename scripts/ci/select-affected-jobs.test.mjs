@@ -1374,3 +1374,81 @@ test('handoff selection uses clean exact integration Git blobs, rejects executab
   const executableHead=git(['rev-parse','HEAD']), executableCandidate=merge(executableBase,executableHead);
   assert.equal(collectRepositoryDecision({...input,base:executableBase,head:executableHead,candidate:executableCandidate}).mode,'full');
 });
+
+test('delivery tooling runs its existing coverage on PR and main without unrelated product jobs', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-delivery-select-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const git = (args, input) => execFileSync('/usr/bin/git', ['-C', directory, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
+    input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 'Delivery Test', GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Delivery Test', GIT_COMMITTER_EMAIL: 'test@example.invalid'},
+  }).trim();
+  const put = async (path, body) => { await mkdir(dirname(join(directory, path)), {recursive: true}); await writeFile(join(directory, path), body); };
+  const commit = message => { git(['add', '.']); git(['commit', '-qm', message]); return git(['rev-parse', 'HEAD']); };
+  const merge = (base, head) => { const sha = git(['commit-tree', git(['rev-parse', `${head}^{tree}`]), '-p', base, '-p', head], 'integration\n'); git(['checkout', '-q', sha]); return sha; };
+  git(['init', '-q', '-b', 'main']);
+  const descriptors = [
+    moduleDescriptor('governance', ['scripts/ci/**', '.github/workflows/verify.yml']),
+    moduleDescriptor('media-migration', ['packages/media-migration/**', 'tests/runtime/media-backup-daily.test.ts']),
+    moduleDescriptor('shared-release', ['deploy/shared-release/**', '.github/workflows/shared-release.yml'], {dependencies: ['governance', 'media-migration']}),
+  ];
+  for (const d of descriptors) await put(`modules/${d.module_id}/freedom.module.json`, JSON.stringify(d));
+  const paths = ['deploy/shared-release/portable/entry.mjs', '.github/workflows/shared-release.yml',
+    'packages/media-migration/backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
+    'scripts/ci/select-affected-jobs.mjs', '.github/workflows/verify.yml', GENERATED_INVENTORY_PATH];
+  for (const path of paths) await put(path, 'before\n');
+  const base = commit('base');
+  for (const path of paths) await put(path, 'after\n');
+  await put('packages/media-migration/backup-diagnostics.ts', 'new diagnostic helper\n');
+  const head = commit('release and daily backup'), candidate = merge(base, head);
+  const input = {repository: directory, event: 'pull_request', base, head, candidate};
+  const selected = collectRepositoryDecision(input);
+  assert.equal(selected.reason, 'delivery_tooling');
+  assert.deepEqual(Object.entries(selected.jobs).filter(([, run]) => run).map(([id]) => id), ['deploy-preflight']);
+  assert.deepEqual(collectRepositoryDecision({...input, event: 'push', head: candidate}), selected);
+  const results = Object.fromEntries(SELECTABLE_JOBS.map(id => [id, selected.jobs[id] ? 'success' : 'skipped']));
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true);
+  for (const result of ['skipped', 'failure', 'cancelled'])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected, {...results, 'deploy-preflight': result})).ok, false);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results, {integrity: 'failure'})).ok, false);
+  for (const extra of [{candidate: head}, {base: head}, {head: base}, {event: 'merge_group'}])
+    assert.equal(collectRepositoryDecision({...input, ...extra}).mode, 'full');
+  await put(paths[0], 'dirty\n'); assert.equal(collectRepositoryDecision(input).mode, 'full'); git(['checkout', '--', paths[0]]);
+  // Mixing even one product/helper, migration, descriptor or unrelated control
+  // change must restore its wider coverage; operator naming grants no exemption.
+  for (const path of ['apps/portal-web/src/App.tsx', 'modules/agent-commerce/hosted/store.ts',
+    'packages/media-migration/inventory.ts', 'packages/db/migrations.ts',
+    '.github/workflows/codeql.yml', 'deploy/shared-release/freedom.module.json',
+    'scripts/ci/run-pinned-suite.mjs']) {
+    git(['checkout', '-q', head]); await put(path, 'mixed\n');
+    const mixed = commit('mixed change'), integration = merge(base, mixed);
+    assert.equal(collectRepositoryDecision({...input, head: mixed, candidate: integration}).mode, 'full', path);
+  }
+  git(['checkout', '-q', head]); git(['rm', paths[0]]); const deleted = commit('delete');
+  assert.equal(collectRepositoryDecision({...input, head: deleted, candidate: merge(base, deleted)}).mode, 'full');
+  git(['checkout', '-q', head]); git(['update-index', '--chmod=+x', paths[0]]); git(['commit', '-qm', 'mode']);
+  const mode = git(['rev-parse', 'HEAD']); git(['checkout', '--', paths[0]]);
+  assert.equal(collectRepositoryDecision({...input, head: mode, candidate: merge(base, mode)}).mode, 'full');
+  git(['checkout', '-q', head]);
+  const restoreTest = 'deploy/cloudflare/test/media-restore-container.test.mjs';
+  await put(restoreTest, 'already-covered operator harness\n');
+  await put('modules/media-migration/freedom.module.json', JSON.stringify({...descriptors[1],
+    owned_paths: [...descriptors[1].owned_paths, restoreTest]}));
+  const owner = commit('assign operator harness owner');
+  assert.deepEqual(collectRepositoryDecision({...input, head: owner, candidate: merge(base, owner)}), selected);
+  git(['checkout', '-q', head]);
+  await put('modules/governance/freedom.module.json', JSON.stringify({...descriptors[0], tests: ['runtime.full']}));
+  const drift = commit('descriptor drift');
+  assert.equal(collectRepositoryDecision({...input, head: drift, candidate: merge(base, drift)}).mode, 'full');
+});
+
+test('delivery CI retains native restore and daily backup diagnostics in its selected job', async () => {
+  const workflow = await readFile(workflowPath, 'utf8');
+  const job = jobBlock(workflow, 'deploy-preflight');
+  assert.match(job, /--suite ci\.deploy-preflight/);
+  assert.match(job, /--suite ci\.migration-postgres/);
+  assert.match(job, /postgres-integration\.mjs --source \./);
+  assert.match(job, /node --import tsx --test tests\/runtime\/media-backup-daily\.test\.ts/);
+  assert.match(jobBlock(workflow, 'select'), /github\.event\.pull_request\.base\.sha \|\| github\.event\.before/);
+});

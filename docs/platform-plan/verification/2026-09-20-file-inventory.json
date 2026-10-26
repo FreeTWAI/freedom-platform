@@ -199,8 +199,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 37004,
-      "sha256": "102a2b620b96f716ad7f8e1044c7609923603a019b958d0135d01819732e2ac8"
+      "bytes": 37319,
+      "sha256": "1a032510265676b83c6b043b78546d35f8a240fb6931e69f710bc42ac6d04246"
     },
     {
       "path": "apps/freedom.module.json",
@@ -23899,8 +23899,8 @@
     },
     {
       "path": "scripts/ci/affected-jobs.md",
-      "bytes": 9629,
-      "sha256": "05ed1818c7b307b2073b2ba241cc32c9e68043540957db6e5b83d64baf5609d7"
+      "bytes": 11832,
+      "sha256": "f9c2da2d23fac462ecb5c2787da232d216725a70b5452d3545848fe29a1879a4"
     },
     {
       "path": "scripts/ci/broker-bridge-check.mjs",
@@ -23979,13 +23979,13 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.mjs",
-      "bytes": 45014,
-      "sha256": "a6309bb4b64aaad4d6a5df7333ab01f0e44971d1d1afb8d36be00239a3abf075"
+      "bytes": 49976,
+      "sha256": "08b9626a2dfa9b888b63e6e9e5b929d1a2b5e3910bdcf18f0e48c9214fcc24f9"
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 92055,
-      "sha256": "cef3c45598ab1ea2c48bba5e6723a572daa504b4bf7bbbd15c403e486d64a2fe"
+      "bytes": 98226,
+      "sha256": "711ce2cd88886e3d0b3d4650e42f00789001323aabadc1a4a484c3eeb4553f77"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",

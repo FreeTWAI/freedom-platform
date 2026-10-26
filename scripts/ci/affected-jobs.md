@@ -1,5 +1,37 @@
 # Bounded affected job selection
 
+## Minimum sufficient CI
+
+Every change should select checks for the behavior it can affect. Reuse coverage
+already supplied by another required check; do not add unrelated product tests
+or repeat successful checks without a changed input or unresolved failure.
+A broader fallback means the dependency scope is not yet established, not that
+all changes inherently require every test. Extend bounded profiles as ownership
+and coverage become clear; retain failures and distinguish skipped from passed.
+
+The `delivery_tooling` profile applies to exact release/backup workflow and
+operator paths, the daily backup orchestrator/diagnostics/test, and the selector
+and Verify workflow controls. It runs **deploy-preflight**: operator/preflight
+unit tests, isolated migration/native PostgreSQL/R2 restoration, and the daily
+backup orchestration tests. The already-required source-integrity job runs
+selector/workflow and governance tests. CodeQL and non-author code-owner review
+continue independently. Product runtime partitions, browser/UI, static Worker
+and consumer repository suites do not run for these operator-only changes.
+
+This profile works for both PR integration trees and a direct main successor.
+The selector verifies the actual immutable base/candidate trees, checkout and
+ordered parents; main uses GitHub's `before` SHA. It accepts ordinary additions
+or modifications within proven operator ownership. Ownership additions for
+already-covered operator files use the existing governance tests; removed ownership
+or changed dependencies, tests and surfaces remain full. Mixed product, schema,
+other CI runner, deletion, rename or mode changes fall back to broader selection. Generated inventory may accompany a scoped change.
+It does not reuse a green result for a different source or weaken deployment
+source/actor/lease/health checks. Ordinary code deployment and daily backups are
+separate operations; deployment need not repeat a full daily backup.
+
+The older profiles below retain their own event and path limits. In particular,
+the statements about full push selection below exclude this delivery profile.
+
 The selector and aggregate are loaded from the installed workflow source, not
 from candidate configuration. This candidate adds an `affected` mode for the
 exact frontend files in `FRONTEND_LEAF_PROFILES` in `select-affected-jobs.mjs`:
@@ -25,6 +57,7 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: frontend leaves | Full eight-part runtime plus aggregate, full browser, static/worker |
 | `affected`: guild presentation | Guild presentation and static/worker |
 | `affected`: informational handoffs | Governance consumers |
+| `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does

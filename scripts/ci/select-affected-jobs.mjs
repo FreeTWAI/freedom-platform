@@ -1,5 +1,6 @@
 // Conservative job selection for .github/workflows/verify.yml.
-// A pull request narrows only inside the explicit docs allowlist or the fixed
+// Operator-only changes use existing deploy and integrity coverage on PR/main.
+// Other pull requests narrow inside the explicit docs allowlist or the fixed
 // frontend leaf or informational handoff profiles below. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
 // Leaf edits retain all runtime/browser/static
@@ -109,12 +110,33 @@ export function heavyJobCondition(outputKey) {
 }
 
 export const GUILD_PRESENTATION_JOBS = Object.freeze(['guild-presentation', 'static-worker']);
+export const DELIVERY_TOOLING_JOBS = Object.freeze(['deploy-preflight']);
+const DELIVERY_TOOLING_REASON = 'delivery_tooling';
+// These operator-only files are covered by deploy-preflight/native restore;
+// selector/workflow controls are covered by the always-on selector/governance
+// suites and code-owner review. No product path or module declaration qualifies.
+const DELIVERY_FILES = new Set([
+  '.github/workflows/shared-release.yml', '.github/workflows/shared-backup.yml',
+  '.github/workflows/release-operator-image.yml', '.github/workflows/verify.yml',
+  'scripts/ci/select-affected-jobs.mjs', 'scripts/ci/select-affected-jobs.test.mjs',
+  'scripts/ci/affected-jobs.md', 'deploy/cloudflare/test/shared-release.test.mjs',
+  'deploy/cloudflare/test/media-restore-container.test.mjs',
+  'packages/media-migration/backup-daily.ts', 'packages/media-migration/backup-diagnostics.ts',
+  'tests/runtime/media-backup-daily.test.ts',
+]);
+function deliveryOwner(path) {
+  if (isModuleDescriptorPath(path)) return null;
+  if (!DELIVERY_FILES.has(path) && !path.startsWith('deploy/shared-release/')) return null;
+  if (path.startsWith('packages/media-migration/') || path.startsWith('tests/runtime/')
+    || path === 'deploy/cloudflare/test/media-restore-container.test.mjs') return 'media-migration';
+  return path.startsWith('scripts/ci/') || path === '.github/workflows/verify.yml' ? 'governance' : 'shared-release';
+}
 function decision(mode, reason, selected) {
   if (!['full', 'docs', 'affected'].includes(mode) || !/^[a-z0-9_]+$/.test(reason)) throw new Error('invalid_selection_decision');
   return Object.freeze({
     mode, reason,
     jobs: Object.freeze(Object.fromEntries(SELECTABLE_JOBS.map(id => [id, mode === 'affected'
-      ? (reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
+      ? (reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS : reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
         : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
   });
 }
@@ -556,6 +578,8 @@ function loadTrees(repository, base, head) {
   } catch { return null; }
 }
 export function collectRepositoryDecision({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
+  const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
+  if (delivery) return delivery;
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
   const handoff = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideHandoffDocsProfile);
   if (handoff.profile === HANDOFF_DOCS_REASON) return decision('affected', handoff.reason, false);
@@ -574,6 +598,53 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
     baseline: baseline.descriptors, candidate: headGraph.descriptors,
     descriptorsProven: baseline.ok && headGraph.ok,
   });
+}
+
+// Compare the actual checkout, including merge resolutions, rather than trusting
+// a PR's path list. On main, only a direct successor of event.before qualifies;
+// a multi-commit push or missing topology falls back to existing full selection.
+function collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch}) {
+  if (!['pull_request', 'push'].includes(event) || typeof repository !== 'string' || !isAbsolute(repository)
+    || ![base, head, candidate].every(value => SHA.test(value))) return null;
+  try {
+    const root = resolve(repository);
+    for (const sha of [base, head, candidate]) if (!ensureCommit(root, sha, pullRequest, allowFetch)) return null;
+    if (runGit(root, ['rev-parse', 'HEAD']).toString().trim() !== candidate
+      || runGit(root, ['status', '--porcelain', '--untracked-files=all']).toString().trim()) return null;
+    const parents = runGit(root, ['cat-file', '-p', candidate]).toString().split('\n\n')[0]
+      .split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
+    if (parents[0] !== base || (event === 'pull_request' ? parents.length !== 2 || parents[1] !== head : head !== candidate)) return null;
+    const diff = loadTrees(root, base, candidate);
+    if (!diff?.ok || !diff.changes.length) return null;
+    const graphs = [base, candidate].map(sha => {
+      const loaded = loadModuleDescriptors(root, sha);
+      if (!loaded.ok) throw Error('missing_graph');
+      return validatedDescriptorGraph(loaded.descriptors);
+    });
+    if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) return null;
+    for (const [id, descriptor] of graphs[0]) {
+      const current = graphs[1].get(id);
+      // Adding ownership for an already-covered operator file does not change
+      // runtime dependencies. Governance tests already validate the descriptor.
+      // Never permit removed ownership or changed tests/dependencies/surfaces.
+      if (descriptor.owned_paths.some(path => !current.owned_paths.includes(path))
+        || current.owned_paths.some(path => !descriptor.owned_paths.includes(path) && deliveryOwner(path) !== id)
+        || JSON.stringify({...descriptor, owned_paths: []}) !== JSON.stringify({...current, owned_paths: []})) return null;
+    }
+    let scoped = false;
+    for (const change of diff.changes) {
+      if (statusReason(change)) return null;
+      const before = diff.baseFiles.get(change.path), after = diff.candidateFiles.get(change.path);
+      if (!regularBlob(after) || before && (!regularBlob(before) || before.mode !== after.mode)) return null;
+      if (change.path === GENERATED_INVENTORY_PATH && change.status === 'M') continue;
+      if (isModuleDescriptorPath(change.path) && change.status === 'M') continue;
+      const owner = deliveryOwner(change.path);
+      const owners = graphs.map(graph => [...graph.values()].filter(d => owns(d, change.path)).map(d => d.module_id));
+      if (!owner || !sameSet(owners[1], [owner]) || owners[0].length && !sameSet(owners[0], [owner])) return null;
+      scoped = true;
+    }
+    return scoped ? decision('affected', DELIVERY_TOOLING_REASON, false) : null;
+  } catch { return null; }
 }
 
 // Host event SHAs, not a candidate profile/file list, authorize the pilot.
@@ -645,6 +716,7 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
     const profile = outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
+      : outputs.reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS
       : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
         : outputs.reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS : null;
     if (!profile || SELECTABLE_JOBS.some(id => jobs[id] !== profile.includes(id))) return { ok: false, reason: 'decision_inconsistent' };
