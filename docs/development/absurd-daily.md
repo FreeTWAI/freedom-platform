@@ -235,3 +235,15 @@ UX-14最終受影響瀏覽器子集 **5 passed／0 skipped（2.4分鐘）**：�
 無3D的公開實際按鈕旅程另通過：刻意不載原生module，加牛排／上桌，當局43分，備援為黑鐵盤／木托；原圖沒有分數，完整portrait只有一次分數，0 POST／0 pageerror。沒有注入成績。隔離測試schema結束後0連線、0剩餘schema，未接觸正式DB。
 
 本輪實際旅程：[手機牛排](../../modules/absurd-daily/review/current-steak-iron-phone-20261025.png)／[下載PNG](../../modules/absurd-daily/review/current-steak-iron-share-20261025.png)。八類native接觸表已檢視器皿用途與高度，但不把它當其他62道全部精細美術已通過或真人接受。素材來源hash及生成factory與最終production build一致。
+
+## UX-15e：依原參考重做搞怪手繪遊戲介面（2026-10-26）
+
+使用者提供日系搞怪食物、暖簾、木台和紙片菜單參考；首批生成卻偏半寫實食物廣告，已被明確否決。保留該失敗紀錄，重新直接讀兩張原圖，將它們作為內建imagegen的style reference。新版以簡單墨線、有限平塗紙色、原創少筆畫角色與幽默動作呈現；沒有複製參考的蛋角色、商標或宣傳文字，也沒有將新圖自行標為使用者已接受。
+
+先完成炸熱狗完整介面方向圖，再把圖中情境接入真正公開頁：按鈕、文字和選擇仍是HTML，開始後是本局3D。原生實際操作已走過開始、加料、裹衣；[手機開場](../../modules/absurd-daily/review/corn-dog-illustrated-ready-20261026.png)是產品頁截圖，並非把生成mockup當可玩證據。其後暫行延伸全部66道料理與6款其他遊戲，每款有獨立插畫。
+
+[封面收據](../../modules/absurd-daily/illustrated-art.json)記錄72個512×340 WebP、每格裁切、來源及輸出hash、完整prompt和工具。PNG封存E槽，不作產品下載路徑。全批2,538,948bytes、單張最高45,838bytes；固定圖片owner、contain保留完整主體、按需載入和可操作的失敗備援。這是新增封面體積，不稱為整站減重。牛排鐵盤／木托、總分、實際成品、存檔和本人確認分享不回退。
+
+本批亦回應四項審查：StrictMode清理釋放舊匯出owner，重播可重試完成局，舊promise不能清掉新owner；holiday canvas保留pointer down時的round，跨回合release不可操作替代目標；未開始的自由料理預覽／初始載入失敗不接管別道checkpoint，明確開始或確認重做才接管；牛排mesh帶原portions索引，配菜不造成偏移。保留main的完成局少一次繪製與測試。
+
+首輪新runtime三項通過，涵蓋實際controller閉包跨回合、原生網格的交錯配菜索引及72素材hash／大小／尺寸／prompt。完整瀏覽器與最終像素結果在收尾時追加，舊43項／5條不作本版通過證據。

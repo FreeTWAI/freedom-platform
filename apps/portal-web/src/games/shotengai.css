@@ -1,0 +1,97 @@
+/* UX-15 — illustrated shop covers; all labels and controls remain accessible HTML. */
+.ad-root.ad-toy-console.ad-shotengai{--ad-bg:#f8f0d9;--ad-surface:#fffbed;--ad-raised:#e7b97e;--ad-ink:#302e29;--ad-muted:#645d50;--ad-line:#65533d;--ad-accent:#c34e35;background:#f8f0d9;color:var(--ad-ink)}
+.ad-root.ad-toy-console.ad-shotengai,.ad-root.ad-toy-console.ad-shotengai button,.ad-root.ad-toy-console.ad-shotengai input,.ad-root.ad-toy-console.ad-shotengai select{font-family:'Microsoft JhengHei','PingFang TC',system-ui,sans-serif}
+.ad-shotengai .sg-cover{display:block;position:relative;overflow:hidden;aspect-ratio:128/85;min-width:0;width:100%;background:#f2dfc4;isolation:isolate}
+.ad-shotengai .sg-cover>img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;max-width:none}
+.ad-shotengai .sg-cover-fallback{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:inherit;height:100%;padding:20px;gap:8px;text-align:center;color:#382d29;font-size:14px;line-height:1.7}
+.ad-shotengai .sg-cover-fallback strong{font-size:20px}
+.ad-root.ad-toy-console.ad-shotengai button,.ad-root.ad-toy-console.ad-shotengai .ad-button{border:2px solid #574135;border-radius:10px;background:#b9432c;color:#fffdf4;box-shadow:0 3px 0 #574135;font-size:15px;line-height:1.6;transition:background-color .12s,border-color .12s,box-shadow .12s;transform:none}
+.ad-root.ad-toy-console.ad-shotengai button:hover,.ad-root.ad-toy-console.ad-shotengai .ad-button:hover{background:#a83b27;transform:none;box-shadow:0 3px 0 #574135}
+.ad-root.ad-toy-console.ad-shotengai button:active,.ad-root.ad-toy-console.ad-shotengai .ad-button:active{transform:none;box-shadow:inset 0 2px 0 #574135}
+.ad-root.ad-toy-console.ad-shotengai .ad-secondary{background:#fffdf4;color:#574135;border-color:#b39370;box-shadow:0 2px 0 #d8ba94}
+.ad-root.ad-toy-console.ad-shotengai .ad-secondary:hover{background:#f6e2bb;color:#574135}
+.ad-root.ad-toy-console.ad-shotengai :focus-visible{outline:3px solid #2e706e;outline-offset:4px}
+.ad-root.ad-toy-console.ad-shotengai .ad-header{border-bottom:2px solid #a38a69;background:#fff7e8;padding:14px 0}
+.ad-root.ad-toy-console.ad-shotengai .ad-brand{font-weight:800;gap:10px}.ad-root.ad-toy-console.ad-shotengai .ad-brand img{height:32px;width:56px;object-fit:contain}
+.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading{padding:26px 24px;background:#243e58;color:#fff7e8;border:3px solid #463a31;border-radius:16px 16px 5px 5px;box-shadow:0 5px 0 #e2c098;gap:16px;position:relative;isolation:isolate}
+.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading:after{content:'';position:absolute;left:0;right:0;bottom:-14px;height:10px;background:repeating-linear-gradient(90deg,#243e58 0 calc(25% - 3px),transparent calc(25% - 3px) 25%);z-index:-1;border-radius:0 0 5px 5px}
+.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading h1{font-size:clamp(27px,3vw,36px);color:#fff7e8;letter-spacing:.02em;line-height:1.45}
+.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading p{font-size:14px;color:#efe0bb;margin-bottom:5px}.ad-root.ad-toy-console.ad-shotengai .ck-open-label{color:#fff7e8;font-size:14px}.ad-root.ad-toy-console.ad-shotengai .ck-open-label i{background:#edc46c}
+.ad-root.ad-toy-console.ad-shotengai .ck-game-types{gap:10px}.ad-root.ad-toy-console.ad-shotengai .ck-type{background:#fffdf4;color:#574135;border:2px solid #bb9b77;box-shadow:0 3px 0 #dec39f;border-radius:9px}
+.ad-root.ad-toy-console.ad-shotengai .ck-type[aria-pressed=true]{background:#b9432c;color:#fffdf4;border-color:#693d2e}.ad-root.ad-toy-console.ad-shotengai .ck-type[aria-pressed=true] small{color:#fffdf4}
+.ad-root.ad-toy-console.ad-shotengai .ck-section-kicker,.ad-root.ad-toy-console.ad-shotengai .pt-kicker{font-size:14px;color:#9d452e;letter-spacing:.06em}
+.ad-root.ad-toy-console.ad-shotengai .ck-section-heading h2{color:#382d29;font-size:clamp(23px,2.5vw,28px)}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-grid{gap:18px;grid-template-columns:repeat(auto-fill,minmax(min(100%,15em),1fr))}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-card,.ad-root.ad-toy-console.ad-shotengai .pt-party-card,.ad-root.ad-toy-console.ad-shotengai .ad-game-card{border:2px solid #7f634d;border-radius:15px;background:#fffdf4;box-shadow:0 4px 0 #d7b58b;transform:none;transition:border-color .12s,box-shadow .12s;overflow:hidden}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-card:hover,.ad-root.ad-toy-console.ad-shotengai .pt-party-card:hover,.ad-root.ad-toy-console.ad-shotengai .ad-game-card:hover{transform:none;border-color:#a13f2b;box-shadow:0 4px 0 #c78f66}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-open{border:0;box-shadow:none;border-radius:0;background:transparent;color:#382d29;padding:0;transform:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-open:hover{background:transparent;box-shadow:none;transform:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-visual{height:auto;aspect-ratio:128/85;padding:0;overflow:hidden;border-bottom:2px solid #7f634d}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-visual>.sg-cover{height:100%}
+.ad-root.ad-toy-console.ad-shotengai .ck-difficulty{font-size:14px;line-height:1.5;padding:4px 8px;top:10px;left:10px;background:#fff9e9ed;border:1px solid #99734f;color:#574135;z-index:1;box-shadow:0 2px 0 #422b241c}
+.ad-root.ad-toy-console.ad-shotengai .ck-play-mark{right:10px;bottom:10px;width:32px;height:32px;border:2px solid #fff7e8;background:#b9432c;color:#fff7e8;font-size:20px}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-info{padding:15px 15px 12px;gap:7px}.ad-root.ad-toy-console.ad-shotengai .ck-recipe-info strong{font-size:20px;line-height:1.5;color:#382d29;letter-spacing:0}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-info>span,.ad-root.ad-toy-console.ad-shotengai .ck-recipe-info small{font-size:14px;color:#705c4e;line-height:1.7}
+.ad-root.ad-toy-console.ad-shotengai .ck-card-bottom{margin:0 14px;border-top:1px dashed #d5b28a;color:#705c4e;font-size:14px}.ad-root.ad-toy-console.ad-shotengai .ck-card-bottom b{color:#9d452e}
+.ad-root.ad-toy-console.ad-shotengai .ck-favorite{background:transparent;box-shadow:none;border:0;color:#9d452e}.ad-root.ad-toy-console.ad-shotengai .ck-favorite:hover{background:#f7e4bf;box-shadow:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-categories button{background:#fffdf4;color:#574135;border:1px solid #ad8d69;box-shadow:none;font-size:14px}.ad-root.ad-toy-console.ad-shotengai .ck-categories button[aria-pressed=true]{background:#294f60;color:#fffdf4;border-color:#294f60}
+.ad-root.ad-toy-console.ad-shotengai .ck-categories button[aria-pressed=true] small{color:#fffdf4}.ad-root.ad-toy-console.ad-shotengai .ck-search input,.ad-root.ad-toy-console.ad-shotengai .ck-filter select{font-size:16px;border:2px solid #b99a76;background:#fffdf4;color:#382d29}
+.ad-root.ad-toy-console.ad-shotengai .ck-search>span,.ad-root.ad-toy-console.ad-shotengai .ck-filter,.ad-root.ad-toy-console.ad-shotengai .ck-count{font-size:14px;color:#705c4e}
+.ad-root.ad-toy-console.ad-shotengai .pt-party-art,.ad-root.ad-toy-console.ad-shotengai .ad-card-art{height:auto;aspect-ratio:128/85;border-bottom:2px solid #7f634d;background:#f2dfc4}
+.ad-root.ad-toy-console.ad-shotengai .pt-party-art>.sg-cover,.ad-root.ad-toy-console.ad-shotengai .ad-card-art>.sg-cover{height:100%;width:100%}
+.ad-root.ad-toy-console.ad-shotengai .pt-party-art>span:not(.sg-cover){font-size:14px;background:#fff9e9ed;color:#574135;border:1px solid #99734f}
+.ad-root.ad-toy-console.ad-shotengai .ck-feature-art .sg-cover{border:2px solid #9f7d58;border-radius:45% 45% 14px 14px;box-shadow:0 4px 0 #d1ad7d}
+.ad-root.ad-toy-console.ad-shotengai .ck-feature-orbit,.ad-root.ad-toy-console.ad-shotengai .ck-dish-note{display:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-card{display:flex;flex-direction:column}
+.ad-root.ad-toy-console.ad-shotengai .sg-intro-copy{padding:24px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;position:relative;color:#382d29;background:#fff8e7}
+.ad-root.ad-toy-console.ad-shotengai .sg-entry-label{font-size:14px;font-weight:800;letter-spacing:.04em;color:#9d452e}
+.ad-root.ad-toy-console.ad-shotengai .mk-surface:has(.mk-cover>.sg-cover){aspect-ratio:auto;min-height:0}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover:has(>.sg-cover){position:relative;inset:auto;display:block;padding:0;border:0;background:#fff8e7;text-align:left}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover>.sg-cover{aspect-ratio:128/85;height:auto;max-height:none}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover .sg-intro-copy h2{font-size:clamp(25px,3vw,33px);line-height:1.5;margin:0;max-width:none;color:#382d29}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover .sg-intro-copy p{font-size:16px;line-height:1.8;margin:0;max-width:36em}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover .sg-intro-copy button{align-self:flex-end;min-width:180px;max-width:100%;margin:6px 0 0;padding:12px 20px}
+.ad-root.ad-toy-console.ad-shotengai .mk-toolbar,.ad-root.ad-toy-console.ad-shotengai .ck-console-toolbar,.ad-root.ad-toy-console.ad-shotengai .pt-heading{border-bottom:2px solid #b49673;padding-bottom:16px}
+.ad-root.ad-toy-console.ad-shotengai .mk-hud{background:#284e60;border:2px solid #463a31;border-radius:12px;color:#fff9eb}.ad-root.ad-toy-console.ad-shotengai .mk-hud>div{background:transparent;color:#fff9eb;border-right:1px solid #69818b}
+.ad-root.ad-toy-console.ad-shotengai .mk-hud span,.ad-root.ad-toy-console.ad-shotengai .mk-hud strong,.ad-root.ad-toy-console.ad-shotengai .mk-hud small{color:#fff9eb}
+.ad-root.ad-toy-console.ad-shotengai .mk-tray,.ad-root.ad-toy-console.ad-shotengai .ck-game-controls,.ad-root.ad-toy-console.ad-shotengai .pt-rule-card{border:2px solid #7f634d;background:#fffdf4;box-shadow:0 4px 0 #d7b58b}
+.ad-root.ad-toy-console.ad-shotengai .mk-tray-heading{border-bottom:2px solid #b49673;padding-bottom:12px}.ad-root.ad-toy-console.ad-shotengai .mk-ingredients button{background:#fff8e7;color:#574135;box-shadow:0 2px 0 #d7b58b;border:1px solid #b99a76}
+.ad-root.ad-toy-console.ad-shotengai .mk-ingredients button:hover{background:#f4deb6}.ad-root.ad-toy-console.ad-shotengai .mk-ingredients strong{font-size:16px;color:#382d29}
+.ad-root.ad-toy-console.ad-shotengai .mk-heat button[aria-pressed=true],.ad-root.ad-toy-console.ad-shotengai .mk-sauces button[aria-pressed=true]{background:#f4cf70;color:#574135;border-color:#815c36;box-shadow:inset 0 -3px 0 #d7ab4d}
+.ad-root.ad-toy-console.ad-shotengai .mk-serve{background:#b9432c;color:#fffdf4}
+.ad-root.ad-toy-console.ad-shotengai .mk-game[data-market-status=ready] .mk-hud,.ad-root.ad-toy-console.ad-shotengai .mk-game[data-market-status=ready] .mk-heat,.ad-root.ad-toy-console.ad-shotengai .mk-game[data-market-status=ready] .mk-instruction,.ad-root.ad-toy-console.ad-shotengai .mk-game[data-market-status=ready] .mk-tray{display:none}
+.ad-root.ad-toy-console.ad-shotengai .mk-game[data-market-status=ready] .mk-layout{grid-template-columns:minmax(0,1fr);max-width:860px;margin-inline:auto}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover:has(>.sg-cover){border-top:6px solid #243e58}
+.ad-root.ad-toy-console.ad-shotengai .sg-guided-cover,.ad-root.ad-toy-console.ad-shotengai .sg-party-cover,.ad-root.ad-toy-console.ad-shotengai .sg-initial-cover{aspect-ratio:128/85;z-index:2}
+.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover){position:relative}
+.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover)>.ck-stage-mission{display:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover)>.ck-live-scene{position:absolute;inset:0;pointer-events:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-game[data-cooking-state=ready] .ck-game-controls{display:none}
+.ad-root.ad-toy-console.ad-shotengai .ck-game[data-cooking-state=ready] .ck-game-layout{grid-template-columns:minmax(0,1fr);max-width:860px;margin-inline:auto}
+.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover)>.ck-scene-overlay{z-index:3;position:relative;inset:auto;min-height:0;padding:22px;background:#fffbed;color:#302e29;border-top:2px solid #302e29;display:flex;flex-wrap:wrap;gap:16px}
+.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover)>.ck-scene-overlay h2,.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover)>.ck-scene-overlay p,.ad-root.ad-toy-console.ad-shotengai .ck-scene-wrap:has(>.sg-guided-cover) .ck-tiny-title{color:#302e29}
+.ad-root.ad-toy-console.ad-shotengai .pt-root[data-party-state=ready] .pt-scoreboard,.ad-root.ad-toy-console.ad-shotengai .pt-root[data-party-state=ready] .pt-controls,.ad-root.ad-toy-console.ad-shotengai .pt-root[data-party-state=ready] .pt-rule-card{display:none}
+.ad-root.ad-toy-console.ad-shotengai .pt-root[data-party-state=ready] .pt-layout{grid-template-columns:minmax(0,1fr);max-width:860px;margin-inline:auto}
+.ad-root.ad-toy-console.ad-shotengai .pt-scene-frame:has(>.sg-party-cover){aspect-ratio:auto;min-height:0}
+.ad-root.ad-toy-console.ad-shotengai .pt-scene-frame:has(>.sg-party-cover)>.pt-canvas{position:absolute;inset:0}
+.ad-root.ad-toy-console.ad-shotengai .ad-stage-wrap:has(>.sg-initial-cover){position:relative;aspect-ratio:auto}
+.ad-root.ad-toy-console.ad-shotengai .ad-stage-wrap:has(>.sg-initial-cover)>.ad-stage{position:absolute;inset:0}
+.ad-root.ad-toy-console.ad-shotengai .ad-stage-wrap:has(>.sg-initial-cover)>.ad-stage-cover{position:relative;inset:auto;min-height:0;padding:24px;z-index:3;background:#fff8e7;color:#382d29}
+@media(max-width:800px){.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading{padding:22px 18px;flex-wrap:wrap;gap:8px}.ad-root.ad-toy-console.ad-shotengai .ck-game-types{gap:8px}.ad-root.ad-toy-console.ad-shotengai .ck-recipe-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,12em),1fr));gap:14px}.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-cards{grid-template-columns:repeat(auto-fill,minmax(min(100%,14em),1fr))}}
+@media(max-width:500px){.ad-root.ad-toy-console.ad-shotengai .ck-recipe-grid{grid-template-columns:1fr}.ad-root.ad-toy-console.ad-shotengai .ck-recipe-visual{aspect-ratio:128/75}.ad-root.ad-toy-console.ad-shotengai .ck-recipe-info{padding:14px}.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading h1{font-size:28px}.ad-root.ad-toy-console.ad-shotengai .ck-game-types{grid-template-columns:repeat(2,minmax(0,1fr))}.ad-root.ad-toy-console.ad-shotengai .sg-intro-copy{padding:20px 18px}.ad-root.ad-toy-console.ad-shotengai .mk-cover .sg-intro-copy button{align-self:stretch;width:100%;min-width:0}.ad-root.ad-toy-console.ad-shotengai .pt-party-cards,.ad-root.ad-toy-console.ad-shotengai .ck-lobby .ad-game-cards{grid-template-columns:1fr}}
+/* UX-15e: flat ink-and-paper controls follow the user's loose cartoon reference. */
+.ad-root.ad-toy-console.ad-shotengai .ck-hub-heading,.ad-root.ad-toy-console.ad-shotengai .mk-heading{background:#29476a;border:2px solid #302e29;border-radius:6px 9px 4px 7px;box-shadow:none;color:#fff6dd}
+.ad-root.ad-toy-console.ad-shotengai .mk-heading{padding:16px;gap:12px;position:relative;isolation:isolate;margin-bottom:16px}
+.ad-root.ad-toy-console.ad-shotengai .mk-heading:after{content:'';position:absolute;inset:auto 0 -10px;height:10px;background:repeating-linear-gradient(90deg,#29476a 0 calc(25% - 3px),transparent calc(25% - 3px) 25%);z-index:-1}
+.ad-root.ad-toy-console.ad-shotengai .mk-heading h1,.ad-root.ad-toy-console.ad-shotengai .mk-heading p{color:#fff6dd}
+.ad-root.ad-toy-console.ad-shotengai .mk-heading h1{font-weight:900;letter-spacing:.08em}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-card,.ad-root.ad-toy-console.ad-shotengai .pt-party-card,.ad-root.ad-toy-console.ad-shotengai .ad-game-card{border-color:#302e29;border-radius:8px 13px 6px 11px;box-shadow:3px 3px 0 #302e29}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-card:hover,.ad-root.ad-toy-console.ad-shotengai .pt-party-card:hover,.ad-root.ad-toy-console.ad-shotengai .ad-game-card:hover{border-color:#aa3e29;box-shadow:3px 3px 0 #aa3e29}
+.ad-root.ad-toy-console.ad-shotengai .ck-recipe-visual,.ad-root.ad-toy-console.ad-shotengai .pt-party-art,.ad-root.ad-toy-console.ad-shotengai .ad-card-art{border-color:#302e29}
+.ad-root.ad-toy-console.ad-shotengai .sg-intro-copy{background:#fffbed;border-top:2px solid #302e29}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover:has(>.sg-cover){border:2px solid #302e29;border-radius:7px 11px 6px 9px;overflow:hidden}
+.ad-root.ad-toy-console.ad-shotengai .mk-cover .sg-intro-copy button{border-radius:40% 45% 40% 45% / 14px 17px 14px 17px;border-color:#302e29;background:#c34e35;box-shadow:2px 3px 0 #302e29;font-weight:800;font-size:18px}
+.ad-root.ad-toy-console.ad-shotengai .mk-tray{background:#e7b97e;border-color:#302e29;box-shadow:none}
+.ad-root.ad-toy-console.ad-shotengai .mk-ingredients button{background:#fffbed;border:2px solid #302e29;border-radius:3px 5px 2px 6px;box-shadow:2px 2px 0 #8a613e}
+.ad-root.ad-toy-console.ad-shotengai .mk-ingredients button:hover{background:#f7e9b8}
+@media(prefers-reduced-motion:reduce){.ad-root.ad-toy-console.ad-shotengai *{transition:none!important;animation:none!important}}

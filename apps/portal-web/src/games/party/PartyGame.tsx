@@ -1,3 +1,4 @@
+import {GameCover} from '../GameCover';
 import {useEffect,useRef,useState,type KeyboardEvent,type PointerEvent} from 'react';
 import {PARTY_GAMES,PARTY_RULES as R,type PartyGameId} from './catalog';
 import {actParty,advanceParty,holidayOpen,holidayTargets,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyAction,type PartyRun} from './domain';
@@ -10,7 +11,7 @@ import './party.css';
 export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:number;onBack:()=>void;onResult:(r:RunResult)=>void}) {
   const spec=PARTY_GAMES.find(g=>g.id===game)!;
   const live=useRef<PartyRun>(newParty(game,seed)),stage=useRef<PartyStage|null>(null),host=useRef<HTMLDivElement>(null);
-  const frame=useRef(0),last=useRef<number|null>(null),lastUi=useRef(0),loop=useRef<(t:number)=>void>(()=>{}),gesture=useRef<{id:number;x:number;y:number}|null>(null);
+  const frame=useRef(0),last=useRef<number|null>(null),lastUi=useRef(0),loop=useRef<(t:number)=>void>(()=>{}),gesture=useRef<{id:number;x:number;y:number;round:number|null}|null>(null);
   const audio=useRef<AudioContext|null>(null),soundRef=useRef(false),motionRef=useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches),settled=useRef(false);
   const [,repaint]=useState(0),[ready,setReady]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[retry,setRetry]=useState(0),[restart,setRestart]=useState(false),[sound,setSound]=useState(false),[motion,setMotion]=useState(motionRef.current);
   function refresh(){repaint(n=>n+1);}
@@ -56,11 +57,11 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
     if(game==='holiday'&&/^[1-6]$/.test(k)&&live.current.game==='holiday')a={kind:'pick',hole:Number(k)-1,round:live.current.round};
     if(a){e.preventDefault();action(a);}
   }
-  function down(e:PointerEvent<HTMLDivElement>){if(live.current.status!=='playing'||e.button!==0||!e.isPrimary)return;e.preventDefault();gesture.current={id:e.pointerId,x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);e.currentTarget.focus({preventScroll:true});}
+  function down(e:PointerEvent<HTMLDivElement>){if(live.current.status!=='playing'||e.button!==0||!e.isPrimary)return;e.preventDefault();gesture.current={id:e.pointerId,x:e.clientX,y:e.clientY,round:live.current.game==='holiday'?live.current.round:null};e.currentTarget.setPointerCapture(e.pointerId);e.currentTarget.focus({preventScroll:true});}
   function up(e:PointerEvent<HTMLDivElement>){const g=gesture.current;if(!g||g.id!==e.pointerId)return;gesture.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);if(live.current.status!=='playing')return;const dx=e.clientX-g.x,dy=e.clientY-g.y;
     if(game==='chair'){if(Math.abs(dx)>=R.gesturePx&&Math.abs(dx)>Math.abs(dy))action({kind:'lane',direction:dx<0?-1:1});else action({kind:'jump'});}
     else if(game==='tofu')action({kind:'drop'});
-    else if(live.current.game==='holiday'){const hole=stage.current?.pick(e.clientX,e.clientY);if(hole!==null&&hole!==undefined)action({kind:'pick',hole,round:live.current.round});}
+    else if(live.current.game==='holiday'){const hole=stage.current?.pick(e.clientX,e.clientY);if(hole!==null&&hole!==undefined)action({kind:'pick',hole,round:g.round??-1});}
   }
   const s=live.current,playing=s.status==='playing',done=s.status==='done',duration=game==='chair'?R.chairMs:game==='tofu'?R.tofuMs:R.holidayMs;
   const aligned=s.game==='tofu'&&!s.fall&&Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)])<=R.tofuPerfect;
@@ -69,7 +70,7 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
     <header className="pt-heading"><div><p className="pt-kicker">日常派對 / {spec.tag}</p><h1>{spec.title}</h1><p>{spec.subtitle}</p></div><button className="ad-secondary" onClick={onBack}>回遊戲大廳</button></header>
     <div className="pt-layout"><div className="pt-play-area">
       <div className="pt-scoreboard" aria-label="本局狀態"><div><small>本局得分</small><strong>{s.score}<span>分</span></strong></div><div><small>{s.game==='tofu'?'豆腐樓層':'剩餘時間'}</small><strong>{s.game==='tofu'?`${s.layers.length-1} / ${R.tofuGoal}`:Math.ceil((duration-s.elapsed)/1000)}{s.game!=='tofu'&&<span>秒</span>}</strong></div><div><small>{s.game==='chair'?'下班意志':s.game==='tofu'?'還能失手':'最長連擊'}</small><strong>{s.game==='chair'?`${'♥'.repeat(s.lives)}${'♡'.repeat(R.chairLives-s.lives)}`:s.game==='tofu'?`${R.tofuMisses-s.misses} 次`:`${s.bestCombo} 次`}</strong></div></div>
-      <div className="pt-scene-frame"><div ref={host} className="pt-canvas" tabIndex={0} role="application" aria-label={`${spec.title} 3D 場景。${spec.keys}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={down} onPointerUp={up} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
+      <div className="pt-scene-frame">{s.status==='ready'&&<GameCover id={game} eager className="sg-party-cover"/>}<div ref={host} className="pt-canvas" tabIndex={0} role="application" aria-label={`${spec.title} 3D 場景。${spec.keys}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={down} onPointerUp={up} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
         {playing&&<span className="pt-live-label">{s.game==='chair'?`假日票 ${s.tickets} 張`:s.game==='tofu'?s.fall?'豆腐穩穩落下…':aligned?'對齊了！現在落下':`完美貼齊 ${s.perfects} 次 · 等對齊再落下`:`已守住 ${s.game==='holiday'?s.saved:0} 個假日`}</span>}
       </div>
       {(error||!ready)&&<div className="pt-panel" role={error?'alert':'status'}><span className="pt-panel-symbol" aria-hidden="true">✳</span><h2>{error?'場景先休息一下。':'正在搭建你的迷你世界…'}</h2><p>{error||'角色和道具就快到齊了。'}</p>{error&&<button onClick={()=>setRetry(n=>n+1)}>重建 3D 場景</button>}<button className="ad-secondary" onClick={onBack}>先回遊戲大廳</button></div>}

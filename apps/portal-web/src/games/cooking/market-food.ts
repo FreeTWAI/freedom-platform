@@ -39,11 +39,11 @@ export function marketFood(run:MarketRun,kit:FoodKit){
   run.portions.filter(p=>p.kind!=='rice').forEach((p,index)=>{for(let j=0;j<5;j++){const a=index*1.4+j*2.4,rr=.45+(j%3)*.4;vegetable(p.kind,Math.cos(a)*rr,base+.48+(rice.length*.05),Math.sin(a)*rr*.8,p.kind==='egg'?.19:p.kind==='shrimp'?.18:.12);}});
  } else if(run.recipe==='steak-dinner'){
   const meatCount=run.portions.filter(p=>p.kind==='steak').length;let meatIndex=0,sideIndex=0;
-  run.portions.forEach(p=>{
+  run.portions.forEach((p,portionIndex)=>{
    if(p.kind==='steak'){
     const index=meatIndex++,single=meatCount===1,x=single?-.28:(index%2-.5)*1.7,z=single?-.1:Math.floor(index/2)*.18,y=base+Math.floor(index/2)*.34;
     const visible=p.side?p.a:p.b,hidden=p.side?p.b:p.a,shade=(c:number)=>c>1?'#'+new Color('#ffffff').lerp(new Color('#3c2818'),Math.min(1,(c-1)*1.8)).getHexString():'#ffffff';
-    const meat=new Mesh(kit.cutlet,[kit.mat(shade(visible),visible>.3?'sear':'meat'),kit.mat(shade(hidden),hidden>.3?'sear':'meat'),kit.mat('#af8059','sear')]);meat.position.set(x,y+(result?.255:.22),z);meat.scale.set(single?.95:.7,.85,single?.95:.7);meat.rotation.y=.2+index*.37;meat.castShadow=meat.receiveShadow=true;root.add(meat);
+    const meat=new Mesh(kit.cutlet,[kit.mat(shade(visible),visible>.3?'sear':'meat'),kit.mat(shade(hidden),hidden>.3?'sear':'meat'),kit.mat('#af8059','sear')]);meat.position.set(x,y+(result?.255:.22),z);meat.scale.set(single?.95:.7,.85,single?.95:.7);meat.rotation.y=.2+index*.37;meat.castShadow=meat.receiveShadow=true;meat.userData.portion=portionIndex;root.add(meat);
     if(visible>.25){const butter=kit.block(root,'#e8c77f',x+.3,y+(result?.555:.52),z,.23,.055,.2);butter.rotation.y=.3;}
    }else{
     const positions:Record<string,[number,number]>={potato:[1.15,-.55],broccoli:[1.35,.45],egg:[-.9,.85]},[x,z]=positions[p.kind]??[Math.cos(sideIndex*2.4)*1.65,Math.sin(sideIndex*2.4)*.95];

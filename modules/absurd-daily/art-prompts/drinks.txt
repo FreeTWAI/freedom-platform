@@ -1,0 +1,12 @@
+Use case: illustration-story. Asset: ONE 3 by 3 illustrated tile sheet for a Japanese quirky casual-game menu, 1536 by 1024 landscape. EXACTLY 3 equal columns and 3 equal rows with no gutters or dividers; 9 independent complete small scenes, one per tile. NOTHING may cross tile boundaries. Keep all subjects inside each cell with 8% safe margin.
+STYLE: match the TWO supplied reference screenshots, their simple silly flat cartoon ink drawing, economical wobbly charcoal outlines, broad flat cream, dusty red, mustard, indigo, pale aqua and muted green shapes. Original goofy food characters with only a few short ink marks for faces and little stick arms, hand-drawn wooden counters, small plain noren accents, quiet paper. Sparse handmade print texture, NOT detailed food rendering. Amusing little situations, clear silhouettes and open background, not food advertisement beauty shots. No cinematic light, 3D rendering, glossy realism, highly detailed ingredients, dense rice granules, polished anime-food paintings, gold glow, fake UI, buttons, text, labels, letters, numbers, logos, watermarks. Do not copy the reference egg mascot or its face; create original diverse food characters. ALL NINE cells consistent in style and fully independently framed.
+Cell order left to right, then top to bottom:
+1. A clear fruit tea cup character juggling three large citrus slices, simple paper straw.
+2. A matcha latte cup character with a leafy green moustache and small bamboo whisk.
+3. A yuzu soda glass character with a citrus-slice sunhat and a few large outline bubbles.
+4. A banana milkshake cup character sliding on a banana peel, a small spoon nearby.
+5. A hot chocolate mug character keeping two marshmallow characters warm, simple steam curls.
+6. A caramel pudding character wobbling happily on a shallow saucer, one broad caramel cap.
+7. An ice-cream sundae character balancing three scoops, one simple chocolate ribbon, small cherry.
+8. A mango shaved-ice bowl character waving a spoon, a broad white ice mound and five big mango cubes.
+9. A small wooden drinks stand with plain indigo noren and three empty ceramic cups, decoration only.

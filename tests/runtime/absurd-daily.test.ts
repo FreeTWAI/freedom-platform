@@ -34,6 +34,7 @@ import {DISH_DESIGNS,dishDesign} from '../../apps/portal-web/src/games/cooking/d
 import {displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {createDishModel,type DishMesh} from '../../apps/portal-web/src/games/cooking/dish-model.js';
 import {createRequire} from 'node:module';
+import {coverOf} from '../../apps/portal-web/src/games/GameCover.js';
 const {Box3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
 
@@ -253,4 +254,45 @@ for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure
   assert.deepEqual(h.events.map(e=>e.kind),['stop','update','capture','stop']);
   assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
   assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
+});
+
+test('UX-15c: a held holiday canvas gesture retains its original round across a target change',()=>{
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
+  const closures=['down','up'].map(name=>{
+    const start=new RegExp(`^( *)function ${name}\\(`,'m').exec(source);assert.ok(start,name);
+    const tail=source.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,`${name} end`);
+    return tail.slice(0,end.index+end[0].length);
+  }).join('\n');
+  const live={current:partyTime(startParty(newParty('holiday',42)) as HolidayRun,4600)},gesture={current:null as null|{id:number;x:number;y:number;round:number}};
+  assert.equal(holidayTargets(42,live.current.round).good,0);
+  const actions:unknown[]=[],target={setPointerCapture(){},hasPointerCapture(){return true;},releasePointerCapture(){},focus(){}};
+  const h=runInNewContext(`${closures}\n({down,up})`,{live,gesture,game:'holiday',R:PT,stage:{current:{pick:()=>0}},action:(a:any)=>{actions.push(a);live.current=actParty(live.current,a) as HolidayRun;}});
+  const event={button:0,isPrimary:true,pointerId:1,clientX:100,clientY:100,preventDefault(){},currentTarget:target};
+  h.down(event);assert.equal(gesture.current?.round,3);
+  live.current=partyTime(live.current,4930);const nextRound=live.current;
+  assert.equal(nextRound.round,4);assert.equal(holidayTargets(42,4).boss,0);
+  h.up(event);assert.equal(live.current,nextRound,'release cannot penalize or score the newly appeared target');assert.equal((actions[0] as any).round,3);
+  h.down(event);h.up(event);assert.equal(live.current.mistakes,nextRound.mistakes+1,'a fresh gesture still acts on the current target');
+});
+
+test('UX-15c: selectable steak geometry retains original portion indices after an interleaved side dish',()=>{
+  const run=displayMarket('steak-dinner'),side=run.portions.find(p=>p.kind==='potato')!;
+  run.portions=[side,run.portions[0],side,run.portions[1]];const before=JSON.stringify(run),model=createDishModel(run.recipe,run);
+  try{const indices:number[]=[];model.root.traverse(o=>{if(typeof o.userData.portion==='number')indices.push(o.userData.portion);});assert.deepEqual(indices.sort(),[1,3]);assert.equal(JSON.stringify(run),before);}finally{model.dispose();}
+});
+
+test('UX-15e: all 72 menu covers have distinct immutable local assets, bounded bytes and recorded prompts',async()=>{
+  const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/illustrated-art.json',import.meta.url),'utf8'));
+  const ids=[...RECIPES.map(r=>r.id),...PARTY_GAMES.map(g=>g.id),...GAMES.map(g=>g.id)];
+  assert.equal(manifest.format,'freedom.illustrated-game-covers/v1');assert.equal(manifest.previews.length,ids.length);
+  assert.equal(new Set(manifest.previews.map((p:any)=>p.sha256)).size,72);
+  assert.equal(coverOf('../../private'),null);assert.equal(coverOf('not-a-game'),null);let bytes=0;
+  for(const id of ids){
+    const p=manifest.previews.find((p:any)=>p.id===id);assert.ok(p,id);assert.equal(coverOf(id)?.src,`/games/absurd-daily/illustrated/${id}.webp`);
+    const raw=await readFile(new URL(`../../${p.path}`,import.meta.url)),info=await sharp(raw).metadata();
+    assert.deepEqual([info.width,info.height],[512,340]);assert.equal(raw.length,p.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),p.sha256);assert.ok(raw.length<=102400);bytes+=raw.length;
+    assert.ok(manifest.atlases.some((a:any)=>a.id===p.atlas));
+  }
+  for(const atlas of manifest.atlases){const prompt=await readFile(new URL(`../../${atlas.prompt}`,import.meta.url));assert.equal(createHash('sha256').update(prompt).digest('hex'),atlas.prompt_sha256);}
+  assert.equal(bytes,manifest.total_bytes);assert.ok(bytes<=5*1024*1024);
 });
