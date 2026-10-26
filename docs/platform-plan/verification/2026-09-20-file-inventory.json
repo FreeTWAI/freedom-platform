@@ -29,8 +29,8 @@
     },
     {
       "path": "DESIGN.md",
-      "bytes": 16321,
-      "sha256": "d31a332d55900a91d6d9b7860a22f10aa0fc98451455f740cb23f65c518bdc07"
+      "bytes": 16514,
+      "sha256": "50a5d0a45148650eb508dee85597b9abb457f9ddb34ff34e87f8afc004d81617"
     },
     {
       "path": "LICENSE",
@@ -2429,8 +2429,8 @@
     },
     {
       "path": "apps/portal-web/src/page-help.ts",
-      "bytes": 20116,
-      "sha256": "b4ad06bfb07deaed7c6e479b43bc0fbb278c2494ba45be2312d1f08400705ca2"
+      "bytes": 20107,
+      "sha256": "98b5693d08dbacef5a88621e83a843335eb33325bae10bd5f1ebffcace1b325a"
     },
     {
       "path": "apps/portal-web/src/portal-feedback.tsx",
@@ -3549,8 +3549,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/ShortVideoFeed.tsx",
-      "bytes": 16487,
-      "sha256": "8430ecd6492bf0f530eef98b8d9b5ee114dee312a53feb48e430aa8cb9fec368"
+      "bytes": 16884,
+      "sha256": "2f17ab6601b82bbf835b91581265ffcfff3f643af0ca48e7318d79b31024d819"
     },
     {
       "path": "apps/portal-web/src/modules/ShowcasePanel.tsx",
@@ -3634,8 +3634,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialPostEditor.tsx",
-      "bytes": 3639,
-      "sha256": "2be06e3d819655bf65a3ccb5d2aff017d38e589f095725f6c2110879e55661a3"
+      "bytes": 7201,
+      "sha256": "cb32c501371b0e55a2b5c47db9a1a1825b09d88ac3230cafd7241ef6369d83a1"
     },
     {
       "path": "apps/portal-web/src/modules/SocialPostLike.tsx",
@@ -3664,13 +3664,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.css",
-      "bytes": 17061,
-      "sha256": "d3861a3cc04b6dafd633fb488ccb0b2d5540be5d87818754366ebb735b11d141"
+      "bytes": 17075,
+      "sha256": "fdc81a9d6f1080e9586c54bb135b48a10a1938a63b25916fb3e11ffac015fcb3"
     },
     {
       "path": "apps/portal-web/src/modules/SocialZone.tsx",
-      "bytes": 65144,
-      "sha256": "63fd4132bd5aaad2a9e79853fe0e7e06e58bc6dde6b7515f33fdd3b4d9adc4b7"
+      "bytes": 85074,
+      "sha256": "9ca969e93536bef45059b0a9c5036158145ec01d8a2609465d9f316532e51c7e"
     },
     {
       "path": "apps/portal-web/src/modules/SquadInvitations.css",
@@ -15499,8 +15499,8 @@
     },
     {
       "path": "docs/development/share-promotion.md",
-      "bytes": 45184,
-      "sha256": "507444708626ea00384659eb6e01a7ecf25a5955e35fac063438f8eb46947272"
+      "bytes": 45891,
+      "sha256": "464d30123dea115b1d5b27fde8bf9690d88ecc8ce0a235630a42b27541519dc2"
     },
     {
       "path": "docs/development/simple-work-sharing.md",
@@ -21309,8 +21309,8 @@
     },
     {
       "path": "modules/community/social-feed/freedom.module.json",
-      "bytes": 3608,
-      "sha256": "3a135e1acb00463e0d6ce10a58dd60f0265a87c810aee03d615212f553c52209"
+      "bytes": 3709,
+      "sha256": "cb88923b534ecd8f249755354f76a1009c2b0ba8a6a7939b71db655a7816dccf"
     },
     {
       "path": "modules/community-ar/README.md",
@@ -24854,8 +24854,8 @@
     },
     {
       "path": "tests/e2e/share-promotion.spec.ts",
-      "bytes": 42151,
-      "sha256": "d4402b2c895fe423bba9876e351990bb4466d6c25628f2a9dfd365478d79b9b1"
+      "bytes": 42349,
+      "sha256": "226e1944040ee2f64aa73700a8ad0399d912b2acc26ba37718ede7eacba9b431"
     },
     {
       "path": "tests/e2e/shared-feedback-language.spec.ts",
@@ -24884,8 +24884,8 @@
     },
     {
       "path": "tests/e2e/short-videos-share.spec.ts",
-      "bytes": 17947,
-      "sha256": "ccdac21e8f2d1c4151f8b380a8d20b28fb7689580a7002fdba33d83ffc5c48d3"
+      "bytes": 22712,
+      "sha256": "5392d09fb901752e3889c5a55c540ea81badd88c81a2794dfd4268cb52e6cc54"
     },
     {
       "path": "tests/e2e/short-videos.spec.ts",
@@ -24954,13 +24954,13 @@
     },
     {
       "path": "tests/e2e/social-feed.spec.ts",
-      "bytes": 46360,
-      "sha256": "ad61c7be30b12ef8d72c81b03b2e017e4fc603c38911919619ab38acce681869"
+      "bytes": 68968,
+      "sha256": "0dadb0db95448d584fd34b64b90c2f688ae7a6092fb36d2c7dd6649b29b829d6"
     },
     {
       "path": "tests/e2e/social-image.spec.ts",
-      "bytes": 10276,
-      "sha256": "5a85a94a39d0ede52f1adeebb1018ef5944c055e20bff17563f42c971e03bbdd"
+      "bytes": 10372,
+      "sha256": "3598b73d7836fdc6a2fbe3858b857fd6b2071097d39a9a2c6217c24cda4a8862"
     },
     {
       "path": "tests/e2e/social-links.spec.ts",
@@ -27034,8 +27034,8 @@
     },
     {
       "path": "tests/runtime/page-issue-label.test.ts",
-      "bytes": 2254,
-      "sha256": "4fee15ffc0ce1c0b002352e0f02e14ad627d90a7e841bd025cb37f6bbc2f5b3a"
+      "bytes": 2560,
+      "sha256": "a0e48a88683bc3cfbdb7417b3b9b2f2b0096b767c2467ba8fac5e4ef5937cc87"
     },
     {
       "path": "tests/runtime/page-tools-notification.test.ts",
@@ -27479,8 +27479,8 @@
     },
     {
       "path": "tests/runtime/social-notification-focus.test.ts",
-      "bytes": 2892,
-      "sha256": "ff338f91e64aef06eb90183832d8679bb113417d034a58928e41abfdd2ee13d6"
+      "bytes": 9143,
+      "sha256": "7e3d8cf37ab190edddd5815322cd4eb5d46c71847a1177de741e46a49001003a"
     },
     {
       "path": "tests/runtime/social-post-edit.test.ts",
@@ -27499,8 +27499,8 @@
     },
     {
       "path": "tests/runtime/social-share.test.ts",
-      "bytes": 11199,
-      "sha256": "3cbed91e5d65cc9f583b06397f7d7c471ed377d471cb7779792fbab9973a5a6d"
+      "bytes": 60276,
+      "sha256": "324f00f50d318ffe4afa96734b4262d41a7d00b1bd6113ca227f8a52e91a8efa"
     },
     {
       "path": "tests/runtime/social-text-history.test.ts",
@@ -28206,6 +28206,16 @@
       "path": "modules/community/discovery-portal/skill-book-uses.ts",
       "bytes": 1337,
       "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
+    },
+    {
+      "path": "tests/runtime/social-feed-write-order.test.ts",
+      "bytes": 39243,
+      "sha256": "0c509effa8e40a08cc7705c5de9374db044e3de9846407231ea4e8f3113976a7"
+    },
+    {
+      "path": "tests/runtime/social-post-editor.test.ts",
+      "bytes": 12578,
+      "sha256": "95ec4ab8dccf88524de873ff2264caa2f6e856773c0b474cf2258c98e7e7a43b"
     }
   ]
 }
