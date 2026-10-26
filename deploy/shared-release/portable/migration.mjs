@@ -220,3 +220,27 @@ export async function observeMigrationOutcome(pool, attempt) {
     return { outcome, postCommitVerification: 'required', resumeAuthorized: false, automaticRetry: false };
   } finally { q.release(broken); }
 }
+
+/** Ordinary code release: prove the existing schema/grants without DDL, grant
+ * repair, migration COMMIT, capture, dump or restore. Schema changes use the
+ * separately reviewed migration operation with its existing recovery guards. */
+export async function verifyUnchangedSchema({ pool, runtimePool, database, plan, expected, lease, floor }) {
+  check(plan.pending.length === 0 && plan.beforeDigest === plan.afterDigest,
+    'release_schema_change_requires_migration');
+  const held = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
+  held(); await floor.assertCurrent();
+  const q = await pool.connect(); let healthy = false, tables;
+  try {
+    await q.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await q.query("SET LOCAL statement_timeout='30000'; SET LOCAL lock_timeout='3000'");
+    same((await q.query(IDENTITY)).rows[0], { database, role: database + '_migrator',
+      session_role: database + '_migrator', schema: 'public' }, 'release_migration_identity');
+    check((await invariants(q)).materialPolicySha256 === expected.materialPolicySha256, 'release_migration_policy_changed');
+    tables = await verify(q, { database, plan, expected }); await floor.verifyDatabase(q);
+    held(); await q.query('ROLLBACK'); healthy = true;
+  } finally { q.release(!healthy); }
+  await probe(runtimePool, database, '_app', tables.filter(row => row.readable).map(row => row.relname));
+  held(); await floor.assertCurrent();
+  return { outcome: 'unchanged', ledgerVerified: true, runtimeGrantsVerified: true, readOnly: true,
+    ledgerSha256: plan.afterDigest };
+}

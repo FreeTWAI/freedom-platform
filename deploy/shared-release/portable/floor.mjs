@@ -47,7 +47,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   for (const item of chain.slice(1)) {
     const event = item.record.data;
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
-    if (event.kind === 'begin' || event.kind === 'backup-begin') {
+    if (event.kind === 'begin' || event.kind === 'backup-begin' || event.kind === 'code-begin') {
       check(state.pending === null, 'release_floor_unsettled'); request(event.request);
       const backup = event.kind === 'backup-begin';
       if (backup) check(event.request.sourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
@@ -57,17 +57,24 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && ledger(candidate.schemaLedger) >= state.schemaVersion, 'release_floor_candidate_invalid');
       same(candidate.schemaLedger.slice(0, state.schemaLedger.length), state.schemaLedger, 'release_floor_ledger_rewind');
       check(isAncestor(state.sourceSha, candidate.sourceSha), 'release_floor_source_rewind');
-      state.pending = { kind: backup ? 'backup' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
+      const codeOnly = event.kind === 'code-begin';
+      if (codeOnly) {
+        check(event.request.releaseKind === 'code-only', 'release_floor_code_request_invalid');
+        same(candidate.schemaLedger, state.schemaLedger, 'release_floor_code_schema_changed');
+      }
+      state.pending = { kind: backup ? 'backup' : codeOnly ? 'code' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
         previousSourceSha: state.deployedSourceSha, stage: 0, intents: {} };
       continue;
     }
     const pending = state.pending;
-    const stages = pending?.kind === 'backup' ? ['backup'] : STAGES;
+    const stages = pending?.kind === 'backup' ? ['backup'] : pending?.kind === 'code' ? ['migration', 'deploy', 'health', 'handoff'] : STAGES;
     check(pending && event.runId === pending.request.runId && event.runAttempt === pending.request.runAttempt
       && event.stage === stages[pending.stage], 'release_floor_stage_mismatch');
     if (event.kind === 'backup-abandoned') {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
-      check(pending.kind === 'backup' && pending.stage === 0 && capture && Object.keys(pending.intents).length === 1
+      const beginOnly = !capture && Object.keys(pending.intents).length === 0
+        && recovery?.failureBoundary === 'before_capture' && proof?.failureBoundary === 'before_capture';
+      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || (capture && Object.keys(pending.intents).length === 1))
         && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
           .every(key => recovery[key] === pending.request[key])
@@ -79,7 +86,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
         && proof.materialPolicySha256 === state.materialPolicySha256
         && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false && proof.deletionFences === 0
-        && proof.captureBackendAbsent === true && proof.captureRevision === capture.revision
+        && proof.captureBackendAbsent === true && (beginOnly || proof.captureRevision === capture.revision)
         && proof.sourcePins === 'retained' && proof.archiveIntent === 'absent', 'release_floor_backup_recovery_invalid');
       request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
       check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
@@ -90,7 +97,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const allowed = { 'backup-before': ['capture-policy', 'archive'], migration: ['commit'], deploy: ['publish'],
         health: [], 'backup-after': ['capture-policy', 'archive'], handoff: [], backup: ['capture-policy', 'archive'] }[event.stage];
       const key = event.stage + ':' + event.operation;
-      check(allowed.includes(event.operation) && !Object.hasOwn(pending.intents, key)
+      check(!(pending.kind === 'code' && event.stage === 'migration') && allowed.includes(event.operation) && !Object.hasOwn(pending.intents, key)
         && event.proof && typeof event.proof === 'object' && !Array.isArray(event.proof), 'release_floor_intent_invalid');
       const value = event.proof;
       check(value.automaticRetry === false, 'release_floor_intent_retry_forbidden');
@@ -113,7 +120,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     }
     if (event.kind === 'committed') {
       const commit = pending.intents['migration:commit'], proof = event.proof;
-      check(event.stage === 'migration' && !pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId)
+      check(pending.kind !== 'code' && event.stage === 'migration' && !pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId)
         && proof?.transactionId === commit.transactionId && proof.source === pending.candidate.sourceSha
         && proof.tree === pending.candidate.sourceTree && proof.afterDigest === migrationLedgerDigest(pending.candidate.schemaLedger),
       'release_floor_commit_unverified');
@@ -130,6 +137,10 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(pending.intents[event.stage + ':capture-policy'], 'release_floor_capture_intent_missing');
       verifyBackup(proof, pending.intents[event.stage + ':archive'], pending.intents[event.stage + ':capture-policy'],
         event.stage === 'backup-before' ? pending.previousSourceSha : pending.candidate.sourceSha);
+    } else if (event.stage === 'migration' && pending.kind === 'code') {
+      check(pending.kind === 'code' && proof?.outcome === 'unchanged' && proof.readOnly === true
+        && proof.ledgerVerified === true && proof.runtimeGrantsVerified === true
+        && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger), 'release_floor_schema_unverified');
     } else if (event.stage === 'migration') {
       const commit = pending.intents['migration:commit'];
       check(pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId) && proof?.transactionId === commit.transactionId
@@ -143,14 +154,17 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(proof?.sourceSha === pending.candidate.sourceSha && proof.statusCode === 200
         && proof.schemaVerified === true && proof.smokePassed === true, 'release_floor_health_unverified');
     } else if (event.stage === 'handoff') {
-      // The controller must authenticate this completed scheduled run/artifact
-      // with GitHub (as for staging provenance), not trust a generic R2 marker.
-      const schedule = proof?.schedule;
-      check(proof?.cleanupVerified === true && schedule?.format === 'freedom.verified-scheduled-backup/v1'
-        && Number.isSafeInteger(schedule.runId) && schedule.runId > 0
-        && schedule.operatorImage === pending.request.operatorImage && schedule.configSha256 === pending.request.configSha256
-        && isDigest(schedule.receiptSha256) && Number.isFinite(Date.parse(schedule.completedAt)),
-      'release_floor_schedule_unverified');
+      if (pending.kind === 'code') {
+        check(proof?.cleanupVerified === true && proof.schemaUnchanged === true, 'release_floor_code_handoff_invalid');
+        state.sourceSha = pending.candidate.sourceSha; state.sourceTree = pending.candidate.sourceTree;
+      } else {
+        const schedule = proof?.schedule;
+        check(proof?.cleanupVerified === true && schedule?.format === 'freedom.verified-scheduled-backup/v1'
+          && Number.isSafeInteger(schedule.runId) && schedule.runId > 0
+          && schedule.operatorImage === pending.request.operatorImage && schedule.configSha256 === pending.request.configSha256
+          && isDigest(schedule.receiptSha256) && Number.isFinite(Date.parse(schedule.completedAt)),
+        'release_floor_schedule_unverified');
+      }
     }
     pending.stage++;
     if (pending.stage === stages.length) state.pending = null;
@@ -254,6 +268,7 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       return verifyCoordinateFence(q, coordinates, { restored });
     },
     verifyConstraints(q, options) { return verifyCoordinateFence(q, coordinates, options); },
+    async beginCode(request, candidate) { return append({ kind: 'code-begin', request, candidate }); },
     async begin(request, candidate) { return append({ kind: 'begin', request, candidate }); },
     async beginBackup(request) { return append({ kind: 'backup-begin', request }); },
     async abandonBackup(proof) {

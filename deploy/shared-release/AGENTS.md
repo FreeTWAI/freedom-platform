@@ -20,14 +20,16 @@ exact merged-main commit and staging-next or next. Exact-source successful main
 Verify and CodeQL runs are required. The workflow/controller comes from the
 main workflow revision, independently of the selected application revision.
 
-Backup before, migration, deploy, exact-source health, backup after and operator
-handoff must all succeed in order. The existing backup must include remote
-readback, isolated database/object restore and cleanup. Migration uncertainty or
-a failed deployment stops, retains the outcome and does not auto-retry/rollback.
-An operator handoff must preserve scheduled backups before a release completes.
-Only an authenticated successful natural schedule's first attempt, with both
-environment jobs and the exact image/config receipt, proves scheduler handoff.
-Manual backup or re-running a failed scheduled run is not that evidence.
+Ordinary code releases use the explicit code-only contract: preflight, read-only
+unchanged-schema migration verification, deploy, exact-source health and handoff.
+They do not consume natural-backup evidence or perform full backup/restore.
+Schema changes require the separately guarded migration operation. Daily backups
+remain independent, with full capture/readback/restore/cleanup. Git history is not
+a database backup. Keep shared concurrency and the DB lease; never cancel a live
+mutation. Historical seven-stage journal records must still replay unchanged.
+BEGIN-only backup reconciliation requires authenticated terminal failure evidence,
+an empty-intent journal and independent live readback under the lease before an
+append-only abandonment. Unknown capture/archive/migration/deploy effects stop.
 
 Environment credentials remain outside the source checkout and public Actions
 artifacts. Only allowlisted summaries are published. Never upload database dumps,

@@ -6,6 +6,37 @@ service credentials, independently checked authority and image/config pins are
 installed for controlled staging acceptance. Do not copy personal-host credentials
 into the image. This file is part of the reviewed controller surface.
 
+## Code-only release contract
+
+The protected-main controller now requests `releaseKind: code-only` and the exact
+five phases `preflight`, `migration`, `deploy`, `health`, `handoff`. Migration here
+means read-only verification of an unchanged migration ledger, canonical grants,
+retained constraints and runtime reads, not migration execution. Pending SQL or
+changed ledger refuses this path. The legacy migration runner retains its fresh
+verified-backup and COMMIT guards for separately reviewed schema operations.
+
+Code-only deploy does not consume scheduled-backup evidence, invoke either backup
+phase, connect as the backup role, or require `backupDatabaseUrl`. It still uses
+the existing environment config and authenticated R2 control journal, the shared
+Actions lock and database lease. Routine backups remain independent and daily.
+The new `code-begin` journal event has four ordered stages after preflight;
+historical `begin` records retain the original six-stage replay semantics below.
+Successful public receipts use `code_release_confirmed` and
+`validated-code-release/v1`; staging admission authenticates both genuine legacy
+and new receipts with their own phase contract, never check-mode receipts.
+
+An optional failed-backup run reference authenticates the original terminal
+workflow/artifact before any BEGIN-only reconciliation. Its failed inner preflight
+and `snapshotDump: not_started` plus the authenticated empty-intent journal are
+necessary, not sufficient: independent Worker/DB/floor/GC/backend observations
+under the lease must pass before append-only abandonment. No seed reset, deletion,
+archive/capture-intent recovery or backup-success assertion is part of deploy.
+Daily receipts now retain independent allowlisted `phaseCode` and `cleanupCode`;
+raw error strings and provider detail never enter these fields.
+
+The rest of this document describes retained legacy and backup contracts where
+seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
+
 ## Invocation and ownership
 
 The manual `check` mode is a separate read-only diagnostic, executed by the

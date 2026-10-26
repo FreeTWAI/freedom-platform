@@ -179,8 +179,8 @@
     },
     {
       "path": ".github/workflows/shared-release.yml",
-      "bytes": 5854,
-      "sha256": "d632a5c30c86fa1b2f112c267ab5c8a9f0adf9422cb54d2db8faa3cf5e35e93e"
+      "bytes": 6121,
+      "sha256": "a310578b3c63c5a41f2f7101968f2c4a414f4bf621b66f57e3a20da316ffca33"
     },
     {
       "path": ".github/workflows/skill-book-upstreams.yml",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 115696,
-      "sha256": "88b963ba405a10a38bb4da12f2ac29a78702a9f6bb18de30a3d07acc8d1e34d1"
+      "bytes": 131741,
+      "sha256": "357da250c12c54904f8eed2bc963c0405f2d92c22594a3196cde9b7d80002acf"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14644,18 +14644,18 @@
     },
     {
       "path": "deploy/shared-release/AGENTS.md",
-      "bytes": 2822,
-      "sha256": "ce045b1173c31a3fbbe0ecbe3e127f79c82db629850cf3b0a553bf706bbb5c5b"
+      "bytes": 3000,
+      "sha256": "78b0467dc3208f9cceaac1155716a757998ceaa4799a8375f7469449eeced806"
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 23519,
-      "sha256": "dad6f920ef1a872477a399ce6702a5185195bdc366e02e406d751481e49ac711"
+      "bytes": 24841,
+      "sha256": "da7b8be00c1c480d3a51045346bad53e023ce2ad68e27d7aa00b4878c680cc0e"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
-      "bytes": 14789,
-      "sha256": "0bd61460e6cb888190a263ff8b086551ea032a16220f63ed3de0a739a6d70f9b"
+      "bytes": 15840,
+      "sha256": "7f563364fb738a92e4038e3a12e15dcdb4d74357d2bf9f1dc495799eecd96c17"
     },
     {
       "path": "deploy/shared-release/artifacts.mjs",
@@ -14669,8 +14669,8 @@
     },
     {
       "path": "deploy/shared-release/cli.mjs",
-      "bytes": 8450,
-      "sha256": "078ab41e5cc4d220dc205686777c724d4247414b74b9b2e205408791469c00be"
+      "bytes": 8444,
+      "sha256": "f4dc52e0a51069f310ae9158c911010682244916b3d186d4418b84b575d3b011"
     },
     {
       "path": "deploy/shared-release/environment-check.mjs",
@@ -14689,13 +14689,13 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 19793,
-      "sha256": "00adb3fa066df32cb022bb840f9fd84b518c78c258621825d5e102d14dd20ca2"
+      "bytes": 21782,
+      "sha256": "6caba434820d456fbf6af732af9ff506b6219dbe8935d4756db96eaa07d21139"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 15937,
-      "sha256": "89165f692fb0835de007a2e6dcfe40d06997e95a5929a1af78f4e1be2ae92c71"
+      "bytes": 17651,
+      "sha256": "6ccac9437d3ded2e93d1e69e9b2949d4ca359049c3e147bc52f50152f976f350"
     },
     {
       "path": "deploy/shared-release/receipt-archive.py",
@@ -14704,8 +14704,8 @@
     },
     {
       "path": "deploy/shared-release/scheduled-admission.mjs",
-      "bytes": 12700,
-      "sha256": "eee240ddee649ea6480a3f220596437756a2e8863ea9312357812742a20eff9d"
+      "bytes": 13420,
+      "sha256": "58bda96af97271e9e3d1c0440e2ed9123b180661d2598375f71754137e206f73"
     },
     {
       "path": "deploy/shared-release/image/Dockerfile",
@@ -14759,8 +14759,8 @@
     },
     {
       "path": "deploy/shared-release/portable/config.mjs",
-      "bytes": 3415,
-      "sha256": "b5f6561a52314f30f9783a2b48d11513b7877258fecb5e88a84676a28ac37d16"
+      "bytes": 3501,
+      "sha256": "d759117a2546f2ef54cae7617586cb12e338bbb8f3d02d8c7e568f40a3973a44"
     },
     {
       "path": "deploy/shared-release/portable/control-store.mjs",
@@ -14779,13 +14779,13 @@
     },
     {
       "path": "deploy/shared-release/portable/entry.mjs",
-      "bytes": 14691,
-      "sha256": "30c04240583cabd5345c99559488fd93552102f5e5782a79e27fe7cf146fa8c9"
+      "bytes": 15951,
+      "sha256": "36d7ce00fecbf3801c7db18c08716932d3777bcf2f500211bfdeaba091fa3153"
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
-      "bytes": 19822,
-      "sha256": "62f8acd63ae319ba1817209b68f075185d624f0a0a2c1089418c519342fceeb0"
+      "bytes": 21127,
+      "sha256": "023ad3c360dee4ee6d164a6c1f36f68d367a910d666631648ebba37e6e67c352"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -14799,8 +14799,8 @@
     },
     {
       "path": "deploy/shared-release/portable/migration.mjs",
-      "bytes": 16974,
-      "sha256": "97f40b03ae75c1fa027f96602e5d8157fa1fb94f2a42e98b2b0d84073f38f484"
+      "bytes": 18568,
+      "sha256": "58661b4318734ae19fa188fff2d502b0c08e653ce2cdd0c0f5586463c244b103"
     },
     {
       "path": "deploy/shared-release/portable/postgres.mjs",
@@ -14814,8 +14814,8 @@
     },
     {
       "path": "deploy/shared-release/test/backup-integration.mjs",
-      "bytes": 17852,
-      "sha256": "ae5d17ca12e98e4dd03aec85a758450ace47d2977636d3a718a705ca8160852c"
+      "bytes": 18317,
+      "sha256": "6c87068f0ee81b2d8d2c8c29f137d182d15a9d4de58a8c96b181cef055ab34a3"
     },
     {
       "path": "deploy/shared-release/test/image-native.mjs",
@@ -14824,8 +14824,8 @@
     },
     {
       "path": "deploy/shared-release/test/migration-integration.mjs",
-      "bytes": 10668,
-      "sha256": "5e10f28f1e87a76fe6208bd5ea393f602e6c1b8b474caccab29e412c8e086cdb"
+      "bytes": 11893,
+      "sha256": "6b9b420d20d0b86d80af25d30ecdee99dba370f272b445b83e44aaa50786007a"
     },
     {
       "path": "deploy/shared-release/test/postgres-integration.mjs",
@@ -23189,8 +23189,8 @@
     },
     {
       "path": "packages/media-migration/backup-daily.ts",
-      "bytes": 14383,
-      "sha256": "f13c48ff3d36b9b36927ce805ffa608b967886a2520e9a606f9598d7926dccca"
+      "bytes": 14721,
+      "sha256": "5f6ba7cababa22d49c1fb079cd04a25d139f8f2cbfc3e673cf8ac82933b57424"
     },
     {
       "path": "packages/media-migration/backup-evidence.ts",
@@ -26559,8 +26559,8 @@
     },
     {
       "path": "tests/runtime/media-backup-daily.test.ts",
-      "bytes": 6571,
-      "sha256": "c08d5266ba00764e9b228cf96de524d8679a864180204b7d002c5b290f54c507"
+      "bytes": 7750,
+      "sha256": "24cca89d2135a0cdf18443edc07262b25bda3b1412cf28b2e135b8cf421a9890"
     },
     {
       "path": "tests/runtime/media-backup-evidence.test.ts",
@@ -28439,8 +28439,13 @@
     },
     {
       "path": "deploy/shared-release/portable/backup-recovery.mjs",
-      "bytes": 4676,
-      "sha256": "f0bdd6a4cf5fa77cb6f1bb863ce3b1e0764c6a2cf1cc9a42334579a795dfb57f"
+      "bytes": 5171,
+      "sha256": "7411a7930a2a6c5eaffb99296a7c11df9b34dd9e5dcc7e2d91df61e73264ba38"
+    },
+    {
+      "path": "packages/media-migration/backup-diagnostics.ts",
+      "bytes": 2166,
+      "sha256": "5557d0aa7d0bcd216727a95bc8d60b8671263437e146cdedaf32166b6fae0baf"
     }
   ]
 }

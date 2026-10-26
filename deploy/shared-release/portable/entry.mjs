@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { open, mkdir, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
-import { PHASES, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha } from '../admission.mjs';
+import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha } from '../admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult } from '../operator.mjs';
 import { BACKUP_PHASES } from '../scheduled-admission.mjs';
 import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
@@ -16,7 +16,7 @@ import { createWorkerDeployer } from './deploy.mjs';
 import { createCloudflareRecoveryTransport, waitForPublicRelease } from './cloudflare.mjs';
 import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
-import { preparePortableMigration, runPortableMigration } from './migration.mjs';
+import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
 import { reconcileFailedBackup } from './backup-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
@@ -54,9 +54,10 @@ export async function main(args = process.argv.slice(2)) {
   check(request.repository === REPOSITORY && request.repositoryId === REPOSITORY_ID && ['deploy', 'backup'].includes(request.mode)
     && isSha(request.sourceSha) && isSha(request.sourceTree) && isSha(request.controllerSha)
     && request.configSha256 === hash(rawConfig.bytes), 'release_entry_request_invalid');
-  const isBackup = request.mode === 'backup', phases = isBackup ? BACKUP_PHASES : PHASES;
+  const isBackup = request.mode === 'backup', codeOnly = request.releaseKind === 'code-only',
+    phases = isBackup ? BACKUP_PHASES : releasePhases(request);
   same(request.requiredPhases, phases, 'release_entry_phases_invalid');
-  const config = validatePortableConfig(rawConfig.value, request.target), connections = portableConnections(config, credentials);
+  const config = validatePortableConfig(rawConfig.value, request.target), connections = portableConnections(config, credentials, { includeBackup: !codeOnly });
   const installation = { image: request.operatorImage, configSha256: request.configSha256 };
   const result = { format: isBackup ? 'freedom.shared-backup-operator-result/v1' : 'freedom.shared-release-operator-result/v1', requestSha256: hash(rawRequest.bytes),
     sourceSha: request.sourceSha, target: request.target, runId: request.runId, runAttempt: request.runAttempt,
@@ -92,7 +93,8 @@ export async function main(args = process.argv.slice(2)) {
       verifyRetainedFloor: (pool, options) => floor.verifyDatabase(pool, options) });
     if (value.status !== 'passed' || value.exposure !== 'quarantine_not_approved_for_exposure') {
       throw Object.assign(new Error('release_entry_backup_failed'), { code: 'release_entry_backup_failed',
-        backupFailure: { stage: value.stage, code: value.code, cleanupVerified: value.cleanupVerified, snapshotDump: value.snapshotDump } });
+        backupFailure: { stage: value.stage, code: value.code, cleanupVerified: value.cleanupVerified, snapshotDump: value.snapshotDump,
+          phaseCode: value.phaseCode, cleanupCode: value.cleanupCode } });
     }
     // The full backup report can contain object/capture metadata and is retained
     // privately. Keep both the journal event and bounded result explicitly small.
@@ -105,7 +107,7 @@ export async function main(args = process.argv.slice(2)) {
     await phase('preflight', async () => {
       await verifyApplicationSource(SOURCE, request.sourceSha, request.sourceTree);
       const schedule = request.scheduleEvidence;
-      if (!isBackup) check(schedule?.format === 'freedom.verified-scheduled-backup/v1' && schedule.operatorImage === request.operatorImage
+      if (!isBackup && !codeOnly) check(schedule?.format === 'freedom.verified-scheduled-backup/v1' && schedule.operatorImage === request.operatorImage
         && schedule.configSha256 === request.configSha256 && Date.now() - Date.parse(schedule.completedAt) <= 36 * 3600000,
       'release_entry_schedule_required');
       lease = await acquireReleaseLease(pools.migrator, { database: config.database.name, role: connections.migrator.role, signal: controller.signal });
@@ -115,7 +117,13 @@ export async function main(args = process.argv.slice(2)) {
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
         token: credentials.cloudflareApiToken, signal: lease.signal });
       let recovery;
-      if (request.recoverRunId) recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, deployer, lease, request });
+      if (request.recoverRunId) {
+        if (codeOnly) check(request.recoveryEvidence?.failureBoundary === 'before_capture', 'release_backup_recovery_boundary_invalid');
+        const previous = floor.state();
+        recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, database: config.database.name, role: connections.migrator.role, deployer, lease,
+          request: codeOnly ? { ...request, mode: 'backup', event: 'workflow_dispatch',
+            sourceSha: previous.sourceSha, sourceTree: previous.sourceTree } : request });
+      }
       const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       before = await deployer.inspect();
       check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
@@ -131,12 +139,14 @@ export async function main(args = process.argv.slice(2)) {
       }
       plan = preparePortableMigration({ sourceRoot: SOURCE, sourceCommit: request.sourceSha, profile: config.migrationProfile,
         installationParent: await directory('migration-installations'), beforeLedger: state.schemaLedger });
+      if (codeOnly) check(plan.pending.length === 0 && plan.beforeDigest === plan.afterDigest,
+        'release_schema_change_requires_migration');
       expected = await deriveCandidateContract({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         profile: config.migrationProfile, materialPolicySha256: state.materialPolicySha256,
         workRoot: await directory('candidate-database'), binDirectory: BIN, signal: lease.signal });
       built = await buildApplication({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         workRoot: await directory('build'), target: config.target, before, signal: lease.signal });
-      await floor.begin(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree, schemaLedger: plan.afterLedger });
+      await (codeOnly ? floor.beginCode : floor.begin)(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree, schemaLedger: plan.afterLedger });
       return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true, previousSourceSha: before.sourceSha };
     });
     if (isBackup) {
@@ -147,17 +157,25 @@ export async function main(args = process.argv.slice(2)) {
       });
       validateBackupOperatorResult(result, request, installation, result.requestSha256); return;
     }
-    await phase('backup-before', async () => {
-      const value = await backup('backup-before', before.sourceSha); beforeBackup = value.report; return value.proof;
-    });
-    await phase('migration', async () => {
-      const value = await runPortableMigration({ pool: pools.migrator, runtimePool: pools.runtime, backupPool: pools.backup,
-        database: config.database.name, plan, expected, beforeBackup, previousSourceSha: before.sourceSha,
-        journalRoot: await directory('migration'), lease, assertFloor: () => floor.assertCurrent(),
-        verifyRetainedConstraints: q => floor.verifyConstraints(q), retainCommitIntent: proof => floor.intent('migration', 'commit', proof),
-        retainCommittedFloor: proof => floor.committed(proof) });
-      await floor.passed('migration', { ...value, ledgerSha256: plan.afterDigest }); return value;
-    });
+    if (codeOnly) {
+      await phase('migration', async () => {
+        const proof = await verifyUnchangedSchema({ pool: pools.migrator, runtimePool: pools.runtime, database: config.database.name,
+          plan, expected, lease, floor });
+        await floor.passed('migration', proof); return proof;
+      });
+    } else {
+      await phase('backup-before', async () => {
+        const value = await backup('backup-before', before.sourceSha); beforeBackup = value.report; return value.proof;
+      });
+      await phase('migration', async () => {
+        const value = await runPortableMigration({ pool: pools.migrator, runtimePool: pools.runtime, backupPool: pools.backup,
+          database: config.database.name, plan, expected, beforeBackup, previousSourceSha: before.sourceSha,
+          journalRoot: await directory('migration'), lease, assertFloor: () => floor.assertCurrent(),
+          verifyRetainedConstraints: q => floor.verifyConstraints(q), retainCommitIntent: proof => floor.intent('migration', 'commit', proof),
+          retainCommittedFloor: proof => floor.committed(proof) });
+        await floor.passed('migration', { ...value, ledgerSha256: plan.afterDigest }); return value;
+      });
+    }
     await phase('deploy', async () => {
       await built.assertUnchanged(); await floor.assertCurrent();
       const value = await deployer.publish({ sourceSha: request.sourceSha, before, source: built.source, sourceRoot: built.root,
@@ -172,12 +190,12 @@ export async function main(args = process.argv.slice(2)) {
       await floor.verifyDatabase(pools.migrator);
       const proof = { ...value, schemaVerified: true }; await floor.passed('health', proof); return proof;
     });
-    await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
+    if (!codeOnly) await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
     await phase('handoff', async () => {
       await floor.assertCurrent(); lease.assertHeld();
-      await floor.passed('handoff', { cleanupVerified: true, schedule: request.scheduleEvidence });
+      await floor.passed('handoff', { cleanupVerified: true, ...(codeOnly ? { schemaUnchanged: true } : { schedule: request.scheduleEvidence }) });
       await lease.release(); lease = null;
-      return { scheduledBackupsVerified: true, cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
+      return { ...(codeOnly ? {} : { scheduledBackupsVerified: true }), cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
     });
     validateOperatorResult(result, request, installation, result.requestSha256);
   } finally {

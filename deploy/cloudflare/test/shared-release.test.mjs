@@ -1,3 +1,4 @@
+import { reconcileFailedBackup } from '../../shared-release/portable/backup-recovery.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs } from 'node:fs/promises';
@@ -65,7 +66,8 @@ const environment = () => ({ GITHUB_REPOSITORY: REPOSITORY, GITHUB_REPOSITORY_ID
   CONTROLLER_SHA: main, RELEASE_SHA: sha, RELEASE_TARGET: 'staging-next', RELEASE_MODE: 'plan',
   GITHUB_ACTOR: 'teddashh', GITHUB_ACTOR_ID: String(OPERATORS.teddashh),
   GITHUB_TRIGGERING_ACTOR: 'arumwu', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '2' });
-const request = () => ({ ...requestFromEnvironment(environment()), admittedAt: new Date(0).toISOString() });
+// Retain legacy receipt/journal fixtures; code-only coverage below is explicit.
+const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: undefined, admittedAt: new Date(0).toISOString() });
 
 function fixtureApi(override = () => undefined) {
   const calls = [];
@@ -1277,6 +1279,9 @@ test('portable configuration cannot select programs, foreign resources, profiles
   const url = suffix => `postgresql://freedom_staging_next${suffix}.fixture:synthetic@fixture.pg.psdb.cloud:5432/freedom_staging_next?sslmode=verify-full`;
   const credentials = { migrationDatabaseUrl: url('_migrator'), runtimeDatabaseUrl: url('_app'), backupDatabaseUrl: url('_backup') };
   assert.equal(portableConnections(parsed, credentials).runtime.options.ssl.rejectUnauthorized, true);
+  const codeCredentials = { ...credentials }; delete codeCredentials.backupDatabaseUrl;
+  assert.deepEqual(Object.keys(portableConnections(parsed, codeCredentials, { includeBackup: false })), ['migrator', 'runtime']);
+  assert.throws(() => portableConnections(parsed, codeCredentials));
   for (const change of [v => { v.program = '/bin/sh'; }, v => { v.database.host = 'foreign.invalid'; },
     v => { v.migrationProfile.format = 'freedom.migrations/dag-v2'; }, v => { v.database.name = 'freedom_next'; },
     v => { v.backupBucket = v.mediaBucket; }, v => { v.floor.seedSha256 = 'untrusted'; }]) {
@@ -1574,4 +1579,194 @@ test('production health never receives staging service credentials even when the
   });
   assert.equal(health, 1); assert.equal(report.checks.at(-1).name, 'public_health');
   assert.equal(report.checks.at(-1).status, 'passed'); assert.equal(report.status, 'failed');
+});
+
+test('public backup diagnostics accept only exact enumerated codes independently', () => {
+  const value = resultFixture(); value.phases = value.phases.slice(0, 2); value.phases[1].status = 'failed';
+  value.phases[1].backupFailure = { stage: 'preflight', code: 'daily_backup_cleanup_failed', cleanupVerified: false,
+    phaseCode: 'backup_database_permission_denied', cleanupCode: 'release_backup_worker_changed' };
+  const progress = () => operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure;
+  assert.equal(progress().phaseCode, 'backup_database_permission_denied');
+  assert.equal(progress().cleanupCode, 'release_backup_worker_changed');
+  for (const secret of ['private-token', 'release_backup_private_token', 'release_backup_worker_changed\nsecret', { code: 'secret' }]) {
+    Object.assign(value.phases[1].backupFailure, { phaseCode: secret, cleanupCode: secret });
+    assert.equal(progress().phaseCode, undefined); assert.equal(progress().cleanupCode, undefined);
+  }
+});
+
+test('BEGIN-only eligibility is derived from authenticated pre-capture progress, not caller claims', async () => {
+  const setup = () => { const f = failedBackupFixture(); f.state.receipt.operatorProgress = [
+    { name: 'preflight', reportedStatus: 'passed' }, { name: 'backup', reportedStatus: 'failed',
+      backupFailure: { stage: 'preflight', snapshotDump: 'not_started', cleanupVerified: false } }]; return f; };
+  const f = setup(); assert.equal((await requireFailedBackup(f.api, f.admission, installation)).failureBoundary, 'before_capture');
+  for (const mutate of [p => { p.pop(); }, p => { p[0].reportedStatus = 'failed'; },
+    p => { p[1].backupFailure.stage = 'capture'; }, p => { p[1].backupFailure.snapshotDump = 'running'; },
+    p => { delete p[1].backupFailure; }, p => { p[1].reportedStatus = 'passed'; }]) {
+    const bad = setup(); mutate(bad.state.receipt.operatorProgress);
+    assert.equal((await requireFailedBackup(bad.api, bad.admission, installation)).failureBoundary, undefined);
+  }
+});
+
+test('BEGIN-only floor recovery preserves history and refuses intents, unrelated runs and missing readback', () => {
+  const f = floorFixture(), old = { ...f.request, sourceSha: main };
+  f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+  const prior = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { format: 'freedom.abandoned-backup/v1', recovery: { ...old, format: 'freedom.verified-failed-backup/v1',
+    failureBoundary: 'before_capture', receiptSha256: '9'.repeat(64), artifactId: 99,
+    artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-10-26T00:00:00Z' },
+    settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: prior.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(prior.schemaLedger), materialPolicySha256: prior.materialPolicySha256,
+    failureBoundary: 'before_capture', maintenanceEnabled: false, domainMaintenanceEnabled: false,
+    deletionFences: 0, captureBackendAbsent: true, sourcePins: 'retained', archiveIntent: 'absent',
+    observedAt: '2026-10-26T01:00:00Z' };
+  for (const patch of [{ failureBoundary: undefined }, { captureBackendAbsent: false }, { maintenanceEnabled: true },
+    { deletionFences: 1 }, { ledgerSha256: 'f'.repeat(64) }, { recovery: { ...proof.recovery, failureBoundary: undefined } },
+    { recovery: { ...proof.recovery, runId: 999 } }, { recovery: { ...proof.recovery, runAttempt: 2 } },
+    { recovery: { ...proof.recovery, operatorImage: 'wrong' } }, { observedAt: '2026-10-25T00:00:00Z' }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', { ...proof, ...patch })], f.options));
+  }
+  const archive = f.event('intent', 'backup', { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 123, automaticRetry: false }, { operation: 'archive' });
+  assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const capture = f.event('intent', 'backup', { format: 'freedom.shared-capture-policy-intent/v1', pid: 123,
+    application: 'fp-capture-' + f.id, revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false }, { operation: 'capture-policy' });
+  assert.throws(() => replayReleaseFloor([...f.chain, capture, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const state = f.add(f.event('backup-abandoned', 'backup', proof));
+  assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 3);
+  assert.equal(f.chain[1].record.data.kind, 'backup-begin');
+});
+
+test('BEGIN-only reconciliation requires independent read-only observations under the lease before append', async () => {
+  const setup = () => {
+    const f = floorFixture(), old = { ...f.request, sourceSha: main };
+    f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+    const state = replayReleaseFloor(f.chain, f.options).state, material = [];
+    state.materialPolicySha256 = hash(JSON.stringify(material));
+    const evidence = { ...old, format: 'freedom.verified-failed-backup/v1', failureBoundary: 'before_capture' };
+    const observations = { identity: { database: 'fixture', role: 'maintainer' },
+      policy: { enabled: false, domain_media_enabled: false, revision: 'prior' }, backends: [], fences: 0, material };
+    const calls = []; let proof;
+    const q = { async query(sql) {
+      calls.push(sql);
+      if (sql.includes('current_database() database')) return { rows: [observations.identity] };
+      if (sql.includes('FROM asset_maintenance_policy')) return { rows: [observations.policy] };
+      if (sql.includes('FROM pg_stat_activity')) return { rows: observations.backends };
+      if (sql.includes('FROM assets')) return { rows: [{ count: observations.fences }] };
+      if (sql.includes('FROM domain_media_storage_policy')) return { rows: observations.material };
+      return { rows: [] };
+    }, release() { calls.push('release'); } };
+    const args = { request: { ...old, runId: 13, mode: 'backup', event: 'workflow_dispatch', recoverRunId: old.runId,
+      recoveryEvidence: evidence }, database: 'fixture', role: 'maintainer', pool: { options: { database: 'fixture', user: 'maintainer' }, connect: async () => q },
+      floor: { state: () => structuredClone(state), assertCurrent: async () => calls.push('floor-current'),
+        verifyDatabase: async () => calls.push('verify-ledger-and-coordinate-fence'), abandonBackup: async value => { proof = value; } },
+      deployer: { inspect: async () => ({ sourceSha: main, bindingsSha256: state.bindingsSha256 }) },
+      lease: { signal: new AbortController().signal, assertHeld() { calls.push('lease-held'); } } };
+    return { args, observations, calls, state, proof: () => proof };
+  };
+  const good = setup(); await reconcileFailedBackup(good.args);
+  assert.equal(good.proof().failureBoundary, 'before_capture'); assert.equal(good.proof().archiveIntent, 'absent');
+  assert(good.calls.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+  assert(good.calls.includes('verify-ledger-and-coordinate-fence'));
+  assert(!good.calls.some(sql => /UPDATE|DELETE|pg_terminate_backend/.test(sql)));
+  for (const mutate of [f => { f.observations.identity.role = 'other'; }, f => { f.observations.policy.enabled = true; },
+    f => { f.observations.policy.domain_media_enabled = true; }, f => { f.observations.backends.push({ pid: 123 }); },
+    f => { f.observations.fences = 1; }, f => { f.observations.material.push({ purpose: 'changed' }); },
+    f => { f.args.floor.verifyDatabase = async () => { throw Error('ledger changed'); }; },
+    f => { f.args.deployer.inspect = async () => ({ sourceSha: sha }); },
+    f => { f.state.pending.request.runId++; }, f => { f.state.pending.intents.archive = {}; },
+    f => { delete f.args.request.recoveryEvidence.failureBoundary; },
+    f => { f.args.lease.assertHeld = () => { throw Error('lease lost'); }; }]) {
+    const bad = setup(); mutate(bad); await assert.rejects(reconcileFailedBackup(bad.args)); assert.equal(bad.proof(), undefined);
+  }
+});
+
+function codeResult() {
+  const admission = { ...request(), releaseKind: 'code-only' }, value = resultFixture(admission);
+  value.phases = [value.phases[0], { ...value.phases[2], name: 'migration', outcome: 'unchanged', readOnly: true },
+    value.phases[3], value.phases[4], value.phases[6]];
+  delete value.phases[4].scheduledBackupsVerified;
+  return { admission, value };
+}
+test('ordinary release validates schema, publication, health and lease cleanup without backup evidence', () => {
+  assert.equal(requestFromEnvironment(environment()).releaseKind, 'code-only');
+  const { admission, value } = codeResult();
+  assert.deepEqual(validateOperatorResult(value, admission, installation, 'e'.repeat(64)).map(p => p.name),
+    ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+  for (const [index, patch] of [[0, { leaseHeld: false }], [1, { outcome: 'committed' }], [1, { readOnly: false }],
+    [1, { ledgerVerified: false }], [1, { runtimeGrantsVerified: false }], [2, { sourceSha: main }],
+    [3, { smokePassed: false }], [4, { leaseReleased: false }]]) {
+    const bad = structuredClone(value); Object.assign(bad.phases[index], patch);
+    assert.throws(() => validateOperatorResult(bad, admission, installation, 'e'.repeat(64)));
+  }
+  assert.throws(() => validateOperatorResult(resultFixture(admission), admission, installation, 'e'.repeat(64)));
+});
+test('production accepts authenticated code-only staging receipt and rejects legacy or forged substitutes', async () => {
+  const f = stagingFixture(), admission = { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'code-only' };
+  Object.assign(f.state.receipt, { releaseKind: 'code-only', providerOutcome: 'code_release_confirmed',
+    operatorEvidence: 'validated-code-release/v1', phases: codeResult().value.phases });
+  await requireStaging(f.api, admission, installation);
+  const legacy = stagingFixture(); await requireStaging(legacy.api, admission, installation);
+  for (const patch of [{ releaseKind: undefined }, { providerOutcome: 'release_and_recovery_confirmed' },
+    { operatorEvidence: 'validated-seven-phases/v1' }, { sourceSha: main }, { phases: resultFixture().phases }]) {
+    const old = { ...f.state.receipt }; Object.assign(f.state.receipt, patch);
+    await assert.rejects(requireStaging(f.api, admission, installation)); Object.assign(f.state.receipt, old);
+  }
+});
+test('code-only floor advances source after health while retaining ledger and rejecting schema changes or overlapping intents', () => {
+  const f = floorFixture(), before = structuredClone(f.chain[0].record.data.state);
+  const begin = f.event('code-begin', undefined, undefined, { request: { ...f.request, releaseKind: 'code-only' },
+    candidate: { sourceSha: sha, sourceTree: tree, schemaLedger: before.schemaLedger } });
+  const bad = structuredClone(begin); bad.record.data.candidate.schemaLedger.push({ name: '002_added.sql', sha256: '2'.repeat(64) });
+  assert.throws(() => replayReleaseFloor([...f.chain, bad], f.options), /release_floor_code_schema_changed/);
+  f.add(begin);
+  assert.throws(() => replayReleaseFloor([...f.chain, begin], f.options), /release_floor_unsettled/);
+  const schema = { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(before.schemaLedger) };
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'migration', { ...schema, readOnly: false })], f.options));
+  f.add(f.event('passed', 'migration', schema));
+  f.add(f.event('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id,
+    configSha256: '3'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+  f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
+  f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  const final = f.add(f.event('passed', 'handoff', { cleanupVerified: true, schemaUnchanged: true }));
+  assert.equal(final.sourceSha, sha); assert.equal(final.deployedSourceSha, sha); assert.equal(final.pending, null);
+  assert.deepEqual(final.schemaLedger, before.schemaLedger); assert.equal(final.schemaVersion, before.schemaVersion);
+  assert(!JSON.stringify(f.chain).includes('backup-before'));
+});
+test('deploy reconciliation accepts only an authenticated failed pre-capture backup, not capture or arbitrary input', async () => {
+  const f = failedBackupFixture();
+  Object.assign(f.admission, { mode: 'deploy', releaseKind: 'code-only', sourceSha: main });
+  await assert.rejects(requireFailedBackup(f.api, f.admission, installation), /release_backup_recovery_boundary_invalid/);
+  f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed' },
+    { name: 'backup', reportedStatus: 'failed', backupFailure: { stage: 'preflight', snapshotDump: 'not_started' } }];
+  const proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.sourceSha, sha); assert.equal(proof.failureBoundary, 'before_capture');
+  for (const value of ['100', '-1', '77\n', '0', '1e2']) {
+    assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_BACKUP_RUN_ID: value }));
+  }
+  assert.equal(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_BACKUP_RUN_ID: '77' }).recoverRunId, 77);
+  assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_RECOVER_BACKUP_RUN_ID: '77' }));
+});
+test('release source has no scheduler dependency, backup calls remain conditional and daily schedule is unchanged', async () => {
+  const cli = await readFile(new URL('../../shared-release/cli.mjs', import.meta.url), 'utf8');
+  assert(!cli.includes('requireScheduledBackup')); assert(!cli.includes('scheduleEvidence'));
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  assert(entry.includes("if (!codeOnly) await phase('backup-after'"));
+  assert(entry.includes("if (codeOnly) check(plan.pending.length === 0"));
+  const backup = await readFile(new URL('../../../.github/workflows/shared-backup.yml', import.meta.url), 'utf8');
+  assert(backup.includes("cron: '43 5 * * *'")); assert(backup.includes('group: shared-release'));
+});
+
+test('code-only controller runs without backup credentials or schedule evidence and binds five phases', async t => {
+  const fixture = await operatorFixture(t), { admission, value } = codeResult();
+  fixture.options.admission = admission; delete fixture.options.credentials.backupDatabaseUrl;
+  const oldRun = fixture.options.run;
+  fixture.options.run = async (cmd, args, ...rest) => {
+    if (args[0] !== 'run') return oldRun(cmd, args, ...rest);
+    const input = await readFile(join(fixture.temporaryRoot, 'input/request.json'), 'utf8');
+    const request = JSON.parse(input), credentials = JSON.parse(await readFile(join(fixture.temporaryRoot, 'input/credentials.json'), 'utf8'));
+    assert.equal(request.scheduleEvidence, undefined); assert.equal(credentials.backupDatabaseUrl, undefined);
+    assert.deepEqual(request.requiredPhases, ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+    await writeFile(join(fixture.temporaryRoot, 'output/result.json'), JSON.stringify({ ...value, requestSha256: hash(input) }));
+  };
+  assert.equal((await runOperator(fixture.options)).length, 5);
 });

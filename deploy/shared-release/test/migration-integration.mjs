@@ -10,7 +10,7 @@ import { readMigrationSources } from '../../../packages/db/migration-files.mjs';
 import { runMigrationPlan } from '../../../packages/db/migration-runner.mjs';
 import { LEGACY_MIGRATIONS } from '../../../packages/db/migration-plan.mjs';
 import { observeBackupControl } from '../portable/backup.mjs';
-import { preparePortableMigration, runPortableMigration, observeMigrationOutcome } from '../portable/migration.mjs';
+import { preparePortableMigration, runPortableMigration, observeMigrationOutcome, verifyUnchangedSchema } from '../portable/migration.mjs';
 import { runCanonicalSql } from '../portable/canonical-sql.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 
@@ -103,6 +103,22 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert(result.probes.every(value => value.readOnly && value.tables > 300));
     assert.equal((await pool.query('SELECT count(*)::int count FROM shared_release_fixture')).rows[0].count, 1);
     const nextPlan = prepare(plan.afterLedger); let commits = 0;
+    const readOnlySql = [], codePool = { async connect() {
+      const q = await pool.connect(); return { release: destroy => q.release(destroy), async query(sql, values) {
+        readOnlySql.push(sql); return q.query(sql, values);
+      } };
+    } };
+    const codeArgs = { pool: codePool, runtimePool, database, plan: nextPlan, expected, lease,
+      floor: { assertCurrent: async () => lease.assertHeld(), verifyDatabase: async q => {
+        assert.deepEqual((await q.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, plan.afterLedger);
+      } } };
+    assert.equal((await verifyUnchangedSchema(codeArgs)).readOnly, true);
+    assert(readOnlySql.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+    assert(!readOnlySql.some(sql => /^(COMMIT|UPDATE|DELETE|INSERT|ALTER|CREATE|GRANT)/i.test(sql)));
+    await assert.rejects(verifyUnchangedSchema({ ...codeArgs, plan }), { code: 'release_schema_change_requires_migration' });
+    await assert.rejects(verifyUnchangedSchema({ ...codeArgs, expected: { ...expected, materialPolicySha256: 'f'.repeat(64) } }),
+      { code: 'release_migration_policy_changed' });
+
     const lostReply = { async connect() {
       const client = await pool.connect();
       return { on: (...items) => client.on(...items), removeListener: (...items) => client.removeListener(...items),
@@ -125,7 +141,7 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(commits, 1); lease.assertHeld();
     return { status: 'passed', realMigratorRole: true, migrationAndGrantsAtomic: true, existingIntentRefusesReplay: true,
       actualRuntimeAndBackupProbes: true, unknownCommitObservedWithoutReplay: true,
-      failedSharedIntentRollsBack: true,
+      failedSharedIntentRollsBack: true, codeReleaseChecksSchemaWithoutMutationOrBackup: true,
       sourceInstallationVerified: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
   } finally {
     if (lease) await lease.release();

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitInstallation,
   requireStaging, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
-import { requireScheduledBackup } from './scheduled-admission.mjs';
+import { requireFailedBackup } from './scheduled-admission.mjs';
 import { checkEnvironment } from './environment-check.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
@@ -44,8 +44,9 @@ export async function main(env = process.env) {
     const installation = admitInstallation(env);
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
+    const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
+    if (recoveryEvidence) receipt.backupReconciliation = recoveryEvidence;
     receipt.stagingEvidence = await requireStaging(api, admission, installation);
-    receipt.scheduleEvidence = await requireScheduledBackup(api, admission, installation);
     const source = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     const git = args => execFileSync('git', ['-C', source, ...args], {
       encoding: 'utf8', timeout: 30_000, maxBuffer: 1_000_000, stdio: ['ignore', 'pipe', 'ignore'],
@@ -74,15 +75,14 @@ export async function main(env = process.env) {
     const status = (state, description) => api(`/repos/${REPOSITORY}/deployments/${deployment.id}/statuses`, {
       method: 'POST', body: { state, description, log_url: runUrl, auto_inactive: false },
     });
-    await status('in_progress', 'Backup, migration, deployment, health and recovery checks in progress');
+    await status('in_progress', 'Schema compatibility, deployment and health checks in progress');
     receipt.status = 'running';
     receipt.providerOutcome = 'unknown_until_confirmed';
     // Persist an honest in-progress record before any remote mutation. Abrupt cancellation
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await runOperator({ admission, installation, sourceRoot: source, temporaryRoot,
+    receipt.phases = await runOperator({ admission, installation, recoveryEvidence, sourceRoot: source, temporaryRoot,
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
-      scheduleEvidence: receipt.scheduleEvidence,
       onProgress: async phases => {
         receipt.operatorProgress = phases;
         await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
@@ -91,14 +91,14 @@ export async function main(env = process.env) {
       },
       config: env.RELEASE_CONFIG_JSON, credentials: {
         cloudflareApiToken: env.CLOUDFLARE_API_TOKEN,
-        migrationDatabaseUrl: env.MIGRATION_DATABASE_URL, backupDatabaseUrl: env.BACKUP_DATABASE_URL,
+        migrationDatabaseUrl: env.MIGRATION_DATABASE_URL,
         runtimeDatabaseUrl: env.RUNTIME_DATABASE_URL,
         ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
           stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });
-    receipt.providerOutcome = 'release_and_recovery_confirmed';
-    receipt.operatorEvidence = 'validated-seven-phases/v1';
-    await status('success', 'Release, health, backup restore and scheduled backup handoff confirmed');
+    receipt.providerOutcome = 'code_release_confirmed';
+    receipt.operatorEvidence = 'validated-code-release/v1';
+    await status('success', 'Code release, unchanged schema and health confirmed');
     receipt.status = 'passed';
   } catch (error) {
     receipt.status = 'failed'; receipt.error = publicError(error);
