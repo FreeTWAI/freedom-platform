@@ -190,3 +190,51 @@ This adds a per-member-page normal-flow entry, not an always-floating bubble or
 an anonymous-site bot. Existing theme colors are inherited. Theme-dependent
 characters still require a separate approved design/integration with the existing
 GuideHost release and asset gates; this candidate does not claim that work done.
+
+## Optional controller preparation (not character wiring)
+
+`PlatformHelper` optionally accepts `controllerRef: Ref<HelperDialogController>`
+and `onDialogChange`. Existing callers omit both, retaining the same launcher,
+dialog, model, guarded navigation and default close/Escape focus behavior.
+The handle exposes the dialog ID, a live `open` getter, and
+`requestOpen(origin: HTMLElement): boolean`. The only supported use is an explicit
+user action on a same-document connected, enabled, non-hidden launcher. False is
+an immediate refusal, never a queued request. Repeated opens do not clear input,
+restart composition or issue duplicate notifications. Native open failures leave
+no partially opened state.
+
+A handle belongs to one committed component lifetime. Account/page replacement,
+the member host's accepted-route key, blocking teardown and unmount invalidate
+retained handles. StrictMode effect replay creates a fresh lease; it does not
+revive a previously captured handle. Reconnected layout setup closes any retained
+open native dialog and clears ephemeral state before issuing the fresh lease; a
+new explicit user action is required. Actual unmount cleanup does not call close
+or restore origin focus. React clears the live ref during cleanup. Replacing only
+the ref prop within the same mounted session does not revoke previously captured
+handles; they share that session's lifetime, not a separate authorization grant.
+No handle, element, callback, input or request is persisted or sent over a network.
+
+Changes report `{dialogId, open: true, origin}` or
+`{dialogId, open: false, reason, origin}`. Reasons are `dismiss` (Close/Escape),
+`native` (an otherwise unhandled native close) and `teardown` (lifetime ended).
+These notifications contain no query, answer, account or route. Optional listener
+exceptions cannot interrupt cleanup and are neither logged nor surfaced. A queued
+close from an earlier opening cannot reset a dialog that has already reopened.
+
+External launchers deliberately do **not** receive an explicit focus call from
+the helper. Existing guides disable controls while a native modal is present;
+immediately focusing that disabled origin would be premature. A future scoped
+host/GuideEngine integration must restore focus only after a manual dismissal,
+its suppression has cleared, the same scope remains current and no newer blocker
+or navigation exists. Teardown cancels restoration. The helper schedules no timer,
+retry, global event or synthetic click. Native browser focus behavior is still
+unverified by the synthetic tests.
+
+This increment does not connect App, PlatformHelperHost, GuideHost or GuideEngine,
+hide the existing launcher, add another character, change themes, load character
+assets, bypass release gates or introduce generative AI. The future opted-in
+character may call this same dialog only through its existing verified ready
+scope; fallback entry selection and deferred guide-focus handshake remain shared
+integration work. New actual-source synthetic lifecycle tests cover controller
+leases, refusal, IME/repeated open, notifications, failed native opening and
+teardown; they are not React scheduling or browser acceptance.

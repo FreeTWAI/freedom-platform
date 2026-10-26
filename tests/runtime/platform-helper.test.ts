@@ -73,7 +73,7 @@ test('synthetic queued close event cannot erase a reopened dialog session',async
   const source=readFileSync(new URL('../../apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx',import.meta.url),'utf8');
   type Element={type:string|((props:unknown)=>Element);props:Record<string,any>};
   const slots:any[]=[];let cursor=0;
-  const hooks={useId:()=> 'synthetic-helper',useRef:(value:unknown)=>{
+  const hooks={useLayoutEffect:()=>{},useImperativeHandle:()=>{},useId:()=> 'synthetic-helper',useRef:(value:unknown)=>{
     const index=cursor++;return slots[index]??(slots[index]={current:value});
   },useState:(value:unknown)=>{
     const index=cursor++;if(!(index in slots))slots[index]=value;
@@ -130,7 +130,7 @@ async function withSyntheticResultSession(check:(session:{nodes:()=>any[];button
   const model=await import('../../apps/portal-web/src/modules/platform-helper/model.js');
   const source=readFileSync(new URL('../../apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx',import.meta.url),'utf8');
   const slots:any[]=[];let cursor=0;
-  const hooks={useId:()=> 'synthetic-result-helper',useRef:(value:unknown)=>{const index=cursor++;return slots[index]??(slots[index]={current:value});},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
+  const hooks={useLayoutEffect:()=>{},useImperativeHandle:()=>{},useId:()=> 'synthetic-result-helper',useRef:(value:unknown)=>{const index=cursor++;return slots[index]??(slots[index]={current:value});},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
   const jsx=(type:unknown,props:unknown,key?:string)=>({type,props,key});
   const module={exports:{} as {PlatformHelper:(props:unknown)=>any}};
   new Function('module','exports','require',transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code)(module,module.exports,(id:string)=>{
@@ -254,4 +254,126 @@ test('canonical adapter never mutates or freezes sources and snapshots mutable s
   const next=buildHelperKnowledge(sources);
   assert.equal(first.knowledge.skills!.title,'技能書架最新標題');assert.deepEqual(first.knowledge.skills!.steps,['目前第一步']);
   assert.deepEqual(next.availablePageIds,['skills']);assert.equal(next.knowledge.skills!.title,' 更新後標題 ');assert.deepEqual(next.knowledge.skills!.steps,['目前第一步','更新步驟']);
+});
+
+/** Actual TSX with synthetic lifecycle/DOM; not React or native-browser acceptance. */
+async function withControllerSession(check:(s:any)=>void){
+  const {transformSync}=await import('esbuild');
+  const model=await import('../../apps/portal-web/src/modules/platform-helper/model.js');
+  const source=readFileSync(new URL('../../apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx',import.meta.url),'utf8');
+  let slots:any[]=[],cursor=0,pending:(()=>void)[]=[],nodes:any[]=[],key:unknown;
+  const effects=new Map<number,{setup:()=>void|(()=>void);cleanup?:()=>void}>();
+  const layout=(setup:()=>void|(()=>void),deps:unknown[])=>{
+    const index=cursor++,prior=slots[index];
+    if(!prior||deps.some((v,i)=>v!==prior[i])){slots[index]=deps;pending.push(()=>{effects.get(index)?.cleanup?.();const cleanup=setup();effects.set(index,{setup,cleanup:cleanup||undefined});});}
+  };
+  const hooks={useId:()=> 'synthetic-controller',useRef:(v:unknown)=>{const i=cursor++;return slots[i]??(slots[i]={current:v});},useState:(v:unknown)=>{const i=cursor++;if(!(i in slots))slots[i]=v;return [slots[i],(next:unknown)=>{slots[i]=next;}];},useLayoutEffect:layout,useImperativeHandle:(ref:any,create:()=>unknown,deps:unknown[])=>layout(()=>{if(ref)ref.current=create();return()=>{if(ref)ref.current=null;};},[ref,...deps])};
+  const jsx=(type:unknown,props:unknown,key?:unknown)=>({type,props,key});
+  const module={exports:{} as {PlatformHelper:(props:any)=>any}};
+  new Function('module','exports','require',transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code)(module,module.exports,(id:string)=>{
+    if(id==='react')return hooks;if(id==='react/jsx-runtime')return {jsx,jsxs:jsx};if(id==='./model')return model;if(id==='./helper.css')return {};throw Error(`Unexpected dependency ${id}`);
+  });
+  let foreign=false,shows=0,focuses=0;
+  const doc={querySelector:()=>foreign?{}:null,querySelectorAll:()=>[],defaultView:{getComputedStyle:()=>({display:'block',visibility:'visible'})}};
+  const origin={isConnected:true,ownerDocument:doc,disabled:false,matches(){return this.disabled;},closest:()=>null,getClientRects:()=>[{}],focus(){focuses++;}};
+  const dialog={isConnected:true,ownerDocument:doc,open:false,showModal(){shows++;this.open=true;},close(){this.open=false;}};
+  const ref={current:null as any},events:any[]=[];
+  const props:any={pageId:'guilds',accountScope:'opaque',availablePageIds:available,knowledge,onNavigate:()=>{},blocked:false,controllerRef:ref,onDialogChange:(event:any)=>events.push(event)};
+  const flatten=(n:any):any[]=>!n||typeof n!=='object'?[]:[n,...[n.props?.children].flat(Infinity).flatMap(flatten)];
+  function teardown(){for(const e of effects.values())e.cleanup?.();effects.clear();slots=[];dialog.open=false;nodes=[];}
+  function render(){cursor=0;pending=[];const outer=module.exports.PlatformHelper(props);if(!outer){teardown();key=undefined;return;}
+    if(key!==outer.key){teardown();key=outer.key;cursor=0;}nodes=flatten(outer.type(outer.props));
+    for(const n of nodes)if(n.props.ref)n.props.ref.current=n.type==='dialog'?dialog:origin;
+    for(const setup of pending)setup();
+  }
+  const before=Object.getOwnPropertyDescriptor(globalThis,'document');Object.defineProperty(globalThis,'document',{configurable:true,value:doc});
+  try{render();check({ref,events,origin,dialog,props,render,teardown,shows:()=>shows,focuses:()=>focuses,foreign:(v:boolean)=>{foreign=v;},
+    strictReplay(){const entries=[...effects.values()];for(const e of entries)e.cleanup?.();for(const e of entries)e.cleanup=e.setup()||undefined;},
+    input(value:string){nodes.find(n=>n.type==='input').props.onChange({target:{value}});render();},
+    value:()=>nodes.find(n=>n.type==='input')?.props.value,
+    compose(v:boolean){nodes.find(n=>n.type==='input').props[v?'onCompositionStart':'onCompositionEnd']();},
+    submit(){nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){},stopPropagation(){}});render();},
+    close(){nodes.find(n=>n.type==='button'&&n.props.children==='關閉').props.onClick();render();},
+    nativeClose(){dialog.open=false;nodes.find(n=>n.type==='dialog').props.onClose();render();},
+    launch(){nodes.find(n=>n.type==='button'&&n.props['aria-haspopup']==='dialog').props.onClick();render();},
+    lateClose:()=>nodes.find(n=>n.type==='dialog').props.onClose,
+  });}finally{teardown();if(before)Object.defineProperty(globalThis,'document',before);else Reflect.deleteProperty(globalThis,'document');}
+}
+
+test('external controller opens the same dialog once, preserving IME and repeated-open input',async()=>{
+  await withControllerSession(s=>{
+    const handle=s.ref.current;assert.ok(handle,'mounted helper exposes an optional controller');
+    assert.equal(handle.dialogId,'synthetic-controller');assert.equal(handle.open,false);
+    assert.equal(handle.requestOpen(s.origin),true);s.render();assert.equal(handle.open,true);assert.equal(s.shows(),1);
+    s.input('組字中');s.compose(true);s.submit();assert.equal(s.value(),'組字中');
+    assert.equal(handle.requestOpen(s.origin),false);s.render();assert.equal(s.value(),'組字中');assert.equal(s.shows(),1);
+    s.compose(false);s.submit();assert.equal(s.value(),'');assert.equal(s.events.length,1);
+  });
+});
+test('external dismissal reports origin and does not focus a suppressed/disabled guide trigger',async()=>{
+  await withControllerSession(s=>{
+    assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();const before=s.focuses();s.origin.disabled=true;s.close();
+    assert.equal(s.focuses(),before);assert.equal(s.events.at(-1).reason,'dismiss');assert.equal(s.events.at(-1).origin,s.origin);
+    assert.equal(s.ref.current.open,false);s.origin.disabled=false;s.launch();const openedFocus=s.focuses();s.close();assert.equal(s.focuses(),openedFocus+1);
+  });
+});
+test('retained controller leases cannot reopen after page/account/blocking/route teardown or StrictMode replay',async()=>{
+  await withControllerSession(s=>{
+    for(const change of [()=>{s.props.pageId='skills';},()=>{s.props.accountScope='new-login';},()=>{s.props.blocked=true;}]){
+      const old=s.ref.current;assert.equal(old.requestOpen(s.origin),true);s.render();change();s.render();
+      assert.equal(old.requestOpen(s.origin),false);assert.equal(old.open,false);assert.equal(s.events.at(-1).reason,'teardown');
+    }
+    assert.equal(s.ref.current,null);s.props.blocked=false;s.render();assert.equal(s.dialog.open,false);
+    const beforeReplay=s.ref.current;s.strictReplay();assert.equal(beforeReplay.requestOpen(s.origin),false);assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();
+    const beforeRoute=s.ref.current;s.teardown();assert.equal(beforeRoute.requestOpen(s.origin),false);assert.equal(beforeRoute.open,false);
+  });
+});
+test('controller rejects foreign modals and disconnected/foreign origins without queuing',async()=>{
+  await withControllerSession(s=>{
+    s.foreign(true);assert.equal(s.ref.current.requestOpen(s.origin),false);s.foreign(false);s.render();assert.equal(s.dialog.open,false);
+    for(const origin of [{...s.origin,isConnected:false},{...s.origin,ownerDocument:{}},{...s.origin,disabled:true}])assert.equal(s.ref.current.requestOpen(origin),false);
+    assert.equal(s.shows(),0);assert.equal(s.events.length,0);
+    assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();s.nativeClose();assert.equal(s.events.at(-1).reason,'native');
+  });
+});
+test('queued native close does not close a reopened controller dialog or duplicate notifications',async()=>{
+  await withControllerSession(s=>{
+    s.ref.current.requestOpen(s.origin);s.render();const queued=s.lateClose();s.close();
+    assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();s.input('新問題');queued();s.render();
+    assert.equal(s.ref.current.open,true);assert.equal(s.value(),'新問題');assert.deepEqual(s.events.map((e:any)=>e.open),[true,false,true]);
+  });
+});
+test('controller notifications use the latest listener and cannot interrupt closing/teardown',async()=>{
+  await withControllerSession(s=>{
+    const changes:any[]=[];s.props.onDialogChange=(change:any)=>{changes.push(change);throw Error('private callback failure');};s.render();
+    assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();s.input('不可記錄的問題');s.close();
+    assert.equal(s.dialog.open,false);assert.equal(s.value(),'');assert.equal(s.events.length,0);
+    assert.deepEqual(changes.map(e=>[e.open,e.reason]),[[true,undefined],[false,'dismiss']]);
+    assert.equal(JSON.stringify(changes.map(({origin,...e})=>e)).includes('不可記錄'),false);
+    s.ref.current.requestOpen(s.origin);s.render();s.teardown();assert.equal(changes.at(-1).reason,'teardown');
+  });
+});
+test('controller refuses hidden triggers and native open failures without partial state',async()=>{
+  await withControllerSession(s=>{
+    assert.equal(s.ref.current.requestOpen({...s.origin,closest:()=>({})}),false);
+    assert.equal(s.ref.current.requestOpen({...s.origin,getClientRects:()=>[]}),false);
+    const visible=s.origin.ownerDocument.defaultView.getComputedStyle;s.origin.ownerDocument.defaultView.getComputedStyle=()=>({display:'none',visibility:'visible'});
+    assert.equal(s.ref.current.requestOpen(s.origin),false);s.origin.ownerDocument.defaultView.getComputedStyle=visible;
+    s.dialog.isConnected=false;assert.equal(s.ref.current.requestOpen(s.origin),false);s.dialog.isConnected=true;
+    const nativeOpen=s.dialog.showModal;s.dialog.showModal=()=>{throw Error('native failure');};
+    assert.equal(s.ref.current.requestOpen(s.origin),false);s.render();assert.equal(s.ref.current.open,false);assert.equal(s.events.length,0);
+    s.dialog.showModal=nativeOpen;assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();
+    s.props.blocked=true;s.render();assert.equal(s.events.at(-1).reason,'teardown');assert.equal(s.ref.current,null);
+  });
+});
+test('layout replay of an open dialog starts a fresh closed session rather than orphaning native state',async()=>{
+  await withControllerSession(s=>{
+    const old=s.ref.current;assert.equal(old.requestOpen(s.origin),true);s.render();s.input('不可復活的問題');const queued=s.lateClose();
+    s.strictReplay();s.render();
+    assert.equal(old.open,false);assert.equal(old.requestOpen(s.origin),false);
+    assert.equal(s.ref.current.open,false);assert.equal(s.dialog.open,false);assert.equal(s.value(),'');
+    assert.deepEqual(s.events.map((e:any)=>[e.open,e.reason]),[[true,undefined],[false,'teardown']]);
+    assert.equal(s.ref.current.requestOpen(s.origin),true);s.render();s.input('重開的新問題');queued();s.render();assert.equal(s.value(),'重開的新問題');s.close();
+    assert.equal(s.events.at(-1).reason,'dismiss');assert.equal(s.events.at(-1).origin,s.origin);
+  });
 });
