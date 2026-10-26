@@ -17328,6 +17328,11 @@
       "sha256": "9abab1958bae6029b0b59d5dd89bc9e833a8e564b42c213ff93c8cc5d3bb19b7"
     },
     {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "bytes": 75278,
+      "sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d"
+    },
+    {
       "path": "docs/platform-plan/execution/unified-foundation/rollout-main-36bec661-2026-10-25.json",
       "bytes": 64039,
       "sha256": "a0396ef2e1b80b98e956417f596285de35e59a77ea049f189dd08290bc4d475b"
@@ -21021,6 +21026,11 @@
       "path": "modules/community/discovery-portal/freedom.module.json",
       "bytes": 1431,
       "sha256": "f17554672905a4bdd8cb37b2d8c102570784eb3909fd24178c17f4a81d316945"
+    },
+    {
+      "path": "modules/community/discovery-portal/skill-book-uses.ts",
+      "bytes": 1337,
+      "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
     },
     {
       "path": "modules/community/outcomes/freedom.module.json",
@@ -28201,16 +28211,6 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
-    },
-    {
-      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "bytes": 75278,
-      "sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d"
-    },
-    {
-      "path": "modules/community/discovery-portal/skill-book-uses.ts",
-      "bytes": 1337,
-      "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
     }
   ]
 }
