@@ -37,10 +37,10 @@
     const link = document.querySelector('[data-post-login]');
     if (link) {
       link.href = member ? `/?social-post=${encodedId}#social` : `/?post_return=${encodedId}#account`;
-      link.textContent = member ? '開啟貼文與討論' : '登入看更多與留言';
+      link.textContent = member ? '回原貼文提問與分享心得' : '登入回原貼文交流';
     }
     const description = document.querySelector('[data-invite-description]');
-    if (description) description.textContent = member ? '繼續閱讀其他分享，或回到貼文加入討論。' : '你已讀完這篇公開貼文。登入後可以看更多分享、按讚與加入討論。';
+    if (description) description.textContent = member ? '回到這則貼文，分享使用心得或提出問題；留言依原有會員資格開放。' : '有實作心得或問題？登入後回到這則貼文交流；留言依原有會員資格開放。';
     const preview = document.querySelector('[data-preview-description]');
     if (preview) preview.textContent = member ? '看看其他夥伴的公開分享。' : '先看看幾則分享，登入後就能繼續閱讀。';
     for (const related of document.querySelectorAll('[data-related-post]')) {
