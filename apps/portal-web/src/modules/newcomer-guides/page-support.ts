@@ -3,6 +3,7 @@ import type {PageGuideSupport} from './contracts';
 export type GuidePageId = TabId | 'registration' | 'onboarding' | 'admin' | 'skillbooks' | 'supplier-console';
 // Every real page must explicitly opt in or give a reason. CI also checks developmentPages.
 export const DRAGON_PAGE_SUPPORT = {
+  'newbie-village':{status:'disabled',reason:'新手村沿用頁內框架與任務說明，角色導覽尚未審核'},
   profile:{status:'disabled',reason:'本人個人空間沿用頁面內說明，角色導覽尚未審核'},
   'supplier-console':{status:'disabled',reason:'商店導覽尚未完成審核'},
   ar:{status:'disabled',reason:'AR 相機採用畫面內操作提示，角色導覽尚未審核'},
