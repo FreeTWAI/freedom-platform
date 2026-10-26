@@ -129,3 +129,12 @@ git diff --check
 需要資料庫的測試先準備獨立、可丟棄的 PostgreSQL；CLI 使用明確的 `TEST_DATABASE_URL`，設定規則見 [本機 runtime](local-runtime.md) 與 [governance](../../governance/README.md)。缺資料庫、瀏覽器或固定行為證據時，寫實際的 `not_run` / unavailable 與原因；`verify` 的 exit 2 不是成功，也不要求為了開 PR 假造所有驗收已完成。新功能模組目前仍會保留 `registration_behavior_audit_required`；即使選定測試通過，也要列出 runtime 註冊與行為審查的未驗項。不要為了消除檢查錯誤重建歷史 inventory；依本次 PR 實際套用的 CI 要求執行，source-boundaries 與 pin 轉換狀態見 [驗證說明](../../scripts/ci/release-inventory.md)。
 
 最後 push 自己的分支，建立 PR 到中央 `main`。使用自動帶入的 PR 模板交代問題、結果、模組、跨模組依賴、實跑命令與未驗項。新功能若需要 migration 或旗標，再說明其啟用條件與回退限制。PR、CI 成功與功能正式啟用是不同狀態；合併及部署依既有 [貢獻發布途徑](contribution-release-paths.md) 辦理。
+
+### 讓下一棒不用重查整段討論
+
+沿用 PR 模板與既有交接摘要，保留一份可更新的短紀錄；不另開追蹤案，也不要求填寫不相關的啟用條件。
+
+- **範圍與認領**：列模組、主要檔案、原 Issue／派工、相依 PR 與本輪完成條件。認領人和已確認的審查／整合接手者分開寫；未指定就明說，`owner_role` 不是已任命的真人。
+- **版本與驗證**：固定本輪 head／baseline SHA；每筆命令列明範圍、結果與適用 SHA，未驗項保留原因與下一步。更新來源後，不把舊版本的局部或完整結果改標成新 head 通過。
+- **審查與 CI**：來源 review 記錄審查的 head；整合候選另記實際候選 SHA 與 CI run，有 tree 證據再附。未產生時寫待審／待產生，不增加開 PR 門檻；來源核准不等於整合 CI 通過，局部預檢不減少既有必要檢查。
+- **卡點與下一棒**：有阻塞時，依[發布途徑](contribution-release-paths.md)區分產品必修、平台／CI 環境與後續改善，更新目前卡點、接手角色或已確認的人、解除條件。沒有確認的人選就寫待指定，不自行指派；新 head 仍依新變更與原完成條件審查，不追加無關的全站改善。
