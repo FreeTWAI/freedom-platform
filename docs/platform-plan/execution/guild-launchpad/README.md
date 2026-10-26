@@ -8,7 +8,15 @@
 
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=1f7aee36d9ba2424e4eeddf9f0399fec95aeca77 release.staging=1f7aee36d9ba2424e4eeddf9f0399fec95aeca77 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=b14916ccd75cff70bcd4ba979088ddd8c3d88583 release.staging=b14916ccd75cff70bcd4ba979088ddd8c3d88583 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-26 05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`；會員取得手機導覽收合與改名、公會目錄主題篩選／符合數量、公會管理用途說明／討論優先與頁內收合保留草稿，以及活動首次載入期間的提交gate。HostedStore拆區無預期行為變更；#1038 shared Actions已合併但release／backup未啟用，本次用本機Q5；checkout／交易Email仍OFF，storefront焦點修補沒有開放新購物流程，既有授權訂單路徑未驗。無migration，188列ledger及 `36bec661`／189回退下限、28設定／37 vars／路由／cron不變。詳見[本次發布收據](../unified-foundation/rollout-main-b14916cc-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
+
+四組正式備份讀回／隔離還原／清理通過：staging before採Q4 wrapper自然排程，production before在「快點推」後手動執行；production after首試失敗、第二次才作pointer。網路probe loss、kit容量中斷、rehearsal實際timer labels與首次timer restore拒絕均保留；operator啟動timer的Persistent補跑通過後原timers恢復，dispatcher為 `14279926`。Production公開smoke14項通過；admin僅Access302與精確來源CSP。會員UX、S10 wrapper自然calendar-slot、M1／完整計畫與真人成果仍未驗收。
+
+### 2026-10-25 19:44 歷史發布
+
+以下保留 `1f7aee36` 當時觀察；最新部署以上方10月26日收據為準。
 
 截至2026-10-25 19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`；會員最多只在AbsurdDaily結束時少一次重複繪製（#1058）。#1042仍在store policies absent／OFF與checkout OFF之後，買家目前看不到；其餘為測試、文件或無行為變更的重構。無migration，188列ledger及 `36bec661`／189回退下限、旗標／37 vars／路由／cron不變。四組正式備份讀回／隔離還原／清理通過，dispatcher `64bdeee1`綁定兩環境、原timers已恢復。詳見[本次發布收據](../unified-foundation/rollout-main-1f7aee36-2026-10-25.json)及[現況快照](../unified-foundation/current-state.json)。
 

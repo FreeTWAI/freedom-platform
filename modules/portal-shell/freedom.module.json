@@ -57,7 +57,10 @@
     "tests/e2e/account-language.spec.ts",
     "tests/e2e/connection-feedback-layout.spec.ts",
     "tests/e2e/local-action-feedback.spec.ts",
-    "tests/e2e/page-tools-notification.spec.ts"
+    "tests/e2e/page-tools-notification.spec.ts",
+    "apps/portal-web/src/PlatformHelperHost.tsx",
+    "tests/runtime/platform-helper-host.test.ts",
+    "tests/e2e/platform-helper-host.spec.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/api.ts",
@@ -78,7 +81,8 @@
     "newcomer-guides",
     "shared",
     "social-feed",
-    "absurd-daily"
+    "absurd-daily",
+    "platform-helper"
   ],
   "contract_families": [],
   "client_profiles": [

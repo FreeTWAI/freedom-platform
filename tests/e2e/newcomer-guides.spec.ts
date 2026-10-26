@@ -95,6 +95,10 @@ async function expectQuietCompanion(page: Page, blocked = false) {
   await expect(actor(page)).toBeVisible();
   if(blocked) {
     const controls=widget(page).locator('.page-spirit-launcher,.page-spirit-entry-actions button');
+    // Foreign blocking surfaces revoke the helper bridge, not the original guide controls.
+    await expect(widget(page).getByRole('button',{name:'問路助手',exact:true})).toHaveCount(0);
+    await expect(widget(page).getByRole('button',{name:'問本頁',exact:true})).toBeDisabled();
+    await expect(widget(page).getByRole('button',{name:'帶我看',exact:true})).toBeDisabled();
     await expect(controls).toHaveCount(3);
     for(const button of await controls.all()) {
       await expect(button).toBeDisabled();

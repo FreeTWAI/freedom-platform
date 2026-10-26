@@ -34,7 +34,8 @@ import {readEventParticipationToken} from './modules/EventParticipation'
 import {DevelopmentAccessProvider} from './modules/DevelopmentAccess'
 import { GameConsoleProvider, GameConsolePopout, useGameConsole } from './GameConsole'
 import {PageTools} from './PageTools'
-import {GuideHost} from './modules/newcomer-guides/GuideHost'
+import {PlatformHelperHost} from './PlatformHelperHost';
+import {GuideHost,type GuideHelperAction} from './modules/newcomer-guides/GuideHost'
 import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import {AdminReports,MemberReportingProvider} from './modules/MemberReporting'
@@ -59,7 +60,9 @@ const AdminPanel = lazy(() => import('./modules/AdminPanel').then(m => ({default
 const GitHubCallback = lazy(() => import('./modules/GitHubCallback').then(m => ({default: m.GitHubCallback})))
 const MemberMessages = lazy(() => import('./modules/MemberMessages').then(m => ({default: m.MemberMessages})))
 const PublicEventPage = lazy(() => import('./modules/PublicEventPage').then(m => ({default: m.PublicEventPage})))
+const NewbieVillage = lazy(() => import('./modules/NewbieVillage').then(m => ({default: m.NewbieVillage})))
 const WelcomePreview = lazy(() => import('./modules/WelcomePreview').then(m => ({default: m.WelcomePreview})))
+const TesterMap = lazy(() => import('./modules/TesterMap').then(m => ({default: m.TesterMap})))
 import { HostedOrderPage } from './features/commerce'
 
 const DEMO_ACCOUNTS = [
@@ -282,8 +285,10 @@ function MemberApp() {
   if(emailChangeToken)return <EmailChangeConfirm key={emailChangeToken} client={client} token={emailChangeToken}/>;
   if(emailVerificationToken)return <EmailVerificationConfirm key={emailVerificationToken} client={client} token={emailVerificationToken}/>;
   if (resetToken || phase !== 'ready' || !session) {
+    if(!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
     if(!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
+    if(!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
     if(!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
     if(!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
@@ -637,6 +642,11 @@ function Workspace({
   },[session.user.user_id,session.csrf_token]);
   const [tab, setTab] = useState<TabId>(() => tabFromHash(site?.guild_launchpad_enabled === true))
   const [locationHash, setLocationHash] = useState(() => window.location.hash)
+  const helperScope=JSON.stringify([client.sessionGeneration,locationHash]);
+  const [helperReady,setHelperReady]=useState<{scope:string;action:GuideHelperAction}|null>(null);
+  const receiveHelper=useCallback((action:GuideHelperAction|null)=>{
+    setHelperReady(previous=>action?{scope:helperScope,action}:previous?.scope===helperScope?null:previous);
+  },[helperScope]);
   const {canEndSession:canEndConsoleSession}=useGameConsole()
   const consoleRoute = tab === 'stores' && site?.supplier_console_enabled === true ? parseSupplierConsoleRoute(locationHash) : null
   const sellerRoute = tab === 'stores' && site?.commerce_console_enabled === true ? parseSellerConsoleRoute(locationHash) : null;
@@ -697,6 +707,7 @@ function Workspace({
   const menuToggle = useRef<HTMLButtonElement>(null)
   const mainContent = useRef<HTMLElement>(null)
   const workspaceTopbar = useRef<HTMLElement>(null)
+  const helperFocusPending = useRef<string | null>(null)
   const previousTab = useRef(tab)
   useEffect(() => {
     setMobileOpen(false)
@@ -711,6 +722,13 @@ function Workspace({
     mainContent.current?.focus({ preventScroll: true })
     workspaceTopbar.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
   }, [tab, locationHash])
+  useEffect(() => {
+    const expectedHash = helperFocusPending.current
+    helperFocusPending.current = null
+    // A same-tab helper route has committed and its keyed native dialog is gone.
+    // A newer modal owns focus; never take it back from that surface.
+    if (expectedHash === locationHash && !document.querySelector('dialog[open],[aria-modal="true"]')) mainContent.current?.focus({preventScroll:true})
+  }, [locationHash])
   const selectTab = useCallback((next: TabId, destinationHash?: string) => {
     if(next==='messages'){openMessages();return}
     const nextHash = destinationHash ?? `#${next}`
@@ -735,6 +753,13 @@ function Workspace({
     // returns to the actual page and cannot reopen an abandoned full-screen chat.
     closeMessagesThen(navigate)
   }, [openMessages,closeMessagesThen])
+  const navigateFromHelper = useCallback((next: TabId) => {
+    const previousHash = acceptedHash.current
+    selectTab(next)
+    // The guard's accepted hash, not the void callback, proves a route change.
+    // Focus only after the keyed helper dialog has been removed from the DOM.
+    if (next === tab && acceptedHash.current !== previousHash && acceptedHash.current === `#${next}`) helperFocusPending.current = acceptedHash.current
+  }, [selectTab, tab])
   function navigateNotification(action:BellAction){
     const destination=orderNotificationDestination(action)
     if(destination?.tab==='stores'){selectTab('stores',destination.hash);return}
@@ -942,10 +967,13 @@ function Workspace({
                 {launchpadOpen ? null : <h1 id="workspace-page-title">{consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : t(`nav.${tab}`)}</h1>}
               </div>
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
-              <div className="topbar-actions"><ShareLauncher onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
+              <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}
+                sessionGeneration={client.sessionGeneration} availablePageIds={Object.keys(TAB_TITLES)} guildLaunchpadEnabled={site?.guild_launchpad_enabled}
+                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
             </header>
             <div className="workspace-content">
-              <GuideHost pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}
+              <GuideHost key={helperScope} pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}
+                helperAction={helperReady?.scope===helperScope?helperReady.action:undefined}
                 memberAccess={!error?.accessExpired && !mobileOpen && !pending && (tab !== 'guild-workspace' || canManageGuild) && (!['business', 'stores'].includes(tab) || site?.guild_launchpad_enabled === true)}/>
               <main ref={mainContent} className="workspace-page" id="main-content" tabIndex={-1} aria-labelledby="workspace-page-title">
             {(shareEntry||shareNotice)&&<p className="share-entry-status" role="status">{shareEntry?`正在開啟${SHARE_TARGETS[shareEntry.target].label}…`:shareNotice}</p>}

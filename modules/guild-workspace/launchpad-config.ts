@@ -48,7 +48,7 @@ const STARTER_CELLS: Record<string, string> = {
 };
 function starterCopy(guildKey: string): Config['starter'] {
   // SP-03's original starter cells above remain the historical v0 wording.
-  if (guildKey === 'guild_talent_direction') return {title_label: '我的方向卡', objective_hint: '寫下一至兩個小活動，選一個開始，記錄完成條件與回顧。', note_hint: NOTE_HINT};
+  if (guildKey === 'guild_talent_direction') return {title_label: '我的方向卡', objective_hint: '寫下過生活底線與第一週行動：選一個小活動，記錄可投入時間、完成條件與回顧。', note_hint: '過生活底線：哪些時間與生活品質不可犧牲？第一週行動：做什麼、何時完成、留下什麼證據？' + NOTE_HINT};
   const cell = STARTER_CELLS[guildKey];
   if (!cell) return {title_label: FALLBACK_TITLE, objective_hint: OBJECTIVE_HINT, note_hint: NOTE_HINT};
   const split = cell.indexOf('；');

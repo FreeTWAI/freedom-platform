@@ -183,7 +183,13 @@ test('selecting another companion preserves the page input and cancels its old g
 test('character selector is only disclosed by its action, restores keyboard focus and closes on outside help',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await registerJoined(page);
   const change=widget(page).getByRole('button',{name:'換角色',exact:true}),select=widget(page).getByRole('combobox',{name:'導覽角色'});
-  await expect(widget(page).locator('.page-spirit-entry-actions button')).toHaveText(['問本頁','帶我看','換角色']);
+  await expect(widget(page).locator('.page-spirit-entry-actions button')).toHaveText(['問本頁','帶我看','問路','換角色']);
+  const helperShortcut=widget(page).getByRole('button',{name:'問路助手',exact:true});
+  await expect(helperShortcut).toHaveText('問路');await expect(helperShortcut).toHaveAttribute('aria-haspopup','dialog');
+  const helperId=await page.locator('.platform-helper-host').getByRole('button',{name:'問路助手',exact:true}).getAttribute('aria-controls');expect(helperId).toBeTruthy();
+  await expect(helperShortcut).toHaveAttribute('aria-controls',helperId!);await helperShortcut.click();
+  const helperDialog=page.getByRole('dialog',{name:'站內問路助手・非生成式 AI',exact:true});await expect(helperDialog).toHaveCount(1);await expect(helperDialog).toHaveAttribute('id',helperId!);
+  await page.keyboard.press('Escape');await expect(helperShortcut).toBeFocused();
   await expect(change).toHaveAttribute('aria-expanded','false');await expect(select).toHaveCount(0);
   await change.focus();await page.keyboard.press('Enter');await expect(select).toBeFocused();
   await expect(change).toHaveAttribute('aria-expanded','true');await expect(widget(page)).toHaveAttribute('data-load-state','idle');

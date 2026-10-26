@@ -10,6 +10,25 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-26 main b14916cc 發布完成（導覽、公會與活動載入）
+
+截至05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`／189；完整證據見[發布收據](rollout-main-b14916cc-2026-10-26.json)。
+會員取得手機選單停靠頂欄下方並可關閉、導覽項目改名（#1047）；公會目錄可收合主題篩選、顯示符合數量並移動次要設定（#1055）。
+公會管理各分頁有用途說明、先列討論；收合討論草稿僅在留於該頁期間保留（#1056）。「提交活動」待第一次列表載入結束才開放，後續重讀不重套此初始gate（#1068）。
+三個first-parent merges為 #1069／#1070／#1071；HostedStore拆區無預期行為變更、#1057僅測試；#1038含backup／migrator角色分離修補，已合併但 `RELEASE_ENABLED`／`BACKUP_ENABLED` 均false，本次由本機Q5發布。
+Storefront僅修失敗關閉dialog後於React commit再回焦一次；checkout與交易Email仍OFF、無新購物流程，既有授權訂單讀取／忘記瀏覽器路徑未被checkout旗標關閉，本次未驗會員操作。
+Main Verify 40244683057 attempt1的17 jobs、CodeQL 40244683121的3 jobs成功；無migration，READ ONLY核對188列ledger，schema189及 `36bec661`／189回退下限不變，Q5未建新floor。
+27旗標加contact retention `all`共28設定、各37 vars、路由與cron不變；無新增線上 `FREEDOM_*` 名稱。
+四組正式備份讀回／隔離DB與物件還原／清理通過：staging before `7b71eb09`為Q4 wrapper首次觀察到的自然排程，after `ab983996`；production before `ee172b97`在Ted約03:28Z（操作者歷史）原話「快點推」後改為手動、通過IO gate，after pointer為第二次 `acc0a813`。
+Production after首試 `cb9c333f`於capture失敗、`daily_backup_cleanup_failed`／cleanupVerified=false；dump547秒後連線中斷。事後唯讀確認無殘留container／session、policy已disabled，未需或執行清理；第二次dump156秒成功，不覆寫首試。
+網路probe loss與04:13–04:46Z不穩窗口另列操作者觀察；path watcher於04:47Z健康後才重試，staging after無另錄mtr；不能改寫為全程乾淨路徑。
+Q5由Q4加入E觀察timer label與F合格自然備份pointer；Codex約01:55Z容量中斷exit1後同session續跑。Sandbox audit的mount拒絕保留；完整audit其後於sandbox外RUNBOOK steps0／1均exit0、隨後02:13:34Z receive，stdout計數屬操作者歷史、非repo evidence；02:02:45Z fixture驗證四命令exit0另列。
+兩次READ ONLY rehearsal均189／188列／floor36bec661，staging為 `timers_active_observed`、production為 `timers_paused_observed`，不是部署授權。
+Production公開smoke04:12:20.537Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過、最終 `14279926`；首次timer restore因錯過04:33:02Z production slot而拒絕、未啟動timer。依RUNBOOK於05:01:34Z只啟動production timer，catch-up `98d243d1`通過；兩service inactive／PID0後停timers、原程式重跑於05:12:56Z恢復active／enabled，排程／argv不變。
+Catch-up是operator啟動timer觸發，S10自然calendar-slot仍 `not_observed_for_new_wrapper`；下次10-27約03:34Z staging／04:33Z production。Deployments success為7324602016／20590722672、7324602177／20590723478。
+無staging acceptance window，會員UX為 `not_run`；真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留；隔離還原不授權公開資料。
+
 ## 2026-10-25 main 1f7aee36 發布完成（遊戲結束少一次繪製）
 
 截至19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`／189；完整證據見[發布收據](rollout-main-1f7aee36-2026-10-25.json)。
