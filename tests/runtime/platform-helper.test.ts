@@ -417,3 +417,33 @@ test('isolated helper fixture loads real appearance CSS, not only a data-theme l
   for(const file of styles){const index=source.indexOf(`import '../../apps/portal-web/src/${file}'`);assert.ok(index>previous,file+' must follow actual main CSS order');previous=index;}
   assert.ok(source.indexOf("import {PlatformHelper}")>previous,'helper CSS follows the main styles as in the lazy App');
 });
+
+test('browser color sampling waits for the actual element transition endpoint before every read',async()=>{
+  const source=readFileSync(new URL('../e2e/platform-helper.spec.ts',import.meta.url),'utf8');
+  const start=source.indexOf('function helperColorTransitionsSettled('),end=source.indexOf('async function readable(',start);
+  assert.ok(start>=0&&end>start,'a scoped transition-state predicate must precede the computed-color reader');
+  const {transform}=await import('esbuild');
+  const compiled=(await transform(source.slice(start,end),{loader:'ts',target:'es2022'})).code;
+  class Transition {constructor(public transitionProperty:string,public playState:string,public pending=false){}}
+  const events:string[]=[];
+  const settle=new Function('CSSTransition','getComputedStyle',compiled+';return helperColorTransitionsSettled;')(
+    Transition,()=>({get color(){events.push('flush');return 'rgb(223, 226, 221)';}}));
+  let animations:unknown[]=[];
+  const element={getAnimations:()=>{events.push('animations');return animations;}};
+  assert.equal(settle(element),true);assert.deepEqual(events,['flush','animations']);
+  for(const property of ['color','background-color','border-color','border-top-color','border-right-color','border-bottom-color','border-left-color','outline-color']){
+    const transition=new Transition(property,'running');animations=[transition];assert.equal(settle(element),false,property);
+    transition.playState='finished';transition.pending=true;assert.equal(settle(element),false,property+' pending');
+    transition.pending=false;assert.equal(settle(element),true,property+' finished');
+    transition.playState='idle';assert.equal(settle(element),true,property+' canceled/idle');
+    transition.playState='paused';assert.throws(()=>settle(element),/paused/i,property+' paused is not settled');
+  }
+  animations=[new Transition('transform','running'),{playState:'running',pending:true}];
+  assert.equal(settle(element),true,'unrelated transforms/keyframe animations cannot block color sampling');
+  const reader=source.slice(end,source.indexOf('async function buttonStates',end));
+  assert.match(reader,/await expect\.poll\(\(\)=>button\.evaluate\(helperColorTransitionsSettled\)\)\.toBe\(true\)/);
+  assert.ok(reader.indexOf('await expect.poll')<reader.indexOf('const styles=await button.evaluate'),'wait before capturing normal/hover/focus/disabled snapshots');
+  assert.match(source,/expect\(disabled\.color\)\.toBe\(normal\.color\)/);
+  assert.match(source,/expect\(disabled\.background\)\.toBe\(normal\.background\)/);
+  assert.match(source,/expect\(styles\.text\)\.toBeGreaterThanOrEqual\(4\.5\)/);
+});

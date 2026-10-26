@@ -90,7 +90,19 @@ for(const width of [320,390])test(`isolated component: ${width}px short viewport
 });
 
 // Actual computed styles in a browser; source-token tests cannot replace these.
+function helperColorTransitionsSettled(element:Element){
+  // Changing a profile after mount starts the real theme color transitions.
+  // Flush style first so getAnimations sees newly-created CSS transitions.
+  void getComputedStyle(element).color;
+  const colors=element.getAnimations().filter(animation=>animation instanceof CSSTransition&&
+    /^(?:color|background-color|outline-color|border(?:-(?:top|right|bottom|left))?-color)$/.test(animation.transitionProperty));
+  if(colors.some(animation=>animation.playState==='paused'))throw Error('Helper color transition is paused');
+  return colors.every(animation=>!animation.pending&&(animation.playState==='finished'||animation.playState==='idle'));
+}
 async function readable(button:Locator){
+  // Use the existing expect budget, not a fixed delay or disabled animations.
+  // Every normal/hover/focus/disabled sample must reach its own color endpoint.
+  await expect.poll(()=>button.evaluate(helperColorTransitionsSettled)).toBe(true);
   const styles=await button.evaluate(element=>{
     const style=getComputedStyle(element);
     function luminance(value:string){
