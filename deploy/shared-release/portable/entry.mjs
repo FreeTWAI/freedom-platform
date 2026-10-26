@@ -18,6 +18,7 @@ import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
+import { reconcileFailedBackup } from './backup-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -71,7 +72,11 @@ export async function main(args = process.argv.slice(2)) {
     same(name, phases[result.phases.length], 'release_entry_phase_order');
     const item = { name, status: 'running', startedAt: new Date().toISOString() }; result.phases.push(item); await save(path, result);
     try { Object.assign(item, await operation(), { status: 'passed', completedAt: new Date().toISOString() }); }
-    catch (error) { Object.assign(item, { status: 'failed', completedAt: new Date().toISOString() }); throw error; }
+    catch (error) {
+      Object.assign(item, { status: 'failed', completedAt: new Date().toISOString() });
+      if (error.backupFailure) item.backupFailure = error.backupFailure;
+      throw error;
+    }
     finally { await save(path, result); }
   };
   const backup = async (stage, sourceSha) => {
@@ -85,7 +90,10 @@ export async function main(args = process.argv.slice(2)) {
         materialPolicySha256: state.materialPolicySha256, schemaVersion: state.schemaVersion },
       retainIntent: (operation, proof) => floor.intent(stage, operation, proof),
       verifyRetainedFloor: (pool, options) => floor.verifyDatabase(pool, options) });
-    check(value.status === 'passed' && value.exposure === 'quarantine_not_approved_for_exposure', 'release_entry_backup_failed');
+    if (value.status !== 'passed' || value.exposure !== 'quarantine_not_approved_for_exposure') {
+      throw Object.assign(new Error('release_entry_backup_failed'), { code: 'release_entry_backup_failed',
+        backupFailure: { stage: value.stage, code: value.code, cleanupVerified: value.cleanupVerified, snapshotDump: value.snapshotDump } });
+    }
     // The full backup report can contain object/capture metadata and is retained
     // privately. Keep both the journal event and bounded result explicitly small.
     const proof = { setId: value.setId, sourceSha, archiveSha256: value.archiveSha256,
@@ -104,9 +112,12 @@ export async function main(args = process.argv.slice(2)) {
       const store = createControlStore({ accountId: config.accountId, bucket: config.backupBucket, target: config.target,
         ...config.floor, token: credentials.cloudflareApiToken, lease });
       floor = await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory('control-intents') });
-      const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
-        token: credentials.cloudflareApiToken, signal: lease.signal }); before = await deployer.inspect();
+        token: credentials.cloudflareApiToken, signal: lease.signal });
+      let recovery;
+      if (request.recoverRunId) recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, deployer, lease, request });
+      const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
+      before = await deployer.inspect();
       check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
         && before.bindingsSha256 === state.bindingsSha256, 'release_entry_predecessor_changed');
       await floor.verifyDatabase(pools.migrator);
@@ -115,7 +126,8 @@ export async function main(args = process.argv.slice(2)) {
       check(before.bindings.find(row => row.name === 'MEDIA')?.bucket_name === config.mediaBucket, 'release_entry_media_binding_changed');
       if (isBackup) {
         check(request.sourceSha === before.sourceSha, 'release_backup_source_changed'); await floor.beginBackup(request);
-        return { leaseHeld: true, retainedFloorVerified: true, flagsPreserved: true, previousSourceSha: before.sourceSha };
+        return { leaseHeld: true, retainedFloorVerified: true, flagsPreserved: true, previousSourceSha: before.sourceSha,
+          ...(recovery ? { recovery } : {}) };
       }
       plan = preparePortableMigration({ sourceRoot: SOURCE, sourceCommit: request.sourceSha, profile: config.migrationProfile,
         installationParent: await directory('migration-installations'), beforeLedger: state.schemaLedger });

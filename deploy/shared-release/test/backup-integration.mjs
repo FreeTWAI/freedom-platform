@@ -15,6 +15,7 @@ import { observeMediaGcState } from '../../../packages/media-migration/backup-gc
 import { runPortableBackup, observeBackupControl } from '../portable/backup.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 import { createCloudflareRecoveryTransport } from '../portable/cloudflare.mjs';
+import { reconcileFailedBackup } from '../portable/backup-recovery.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -142,6 +143,13 @@ export async function verifyBackup({ root, openCluster, execute }) {
     assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, 2);
     lease.assertHeld();
 
+    const dumpFailed = await run({ execute: async (program, args, options) => {
+      if (program.endsWith('/pg_dump') && args.includes('--format=custom')) throw new Error('private synthetic dump failure');
+      return execute(program, args, options);
+    } });
+    assert.equal(dumpFailed.stage, 'capture'); assert.equal(dumpFailed.snapshotDump, 'failed');
+    assert.equal(dumpFailed.cleanupVerified, true); assert.equal(uploads, 1);
+
     for (const failure of ['corrupt', 'lost-put']) {
       mode = failure; const count = uploads;
       const bad = await run(); assert.equal(bad.status, 'failed'); assert.equal(bad.stage, 'offsite');
@@ -167,16 +175,49 @@ export async function verifyBackup({ root, openCluster, execute }) {
           return result;
         } };
     } };
-    const uncertain = await run({ maintenancePool: uncertainPool });
+    let failedCapture;
+    const uncertain = await run({ maintenancePool: uncertainPool, retainIntent: async (operation, proof) => {
+      assert.equal(operation, 'capture-policy'); failedCapture = proof;
+    } });
     assert(lost); assert.equal(uncertain.status, 'failed'); assert.equal(uncertain.stage, 'capture');
     assert.equal(uncertain.cleanupVerified, true); assert.equal(uploads, count); assert.equal(restores, 1);
     assert.equal((await pool.query('SELECT enabled FROM asset_maintenance_policy')).rows[0].enabled, false);
+    const schemaLedger = (await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows;
+    const pinCount = (await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count;
+    const old = { runId: 10, runAttempt: 1, sourceSha: expected.sourceSha, sourceTree: 'c'.repeat(40),
+      controllerSha: 'b'.repeat(40), operatorImage: 'ghcr.io/freetwai/freedom-release-operator@sha256:' + 'd'.repeat(64),
+      configSha256: 'e'.repeat(64) };
+    const state = { ...expected, sourceTree: old.sourceTree, deployedSourceSha: expected.sourceSha, schemaLedger,
+      pending: { kind: 'backup', stage: 0, request: old, intents: { 'backup:capture-policy': failedCapture } } };
+    let abandoned = 0;
+    const floor = { state: () => structuredClone(state), assertCurrent: async () => {},
+      verifyDatabase: async q => assert.deepEqual((await q.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, schemaLedger),
+      abandonBackup: async proof => { assert.equal(proof.captureBackendAbsent, true); assert.equal(proof.sourcePins, 'retained'); abandoned++; } };
+    // Fixed image port over a synthetic GitHub proof; actual DB observations run
+    // against the non-superuser owner and must not mutate policy or release pins.
+    const recovery = { floor, pool, deployer: { inspect: () => transport.readWorkerState() }, lease,
+      request: { ...old, runId: 11, mode: 'backup', event: 'workflow_dispatch', target: 'staging-next', recoverRunId: 10,
+        recoveryEvidence: { ...old, format: 'freedom.verified-failed-backup/v1', target: 'staging-next' } } };
+    const recovered = await reconcileFailedBackup(recovery);
+    assert.equal(recovered.status, 'abandoned_after_readback'); assert.equal(abandoned, 1);
+    assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
+    await pool.query('UPDATE asset_maintenance_policy SET enabled=true WHERE singleton');
+    await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
+    await pool.query('UPDATE asset_maintenance_policy SET enabled=false WHERE singleton');
+    const backend = await pool.connect();
+    try {
+      const row = (await backend.query("SELECT pg_backend_pid() pid,set_config('application_name',$1,false)", [failedCapture.application])).rows[0];
+      state.pending.intents['backup:capture-policy'].pid = row.pid;
+      await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
+    } finally { backend.release(true); }
+    assert.equal(abandoned, 1);
     const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
     await assertBackupReadOnly();
     return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
       remoteTarReadback: 'synthetic-provider', corruptionStopsBeforeRestore: true, lostPutIsNotRetried: true,
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
+      failedBackupReadbackBeforeAbandon: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
       crossEnvironmentTransportRefused: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };
   } finally {
