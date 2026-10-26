@@ -390,6 +390,8 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   await page.clock.fastForward(16);
   await expect(page.getByRole('alert')).toHaveText('3D 畫面暫時中斷。按重試恢復這一局。');
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  // Reconstruction has the same bounded readiness phase as initial load and import retry.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
   await expect(resume).toBeVisible();await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
   await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
