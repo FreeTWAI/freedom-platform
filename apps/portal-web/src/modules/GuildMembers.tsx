@@ -55,10 +55,23 @@ export function GuildMembers({ client, guildKey, guildName, masterId, expertIds 
     if (value.trim() === filters.search) void load();
     else { setMembers([]); setTotal(null); setNext(null); setLoading(true); }
   }
+  // Reading a list does not invalidate a command. Closing/replacing its owner
+  // does: an old ACK must not start reads or refresh a replacement guild card.
+  const operationLifetime = useRef({ active: false, epoch: 0 });
+  const operationOwner = useRef({ client, guildKey, viewerId, masterId });
+  operationOwner.current = { client, guildKey, viewerId, masterId };
+  const operationSession = client.sessionGeneration;
+  useEffect(() => { const scope = operationLifetime.current; scope.active = true; return () => { scope.active = false; scope.epoch++; }; }, [client, guildKey, viewerId, masterId, operationSession]);
+  function currentMemberOperation(epoch: number) {
+    const owner = operationOwner.current;
+    return operationLifetime.current.active && operationLifetime.current.epoch === epoch && owner.client === client && owner.guildKey === guildKey && owner.viewerId === viewerId && owner.masterId === masterId && Boolean(viewerId && viewerId === masterId) && client.sessionGeneration === operationSession;
+  }
   async function apply(member: MemberCardData, path: string, body: unknown, version: number | null) {
+    const epoch = operationLifetime.current.epoch;
+    if (!currentMemberOperation(epoch)) return;
     const saved = await mutate(path, body, version ?? undefined);
-    if (!saved) return;
-    setConfirm(null); setActionError(null); await load(0); onChanged?.();
+    if (!saved || !currentMemberOperation(epoch)) return;
+    setConfirm(null); setActionError(null); await load(0); if (currentMemberOperation(epoch)) onChanged?.();
   }
   function submit(event: FormEvent) {
     event.preventDefault(); generation.current++;

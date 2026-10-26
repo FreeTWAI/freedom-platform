@@ -3084,8 +3084,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/GuildMembers.tsx",
-      "bytes": 9490,
-      "sha256": "507baa5b660c9371a94ba68d1986ff085f1cd12fe1c610748e331471d752125c"
+      "bytes": 10680,
+      "sha256": "8f3b69d79e8bbc9b5b029c4677029083d6b25af9c6aa305fd402df88f1d668c6"
     },
     {
       "path": "apps/portal-web/src/modules/GuildName.css",
@@ -22064,8 +22064,8 @@
     },
     {
       "path": "modules/positioning/freedom.module.json",
-      "bytes": 2250,
-      "sha256": "bbe0488043d156753c6cec6ea685d280cc3b23bca49602af0cc0df17ca23e92b"
+      "bytes": 2351,
+      "sha256": "bb7bd94e9599af485a0bae703061bb28dea36c4dbe94cacecce93ed4f7e420c6"
     },
     {
       "path": "modules/positioning/guild-categories.ts",
@@ -28206,6 +28206,16 @@
       "path": "modules/community/discovery-portal/skill-book-uses.ts",
       "bytes": 1337,
       "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
+    },
+    {
+      "path": "tests/e2e/guild-member-operations.spec.ts",
+      "bytes": 7560,
+      "sha256": "86e4cab6f5fb4773d7253ad53626953edca26b18872435540e9c845a9e8dd2f2"
+    },
+    {
+      "path": "tests/runtime/guild-member-operation.test.ts",
+      "bytes": 8818,
+      "sha256": "f243f4bef8adcb1a137026ebdcce9b8a5fa9c957b0940032e6e1ff1231405cee"
     },
     {
       "path": "tests/runtime/social-feed-write-order.test.ts",
