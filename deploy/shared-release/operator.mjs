@@ -1,3 +1,5 @@
+import { releasePhases } from './admission.mjs';
+import { BACKUP_DIAGNOSTIC_CODES } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -68,18 +70,35 @@ async function boundedJson(path) {
 // provider state. The operator must perform the observations before reporting.
 export function validateOperatorResult(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
-  requireRelease(Array.isArray(value.phases) && value.phases.length === PHASES.length, 'release_operator_phases_incomplete');
+  const phases = releasePhases(admission);
+  requireRelease(Array.isArray(value.phases) && value.phases.length === phases.length, 'release_operator_phases_incomplete');
   let previous = Date.parse(admission.admittedAt);
   requireRelease(Number.isFinite(previous), 'release_operator_phase_invalid');
   const observedAt = Date.now();
-  for (let i = 0; i < PHASES.length; i++) {
+  for (let i = 0; i < phases.length; i++) {
     const phase = value.phases[i];
     const start = Date.parse(phase.startedAt), end = Date.parse(phase.completedAt);
-    requireRelease(phase.name === PHASES[i] && phase.status === 'passed'
+    requireRelease(phase.name === phases[i] && phase.status === 'passed'
       && Number.isFinite(start) && Number.isFinite(end) && start >= previous && end >= start
       && end <= observedAt + 60_000,
     'release_operator_phase_invalid');
     previous = end;
+  }
+  if (admission.releaseKind === 'independent') {
+    const [preflight, schema, deploy, health, handoff] = value.phases;
+    requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
+      && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
+      && isSha(preflight.previousSourceSha), 'release_operator_preflight_incomplete');
+    requireRelease(((schema.outcome === 'unchanged' && schema.readOnly === true)
+      || (schema.outcome === 'committed' && schema.commitStatus === 'confirmed' && /^[1-9][0-9]*$/.test(schema.transactionId)))
+      && schema.ledgerVerified === true && schema.runtimeGrantsVerified === true, 'release_schema_unconfirmed');
+    requireRelease(deploy.sourceSha === admission.sourceSha && deploy.providerConfirmed === true
+      && health.sourceSha === admission.sourceSha && health.statusCode === 200
+      && health.schemaVerified === true && health.smokePassed === true, 'release_health_unconfirmed');
+    requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
+      && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
+    return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+      startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
   }
   const [preflight, before, migration, deploy, health, after, handoff] = value.phases;
   requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
@@ -134,7 +153,7 @@ export function validateBackupOperatorResult(value, admission, installation, req
 
 export function operatorProgress(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
-  const phases = admission.mode === 'backup' ? BACKUP_PHASES : PHASES;
+  const phases = admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission);
   requireRelease(Array.isArray(value.phases) && value.phases.length <= phases.length, 'release_operator_progress_invalid');
   return value.phases.map((phase, i) => {
     requireRelease(phase.name === phases[i] && ['passed', 'running', 'failed'].includes(phase.status)
@@ -150,6 +169,8 @@ export function operatorProgress(value, admission, installation, requestDigest) 
     const diagnostic = ['backup', 'backup-before', 'backup-after'].includes(phase.name) && phase.status === 'failed'
       && stages.includes(failure?.stage) && codes.includes(failure?.code) && typeof failure.cleanupVerified === 'boolean'
       ? { backupFailure: { stage: failure.stage, code: failure.code, cleanupVerified: failure.cleanupVerified,
+        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => BACKUP_DIAGNOSTIC_CODES.includes(failure[key]))
+          .map(key => [key, failure[key]])),
         ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
     return { name: phase.name, reportedStatus: phase.status, ...diagnostic };
   });
@@ -168,7 +189,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     && parsedConfig.target === admission.target,
   'release_config_binding_invalid');
   requireRelease(credentials && typeof credentials === 'object' && !Array.isArray(credentials), 'release_credentials_missing');
-  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl', 'backupDatabaseUrl']) {
+  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl',
+    ...(admission.releaseKind === 'independent' && admission.mode !== 'backup' ? [] : ['backupDatabaseUrl'])]) {
     requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0, 'release_credentials_missing');
   }
   if (admission.target === 'staging-next') {
@@ -178,7 +200,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     }
   }
   const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence,
-    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : PHASES });
+    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission) });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });
   await mkdir(resultDir, { recursive: false, mode: 0o700 });

@@ -195,12 +195,19 @@ export async function verifyBackup({ root, openCluster, execute }) {
       abandonBackup: async proof => { assert.equal(proof.captureBackendAbsent, true); assert.equal(proof.sourcePins, 'retained'); abandoned++; } };
     // Fixed image port over a synthetic GitHub proof; actual DB observations run
     // against the non-superuser owner and must not mutate policy or release pins.
-    const recovery = { floor, pool, deployer: { inspect: () => transport.readWorkerState() }, lease,
+    const recovery = { floor, pool, database: source.databaseName, role: 'fp_fixture_migrator', deployer: { inspect: () => transport.readWorkerState() }, lease,
       request: { ...old, runId: 11, mode: 'backup', event: 'workflow_dispatch', target: 'staging-next', recoverRunId: 10,
         recoveryEvidence: { ...old, format: 'freedom.verified-failed-backup/v1', target: 'staging-next' } } };
     const recovered = await reconcileFailedBackup(recovery);
     assert.equal(recovered.status, 'abandoned_after_readback'); assert.equal(abandoned, 1);
     assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
+    state.pending.intents = {};
+    recovery.request.recoveryEvidence.failureBoundary = 'before_capture';
+    assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback');
+    assert.equal(abandoned, 2);
+    state.pending.intents = { 'backup:capture-policy': failedCapture };
+    delete recovery.request.recoveryEvidence.failureBoundary;
+
     await pool.query('UPDATE asset_maintenance_policy SET enabled=true WHERE singleton');
     await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
     await pool.query('UPDATE asset_maintenance_policy SET enabled=false WHERE singleton');
@@ -210,14 +217,14 @@ export async function verifyBackup({ root, openCluster, execute }) {
       state.pending.intents['backup:capture-policy'].pid = row.pid;
       await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
     } finally { backend.release(true); }
-    assert.equal(abandoned, 1);
+    assert.equal(abandoned, 2);
     const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
     await assertBackupReadOnly();
     return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
       remoteTarReadback: 'synthetic-provider', corruptionStopsBeforeRestore: true, lostPutIsNotRetried: true,
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
-      failedBackupReadbackBeforeAbandon: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
+      failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
       crossEnvironmentTransportRefused: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };
   } finally {
