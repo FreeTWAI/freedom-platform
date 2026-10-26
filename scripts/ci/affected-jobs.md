@@ -214,3 +214,15 @@ to them keep broader selection. The existing pinned-suite contract test remains
 in mandatory `ci.governance-unit`, including empty/skipped/failed daily-suite
 regressions. Its test file may accompany the addition; the suite runner itself
 has no delivery exemption.
+
+
+The Verify mask rejects noncanonical job-level structure, including quoted and
+underscore job headers after the final deployment job. A bounded direct-import
+check additionally reads outside JS/TS sources in both immutable trees, regardless
+of ownership/dependency declarations, and rejects relative literal imports/re-exports,
+literal dynamic imports, CommonJS requires and type imports into daily-backup or
+shared-release. It runs for release-only changes too. Limits are 4,096 files,
+2 MB per file and 64 MB per snapshot; unchanged blobs share one read cache.
+This is a direct relative literal-import boundary, not comprehensive proof about computed
+loaders, arbitrary executable strings or transitive imports. Existing stricter
+media-boundary parser checks and mandatory ownership validation remain separate.

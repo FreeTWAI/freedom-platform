@@ -1515,6 +1515,10 @@ test('delivery Verify comparison preserves unrelated jobs and global execution p
   assert.equal(deliveryVerifyWiringOnly(actual,actual),true,'real workflow expressions are not YAML tags');
   assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('Verify complete daily backup orchestration evidence','Daily coverage')),true);
   assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('--suite ci.worker-unit','--suite ci.unknown')),false);
+  for(const header of ['  \"outside-job\":','  outside_job:']) {
+    const appended=actual+'\n'+header+'\n    runs-on: ubuntu-24.04\n    steps:\n      - run: exit 1\n';
+    assert.equal(deliveryVerifyWiringOnly(actual,appended),false,header);
+  }
 });
 
 
@@ -1594,4 +1598,21 @@ test('daily registry exception preserves all existing suites and required comple
   assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(c=>c.includes('--suite ci.governance-unit')));
   const integrity=jobBlock(await readFile(workflowPath,'utf8'),'source-integrity');
   assert.match(integrity,/\n      - run: node \.freedom\/trusted\/scripts\/ci\/run-pinned-suite\.mjs --root \. --suite ci\.governance-unit\n/);
+});
+
+
+test('owned outside source cannot introduce literal delivery consumers without a declared dependency', () => {
+  const loaded=loadModuleDescriptors(root,'HEAD');assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const path='packages/contribution-tools/io.mjs';
+  assert.ok(loaded.descriptors.some(d=>owns(d,path)),'fixture is already owned');
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  for(const changed of ['packages/media-migration/backup-daily.ts','deploy/shared-release/operator.mjs']) {
+    const prove=source=>deliveryCoverageProven([graph,graph],[changed],[{graph,files,read:()=>source}]);
+    assert.equal(prove('export const unrelated=1;'),true);
+    for(const target of ['../media-migration/backup-daily.js','../../deploy/shared-release/operator.mjs'])
+      for(const source of [`import * as x from '${target}';`,`export * from '${target}';`,
+        `const x=import('${target}');`,`const x=require('${target}');`,`type T=import('${target}').T;`])
+        assert.equal(prove(source),false,changed+': '+source);
+  }
 });

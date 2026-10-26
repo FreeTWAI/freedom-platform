@@ -166,11 +166,12 @@ export function deliveryVerifyWiringOnly(before, after) {
   // This is a constrained textual comparison, not permissive YAML parsing.
   const mask = text => {
     if (typeof text !== 'string' || text.length > 128000 || /[\t\r]/.test(text)) return null;
-    const lines = text.split('\n'), out = []; let job = '', seen = new Set();
+    const lines = text.split('\n'), out = []; let job = '', inJobs = false, seen = new Set();
     for (const line of lines) {
-      const match = /^  ([a-z][a-z0-9-]*):$/.exec(line);
+      if (/^\S/.test(line) && !line.startsWith('#')) {inJobs = line === 'jobs:'; job = '';}
+      const match = inJobs && /^  ([a-z][a-z0-9-]*):$/.exec(line);
       if (match) {job = match[1]; if (seen.has(job)) return null; seen.add(job);}
-      else if (/^\S/.test(line) && !line.startsWith('#')) job = '';
+      else if (inJobs && /^ {1,3}\S/.test(line) && !line.trimStart().startsWith('#')) return null;
       // YAML anchors/aliases/tags can let edited delivery blocks affect other jobs.
       if (/(?:^\s*-?\s*|:\s*)[&*!][a-zA-Z]/.test(line) && !line.trimStart().startsWith('#')) return null;
       if (!['select','deploy-preflight'].includes(job) && !line.trimStart().startsWith('#')) out.push(line);
@@ -200,7 +201,6 @@ export function deliveryCoverageProven(graphs, paths, snapshots) {
     if (media && descriptors.some(d => d.dependencies.includes('media-migration')
       && !['shared-release', ...MEDIA_PRODUCT_CONSUMERS].includes(d.module_id))) return false;
   }
-  if (!media) return true;
   const ts = loadGuildPresentationParsers()?.ts;
   if (!ts) return false;
   // Prove the other direct media consumers and the rest of the media module do
@@ -211,6 +211,24 @@ export function deliveryCoverageProven(graphs, paths, snapshots) {
       const config = JSON.parse(read(path));
       if (config.compilerOptions?.paths || config.compilerOptions?.baseUrl || config.imports || config.exports) return false;
     }
+    // Literal incoming imports must not hide behind an unrelated owner or an
+    // omitted descriptor dependency. This is deliberately a bounded direct-edge
+    // check, not general dynamic-code or transitive dependency analysis.
+    let literalCount = 0, literalBytes = 0;
+    for (const [path, entry] of files) {
+      if (!/\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) || deliveryOwner(path)
+        || DAILY_SOURCES.includes(path) || DAILY_CLIENTS.includes(path)) continue;
+      if (++literalCount > 4096 || entry.type !== 'blob' || !['100644','100755'].includes(entry.mode)) return false;
+      const source = read(path); literalBytes += Buffer.byteLength(source);
+      if (Buffer.byteLength(source) > 2000000 || literalBytes > 64000000) return false;
+      for (const {fileName} of ts.preProcessFile(source, true, true).importedFiles) {
+        if (!fileName.startsWith('.')) continue;
+        const target = posix.normalize(posix.join(posix.dirname(path), fileName)).replace(/\.[cm]?js$/, '.ts');
+        if (target.startsWith('deploy/shared-release/')
+          || [...DAILY_SOURCES, ...DAILY_CLIENTS].some(p => p === target || p.replace(/\.ts$/, '') === target)) return false;
+      }
+    }
+    if (!media) continue;
     const excluded = ['media-migration', ...MEDIA_PRODUCT_CONSUMERS].map(id => graph.get(id)).filter(Boolean);
     let count = 0, bytes = 0;
     for (const [path, entry] of files) {
@@ -765,7 +783,13 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
         || current.owned_paths.some(path => !descriptor.owned_paths.includes(path) && deliveryOwner(path) !== id)
         || JSON.stringify({...descriptor, owned_paths: []}) !== JSON.stringify({...current, owned_paths: []})) return null;
     }
-    const read = (sha, path) => runGit(root, ['show', '--end-of-options', `${sha}:${path}`]).toString('utf8');
+    const blobs = new Map();
+    const read = (sha, path) => {
+      const oid = (sha === base ? diff.baseFiles : diff.candidateFiles).get(path)?.oid;
+      if (!oid) throw Error('source_blob_missing');
+      if (!blobs.has(oid)) blobs.set(oid, runGit(root, ['show', '--end-of-options', `${sha}:${path}`]).toString('utf8'));
+      return blobs.get(oid);
+    };
     const paths = [];
     let scoped = false;
     for (const change of diff.changes) {
