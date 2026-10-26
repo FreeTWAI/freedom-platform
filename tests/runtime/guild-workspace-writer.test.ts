@@ -438,3 +438,36 @@ for(const method of ['get','post'] as const)for(const stale of [false,true])test
  if(stale)client.csrfToken='synthetic-B';reject(failure);
  await assert.rejects(pending,(error:Error)=>stale?error!==failure&&/登入已變更/.test(error.message)&&!error.message.includes('private detail'):error===failure);
 });
+
+test('grant ACK probe settles after actual body/handler continuations without requiring a stale reload',async()=>{
+ const spec=readFileSync('tests/e2e/guild-workspace.spec.ts','utf8'),start=spec.indexOf('function installGrantAckProbe('),end=spec.indexOf('\ntest.beforeEach(',start);assert.ok(start>=0&&end>start,'actual browser probe boundary');
+ const tasks:(()=>void)[]=[],channels:any[]=[];
+ class Channel{port1={onmessage:null as null|(()=>void),close(){}};port2={postMessage:()=>tasks.push(()=>this.port1.onmessage?.()),close(){}};constructor(){channels.push(this);}}
+ class Broadcast{postMessage(_value:unknown){}}
+ let release!:(value:Response)=>void;
+ const originalFetch=()=>new Promise<Response>(resolve=>release=resolve),originalBroadcast=Broadcast.prototype.postMessage,root:any={fetch:originalFetch};
+ const install=runInNewContext(stripTypeScriptTypes(spec.slice(start,end))+';installGrantAckProbe',{window:root,location:{href:'http://localhost/',origin:'http://localhost'},URL,Request,MessageChannel:Channel,BroadcastChannel:Broadcast});
+ const path='/api/v1/guilds/synthetic-guild/announcements',title='Synthetic removed draft';install({path,title});
+ const readStart=portalSource.indexOf('async function readJson('),readEnd=portalSource.indexOf('\nfunction instanceCandidates(',readStart);assert.ok(readStart>=0&&readEnd>readStart);
+ const readJson=runInNewContext(stripTypeScriptTypes(portalSource.slice(readStart,readEnd))+';readJson',{ApiError:Error});
+ const old=announcementHarness(async()=>readJson(await root.fetch(path,{method:'POST',body:JSON.stringify({title})})),()=>true,event=>new Broadcast().postMessage({type:'event',event}));
+ old.render();old.reads[0].resolve({items:[]});await settleCouncil();old.draft(title,'Old body');old.publish();old.save();await settleCouncil();old.unmount();
+ const fresh=announcementHarness();fresh.render();fresh.reads[0].resolve({items:[]});await settleCouncil();fresh.draft('Replacement draft','Replacement body');
+ assert.equal(root.__guildGrantAckProbe.settled,false);assert.equal(tasks.length,0,'network ACK has not arrived');
+ release(new Response(JSON.stringify({...storedAnnouncement,announcement_id:'synthetic-announcement',title})));await settleCouncil();
+ assert.equal(tasks.length,1,'only a valid parsed fixture ACK queues the next task');assert.equal(root.__guildGrantAckProbe.settled,false,'microtask continuation precedes the task barrier');
+ assert.equal(old.reads.length,1);assert.deepEqual(old.consoleEvents,[]);assert.deepEqual(fresh.values(),['Replacement draft','Replacement body']);
+ tasks.shift()!();assert.equal(root.__guildGrantAckProbe.settled,true);assert.equal(root.__guildGrantAckProbe.reads,0);assert.equal(root.__guildGrantAckProbe.events,0);assert.equal(channels.length,1);
+ root.__guildGrantAckProbe.restore();assert.equal(root.fetch,originalFetch);assert.equal(Broadcast.prototype.postMessage,originalBroadcast);
+});
+for(const mismatch of ['origin','path','method','title','invalid-json','response-id','disposed'] as const)test(`grant ACK probe does not mark unrelated ${mismatch} as settled`,async()=>{
+ const spec=readFileSync('tests/e2e/guild-workspace.spec.ts','utf8'),start=spec.indexOf('function installGrantAckProbe('),end=spec.indexOf('\ntest.beforeEach(',start);assert.ok(start>=0&&end>start);
+ let tasks=0;class Channel{port1={onmessage:null,close(){}};port2={postMessage(){tasks++;},close(){}};}
+ class Broadcast{postMessage(_value:unknown){}}
+ const title='Synthetic fixture',path='/api/v1/guilds/synthetic-guild/announcements';
+ const response=new Response(mismatch==='invalid-json'?'invalid':JSON.stringify({announcement_id:mismatch==='response-id'?'unrelated':'synthetic-announcement',title})),read=response.text;
+ const root:any={fetch:async()=>response};const original=root.fetch;
+ const install=runInNewContext(stripTypeScriptTypes(spec.slice(start,end))+';installGrantAckProbe',{window:root,location:{href:'http://localhost/',origin:'http://localhost'},URL,Request,MessageChannel:Channel,BroadcastChannel:Broadcast});install({path,title});
+ const result=await root.fetch(mismatch==='origin'?'http://example.test'+path:mismatch==='path'?'/unrelated':path,{method:mismatch==='method'?'GET':'POST',body:JSON.stringify({title:mismatch==='title'?'unrelated':title})});
+ assert.equal(result,response);if(!['invalid-json','response-id','disposed'].includes(mismatch))assert.equal(result.text,read,'unrelated response body remains untouched');if(mismatch==='disposed')root.__guildGrantAckProbe.restore();await result.text();assert.equal(tasks,0);assert.equal(root.__guildGrantAckProbe.settled,false);root.__guildGrantAckProbe.restore();assert.equal(root.fetch,original);
+});

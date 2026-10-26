@@ -4,6 +4,27 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 const caps={managed_guilds:[{guild_key:'synthetic-guild',name:'測試公會'}],managed_books:[{book_id:'video-autopilot',title:'測試剪輯技能'}],can_discuss:true};
 const announcement={announcement_id:'synthetic-announcement',guild_key:'synthetic-guild',title:'週末共創',body:'帶一段合成素材一起測試。',state:'published',aggregate_version:2,created_at:'2026-09-23T10:00:00Z',updated_at:'2026-09-23T10:00:00Z'};
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();}
+// Observe only one synthetic write. The next task runs after the response-body
+// promise and its synchronous await continuations, not after an arbitrary sleep.
+function installGrantAckProbe({path,title}:{path:string;title:string}){
+ const root=window as any,originalFetch=window.fetch,originalBroadcast=BroadcastChannel.prototype.postMessage;
+ const channels:MessageChannel[]=[];let active=true;
+ const probe={settled:false,reads:0,events:0,restore:()=>{active=false;window.fetch=originalFetch;BroadcastChannel.prototype.postMessage=originalBroadcast;for(const channel of channels){channel.port1.close();channel.port2.close();}}};
+ root.__guildGrantAckProbe=probe;
+ BroadcastChannel.prototype.postMessage=function(message){if(message?.type==='event'&&message.event?.message===title)probe.events++;return originalBroadcast.call(this,message);};
+ window.fetch=async(input,init)=>{
+  const url=new URL(input instanceof Request?input.url:String(input),location.href),method=init?.method??(input instanceof Request?input.method:'GET');
+  const matches=url.origin===location.origin&&url.pathname===path;
+  if(matches&&method==='GET')probe.reads++;
+  let selected=false;if(matches&&method==='POST'&&typeof init?.body==='string'){try{selected=JSON.parse(init.body).title===title;}catch{/* Not the synthetic fixture. */}}
+  const response=await originalFetch(input,init);if(!selected)return response;
+  const read=response.text.bind(response);response.text=async()=>{
+   const text=await read();let fixture=false;try{const value=JSON.parse(text);fixture=response.ok&&value.announcement_id==='synthetic-announcement'&&value.title===title;}catch{/* No valid ACK; never signal settlement. */}
+   if(fixture&&active){const channel=new MessageChannel();channels.push(channel);channel.port1.onmessage=()=>{if(active)probe.settled=true;channel.port1.close();channel.port2.close();};channel.port2.postMessage(null);}
+   return text;
+  };return response;
+ };
+}
 test.beforeEach(async({page})=>{
   await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:caps}));
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:false,connected:false,github_user:null}}));
@@ -134,7 +155,7 @@ test('a pending announcement save survives tab changes and retries an unknown re
 
 test('removing selected management targets clears their hidden drafts without reviving them when grants return',async({page})=>{
   const otherGuild={guild_key:'another-guild',name:'另一公會'},otherBook={book_id:'another-book',title:'另一技能書'};
-  let permissions={...caps,managed_guilds:[...caps.managed_guilds,otherGuild],managed_books:[...caps.managed_books,otherBook]},release=()=>{},saving=false;
+  let permissions={...caps,managed_guilds:[...caps.managed_guilds,otherGuild],managed_books:[...caps.managed_books,otherBook]},release=()=>{},saving=false,failed=false;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:permissions}));
   await page.route('**/api/v1/guilds/*/announcements',async route=>{
@@ -146,8 +167,10 @@ test('removing selected management targets clears their hidden drafts without re
   try{
   await login(page);await navigate(page,'公會管理');
   const workspace=page.locator('.guild-workspace'),tabs=workspace.getByRole('navigation',{name:'公會管理功能'});
+  await page.evaluate(installGrantAckProbe,{path:'/api/v1/guilds/synthetic-guild/announcements',title:'撤權後不可保留的公告'});
   await workspace.getByLabel('公告標題',{exact:true}).fill('撤權後不可保留的公告');
   await workspace.getByLabel(/^公告內容/).fill('原公會待確認的正文');
+  await workspace.getByRole('combobox',{name:'發布狀態',exact:true}).selectOption('published');
   await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await expect.poll(()=>saving).toBe(true);
   await tabs.getByRole('button',{name:'技能書編輯',exact:true}).click();
   await workspace.getByLabel('一句話摘要',{exact:true}).fill('撤權後不可保留的技能草稿');
@@ -160,11 +183,11 @@ test('removing selected management targets clears their hidden drafts without re
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveValue('');
   await workspace.getByLabel('公告標題',{exact:true}).fill('新公會尚未保存的公告');
   const completed=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/guilds/synthetic-guild/announcements'));
-  const oldReload=page.waitForResponse(response=>response.request().method()==='GET'&&response.url().endsWith('/guilds/synthetic-guild/announcements'));
+  const oldReads=await page.evaluate(()=>(window as any).__guildGrantAckProbe.reads);
   release();const completedResponse=await completed;expect(completedResponse.status()).toBe(200);await completedResponse.finished();
-  // The old save clears its local draft before this follow-up read. Waiting for
-  // that continuation makes the replacement-draft assertion deterministic.
-  await (await oldReload).finished();
+  await page.waitForFunction(()=>(window as any).__guildGrantAckProbe.settled===true);
+  expect(await page.evaluate(()=>(window as any).__guildGrantAckProbe.reads)).toBe(oldReads);
+  expect(await page.evaluate(()=>(window as any).__guildGrantAckProbe.events)).toBe(0);
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveValue('新公會尚未保存的公告');
   await expect(workspace.getByLabel('公告標題',{exact:true})).toBeEnabled();
   await expect(workspace.getByText('公告已保存。',{exact:true})).toHaveCount(0);
@@ -182,7 +205,8 @@ test('removing selected management targets clears their hidden drafts without re
   await page.evaluate(()=>window.dispatchEvent(new Event('freedom-profile-updated')));
   await expect(tabs.getByRole('button',{name:'技能書編輯',exact:true})).toHaveCount(0);
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveCount(0);await expect(workspace.getByLabel('一句話摘要',{exact:true})).toHaveCount(0);
-  }finally{release();}
+  }catch(error){failed=true;throw error;}
+  finally{release();try{if(!page.isClosed())await page.evaluate(()=>{const root=window as any;root.__guildGrantAckProbe?.restore();delete root.__guildGrantAckProbe;});}catch(error){if(!failed)throw error;}}
 });
 test('a removed skill editor cannot lock its replacement with a late guild-required save rejection',async({page})=>{
   const otherBook={book_id:'another-book',title:'另一技能書'};
