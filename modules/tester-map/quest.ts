@@ -42,6 +42,10 @@ export const QUEST_STAGES: readonly QuestStage[] = [
         title: ['補做定位測驗（選填）', 'Optional direction quiz', '方向性テスト（任意）', '방향 테스트(선택)', 'Test de orientación (opcional)'],
         task: ['到「我的定位」做幾題，可以中途離開再回來。', 'Answer a few questions in “My direction”; leave and come back midway.', '「自分の方向性」で数問答え、途中で離れて戻ります。', '“내 방향”에서 몇 문항 답하고 중간에 나갔다 돌아오세요.', 'Responde algunas preguntas en «Mi orientación»; sal y vuelve a mitad.'],
         check: ['回來時答案還在；結果由你確認後才算數。', 'Your answers are kept, and results count only after you confirm them.', '戻っても回答が残り、確認するまで結果は確定しません。', '돌아와도 답이 남아 있고 확인해야 결과가 확정됩니다.', 'Tus respuestas siguen ahí y el resultado cuenta solo al confirmarlo.'] },
+      { id: 'arrival.newbie-village', features: ['entry.newbie-village'], href: '#newbie-village',
+        title: ['試試新手村任務', 'Try Newbie Village Quests', 'はじめの村クエストを試す', '초보 마을 퀘스트 체험', 'Prueba las misiones de la aldea inicial'],
+        task: ['用合成答案試做測驗、寫方向卡，再清除本機作答與進度；不要填個資。', 'Try the quiz and direction card with synthetic answers, then clear local answers and progress. Do not enter personal data.', '架空の回答でテストと方向性カードを試し、端末の回答と進捗を消去します。個人情報は入力しません。', '가상 답변으로 퀴즈와 방향 카드를 시험한 뒤 로컬 답변과 진행을 지우세요. 개인정보는 입력하지 마세요.', 'Prueba el cuestionario y la tarjeta con respuestas ficticias y borra las respuestas y el progreso locales. No introduzcas datos personales.'],
+        check: ['結果只是反思草稿；公會由本人另選。本機進度與勳章不是官方完成或入會紀錄。', 'Results are reflection drafts; guilds are chosen separately. Local progress and medals are not official completion or membership records.', '結果は振り返りの下書きで、ギルドは本人が別に選びます。端末の進捗や勲章は公式な完了・加入記録ではありません。', '결과는 성찰 초안이며 길드는 별도로 직접 선택합니다. 로컬 진행과 훈장은 공식 완료나 가입 기록이 아닙니다.', 'Los resultados son borradores de reflexión; cada persona elige su gremio aparte. El progreso y las medallas locales no son registros oficiales de finalización o afiliación.'] },
     ],
   },
   {

@@ -28319,13 +28319,13 @@
     },
     {
       "path": "modules/tester-map/areas.ts",
-      "bytes": 39645,
-      "sha256": "766f792c80f685e4a2ed8e3ea63b2ad29ac0d44d38bc6bb268edeba6b8efe325"
+      "bytes": 39877,
+      "sha256": "90c1446bcc5eddadf6f673aa14d1acd10a5efc1151efed53291a96a93fdb9756"
     },
     {
       "path": "modules/tester-map/coverage.ts",
-      "bytes": 5256,
-      "sha256": "d7fda7bd2f775425872fd166c3ec3b602c92f7be5e08e156716400135455c6d0"
+      "bytes": 5304,
+      "sha256": "6666879060e503e3db3fc0454b9278452330c6da3aa58870e7ee2734b4a283bd"
     },
     {
       "path": "modules/tester-map/freedom.module.json",
@@ -28344,8 +28344,8 @@
     },
     {
       "path": "modules/tester-map/quest.ts",
-      "bytes": 56694,
-      "sha256": "7e4292fd68eeccebe2d76c29ec3699aab9c40db978e3152d2a3e763ee42b2c10"
+      "bytes": 58425,
+      "sha256": "0e204918b40a247a043856991d5751004f5f421e0f8998081222bd0d9ef4e3a2"
     },
     {
       "path": "modules/tester-map/service.ts",
@@ -28374,8 +28374,8 @@
     },
     {
       "path": "tests/e2e/tester-map.spec.ts",
-      "bytes": 10108,
-      "sha256": "6ef59c3dc256359996bc9bb4e32c447ac03e044ad65e5c7bef124ad124f3b17e"
+      "bytes": 10585,
+      "sha256": "30eacedfa9288461e0fa2b969e745734024c4c7b46bc3c31be2af7795286e18f"
     },
     {
       "path": "tests/runtime/newbie-village.test.ts",
@@ -28394,8 +28394,8 @@
     },
     {
       "path": "tests/runtime/tester-map.test.ts",
-      "bytes": 17579,
-      "sha256": "67d72330fbfe848334f36d5bd3ab9ff710e67107e34ad5165b2856de75d6fb03"
+      "bytes": 18754,
+      "sha256": "11f5d925b2976d826c281b58ad8ba7e582b5cc1dba904b335fe5c6519004861b"
     }
   ]
 }

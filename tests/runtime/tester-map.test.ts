@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import ts from '@typescript/typescript6';
 import { readFileSync } from 'node:fs';
 import { developmentPages } from '../../modules/development/pages.js';
 import { interfaceMessages } from '../../apps/portal-web/src/interface-messages.js';
@@ -209,9 +210,25 @@ test('tester-map quest: event and highlight checks quote the real visibility lab
 });
 
 test('tester-map quest: store steps never ask for photo uploads while hosted_store_photo_uploads_enabled is off', () => {
-  // The real dependency: site flag → HostedStore photoUploadsEnabled → editor renders the file input only when enabled.
+  // The real dependency: site flag → HostedStore → StorePage → products area → photo editor guard.
   assert.match(readFileSync('apps/portal-web/src/features/commerce.tsx', 'utf8'), /photoUploadsEnabled=\{site\?\.hosted_store_photo_uploads_enabled===true\}/);
-  assert.match(readFileSync('apps/portal-web/src/modules/HostedStore.tsx', 'utf8'), /uploadsEnabled=\{photoUploadsEnabled\}/);
+  function assertForwarded(path: string, tag: string, property: string, count: number) {
+    const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let found = 0;
+    function visit(node: ts.Node) {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(source) === tag) {
+        found++;
+        const attribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(source) === property);
+        assert.ok(attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isJsxExpression(attribute.initializer));
+        assert.equal(attribute.initializer.expression?.getText(source), 'photoUploadsEnabled', `${path}: ${tag}.${property}`);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source); assert.equal(found, count, `${path}: ${tag} forwarding sites`);
+  }
+  assertForwarded('apps/portal-web/src/modules/HostedStore.tsx', 'StorePage', 'photoUploadsEnabled', 2);
+  assertForwarded('apps/portal-web/src/modules/HostedStore.tsx', 'HostedStoreProductsArea', 'photoUploadsEnabled', 1);
+  assertForwarded('apps/portal-web/src/modules/HostedStoreProductsArea.tsx', 'HostedStorePhoto', 'uploadsEnabled', 1);
   assert.match(readFileSync('apps/portal-web/src/modules/HostedStorePhoto.tsx', 'utf8'), /\{uploadsEnabled&&<label htmlFor=\{id\}>商品照片<input [^>]*type="file"/);
   const uploads = features.find(feature => feature.id === 'shop.photo-uploads')!;
   assert.equal(uploads.flag, 'hosted_store_photo_uploads_enabled');

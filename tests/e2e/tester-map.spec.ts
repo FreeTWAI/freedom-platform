@@ -16,6 +16,8 @@ test('TESTER-001 signed-out visitors read the static tester map with owners, sta
   await expect(entry.locator('[data-feature-id="entry.preview"]')).toContainText('改版優先 · #1004');
   await expect(entry.locator('[data-feature-id="entry.demo"]')).toContainText('預設關閉');
   await expect(entry.locator('[data-feature-id="entry.preview"]')).toContainText('未測');
+  await expect(entry.locator('[data-feature-id="entry.newbie-village"]')).toContainText('未測');
+  await expect(entry.locator('[data-feature-id="entry.newbie-village"] a')).toHaveAttribute('href','#newbie-village');
   await expect(areaName(page,'管理與權限').locator('[data-feature-id="admin.console"]')).toContainText('需平台管理員');
   const report=page.getByRole('region',{name:'怎麼回報',exact:true});
   await expect(report).toContainText('「想法」');
@@ -84,7 +86,10 @@ test('TESTER-004 a tester follows the guided path, completes a step, keeps progr
   await expect(done).toHaveAttribute('aria-pressed','false');
   await done.click();
   await expect(quest.getByText(`整體進度：1／${total} 步`,{exact:true})).toBeVisible();
-  await expect(stage.locator('summary')).toContainText('1／5 步');
+  await expect(stage.locator('summary')).toContainText('1／6 步');
+  const village=stage.locator('[data-step-id="arrival.newbie-village"]');
+  await expect(village.getByRole('link')).toHaveAttribute('href','#newbie-village');
+  await expect(village).toContainText('本機進度與勳章不是官方完成或入會紀錄。');
   await expect(quest.getByRole('status')).toContainText('已完成「不登入先看看」');
   await expect(quest.getByRole('status')).toContainText('獲得勳章：第一步');
   const medal=page.locator('[data-medal-id="first-step"]');

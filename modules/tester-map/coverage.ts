@@ -17,6 +17,7 @@ export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
   'entry.email': { status: '未測' },
   'entry.join': { status: '未測' },
   'entry.positioning': { status: '未測' },
+  'entry.newbie-village': { status: '未測' },
   'entry.public': { status: '未測' },
   'entry.discovery': { status: '未測' },
   'entry.demo': { status: '未測' },

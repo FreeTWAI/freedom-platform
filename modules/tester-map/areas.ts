@@ -110,6 +110,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
       { id: 'entry.email', pages: ['registration'], name: ['Email 驗證連結', 'Email verification link', 'メール認証リンク', '이메일 인증 링크', 'Enlace de verificación del email'] },
       { id: 'entry.join', pages: ['onboarding'], name: ['選主要公會完成加入', 'Join by choosing a main guild', 'メインギルドを選んで参加', '주 길드를 골라 참여 완료', 'Unirse eligiendo el gremio principal'] },
       { id: 'entry.positioning', pages: ['onboarding', 'positioning'], href: '#positioning', name: ['定位測驗（選填）與我的定位', 'Optional direction quiz and My direction', '方向性テスト（任意）と自分の方向性', '방향 테스트(선택)와 내 방향', 'Test de orientación (opcional) y Mi orientación'] },
+      { id: 'entry.newbie-village', pages: ['newbie-village'], href: '#newbie-village', name: ['新手村任務', 'Newbie Village Quests', 'はじめの村クエスト', '초보 마을 퀘스트', 'Misiones de la aldea inicial'] },
       { id: 'entry.public', href: '/', name: ['未登入閱讀公開貼文、技能書與公會頁', 'Reading public posts, skill books and guild pages signed out', '未ログインで公開投稿・スキルブック・ギルドページを読む', '로그인 없이 공개 글 · 스킬북 · 길드 페이지 읽기', 'Leer publicaciones, libros y gremios públicos sin sesión'] },
       { id: 'entry.discovery', flag: 'community_discovery_enabled', name: ['訪客探索社群內容與活動', 'Guest discovery of content and events', 'ゲストによるコンテンツとイベントの探索', '방문자 콘텐츠 · 행사 둘러보기', 'Exploración de contenido y eventos para invitados'] },
       { id: 'entry.demo', flag: 'demo_accounts_enabled', name: ['示範帳號（僅本機）', 'Demo accounts (local only)', 'デモアカウント（ローカルのみ）', '데모 계정(로컬 전용)', 'Cuentas de demostración (solo local)'] },
