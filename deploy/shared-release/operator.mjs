@@ -9,7 +9,7 @@ import { BACKUP_PHASES } from './scheduled-admission.mjs';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value, null, 2) + '\n';
 export const operatorCommand = (image, source, privateDir, resultDir, name, workDir) => [
-  'run', '--name', name, '--init', '--read-only', '--cap-drop=ALL',
+  'run', '--pull=never', '--name', name, '--init', '--read-only', '--cap-drop=ALL',
   '--security-opt=no-new-privileges', '--pids-limit=512', '--user=1001:1001',
   '--tmpfs=/tmp:rw,nosuid,nodev,size=2g,uid=1001,gid=1001',
   '--mount', `type=bind,src=${source},dst=/release/source,readonly`,
@@ -23,14 +23,36 @@ export const operatorCommand = (image, source, privateDir, resultDir, name, work
 
 // Operator output is private; even error text may contain a database URI or token.
 // Never forward stdout/stderr to Actions logs, the summary or an uploaded artifact.
-export function quietCommand(command, args, timeout = 90 * 60_000) {
+export function quietCommand(command, args, timeout = 90 * 60_000, { input } = {}) {
   return new Promise((accept, reject) => {
-    const child = spawn(command, args, { stdio: 'ignore', timeout, killSignal: 'SIGKILL',
+    const child = spawn(command, args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'ignore', 'ignore'], timeout, killSignal: 'SIGKILL',
       env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8' } });
+    // Registry credentials travel only over stdin, never command arguments or logs.
+    if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(input); }
     child.once('error', () => reject(Object.assign(new Error('release_operator_process_failed'), { code: 'release_operator_process_failed' })));
     child.once('exit', (code, signal) => code === 0 && signal === null ? accept()
       : reject(Object.assign(new Error('release_operator_process_failed'), { code: 'release_operator_process_failed' })));
   });
+}
+
+// The job's short-lived GITHUB_TOKEN may read a private, repository-linked GHCR
+// package. Its temporary Docker config is removed before the operator starts;
+// neither the token nor that directory enters the container or public receipt.
+export async function pullOperatorImage({ image, temporaryRoot, registry, run = quietCommand }) {
+  requireRelease(/^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(image),
+    'release_operator_image_invalid');
+  requireRelease(registry && typeof registry.username === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(registry.username)
+    && typeof registry.token === 'string' && registry.token.length > 0 && registry.token.length <= 16384
+    && !/[\r\n\0]/.test(registry.token), 'release_registry_credentials_missing');
+  const directory = join(temporaryRoot, 'registry');
+  await mkdir(directory, { mode: 0o700 });
+  try {
+    await run('docker', ['--config', directory, 'login', 'ghcr.io', '--username', registry.username, '--password-stdin'],
+      60_000, { input: registry.token });
+    await run('docker', ['--config', directory, 'pull', image], 10 * 60_000);
+  } catch {
+    throw Object.assign(new Error('release_registry_pull_failed'), { code: 'release_registry_pull_failed' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
 async function boundedJson(path) {
@@ -121,7 +143,7 @@ export function operatorProgress(value, admission, installation, requestDigest) 
   });
 }
 
-export async function runOperator({ admission, installation, sourceRoot, temporaryRoot,
+export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
   config, credentials, scheduleEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
@@ -162,7 +184,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await writeFile(join(privateDir, 'credentials.json'), json(credentials), { mode: 0o600, flag: 'wx' });
     // Hosted Ubuntu runner UID is 1001. Refuse other hosts rather than widening file permissions.
     requireRelease(process.getuid?.() === 1001 || run !== quietCommand, 'release_runner_uid_invalid');
-    await run('docker', ['pull', installation.image], 10 * 60_000);
+    await pullOperatorImage({ image: installation.image, temporaryRoot, registry, run });
     timer = setInterval(() => { progressTask = progressTask.then(readProgress); }, 10_000);
     containerAttempted = true;
     await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name, workDir));

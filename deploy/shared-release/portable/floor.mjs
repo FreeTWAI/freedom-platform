@@ -2,7 +2,7 @@
 // an unsettled intent. Original legacy authority remains pinned and readable.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
+import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { requireRelease as check, isSha, isDigest } from '../admission.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from './coordinate-fence.mjs';
 
@@ -36,7 +36,8 @@ function verifyBackup(proof, intent, capture, sourceSha) {
 export function replayReleaseFloor(chain, { isAncestor }) {
   check(Array.isArray(chain) && chain.length > 0 && typeof isAncestor === 'function', 'release_floor_history_invalid');
   const seed = chain[0].record.data;
-  check(seed?.format === 'freedom.shared-floor-seed/v1' && seed.authority && isDigest(seed.authority.legacyFloorSha256),
+  check(['freedom.shared-floor-seed/v1', 'freedom.shared-floor-seed/v2'].includes(seed?.format)
+    && seed.authority && isDigest(seed.authority.legacyFloorSha256),
     'release_floor_seed_invalid');
   const state = structuredClone(seed.state);
   check(state && isSha(state.sourceSha) && isSha(state.sourceTree) && state.deployedSourceSha === state.sourceSha
@@ -147,6 +148,42 @@ function gitAncestor(sourceRoot, before, after) {
   } catch { return false; }
 }
 
+// A legacy schema floor can predate code-only releases. A separately provisioned
+// v2 seed may adopt that already deployed descendant, but never new schema bytes.
+// Read the immutable Git object, not the current checkout or live DB as authority.
+function verifyAdoptedSource(sourceRoot, legacy, baseline) {
+  const previous = legacy.migration.release;
+  check(isSha(previous) && isSha(legacy.migration.tree) && gitAncestor(sourceRoot, previous, baseline.sourceSha),
+    'release_floor_adoption_source_invalid');
+  const git = (args, maxBuffer = 1_000_000) => execFileSync('/usr/bin/git', ['--no-optional-locks',
+    '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'protocol.allow=never', ...args],
+  { cwd: sourceRoot, timeout: 15000, maxBuffer, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' } });
+  try {
+    check(git(['rev-parse', previous + '^{tree}']).toString().trim() === legacy.migration.tree
+      && git(['rev-parse', baseline.sourceSha + '^{tree}']).toString().trim() === baseline.sourceTree,
+    'release_floor_adoption_tree_invalid');
+    const entries = git(['ls-tree', '-r', '-z', baseline.sourceSha, '--', 'migrations/']).toString().split('\0').filter(Boolean);
+    const rows = []; let total = 0;
+    for (const entry of entries) {
+      const path = entry.slice(entry.indexOf('\t') + 1);
+      if (!path.endsWith('.sql')) continue;
+      const match = /^(100644|100755) blob ([a-f0-9]{40})\tmigrations\/([0-9]{3}_[A-Za-z0-9_]+\.sql)$/.exec(entry);
+      check(match && rows.length < 1000, 'release_floor_adoption_catalog_invalid');
+      const bytes = git(['cat-file', 'blob', match[2]], 4 * 1024 * 1024);
+      total += bytes.length; check(total <= 64 * 1024 * 1024, 'release_floor_adoption_catalog_invalid');
+      const sql = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+      rows.push({ name: match[3], sha256: migrationDigest(sql) });
+    }
+    rows.sort((a, b) => a.name < b.name ? -1 : 1);
+    same(rows, baseline.schemaLedger, 'release_floor_adoption_catalog_changed');
+  } catch (error) {
+    if (error?.code?.startsWith('release_floor_')) throw error;
+    check(false, 'release_floor_adoption_source_unavailable');
+  }
+}
+
 /** sourceRoot is the immutable, full-history application checkout. The seed and
  * legacy bytes are provisioned independently after review; this function cannot
  * bless the current database as a new rollback floor. */
@@ -158,10 +195,14 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
   const baseline = current.seed.state, schema = ledger(baseline.schemaLedger);
   check(legacy.format === `freedom.schema${schema}-committed-floor/v1`
     && legacy.floor?.environment === (store.target === 'next' ? 'production' : 'staging')
-    && legacy.floor.minimumSchema === schema && legacy.floor.candidateRelease === baseline.sourceSha
-    && legacy.migration?.commitStatus === 'confirmed' && legacy.migration.release === baseline.sourceSha
-    && legacy.migration.tree === baseline.sourceTree && legacy.restoreQuarantineRequired === true,
+    && legacy.floor.minimumSchema === schema
+    && legacy.migration?.commitStatus === 'confirmed' && legacy.migration.release === legacy.floor.candidateRelease
+    && legacy.restoreQuarantineRequired === true,
   'release_floor_legacy_authority_invalid');
+  if (current.seed.format === 'freedom.shared-floor-seed/v1') {
+    check(legacy.floor.candidateRelease === baseline.sourceSha && legacy.migration.tree === baseline.sourceTree,
+      'release_floor_legacy_authority_invalid');
+  } else verifyAdoptedSource(sourceRoot, legacy, baseline);
   same(legacy.schemaLedger, baseline.schemaLedger, 'release_floor_legacy_ledger_changed');
   const policy = legacy.retained172?.materialPolicy;
   check(policy?.format === 'freedom.backup-material-policy-observation/v1' && Array.isArray(policy.policies)

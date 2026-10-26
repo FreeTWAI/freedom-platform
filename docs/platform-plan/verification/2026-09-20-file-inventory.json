@@ -169,18 +169,18 @@
     },
     {
       "path": ".github/workflows/release-operator-image.yml",
-      "bytes": 4061,
-      "sha256": "32b98149664150d9edc8abdc635d343b1381461a4ee1c761c09dfcf4d0fe681d"
+      "bytes": 5786,
+      "sha256": "d0ea7a505d9e991bbbec4d42b13fd2ed5a6c68eb93edd9157c3f674b572ce4e4"
     },
     {
       "path": ".github/workflows/shared-backup.yml",
-      "bytes": 4162,
-      "sha256": "f3bfd339354794768f7371dda9b7bfd5d145993e5a2ae3e56a9d067f39d893db"
+      "bytes": 4183,
+      "sha256": "391b782d92f93a69e8c994f456453c46bb77e917e2c12b93e9c00dab427adc23"
     },
     {
       "path": ".github/workflows/shared-release.yml",
-      "bytes": 5692,
-      "sha256": "a24cda9769dfd770db8a9a23a2cac68c5ddd636889a841976de886fb5583e061"
+      "bytes": 5854,
+      "sha256": "d632a5c30c86fa1b2f112c267ab5c8a9f0adf9422cb54d2db8faa3cf5e35e93e"
     },
     {
       "path": ".github/workflows/skill-book-upstreams.yml",
@@ -14604,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 91255,
-      "sha256": "fdb1e01829d715a105ef5fdb37584aac7714fcb218529725d8fa37771bdf0bcd"
+      "bytes": 105809,
+      "sha256": "3b82a6fa44e4da76c011db995d96ee3a23be388ebf2c3d6b7ccaefc059b97851"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -14644,18 +14644,18 @@
     },
     {
       "path": "deploy/shared-release/AGENTS.md",
-      "bytes": 2588,
-      "sha256": "fb1097f48f0831e4d2e6784282565c0b5e8f251cc38097c782f225e0e81b8f81"
+      "bytes": 2822,
+      "sha256": "ce045b1173c31a3fbbe0ecbe3e127f79c82db629850cf3b0a553bf706bbb5c5b"
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 19243,
-      "sha256": "a0e37d3fa36ac373bd77832216f473e8c588beeb13cf76f402e3388eff84e54d"
+      "bytes": 20747,
+      "sha256": "7c43aedfdfee7da8800105629cddf277eb9dd1b4e835183d365c6616719bdfad"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
-      "bytes": 14780,
-      "sha256": "4531138398352c42ad67ba94e650933cff53c678783c1533d2fc8f94b58367d7"
+      "bytes": 14789,
+      "sha256": "0bd61460e6cb888190a263ff8b086551ea032a16220f63ed3de0a739a6d70f9b"
     },
     {
       "path": "deploy/shared-release/artifacts.mjs",
@@ -14664,13 +14664,18 @@
     },
     {
       "path": "deploy/shared-release/backup-cli.mjs",
-      "bytes": 4886,
-      "sha256": "36ccb4ce8eeb60dbcee663991e2c5b66e3ad1071f0872e590c938d83fd29e754"
+      "bytes": 4955,
+      "sha256": "beecac3c78ed1bd0e0831bbd97a25dd933a6be06bf4d703ffbf7d4a8c5ceccb6"
     },
     {
       "path": "deploy/shared-release/cli.mjs",
-      "bytes": 7511,
-      "sha256": "78d78c6e06ee2afb082274977ad5fb7623e04a540499f6f007239f993550bc06"
+      "bytes": 8450,
+      "sha256": "078ab41e5cc4d220dc205686777c724d4247414b74b9b2e205408791469c00be"
+    },
+    {
+      "path": "deploy/shared-release/environment-check.mjs",
+      "bytes": 5279,
+      "sha256": "af5f8662eee9373e19a553c2e615c9f0e2a0dc765be3548acc698b4f9a9d30f7"
     },
     {
       "path": "deploy/shared-release/freedom.module.json",
@@ -14684,13 +14689,13 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 17799,
-      "sha256": "10210d6dd5d53ad6721c4c3455e296de8a5f98fbae2b05113d03e76d802bbbce"
+      "bytes": 19793,
+      "sha256": "00adb3fa066df32cb022bb840f9fd84b518c78c258621825d5e102d14dd20ca2"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 13106,
-      "sha256": "0eb20e101252aedea1621e2a9200951a046d305dd6d401e3d8b631021b497210"
+      "bytes": 14714,
+      "sha256": "5f6a0fdb80470397d127ec56300886761e863e049e8ae2a040998632e219de68"
     },
     {
       "path": "deploy/shared-release/receipt-archive.py",
@@ -14779,8 +14784,8 @@
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
-      "bytes": 15037,
-      "sha256": "67e56064a420e1d78dffe3501e6c0ed01013c07c895d078203cf45661f2043e0"
+      "bytes": 17660,
+      "sha256": "eedba52d7178ef6485b28f26fae43d64f079ab9202124d9d4fe4bd8d5095eee3"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -26063,6 +26068,16 @@
       "sha256": "e88fbd1c00608726d809e4fecef989f3366d657cade9c2bf86c49f7656e5a47a"
     },
     {
+      "path": "tests/runtime/guild-category-retry.test.ts",
+      "bytes": 19096,
+      "sha256": "110a0c0ad3f1b1a5c046144b07ad3986f5971d50cb2ee4749511720233a89780"
+    },
+    {
+      "path": "tests/runtime/guild-directory-focus.test.ts",
+      "bytes": 2891,
+      "sha256": "59ac425de8e3d01b56f8b0590ba932f5c1ca9e428cbbd645c624a1aa8ae5d263"
+    },
+    {
       "path": "tests/runtime/guild-entry-questions.test.ts",
       "bytes": 19546,
       "sha256": "c05386fbe51b871bbf97911f3819f2b5032ee25c131670274276da7f590efbdf"
@@ -26098,6 +26113,11 @@
       "sha256": "3b67cf9d612bb237fb894b2cf769baf2bc906b40b04560cddbac7fc302dbe23f"
     },
     {
+      "path": "tests/runtime/guild-member-tier-fixture.test.ts",
+      "bytes": 14507,
+      "sha256": "9c6295b7844f5835d63f3099c9d087f5e5eec36dc69488ecffb18b6a58d38c03"
+    },
+    {
       "path": "tests/runtime/guild-member-tiers.test.ts",
       "bytes": 22529,
       "sha256": "81e063e0bef5b40b588d529017d85a123e3b1822fcde6ea8eb86924548a8203a"
@@ -26111,6 +26131,11 @@
       "path": "tests/runtime/guild-profile.test.ts",
       "bytes": 23241,
       "sha256": "b68715d9e3e64e6df9ad2f92146ccbb1436db987e0ba4dd2bc6b06d371f7d205"
+    },
+    {
+      "path": "tests/runtime/guild-workspace-writer.test.ts",
+      "bytes": 22918,
+      "sha256": "b2f22fda983e6ff7babdd820e15ceaa90a3d6e24cf0ba72dad2cd2a85197a483"
     },
     {
       "path": "tests/runtime/guild-workspace.test.ts",
@@ -28171,26 +28196,6 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
-    },
-    {
-      "path": "tests/runtime/guild-member-tier-fixture.test.ts",
-      "bytes": 14507,
-      "sha256": "9c6295b7844f5835d63f3099c9d087f5e5eec36dc69488ecffb18b6a58d38c03"
-    },
-    {
-      "path": "tests/runtime/guild-category-retry.test.ts",
-      "bytes": 19096,
-      "sha256": "110a0c0ad3f1b1a5c046144b07ad3986f5971d50cb2ee4749511720233a89780"
-    },
-    {
-      "path": "tests/runtime/guild-directory-focus.test.ts",
-      "bytes": 2891,
-      "sha256": "59ac425de8e3d01b56f8b0590ba932f5c1ca9e428cbbd645c624a1aa8ae5d263"
-    },
-    {
-      "path": "tests/runtime/guild-workspace-writer.test.ts",
-      "bytes": 22918,
-      "sha256": "b2f22fda983e6ff7babdd820e15ceaa90a3d6e24cf0ba72dad2cd2a85197a483"
     }
   ]
 }

@@ -40,6 +40,7 @@ export async function main(env = process.env) {
     receipt.status = 'running'; receipt.providerOutcome = 'unknown_until_confirmed';
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
     receipt.phases = await runOperator({ admission, installation, sourceRoot, temporaryRoot, config: env.RELEASE_CONFIG_JSON,
+      registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       credentials: { cloudflareApiToken: env.CLOUDFLARE_API_TOKEN, migrationDatabaseUrl: env.MIGRATION_DATABASE_URL,
         runtimeDatabaseUrl: env.RUNTIME_DATABASE_URL, backupDatabaseUrl: env.BACKUP_DATABASE_URL,
         ...(admission.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID, stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}) } });

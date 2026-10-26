@@ -6,6 +6,7 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
   requireStaging, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireScheduledBackup } from './scheduled-admission.mjs';
+import { checkEnvironment } from './environment-check.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
@@ -29,6 +30,14 @@ export async function main(env = process.env) {
       receipt.status = admission.mode === 'plan' ? 'plan_passed' : 'awaiting_execution';
       // A plan checks GitHub admission only. It has no environment credentials and cannot attest readiness.
       receipt.environmentReadiness = 'not_checked';
+      return;
+    }
+    if (request.mode === 'check') {
+      receipt.environmentCheck = await checkEnvironment(env, request.target);
+      receipt.environmentReadiness = 'read_only_checks_only';
+      receipt.providerOutcome = 'no_mutations';
+      receipt.status = receipt.environmentCheck.status === 'passed' ? 'checks_passed' : 'checks_failed';
+      if (receipt.status === 'checks_failed') process.exitCode = 1;
       return;
     }
     requireRelease(request.mode === 'deploy', 'release_execution_mode_invalid');
@@ -72,6 +81,7 @@ export async function main(env = process.env) {
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
     receipt.phases = await runOperator({ admission, installation, sourceRoot: source, temporaryRoot,
+      registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       scheduleEvidence: receipt.scheduleEvidence,
       onProgress: async phases => {
         receipt.operatorProgress = phases;
@@ -110,7 +120,10 @@ export async function main(env = process.env) {
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
-      + (receipt.environmentReadiness ? '- Plan only: environment/operator readiness has not been checked.\n' : '')
+      + (receipt.environmentReadiness === 'not_checked' ? '- Plan only: environment/operator readiness has not been checked.\n' : '')
+      + (receipt.environmentCheck ? '\n' + receipt.environmentCheck.checks.map(item => `- ${item.name}: ${item.status}`
+        + (item.error ? ` (${item.error}${item.httpStatus ? ', HTTP ' + item.httpStatus : ''})` : '')).join('\n')
+        + '\n\nRead-only credential checks do not prove write permissions, database access, backup/restore or deployment readiness.\n' : '')
       + '\nThe JSON receipt records the exact source, controller, CI runs and completed phases.\n');
   }
 }

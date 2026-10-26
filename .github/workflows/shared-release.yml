@@ -13,11 +13,11 @@ on:
         type: choice
         options: [staging-next, next]
       mode:
-        description: 'Plan checks version/permissions only; deploy requires installed environment operator'
+        description: 'plan: GitHub admission; check: read-only Cloudflare/Access checks; deploy: installed operator'
         required: true
         type: choice
         default: plan
-        options: [plan, deploy]
+        options: [plan, check, deploy]
 permissions:
   contents: read
 # One release across BOTH environments: the current databases/operator schedules
@@ -68,7 +68,7 @@ jobs:
           retention-days: 90
   deploy:
     needs: admission
-    if: needs.admission.outputs.mode == 'deploy'
+    if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check'
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     environment:
@@ -80,6 +80,7 @@ jobs:
       contents: read
       actions: read
       deployments: write
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -88,6 +89,7 @@ jobs:
           path: controller
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.admission.outputs.mode == 'deploy'
         with:
           ref: ${{ needs.admission.outputs.source_sha }}
           path: source
@@ -104,7 +106,7 @@ jobs:
           CONTROLLER_SHA: ${{ job.workflow_sha }}
           RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
           RELEASE_TARGET: ${{ needs.admission.outputs.target }}
-          RELEASE_MODE: deploy
+          RELEASE_MODE: ${{ needs.admission.outputs.mode }}
           RELEASE_COMMAND: execute
           RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
