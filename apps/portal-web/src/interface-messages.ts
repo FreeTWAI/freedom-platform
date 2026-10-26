@@ -309,6 +309,7 @@ export const interfaceMessages = {
   'nav.search': ['搜尋功能', 'Find a feature', '機能を探す', '기능 찾기', 'Buscar una función'],
   'nav.example': ['找功能，例如：聊天室', 'Find a feature, e.g. messages', '機能を検索：例 メッセージ', '기능 검색, 예: 메시지', 'Buscar, por ejemplo: mensajes'],
   'nav.results': ['功能搜尋結果', 'Feature search results', '機能の検索結果', '기능 검색 결과', 'Resultados de funciones'],
+  'nav.searchContent': ['用此關鍵字搜尋社群內容', 'Search community content with this keyword', 'このキーワードでコミュニティ内を検索', '이 검색어로 커뮤니티 콘텐츠 검색', 'Buscar contenido de la comunidad con esta palabra clave'],
   'nav.searchHint': ['輸入其他關鍵字可換一組結果。', 'Try another keyword for different results.', '別のキーワードで検索できます。', '다른 검색어로 결과를 바꿀 수 있습니다.', 'Prueba otra palabra para obtener otros resultados.'],
   'nav.participation': ['社群參與', 'Get involved', 'コミュニティに参加', '커뮤니티 참여', 'Participar'],
   'nav.people': ['認識夥伴', 'Meet people', '仲間と出会う', '사람들 만나기', 'Conocer personas'],
