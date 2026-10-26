@@ -31,7 +31,11 @@ test('NEWBIE-001 complete quiz, write direction card, local quests persist and m
   await page.context().grantPermissions(['clipboard-read','clipboard-write']);
   await page.getByRole('button',{name:'複製方向卡草稿',exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:'已複製到剪貼簿'})).toBeVisible();
-  expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain('每週只投入三小時，不熬夜。');
+  const draft=await page.evaluate(()=>navigator.clipboard.readText());
+  expect(draft).toContain('每週只投入三小時，不熬夜。');
+  expect(draft).toContain('主公會：');
+  expect(draft).toContain('https://freetwai.com/#guilds/guild_');
+  await expect(page.locator('#nv-card pre')).toHaveText(draft);
   await page.locator('#nv-card').getByRole('button',{name:'完成這一步'}).click();
   await page.locator('#nv-guild').getByRole('button',{name:'完成這一步'}).click();
   await page.locator('#nv-checkin textarea').fill('已完成小工具；下週請一位朋友試用。');

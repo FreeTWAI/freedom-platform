@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {CLASSES_V2,EXTRA_DATA_V2,QUESTIONS_V2,DIMENSION_META_V2,RADAR_AXES_V2,DIMENSIONS,CAREER_GUILDS,calculateResult,lifestyleBaseline,completeAnswers,STORAGE_KEY,QUESTS,parseProgress,freshProgress,type Progress,type Quest} from '../../../../modules/newbie-village/index';
+import {CLASSES_V2,EXTRA_DATA_V2,QUESTIONS_V2,DIMENSION_META_V2,RADAR_AXES_V2,DIMENSIONS,CAREER_GUILDS,directionDraft,calculateResult,lifestyleBaseline,completeAnswers,STORAGE_KEY,QUESTS,parseProgress,freshProgress,type Progress,type Quest} from '../../../../modules/newbie-village/index';
 import {useLanguage} from '../language';
 import type {InterfaceMessage} from '../interface-messages';
 import './NewbieVillage.css';
@@ -16,7 +16,7 @@ export function NewbieVillage(){
   const q=QUESTIONS_V2[index],selected=p.answers[index];
   const suggestedCareers=[...new Set([result.primary,...DIMENSIONS.map(d=>result.dimensionWinners[d])])];
   const baseline=p.baseline||lifestyleBaseline(p.answers),action=p.action||career.actions[0];
-  const draft=`方向卡（本人選擇的草稿）\n做自己：${CLASSES_V2[result.dimensionWinners.personality].name}\n過生活：${CLASSES_V2[result.dimensionWinners.lifestyle].name}\n用強項：${CLASSES_V2[result.dimensionWinners.capability].name}\n過生活底線：${baseline}\n第一週行動：${action}\n完成條件與回顧：${p.checkin}\n公會僅供建議，由本人另行選擇。`;
+  const draft=directionDraft({...result,baseline,action,checkin:p.checkin});
   const changeQuestion=(i:number)=>{focusQuestion.current=true;setIndex(i)};
   const toggle=(option:number)=>setP(old=>{const a=old.answers[index];const next=q.multi?(a.includes(option)?a.filter(v=>v!==option):a.length<(q.maxSelect??1)?[...a,option]:a):[option];return {...old,answers:old.answers.map((v,i)=>i===index?next:v)}});
   const point=(i:number,value:number)=>{const angle=(-90+i*60)*Math.PI/180;return `${200+Math.cos(angle)*value*25},${200+Math.sin(angle)*value*25}`};
