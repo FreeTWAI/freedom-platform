@@ -132,10 +132,7 @@ async function expectWorkPaginationColors(action:import('@playwright/test').Loca
   });
   expect(observed.text).toBeGreaterThanOrEqual(4.5);
   expect(observed.height).toBeGreaterThanOrEqual(44);
-  // Disabled controls are exempt; inspect retained opacity separately, not as a
-  // claim about the composited disabled text's WCAG contrast.
-  if(await action.isDisabled())expect(observed.opacity).toBeLessThan(1);
-  else expect(observed.opacity).toBe(1);
+  expect(observed.opacity).toBe(1);
   if(focused){
     expect(observed.focusVisible).toBe(true);expect(observed.outline).not.toBe('none');
     expect(observed.outlineWidth).toBeGreaterThanOrEqual(2);expect(observed.focus).toBeGreaterThanOrEqual(3);
@@ -143,57 +140,30 @@ async function expectWorkPaginationColors(action:import('@playwright/test').Loca
 }
 
 const paginationPages=[
-  {pageName:'任務協作',selector:'.workbench-load-more',loadName:'載入較早的社群工作',retryName:'載入較早的社群工作',error:'較早的社群工作暫時無法載入。'},
-  {pageName:'社群任務',selector:'.task-board-load-more',loadName:'載入較早的工坊工作',retryName:'重試載入較早的工坊工作',error:'較早的工坊工作暫時無法載入。'},
+  {pageName:'任務協作',selector:'.workbench-load-more',loadName:'載入較早的社群工作'},
+  {pageName:'社群任務',selector:'.task-board-load-more',loadName:'載入較早的工坊工作'},
 ];
-// Two authenticated journeys, not a login/retry fixture for every palette/width.
-for(const panel of paginationPages)test(`${panel.pageName} pagination keeps five profile palettes and retry`,async({page})=>{
+// One authenticated journey per page. Existing pagination/loading tests retain
+// the two-width and failure/retry coverage; these cases only exercise appearance.
+for(const panel of paginationPages)test(`${panel.pageName} pagination keeps five profile palettes`,async({page})=>{
   await page.setViewportSize({width:1280,height:900});
   await page.route('**/api/v1/co-creation/projects',route=>route.fulfill({json:{items:[]}}));
-  let cursorRequests=0,release=()=>{};
-  const held=new Promise<void>(resolve=>{release=resolve;});
-  await page.route('**/api/v1/work-items/page*',async route=>{
-    const cursor=new URL(route.request().url()).searchParams.get('cursor');
-    if(!cursor){await route.fulfill({json:{items:[],next_cursor:'synthetic-workbench-cursor'}});return;}
-    expect(cursor).toBe('synthetic-workbench-cursor');cursorRequests++;
-    if(cursorRequests===1){await held;await route.fulfill({status:503,json:{error:{code:'synthetic_unavailable',message:'Synthetic unavailable page'}}});}
-    else await route.fulfill({json:{items:[],next_cursor:null}});
-  });
-  try{
-    await login(page);await navigate(page,panel.pageName);
-    const action=page.locator(panel.selector);
-    await expect(action).toHaveAccessibleName(panel.loadName);await expect(action).toBeVisible();
-    for(const profile of Object.values(EXPERIENCE_PROFILES)){
-      await openSettingsPanel(page,'appearance');
-      await page.getByRole('menuitemradio',{name:profile.label,exact:true}).click();
-      await closeSettingsMenu(page);
-      await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile.id);
-      expect(await page.evaluate(()=>localStorage.getItem('freedom-theme'))).toBe(profile.id);
-      for(const width of [390,1280]){
-        await page.setViewportSize({width,height:900});
-        await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();
-        // Clear the previous sample's pointer/focus before checking the idle state.
-        await page.mouse.move(0,0);await page.getByRole('button',{name:'設定',exact:true}).focus();
-        await expectWorkPaginationColors(action);
-        await action.hover();await expectWorkPaginationColors(action);
-        await action.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
-        await expect(action).toBeFocused();await expectWorkPaginationColors(action,true);
-        await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-      }
-    }
-    // Read-state behavior is independent of the palette: exercise it once per
-    // real page after all five live appearance changes, without another login.
-    await action.press('Enter');
-    await expect(action).toBeDisabled();await expect(action).toHaveAccessibleName('正在載入…');
-    await expect.poll(()=>cursorRequests).toBe(1);
+  await page.route('**/api/v1/work-items/page*',route=>route.fulfill({json:{items:[],next_cursor:'synthetic-workbench-cursor'}}));
+  await login(page);await navigate(page,panel.pageName);
+  const action=page.locator(panel.selector);
+  await expect(action).toHaveAccessibleName(panel.loadName);await expect(action).toBeVisible();
+  for(const profile of Object.values(EXPERIENCE_PROFILES)){
+    await openSettingsPanel(page,'appearance');
+    await page.getByRole('menuitemradio',{name:profile.label,exact:true}).click();
+    await closeSettingsMenu(page);
+    await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile.id);
+    expect(await page.evaluate(()=>localStorage.getItem('freedom-theme'))).toBe(profile.id);
+    await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();
+    // Clear the previous sample's pointer/focus before checking the idle state.
+    await page.mouse.move(0,0);await page.getByRole('button',{name:'設定',exact:true}).focus();
     await expectWorkPaginationColors(action);
-    await action.evaluate(element=>(element as HTMLButtonElement).click());
-    expect(cursorRequests).toBe(1);
-    release();
-    await expect(page.getByRole('alert').filter({hasText:panel.error})).toBeVisible();
-    await expect(action).toBeEnabled();await expect(action).toHaveAccessibleName(panel.retryName);
-    await expectWorkPaginationColors(action);
-    await action.click();await expect(action).toHaveCount(0);expect(cursorRequests).toBe(2);
-    await expect(page.getByRole('alert').filter({hasText:panel.error})).toHaveCount(0);
-  }finally{release();}
+    await action.hover();await expectWorkPaginationColors(action);
+    await action.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
+    await expect(action).toBeFocused();await expectWorkPaginationColors(action,true);
+  }
 });

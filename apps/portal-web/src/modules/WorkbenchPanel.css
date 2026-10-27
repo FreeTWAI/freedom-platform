@@ -8,7 +8,3 @@
 .workbench-load-more.btn-secondary:focus-visible {
   border-color: var(--focus);
 }
-.workbench-load-more.btn-secondary:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
