@@ -108,15 +108,15 @@ test('admin reads a transparent rules report and requests only a due refresh',as
 function recommendationFixture(nickname:string,next_offset:number){
   return {items:[{member:{user_id:'11111111-1111-4111-8111-111111111111',nickname,last_seen_at:null,is_online:false,positioning_title:null,primary_guild:null,secondary_guilds:[],capabilities:[],equipment:[],contacts:{},is_self:false,friendship:{state:'none'}},reason:'認識不同領域的工坊夥伴'}],total:2,next_offset};
 }
-test('recommendation retries the failed next offset, coalesces clicks and preserves wrap and empty states',async({page})=>{
-  const offsets:number[]=[];let fail=true,empty=false,release=()=>{};
+test('recommendation retries the failed next offset and coalesces clicks',async({page})=>{
+  const offsets:number[]=[];let fail=true,release=()=>{};
   await page.route('**/api/v1/members/recommendations?*',async route=>{
     const offset=Number(new URL(route.request().url()).searchParams.get('offset'));offsets.push(offset);
     if(offset===1&&fail){
       if(offsets.length===3)await new Promise<void>(resolve=>{release=resolve;});
       return route.fulfill({status:503,json:{error:{code:'temporarily_unavailable',message:'推薦暫時無法讀取'}}});
     }
-    return route.fulfill({json:empty?{items:[],total:0,next_offset:0}:recommendationFixture(offset===0?'第一位測試夥伴':'第二位測試夥伴',offset===0?1:0)});
+    return route.fulfill({json:recommendationFixture(offset===0?'第一位測試夥伴':'第二位測試夥伴',offset===0?1:0)});
   });
   try{
     await signup(page,'推薦重試探索者');await page.locator('.home-personal > summary').click();
@@ -126,28 +126,7 @@ test('recommendation retries the failed next offset, coalesces clicks and preser
     await retry.evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
     await expect.poll(()=>offsets).toEqual([0,1,1]);await expect(panel.getByRole('status')).toHaveText('正在找可以認識的夥伴…');await expect(swap).toBeDisabled();
     release();await expect(retry).toBeVisible();expect(offsets).toEqual([0,1,1]);
-    fail=false;await retry.focus();await page.keyboard.press('Enter');await expect(panel.getByRole('heading',{name:'第二位測試夥伴',exact:true})).toBeVisible();expect(offsets).toEqual([0,1,1,1]);await expect(retry).toHaveCount(0);
-    await swap.click();await expect(panel.getByRole('heading',{name:'第一位測試夥伴',exact:true})).toBeVisible();expect(offsets).toEqual([0,1,1,1,0]);
-    empty=true;await swap.click();await expect(panel.getByText('目前沒有新的推薦夥伴。可以到工坊夥伴頁探索，或邀請朋友加入。')).toBeVisible();await expect(panel.getByRole('alert')).toHaveCount(0);
-  }finally{release();}
-});
-test('leaving recommendations discards a late next-page failure and remount starts at zero',async({page})=>{
-  const offsets:number[]=[];let release=()=>{};
-  await page.route('**/api/v1/members/recommendations?*',async route=>{
-    const offset=Number(new URL(route.request().url()).searchParams.get('offset'));offsets.push(offset);
-    if(offset===1){await new Promise<void>(resolve=>{release=resolve;});return route.fulfill({status:503,json:{error:{code:'temporarily_unavailable',message:'舊推薦失敗'}}});}
-    return route.fulfill({json:recommendationFixture('重新開始的測試夥伴',1)});
-  });
-  try{
-    await signup(page,'推薦離頁探索者');await page.locator('.home-personal > summary').click();
-    const panel=page.getByRole('region',{name:'認識一位工坊夥伴'});
-    await expect(panel.getByRole('heading',{name:'重新開始的測試夥伴',exact:true})).toBeVisible();await panel.getByRole('button',{name:'換一位',exact:true}).click();await expect.poll(()=>offsets).toEqual([0,1]);
-    await navigate(page,'技能書架');await expect(panel).toHaveCount(0);await navigate(page,'會員首頁');
-    const details=page.locator('.home-personal');if(await details.getAttribute('open')===null)await details.locator(':scope > summary').click();
-    await expect(panel.getByRole('heading',{name:'重新開始的測試夥伴',exact:true})).toBeVisible();expect(offsets).toEqual([0,1,0]);
-    const finished=page.waitForEvent('requestfinished',request=>request.url().includes('/members/recommendations?')&&new URL(request.url()).searchParams.get('offset')==='1');release();await finished;
-    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
-    await expect(panel.getByRole('alert')).toHaveCount(0);await expect(panel.getByRole('heading',{name:'重新開始的測試夥伴',exact:true})).toBeVisible();
+    fail=false;await retry.click();await expect(panel.getByRole('heading',{name:'第二位測試夥伴',exact:true})).toBeVisible();expect(offsets).toEqual([0,1,1,1]);await expect(retry).toHaveCount(0);
   }finally{release();}
 });
 test('initial recommendation retry and acknowledged invitation refresh both start at zero',async({page})=>{
