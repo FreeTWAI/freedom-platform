@@ -78,6 +78,15 @@ test('local progress rejects malformed storage and preserves valid answers, draf
   const p={...freshProgress(),answers,done:['framework','quiz','card','guild','checkin'] as const,baseline:'生活底線',action:'小實驗',checkin:'證據'};
   const restored=parseProgress(JSON.stringify(p));assert.deepEqual(restored,p);assert.equal(badges(restored).length,5);
   assert.deepEqual(parseProgress('{"version":1,"done":["quiz","unknown"],"answers":[[999]]}').done,[]);
+  // Preserve the useful long-draft round trip without a profile/login/width matrix.
+  const longText=('合成草稿 🌱\nhttps://example.invalid/'+'a'.repeat(180)+'\n').repeat(20).slice(0,4000);
+  const longProgress={...p,baseline:longText,action:longText,checkin:longText};
+  const longRestored=parseProgress(JSON.stringify(longProgress));
+  assert.deepEqual(longRestored,longProgress);
+  const draft=directionDraft({...calculateResult(longRestored.answers),baseline:longRestored.baseline,action:longRestored.action,checkin:longRestored.checkin});
+  assert.ok(draft.includes('過生活底線：'+longText));
+  assert.ok(draft.includes('第一週行動：'+longText));
+  assert.ok(draft.includes('完成條件與回顧：'+longText));
 });
 test('module and page sources contain no network primitives or HTTP URLs',()=>{
   const root=new URL('../../modules/newbie-village/',import.meta.url);
