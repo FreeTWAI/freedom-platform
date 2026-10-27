@@ -98,7 +98,7 @@ runtime 測試涵蓋原子匯入、雜湊去重、私有店／跨店／跨社群
 1. 核對預設分支、PR head SHA、既有工作與授權。Jev 先檢查本次來源及測試；`changes` 只看未提交變更，已提交的 PR 需提供實際 diff 或限定來源範圍。審查報告記錄範圍與 SHA，不把工具啟動或低信心結果列為通過。
 2. 逐項覆核 Jev 發現；另檢查 SQL、MD、權限、付款重送及庫存競爭。若指出測試不足，先补重現測試，保留修正前失敗與修正後通過的證據。Jev 不代替實跑測試或操作者權限。
 3. 型別／建置、交易與舊版回歸、先 build 後的瀏覽器流程、Worker、契約及 inventory 通過後推送。GitHub CI 必須對應最新 head；`action_required` 不是通過，不能跳過受保護分支或使用 admin bypass。由有合併權的人依 repo 規則合併，保存 merged SHA。
-4. 有正式發布授權與部署權限的維護者，使用私有環境 overlay 與既有發布 helper。repo 的全零 Hyperdrive template 不可直接部署；不要索取或提交秘密。先 staging、後正式；逐一核對環境／資料庫、備份與回復方式。
+4. 有正式發布授權與部署權限的維護者，使用私有環境 overlay 與既有發布 helper。repo 的全零 Hyperdrive template 不可直接部署；不要索取或提交秘密。先 staging、後正式；逐一核對環境／資料庫與回復方式。每日備份獨立執行，不是發布前提。
 5. 在相應環境依序套用 `055_agent_shops.sql`、`056_commerce_distribution.sql` 並核對執行結果及 runtime 權限，再發布對應程式。觸發函式沿用 PostgreSQL 預設的 PUBLIC EXECUTE，不在 migration 裡改 OWNER 或另做 GRANT。這是新增資料表，不應為回退刪除已產生的商店／交易資料；回退策略須保留新資料，先停接新單，再由維護者確認相容版本及未完成訂單處置。
 6. staging 驗證下載 MD、預覽不寫入、確認歸檔、私有店 404、跨店拒絕、兩筆付款分開及出貨登記；核對健康端點與 release SHA。通過後才按同樣程序發布正式，讀回網址與實際頁面。正式交易另需每店金流及個資交付驗收，不能拿合成付款當銀行證明。
 
