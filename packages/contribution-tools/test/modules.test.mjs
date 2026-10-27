@@ -63,10 +63,15 @@ test('catalog and ownership reflect unstaged tracked deletions', async t => {
 });
 
 test('module-check reports actual unmapped source and keeps its verification scope explicit', async t => {
+  const warning = t.mock.method(console, 'warn', () => {});
   const f = await fixture(t);
   await put(f.root, 'apps/portal-web/src/Orphan.tsx', 'export const fixture = true;\n');
   const report = await checkModules(f.root);
-  assert.equal(report.status, 'failed');
+  assert.equal(report.status, 'passed');
+  assert.deepEqual(JSON.parse(warning.mock.calls[0].arguments[0]), { severity: 'warning', code: 'surface_unmapped',
+    unknown_paths: ['apps/portal-web/src/Orphan.tsx'] });
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(report.warnings, [{ code: 'surface_unmapped', path: 'apps/portal-web/src/Orphan.tsx' }]);
   assert.equal(report.coverage_kind, 'descriptor-and-source-ownership');
   assert.deepEqual(report.unknown_paths, ['apps/portal-web/src/Orphan.tsx']);
   assert(report.not_checked.includes('imports'));
@@ -180,12 +185,12 @@ test('catalog rejects invalid, duplicate or symlinked descriptor data without lo
 
 test('catalog applies the CI bound to implicit descriptor ownership without double-counting covered paths', async t => {
   const f = await fixture(t);
-  const paths = Array.from({ length: 64 }, (_, index) => `apps/portal-web/src/feature-${index}.ts`);
+  const paths = Array.from({ length: 256 }, (_, index) => `apps/portal-web/src/feature-${index}.ts`);
   await writeDescriptor(f.root, 'bounded', { owned_paths: paths });
   await assert.rejects(readModuleCatalog(f.root));
   paths[0] = 'packages/bounded/**';
   await writeDescriptor(f.root, 'bounded', { owned_paths: paths });
-  assert.equal((await listModules(f.root, { moduleId: 'bounded' })).modules[0].owned_paths.length, 64);
+  assert.equal((await listModules(f.root, { moduleId: 'bounded' })).modules[0].owned_paths.length, 256);
 });
 
 test('module CLI accepts only the documented flags and does not mutate on malformed input', async t => {

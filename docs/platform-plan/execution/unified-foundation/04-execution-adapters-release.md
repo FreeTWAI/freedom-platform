@@ -85,7 +85,7 @@ rotation 先公布可信新 public key，再換 signer，舊 key 在明確窗口
 
 公開 spec/fixture 只提供 private helper 的輸入輸出契約及測試結果欄位；grok 不可讀含秘密的實際 release 目錄。operators 需另跑其真實相容測試並提供 redacted evidence。若缺此證據，新命名不得進正式 migrations。
 
-Inventory 從每 PR 移到 release/archive 需獨立 PR：先有可信 impact mapping、未知範圍 full fallback、release full inventory 與還原檢查，才調整現行 push 規則。在此之前依舊重產並驗證。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 
 ## 既有 shell 與 route 拆責任
 

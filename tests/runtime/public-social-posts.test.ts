@@ -306,7 +306,7 @@ test('a registration-disabled public runtime keeps shared posts readable without
   assert.equal(json.status, 200); assert.equal((await json.json()).post.note, post.note);
   const page = await closed.request(`${closedOrigin}/posts/${post.post_id}`), html = await page.text();
   assert.equal(page.status, 200); assert.equal(page.headers.get('cache-control'), 'no-store');
-  assert.ok(html.includes('登入看更多與留言'));
+  assert.ok(html.includes(`data-post-login="${post.post_id}" href="/?post_return=${post.post_id}#account">登入回原貼文交流</a>`));
   assert.equal(html.includes('data-post-join'), false); assert.equal(html.includes('建立帳號'), false);
   const registration = await closed.request(`${closedOrigin}/api/v1/auth/register`, {method: 'POST',
     headers: {Origin: closedOrigin, 'Content-Type': 'application/json'},

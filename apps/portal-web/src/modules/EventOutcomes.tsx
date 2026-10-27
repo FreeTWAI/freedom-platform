@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../api';
 
 type Ref={kind:'work'|'skill_book'|'squad_outcome';id:string;title?:string;path?:string;author?:{user_id:string|null;display_name:string}|null;unavailable?:boolean;audience?:string};
@@ -12,18 +12,32 @@ export function EventOutcomes({client,eventId,onBindingChange,onChanged}:{client
  const [editing,setEditing]=useState<Outcome|null>(null),[title,setTitle]=useState(''),[summary,setSummary]=useState('');
  const [audience,setAudience]=useState<Outcome['audience']>('community'),[selected,setSelected]=useState<Ref[]>([]),[consent,setConsent]=useState(false);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const [readError,setReadError]=useState(''),[loading,setLoading]=useState(false);
+ const mounted=useRef(false),readTicket=useRef(0);
+ const session=client.sessionGeneration;
+ const scope=useRef({client,eventId,session});scope.current={client,eventId,session};
  const load=useCallback(async()=>{
-  const [published,history,available]=await Promise.all([
-   client.get<{items:Outcome[]}>(`/event-highlights/${eventId}/outcomes`),
-   client.get<{items:Outcome[]}>(`/event-highlights/${eventId}/outcomes/own`),
-   client.get<{items:Ref[]}>(`/event-highlights/${eventId}/outcome-references`),
-  ]);
-  setItems(published.items);setOwn(history.items);setSources(available.items);
- },[client,eventId]);
+  const inScope=()=>mounted.current&&scope.current.client===client&&scope.current.eventId===eventId&&scope.current.session===session&&client.sessionGeneration===session;
+  if(!inScope())return false;
+  const ticket=++readTicket.current;
+  const current=()=>inScope()&&ticket===readTicket.current;
+  setLoading(true);
+  try{
+   const [published,history,available]=await Promise.all([
+    client.get<{items:Outcome[]}>(`/event-highlights/${eventId}/outcomes`),
+    client.get<{items:Outcome[]}>(`/event-highlights/${eventId}/outcomes/own`),
+    client.get<{items:Ref[]}>(`/event-highlights/${eventId}/outcome-references`),
+   ]);
+   if(!current())return false;
+   setItems(published.items);setOwn(history.items);setSources(available.items);setReadError('');
+   return true;
+  }catch(reason){if(current())setReadError(message(reason));return false;}
+  finally{if(current())setLoading(false);}
+ },[client,eventId,session]);
  useEffect(()=>{
-  let active=true;setItems([]);setOwn([]);setSources([]);setEditing(null);onBindingChange(null);
-  void load().catch(reason=>{if(active)setError(message(reason));});
-  return()=>{active=false;onBindingChange(null);};
+  mounted.current=true;setItems([]);setOwn([]);setSources([]);setEditing(null);setReadError('');onBindingChange(null);
+  void load();
+  return()=>{mounted.current=false;readTicket.current++;onBindingChange(null);};
  },[load,onBindingChange]);
  function edit(item:Outcome){
   setEditing(item);setTitle(item.title);setSummary(item.summary);setAudience(item.audience);
@@ -40,7 +54,7 @@ export function EventOutcomes({client,eventId,onBindingChange,onChanged}:{client
   try{
    const value=await client.post<Outcome>(editing?`/event-outcomes/${editing.outcome_id}/update`:`/event-highlights/${eventId}/outcomes`,{title,summary,audience,refs:selected.map(({kind,id})=>({kind,id}))},{idempotencyKey:crypto.randomUUID(),...(editing?{ifMatch:editing.aggregate_version}:{})});
    edit(value);setNotice('摘要草稿已儲存。下方補上媒體時會綁定這份草稿，明確發布前只有你可閱讀。');
-   await load();await onChanged();
+   if(await load())await onChanged();
   }catch(reason){setError(message(reason));}finally{setBusy(false);}
  }
  async function mutate(item:Outcome,action:'publish'|'withdraw'){
@@ -50,7 +64,7 @@ export function EventOutcomes({client,eventId,onBindingChange,onChanged}:{client
    const value=await client.post<Outcome>(`/event-outcomes/${item.outcome_id}/${action}`,action==='publish'?{consent_to_share:true}:{},{idempotencyKey:crypto.randomUUID(),ifMatch:item.aggregate_version});
    if(editing?.outcome_id===item.outcome_id)edit(value);
    setConsent(false);setNotice(action==='publish'?'活動精華已依所選範圍發布。':'精華已撤下；綁定媒體與成果反向連結也停止顯示。');
-   await load();await onChanged();
+   if(await load())await onChanged();
   }catch(reason){
    setError(message(reason));
    if(reason instanceof ApiError&&reason.status===412)setNotice('版本已變更。目前輸入保留；重新載入原紀錄會明確取代這些未儲存內容。');
@@ -59,8 +73,8 @@ export function EventOutcomes({client,eventId,onBindingChange,onChanged}:{client
  return <section className="card stack outcome-section" aria-label="活動精華與成果">
   <h2>活動精華與成果</h2>
   <p className="field-hint">只整理自己有權分享的摘要與媒體。不可擷取私人對話、私有 Result；活動連結不代表出席、驗收或 XP。來源撤下或權限變更時，相關摘要、媒體與反向連結會停止顯示。</p>
-  {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
-  <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void load().catch(reason=>setError(message(reason)))}>重新載入精華與來源</button>
+  {readError&&<p role="alert">{readError}</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  <button type="button" className="btn btn-secondary btn-small" disabled={busy||loading} aria-busy={loading} onClick={()=>void load()}>{loading?'正在載入精華與來源…':'重新載入精華與來源'}</button>
   {items.map(item=><article key={item.outcome_id} className="stack">
    <h3>{item.title}</h3><p>作者：{item.author.display_name}</p><p className="multiline-text">{item.summary}</p>
    {item.refs.length>0&&<ul>{item.refs.map(ref=><li key={key(ref)}>

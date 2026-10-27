@@ -95,6 +95,10 @@ async function expectQuietCompanion(page: Page, blocked = false) {
   await expect(actor(page)).toBeVisible();
   if(blocked) {
     const controls=widget(page).locator('.page-spirit-launcher,.page-spirit-entry-actions button');
+    // Foreign blocking surfaces revoke the helper bridge, not the original guide controls.
+    await expect(widget(page).getByRole('button',{name:'問路助手',exact:true})).toHaveCount(0);
+    await expect(widget(page).getByRole('button',{name:'問本頁',exact:true})).toBeDisabled();
+    await expect(widget(page).getByRole('button',{name:'帶我看',exact:true})).toBeDisabled();
     await expect(controls).toHaveCount(3);
     for(const button of await controls.all()) {
       await expect(button).toBeDisabled();
@@ -764,7 +768,7 @@ test('gallery loads one selected view and closes cleanly with Escape without cro
   await gallery.getByRole('combobox',{name:'角色',exact:true}).selectOption('skills');await expect(gallery.locator('img')).toHaveAttribute('src',SPIRIT_CHARACTERS.skills.views[0]);
   await page.keyboard.press('Escape');await expect(gallery).toHaveCount(0);
   await expect(panel(page).getByRole('button',{name:'角色六視圖',exact:true})).toBeFocused();
-  await closeSpirit(page);await navigate(page,'私人工作與 AI');await expect(widget(page)).toHaveCount(0);
+  await closeSpirit(page);await navigate(page,'私人 AI 工作室');await expect(widget(page)).toHaveCount(0);
 });
 
 test('default-off or mismatched release never imports the engine or requests art; late responses cannot remount after theme change',async({page})=>{

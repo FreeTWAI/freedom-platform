@@ -60,14 +60,15 @@ for(const language of sharingLanguages)test(`${language.id}: browser-selected co
     if(language.id==='en'){
       await emoji.click();
       await dialog.getByRole('region',{name:'emoji',exact:true}).getByRole('button',{name:'Insert 🎉',exact:true}).click();
-      await expect(source).toHaveValue(`${draft}🎉`);await expect(emoji).toBeFocused();
+      await expect(source).toHaveValue(`${draft}🎉`);await expect(source).toBeFocused();
+      expect(await source.evaluate((input:HTMLTextAreaElement)=>[input.selectionStart,input.selectionEnd])).toEqual([draft.length+2,draft.length+2]);
       await source.fill(draft);
     }
     await mention.click();
     const picker=dialog.getByRole('region',{name:labels.mention,exact:true}),search=picker.getByRole('searchbox',{name:labels.search,exact:true});
     await expect(search).toBeVisible();await search.press('Escape');
     await expect(picker).toHaveCount(0);await expect(dialog).toBeVisible();
-    // Both existing text pickers return to their shared emoji toolbar anchor.
+    // Dismissing the mention picker returns to its shared emoji toolbar anchor.
     await expect(emoji).toBeFocused();await expect(source).toHaveValue(draft);
     await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeEnabled();
     await expect(trigger).toHaveAttribute('aria-expanded','false');

@@ -77,6 +77,13 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   // current cart may belong to a newer purchase, so recovery must retain it.
   const submittedCart = useRef(intent === null ? cart : null);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [acceptedPolicies, setAcceptedPolicies] = useState<string | null>(null);
+  const [policiesUpdated, setPoliciesUpdated] = useState(false);
+  const policyCheckbox = useRef<HTMLInputElement>(null);
+  const policyNotice = useRef<HTMLParagraphElement>(null);
+  const policyFocusPending = useRef(false);
+  const policySet = JSON.stringify(quote?.required_consents.map(({policy_kind, policy_version_id}) => ({policy_kind, policy_version_id})) ?? []);
+  const policiesAccepted = !quote?.required_consents.length || acceptedPolicies === policySet;
   const [method, setMethod] = useState<ShippingMethodRef | ''>('');
   const [contactName, setContactName] = useState('');
   const [email, setEmail] = useState('');
@@ -116,6 +123,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
           operation.current?.controller.abort(); operation.current = null; inFlight.current = false;
           freezeRequest.current = null;
           setIntent(null); setCheckout(null); setQuote(null); setPayment(''); setMethod('');
+          setAcceptedPolicies(null); setPoliciesUpdated(false);
           setContactName(''); setEmail(''); setMobile(''); setPostal(''); setAddress('');
           setFieldErrors({}); setDeliveryFailure([]); setError(''); setFreezeUnknown(false); setBusy(false); setQuoteBusy(false);
           setIdentityNotice(true); setPreviousOrder(value => value || result.previousOrder);
@@ -158,6 +166,12 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     const target = Object.keys(fieldErrors).map(path => deliveryFieldTargets[path]).find(Boolean);
     if (target) document.getElementById(target)?.focus();
   }, [busy, identityBlocked, freezeUnknown, fieldErrors]);
+  useEffect(() => {
+    if (policyFocusPending.current && policiesUpdated && quote && !quoteBusy && !busy && !identityBlocked) {
+      const target = quote.required_consents.length ? policyCheckbox.current : policyNotice.current;
+      if (target) {policyFocusPending.current = false; target.focus();}
+    }
+  }, [policiesUpdated, quote, quoteBusy, busy, identityBlocked]);
   useEffect(() => {container.setAttribute('aria-busy', busy || quoteBusy || enhanced && identityChecking ? 'true' : 'false');}, [busy, quoteBusy, container, enhanced, identityChecking]);
   useEffect(() => {document.title = `結帳｜${name}｜自由工坊`;}, [name]);
   useEffect(() => {
@@ -181,6 +195,8 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         if (result.lines.length !== lines.length || result.lines.some((line, index) => line.sku !== lines[index].sku || line.quantity !== lines[index].quantity)) {
           setQuote(null); setError('報價與購物車不符，請重新讀取。'); return;
         }
+        const nextPolicies = JSON.stringify(result.required_consents.map(({policy_kind, policy_version_id}) => ({policy_kind, policy_version_id})));
+        setAcceptedPolicies(current => current === nextPolicies ? current : null);
         setQuote(result); setDeliveryFailure([]);
       }).catch(() => {if (active) {setQuote(null); setError('無法取得最新報價，請稍後重試。');}})
         .finally(() => {if (active) setQuoteBusy(false);});
@@ -189,7 +205,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
   }, [slug, cart, method, postal, refresh, Boolean(checkout), Boolean(intent), identityBlocked, identityGeneration]);
 
   async function freeze() {
-    if (inFlight.current || (!freezeRequest.current && (!quote || quoteBusy))) return;
+    if (inFlight.current || (!freezeRequest.current && (!quote || quoteBusy || !policiesAccepted))) return;
     const observed = enhanced ? await checkIdentity() : null;
     if (enhanced && (!observed || observed.changed) || inFlight.current) return;
     const request: Operation = {controller: new AbortController(), identity: observed?.identity, generation: observed?.generation ?? 0};
@@ -200,7 +216,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       body: {publication_revision: quote!.publication_revision, lines,
         contact: {name: contactName.trim(), email: email.trim(), phone: mobile.trim()},
         delivery: {method, name: contactName.trim(), mobile: mobile.trim(), ...((method === 'home' || method === 'self_ship') ? {postal_code: postal.trim(), address: address.trim()} : {})},
-        invoice: null, consents: []},
+        invoice: null, consents: quote!.required_consents.map(({policy_kind, policy_version_id}) => ({policy_kind, policy_version_id}))},
     };
     try {
       const {response, data} = await post(slug, 'checkouts', freezeRequest.current.body, freezeRequest.current.key, request.identity, request.controller.signal);
@@ -208,13 +224,17 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
       if (CheckoutErrorSchema.safeParse(data).data?.code === 'checkout_identity_changed') {identityRejected(); return;}
       const parsed = CheckoutResponseSchema.safeParse(data);
       if (response.ok && parsed.success) {
-        setCheckout(parsed.data); setQuoteBusy(false); setFreezeUnknown(false); freezeRequest.current = null;
+        setCheckout(parsed.data); setQuoteBusy(false); setPoliciesUpdated(false); setFreezeUnknown(false); freezeRequest.current = null;
         const offered = quote?.payment_options.find(option => option.available && parsed.data.terms.payment_methods.includes(option.method));
         setPayment(offered?.method ?? '');
         heading.current?.focus();
       } else {
         setError(errorCopy(data));
         const problem = CheckoutErrorSchema.safeParse(data);
+        if (problem.success && problem.data.code === 'consents_mismatch') {
+          policyFocusPending.current = true;
+          setAcceptedPolicies(null); setPoliciesUpdated(true); setQuoteBusy(true); setRefresh(value => value + 1); setError('');
+        }
         if (enhanced && problem.success && problem.data.lines) {setDeliveryFailure(problem.data.lines); setRefresh(value => value + 1);}
         if (problem.success && problem.data.fields) {
           const copy:Record<string,string>={required:'請填寫此欄位。',format:'請檢查此欄位的格式。',too_long:'此欄位內容太長。',unknown_postal_code:'請填寫可辨識的臺灣郵遞區號。'};
@@ -285,6 +305,7 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
     {enhanced && identityChecking && identityBlocked && <p role="status">正在確認登入狀態…</p>}
     {enhanced && identityError && <div><p role="alert">{identityError}</p><button type="button" className="shop-button shop-button-secondary" onClick={() => void checkIdentity()}>重新確認登入狀態</button></div>}
     {error && <p role="alert" className="shop-order-alert">{error}</p>}
+    {policiesUpdated && quote && !quoteBusy && <p id="checkout-policy-update" ref={policyNotice} tabIndex={-1} role="alert" className="shop-order-alert">{quote.required_consents.length ? '商店政策剛更新，請重新閱讀並勾選同意。' : '商店政策剛更新，目前不需勾選同意，請確認訂單內容後再送出。'}</p>}
     {intent ? <section className="shop-order-section" aria-labelledby="shop-order-retry-heading">
       <h2 id="shop-order-retry-heading">確認下單結果</h2>
       <p>上次下單結果尚未確認。重試會沿用同一筆訂單。</p>
@@ -343,9 +364,13 @@ function CheckoutPage({slug, name, container}: {slug: string; name: string; cont
         {quote?.lines.some(line => line.state === 'insufficient' || line.state === 'unavailable') && <p>商品庫存已改變，請回購物車調整。</p>}
         {paymentOptions.map(option => <p key={option.method}>{methodNames[option.method]}：{option.reason ? unavailable[option.reason] : '可使用'}</p>)}
         {paymentOptions.some(option => option.reason === 'member_required') && <div className="shop-order-actions"><a href={container.dataset.buyerJourney === 'true' ? storefrontLoginHref(`/shops/${slug}/checkout`) : '/'}>登入會員</a></div>}
+        {Boolean(quote?.required_consents.length) && <label className="shop-checkout-choice">
+          <input ref={policyCheckbox} type="checkbox" required checked={policiesAccepted} aria-describedby={policiesUpdated ? 'checkout-policy-update' : undefined} onChange={event => {setAcceptedPolicies(event.target.checked ? policySet : null); if (event.target.checked) setPoliciesUpdated(false);}} />
+          <span>我已閱讀並同意本店的{quote!.required_consents.map((policy, index) => <span key={policy.policy_kind}>{index > 0 && '、'}<a href={policy.url} target="_blank" rel="noopener noreferrer">{policy.label}</a></span>)}</span>
+        </label>}
       </fieldset>
       <div className="shop-order-actions">
-        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
+        <button className="shop-button shop-pay-primary" type={freezeUnknown ? 'button' : 'submit'} disabled={busy || identityBlocked || (!freezeUnknown && (!quoteReady || !policiesAccepted || !paymentOptions.some(option => option.available)))} onClick={freezeUnknown ? () => void freeze() : undefined}>{busy ? '正在核對…' : freezeUnknown ? '重試同一筆結帳' : '核對訂單'}</button>
         {!freezeUnknown && <button className="shop-button shop-button-secondary" type="button" disabled={busy || quoteBusy} onClick={() => setRefresh(value => value + 1)}>更新報價</button>}
       </div>
     </form>}

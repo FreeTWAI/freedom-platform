@@ -150,6 +150,24 @@ notification SQL. The frozen publication supplies only store name/slug and the
 order supplies its display number and immutable buyer principal; the email-based
 customer/member label is not a notification identity.
 
+## 買家確認商店政策
+
+安裝 `storePoliciesOptions(runtime)` 時，政策 port 只讀目前 publication 的
+`commerce_publication_policy_refs`，以相同 tenant／instance／kind／version 的不可變
+政策版本核對正文及 digest。只有正文非空的版本列入要求；草稿、歷史與其他租戶不列入。
+consent kind 為 `storefront.shipping`、`storefront.returns`、`storefront.privacy`、
+`storefront.terms`，`policy_version_id` 就是該 publication ref 的 `version_id`。
+旗標關閉不安裝 port、不讀政策表；沒有 published refs 時要求仍是空陣列。
+
+公開 cart quote 必回 `required_consents`（無要求時為 `[]`），每項有 `policy_kind`、
+`policy_version_id`、`POLICY_LABELS` 的繁中 `label` 與 `/shops/<slug>/policies/<kind>`
+公開 `url`。結帳頁以單一必填勾選連結所有政策，逐項在新分頁開啟；未勾選不能核對訂單。
+freeze 只送當次 quote 的 kind／version 集合。`consents_mismatch` 重新報價、清除同意，
+顯示「商店政策剛更新，請重新閱讀並勾選同意。」並聚焦勾選欄位。
+placement 照舊重算，差異沿用 `terms_changed`，不自動建立新訂單或放寬條款。
+已同意的版本保留在 checkout／order terms；目前賣家／管理員訂單 DTO 未帶出
+consents，後續可擴充既有讀模型與顯示，這次不加 migration。
+
 ## Canonical terms
 
 `freedom.checkout-terms/v1` contains current publication identity/revision,

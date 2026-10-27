@@ -127,8 +127,9 @@ test('provider setup HTTP, activation, retained credentials, entry routes and se
     }
     const route=(await h.pool.query('SELECT route_key FROM commerce_entry_routes WHERE target_id=$1',[a.account_id])).rows[0].route_key;assert.match(route,/^[0-9a-hjkmnp-tv-z]{26}$/);
     const resolved=await x.tx(q=>resolveProviderAccountRoute(q,route));assert.deepEqual(resolved,{tenant_id:s.tenantId,instance_id:s.instanceId,account_id:a.account_id});
-    const refTarget=randomUUID(),entropy=[Buffer.from('0000000000000000000000000000018d','hex'),randomBytes(16)];
+    const refTarget=randomUUID(),entropy=[Buffer.from('0000000000000000000000000000018d','hex'),Buffer.alloc(16)];
     await machine(q=>createProviderAccountRoute(q,{tenantId:s.tenantId,instanceId:s.instanceId,accountId:refTarget},()=>entropy.shift()!));assert.equal(entropy.length,0);
+    assert.equal((await h.pool.query('SELECT route_key FROM commerce_entry_routes WHERE target_id=$1',[refTarget])).rows[0].route_key,'0'.repeat(26));
     const other=await x.store();assert.equal((await call('POST',root,{...input,merchant_id:'1234569',fresh_auth_verification_id:await fresh('commerce.provider_account.write',other.owner,other.tenantId)})).data.code,'fresh_auth_required');assert.equal((await call('GET',root,undefined,undefined,randomUUID(),other.owner)).status,404);
     await x.tx(async q=>{await bindTenantScope(q,other.tenantId);assert.deepEqual(await listUsableCredentialVersions(q,{accountId:a.account_id,purpose:'payment'}),[]);await assert.rejects(loadServiceCredentials(q,next,{accountId:a.account_id,purpose:'payment'}),{code:'provider_account_not_found'});});
     for(const role of ['admin','operator','viewer'] as const){
