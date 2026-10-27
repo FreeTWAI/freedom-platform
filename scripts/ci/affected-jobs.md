@@ -53,7 +53,7 @@ selector-level negatives too. Mandatory source-integrity failure still rejects
 the aggregate; ownership warnings are not mislabeled as that failure.
 
 The older profiles below retain their own event and path limits. In particular,
-the statements about full push selection below exclude this delivery profile.
+the statements about full push selection below exclude this delivery profile and bounded CI tools.
 
 The selector and aggregate are loaded from the installed workflow source, not
 from candidate configuration. This candidate adds an `affected` mode for the
@@ -209,6 +209,15 @@ media-boundary parser checks and mandatory ownership validation remain separate.
 
 
 ## Bounded CI tools coverage
+
+`ci_tools` supports PR integrations and direct-first-parent main pushes. Pushes
+require `GITHUB_REF=refs/heads/main` from the workflow event, head equal to the
+checked-out candidate, and candidate first parent equal to event.before. Missing
+proof, other refs and multi-commit pushes retain full selection. The workflow
+accepts push events only on main; local invocations are projections, not
+authenticated hosted evidence. Both events use the same clean-checkout, immutable
+tree, descriptor and source guards below. CI tools are proved before delivery
+tooling so selector-only edits do not inherit deployment checks.
 
 `ci_tools` selects no heavy job: mandatory source integrity already runs selector,
 governance and pinned-suite contract tests. `ci_tools_document_inputs` adds the
