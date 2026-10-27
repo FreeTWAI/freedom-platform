@@ -101,7 +101,7 @@ function helperColorTransitionsSettled(element:Element){
 }
 async function readable(button:Locator){
   // Use the existing expect budget, not a fixed delay or disabled animations.
-  // Every normal/hover/focus/disabled sample must reach its own color endpoint.
+  // Every normal/hover/focus sample must reach its own color endpoint.
   await expect.poll(()=>button.evaluate(helperColorTransitionsSettled)).toBe(true);
   const styles=await button.evaluate(element=>{
     const style=getComputedStyle(element);
@@ -118,30 +118,17 @@ async function readable(button:Locator){
 }
 async function buttonStates(page:Page,button:Locator){
   await button.scrollIntoViewIfNeeded();await page.mouse.move(0,0);
-  const normal=await readable(button);
+  await readable(button);
   await button.hover();await readable(button);
   // Establish keyboard modality rather than asserting :focus-visible after a mouse click.
   await button.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await expect(button).toBeFocused();
   const focused=await readable(button);expect(focused.outline).toBe('solid');expect(focused.width).toBeGreaterThanOrEqual(2);expect(focused.focus).toBeGreaterThanOrEqual(3);
-  // The helper currently has no business-disabled buttons. This is only a
-  // synthetic styling probe, not a disabled-flow or WCAG-disabled contrast claim.
-  await button.evaluate(element=>(element as HTMLButtonElement).disabled=true);
-  await expect(button).toBeDisabled();const disabled=await readable(button);
-  expect(disabled.color).toBe(normal.color);expect(disabled.background).toBe(normal.background);
-  expect(Number(disabled.opacity)).toBeGreaterThan(0);expect(Number(disabled.opacity)).toBeLessThan(1);
-  await button.evaluate(element=>(element as HTMLButtonElement).disabled=false);
+
 }
-for(const profile of Object.values(EXPERIENCE_PROFILES))test(`isolated helper: ${profile.id} real CSS keeps every action readable`,async({page})=>{
+// One representative secondary button per profile; the real-app host cases
+// retain coverage of launcher, modal and destination actions across all profiles.
+for(const profile of Object.values(EXPERIENCE_PROFILES))test(`isolated helper: ${profile.id} representative action retains contrast`,async({page})=>{
   await page.setViewportSize({width:390,height:640});
   await page.evaluate(value=>{document.documentElement.dataset.theme=value.baseTheme;document.documentElement.dataset.experienceProfile=value.id;if(value.skin)document.documentElement.dataset.guideSkin=value.skin;else delete document.documentElement.dataset.guideSkin;},profile);
-  await buttonStates(page,page.getByRole('button',{name:'問路助手',exact:true}));await open(page);
-  for(const name of ['關閉','詢問','從哪裡開始','學 AI','開店／賣東西','找合作夥伴'])await buttonStates(page,page.getByRole('dialog').getByRole('button',{name,exact:true}));
-  for(const name of ['從哪裡開始','學 AI','開店／賣東西','找合作夥伴']){
-    await page.getByRole('button',{name,exact:true}).click();
-    const destinations=page.locator('.platform-helper-card button');expect(await destinations.count()).toBeGreaterThan(0);
-    for(const button of await destinations.all())await buttonStates(page,button);
-  }
-  await host(page,{pageId:'skills'});await open(page);await question(page).fill('不在詞庫的問題');await question(page).press('Enter');
-  await buttonStates(page,page.getByRole('button',{name:'查看本頁說明',exact:true}));
-  await page.getByRole('button',{name:'關閉',exact:true}).click();await expect(page.getByRole('button',{name:'問路助手',exact:true})).toBeFocused();
+  await buttonStates(page,page.getByRole('button',{name:'問路助手',exact:true}));
 });

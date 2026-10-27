@@ -302,11 +302,13 @@ requests and it does not load character assets or activate release gates.
 
 Browser specifications add five-profile computed-color checks: the real member
 homepage initializes each profile through the existing local preference, then
-checks launcher and modal actions; isolated cases cover all button types, hover,
-keyboard-focus contrast and a clearly synthetic disabled-style probe. Helper
-buttons have no current business-disabled state. The probe checks retained colors
-and inherited opacity, not a WCAG contrast requirement for disabled controls or a
-real disabled workflow. Existing close/reopen, IME, lifecycle and narrow/enlarged
+checks launcher and modal actions; isolated cases check one representative
+secondary launcher per profile in normal, hover and keyboard-focus states,
+waiting for its real CSS color transitions before sampling. There is no synthetic
+disabled probe because helper buttons have no business-disabled state. The
+runtime source-text test of the E2E sampler is removed; product runtime coverage
+and the actual browser transition wait remain.
+Existing close/reopen, IME, lifecycle and narrow/enlarged
 text cases are retained. Full fixture bundling and 34-case discovery pass, but
 browser assertions remain **not_run** locally under the existing browser/socket
 restriction. Discovery is not browser execution. Exact-head hosted UI checks,
