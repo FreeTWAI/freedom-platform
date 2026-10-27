@@ -21,13 +21,13 @@
   mock 驗證 required-name/錯誤 target/缺少 approval 的拒絕行為，不能修改舊 receipt
   或把舊 helper 的檢查關掉。
 - release approval 要固定 merged source SHA、artifact、實際 schema ledger、每個
-  target 的 Worker/origin、金鑰新增或輪替範圍、staging 驗收與 production 放行條件，
-  以及 backup/pin transition。此 PR 沒有執行這些 provider 或備份操作。
+  target 的 Worker/origin、金鑰新增或輪替範圍、staging 驗收與 production 放行條件。
+  每日備份獨立執行，不是發布前提。此 PR 沒有執行這些 provider 或備份操作。
 
 ## 給已審查 operator helper 的設定步驟
 
-1. 按核准的 target 與既有備份程序完成發布前檢查；確認現行 Worker、來源 SHA、
-   schema ledger 和 backup pin 相符。不得用缺 Worker 時自動建立的分支代替目標核對。
+1. 按核准的 target 與既有發布程序完成發布前檢查；確認現行 Worker、來源 SHA 與
+   schema ledger 相符。不得用缺 Worker 時自動建立的分支代替目標核對。
 2. helper 從既有私有 credential source 在程序內取得憑證，不輸出內容。為本次 target
    在記憶體產生 `randomBytes(32).toString('base64url')`，確認解碼長度 32、重新編碼
    完全相同；第二個環境獨立產生，不複製第一個值。值只經非 TTY stdin 傳給鎖定版本
@@ -53,7 +53,7 @@
 5. 依新的 release plan 發布相同的已審查 artifact 到 staging，完成下面的驗收。需要
    production 放行時，取得該 exact release/configuration 的明確核准後，對 `next`
    以自己的金鑰重做同一流程；不能把 staging 的成功或 Round 10 授權當 production-go。
-   每個環境完成後按新計畫核對 actual release/schema 與 backup pins，保留失敗狀態。
+   每個環境完成後按新計畫核對 actual release/schema，保留失敗狀態。
 
 以上是 future helper 的操作介面與要求，並非聲稱 repo 已提供可執行的 provision
 helper。versioned `deploy/cloudflare/preflight.mjs` 仍是唯讀工具；本文件不增加其寫入權。

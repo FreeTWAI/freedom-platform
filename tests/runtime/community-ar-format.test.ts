@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {withArCaptureFailureAttachment} from '../fixtures/community-ar/capture-diagnostics.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -84,4 +85,19 @@ test('AR-FMT-09 original effect presets use bounded three-dimensional lit meshes
   }
   const projection=previewProjection(1.6),matrix=multiply4(projection,transform4([0,0,-2.4],[0,.4,0],[1,1,1]));
   assert.ok(matrix.every(Number.isFinite));assert.notEqual(matrix[3],0);assert.equal(projection[11],-1);
+});
+
+test('AR-DIAG-05 attachment is failure-only and never replaces original assertion identity',async()=>{
+  const original=new Error('original assertion'),bodies:string[]=[];let reads=0;
+  await withArCaptureFailureAttachment(async()=>{},async()=>{reads++;return {};},async body=>{bodies.push(body);});assert.equal(reads,0);
+  await assert.rejects(withArCaptureFailureAttachment(async()=>{throw original;},async()=>{reads++;return {version:1,rows:[]};},async body=>{bodies.push(body);}),e=>e===original);
+  assert.equal(reads,1);assert.deepEqual(JSON.parse(bodies[0]),{version:1,rows:[]});
+  await assert.rejects(withArCaptureFailureAttachment(async()=>{throw original;},async()=>{throw new Error('secret');},async body=>{bodies.push(body);throw new Error('attachment failed');}),e=>e===original);
+  assert.deepEqual(JSON.parse(bodies[1]),{version:1,unavailable:true});
+});
+test('AR-DIAG-06 unavailable browser reads or attachment cannot wait indefinitely',async()=>{
+  const original={failure:true};let attached='';
+  await assert.rejects(withArCaptureFailureAttachment(async()=>{throw original;},()=>new Promise(()=>{}),async body=>{attached=body;},5),e=>e===original);
+  assert.deepEqual(JSON.parse(attached),{version:1,unavailable:true});
+  await assert.rejects(withArCaptureFailureAttachment(async()=>{throw original;},async()=>({version:1}),()=>new Promise(()=>{}),5),e=>e===original);
 });

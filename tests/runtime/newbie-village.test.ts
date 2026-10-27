@@ -78,6 +78,15 @@ test('local progress rejects malformed storage and preserves valid answers, draf
   const p={...freshProgress(),answers,done:['framework','quiz','card','guild','checkin'] as const,baseline:'生活底線',action:'小實驗',checkin:'證據'};
   const restored=parseProgress(JSON.stringify(p));assert.deepEqual(restored,p);assert.equal(badges(restored).length,5);
   assert.deepEqual(parseProgress('{"version":1,"done":["quiz","unknown"],"answers":[[999]]}').done,[]);
+  // Preserve the useful long-draft round trip without a profile/login/width matrix.
+  const longText=('合成草稿 🌱\nhttps://example.invalid/'+'a'.repeat(180)+'\n').repeat(20).slice(0,4000);
+  const longProgress={...p,baseline:longText,action:longText,checkin:longText};
+  const longRestored=parseProgress(JSON.stringify(longProgress));
+  assert.deepEqual(longRestored,longProgress);
+  const draft=directionDraft({...calculateResult(longRestored.answers),baseline:longRestored.baseline,action:longRestored.action,checkin:longRestored.checkin});
+  assert.ok(draft.includes('過生活底線：'+longText));
+  assert.ok(draft.includes('第一週行動：'+longText));
+  assert.ok(draft.includes('完成條件與回顧：'+longText));
 });
 test('module and page sources contain no network primitives or HTTP URLs',()=>{
   const root=new URL('../../modules/newbie-village/',import.meta.url);
@@ -130,4 +139,40 @@ test('direction draft omits secondary guild for the single-guild content career'
   const draft=directionDraft({...calculateResult([]),baseline:'',action:'',checkin:''});
   assert.ok(!draft.includes('副公會：'));
   assert.deepEqual(draft.split('\n').slice(-2),['主公會：成長與行銷公會（https://freetwai.com/#guilds/guild_marketing）','公會僅供建議，由本人另行選擇。']);
+});
+
+// Source/token contract only; actual cascade and interaction are covered in E2E.
+test('newbie plain and secondary actions own a paired surface without overriding semantic variants',()=>{
+  const css=readFileSync(new URL('../../apps/portal-web/src/modules/NewbieVillage.css',import.meta.url),'utf8');
+  const selector='.newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost)';
+  const rule=css.slice(css.indexOf(selector)).match(/^[^{]+\{([^}]+)\}/)?.[1];
+  assert.ok(css.includes(selector),'scope must include plain quiz actions and exclude semantic variants');
+  assert.ok(rule);assert.match(rule,/color:\s*var\(--ink\)/);assert.match(rule,/background:\s*var\(--bg-elev\)/);
+  assert.match(rule,/border:\s*1px solid var\(--line\)/);
+  assert.ok(css.includes(selector+':hover:not(:disabled)'));
+  assert.ok(css.includes(selector+':focus-visible'));
+  assert.match(css,/outline:2px solid var\(--focus\)/);
+  const source=readFileSync(new URL('../../apps/portal-web/src/modules/NewbieVillage.tsx',import.meta.url),'utf8');
+  const classes=[...source.matchAll(/className="(btn[^"]*)"/g)].map(m=>m[1]);
+  assert.equal(classes.length,13);
+  assert.ok(classes.includes('btn btn-small'),'plain next/result action must be covered');
+  assert.ok(classes.every(value=>value==='btn btn-small'||value==='btn btn-secondary btn-small'));
+});
+test('all newbie appearance palettes pair readable text and focus with the actual surface tokens',async()=>{
+  const {EXPERIENCE_PROFILES}=await import('../../apps/portal-web/src/experience-profiles.js');
+  function tokens(file:string){
+    const css=readFileSync(new URL(`../../apps/portal-web/src/${file}`,import.meta.url),'utf8');
+    return Object.fromEntries([...css.matchAll(/(--(?:ink|bg-elev|focus))\s*:\s*(#[\da-fA-F]+)/g)].map(match=>[match[1],match[2]]));
+  }
+  function luminance(hex:string){
+    const expanded=hex.length===4?'#'+[...hex.slice(1)].map(c=>c+c).join(''):hex;
+    const rgb=[1,3,5].map(i=>parseInt(expanded.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+  }
+  function ratio(a:string,b:string){const values=[luminance(a),luminance(b)].sort((x,y)=>x-y);return (values[1]+.05)/(values[0]+.05);}
+  for(const profile of Object.values(EXPERIENCE_PROFILES)){
+    const palette={...tokens('styles.css'),...tokens('rpg-theme.css'),...(profile.baseTheme!=='dark'?tokens('light-theme.css'):{}),...(profile.baseTheme==='versefolk'?tokens('versefolk-theme.css'):{}),...(profile.skin==='dragon'?tokens('dragon-theme.css'):{})};
+    assert.ok(ratio(palette['--ink'],palette['--bg-elev'])>=4.5,profile.id+' text');
+    assert.ok(ratio(palette['--focus'],palette['--bg-elev'])>=3,profile.id+' focus');
+  }
 });

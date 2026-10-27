@@ -11,7 +11,7 @@ async function login(page:Page) {
 }
 const entries = [
   {button:'供貨商：展示商品、找合作', target:'supplier', label:'展示商品與供貨條件', heading:'我有東西要賣'},
-  {button:'創作者：找案件與推廣合作', target:'showcase', label:'作品與合作案件', heading:'作品與需求'},
+  {button:'創作者：找案件與推廣合作', target:'showcase', label:'作品與合作案件', heading:'作品與合作'},
   {button:'開發者：找專案與夥伴', target:'tasks', label:'社群專案與任務', heading:'社群任務'},
 ];
 
@@ -37,7 +37,7 @@ for (const entry of entries) test(`${entry.target} entry survives registration a
 test('existing members reach their chosen entry and all six collaboration destinations without selecting a permanent role',async({page})=>{
   await page.goto('/');await page.getByRole('button',{name:entries[0].button,exact:true}).click();await login(page);
   await expect(page).toHaveURL(/#supplier$/);
-  const actions=[['展示我的商品','supplier','我有東西要賣'],['找合作夥伴','members','工坊夥伴'],['找合作案件','showcase','作品與需求'],['挑商品推廣','retail','我可以賣東西'],['找專案任務','tasks','社群任務'],['分享開發作品','showcase','作品與需求']];
+  const actions=[['展示我的商品','supplier','我有東西要賣'],['找合作夥伴','members','工坊夥伴'],['找合作案件','showcase','作品與合作'],['挑商品推廣','retail','我可以賣東西'],['找專案任務','tasks','社群任務'],['分享開發作品','showcase','作品與合作']];
   for(const [label,target,heading] of actions){
     await page.goto('/#home');
     await openHomeGuide(page);

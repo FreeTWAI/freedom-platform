@@ -4,7 +4,7 @@ import {after,before,beforeEach,test} from 'node:test';
 import {shippingSettingsHarness,type ShippingSettingsHarness,type ShippingTestStore} from './module-registry-harness.js';
 import {createShippingQuotePort} from '../../modules/agent-commerce/fulfilment/quote/index.js';
 import {hostedCheckoutOptions} from '../../apps/platform-api/src/routes/hosted-checkout.js';
-import {storeReadiness,readStoreOverview} from '../../modules/agent-commerce/operations/store-readiness.js';
+import {storeReadiness,readStoreOverview,listAdminStoreReadiness} from '../../modules/agent-commerce/operations/store-readiness.js';
 import {publicPurchaseState,publicPurchaseStateWithClient,createPublicCheckout,placePublicOrder} from '../../modules/agent-commerce/checkout/public-commands.js';
 import {createStoreAdmissionPort} from '../../modules/agent-commerce/operations/admissions.js';
 import {assertCommerceReadinessPrivacy} from '../../packages/testing/commerce-readiness-privacy.js';
@@ -13,6 +13,7 @@ import {StoreOverviewSchema,AdminStoreReadinessPageSchema,type StoreReadiness} f
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createTenantListCursorCodec} from '../../packages/shared/tenant-list-cursor.js';
 import {TENANT_CURSOR_TEST_KEY} from './tenant-cursor-fixture.js';
+import type {Pool,PoolClient} from 'pg';
 
 let h:ShippingSettingsHarness;
 before(async()=>{h=await shippingSettingsHarness('fp_readiness');});
@@ -180,4 +181,62 @@ test('admin receipt list includes inactive and unready stores, all active admiss
  for(const query of ['limit=0','limit=51','offset=-1','limit=1&limit=2','unknown=1'])assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness?'+query)).status,422);
  await h.f.x.h.pool.query('UPDATE platform_admins SET active=false,aggregate_version=aggregate_version+1 WHERE admin_id=$1',[memberAdmin]);
  assert.equal((await memberApp.request(h.f.origin+'/admin/api/commerce/store-readiness')).status,403);
+});
+
+test('admin pages read bounded admission history and no off-page membership details',async()=>{
+ const stores=[await h.store(),await h.store(),await h.store()];
+ const admin=h.expect(await h.f.http('GET','/admin/api/bootstrap')).admin;
+ for(const s of stores){
+  // Retained history grows independently of the number of stores on a page.
+  for(let index=0;index<30;index++){
+   const row=(await h.f.x.h.pool.query(`INSERT INTO commerce_store_admissions(tenant_id,instance_id,environment,admitted_by,reason)
+    VALUES($1,$2,'sandbox',$3,'合成歷史准入') RETURNING admission_id`,[s.tenantId,s.instanceId,admin.admin_id])).rows[0];
+   await h.f.x.h.pool.query(`UPDATE commerce_store_admissions SET revoked_at=clock_timestamp(),revoked_by=$2,revoke_reason='合成歷史撤銷' WHERE admission_id=$1`,[row.admission_id,admin.admin_id]);
+  }
+  h.expect(await adminPost('',{tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成目前准入'}),201);
+ }
+ let historyRows:Record<string,unknown>[]=[],membershipReads=0,queries=0;
+ const counted=new Proxy(h.f.x.runtime,{get(target,key){
+  if(key==='connect')return async()=>{
+   const q=await target.connect();
+   return new Proxy(q,{get(client,property){
+    if(property==='query')return async(...args:unknown[])=>{
+     queries++;const result=await Reflect.apply(client.query,client,args);
+     if(result?.rows)historyRows.push(...result.rows.filter((row:Record<string,unknown>)=>'admission_id' in row&&'reason' in row));
+     if(typeof args[0]==='string'&&args[0].includes('tenant_memberships')&&args[0].includes('lower('))membershipReads++;
+     return result;
+    };
+    const value=Reflect.get(client,property);return typeof value==='function'?value.bind(client):value;
+   }}) as PoolClient;
+  };
+  return Reflect.get(target,key);
+ }}) as Pool;
+ const page=await listAdminStoreReadiness(counted,admin,deps(),1,0,null);
+ assert.equal(page.summary.stores,3);assert.equal(page.summary.active_admissions,3);
+ assert.equal(page.items.length,1);assert(page.items[0].admission.active);assert(page.items[0].admission.last_revoked);
+ const latest=(await h.f.x.h.pool.query(`SELECT admission_id FROM commerce_store_admissions WHERE instance_id=$1 AND environment='sandbox' AND revoked_at IS NOT NULL ORDER BY admitted_at DESC,admission_id DESC LIMIT 1`,[page.items[0].instance_id])).rows[0];
+ assert.equal(page.items[0].admission.last_revoked!.admission_id,latest.admission_id);
+ console.log(JSON.stringify({admin_page_queries:queries,admission_history_rows:historyRows.length,membership_reads:membershipReads,stores:3,page_size:1,history_per_store:31}));
+ assert.equal(historyRows.length,2,'only the active and latest revoked admission for the page are materialized');
+ assert(historyRows.every(row=>row.instance_id===page.items[0].instance_id),'off-page admission history is never read');
+ assert.equal(membershipReads,1,'membership is checked only for displayed tenants');
+ historyRows=[];membershipReads=0;
+ const beyond=await listAdminStoreReadiness(counted,admin,deps(),1,3,null);
+ assert.deepEqual(beyond.summary,page.summary);assert.deepEqual(beyond.items,[]);
+ assert.equal(historyRows.length,0);assert.equal(membershipReads,0);
+});
+
+test('admin accepting totals remain equal across pages for a self-ship-only store with delivery disabled',async()=>{
+ const s=await h.store();await bank(s);
+ h.f.install({commerceSelfShipEnabled:true,commercePorts:{shipping:createShippingQuotePort({environment:'sandbox',selfShipEnabled:true})}});
+ h.expect(await h.request(s,'PUT','/shipping-profile',{...h.document(),services:[],delivery_options:[{method:'self_ship',fee_per_order_minor:0,handling_days:2,note:null}]}),201);
+ h.expect(await adminPost('',{tenant_id:s.tenantId,instance_id:s.instanceId,reason:'合成寄送試用'}),201);
+ for(const enabled of [true,false]){
+  h.f.install({commerceSelfShipEnabled:enabled,commercePorts:{shipping:createShippingQuotePort({environment:'sandbox',selfShipEnabled:enabled})}});
+  const first=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?limit=1')));
+  const beyond=AdminStoreReadinessPageSchema.parse(h.expect(await h.f.http('GET','/admin/api/commerce/store-readiness?limit=1&offset=1')));
+  assert.equal(first.items[0].readiness.accepting_orders,enabled);
+  assert.equal(first.summary.accepting_orders,enabled?1:0);
+  assert.deepEqual(beyond.summary,first.summary,'receipt totals cannot depend on whether the store is on the requested page');
+ }
 });

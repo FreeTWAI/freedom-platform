@@ -19,7 +19,7 @@ test('member filters and pagination keep the server query together and reset to 
     return route.fulfill({json:{items:[member(1)],next_offset:null,total:1}});
   });
   const panel=await openDirectory(page);await expect(panel.locator('.directory-result-count')).toHaveText('顯示 1–1 / 1 位夥伴');expect(requests[0].get('sort')).toBe('newest');
-  await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('企劃');await expect(panel.getByRole('combobox',{name:'依專長篩選',exact:true}).locator('option[value="typescript"]')).toHaveCount(1);await panel.getByRole('combobox',{name:'依專長篩選',exact:true}).selectOption('typescript');await panel.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption('media');await panel.getByRole('combobox',{name:'依主要定位篩選',exact:true}).selectOption('media');await panel.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('oldest');await panel.getByRole('button',{name:'搜尋',exact:true}).click();
+  await panel.locator('.directory-advanced > summary').click();await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('企劃');await expect(panel.getByRole('combobox',{name:'依專長篩選',exact:true}).locator('option[value="typescript"]')).toHaveCount(1);await panel.getByRole('combobox',{name:'依專長篩選',exact:true}).selectOption('typescript');await panel.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption('media');await panel.getByRole('combobox',{name:'依主要定位篩選',exact:true}).selectOption('media');await panel.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('oldest');await panel.getByRole('button',{name:'搜尋',exact:true}).click();
   await expect(panel.locator('.directory-member')).toHaveCount(20);await expect(panel.locator('.directory-result-count')).toHaveText('顯示 1–20 / 21 位夥伴');await panel.getByRole('button',{name:'下一頁',exact:true}).click();await expect(panel.getByRole('heading',{name:'第 21 位企劃夥伴',exact:true})).toBeVisible();await expect(panel.locator('.directory-result-count')).toHaveText('顯示 21–21 / 21 位夥伴');await expect(panel.getByRole('button',{name:'下一頁',exact:true})).toBeDisabled();
   const continuation=requests.find(q=>q.get('offset')==='20')!;expect(continuation.get('search')).toBe('企劃');expect(continuation.get('capability')).toBe('typescript');expect(continuation.get('guild_key')).toBe('media');expect(continuation.get('primary_guild_key')).toBe('media');expect(continuation.get('sort')).toBe('oldest');expect(continuation.get('limit')).toBe('20');
   await panel.getByRole('button',{name:'重設篩選',exact:true}).click();await expect(panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true})).toHaveValue('');await expect(panel.getByRole('combobox',{name:'依專長篩選',exact:true})).toHaveValue('');await expect(panel.getByRole('combobox',{name:'依公會篩選',exact:true})).toHaveValue('');await expect(panel.getByRole('combobox',{name:'依主要定位篩選',exact:true})).toHaveValue('');await expect(panel.getByRole('combobox',{name:'排序方式',exact:true})).toHaveValue('newest');await expect(panel.locator('.directory-member')).toHaveCount(1);
@@ -49,7 +49,7 @@ test('older filter responses never overwrite a newer guild selection',async({pag
     if(new URL(route.request().url()).searchParams.get('guild_key')==='media')return route.fulfill({json:{items:[member(2,{nickname:'目前選取的公會夥伴'})],next_offset:null,total:1}});
     requested();await pending;await route.fulfill({json:{items:[member(1,{nickname:'過期回應的夥伴'})],next_offset:null,total:1}});
   });
-  const panel=await openDirectory(page);await started;await panel.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption('media');await expect(panel.getByRole('heading',{name:'目前選取的公會夥伴',exact:true})).toBeVisible();const delivered=page.waitForResponse(response=>response.url().includes('/api/v1/members?')&&!new URL(response.url()).searchParams.has('guild_key'));release();await delivered;await expect(panel.getByRole('heading',{name:'目前選取的公會夥伴',exact:true})).toBeVisible();await expect(panel.getByRole('heading',{name:'過期回應的夥伴',exact:true})).toHaveCount(0);
+  const panel=await openDirectory(page);await started;await panel.locator('.directory-advanced > summary').click();await panel.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption('media');await expect(panel.getByRole('heading',{name:'目前選取的公會夥伴',exact:true})).toBeVisible();const delivered=page.waitForResponse(response=>response.url().includes('/api/v1/members?')&&!new URL(response.url()).searchParams.has('guild_key'));release();await delivered;await expect(panel.getByRole('heading',{name:'目前選取的公會夥伴',exact:true})).toBeVisible();await expect(panel.getByRole('heading',{name:'過期回應的夥伴',exact:true})).toHaveCount(0);
 });
 
 test('an old page response cannot replace members after the search changes',async({page})=>{
@@ -79,5 +79,91 @@ test('compact rows keep three skills visible and fold permitted contact and guil
 test('empty search and retry states remain distinct and keep the selected filters',async({page})=>{
   let broken=false;const queries:URLSearchParams[]=[];
   await page.route('**/api/v1/members?*',route=>{const query=new URL(route.request().url()).searchParams;queries.push(query);return broken?route.fulfill({status:503,json:{detail:'夥伴清單暫時無法讀取。'}}):route.fulfill({json:{items:query.has('search')?[]:[member(1)],next_offset:null,total:query.has('search')?0:1}});});
-  const panel=await openDirectory(page);await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('不存在的專長');await expect(panel.getByText('沒有符合的夥伴。換個關鍵字、專長或公會試試。',{exact:true})).toBeVisible();broken=true;await panel.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('nickname');await expect(panel.getByRole('alert')).toContainText('服務暫時無法回應（503）。請稍後重試。');await expect(panel.getByText('沒有符合的夥伴。換個關鍵字、專長或公會試試。',{exact:true})).toHaveCount(0);broken=false;await panel.getByRole('button',{name:'重新載入夥伴',exact:true}).click();await expect(panel.getByRole('alert')).toHaveCount(0);await expect(panel.locator('.directory-result-count')).toHaveText('顯示 0–0 / 0 位夥伴');expect(queries.at(-1)!.get('sort')).toBe('nickname');expect(queries.at(-1)!.get('search')).toBe('不存在的專長');await panel.getByRole('button',{name:'查看全部夥伴',exact:true}).click();await expect(panel.locator('.directory-member')).toHaveCount(1);
+  const panel=await openDirectory(page);await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('不存在的專長');await expect(panel.getByText('沒有符合的夥伴。換個關鍵字、專長或公會試試。',{exact:true})).toBeVisible();broken=true;await panel.locator('.directory-advanced > summary').click();await panel.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('nickname');await expect(panel.getByRole('alert')).toContainText('服務暫時無法回應（503）。請稍後重試。');await expect(panel.getByText('沒有符合的夥伴。換個關鍵字、專長或公會試試。',{exact:true})).toHaveCount(0);broken=false;await panel.getByRole('button',{name:'重新載入夥伴',exact:true}).click();await expect(panel.getByRole('alert')).toHaveCount(0);await expect(panel.locator('.directory-result-count')).toHaveText('顯示 0–0 / 0 位夥伴');expect(queries.at(-1)!.get('sort')).toBe('nickname');expect(queries.at(-1)!.get('search')).toBe('不存在的專長');await panel.getByRole('button',{name:'查看全部夥伴',exact:true}).click();await expect(panel.locator('.directory-member')).toHaveCount(1);
+});
+
+
+test('search starts compact and advanced settings stay visible as removable chips when folded',async({page})=>{
+  const queries:URLSearchParams[]=[];
+  await page.route('**/api/v1/members?*',route=>{queries.push(new URL(route.request().url()).searchParams);return route.fulfill({json:{items:[member(1)],next_offset:null,total:1}});});
+  const panel=await openDirectory(page),advanced=panel.locator('.directory-advanced'),summary=advanced.locator('summary'),search=panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true});
+  await expect(panel.getByRole('heading',{name:'找夥伴',exact:true})).toBeVisible();
+  await expect(panel.locator('.directory-member')).toHaveCount(1);
+  await expect(advanced).not.toHaveAttribute('open');
+  await expect(panel.getByRole('combobox')).toHaveCount(0);
+  const beforeToggle=queries.length;
+  await summary.focus();await page.keyboard.press('Enter');await expect(advanced).toHaveAttribute('open','');
+  await expect(panel.getByRole('combobox')).toHaveCount(5);
+  await summary.press('Enter');await expect(advanced).not.toHaveAttribute('open');
+  expect(queries).toHaveLength(beforeToggle);
+  await summary.press('Enter');
+  await panel.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption('media');
+  await panel.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('nickname');
+  await panel.getByRole('combobox',{name:'每頁顯示',exact:true}).selectOption('10');
+  await search.fill('  企劃  ');await search.press('Enter');
+  await expect.poll(()=>queries.at(-1)?.get('search')).toBe('企劃');
+  await summary.click();await expect(advanced).not.toHaveAttribute('open');
+  await expect(summary.locator('.directory-filter-count')).toContainText('3');
+  await expect(panel.locator('.directory-filter-chip')).toHaveCount(4);
+  await panel.getByRole('button',{name:'清除條件：公會：媒體自動化公會',exact:true}).click();
+  await expect(search).toBeFocused();
+  await expect.poll(()=>queries.at(-1)?.has('guild_key')).toBe(false);
+  expect(queries.at(-1)?.get('search')).toBe('企劃');expect(queries.at(-1)?.get('sort')).toBe('nickname');expect(queries.at(-1)?.get('limit')).toBe('10');
+  await panel.getByRole('button',{name:'重設篩選',exact:true}).click();
+  await expect(search).toBeFocused();await expect(search).toHaveValue('');
+  await expect(panel.locator('.directory-filter-chip')).toHaveCount(0);
+  await expect(summary.locator('.directory-filter-count')).toHaveCount(0);
+  await expect.poll(()=>queries.at(-1)?.toString()).toBe('limit=20&offset=0&sort=newest');
+});
+
+test('clearing a pending search keeps the current results after the older response arrives',async({page})=>{
+  let release!:()=>void,requested!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{requested=resolve;});
+  const queries:URLSearchParams[]=[];
+  await page.route('**/api/v1/members?*',async route=>{
+    const query=new URL(route.request().url()).searchParams;queries.push(query);
+    if(query.get('search')==='舊條件'){requested();await held;return route.fulfill({json:{items:[member(2,{nickname:'舊搜尋夥伴'})],next_offset:null,total:1}});}
+    return route.fulfill({json:{items:[member(1,{nickname:'全部夥伴'})],next_offset:null,total:1}});
+  });
+  const panel=await openDirectory(page),search=panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true});
+  await expect(panel.getByRole('heading',{name:'全部夥伴',exact:true})).toBeVisible();
+  // Freeze browser time only after the initial reads; the existing debounce remains 250 ms.
+  await page.clock.install();await page.clock.pauseAt(new Date());
+  const initialCount=queries.length;
+  await search.fill('舊條件');await expect(panel.locator('.directory-result-count')).toHaveText('正在套用搜尋…');
+  await page.clock.runFor(249);expect(queries).toHaveLength(initialCount);
+  await page.clock.runFor(1);await started;
+  await panel.getByRole('button',{name:'清除搜尋',exact:true}).click();
+  await expect(search).toBeFocused();await expect(panel.getByRole('heading',{name:'全部夥伴',exact:true})).toBeVisible();
+  const delivered=page.waitForResponse(response=>new URL(response.url()).searchParams.get('search')==='舊條件');release();await delivered;
+  await page.clock.runFor(300);
+  await expect(panel.getByRole('heading',{name:'舊搜尋夥伴',exact:true})).toHaveCount(0);
+  await expect(panel.getByRole('heading',{name:'全部夥伴',exact:true})).toBeVisible();
+  await expect(panel.locator('.directory-result-count')).toHaveText('顯示 1–1 / 1 位夥伴');
+  expect(queries.at(-1)?.has('search')).toBe(false);
+});
+
+for(const theme of ['light','dark','versefolk'])test(`compact member search fits narrow screens in ${theme}`,async({page})=>{
+  await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),theme);
+  await page.setViewportSize({width:320,height:844});
+  await page.route('**/api/v1/members?*',route=>route.fulfill({json:{items:[member(1)],next_offset:null,total:1}}));
+  const panel=await openDirectory(page),form=panel.getByRole('search',{name:'尋找工坊夥伴'}),advanced=panel.locator('.directory-advanced');
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await expect(panel.locator('.directory-member')).toHaveCount(1);
+  expect((await form.boundingBox())!.height).toBeLessThan(180);
+  await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('很長的關鍵字'.repeat(10));
+  await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).press('Enter');
+  await expect(panel.locator('.directory-filter-chip')).toHaveCount(1);
+  for(const width of [320,390,768,1440]){
+    await page.setViewportSize({width,height:900});
+    for(const open of [true,false]){
+      if(await advanced.evaluate(element=>(element as HTMLDetailsElement).open)!==open)await advanced.locator('summary').click();
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      for(const control of await form.locator('input,select,button,summary').all()){
+        if(await control.isVisible())expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:`test-results/member-search-${theme}-phone.png`,fullPage:true});
 });

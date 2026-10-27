@@ -13,7 +13,7 @@ async function login(page:Page){
 test('home and navigation reveal secondary functions on demand and page tools return keyboard focus',async({page})=>{
   await login(page);
   await expect(page.locator('.nav-primary > button')).toHaveCount(5);
-  await expect(page.locator('.nav-primary > button')).toHaveText(['會員首頁','我的內容','職業公會','技能書架','搜尋社群內容']);
+  await expect(page.locator('.nav-primary > button')).toHaveText(['會員首頁','我的個人空間','職業公會','技能書架','搜尋社群內容']);
   await expect(page.locator('.nav-more')).not.toHaveAttribute('open','');
   await expect(page.locator('.home-personal')).not.toHaveAttribute('open','');
   await expect(page.locator('.home-destinations')).toBeVisible();

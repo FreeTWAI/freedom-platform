@@ -82,17 +82,18 @@ test('EXIF orientation, transparent small images, and invalid replacement preser
 
 test('external link thumbnails accept normal photos and replacements use the same automatic preparation', async ({page}) => {
   await login(page); await page.keyboard.press('Escape');
-  await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
-  const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
+  await page.locator('.social-composer-start').getByRole('button', {name: '建立貼文', exact: true}).click();
+  await page.getByRole('checkbox', {name: '加入連結預覽（選填）', exact: true}).check();
+  const dialog = page.getByRole('dialog', {name: '建立貼文', exact: true});
   const title = `E2E 連結原始照片 ${Date.now()}`;
-  await dialog.getByLabel('連結', {exact: true}).fill(`https://example.org/photo-${Date.now()}`);
-  await dialog.getByLabel('標題（選填）').fill(title);
+  await dialog.getByLabel('預覽連結', {exact: true}).fill(`https://example.org/photo-${Date.now()}`);
+  await dialog.getByLabel('預覽標題（選填）').fill(title);
   const photo = {name: 'large.png', mimeType: 'image/png', buffer: await sharp({create: {width: 2400, height: 1600, channels: 3, background: '#2a6f4b'}}).png({compressionLevel: 0}).toBuffer()};
   const sizes: Promise<number>[] = [];
   page.on('response', response => {const request = response.request(); if (request.method() === 'PUT' && request.url().includes('/thumbnail')) sizes.push(request.allHeaders().then(headers => Number(headers['content-length'])));});
-  await dialog.getByLabel('縮圖（選填，會自動調整大小）').setInputFiles(photo);
-  await expect(dialog.getByText('已選擇：large.png')).toBeVisible();
-  await dialog.getByRole('button', {name: '分享貼文', exact: true}).click();
+  await dialog.getByLabel('貼文圖片（選填）').setInputFiles(photo);
+  await expect(dialog.getByRole('img', {name: '待發布圖片預覽'})).toBeVisible();
+  await dialog.getByRole('button', {name: '發布貼文', exact: true}).click();
   await expect(dialog).toBeHidden(); await selectSocialFeed(page, '全部動態');
   const card = page.locator('.social-card').filter({has: page.getByRole('heading', {name: title, exact: true})});
   await expect(card.locator('img.social-thumb')).toHaveJSProperty('naturalWidth', 640);

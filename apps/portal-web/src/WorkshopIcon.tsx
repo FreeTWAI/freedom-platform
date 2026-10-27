@@ -37,6 +37,7 @@ const paths: Record<TabId, string> = {
   services:'M4 7h16v13H4Zm0 4h16M8 7V5a4 4 0 0 1 8 0v2',
   promotion:'M4 20V10m8 10V4m8 16v-7',
   highlights:'M4 8h11v11H4Zm5-4h13v11M8 13.5l4-2.2v4.4Z',
+  'tester-map':'m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Zm6-3v15m6-12v15',
 };
 export function WorkshopIcon({ name }: { name: TabId }) {
   return <svg className="workshop-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name]}/></svg>;
