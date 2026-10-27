@@ -241,6 +241,59 @@ test('skill trees preserve choices across screen sizes and show only three featu
 });
 
 
+test('custom ability and equipment entry keeps IME confirmation separate from adding an item',async({page})=>{
+  await register(page,'輸入法新夥伴');
+  await answerQuestions(page);
+  const saves:string[]=[];
+  page.on('request',request=>{
+    if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/me/onboarding/'))saves.push(request.url());
+  });
+  for(const kind of ['能力','裝備'] as const){
+    const heading=page.getByRole('heading',{name:kind==='能力'?'你從哪裡來，帶著哪些能力？':'你的裝備庫',exact:true});
+    const input=page.getByLabel(`自訂${kind}`,{exact:true});
+    await expect(heading).toBeVisible();
+    const savesBefore=saves.length;
+    for(const composition of [
+      {isComposing:true,keyCode:13},
+      {isComposing:false,keyCode:229},
+    ]){
+      const label=`${kind}組字測試${composition.keyCode}`;
+      await input.dispatchEvent('compositionstart');
+      await input.fill(label);
+      // Some IMEs end composition before their confirming keydown; 229 still marks that key.
+      if(!composition.isComposing)await input.dispatchEvent('compositionend',{data:label});
+      // Synthetic events exercise both handler branches, not trusted/native OS IME behavior.
+      const prevented=await input.evaluate((element,shape)=>{
+        const event=new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true,cancelable:true,...shape});
+        element.dispatchEvent(event);
+        return event.defaultPrevented;
+      },composition);
+      expect(prevented).toBe(false);
+      await expect(input).toHaveValue(label);
+      await expect(page.getByRole('button',{name:`移除${kind}：${label}`,exact:true})).toHaveCount(0);
+      await expect(heading).toBeVisible();
+      expect(saves).toHaveLength(savesBefore);
+      if(composition.isComposing)await input.dispatchEvent('compositionend',{data:label});
+      await input.press('Enter');
+      await expect(input).toHaveValue('');
+      await expect(page.getByRole('button',{name:`移除${kind}：${label}`,exact:true})).toHaveCount(1);
+      // A second, empty Enter must neither duplicate the item nor submit the surrounding form.
+      await input.press('Enter');
+      await expect(page.getByRole('button',{name:`移除${kind}：${label}`,exact:true})).toHaveCount(1);
+      await expect(heading).toBeVisible();
+      expect(saves).toHaveLength(savesBefore);
+    }
+    const mouseLabel=`${kind}滑鼠加入`;
+    await input.fill(mouseLabel);
+    await page.getByRole('button',{name:`加入${kind}`,exact:true}).click();
+    await expect(input).toHaveValue('');
+    await expect(page.getByRole('button',{name:`移除${kind}：${mouseLabel}`,exact:true})).toHaveCount(1);
+    await expect(heading).toBeVisible();
+    expect(saves).toHaveLength(savesBefore);
+    if(kind==='能力')await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();
+  }
+});
+
 test('completed positioning shows only the published result and never creates a second profile',async({page})=>{
   await register(page,'連貫定位夥伴');
   await completeOrientation(page);
