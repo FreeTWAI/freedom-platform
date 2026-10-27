@@ -201,13 +201,26 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 立即補跑，不能把所有啟動後的執行都當作交接失敗。這些仍是後續 operator 安裝驗收項。
 
 旗標值以 owner 的既有決策紀錄為準；Environment config 只是傳遞設定，不是新旗標
-的核准來源。該次操作者回報的 rollback floor 是 `36bec661`／schema 189，並正在準備
+的核准來源。變更須以經 code owner 審查的 PR 編輯 [flag-decisions.json](flag-decisions.json)，
+記錄各 target 的布林字串值、決策人、日期及本倉 GitHub 決策網址；再正常發布合併後的
+精確 main SHA，先 `staging-next`、成功後才 `next`。本次記錄 Ted 於 2026-10-27
+決定兩環境的 `FREEDOM_COMMUNITY_RELATIONS_ENABLED="true"`；既有搜尋旗標維持原值。
+移除 entry **不會關閉**旗標；關閉須明確設定 `"false"`。缺少整個檔案時完全保留舊行為。
+
+決策僅從准入 SHA 的 Git blob 讀取，不讀 workflow input、Environment config 或網路。
+只允許 `FREEDOM_*_ENABLED` 的 plain-text 布林旗標，每 target 最多 64 筆；未知欄位、
+其他變數或 binding 類型一律拒絕。`plan` 列出決策（`from: null` 表示未讀線上舊值，
+不代表已新增）；`check` 用唯讀觀察列出實際差異（此時 `null` 表示線上不存在）。
+發布收據只公開 `name/from/to/record`；確認部署後 floor 採用預期 bindings hash，
+後續備份與發布沿用新 hash。未知部署結果仍停止對帳，不自動重試。
+
+該次操作者回報的 rollback floor 是 `36bec661`／schema 189，並正在準備
 下一版；這是具日期的交接觀察。接手時必須重讀權威 floor，僅能前進，不能直接把
 這個歷史值寫死在 Actions。
 
 只上傳固定欄位的公開 JSON 收據，不上傳 operator stdout/stderr、DB dump、物件、
 原始設定或 provider response。operator 每階段可寫進度，controller 只輸出白名單內的
-階段名稱和狀態。這不是對惡意發布工具的防洩漏沙箱；image 本身仍須審查與釘選。
+階段名稱、狀態及上述公開旗標差異。這不是對惡意發布工具的防洩漏沙箱；image 本身仍須審查與釘選。
 
 ## 還差什麼才算完成
 
@@ -234,7 +247,7 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
   核對來源未變與輸出 digest；建置程序不繼承部署憑證。已實跑 `0ec26d5c` 的本機
   npm 安裝、build、Wrangler dry-run，這不是 image／hosted runner 的驗收。
 - `deploy.mjs`：讀回 active version、bindings、route、crons、workers.dev、Tokyo placement
-  與 Hyperdrive cache；保留現有旗標、秘密與綁定，只呼叫一次 Wrangler。Provider 清單延遲或
+  與 Hyperdrive cache；套用本 SHA 的 owner 決策，保留其他旗標、秘密與綁定，只呼叫一次 Wrangler。Provider 清單延遲或
   GET 失敗會留下觀察紀錄並有界重讀，不再次發布。兩環境已完成實際唯讀核對；
   mutation 仍只驗了合成 provider，沒有實際部署。
   另讀取 service metadata 核對 Workers Logs，明確保留目前的停用狀態；若已啟用

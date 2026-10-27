@@ -5,11 +5,12 @@ import { requireRelease as check, isDigest, isSha } from './admission.mjs';
 import { validatePortableConfig } from './portable/config.mjs';
 import { boundedResponseBytes } from './portable/cloudflare.mjs';
 import { createWorkerDeployer } from './portable/deploy.mjs';
+import { applyFlagDecisions } from './portable/flag-decisions.mjs';
 
 const secret = value => typeof value === 'string' && value.length > 0
   && value.length <= 4096 && !/[\r\n\0]/.test(value);
 
-export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) {
+export async function checkEnvironment(env, target, { fetchImpl = fetch, flagDecisions } = {}) {
   check(typeof env.RELEASE_CONFIG_JSON === 'string' && Buffer.byteLength(env.RELEASE_CONFIG_JSON) <= 262144
     && isDigest(env.RELEASE_CONFIG_SHA256)
     && createHash('sha256').update(env.RELEASE_CONFIG_JSON).digest('hex') === env.RELEASE_CONFIG_SHA256,
@@ -82,6 +83,10 @@ export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) 
     check(live.bindings.find(row => row.name === 'MEDIA')?.bucket_name === config.mediaBucket,
       'release_environment_media_mismatch');
     report.observedSourceSha = live.sourceSha;
+    if (flagDecisions) {
+      report.flagChanges = applyFlagDecisions({ target, bindings: live.bindings, decisions: flagDecisions }).flagChanges;
+      report.flagChangesObservation = 'live';
+    }
   });
   for (const [name, bucket] of [['media_object_listing', config.mediaBucket], ['backup_object_listing', config.backupBucket]]) {
     await run(name, async () => {

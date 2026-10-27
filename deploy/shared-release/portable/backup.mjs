@@ -20,6 +20,11 @@ import { openCapturePolicy } from './capture-policy.mjs';
 import { backupObjectStore, backupTar, bytesStream, privateBackupRoot, newBackupDirectories } from './backup-storage.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+export function backupExpectation(state, sourceSha) {
+  return { sourceSha, bindingsSha256: state.bindingsSha256, ledgerSha256: migrationLedgerDigest(state.schemaLedger),
+    materialPolicySha256: state.materialPolicySha256, schemaVersion: state.schemaVersion };
+}
+
 const POLICY_SQL = `SELECT purpose,mode,policy_lock,policy_revision,persistence_allowed,
   retained_byte_limit::text AS retained_byte_limit FROM domain_media_storage_policy ORDER BY purpose`;
 

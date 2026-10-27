@@ -1,0 +1,21 @@
+{
+  "format": "freedom.shared-release.flag-decisions/v1",
+  "targets": {
+    "staging-next": {
+      "FREEDOM_COMMUNITY_RELATIONS_ENABLED": {
+        "value": "true",
+        "decidedBy": "Ted",
+        "decidedAt": "2026-10-27",
+        "record": "https://github.com/FreeTWAI/freedom-platform/pull/0000"
+      }
+    },
+    "next": {
+      "FREEDOM_COMMUNITY_RELATIONS_ENABLED": {
+        "value": "true",
+        "decidedBy": "Ted",
+        "decidedAt": "2026-10-27",
+        "record": "https://github.com/FreeTWAI/freedom-platform/pull/0000"
+      }
+    }
+  }
+}
