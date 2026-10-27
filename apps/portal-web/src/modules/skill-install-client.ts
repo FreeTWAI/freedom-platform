@@ -64,7 +64,7 @@ export function installReceipt(bundle:InstallBundle,target:SkillInstallTarget,me
 // ---- 寫入資料夾（File System Access API；Chrome／Edge 桌面版） ----
 type WritableLike={write(data:Uint8Array|string):Promise<void>;close():Promise<void>};
 type FileHandleLike={createWritable():Promise<WritableLike>};
-export type DirectoryHandleLike={name:string;getDirectoryHandle(name:string,options?:{create?:boolean}):Promise<DirectoryHandleLike>;getFileHandle(name:string,options?:{create?:boolean}):Promise<FileHandleLike>;removeEntry(name:string,options?:{recursive?:boolean}):Promise<void>;keys():AsyncIterable<string>;requestPermission?(options:{mode:'readwrite'}):Promise<string>};
+export type DirectoryHandleLike={name:string;getDirectoryHandle(name:string,options?:{create?:boolean}):Promise<DirectoryHandleLike>;getFileHandle(name:string,options?:{create?:boolean}):Promise<FileHandleLike>;keys():AsyncIterable<string>;requestPermission?(options:{mode:'readwrite'}):Promise<string>};
 type PickerWindow=Window&{showDirectoryPicker?:(options:{id?:string;mode?:'readwrite'})=>Promise<DirectoryHandleLike>};
 
 export function supportsFolderInstall(){return typeof window!=='undefined'&&window.isSecureContext&&typeof (window as PickerWindow).showDirectoryPicker==='function';}
@@ -84,36 +84,41 @@ export async function writeBundleToFolder(root:DirectoryHandleLike,bundle:Instal
     if(AGENT_HOME.has(root.name)){base=await root.getDirectoryHandle('skills',{create:true});where=root.name+'/skills';}
     else if(!await confirm('你選的資料夾是「'+root.name+'」，不是 skills。仍要裝在這裡嗎？'))throw new SkillInstallError('cancelled','已取消。');
   }
-  let folder:DirectoryHandleLike|undefined=root.name===bundle.name?root:undefined,created=false;
+  let folder:DirectoryHandleLike|undefined=root.name===bundle.name?root:undefined;
   if(!folder){
     try{folder=await base.getDirectoryHandle(bundle.name,{create:false});}
     catch(error){if(!(error instanceof Error)||error.name!=='NotFoundError')throw error;}
   }
   if(folder!==root)where+='/'+bundle.name;
-  if(folder)for await(const _ of folder.keys())throw new SkillInstallError('exists','「'+bundle.name+'」資料夾已經存在。為了不動到裡面的檔案，這次沒有覆寫；要更新請先自行移走或刪除這個資料夾再安裝，或改用下載 zip。');
-  const entries=new Set<string>();
+  const exists=()=>new SkillInstallError('exists','「'+bundle.name+'」資料夾已經存在。為了不動到裡面的檔案，這次沒有覆寫；要更新請先自行移走或刪除這個資料夾再安裝，或改用下載 zip。');
+  if(folder)for await(const _ of folder.keys())throw exists();
+  // File System Access API 沒有 exclusive create；安裝器只拒絕偵測到的衝突，永不刪除檔案。
+  async function createFile(directory:DirectoryHandleLike,name:string){
+    try{await directory.getFileHandle(name,{create:false});}
+    catch(error){
+      if(!(error instanceof Error)||error.name!=='NotFoundError')throw error;
+      return directory.getFileHandle(name,{create:true});
+    }
+    throw new SkillInstallError('conflict','安裝途中「'+bundle.name+'」資料夾裡出現同名檔案，已停止；沒有刪除任何檔案。請確認資料夾內容後再處理，或改用下載 zip。');
+  }
   try{
-    if(!folder){folder=await base.getDirectoryHandle(bundle.name,{create:true});created=true;}
+    if(!folder){
+      folder=await base.getDirectoryHandle(bundle.name,{create:true});
+      for await(const _ of folder.keys())throw exists();
+    }
     for(const file of bundle.files){
       const parts=file.path.split('/');let directory=folder;
-      for(const [index,segment] of parts.slice(0,-1).entries()){
-        directory=await directory.getDirectoryHandle(segment,{create:true});
-        if(index===0)entries.add(segment);
-      }
-      const handle=await directory.getFileHandle(parts[parts.length-1],{create:true});
-      if(parts.length===1)entries.add(parts[0]);
+      for(const segment of parts.slice(0,-1))directory=await directory.getDirectoryHandle(segment,{create:true});
+      const handle=await createFile(directory,parts[parts.length-1]);
       const writable=await handle.createWritable();
       await writable.write(file.bytes);await writable.close();
     }
-    const handle=await folder.getFileHandle(SKILL_INSTALL_RECEIPT_FILE,{create:true});
-    entries.add(SKILL_INSTALL_RECEIPT_FILE);
+    const handle=await createFile(folder,SKILL_INSTALL_RECEIPT_FILE);
     const receipt=await handle.createWritable();
     await receipt.write(JSON.stringify(installReceipt(bundle,target,'folder'),null,2)+'\n');await receipt.close();
-  }catch{
-    // 只清理由本次安裝建立的資料夾或頂層項目；清理失敗仍回報原本的寫入失敗。
-    if(created)await base.removeEntry(bundle.name,{recursive:true}).catch(()=>{});
-    else if(folder)for(const name of entries)await folder.removeEntry(name,{recursive:true}).catch(()=>{});
-    throw new SkillInstallError('write_failed','安裝沒有完成，已移除這次寫入的檔案；原有檔案沒有變動。');
+  }catch(error){
+    if(error instanceof SkillInstallError&&(error.code==='conflict'||error.code==='exists'))throw error;
+    throw new SkillInstallError('write_failed','安裝沒有完成，「'+bundle.name+'」資料夾裡可能留下部分檔案；沒有刪除任何檔案。請確認後自行刪除再重新安裝，或改用下載 zip。');
   }
   return {where};
 }
@@ -144,7 +149,7 @@ export function installCommands(bundle:Pick<InstallBundle,'name'|'repository'|'c
   const where=SKILL_INSTALL_TARGETS[target],repo=bundle.repository.split('/')[1],extracted=repo+'-'+bundle.commit;
   const home=where.userPath.replace('~','$HOME'),exists='「'+bundle.name+'」資料夾已經存在，這次沒有覆寫；要更新請先自行移走或刪除舊資料夾，或改用下載 zip。';
   return {
-    shell:'(t=$(mktemp -d) || exit 1; trap \'install_status=$?; rm -rf "$t" || install_status=$?; exit "$install_status"\' EXIT; curl -fsSL "https://codeload.github.com/'+bundle.repository+'/tar.gz/'+bundle.commit+'" -o "$t/bundle.tar.gz" && tar -xzf "$t/bundle.tar.gz" -C "$t" && test -f "$t/'+extracted+'/SKILL.md" && { if [ -e "'+home+'/'+bundle.name+'" ] || [ -L "'+home+'/'+bundle.name+'" ]; then printf \'%s\\n\' \''+exists+'\' >&2; exit 1; fi; mkdir -p "'+home+'" && mv "$t/'+extracted+'" "'+home+'/'+bundle.name+'"; })',
-    powershell:"$ErrorActionPreference='Stop'; $d=\""+where.windowsPath+'"; $dest="$d\\'+bundle.name+'"; $t=Join-Path $env:TEMP ([guid]::NewGuid().ToString()); New-Item -ItemType Directory -Path $t | Out-Null; try { $z=Join-Path $t "bundle.zip"; Invoke-WebRequest "https://codeload.github.com/'+bundle.repository+'/zip/'+bundle.commit+'" -OutFile $z; Expand-Archive -LiteralPath $z -DestinationPath $t; $s=Join-Path $t "'+extracted+'"; if (!(Test-Path -LiteralPath "$s\\SKILL.md" -PathType Leaf)) { throw "找不到 SKILL.md，已停止安裝。" }; if (Test-Path -LiteralPath $dest) { throw "'+exists+'" }; New-Item -ItemType Directory -Force -Path $d | Out-Null; Move-Item -LiteralPath $s -Destination $dest } finally { Remove-Item -LiteralPath $t -Recurse -Force }',
+    shell:'(t=$(mktemp -d) || exit 1; trap \'install_status=$?; rm -rf "$t" || install_status=$?; exit "$install_status"\' EXIT; curl -fsSL "https://codeload.github.com/'+bundle.repository+'/tar.gz/'+bundle.commit+'" -o "$t/bundle.tar.gz" && tar -xzf "$t/bundle.tar.gz" -C "$t" && test -f "$t/'+extracted+'/SKILL.md" && { staged="$t/'+extracted+'"; dest="'+home+'/'+bundle.name+'"; mkdir -p "'+home+'" || exit 1; if [ -e "$dest" ] || [ -L "$dest" ]; then printf \'%s\\n\' \''+exists+'\' >&2; exit 1; fi; mkdir "$dest" || exit 1; cp -R "$staged/." "$dest/" || { printf \'%s\\n\' \'安裝沒有完成，資料夾裡可能留下部分檔案；沒有刪除任何檔案。請確認後自行處理，或改用下載 zip。\' >&2; exit 1; }; })',
+    powershell:"$ErrorActionPreference='Stop'; $d=\""+where.windowsPath+'"; $dest="$d\\'+bundle.name+'"; $t=Join-Path $env:TEMP ([guid]::NewGuid().ToString()); New-Item -ItemType Directory -Path $t | Out-Null; try { $z=Join-Path $t "bundle.zip"; Invoke-WebRequest "https://codeload.github.com/'+bundle.repository+'/zip/'+bundle.commit+'" -OutFile $z; Expand-Archive -LiteralPath $z -DestinationPath $t; $s=Join-Path $t "'+extracted+'"; if (!(Test-Path -LiteralPath "$s\\SKILL.md" -PathType Leaf)) { throw "找不到 SKILL.md，已停止安裝。" }; if (Test-Path -LiteralPath $dest) { throw "'+exists+'" }; New-Item -ItemType Directory -Force -Path $d | Out-Null; New-Item -ItemType Directory -Path $dest | Out-Null; Get-ChildItem -LiteralPath $s -Force | Copy-Item -Destination $dest -Recurse } finally { Remove-Item -LiteralPath $t -Recurse -Force }',
   };
 }
