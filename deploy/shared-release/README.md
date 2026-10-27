@@ -1,9 +1,46 @@
 # 共用發布入口
 
-這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
-`Shared release` Actions，並串接資料庫／媒體備份、遠端讀回與隔離還原。
-完整發布 entry、OCI image 建置入口和自然備份 workflow 已接入原始碼，
-**尚未在 hosted runner 發布或啟用。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
+一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
+不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
+日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
+GitHub 版本歷史只保存程式，不能當作資料庫備份。
+
+已核准 main 的待執行 migration 使用原 immutable catalog／SQL policy、交易執行器、lease、ledger prefix、
+COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，不能當作可逆程式更新；
+破壞性 SQL 仍須在來源審查中明確評估，未知 COMMIT 結果停止且不自動重試／回滾。
+跨環境 Actions concurrency 與 DB advisory lease 保留，正在執行的備份或 migration 不會被取消。
+舊 journal 仍依原七階段 replay；新 `release-begin-v2` 保留四個 journal stages；有 migration 時確認 COMMIT 即更新 schema floor，
+無 migration 時先完成唯讀檢查才建立 journal，健康查核後完成發布。
+
+若前次備份留下 BEGIN-only journal，可在 deploy 選填 `recover_backup_run_id`。
+這只允許可信、已結束的失敗收據證明尚未進入 capture，且 journal 沒有任何 intent；
+持有同一 lease 後重新查 Worker、原 floor／ledger／material policy、GC OFF、零 deletion fences
+及沒有目前維護角色的 capture backend，才 append abandonment，保留原失敗。
+這不是備份成功，也不執行新備份。capture／archive／migration／deploy intent 或任何不確定狀態仍拒絕。
+尚未確認 live run 的 journal 符合此條件，不可據此聲稱現場已恢復。
+
+首次接手時，舊操作者可能已在共用 journal 建立後發布較新的程式。Controller 會核對
+該環境最新 GitHub deployment 的成功狀態、四位操作者身分、main／CI 及新舊版本關係；
+image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、DB ledger、原政策
+與座標限制，才追加 `legacy-source-adopted`。不重設 seed、不改 schema、不抹除舊紀錄。
+若同時有 BEGIN-only 備份失敗，先依原失敗收據與唯讀檢查追加 abandonment，再銜接版本。
+有 capture／archive／migration／deploy intent、未核准版本、schema 或設定變動仍會停止。
+這類首次接手在 operator 通過 preflight（含版本銜接）後才建立新的 GitHub Deployment，
+避免 image 下載或唯讀檢查失敗時，新紀錄遮住原本可信的舊發布。失敗的 Actions 收據仍保留；
+缺少 Deployment 不證明沒有副作用，重做前仍須讀回原 journal，未知 intent 不放行。
+
+以下安裝紀錄為具日期的歷史觀察；新 controller 與新 digest-pinned image 都須通過審查／CI 並安裝，
+本補丁及本機測試不表示已部署。`plan`、`check` 成功也不表示已發布。
+
+2026-10-26 安裝進度：兩環境的 account-owned Cloudflare token、原始 floor／config
+與私人 image 已安裝；[staging 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276457566)
+及 [production 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276554245) 通過。
+[staging 備份首跑](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276749439) 失敗，
+原收據未保存細部階段；遠端 journal 只有 capture-policy intent，尚無 archive intent。
+後續唯讀觀察確認維護開關關閉、刪除 fence 為零；本機另驗 343 張表的快照、PG18 dump
+及 66 個媒體物件成功，但沒有重現 hosted 失敗，不能拿這些結果替代完整備份驗收。
+目前 `BACKUP_ENABLED`／`RELEASE_ENABLED` 皆為 false，舊 timer 保留；下方 10 月 25 日
+的安裝與合成驗證段落為當時紀錄，不能代替這份進度。
 
 2026-10-25 查核：`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 都有此 repo
 的 admin 權限。現有 main ruleset 仍要求非作者審查、CODEOWNERS、最新推送後核准，
@@ -20,6 +57,16 @@
    暫不提供會漂移的 `main`／tag／短 SHA 作為版本輸入。
 3. 在 Summary 看版本、原始發起人、此次執行者、兩個 CI run 及結果收據。
    同一版本最新的 main push Verify、CodeQL 必須全部成功；PR 的綠燈不替代主線驗證。
+   新存憑證後，選 `check` 可先驗 Cloudflare 帳戶 token、Worker／路由／Hyperdrive
+   讀取、兩個 R2 bucket 列舉及 staging Access health。先安裝正確的 config secret／hash；
+   此模式不需開啟發布／備份，也不需安裝 image 或 floor，不建立 Deployment、不修改資料。
+   Summary 逐項列出結果；通過只表示這些唯讀請求成功，不證明寫入權限、DB、備份或可部署。
+   帳戶驗證被拒時，會另以唯讀請求辨識是否誤存有效的使用者 token；若是，顯示
+   `release_account_owned_token_required`，不把它當作帳戶服務憑證通過。帳戶 token
+   從 Cloudflare **Manage account → Account API tokens** 建立，與個人頭像下的
+   My Profile → API Tokens 不同（[Cloudflare 說明](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)）。
+   Access 回傳重新導向時顯示 `release_environment_redirect_rejected` 與 HTTP 狀態，
+   不跟隨 Location、不轉送憑證；檢查應用已儲存的 Service Auth 政策及指定的 service token。
 4. 確認環境已安裝後，選同一版本與 `deploy`。正式 `next` 會要求同一版本、
    同一發布工具 digest 最新的 staging 發布成功，而且成功收據須來自可信的完整 workflow 執行。
 5. 查看每個階段和 GitHub Deployment。失敗先看收據；migration 或 provider 結果
@@ -44,7 +91,7 @@ Deployment branches and tags 選 Selected branches and tags，只加 **branch `m
 | --- | --- | --- |
 | Variable | `RELEASE_ENABLED` | 安裝與 staging 真實演練完成前維持 `false` |
 | Variable | `BACKUP_ENABLED` | 獨立安裝備份入口；未設或非 `true` 時拒絕，不能由發布開關推定 |
-| Variable | `RELEASE_OPERATOR_IMAGE` | 已審查的公開 OCI image，固定 `ghcr.io/freetwai/freedom-release-operator@sha256:…`，不能用 tag |
+| Variable | `RELEASE_OPERATOR_IMAGE` | 已審查且本倉 Actions 可讀的 OCI image，固定 `ghcr.io/freetwai/freedom-release-operator@sha256:…`，不能用 tag |
 | Variable | `RELEASE_CONFIG_SHA256` | 下方 config 的完整 UTF-8 bytes SHA-256，包含檔尾換行 |
 | Secret | `RELEASE_CONFIG_JSON` | 此環境的資源、DB 身份、外部 floor seed 與 migration profile；不接受程式或旗標決策，格式見 [operator protocol](operator-protocol.md) |
 | Secret | `CLOUDFLARE_API_TOKEN` | 團隊服務帳號的環境專用 token；僅核准的 Worker 部署、目標 R2 備份／讀回及必要資源權限 |
@@ -72,9 +119,20 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
 1. 原始碼通過必要審查、合併及相同 main 版本 CI 後，由四人之一執行
    `Release operator image`。它只封裝已追蹤來源，實跑 image 內 PG18、R2、migration
    與 smoke 邊界驗證，再以短效 job token 發布 GHCR；不讀取部署秘密。
-2. 確認該 image 可公開拉取，把輸出的不可變 digest 安裝到兩個 Environment。
+2. 保持 GHCR 套件 Private，把輸出的不可變 digest 安裝到兩個 Environment。
+   發布 workflow 會將套件連結本倉；確認 Package settings 的 **Manage Actions access**
+   已給 `freedom-platform` Read 或更高權限（Codespaces access 是另一項設定）。
+   部署與備份 job 使用 `packages: read` 的短效 `GITHUB_TOKEN` 登入並下載固定 digest；
+   權杖只經 stdin 傳給 runner 上的 Docker，暫存登入資料在啟動 operator 前刪除。
+   不需要改組織的公開政策、建立個人 PAT 或另存 registry secret。
+   `Release operator image` 的 `verify-pull` 會在另一個乾淨 runner，使用只有
+   `packages: read` 的 job token 實測下載；不能以 image build／push 綠燈替代。
    從原操作者保留的 legacy floor、素材政策及座標約束建立獨立核對的私人 seed；
    不得以當下 DB 狀態自行核准新的還原下限。固定 config bytes 與 SHA-256 必須一致。
+   若網站只有程式更新、最後 migration 仍是舊版本，可用 seed v2 明確採納已部署的
+   後繼版本；先獨立核對該版 main／CI、provider、DB ledger 與原政策。Operator 再
+   驗 Git ancestry、兩個 tree 和完整 SQL catalog；原 legacy floor 不改寫，不能用
+   v2 接受新增／變更／刪除 migration 或跳過原座標約束。
 3. 補齊服務憑證後，先開 `BACKUP_ENABLED`，保持 `RELEASE_ENABLED=false`。
    各環境先手動執行 `Shared backup`，核對真實 dump 預算、遠端讀回、隔離還原及清理。
 4. 保留舊 timer，等新 `Shared backup` 在 **05:43 UTC** 自然觸發並完成兩個環境。
@@ -88,6 +146,21 @@ service token、image 與 config 仍待安裝，發布尚未啟用。
 通過驗證，收據不超過 36 小時，image／config 與本次完全相同。改 pin 後須先驗新 pin
 的備份與自然排程。手動備份、舊 attempt、過期 artifact、失敗的新 run 都不放行。
 目前沒有自動排程補跑或未結案 floor 的自動重做功能；缺漏會明確拒絕。
+
+### 備份在上傳前失敗時的手動接續
+
+四位操作人可在 `Shared backup` 選同一環境，於 `recover_run_id` 填入原失敗 run ID，
+啟動一次新的完整 workflow。這不是 Re-run，也不把原失敗改成成功。
+控制程式先向 GitHub 核對原 run 已完成且失敗、main workflow、操作者、該環境 job
+及原 artifact；同 source／tree／config 才能接續，image 可更新到已審的修正版。
+Operator 取得原共用 DB lease 後，再讀回未變更的 Worker、ledger、政策與原 floor，
+確認原 capture backend 已結束、維護開關關閉且沒有刪除 fence，才追加
+`backup-abandoned` 歷史紀錄並開始新的備份。所有來源 pins 與原失敗證據保留。
+
+這條接續只適用於 **backup-only、已有 capture-policy intent、尚無 archive intent**。
+上傳結果不明、migration／deploy 失敗、舊程序仍存活、設定或狀態已改變都拒絕；
+不覆寫 seed、不刪 journal、不自動重送 PUT，也不能以此取得自然排程成功證據。
+新的失敗收據會顯示固定的備份階段、snapshot dump 進度與清理結果，不包含原始錯誤或憑證。
 
 ## 執行與失敗處理
 
@@ -186,7 +259,7 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 
 這個備份 adapter 仍要求上層提供已核准的來源、ledger 與 material policy digest。
 比對 digest 不等於驗證外部 retained floor 的權威；共享紀錄程式已補上，live 權威
-seed、公開 image 安裝與自然排程交接仍未完成。原生 PostgreSQL／R2
+seed、image 安裝與自然排程交接仍未完成。原生 PostgreSQL／R2
 演練使用合成資料；Cloudflare HTTP 邊界使用磁碟上的合成遠端副本，沒有接觸遠端
 bucket、Worker 或正式資料庫。
 

@@ -45,9 +45,9 @@ async function login(page: Page) {
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.locator('.shell')).toBeVisible();
-  await navigate(page, '私人工作與 AI');
-  await expect(page.getByRole('heading', { level: 1, name: '私人工作與 AI' })).toBeVisible();
-  const tools = page.getByRole('group', { name: '私人工作與 AI頁面工具', exact: true });
+  await navigate(page, '私人 AI 工作室');
+  await expect(page.getByRole('heading', { level: 1, name: '私人 AI 工作室' })).toBeVisible();
+  const tools = page.getByRole('group', { name: '私人 AI 工作室頁面工具', exact: true });
   await openPageTools(page);
   await expect(tools.getByRole('button')).toHaveCount(3);
   for (const name of ['提出想法', '頁面說明', '參與編修']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
@@ -101,10 +101,10 @@ test.describe('isolated SQL and loopback synthetic model fixture', () => {
     page.on('request', request => { if (request.method() === 'POST' && /\/me\/model-steps\/.+:execute$/.test(new URL(request.url()).pathname)) executes.push({ key: request.headers()['idempotency-key'], version: request.headers()['if-match'], body: request.postData() }); });
     await login(page);
     await page.getByRole('button', { name: '頁面說明', exact: true }).click();
-    const help = page.getByRole('dialog', { name: '私人工作與 AI：頁面說明', exact: true });
+    const help = page.getByRole('dialog', { name: '私人 AI 工作室：頁面說明', exact: true });
     await expect(help).toBeVisible();
     await expect(help.getByRole('heading', { name: '這一頁是什麼', exact: true })).toBeVisible();
-    await expect(help.locator('.page-tools-lead')).toHaveText('私人工作與 AI 讓你建立、修改本人的工作草稿，逐次確認模型推論送出的內容，並閱讀私人產出的成果。');
+    await expect(help.locator('.page-tools-lead')).toHaveText('私人 AI 工作室讓你建立、修改本人的工作草稿，逐次確認模型推論送出的內容，並閱讀私人產出的成果。');
     await expect(help.locator('.page-tools-help-steps')).toContainText('標題、目標、供應商、模型與輸出上限');
     await expect(help.locator('.page-tools-help-steps')).toContainText('目前成果與歷史');
     await expect(help.locator('.page-tools-help-steps')).toContainText('以原請求確認結果');
@@ -124,7 +124,7 @@ test.describe('isolated SQL and loopback synthetic model fixture', () => {
       await page.setViewportSize({ width, height });
       await page.evaluate(() => scrollTo(0, 0));
       await openPageTools(page);
-      for (const name of ['提出想法', '頁面說明', '參與編修']) await expect(page.getByRole('group', { name: '私人工作與 AI頁面工具', exact: true }).getByRole('button', { name, exact: true })).toBeInViewport();
+      for (const name of ['提出想法', '頁面說明', '參與編修']) await expect(page.getByRole('group', { name: '私人 AI 工作室頁面工具', exact: true }).getByRole('button', { name, exact: true })).toBeInViewport();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`private-ai-${width}.png`), fullPage: true });
       await page.screenshot({ path: testInfo.outputPath(`private-ai-viewport-${width}.png`) });

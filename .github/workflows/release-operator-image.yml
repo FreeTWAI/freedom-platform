@@ -15,6 +15,8 @@ jobs:
       contents: read
       actions: read
       packages: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -71,7 +73,8 @@ jobs:
             import {readFile,appendFile} from "node:fs/promises";
             const image=(await readFile(process.env.RUNNER_TEMP+"/operator-image-digest.txt","utf8")).trim();
             if(!/^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(image)) throw Error("image_digest_invalid");
-            await appendFile(process.env.GITHUB_STEP_SUMMARY,"\nBuilt and tested image: `"+image+"`\n\nEnvironment pins remain unchanged. Verify public pull and staging acceptance before enabling release.\n");'
+            await appendFile(process.env.GITHUB_OUTPUT,"image="+image+"\n");
+            await appendFile(process.env.GITHUB_STEP_SUMMARY,"\nBuilt and tested image: `"+image+"`\n\nEnvironment pins remain unchanged. Verify repository Actions access to this package and staging acceptance before enabling release.\n");'
       - name: Cleanup container and registry login
         if: always()
         env:
@@ -79,3 +82,35 @@ jobs:
         run: |
           docker rm --force "$IMAGE_TEST_CONTAINER" >/dev/null 2>&1 || true
           docker logout ghcr.io >/dev/null 2>&1 || true
+  verify-pull:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify pinned image pull with a separate read-only job token
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+          OPERATOR_IMAGE: ${{ needs.image.outputs.image }}
+        run: |
+          node --input-type=module -e '
+            import {mkdtemp,rm,appendFile} from "node:fs/promises";
+            import {join} from "node:path";
+            import {pullOperatorImage} from "./deploy/shared-release/operator.mjs";
+            const temporaryRoot=await mkdtemp(join(process.env.RUNNER_TEMP,"operator-pull-"));
+            try {
+              await pullOperatorImage({image:process.env.OPERATOR_IMAGE,temporaryRoot,
+                registry:{username:process.env.REGISTRY_USER,token:process.env.REGISTRY_TOKEN}});
+              await appendFile(process.env.GITHUB_STEP_SUMMARY,"\nSeparate packages:read job pulled `"+process.env.OPERATOR_IMAGE+"`. Environment pins remain unchanged; deployment has not run.\n");
+            } finally {await rm(temporaryRoot,{recursive:true,force:true});}'

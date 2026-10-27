@@ -6,6 +6,11 @@ export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
   Hao0321: 126182090, 'detna-vibe-coding': 267743027 });
 export const PHASES = Object.freeze(['preflight', 'backup-before', 'migration', 'deploy',
   'health', 'backup-after', 'handoff']);
+export const INDEPENDENT_PHASES = Object.freeze(['preflight', 'migration', 'deploy', 'health', 'handoff']);
+export const releasePhases = request => {
+  requireRelease(request.releaseKind === undefined || request.releaseKind === 'independent', 'release_contract_invalid');
+  return request.releaseKind === 'independent' ? INDEPENDENT_PHASES : PHASES;
+};
 export const requireRelease = (condition, code) => {
   if (!condition) throw Object.assign(new Error(code), { code });
 };
@@ -23,14 +28,18 @@ export function requestFromEnvironment(env) {
     && isSha(env.CONTROLLER_SHA), 'release_workflow_identity_invalid');
   requireRelease(isSha(env.RELEASE_SHA), 'release_exact_sha_required');
   requireRelease(['staging-next', 'next'].includes(env.RELEASE_TARGET), 'release_target_invalid');
-  requireRelease(['plan', 'deploy'].includes(env.RELEASE_MODE), 'release_mode_invalid');
+  requireRelease(['plan', 'check', 'deploy'].includes(env.RELEASE_MODE), 'release_mode_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
       && positiveId(Number(env[key])), 'release_run_identity_invalid');
   }
-  return { format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
+  const recovery = env.RELEASE_RECOVER_BACKUP_RUN_ID;
+  requireRelease(!recovery || (env.RELEASE_MODE === 'deploy' && /^[1-9][0-9]{0,15}$/.test(recovery)
+    && positiveId(Number(recovery)) && String(Number(recovery)) === recovery && recovery !== env.GITHUB_RUN_ID),
+  'release_backup_recovery_request_invalid');
+  return { ...(recovery ? { recoverRunId: Number(recovery) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
-    mode: env.RELEASE_MODE, controllerSha: env.CONTROLLER_SHA,
+    mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID),
     triggeringActor: env.GITHUB_TRIGGERING_ACTOR,
     runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) };
@@ -116,6 +125,41 @@ export function admitInstallation(env) {
   return { image: env.RELEASE_OPERATOR_IMAGE, configSha256: env.RELEASE_CONFIG_SHA256 };
 }
 
+// The initial shared journal may predate the last release by the legacy
+// operator. Authenticate that existing deployment; the image must still match
+// it to the live Worker and unchanged SQL/DB authority under the release lease.
+export async function requireLegacyPredecessor(api, admission) {
+  const prefix = `/repos/${REPOSITORY}`;
+  const latest = async () => {
+    const rows = await api(`${prefix}/deployments?environment=${admission.target}&per_page=100`);
+    requireRelease(Array.isArray(rows) && rows.every(row => positiveId(row.id)), 'release_legacy_deployments_invalid');
+    return rows.filter(row => row.environment === admission.target).sort((a, b) => b.id - a.id)[0];
+  };
+  const deployment = await latest();
+  if (!deployment || deployment.payload?.format === 'freedom.shared-release/v1') return undefined;
+  requireRelease(deployment.task === 'deploy' && isSha(deployment.sha)
+    && deployment.payload && Object.keys(deployment.payload).length === 0, 'release_legacy_deployment_invalid');
+  const creator = await admitActor(api, deployment.creator?.login, deployment.creator?.id);
+  const status = async () => {
+    const rows = await api(`${prefix}/deployments/${deployment.id}/statuses?per_page=1`);
+    requireRelease(Array.isArray(rows) && rows.length === 1 && positiveId(rows[0].id)
+      && rows[0].state === 'success' && Number.isFinite(Date.parse(rows[0].created_at)), 'release_legacy_deployment_not_successful');
+    await admitActor(api, rows[0].creator?.login, rows[0].creator?.id);
+    return rows[0];
+  };
+  const successful = await status();
+  const verified = await admitRelease({ ...admission, sourceSha: deployment.sha }, api);
+  const ancestry = await api(`${prefix}/compare/${deployment.sha}...${admission.sourceSha}`);
+  requireRelease(['ahead', 'identical'].includes(ancestry.status)
+    && ancestry.merge_base_commit?.sha === deployment.sha, 'release_legacy_successor_invalid');
+  requireRelease((await latest())?.id === deployment.id && (await status()).id === successful.id,
+    'release_legacy_deployment_changed');
+  return { format: 'freedom.verified-legacy-deployment/v1', target: admission.target,
+    deploymentId: deployment.id, statusId: successful.id, creator, completedAt: successful.created_at,
+    sourceSha: verified.sourceSha, sourceTree: verified.sourceTree, verification: verified.verification,
+    admittedRunId: admission.runId, admittedRunAttempt: admission.runAttempt };
+}
+
 export async function requireStaging(api, admission, installation) {
   if (admission.target !== 'next') return;
   const prefix = `/repos/${REPOSITORY}`;
@@ -174,7 +218,10 @@ export async function requireStaging(api, admission, installation) {
     && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
   requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
-    && receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1'
+    && (receipt.releaseKind === undefined || receipt.releaseKind === 'independent')
+    && (receipt.releaseKind === 'independent'
+      ? receipt.releaseKind === 'independent' && receipt.providerOutcome === 'release_confirmed' && receipt.operatorEvidence === 'validated-independent-release/v1'
+      : receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1')
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
     && receipt.controllerSha === binding.controllerSha && receipt.target === 'staging-next' && receipt.mode === 'deploy'
@@ -186,10 +233,10 @@ export async function requireStaging(api, admission, installation) {
   let previous = Date.parse(receipt.admittedAt);
   requireRelease(Number.isFinite(start) && Number.isFinite(previous) && Number.isFinite(completed) && Number.isFinite(end)
     && previous >= start && completed >= previous && completed <= end && end <= Date.now() + 60_000
-    && Array.isArray(receipt.phases) && receipt.phases.length === PHASES.length, 'release_staging_receipt_invalid');
+    && Array.isArray(receipt.phases) && receipt.phases.length === releasePhases(receipt).length, 'release_staging_receipt_invalid');
   for (const [index, phase] of receipt.phases.entries()) {
     const from = Date.parse(phase.startedAt), to = Date.parse(phase.completedAt);
-    requireRelease(phase.name === PHASES[index] && phase.status === 'passed' && Number.isFinite(from)
+    requireRelease(phase.name === releasePhases(receipt)[index] && phase.status === 'passed' && Number.isFinite(from)
       && Number.isFinite(to) && from >= previous && to >= from && to <= completed, 'release_staging_receipt_invalid');
     previous = to;
   }

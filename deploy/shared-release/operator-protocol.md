@@ -6,9 +6,59 @@ service credentials, independently checked authority and image/config pins are
 installed for controlled staging acceptance. Do not copy personal-host credentials
 into the image. This file is part of the reviewed controller surface.
 
+## Independent release contract
+
+The protected-main controller now requests `releaseKind: independent` and the exact
+five phases `preflight`, `migration`, `deploy`, `health`, `handoff`. With no pending SQL, migration is read-only verification of the unchanged ledger,
+canonical grants, retained constraints and runtime reads, completed before journal
+begin. Approved pending SQL remains reachable through the immutable installed
+transaction runner: SQL policy scan, ledger prefix, lease, before/after invariants,
+commit intent, confirmed floor and unknown-COMMIT refusal remain. Only the fresh
+backup requirement and backupSetId dependency are absent in this contract. The
+legacy runner mode retains its old backup contract for legacy callers. SQL review
+still determines whether a data change is appropriate; catalog hashes do not prove
+that arbitrary SQL is additive or reversible.
+
+Independent deploy does not consume scheduled-backup evidence, invoke either backup
+phase, connect as the backup role, or require `backupDatabaseUrl`. It still uses
+the existing environment config and authenticated R2 control journal, the shared
+Actions lock and database lease. Routine backups remain independent and daily.
+The new `release-begin-v2` journal event has four ordered stages after preflight;
+historical `begin` records retain the original six-stage replay semantics below.
+Successful public receipts use `release_confirmed` and
+`validated-independent-release/v1`; staging admission authenticates both genuine legacy
+and new receipts with their own phase contract, never check-mode receipts.
+
+An optional failed-backup run reference authenticates the original terminal
+workflow/artifact before any BEGIN-only reconciliation. Its failed inner preflight
+and `snapshotDump: not_started` plus the authenticated empty-intent journal are
+necessary, not sufficient: independent Worker/DB/floor/GC/backend observations
+under the lease must pass before append-only abandonment. No seed reset, deletion,
+archive/capture-intent recovery or backup-success assertion is part of deploy.
+Daily receipts now retain independent allowlisted `phaseCode` and `cleanupCode`;
+raw error strings and provider detail never enter these fields.
+
+The rest of this document describes retained legacy and backup contracts where
+seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
+
 ## Invocation and ownership
 
-The image must be public, independently reviewed and pinned by digest. Its fixed
+The manual `check` mode is a separate read-only diagnostic, executed by the
+reviewed main controller after the same actor/source/CI admission. It reads the
+Environment's pinned config and tests account-token verification, retained
+Worker/routes/Hyperdrive inspection, bounded R2 object listings and fixed-origin
+health with staging-only Access headers. It does not invoke the operator image,
+write a journal, access a database or create a GitHub Deployment. It works with
+release and backup switches disabled. Its `checks_passed` receipt is deliberately
+ineligible for production staging evidence. Raw responses and exception text are
+excluded; write permissions and backup/deployment readiness remain unverified.
+
+The image must be independently reviewed, readable by this repository's Actions
+and pinned by digest. A private GHCR package is supported through the job's
+`packages: read` GITHUB_TOKEN. The host sends it only to `docker login ghcr.io`
+over stdin, pulls the pinned digest using a fresh mode-0700 Docker config, then
+removes that config before starting the operator. The token and registry config
+are never mounted or passed into the container. Its fixed
 entrypoint is `/usr/local/bin/freedom-release`; arguments are only `--request`,
 `--config`, `--credentials`, `--result`, followed by fixed paths in `/release`.
 It runs as UID/GID 1001, no Linux capabilities, no Docker socket, a read-only root,
@@ -132,6 +182,16 @@ and only the five already-reviewed PG18 restore definition variants. Original
 legacy material-policy bytes remain authoritative; this port cannot bootstrap a
 floor from the live database. Independent live provisioning is still needed.
 
+Legacy seed v1 requires the deployed source/tree to equal the original migration
+floor. Seed v2 explicitly supports an already deployed code-only descendant:
+the provisioner independently checks its exact main/CI identity and provider
+state before pinning it. On every open, the operator verifies Git ancestry, both
+immutable trees and the descendant's entire regular SQL catalog against the
+original ledger, using the existing `migrationDigest` format. Added, removed or
+changed migrations fail. The original legacy floor, schema ledger, material
+policy and coordinate authority stay byte-pinned and unchanged; v2 does not
+invent migration events or approve a live database as new schema authority.
+
 `buildApplication` copies the selected Git commit into a fresh independent build
 directory, installs its lockfile, builds the portal and runs the image's fixed
 Wrangler dry-run without inherited provider/DB/job credentials. It verifies the
@@ -175,7 +235,10 @@ excludes `.git` and private/untracked files. Immutable Node24 and PG18 bases,
 locked dependencies, fixed TS loader and the reviewed import closure produce the
 image. Its native fixture runs as UID1001 with read-only root and no network,
 then the short-lived job token publishes GHCR. Publication does not alter pins
-or enable an environment; public pull must be verified before installation.
+or enable an environment; a separate job's authenticated pull must be verified
+before installation. The `verify-pull` job uses a fresh runner and only
+`packages: read`, exercising the same download helper as release/backup.
+Organization package-publication policy need not change.
 
 `shared-backup.yml` has a separate `BACKUP_ENABLED` switch. It backs up each
 actually deployed, main/CI-admitted SHA under the same DB lease and shared journal.

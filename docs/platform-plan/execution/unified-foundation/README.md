@@ -71,4 +71,4 @@ Ted 在規格完成後已明確授權由目前 agent 直接實作並持續推進
 
 每個實作 PR 附來源需求、前後行為、實際 SHA、相依 PR、已跑及 `not_run` 項目。合計 168 項原始驗收保留來源命名空間；schema／mock 通過、本機 runtime 通過、真實 GitHub 強制、staging/provider、packaged client、production 的證據分開記錄。缺少 AP 舊附件 ZIP 不妨礙建立正式中央 schema/vectors，但不能引用原作者的樣本 PASS 當本輪證據。
 
-目前仍需每次 push 前重產 inventory 並執行 `npm run verify:inventory`。本機文件產出不等於授權推送、合併、設定 ruleset、簽發 release、部署或發布 Discord 公告。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。本機文件產出不等於授權推送、合併、設定 ruleset、簽發 release、部署或發布 Discord 公告。

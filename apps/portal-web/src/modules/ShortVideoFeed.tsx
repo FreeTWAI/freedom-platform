@@ -13,7 +13,7 @@ export type ShortRefreshResult = readonly string[] | null;
  * player, so the next video is already loaded when it arrives; only the one on screen plays, and only while
  * the viewer has not paused it, the tab is visible and the list has been confirmed current.
  */
-export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefresh, onManage, onLike, onComment, likeBusy, renderShare}: {
+export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefresh, onManage, onLike, onComment, likeBusy, likeRetry, renderShare}: {
   posts: readonly ShortVideoPost[]; hasMore: boolean; loadingMore: boolean; onLoadMore: () => void;
   /** Re-reads the list; resolves with the current ids, or null when the request failed. */
   onRefresh: () => Promise<ShortRefreshResult>;
@@ -24,6 +24,8 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
   /** Opens the post's comments (the existing comment panel) for a post. */
   onComment: (post: ShortVideoPost, trigger: HTMLElement) => void;
   likeBusy?: string | null;
+  /** An uncertain command confirms its original intent rather than starting a new toggle. */
+  likeRetry?: Readonly<Record<string,boolean>>;
   /** The existing share control for a post (permalink hand-off). */
   renderShare: (post: ShortVideoPost) => ReactNode;
 }) {
@@ -204,6 +206,8 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
       {videos.map((post, index) => {
         const embed = Math.abs(index - active) <= 1 ? shortVideoEmbedUrl(post.url) : null;
         const unconfirmed = index === active && check !== 'idle';
+        const retryLike=likeRetry?.[post.post_id];
+        const likeLabel=retryLike===undefined?(post.liked?'收回讚':'按讚'):(retryLike?'確認上次按讚':'確認上次收回讚');
         return <article key={post.post_id} data-index={index} data-post-id={post.post_id} className={`short-video-slide${unconfirmed ? ' is-unconfirmed' : ''}`} aria-label={`第 ${index + 1} 支，共 ${videos.length} 支：${post.title}`}>
           {post.thumbnail_url && <img className="short-video-poster" src={post.thumbnail_url} alt="" loading="lazy"/>}
           {embed && <iframe ref={element => { frames.current[index] = element; }} title={post.title} src={embed} tabIndex={-1} allow="autoplay; encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation"
@@ -219,7 +223,7 @@ export function ShortVideoFeed({posts, hasMore, loadingMore, onLoadMore, onRefre
             <span>{post.author.display_name} · {formatIsoLocal(post.created_at)}</span>
             {post.url && <a href={post.url} target="_blank" rel="noopener noreferrer">在 YouTube 開啟 ↗</a>}
             <div className="short-video-actions" role="group" aria-label="貼文互動">
-              <button type="button" className="short-video-action" aria-pressed={post.liked ?? false} aria-label={`${post.liked ? '收回讚' : '按讚'} · ${post.like_count ?? 0}`} disabled={likeBusy === post.post_id} onClick={() => onLike(post)}>{post.liked ? '♥' : '♡'} {post.like_count ?? 0}</button>
+              <button type="button" className="short-video-action" aria-pressed={post.liked ?? false} aria-label={`${likeLabel} · ${post.like_count ?? 0}`} aria-busy={likeBusy === post.post_id || undefined} disabled={likeBusy === post.post_id} onClick={() => onLike(post)}>{retryLike===undefined?(post.liked?'♥':'♡'):likeLabel} {post.like_count ?? 0}</button>
               <button type="button" className="short-video-action" aria-label={`留言 · ${post.comment_count ?? 0}`} onClick={event => onComment(post, event.currentTarget)}>💬 {post.comment_count ?? 0}</button>
               <span className="short-video-share">{renderShare(post)}</span>
               <button type="button" className="short-video-action short-video-manage" onClick={event => onManage(post, event.currentTarget)}>貼文選項與檢舉</button>

@@ -1,0 +1,18 @@
+.platform-helper { display: inline-flex; align-items: center; gap: .5rem; }
+.platform-helper button { min-height: 44px; min-width: 44px; }
+.platform-helper-dialog { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 0; width: min(36rem, calc(100vw - 1.5rem)); max-width: calc(100vw - 1.5rem); max-height: calc(100dvh - 1.5rem); overflow: hidden; }
+.platform-helper-dialog[open] { display: flex; flex-direction: column; }
+.platform-helper-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.platform-helper-dialog header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .75rem; border-bottom: 1px solid var(--line); flex: none; }
+.platform-helper-dialog h2 { font-size: 1rem; overflow-wrap: anywhere; }
+.platform-helper-dialog h3 { font-size: 1rem; }
+.platform-helper-body { overflow: auto; overscroll-behavior: contain; min-height: 0; padding: .75rem; display: grid; gap: .75rem; font-size: 1rem; overflow-wrap: anywhere; }
+.platform-helper-body form { display: grid; gap: .5rem; }
+.platform-helper-body input { width: 100%; min-width: 0; font-size: 1rem; }
+.platform-helper-body form button { justify-self: start; }
+.platform-helper-choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.platform-helper-card { display: grid; gap: .5rem; padding: .75rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.platform-helper-card ol { margin: 0; padding-inline-start: 1.4rem; }
+.platform-helper-card button { justify-self: start; white-space: normal; }
+.platform-helper-note { color: var(--muted); }
+.platform-helper :is(button,input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

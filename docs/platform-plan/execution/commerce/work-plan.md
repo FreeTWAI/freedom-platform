@@ -791,7 +791,7 @@ Claude 達到額度上限後，Ted 授權 Codex 接手，並可使用 Grok CLI `
 | `apps/platform-api/src/platform-app.ts`、`worker.ts`、`server.ts`、`runtime.ts`、`app.ts` | wp03-http，之後 wp04-* | 同上 |
 | `modules/module-data/catalog.ts` | 帶新表的工作 | 同上 |
 | `modules/module-registry/definitions.ts`、`contracts/guild-launchpad/v1/tenant.ts` | wp04-accounts | 同上 |
-| `docs/platform-plan/verification/2026-09-20-file-inventory.json` | 每個工作最後重產 | 合併衝突一律重產，不手改 |
+| 日期 inventory | 歷史快照 | PR CI 與 main pushes 使用 Git objects |
 | `modules/agent-commerce/freedom.module.json` | 不改 | 已有 64 條路徑；新路徑放新的 descriptor（§7） |
 | `modules/agent-commerce/supplier-console/**`、`HostedStore()` 的路由、App 的離開提示 | Supplier Console 工作階段 | commerce 的工作不改 |
 
@@ -823,7 +823,7 @@ Claude 達到額度上限後，Ted 授權 Codex 接手，並可使用 Grok CLI `
 | 履約契約與 SL 頁 | Commerce → Supplier | M3 的 `contracts/guild-launchpad/v1/` 新檔與讀取投影；SL 頁等 Commerce 交 SHA 才開始 | 依 M3 |
 | migration 編號 | 雙方 | Commerce 的 M1～M4 與 Supplier 的 S3 依合併順序取號 | 整合時決定 |
 
-雙方都會改的共用檔（spec index、file inventory、`generate-contracts`、guild-launchpad 契約測試）在整合時合併，衝突時兩邊都保留。
+雙方都會改的共用檔（spec index、`generate-contracts`、guild-launchpad 契約測試）在整合時合併，衝突時兩邊都保留。
 
 ## 9. 埠與資料庫
 

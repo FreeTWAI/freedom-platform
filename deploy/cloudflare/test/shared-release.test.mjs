@@ -1,3 +1,5 @@
+import { runPortableMigration } from '../../shared-release/portable/migration.mjs';
+import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs } from 'node:fs/promises';
@@ -5,9 +7,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
-  admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator } from '../../shared-release/operator.mjs';
+  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient } from '../../shared-release/admission.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -19,11 +22,13 @@ import { buildApplication, directoryDigest } from '../../shared-release/portable
 import { git as fixtureGit } from './migration-fixtures.mjs';
 import { createControlStore } from '../../shared-release/portable/control-store.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared-release/portable/coordinate-fence.mjs';
-import { replayReleaseFloor } from '../../shared-release/portable/floor.mjs';
-import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
+import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/portable/floor.mjs';
+import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
-import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup } from '../../shared-release/scheduled-admission.mjs';
+import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
+import { checkEnvironment } from '../../shared-release/environment-check.mjs';
+import { main as releaseMain } from '../../shared-release/cli.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -63,7 +68,8 @@ const environment = () => ({ GITHUB_REPOSITORY: REPOSITORY, GITHUB_REPOSITORY_ID
   CONTROLLER_SHA: main, RELEASE_SHA: sha, RELEASE_TARGET: 'staging-next', RELEASE_MODE: 'plan',
   GITHUB_ACTOR: 'teddashh', GITHUB_ACTOR_ID: String(OPERATORS.teddashh),
   GITHUB_TRIGGERING_ACTOR: 'arumwu', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '2' });
-const request = () => ({ ...requestFromEnvironment(environment()), admittedAt: new Date(0).toISOString() });
+// Retain legacy receipt/journal fixtures; independent coverage below is explicit.
+const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: undefined, admittedAt: new Date(0).toISOString() });
 
 function fixtureApi(override = () => undefined) {
   const calls = [];
@@ -255,6 +261,7 @@ test('plan-only/skipped execution, stale/wrong-run/expired or duplicate artifact
 test('artifact receipt must bind the deployment, source, operator, config, actors and seven ordered completed phases', async () => {
   for (const patch of [{ status: 'plan_passed' }, { providerOutcome: 'unknown_until_confirmed' }, { operatorEvidence: undefined },
     { sourceSha: main }, { sourceTree: sha }, { controllerSha: sha }, { target: 'next' }, { mode: 'plan' },
+    { mode: 'check' }, { status: 'checks_passed' },
     { runId: 44 }, { runAttempt: 1 }, { deploymentId: 2 }, { operatorImage: 'other' }, { configSha256: '0'.repeat(64) },
     { original: { login: 'Hao0321', id: OPERATORS.Hao0321 } }, { phases: [] }, { completedAt: new Date(0).toISOString() }]) {
     const fixture = stagingFixture(); Object.assign(fixture.state.receipt, patch);
@@ -340,6 +347,25 @@ test('failed progress reports identify the phase without publishing arbitrary op
   assert.throws(() => operatorProgress(value, request(), installation, 'e'.repeat(64)));
 });
 
+test('failed backup progress exposes only bounded stage and cleanup evidence', () => {
+  const value = resultFixture(); value.phases = value.phases.slice(0, 2);
+  value.phases[1].status = 'failed';
+  value.phases[1].backupFailure = { stage: 'capture', code: 'daily_backup_phase_failed', cleanupVerified: true,
+    secret: 'private-provider-diagnostic' };
+  const failure = operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1);
+  assert.deepEqual(failure, { name: 'backup-before', reportedStatus: 'failed',
+    backupFailure: { stage: 'capture', code: 'daily_backup_phase_failed', cleanupVerified: true } });
+  value.phases[1].backupFailure.snapshotDump = 'failed';
+  assert.equal(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure.snapshotDump, 'failed');
+  value.phases[1].backupFailure.snapshotDump = 'private-dump-error';
+  assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1), failure);
+  for (const patch of [{ stage: 'private-stage' }, { code: 'daily_backup_private_token' }, { cleanupVerified: 'true' }]) {
+    const changed = structuredClone(value); Object.assign(changed.phases[1].backupFailure, patch);
+    assert.deepEqual(operatorProgress(changed, request(), installation, 'e'.repeat(64)).at(-1),
+      { name: 'backup-before', reportedStatus: 'failed' });
+  }
+});
+
 async function operatorFixture(t, outcome = 'passed') {
   const root = await mkdtemp(join(tmpdir(), 'freedom-shared-release-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -347,9 +373,16 @@ async function operatorFixture(t, outcome = 'passed') {
   await mkdir(source); await mkdir(temporaryRoot);
   const calls = [], credentials = { cloudflareApiToken: 'fixture-token', migrationDatabaseUrl: 'fixture-db', runtimeDatabaseUrl: 'fixture-runtime', backupDatabaseUrl: 'fixture-backup',
     stagingAccessClientId: 'fixture-access-id', stagingAccessClientSecret: 'fixture-access-secret' };
-  const run = async (cmd, args) => {
+  const registry = { username: 'teddashh', token: 'fixture-registry-secret' };
+  const run = async (cmd, args, timeout, options) => {
+    if (args[0] === '--config') {
+      assert.equal((await stat(args[1])).mode & 0o777, 0o700);
+      if (args[2] === 'login') assert.equal(options.input, registry.token);
+      else assert.equal(options, undefined);
+    }
     calls.push([cmd, ...args]);
     if (args[0] === 'run') {
+      await assert.rejects(stat(join(temporaryRoot, 'registry')), { code: 'ENOENT' });
       const input = await readFile(join(temporaryRoot, 'input/request.json'), 'utf8');
       assert.equal((await stat(join(temporaryRoot, 'input/credentials.json'))).mode & 0o777, 0o600);
       assert.deepEqual(JSON.parse(await readFile(join(temporaryRoot, 'input/credentials.json'), 'utf8')), credentials);
@@ -358,17 +391,18 @@ async function operatorFixture(t, outcome = 'passed') {
       else await writeFile(join(temporaryRoot, 'output/result.json'), JSON.stringify(resultFixture(request(), hash(input))));
     }
     if (args[0] === 'rm' && outcome.endsWith('cleanup-failed')) throw Error('cleanup failure');
-    if (args[0] === 'pull' && outcome === 'pull-failed') throw Error('pull failure');
+    if (args[2] === 'pull' && outcome === 'pull-failed') throw Error('pull failure');
   };
   return { calls, root, temporaryRoot, options: { admission: request(), installation, sourceRoot: source,
-    temporaryRoot, config, credentials, run } };
+    temporaryRoot, config, credentials, registry, run } };
 }
 
 test('one operator process owns the whole release; no credentials enter argv, host mounts or artifacts', async t => {
   const fixture = await operatorFixture(t);
   assert.equal((await runOperator(fixture.options)).length, 7);
-  assert.deepEqual(fixture.calls.map(call => call[1]), ['pull', 'run', 'rm']);
+  assert.deepEqual(fixture.calls.map(call => call[1] === '--config' ? call[3] : call[1]), ['login', 'pull', 'run', 'rm']);
   assert.ok(!JSON.stringify(fixture.calls).includes('fixture-token'));
+  assert.ok(!JSON.stringify(fixture.calls).includes('fixture-registry-secret'));
   assert.ok(!JSON.stringify(fixture.calls).includes('docker.sock'));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'output')));
@@ -382,10 +416,41 @@ test('one operator process owns the whole release; no credentials enter argv, ho
 test('an interrupted release is not retried and private input/output are removed', async t => {
   const fixture = await operatorFixture(t, 'interrupted');
   await assert.rejects(runOperator(fixture.options));
-  assert.deepEqual(fixture.calls.map(call => call[1]), ['pull', 'run', 'rm']);
+  assert.deepEqual(fixture.calls.map(call => call[1] === '--config' ? call[3] : call[1]), ['login', 'pull', 'run', 'rm']);
   await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'output')));
   await assert.rejects(stat(join(fixture.temporaryRoot, 'work')));
+});
+
+test('private registry login and pull failures remove credentials and cannot start an operator', async t => {
+  for (const failing of ['login', 'pull']) {
+    const fixture = await operatorFixture(t), calls = [];
+    await assert.rejects(pullOperatorImage({ image: installation.image, temporaryRoot: fixture.temporaryRoot,
+      registry: fixture.options.registry, run: async (command, args, timeout, options) => {
+        calls.push(args[2]);
+        assert.equal(command, 'docker');
+        if (args[2] === 'login') {
+          assert.equal(options.input, fixture.options.registry.token);
+          await writeFile(join(args[1], 'config.json'), 'synthetic private registry credentials');
+        } else assert.equal(args.at(-1), installation.image);
+        if (args[2] === failing) throw Error('private provider error with token');
+      } }), { code: 'release_registry_pull_failed', message: 'release_registry_pull_failed' });
+    assert.deepEqual(calls, failing === 'login' ? ['login'] : ['login', 'pull']);
+    await assert.rejects(stat(join(fixture.temporaryRoot, 'registry')), { code: 'ENOENT' });
+  }
+});
+
+test('registry input is validated before login; quiet subprocess sends token only through stdin', async t => {
+  const fixture = await operatorFixture(t); let calls = 0;
+  for (const patch of [{ image: 'ghcr.io/other/image:latest' }, { registry: undefined },
+    { registry: { username: 'teddashh', token: 'bad\nheader' } }, { registry: { username: '--invalid', token: '' } }]) {
+    await assert.rejects(pullOperatorImage({ image: installation.image, temporaryRoot: fixture.temporaryRoot,
+      registry: fixture.options.registry, run: async () => { calls++; }, ...patch }));
+  }
+  assert.equal(calls, 0);
+  const program = "let value='';process.stdin.on('data',b=>value+=b);process.stdin.on('end',()=>{"
+    + "if(value!=='synthetic-stdin-token'||Object.keys(process.env).some(k=>/TOKEN|DOCKER_CONFIG/.test(k)))process.exit(1);});";
+  await quietCommand(process.execPath, ['-e', program], 5000, { input: 'synthetic-stdin-token' });
 });
 
 test('remote PostgreSQL credentials bind the expected role/database and require full TLS verification', () => {
@@ -451,7 +516,7 @@ test('receipt symlinks and failed container cleanup cannot yield successful rele
     await assert.rejects(stat(join(fixture.temporaryRoot, 'input')));
     if (outcome.endsWith('cleanup-failed')) assert.equal((await stat(join(fixture.temporaryRoot, 'work'))).mode & 0o777, 0o700);
     else await assert.rejects(stat(join(fixture.temporaryRoot, 'work')));
-    if (outcome === 'pull-failed') assert.deepEqual(fixture.calls.map(call => call[1]), ['pull']);
+    if (outcome === 'pull-failed') assert.deepEqual(fixture.calls.map(call => call[3]), ['login', 'pull']);
   }
 });
 
@@ -848,7 +913,7 @@ async function deployFixture(t) {
     token: 'synthetic-deploy-token', signal: controller.signal, fetchImpl });
   const before = await deployer.inspect();
   const source = parseJsonc(await readFile(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'));
-  return { deployer, before, sourceSha, oldVersion, newVersion, controller,
+  return { deployer, before, sourceSha, oldVersion, newVersion, controller, fetchImpl,
     args: { sourceSha, before, source, sourceRoot: '/fixture/source', workRoot,
       async retainIntent(value) { assert.equal(value.sourceSha, sourceSha); assert.equal(value.automaticRetry, false); },
       lease: { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } } },
@@ -1051,6 +1116,79 @@ test('retained coordinate fence accepts only original live constraints and exact
   assert.throws(() => validateCoordinateAuthority(input), /release_coordinate_variant_binding_invalid/);
 });
 
+async function adoptionFixture(t) {
+  const sourceRoot = await mkdtemp(join(tmpdir(), 'fp-floor-adoption-'));
+  t.after(() => rm(sourceRoot, { recursive: true, force: true }));
+  fixtureGit(sourceRoot, ['init', '-q', '-b', 'main']); await mkdir(join(sourceRoot, 'migrations'));
+  const sql = 'CREATE TABLE fixture(id integer);\n';
+  await writeFile(join(sourceRoot, 'migrations/189_fixture.sql'), sql);
+  const commit = () => {
+    fixtureGit(sourceRoot, ['add', '.']); fixtureGit(sourceRoot, ['commit', '-qm', 'Synthetic floor fixture']);
+    return { sourceSha: fixtureGit(sourceRoot, ['rev-parse', 'HEAD']), sourceTree: fixtureGit(sourceRoot, ['rev-parse', 'HEAD^{tree}']) };
+  };
+  const previous = commit(), schemaLedger = [{ name: '189_fixture.sql', sha256: migrationDigest(sql) }];
+  const policies = [{ bucket: 'synthetic-media', revision: 'retained' }];
+  const legacy = { format: 'freedom.schema189-committed-floor/v1', restoreQuarantineRequired: true,
+    floor: { environment: 'staging', minimumSchema: 189, candidateRelease: previous.sourceSha },
+    migration: { release: previous.sourceSha, tree: previous.sourceTree, commitStatus: 'confirmed' }, schemaLedger,
+    retained172: { floor: { floor: { environment: 'staging', minimumSchema: 172 } },
+      materialPolicy: { format: 'freedom.backup-material-policy-observation/v1', policies } } };
+  await writeFile(join(sourceRoot, 'app.txt'), 'independent update'); const current = commit();
+  const seed = { format: 'freedom.shared-floor-seed/v2', authority: { legacyFloorSha256: hash(JSON.stringify(legacy)) },
+    state: { ...current, deployedSourceSha: current.sourceSha, bindingsSha256: 'd'.repeat(64),
+      materialPolicySha256: hash(JSON.stringify(policies)), schemaLedger, schemaVersion: 189, pending: null } };
+  const open = (candidate = seed, authority = legacy) => openReleaseFloor({ sourceRoot, intentDirectory: sourceRoot,
+    store: { target: 'staging-next', load: async () => [{ sha256: hash(JSON.stringify(candidate)), record: { data: candidate } }],
+      readAuthority: async () => structuredClone(authority), append: async () => { throw Error('No writes during adoption'); } } });
+  return { sourceRoot, previous, current, legacy, seed, commit, open };
+}
+
+test('seed v2 adopts a independent Git descendant while keeping original migration authority', async t => {
+  const f = await adoptionFixture(t), before = JSON.stringify(f.legacy);
+  assert.equal((await f.open()).state().sourceSha, f.current.sourceSha);
+  assert.equal(JSON.stringify(f.legacy), before);
+  // Immutable Git blobs are authoritative, not mutable working-tree SQL.
+  await writeFile(join(f.sourceRoot, 'migrations/189_fixture.sql'), 'uncommitted SQL is not authority');
+  assert.equal((await f.open()).state().sourceSha, f.current.sourceSha);
+  assert.notEqual(f.seed.state.schemaLedger[0].sha256, hash('CREATE TABLE fixture(id integer);\n'));
+});
+
+test('seed v1 retains exact-source compatibility and rejects independent adoption', async t => {
+  const f = await adoptionFixture(t), seed = structuredClone(f.seed); seed.format = 'freedom.shared-floor-seed/v1';
+  await assert.rejects(f.open(seed), { code: 'release_floor_legacy_authority_invalid' });
+  Object.assign(seed.state, f.previous, { deployedSourceSha: f.previous.sourceSha });
+  assert.equal((await f.open(seed)).state().sourceSha, f.previous.sourceSha);
+});
+
+test('seed v2 rejects new, edited, removed and symlink migration catalogs', async t => {
+  for (const change of ['add', 'edit', 'remove', 'symlink']) {
+    const f = await adoptionFixture(t), path = join(f.sourceRoot, 'migrations/189_fixture.sql');
+    if (change === 'add') await writeFile(join(f.sourceRoot, 'migrations/190_new.sql'), 'SELECT 1;');
+    if (change === 'edit') await writeFile(path, 'SELECT 2;');
+    if (change === 'remove' || change === 'symlink') await rm(path);
+    if (change === 'symlink') await symlink('../app.txt', path);
+    const updated = f.commit(); Object.assign(f.seed.state, updated, { deployedSourceSha: updated.sourceSha });
+    await assert.rejects(f.open(), { code: change === 'symlink' ? 'release_floor_adoption_catalog_invalid' : 'release_floor_adoption_catalog_changed' });
+  }
+});
+
+test('seed v2 rejects unrelated ancestry, wrong trees, ledger substitution and changed original policies', async t => {
+  const f = await adoptionFixture(t);
+  const unrelated = fixtureGit(f.sourceRoot, ['commit-tree', f.current.sourceTree, '-m', 'Unrelated synthetic root']);
+  for (const sourceSha of [unrelated, 'f'.repeat(40)]) {
+    const seed = structuredClone(f.seed); Object.assign(seed.state, { sourceSha, deployedSourceSha: sourceSha });
+    await assert.rejects(f.open(seed), { code: 'release_floor_adoption_source_invalid' });
+  }
+  const wrongTree = structuredClone(f.seed); wrongTree.state.sourceTree = f.previous.sourceTree;
+  await assert.rejects(f.open(wrongTree), { code: 'release_floor_adoption_tree_invalid' });
+  const wrongLegacy = structuredClone(f.legacy); wrongLegacy.migration.tree = f.current.sourceTree;
+  await assert.rejects(f.open(f.seed, wrongLegacy), { code: 'release_floor_adoption_tree_invalid' });
+  const wrongLedger = structuredClone(f.legacy); wrongLedger.schemaLedger[0].sha256 = '0'.repeat(64);
+  await assert.rejects(f.open(f.seed, wrongLedger), { code: 'release_floor_legacy_ledger_changed' });
+  const wrongPolicy = structuredClone(f.legacy); wrongPolicy.retained172.materialPolicy.policies[0].revision = 'changed';
+  await assert.rejects(f.open(f.seed, wrongPolicy), { code: 'release_floor_legacy_policy_changed' });
+});
+
 function floorFixture() {
   const before = [{ name: '001_initial.sql', sha256: '1'.repeat(64) }];
   const after = [...before, { name: '002_next.sql', sha256: '2'.repeat(64) }];
@@ -1143,6 +1281,9 @@ test('portable configuration cannot select programs, foreign resources, profiles
   const url = suffix => `postgresql://freedom_staging_next${suffix}.fixture:synthetic@fixture.pg.psdb.cloud:5432/freedom_staging_next?sslmode=verify-full`;
   const credentials = { migrationDatabaseUrl: url('_migrator'), runtimeDatabaseUrl: url('_app'), backupDatabaseUrl: url('_backup') };
   assert.equal(portableConnections(parsed, credentials).runtime.options.ssl.rejectUnauthorized, true);
+  const codeCredentials = { ...credentials }; delete codeCredentials.backupDatabaseUrl;
+  assert.deepEqual(Object.keys(portableConnections(parsed, codeCredentials, { includeBackup: false })), ['migrator', 'runtime']);
+  assert.throws(() => portableConnections(parsed, codeCredentials));
   for (const change of [v => { v.program = '/bin/sh'; }, v => { v.database.host = 'foreign.invalid'; },
     v => { v.migrationProfile.format = 'freedom.migrations/dag-v2'; }, v => { v.database.name = 'freedom_next'; },
     v => { v.backupBucket = v.mediaBucket; }, v => { v.floor.seedSha256 = 'untrusted'; }]) {
@@ -1237,4 +1378,599 @@ test('scheduled backup uses the same floor and cannot overlap or change the comm
   const state = f.runBackup('backup', main); assert.equal(state.pending, null); assert.equal(state.sourceSha, main);
   const changed = structuredClone(begin); changed.record.data.request.sourceSha = sha;
   assert.throws(() => replayReleaseFloor([...f.chain, changed], f.options), /release_floor_backup_source_changed/);
+});
+
+function failedBackupFixture() {
+  const f = scheduledFixture();
+  Object.assign(f.state.run, { event: 'workflow_dispatch', conclusion: 'failure' });
+  f.state.jobs.splice(1); f.state.jobs[0].conclusion = 'failure'; f.state.jobs[0].steps[0].conclusion = 'failure';
+  Object.assign(f.state.receipt, { status: 'failed', event: 'workflow_dispatch', providerOutcome: 'unknown_until_confirmed' });
+  delete f.state.receipt.operatorEvidence; f.state.receipt.phases = [];
+  Object.assign(f.admission, { mode: 'backup', event: 'workflow_dispatch', recoverRunId: 77, sourceTree: tree });
+  return f;
+}
+
+test('manual recovery authenticates a failed backup, not a caller-supplied cleanup claim', async () => {
+  const f = failedBackupFixture(), proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.runId, 77); assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+  assert.equal(proof.cleanupVerified, undefined);
+  for (const mutate of [s => { s.run.status = 'in_progress'; }, s => { s.run.conclusion = 'success'; },
+    s => { s.run.head_repository.id = 2; }, s => { s.run.head_branch = 'feature'; },
+    s => { s.run.actor.id++; }, s => { s.run.run_attempt++; }, s => { s.jobs[0].steps[0].conclusion = 'skipped'; },
+    s => { s.jobs[0].steps[1].conclusion = 'failure'; }, s => { s.receipt.target = 'next'; },
+    s => { s.artifact.workflow_run.head_sha = sha; }, s => { s.artifact.expired = true; },
+    s => { s.receipt.sourceSha = main; }, s => { s.receipt.configSha256 = 'f'.repeat(64); }]) {
+    const bad = failedBackupFixture(); mutate(bad.state);
+    await assert.rejects(requireFailedBackup(bad.api, bad.admission, installation));
+  }
+  const changed = failedBackupFixture(); changed.api.readArtifact = async () => {
+    changed.state.run.run_attempt++; return structuredClone(changed.state.receipt);
+  };
+  await assert.rejects(requireFailedBackup(changed.api, changed.admission, installation));
+});
+
+test('backup recovery input is explicit, manual-only and cannot name the current run', () => {
+  const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/shared-backup.yml@refs/heads/main`,
+    BACKUP_RECOVER_RUN_ID: '77' };
+  assert.equal(backupRequestFromEnvironment(env, sha).recoverRunId, 77);
+  for (const value of ['100', '0', '-1', '1e2', '77\n', 'abc']) {
+    assert.throws(() => backupRequestFromEnvironment({ ...env, BACKUP_RECOVER_RUN_ID: value }, sha));
+  }
+  assert.throws(() => backupRequestFromEnvironment({ ...env, GITHUB_EVENT_NAME: 'schedule', BACKUP_CRON }, sha));
+});
+
+test('abandoned backup keeps history and floor; archive, release and unverified cleanup remain blocked', () => {
+  const f = floorFixture(), old = { ...f.request, sourceSha: main };
+  f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+  const capture = { format: 'freedom.shared-capture-policy-intent/v1', pid: 123, application: 'fp-capture-' + f.id,
+    revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false };
+  f.add(f.event('intent', 'backup', capture, { operation: 'capture-policy' }));
+  const prior = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { format: 'freedom.abandoned-backup/v1', recovery: { ...old, format: 'freedom.verified-failed-backup/v1',
+    receiptSha256: '9'.repeat(64), artifactId: 99, artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-10-26T00:00:00Z' },
+    settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: prior.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(prior.schemaLedger), materialPolicySha256: prior.materialPolicySha256,
+    maintenanceEnabled: false, domainMaintenanceEnabled: false, deletionFences: 0, captureBackendAbsent: true,
+    captureRevision: capture.revision, sourcePins: 'retained', archiveIntent: 'absent', observedAt: '2026-10-26T01:00:00Z' };
+  for (const patch of [{ maintenanceEnabled: true }, { domainMaintenanceEnabled: true }, { deletionFences: 1 },
+    { captureBackendAbsent: false }, { captureRevision: 'other' }, { sourceSha: sha }, { sourcePins: 'released' },
+    { materialPolicySha256: 'f'.repeat(64) }, { recovery: { ...proof.recovery, runId: 99 } }, { settledBy: old }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', { ...proof, ...patch })], f.options));
+  }
+  const archive = f.event('intent', 'backup', { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 123, automaticRetry: false }, { operation: 'archive' });
+  assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const g = floorFixture(); g.add(g.begin);
+  assert.throws(() => replayReleaseFloor([...g.chain, g.event('backup-abandoned', 'backup-before', proof)], g.options));
+  const state = f.add(f.event('backup-abandoned', 'backup', proof));
+  assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 4);
+  assert.equal(f.chain[2].record.data.kind, 'intent');
+});
+
+async function environmentCheckFixture(t) {
+  const f = await deployFixture(t), calls = [];
+  const value = { format: 'freedom.shared-release-config/v1', target: 'staging-next', accountId: 'a'.repeat(32), zoneId: 'b'.repeat(32),
+    mediaBucket: 'fixture-media', backupBucket: 'fixture-backups',
+    database: { name: 'freedom_staging_next', host: 'fixture.pg.psdb.cloud', port: '5432', loginSuffix: 'fixture' },
+    floor: { epoch: '11111111-1111-4111-8111-111111111111', seedSha256: 'c'.repeat(64) },
+    migrationProfile: { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] } };
+  const config = JSON.stringify(value), env = { RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: hash(config),
+    CLOUDFLARE_API_TOKEN: 'fixture-management-secret', CF_ACCESS_CLIENT_ID: 'fixture-access-id', CF_ACCESS_CLIENT_SECRET: 'fixture-access-secret',
+    RELEASE_ENABLED: 'false', BACKUP_ENABLED: 'false' };
+  const fetchImpl = async (address, options) => {
+    const url = new URL(address); calls.push({ url, options });
+    assert.equal(options.method, 'GET');
+    assert.equal(options.redirect, url.origin === 'https://staging.freetwai.com'
+      || url.pathname.endsWith('/tokens/verify') || url.pathname.includes('/r2/buckets/') ? 'manual' : 'error');
+    if (url.origin === 'https://api.cloudflare.com') {
+      assert.equal(options.headers.Authorization, 'Bearer ' + env.CLOUDFLARE_API_TOKEN);
+      assert(!('CF-Access-Client-Id' in options.headers)); assert(!('CF-Access-Client-Secret' in options.headers));
+      if (url.pathname.endsWith('/tokens/verify')) return Response.json({ success: true, result: { status: 'active' } });
+      if (url.pathname.includes('/r2/buckets/')) return Response.json({ success: true, result: [{ key: 'private-object-do-not-publish' }] });
+      return f.fetchImpl(address, options);
+    }
+    assert.equal(url.href, 'https://staging.freetwai.com/api/v1/health');
+    assert.equal(options.headers['CF-Access-Client-Id'], env.CF_ACCESS_CLIENT_ID);
+    assert.equal(options.headers['CF-Access-Client-Secret'], env.CF_ACCESS_CLIENT_SECRET);
+    assert(!('Authorization' in options.headers));
+    return Response.json({ status: 'ok', release_sha: f.before.sourceSha, private: 'private-health-do-not-publish' });
+  };
+  return { env, value, fetchImpl, calls, f };
+}
+
+test('credential check works with releases disabled, makes only GETs and never attests a deployment', async t => {
+  const f = await environmentCheckFixture(t);
+  assert.equal(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'check' }).mode, 'check');
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: f.fetchImpl });
+  assert.equal(report.status, 'passed'); assert.equal(report.checks.length, 5);
+  assert.equal(report.cloudflareTokenKind, 'account');
+  assert.equal(report.observedSourceSha, f.f.before.sourceSha);
+  assert.equal(report.healthSourceSha, report.observedSourceSha);
+  assert.equal(report.databaseCredentials, 'not_checked'); assert.equal(report.writePermissions, 'not_checked');
+  assert.equal(report.deployment, 'not_run'); assert.equal(report.backupAndRestore, 'not_run');
+  assert(f.calls.length > 5);
+  const serialized = JSON.stringify(report);
+  for (const secret of [f.env.CLOUDFLARE_API_TOKEN, f.env.CF_ACCESS_CLIENT_SECRET, f.env.CF_ACCESS_CLIENT_ID,
+    'private-object-do-not-publish', 'private-health-do-not-publish', 'fixture-backups', 'fixture.pg.psdb.cloud']) assert(!serialized.includes(secret));
+});
+
+test('credential diagnostics retain named failures without leaking provider bodies or exception messages', async t => {
+  const f = await environmentCheckFixture(t);
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: async (url, options) => {
+    if (url.includes('/tokens/verify')) return new Response('private-api-body', { status: 403 });
+    if (url.includes('/r2/buckets/fixture-backups/')) throw Error('private-exception-' + f.env.CLOUDFLARE_API_TOKEN);
+    if (url.startsWith('https://staging.')) return new Response('private-access-body', { status: 302 });
+    return f.fetchImpl(url, options);
+  } });
+  assert.equal(report.status, 'failed');
+  assert.deepEqual(report.checks.map(c => c.status), ['failed', 'passed', 'passed', 'failed', 'failed']);
+  assert.equal(report.checks[0].httpStatus, 403); assert.equal(report.checks[4].httpStatus, 302);
+  assert.equal(report.checks[4].error, 'release_environment_redirect_rejected');
+  assert(!JSON.stringify(report).includes('private-')); assert(!JSON.stringify(report).includes(f.env.CLOUDFLARE_API_TOKEN));
+});
+
+test('an active user token is identified without accepting it as an account service credential', async t => {
+  const f = await environmentCheckFixture(t), tokenPaths = [];
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: async (url, options) => {
+    if (url.endsWith('/tokens/verify')) {
+      tokenPaths.push(new URL(url).pathname);
+      if (url.includes('/accounts/')) return new Response('private-account-error', { status: 401 });
+      assert.equal(options.redirect, 'manual'); assert.equal(options.method, 'GET');
+      assert.equal(options.headers.Authorization, 'Bearer ' + f.env.CLOUDFLARE_API_TOKEN);
+      return Response.json({ success: true, result: { status: 'active', id: 'private-token-id' } });
+    }
+    return f.fetchImpl(url, options);
+  } });
+  assert.deepEqual(tokenPaths, ['/client/v4/accounts/' + 'a'.repeat(32) + '/tokens/verify', '/client/v4/user/tokens/verify']);
+  assert.equal(report.status, 'failed'); assert.equal(report.cloudflareTokenKind, 'user');
+  assert.equal(report.checks[0].error, 'release_account_owned_token_required');
+  assert.equal(report.checks[0].httpStatus, 401);
+  assert(!JSON.stringify(report).includes('private-'));
+});
+
+test('token verification transport and server errors never trigger a user-token fallback', async t => {
+  for (const failure of [() => { throw Error('private-network-detail'); }, () => new Response('private-api-detail', { status: 503 })]) {
+    const f = await environmentCheckFixture(t); let attempts = 0;
+    const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => {
+      if (url.endsWith('/tokens/verify')) { attempts++; assert(url.includes('/accounts/')); return failure(); }
+      return f.fetchImpl(url, options);
+    } });
+    assert.equal(attempts, 1); assert.equal(report.status, 'failed');
+    assert.equal(report.cloudflareTokenKind, undefined); assert(!JSON.stringify(report).includes('private-'));
+    assert(['release_environment_http_failed', 'release_environment_transport_failed'].includes(report.checks[0].error));
+  }
+});
+
+test('real HTTP redirect is reported without following it or forwarding Access credentials', async t => {
+  const f = await environmentCheckFixture(t), received = [];
+  const server = createServer((req, res) => {
+    received.push(req.url);
+    res.writeHead(302, { Location: '/credential-sink?private-location-data' }); res.end('private-redirect-body');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => url.startsWith('https://staging.')
+    ? fetch(`http://127.0.0.1:${server.address().port}/health`, options) : f.fetchImpl(url, options) });
+  assert.deepEqual(received, ['/health']);
+  assert.equal(report.checks.at(-1).httpStatus, 302);
+  assert.equal(report.checks.at(-1).error, 'release_environment_redirect_rejected');
+  assert.equal(report.status, 'failed'); assert(!JSON.stringify(report).includes('private-'));
+});
+
+test('credential checks reject wrong config pins before network and wrong health versions after reading', async t => {
+  const f = await environmentCheckFixture(t);
+  for (const env of [{ ...f.env, RELEASE_CONFIG_SHA256: 'f'.repeat(64) }, { ...f.env, RELEASE_CONFIG_JSON: '{}' }]) {
+    await assert.rejects(checkEnvironment(env, 'staging-next', { fetchImpl() { assert.fail('no network for unpinned config'); } }), /release_config_pin_mismatch/);
+  }
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: (url, options) => url.startsWith('https://staging.')
+    ? Response.json({ status: 'ok', release_sha: 'f'.repeat(40) }) : f.fetchImpl(url, options) });
+  assert.equal(report.status, 'failed'); assert.equal(report.checks.at(-1).error, 'release_environment_health_source_mismatch');
+});
+
+test('production health never receives staging service credentials even when they exist in the environment', async t => {
+  const f = await environmentCheckFixture(t);
+  const config = JSON.stringify({ ...f.value, target: 'next', database: { ...f.value.database, name: 'freedom_next' } });
+  let health = 0;
+  const report = await checkEnvironment({ ...f.env, RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: hash(config) }, 'next', {
+    fetchImpl: async (url, options) => {
+      assert(!('CF-Access-Client-Id' in options.headers)); assert(!('CF-Access-Client-Secret' in options.headers));
+      if (url === 'https://freetwai.com/api/v1/health') {
+        health++; assert(!('Authorization' in options.headers)); return Response.json({ status: 'ok', release_sha: sha });
+      }
+      return new Response('', { status: 403 });
+    },
+  });
+  assert.equal(health, 1); assert.equal(report.checks.at(-1).name, 'public_health');
+  assert.equal(report.checks.at(-1).status, 'passed'); assert.equal(report.status, 'failed');
+});
+
+test('public backup diagnostics accept only exact enumerated codes independently', () => {
+  const value = resultFixture(); value.phases = value.phases.slice(0, 2); value.phases[1].status = 'failed';
+  value.phases[1].backupFailure = { stage: 'preflight', code: 'daily_backup_cleanup_failed', cleanupVerified: false,
+    phaseCode: 'backup_database_permission_denied', cleanupCode: 'release_backup_worker_changed' };
+  const progress = () => operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure;
+  assert.equal(progress().phaseCode, 'backup_database_permission_denied');
+  assert.equal(progress().cleanupCode, 'release_backup_worker_changed');
+  for (const secret of ['private-token', 'release_backup_private_token', 'release_backup_worker_changed\nsecret', { code: 'secret' }]) {
+    Object.assign(value.phases[1].backupFailure, { phaseCode: secret, cleanupCode: secret });
+    assert.equal(progress().phaseCode, undefined); assert.equal(progress().cleanupCode, undefined);
+  }
+});
+
+test('BEGIN-only eligibility is derived from authenticated pre-capture progress, not caller claims', async () => {
+  const setup = () => { const f = failedBackupFixture(); f.state.receipt.operatorProgress = [
+    { name: 'preflight', reportedStatus: 'passed' }, { name: 'backup', reportedStatus: 'failed',
+      backupFailure: { stage: 'preflight', snapshotDump: 'not_started', cleanupVerified: false } }]; return f; };
+  const f = setup(); assert.equal((await requireFailedBackup(f.api, f.admission, installation)).failureBoundary, 'before_capture');
+  for (const mutate of [p => { p.pop(); }, p => { p[0].reportedStatus = 'failed'; },
+    p => { p[1].backupFailure.stage = 'capture'; }, p => { p[1].backupFailure.snapshotDump = 'running'; },
+    p => { delete p[1].backupFailure; }, p => { p[1].reportedStatus = 'passed'; }]) {
+    const bad = setup(); mutate(bad.state.receipt.operatorProgress);
+    assert.equal((await requireFailedBackup(bad.api, bad.admission, installation)).failureBoundary, undefined);
+  }
+});
+
+test('BEGIN-only floor recovery preserves history and refuses intents, unrelated runs and missing readback', () => {
+  const f = floorFixture(), old = { ...f.request, sourceSha: main };
+  f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+  const prior = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { format: 'freedom.abandoned-backup/v1', recovery: { ...old, format: 'freedom.verified-failed-backup/v1',
+    failureBoundary: 'before_capture', receiptSha256: '9'.repeat(64), artifactId: 99,
+    artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-10-26T00:00:00Z' },
+    settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: prior.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(prior.schemaLedger), materialPolicySha256: prior.materialPolicySha256,
+    failureBoundary: 'before_capture', maintenanceEnabled: false, domainMaintenanceEnabled: false,
+    deletionFences: 0, captureBackendAbsent: true, sourcePins: 'retained', archiveIntent: 'absent',
+    observedAt: '2026-10-26T01:00:00Z' };
+  for (const patch of [{ failureBoundary: undefined }, { captureBackendAbsent: false }, { maintenanceEnabled: true },
+    { deletionFences: 1 }, { ledgerSha256: 'f'.repeat(64) }, { recovery: { ...proof.recovery, failureBoundary: undefined } },
+    { recovery: { ...proof.recovery, runId: 999 } }, { recovery: { ...proof.recovery, runAttempt: 2 } },
+    { recovery: { ...proof.recovery, operatorImage: 'wrong' } }, { observedAt: '2026-10-25T00:00:00Z' }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', { ...proof, ...patch })], f.options));
+  }
+  const archive = f.event('intent', 'backup', { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 123, automaticRetry: false }, { operation: 'archive' });
+  assert.throws(() => replayReleaseFloor([...f.chain, archive, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const capture = f.event('intent', 'backup', { format: 'freedom.shared-capture-policy-intent/v1', pid: 123,
+    application: 'fp-capture-' + f.id, revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false }, { operation: 'capture-policy' });
+  assert.throws(() => replayReleaseFloor([...f.chain, capture, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const advanced = { ...proof, legacyPredecessor: legacyEvidenceFixture({admittedRunId: 13}) };
+  assert.equal(replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', advanced)], f.options).state.pending, null);
+  for (const patch of [{admittedRunId: 99}, {admittedRunAttempt: 2}, {sourceSha: 'f'.repeat(40)}])
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', {
+      ...advanced, legacyPredecessor: {...advanced.legacyPredecessor, ...patch} })], f.options));
+  assert.throws(() => replayReleaseFloor([...f.chain, capture, f.event('backup-abandoned', 'backup', advanced)], f.options));
+  const state = f.add(f.event('backup-abandoned', 'backup', proof));
+  assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 3);
+  assert.equal(f.chain[1].record.data.kind, 'backup-begin');
+});
+
+test('BEGIN-only reconciliation requires independent read-only observations under the lease before append', async () => {
+  const setup = () => {
+    const f = floorFixture(), old = { ...f.request, sourceSha: main };
+    f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+    const state = replayReleaseFloor(f.chain, f.options).state, material = [];
+    state.materialPolicySha256 = hash(JSON.stringify(material));
+    const evidence = { ...old, format: 'freedom.verified-failed-backup/v1', failureBoundary: 'before_capture' };
+    const observations = { identity: { database: 'fixture', role: 'maintainer' },
+      policy: { enabled: false, domain_media_enabled: false, revision: 'prior' }, backends: [], fences: 0, material };
+    const calls = []; let proof;
+    const q = { async query(sql) {
+      calls.push(sql);
+      if (sql.includes('current_database() database')) return { rows: [observations.identity] };
+      if (sql.includes('FROM asset_maintenance_policy')) return { rows: [observations.policy] };
+      if (sql.includes('FROM pg_stat_activity')) return { rows: observations.backends };
+      if (sql.includes('FROM assets')) return { rows: [{ count: observations.fences }] };
+      if (sql.includes('FROM domain_media_storage_policy')) return { rows: observations.material };
+      return { rows: [] };
+    }, release() { calls.push('release'); } };
+    const args = { request: { ...old, runId: 13, mode: 'backup', event: 'workflow_dispatch', recoverRunId: old.runId,
+      recoveryEvidence: evidence }, database: 'fixture', role: 'maintainer', pool: { options: { database: 'fixture', user: 'maintainer' }, connect: async () => q },
+      floor: { state: () => structuredClone(state), assertCurrent: async () => calls.push('floor-current'),
+        verifyDatabase: async () => calls.push('verify-ledger-and-coordinate-fence'), abandonBackup: async value => { proof = value; } },
+      deployer: { inspect: async () => ({ sourceSha: main, bindingsSha256: state.bindingsSha256 }) },
+      lease: { signal: new AbortController().signal, assertHeld() { calls.push('lease-held'); } } };
+    return { args, observations, calls, state, proof: () => proof };
+  };
+  const good = setup(); await reconcileFailedBackup(good.args);
+  assert.equal(good.proof().failureBoundary, 'before_capture'); assert.equal(good.proof().archiveIntent, 'absent');
+  assert(good.calls.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+  assert(good.calls.includes('verify-ledger-and-coordinate-fence'));
+  assert(!good.calls.some(sql => /UPDATE|DELETE|pg_terminate_backend/.test(sql)));
+  for (const mutate of [f => { f.observations.identity.role = 'other'; }, f => { f.observations.policy.enabled = true; },
+    f => { f.observations.policy.domain_media_enabled = true; }, f => { f.observations.backends.push({ pid: 123 }); },
+    f => { f.observations.fences = 1; }, f => { f.observations.material.push({ purpose: 'changed' }); },
+    f => { f.args.floor.verifyDatabase = async () => { throw Error('ledger changed'); }; },
+    f => { f.args.deployer.inspect = async () => ({ sourceSha: sha }); },
+    f => { f.state.pending.request.runId++; }, f => { f.state.pending.intents.archive = {}; },
+    f => { delete f.args.request.recoveryEvidence.failureBoundary; },
+    f => { f.args.lease.assertHeld = () => { throw Error('lease lost'); }; }]) {
+    const bad = setup(); mutate(bad); await assert.rejects(reconcileFailedBackup(bad.args)); assert.equal(bad.proof(), undefined);
+  }
+});
+
+function codeResult() {
+  const admission = { ...request(), releaseKind: 'independent' }, value = resultFixture(admission);
+  value.phases = [value.phases[0], { ...value.phases[2], name: 'migration', outcome: 'unchanged', readOnly: true },
+    value.phases[3], value.phases[4], value.phases[6]];
+  delete value.phases[4].scheduledBackupsVerified;
+  return { admission, value };
+}
+test('ordinary release validates schema, publication, health and lease cleanup without backup evidence', () => {
+  assert.equal(requestFromEnvironment(environment()).releaseKind, 'independent');
+  const { admission, value } = codeResult();
+  assert.deepEqual(validateOperatorResult(value, admission, installation, 'e'.repeat(64)).map(p => p.name),
+    ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+  for (const [index, patch] of [[0, { leaseHeld: false }], [1, { outcome: 'committed' }], [1, { readOnly: false }],
+    [1, { ledgerVerified: false }], [1, { runtimeGrantsVerified: false }], [2, { sourceSha: main }],
+    [3, { smokePassed: false }], [4, { leaseReleased: false }]]) {
+    const bad = structuredClone(value); Object.assign(bad.phases[index], patch);
+    assert.throws(() => validateOperatorResult(bad, admission, installation, 'e'.repeat(64)));
+  }
+  assert.throws(() => validateOperatorResult(resultFixture(admission), admission, installation, 'e'.repeat(64)));
+});
+test('production accepts authenticated independent staging receipt and rejects legacy or forged substitutes', async () => {
+  const f = stagingFixture(), admission = { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'independent' };
+  Object.assign(f.state.receipt, { releaseKind: 'independent', providerOutcome: 'release_confirmed',
+    operatorEvidence: 'validated-independent-release/v1', phases: codeResult().value.phases });
+  await requireStaging(f.api, admission, installation);
+  const legacy = stagingFixture(); await requireStaging(legacy.api, admission, installation);
+  for (const patch of [{ releaseKind: undefined }, { providerOutcome: 'release_and_recovery_confirmed' },
+    { operatorEvidence: 'validated-seven-phases/v1' }, { sourceSha: main }, { phases: resultFixture().phases }]) {
+    const old = { ...f.state.receipt }; Object.assign(f.state.receipt, patch);
+    await assert.rejects(requireStaging(f.api, admission, installation)); Object.assign(f.state.receipt, old);
+  }
+});
+test('independent floor advances source after health while retaining ledger and rejecting schema changes or overlapping intents', () => {
+  const f = floorFixture(), before = structuredClone(f.chain[0].record.data.state);
+  const begin = f.event('release-begin-v2', undefined, undefined, { request: { ...f.request, releaseKind: 'independent' },
+    candidate: { sourceSha: sha, sourceTree: tree, schemaLedger: before.schemaLedger } });
+  const bad = structuredClone(begin); bad.record.data.candidate.schemaLedger.push({ name: '002_added.sql', sha256: '2'.repeat(64) });
+  const pending = replayReleaseFloor([...f.chain, bad], f.options).state.pending;
+  assert.equal(pending.candidate.schemaLedger.length, 2); // Approved schema changes are reachable.
+  assert.throws(() => replayReleaseFloor([...f.chain, bad, f.event('passed', 'migration', { outcome: 'unchanged', readOnly: true,
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(before.schemaLedger) })], f.options));
+  f.add(begin);
+  assert.throws(() => replayReleaseFloor([...f.chain, begin], f.options), /release_floor_unsettled/);
+  const schema = { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(before.schemaLedger) };
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'migration', { ...schema, readOnly: false })], f.options));
+  f.add(f.event('passed', 'migration', schema));
+  f.add(f.event('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id,
+    configSha256: '3'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+  f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
+  f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  const final = f.add(f.event('passed', 'handoff', { cleanupVerified: true, migrationVerified: true }));
+  assert.equal(final.sourceSha, sha); assert.equal(final.deployedSourceSha, sha); assert.equal(final.pending, null);
+  assert.deepEqual(final.schemaLedger, before.schemaLedger); assert.equal(final.schemaVersion, before.schemaVersion);
+  assert(!JSON.stringify(f.chain).includes('backup-before'));
+});
+test('deploy reconciliation accepts only an authenticated failed pre-capture backup, not capture or arbitrary input', async () => {
+  const f = failedBackupFixture();
+  Object.assign(f.admission, { mode: 'deploy', releaseKind: 'independent', sourceSha: main });
+  await assert.rejects(requireFailedBackup(f.api, f.admission, installation), /release_backup_recovery_boundary_invalid/);
+  f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed' },
+    { name: 'backup', reportedStatus: 'failed', backupFailure: { stage: 'preflight', snapshotDump: 'not_started' } }];
+  const proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.sourceSha, sha); assert.equal(proof.failureBoundary, 'before_capture');
+  for (const value of ['100', '-1', '77\n', '0', '1e2']) {
+    assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_BACKUP_RUN_ID: value }));
+  }
+  assert.equal(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_BACKUP_RUN_ID: '77' }).recoverRunId, 77);
+  assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_RECOVER_BACKUP_RUN_ID: '77' }));
+});
+test('release source has no scheduler dependency, backup calls remain conditional and daily schedule is unchanged', async () => {
+  const cli = await readFile(new URL('../../shared-release/cli.mjs', import.meta.url), 'utf8');
+  assert(!cli.includes('requireScheduledBackup')); assert(!cli.includes('scheduleEvidence'));
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  assert(entry.includes("if (!independentRelease) await phase('backup-after'"));
+  assert(entry.includes("const proof = plan.pending.length === 0"));
+  assert(entry.includes('independent: true'));
+  const backup = await readFile(new URL('../../../.github/workflows/shared-backup.yml', import.meta.url), 'utf8');
+  assert(backup.includes("cron: '43 5 * * *'")); assert(backup.includes('group: shared-release'));
+});
+
+test('independent controller runs without backup credentials or schedule evidence and binds five phases', async t => {
+  const fixture = await operatorFixture(t), { admission, value } = codeResult();
+  fixture.options.admission = admission; delete fixture.options.credentials.backupDatabaseUrl;
+  const oldRun = fixture.options.run;
+  fixture.options.run = async (cmd, args, ...rest) => {
+    if (args[0] !== 'run') return oldRun(cmd, args, ...rest);
+    const input = await readFile(join(fixture.temporaryRoot, 'input/request.json'), 'utf8');
+    const request = JSON.parse(input), credentials = JSON.parse(await readFile(join(fixture.temporaryRoot, 'input/credentials.json'), 'utf8'));
+    assert.equal(request.scheduleEvidence, undefined); assert.equal(credentials.backupDatabaseUrl, undefined);
+    assert.deepEqual(request.requiredPhases, ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+    await writeFile(join(fixture.temporaryRoot, 'output/result.json'), JSON.stringify({ ...value, requestSha256: hash(input) }));
+  };
+  assert.equal((await runOperator(fixture.options)).length, 5);
+});
+
+test('independent release executes confirmed migration journal transitions without backup events', () => {
+  const f = floorFixture();
+  const begin = structuredClone(f.begin); begin.record.data.kind = 'release-begin-v2';
+  begin.record.data.request.releaseKind = 'independent'; f.add(begin);
+  const confirmed = { ...f.commit, ledger: f.after };
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('committed', 'migration', confirmed)], f.options), /release_floor_commit_unverified/);
+  f.add(f.event('intent', 'migration', f.commit, { operation: 'commit' }));
+  const uncertain = structuredClone(f.chain);
+  assert.throws(() => replayReleaseFloor([...uncertain, begin], f.options), /release_floor_unsettled/);
+  assert.throws(() => replayReleaseFloor([...uncertain, f.event('passed', 'migration', {
+    outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(f.before) })], f.options));
+  const state = f.add(f.event('committed', 'migration', confirmed));
+  assert.equal(state.schemaVersion, 2); assert.equal(state.sourceSha, sha);
+  f.add(f.event('passed', 'migration', { outcome: 'committed', transactionId: '123', commitStatus: 'confirmed',
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) }));
+  f.add(f.event('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id,
+    configSha256: '8'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+  f.add(f.event('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id }));
+  f.add(f.event('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  assert.equal(f.add(f.event('passed', 'handoff', { cleanupVerified: true, migrationVerified: true })).pending, null);
+  assert(!f.chain.some(item => item.record.data.stage?.startsWith('backup')));
+  const { admission, value } = codeResult();
+  Object.assign(value.phases[1], { outcome: 'committed', commitStatus: 'confirmed', transactionId: '123' });
+  delete value.phases[1].readOnly;
+  assert.equal(validateOperatorResult(value, admission, installation, 'e'.repeat(64)).length, 5);
+  value.phases[1].commitStatus = 'unknown';
+  assert.throws(() => validateOperatorResult(value, admission, installation, 'e'.repeat(64)), /release_schema_unconfirmed/);
+});
+
+test('independent migration preflight read failure never begins a durable release', async t => {
+  const root = await diskFixture(t, 'migration-preflight-'); let began = 0, released = false;
+  const client = { on() {}, removeListener() {}, release() { released = true; }, async query(input) {
+    const sql = typeof input === 'string' ? input : input.text;
+    if (sql.startsWith('SELECT current_database()')) return { rows: [{ database: 'fixture', role: 'fixture_migrator',
+      session_role: 'fixture_migrator', schema: 'public' }] };
+    if (sql.includes('FROM schema_migrations')) throw Error('synthetic transient preflight read');
+    return { rows: [], command: sql };
+  } };
+  await assert.rejects(runPortableMigration({ pool: { connect: async () => client }, database: 'fixture',
+    plan: { sourceCommit: sha, sourceTree: tree, canonical: { sourceCommit: sha } },
+    expected: { materialPolicySha256: 'a'.repeat(64), rlsTables: ['fixture'], runtimeUnreadable: [], tablePrivileges: [] },
+    previousSourceSha: main, journalRoot: root, independent: true, beginMutation: async () => { began++; },
+    lease: { signal: new AbortController().signal, assertHeld() {} }, assertFloor: async () => {},
+    verifyRetainedConstraints: async () => {}, retainCommitIntent: async () => { assert.fail('no commit intent'); },
+    retainCommittedFloor: async () => { assert.fail('no committed floor'); } }), /synthetic transient preflight read/);
+  assert.equal(began, 0); assert.equal(released, true);
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  assert(entry.indexOf('unchangedProof = await verifyUnchangedSchema') < entry.indexOf('const begin = () => floor.beginIndependent'));
+});
+
+function legacyEvidenceFixture(extra = {}) {
+  return { format: 'freedom.verified-legacy-deployment/v1', target: 'staging-next', sourceSha: sha, sourceTree: tree,
+    deploymentId: 100, statusId: 101, admittedRunId: 12, admittedRunAttempt: 1,
+    completedAt: '2026-10-26T00:00:00Z', verification: [{workflow: '.github/workflows/verify.yml'}, {workflow: '.github/workflows/codeql.yml'}], ...extra };
+}
+
+test('legacy pre-adoption failure preserves predecessor for retry; later failures and uncertain POST stay recorded', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'legacy-retry-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const previousExitCode = process.exitCode; t.after(() => { process.exitCode = previousExitCode; });
+  const source = join(root, 'source'); await mkdir(source);
+  fixtureGit(source, ['init', '-q']); await writeFile(join(source, 'app.txt'), 'synthetic source');
+  fixtureGit(source, ['add', '.']); fixtureGit(source, ['commit', '-qm', 'fixture']);
+  const sourceSha = fixtureGit(source, ['rev-parse', 'HEAD']), sourceTree = fixtureGit(source, ['rev-parse', 'HEAD^{tree}']);
+  const creator = {login: 'teddashh', id: OPERATORS.teddashh};
+  let runId = 200;
+  for (const boundary of ['pull', 'preflight', 'after-adoption', 'uncertain-post']) {
+    const deployments = [{id: 100, environment: 'staging-next', task: 'deploy', sha: sourceSha, payload: {}, creator}];
+    const statuses = []; let posts = 0, executions = 0;
+    const read = fixtureApi(path => path.includes('/deployments?') ? deployments
+      : path.includes('/statuses?') ? [{id: 101, state: 'success', creator, created_at: '2026-10-26T00:00:00Z'}]
+      : path.includes('/commits/') ? {sha: sourceSha, commit: {tree: {sha: sourceTree}}} : undefined);
+    const api = async (path, options) => {
+      if (options?.method === 'POST') {
+        if (path.endsWith('/deployments')) {
+          posts++; deployments.unshift({...options.body, sha: options.body.ref, id: 200, creator});
+          if (boundary === 'uncertain-post') throw Error('synthetic reply lost after POST');
+          return deployments[0];
+        }
+        assert(path.endsWith('/deployments/200/statuses')); statuses.push(options.body.state); return {};
+      }
+      const value = await read(path);
+      if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = sourceSha;
+      return value;
+    };
+    const invoke = async executeOperator => {
+      const runner = join(root, String(++runId)); await mkdir(runner);
+      process.exitCode = previousExitCode;
+      await releaseMain({...environment(), PATH: process.env.PATH, RELEASE_SHA: sourceSha, RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute',
+        GITHUB_RUN_ID: String(runId), GITHUB_RUN_ATTEMPT: '1', RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: source,
+        RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_CONFIG_SHA256: installation.configSha256,
+        PUBLIC_RECEIPT_DIRECTORY: join(runner, 'public')}, {api, executeOperator: async options => {
+          executions++; assert.equal(options.admission.legacyPredecessor.deploymentId, 100);
+          return executeOperator(options);
+        }});
+      return JSON.parse(await readFile(join(runner, 'public/receipt.json'), 'utf8'));
+    };
+    const passed = [{name: 'preflight', reportedStatus: 'passed'}];
+    const failed = await invoke(async ({onProgress}) => {
+      if (boundary === 'preflight') await onProgress([{name: 'preflight', reportedStatus: 'failed'}]);
+      if (boundary === 'after-adoption') await onProgress([...passed, {name: 'migration', reportedStatus: 'failed'}]);
+      if (boundary === 'uncertain-post') {
+        // The operator's progress observer catches callback errors. Final creation
+        // must still surface the original uncertainty, never send a second POST.
+        await onProgress(passed).catch(() => {}); await onProgress(passed).catch(() => {});
+        return codeResult().value.phases;
+      }
+      throw Object.assign(Error('synthetic failed boundary'), {code: boundary === 'pull' ? 'release_registry_pull_failed' : 'release_operator_failed'});
+    });
+    assert.equal(failed.status, 'failed'); assert.equal(executions, 1, failed.error);
+    assert.equal(failed.providerOutcome, 'unknown_until_confirmed');
+    if (['pull', 'preflight'].includes(boundary)) {
+      assert.equal(posts, 0); assert.equal(deployments[0].id, 100); assert.equal(failed.deploymentId, undefined);
+      const retried = await invoke(async ({onProgress}) => {
+        await onProgress(passed); await onProgress(passed);
+        assert.equal(posts, 1); return codeResult().value.phases;
+      });
+      assert.equal(retried.status, 'passed'); assert.equal(retried.deploymentId, 200);
+      assert.equal(posts, 1); assert.deepEqual(statuses, ['in_progress', 'success']);
+    } else {
+      assert.equal(posts, 1); assert.equal(deployments[0].id, 200);
+      if (boundary === 'after-adoption') assert.deepEqual(statuses, ['in_progress', 'failure']);
+      else assert.deepEqual(statuses, []);
+    }
+  }
+});
+
+test('legacy predecessor requires latest successful authorized deployment and exact main CI', async () => {
+  const creator = { login: 'teddashh', id: OPERATORS.teddashh };
+  const deployment = { id: 100, environment: 'staging-next', task: 'deploy', sha, payload: {}, creator };
+  const status = { id: 101, state: 'success', creator, created_at: '2026-10-26T00:00:00Z' };
+  const setup = (d = deployment, s = status, override = () => undefined) => fixtureApi(path => override(path)
+    ?? (path.includes('/deployments?') ? [d] : path.includes('/statuses?') ? [s] : undefined));
+  const admission = { ...request(), sourceSha: main, target: 'staging-next' };
+  const proof = await requireLegacyPredecessor(setup(), admission);
+  assert.equal(proof.sourceSha, sha); assert.equal(proof.deploymentId, 100); assert.equal(proof.verification.length, 2);
+  assert.equal(await requireLegacyPredecessor(setup({...deployment, payload: {format: 'freedom.shared-release/v1'}}), admission), undefined);
+  for (const patch of [{state: 'failure'}, {state: 'in_progress'}, {creator: {login: 'unknown', id: 1}}, {id: 0}])
+    await assert.rejects(requireLegacyPredecessor(setup(deployment, {...status, ...patch}), admission));
+  for (const patch of [{sha: 'invalid'}, {creator: {...creator, id: 9}}, {payload: {unknown: true}}])
+    await assert.rejects(requireLegacyPredecessor(setup({...deployment, ...patch}), admission));
+  await assert.rejects(requireLegacyPredecessor(setup(deployment, status, path => path.includes('/actions/runs/11')
+    ? {status: 'completed', conclusion: 'failure'} : undefined), admission));
+  let reads = 0;
+  await assert.rejects(requireLegacyPredecessor(setup(deployment, status, path => path.includes('/deployments?')
+    ? [{...deployment, id: ++reads === 1 ? 100 : 102}] : undefined), admission), /release_legacy_deployment_changed/);
+});
+
+test('legacy journal adoption appends source history without changing schema or original seed', () => {
+  const f = floorFixture(), original = JSON.stringify(f.chain[0]), state = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { evidence: legacyEvidenceFixture(), previousSourceSha: main, bindingsSha256: state.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(state.schemaLedger), materialPolicySha256: state.materialPolicySha256,
+    readOnly: true, observedAt: '2026-10-26T01:00:00Z' };
+  const adopted = replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, proof)], f.options).state;
+  assert.equal(adopted.sourceSha, sha); assert.equal(adopted.deployedSourceSha, sha);
+  assert.deepEqual(adopted.schemaLedger, state.schemaLedger); assert.equal(JSON.stringify(f.chain[0]), original);
+  for (const patch of [{readOnly: false}, {previousSourceSha: sha}, {ledgerSha256: '0'.repeat(64)},
+    {bindingsSha256: '0'.repeat(64)}, {materialPolicySha256: '0'.repeat(64)},
+    {evidence: legacyEvidenceFixture({sourceSha: 'f'.repeat(40)})}])
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, {...proof, ...patch})], f.options));
+  f.add(f.begin);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, proof)], f.options));
+});
+
+test('legacy adoption verifies immutable Git SQL and live read-only state before appending', async t => {
+  const f = await adoptionFixture(t), floor = await f.open();
+  await writeFile(join(f.sourceRoot, 'app.txt'), 'new legacy deployment'); const deployed = f.commit();
+  const evidence = legacyEvidenceFixture(deployed), calls = []; let appended;
+  const state = floor.state();
+  const q = { async query(sql) { calls.push(sql); return { rows: sql.includes('domain_media_storage_policy')
+    ? f.legacy.retained172.materialPolicy.policies : [] }; }, release() {} };
+  const args = { floor: {...floor, verifyDatabase: async () => calls.push('verify-ledger'),
+    adoptLegacySource: async proof => { appended = proof; }}, pool: {connect: async () => q},
+    deployer: {inspect: async () => ({sourceSha: deployed.sourceSha, bindingsSha256: state.bindingsSha256})},
+    lease: {signal: new AbortController().signal, assertHeld() {}},
+    request: {...request(), runId: 12, runAttempt: 1, releaseKind: 'independent', target: 'staging-next', legacyPredecessor: evidence} };
+  await adoptLegacyPredecessor(args); assert.equal(appended.evidence.sourceSha, deployed.sourceSha);
+  assert(calls.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')); assert(calls.includes('verify-ledger'));
+  assert(!calls.some(sql => /UPDATE|DELETE|INSERT|CREATE/.test(sql)));
+  for (const patch of [{sourceTree: f.previous.sourceTree}, {target: 'next'}, {sourceSha: f.previous.sourceSha}]) {
+    appended = undefined;
+    await assert.rejects(adoptLegacyPredecessor({...args, request: {...args.request, legacyPredecessor: {...evidence, ...patch}}}));
+    assert.equal(appended, undefined);
+  }
+  await writeFile(join(f.sourceRoot, 'migrations/190_forbidden.sql'), 'SELECT 1;'); const schemaChange = f.commit();
+  assert.throws(() => floor.verifyLegacySource({...evidence, ...schemaChange}), /release_floor_adoption_catalog_changed/);
+  appended = undefined;
+  await assert.rejects(adoptLegacyPredecessor({...args, floor: {...args.floor, state: () => ({...state, pending: {kind: 'backup'}})}}));
+  assert.equal(appended, undefined);
 });
