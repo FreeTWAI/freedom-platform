@@ -7,6 +7,8 @@
     "migrations/120_guild_categories_preferences.sql",
     "tests/runtime/guild-category-preferences.test.ts",
     "tests/runtime/guild-member-tiers.test.ts",
+    "tests/runtime/guild-search.test.ts",
+    "tests/runtime/guild-search-access.test.ts",
     "tests/runtime/guild-member-tier-fixture.test.ts",
     "tests/runtime/guild-directory-focus.test.ts",
     "tests/runtime/guild-category-retry.test.ts",
@@ -37,6 +39,7 @@
     "tests/e2e/guild-member-operations.spec.ts"
   ],
   "public_exports": [
+    "modules/positioning/guild-search.ts",
     "modules/positioning/guild-categories.ts",
     "contracts/guild-launchpad/v1/guild-preferences.ts"
   ],
@@ -65,5 +68,11 @@
   "tests": [
     "runtime.full"
   ],
-  "surfaces": []
+  "surfaces": [{
+    "surface_id": "positioning.guild-search",
+    "kind": "http",
+    "entry": "apps/platform-api/src/routes/positioning.ts",
+    "operations": ["positioning.guild-search.read"],
+    "auth_profile": "member-session"
+  }]
 }

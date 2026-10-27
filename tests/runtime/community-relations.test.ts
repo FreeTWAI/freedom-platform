@@ -7,7 +7,7 @@ import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_COMMUNITY, DEMO_PASSWORD } from '../../packages/testing/seed.js';
 import { login } from '../../modules/identity-membership/service.js';
 import { Problem } from '../../packages/shared/problem.js';
-import { listCommunityBookmarks, listCommunityFollows, listCommunityFollowUpdates, changeCommunityBookmark } from '../../modules/community/content-relations.js';
+import { listCommunityBookmarks, readCommunityPostBookmark, listCommunityFollows, listCommunityFollowUpdates, changeCommunityBookmark } from '../../modules/community/content-relations.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -233,4 +233,82 @@ test('relation source filters run before per-source limits and do not select unr
   const updates=page.parse(await (await owner.get('updates')).json());
   assert.equal(updates.items.some(item=>item.id===target),true);
   assert.equal(updates.items.every(item=>item.author_id===DEMO_USERS[2].user_id),true);
+});
+
+test('single post bookmark read is bounded, private, persistent and redacts unavailable sources', async () => {
+  const owner=await member(0), stranger=await member(1);
+  const id=await post(DEMO_USERS[2].user_id,'單篇收藏讀取');
+  const get=()=>owner.get(`bookmarks/post/${id}`);
+  let response=await get();assert.equal(response.status,200);
+  assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+  assert.deepEqual(await response.json(),{kind:'post',id,selected:false,available:true});
+  const body={kind:'post',id,selected:true}, key=randomUUID();
+  assert.equal((await owner.post('bookmarks',body,key)).status,200);
+  assert.equal((await owner.post('bookmarks',body,key)).status,200);
+  const reentered=await member(0);
+  assert.deepEqual(await (await reentered.get(`bookmarks/post/${id.toUpperCase()}`)).json(),{kind:'post',id,selected:true,available:true});
+  assert.deepEqual(await (await stranger.get(`bookmarks/post/${id}`)).json(),{kind:'post',id,selected:false,available:true});
+  for(let i=0;i<22;i++)await post(DEMO_USERS[2].user_id,`較新的其他貼文${i}`);
+  assert.deepEqual(await (await get()).json(),{kind:'post',id,selected:true,available:true});
+  for(const query of ['?owner='+DEMO_USERS[1].user_id,'?cursor=anything','?limit=50'])assert.equal((await owner.get(`bookmarks/post/${id}${query}`)).status,422);
+  assert.equal((await owner.get('bookmarks/post/not-a-uuid')).status,422);
+  assert.equal((await app.request(origin+`/api/v1/community-relations/bookmarks/post/${id}`)).status,401);
+  await pool.query('UPDATE users SET active=false WHERE user_id=$1',[DEMO_USERS[2].user_id]);
+  assert.deepEqual(await (await get()).json(),{kind:'post',id,selected:true,available:false});
+  assert.equal((await stranger.get(`bookmarks/post/${id}`)).status,404);
+  await pool.query('UPDATE users SET active=true WHERE user_id=$1',[DEMO_USERS[2].user_id]);
+  const otherCommunity=randomUUID(), otherAuthor=randomUUID(), foreignPost=randomUUID();
+  await pool.query('INSERT INTO communities VALUES($1,$2)',[otherCommunity,'單篇外社群']);
+  await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required) VALUES($1,$2,$3,'外作者','not-a-login-hash',$4,true,false)`,[otherAuthor,otherCommunity,otherAuthor+'@example.test',randomUUID()]);
+  await pool.query(`INSERT INTO community_social_posts(post_id,community_id,author_user_id,url,platform,title,note,state) VALUES($1,$2,$3,'https://example.com/foreign','other','外社群內容','不公開','active')`,[foreignPost,otherCommunity,otherAuthor]);
+  assert.equal((await owner.get(`bookmarks/post/${foreignPost}`)).status,404);
+  await pool.query("UPDATE community_social_posts SET state='deleted' WHERE post_id=$1",[id]);
+  assert.deepEqual(await (await get()).json(),{kind:'post',id,selected:true,available:false});
+  const absent=await stranger.get(`bookmarks/post/${randomUUID()}`), hidden=await stranger.get(`bookmarks/post/${id}`);
+  assert.equal(absent.status,404);assert.equal(hidden.status,404);
+  const missingBody=await absent.json() as any, hiddenBody=await hidden.json() as any;
+  assert.equal(missingBody.code,hiddenBody.code);assert.equal(missingBody.detail,hiddenBody.detail);
+  assert.equal((await owner.post('bookmarks',{...body,selected:false})).status,200);
+  assert.equal((await get()).status,404);
+  for(const flags of [{communitySearchEnabled:true},{communityRelationsEnabled:true}]){
+    const off=createApp(pool,origin,'local',flags);
+    assert.equal((await off.request(origin+`/api/v1/community-relations/bookmarks/post/${id}`,{headers:owner.headers})).status,404);
+  }
+});
+
+test('single bookmark reader rejects revoked sessions without trusting a previous Actor',async()=>{
+  const actor=(await login(pool,DEMO_USERS[0].email,DEMO_PASSWORD)).actor;
+  const id=await post(actor.user_id,'單篇收藏撤銷');
+  await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[actor.session_hash]);
+  await assert.rejects(readCommunityPostBookmark(pool,actor,id,{}),(error:unknown)=>error instanceof Problem&&error.code==='session_expired');
+});
+
+test('single post bookmark read rejects expiry after a blocked domain query', async () => {
+  const actor = (await login(pool, DEMO_USERS[0].email, DEMO_PASSWORD)).actor;
+  const id = await post(actor.user_id, '讀取等待期限253');
+  await changeCommunityBookmark(pool, { actor, operation: 'relations-wait-fixture', key: randomUUID(), body: { kind: 'post', id, selected: true } });
+  await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '3 seconds' WHERE token_hash=$1", [actor.session_hash]);
+  const locker = await pool.connect();
+  const workerName = `${schema}_read_racer`;
+  const racer = new Pool({ connectionString: url, options: `-c search_path=${schema}`, application_name: workerName, max: 1 });
+  let pending: Promise<{ value?: unknown; error?: unknown }> | undefined;
+  try {
+    await locker.query('BEGIN');
+    await locker.query('LOCK TABLE community_content_bookmarks IN ACCESS EXCLUSIVE MODE');
+    pending = readCommunityPostBookmark(racer, actor, id, {}).then(value => ({ value }), error => ({ error }));
+    let waiting = false;
+    for (let count = 0; count < 2000; count += 1) {
+      waiting = (await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'", [workerName])).rowCount === 1;
+      if (waiting) break;
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    assert.ok(waiting, 'private read must have passed session authentication and reached the held table');
+    await locker.query('SELECT pg_sleep(3.1)');
+    await locker.query('COMMIT');
+    const outcome = await pending;
+    assert.ok(outcome.error instanceof Problem && outcome.error.code === 'session_expired');
+  } finally {
+    await locker.query('ROLLBACK'); locker.release();
+    await pending; await racer.end();
+  }
 });

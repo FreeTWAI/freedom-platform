@@ -1,6 +1,6 @@
 import { markSearchOpened } from '../../../../modules/community/participation-metrics.js';
 import { assignContentTopics, listTaggableContent } from '../../../../modules/community/content-search.js';
-import { listCommunityBookmarks, changeCommunityBookmark, listCommunityFollows, changeCommunityFollow, listCommunityFollowUpdates } from '../../../../modules/community/content-relations.js';
+import { listCommunityBookmarks, readCommunityPostBookmark, changeCommunityBookmark, listCommunityFollows, changeCommunityFollow, listCommunityFollowUpdates } from '../../../../modules/community/content-relations.js';
 import { cmd, routeId, respond } from './commands.js';
 import type { PlatformFeatureApp, PlatformFeatureContext } from './context.js';
 
@@ -14,6 +14,7 @@ export function registerMemberSearchRoutes(app: PlatformFeatureApp, context: Pla
   }
   if(runtime.communitySearchEnabled===true&&runtime.communityRelationsEnabled===true){
     app.get('/api/v1/community-relations/bookmarks',async c=>c.json(await listCommunityBookmarks(pool,c.get('actor'),c.req.query())));
+    app.get('/api/v1/community-relations/bookmarks/post/:id',async c=>c.json(await readCommunityPostBookmark(pool,c.get('actor'),c.req.param('id'),c.req.query())));
     app.post('/api/v1/community-relations/bookmarks',async c=>respond(c,await changeCommunityBookmark(pool,await cmd(c))));
     app.get('/api/v1/community-relations/follows',async c=>c.json(await listCommunityFollows(pool,c.get('actor'))));
     app.post('/api/v1/community-relations/follows',async c=>respond(c,await changeCommunityFollow(pool,await cmd(c))));

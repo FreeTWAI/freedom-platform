@@ -1,0 +1,9 @@
+.skill-install-targets { display: flex; flex-wrap: wrap; gap: 8px; border: 0; padding: 0; margin: 0; }
+.skill-install-targets legend { width: 100%; margin-bottom: 4px; }
+.skill-install-targets label { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.skill-install-targets label:has(input:checked) { border-color: var(--green); background: var(--green-soft); }
+.skill-install-targets input { accent-color: var(--green); }
+.skill-install-status:empty { display: none; }
+.skill-install-status.done { color: var(--green); }
+.skill-install-status.error { color: #ff9b9b; }
+.skill-install-status.busy { color: var(--muted); }

@@ -142,7 +142,7 @@ test('a note publishes with its image, unusable files are refused before upload,
   await expect(dialog.getByRole('button', {name: '取消', exact: true})).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(post.locator('summary')).toBeFocused();
+  await expect(post.getByLabel('貼文選項', {exact: true})).toBeFocused();
   await expect(card(page, text)).toHaveCount(1);
   await page.setViewportSize({width: 390, height: 844});
   await post.getByRole('button', {name: '刪除', exact: true}).click();
