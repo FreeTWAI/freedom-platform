@@ -1,0 +1,342 @@
+{
+  "format": "freedom.shared-actions-rollout-observation/v1",
+  "recorded_at": "2026-10-27T07:22:57.007674+00:00",
+  "source": "1db283839296e284602217140a21921072d86629",
+  "previous_live_source": "274f0614208552e73c734108e73494503cf30c66",
+  "scope": "Actual shared Actions release and independent manual backup acceptance; no member UX or automatic schedule acceptance.",
+  "release_source_ci": [
+    {
+      "workflow": ".github/workflows/verify.yml",
+      "runId": 40449510394,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40449510394/attempts/1"
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "runId": 40449510281,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40449510281/attempts/1"
+    }
+  ],
+  "operator_image_build": {
+    "run": 40451864619,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40451864619",
+    "image": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+    "image_and_independent_private_pull": "passed"
+  },
+  "deployments": {
+    "staging-next": {
+      "status": "passed",
+      "sourceSha": "1db283839296e284602217140a21921072d86629",
+      "sourceTree": "400e81c46e8011818330404b9cedac9e7e5eaffb",
+      "controllerSha": "1db283839296e284602217140a21921072d86629",
+      "runId": 40452068872,
+      "runAttempt": 1,
+      "target": "staging-next",
+      "actor": "teddashh",
+      "actorId": 233386770,
+      "deploymentId": 7350698151,
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "configSha256": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376",
+      "providerOutcome": "release_confirmed",
+      "operatorEvidence": "validated-independent-release/v1",
+      "phases": [
+        {
+          "name": "preflight",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:53:00.816Z",
+          "completedAt": "2026-10-27T04:55:50.327Z"
+        },
+        {
+          "name": "migration",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:55:50.329Z",
+          "completedAt": "2026-10-27T04:55:57.728Z"
+        },
+        {
+          "name": "deploy",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:55:57.729Z",
+          "completedAt": "2026-10-27T04:56:19.283Z"
+        },
+        {
+          "name": "health",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:56:19.284Z",
+          "completedAt": "2026-10-27T04:56:36.730Z"
+        },
+        {
+          "name": "handoff",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:56:36.732Z",
+          "completedAt": "2026-10-27T04:56:42.675Z"
+        }
+      ],
+      "completedAt": "2026-10-27T04:56:44.052Z",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452068872",
+      "artifactId": 12710584615,
+      "artifactDigest": "sha256:2b248d9ee9da354899fcf16b38fc7941bdace7893d8302830a58831aae11721b"
+    },
+    "next": {
+      "status": "passed",
+      "sourceSha": "1db283839296e284602217140a21921072d86629",
+      "sourceTree": "400e81c46e8011818330404b9cedac9e7e5eaffb",
+      "controllerSha": "1db283839296e284602217140a21921072d86629",
+      "runId": 40452543953,
+      "runAttempt": 1,
+      "target": "next",
+      "actor": "teddashh",
+      "actorId": 233386770,
+      "deploymentId": 7350773249,
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "configSha256": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6",
+      "providerOutcome": "release_confirmed",
+      "operatorEvidence": "validated-independent-release/v1",
+      "phases": [
+        {
+          "name": "preflight",
+          "status": "passed",
+          "startedAt": "2026-10-27T04:58:17.593Z",
+          "completedAt": "2026-10-27T05:01:37.745Z"
+        },
+        {
+          "name": "migration",
+          "status": "passed",
+          "startedAt": "2026-10-27T05:01:37.848Z",
+          "completedAt": "2026-10-27T05:01:45.233Z"
+        },
+        {
+          "name": "deploy",
+          "status": "passed",
+          "startedAt": "2026-10-27T05:01:45.234Z",
+          "completedAt": "2026-10-27T05:02:08.498Z"
+        },
+        {
+          "name": "health",
+          "status": "passed",
+          "startedAt": "2026-10-27T05:02:08.500Z",
+          "completedAt": "2026-10-27T05:02:28.705Z"
+        },
+        {
+          "name": "handoff",
+          "status": "passed",
+          "startedAt": "2026-10-27T05:02:28.706Z",
+          "completedAt": "2026-10-27T05:02:34.215Z"
+        }
+      ],
+      "completedAt": "2026-10-27T05:02:35.956Z",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452543953",
+      "artifactId": 12711530453,
+      "artifactDigest": "sha256:038a171f0ea1a22471b99e9c26132570e26e5f77a48917c44e53983011ab33f4"
+    }
+  },
+  "production_health": {
+    "observedAt": "2026-10-27T05:06:23.146Z",
+    "httpStatus": 200,
+    "body": {
+      "status": "ok",
+      "mode": "public",
+      "version": "0.13.0-member-messages",
+      "money_movement_enabled": false,
+      "official": false,
+      "runtime": "cloudflare-workers",
+      "release_sha": "1db283839296e284602217140a21921072d86629",
+      "shop_key_policy": "legacy-compatible",
+      "shop_key_issuer_profile": "freedom.shop-service-key/v1"
+    }
+  },
+  "access_readback": {
+    "observedAt": "2026-10-27T05:06:22.157Z",
+    "operators": [
+      {
+        "login": "teddashh",
+        "id": 233386770,
+        "permission": "admin"
+      },
+      {
+        "login": "arumwu",
+        "id": 75135621,
+        "permission": "admin"
+      },
+      {
+        "login": "Hao0321",
+        "id": 126182090,
+        "permission": "admin"
+      },
+      {
+        "login": "detna-vibe-coding",
+        "id": 267743027,
+        "permission": "admin"
+      }
+    ],
+    "environments": [
+      {
+        "target": "staging-next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "variables": {
+          "BACKUP_ENABLED": "true",
+          "RELEASE_CONFIG_SHA256": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376",
+          "RELEASE_ENABLED": "true",
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+        }
+      },
+      {
+        "target": "next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "variables": {
+          "BACKUP_ENABLED": "true",
+          "RELEASE_CONFIG_SHA256": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6",
+          "RELEASE_ENABLED": "true",
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+        }
+      }
+    ]
+  },
+  "independent_manual_backups": {
+    "staging-next": {
+      "runId": 40464222441,
+      "target": "staging-next",
+      "status": "passed",
+      "source": "1db283839296e284602217140a21921072d86629",
+      "event": "workflow_dispatch",
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "artifactId": 12716506614,
+      "artifactDigest": "sha256:20013c9cb8667719584ae2bc3385f265d833fba7c32a420faf91a5fe609ac105",
+      "completedAt": "2026-10-27T07:07:37.124Z",
+      "phases": [
+        {
+          "name": "preflight",
+          "status": "passed",
+          "startedAt": "2026-10-27T06:58:39.447Z",
+          "completedAt": "2026-10-27T06:58:50.567Z"
+        },
+        {
+          "name": "backup",
+          "status": "passed",
+          "startedAt": "2026-10-27T06:58:50.568Z",
+          "completedAt": "2026-10-27T07:07:28.337Z"
+        },
+        {
+          "name": "handoff",
+          "status": "passed",
+          "startedAt": "2026-10-27T07:07:28.338Z",
+          "completedAt": "2026-10-27T07:07:36.873Z"
+        }
+      ],
+      "naturalScheduleProven": false,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40464222441"
+    },
+    "next": {
+      "runId": 40465320248,
+      "target": "next",
+      "status": "workflow_failed_backup_completion_reconciled",
+      "workflowConclusion": "failure",
+      "error": "release_operator_process_failed",
+      "source": "1db283839296e284602217140a21921072d86629",
+      "event": "workflow_dispatch",
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "artifactId": 12715594126,
+      "artifactDigest": "sha256:75b218bc24c1e0db47d39643d13d52c482e8cd2aa30fb2c85e3035df9a5e0f56",
+      "completedAt": "2026-10-27T07:16:59.225Z",
+      "naturalScheduleProven": false,
+      "readback": {
+        "observedAt": "2026-10-27T07:20:26.349Z",
+        "target": "next",
+        "failedRun": 40465320248,
+        "readOnlyExceptAdvisoryLease": true,
+        "remoteWrites": 0,
+        "workflowConclusion": "failure",
+        "status": "settled_readback_passed",
+        "source": "1db283839296e284602217140a21921072d86629",
+        "schemaVersion": 189,
+        "ledgerRows": 188,
+        "pending": null,
+        "journalGeneration": 17,
+        "journalSha256": "02d806073f547c0da3ff3d3bd736af36cccb0a749f950ff83eca31cb53f3b3b5",
+        "proof": {
+          "remoteReadback": "verified",
+          "restore": "database_and_objects_restored",
+          "cleanupVerified": true,
+          "archiveSha256": "c8c327f49e9f15724881f97e576428fbe3b6d119484082b0c8996dfc2a851f8f"
+        },
+        "liveBindingsUnchanged": true,
+        "gcDisabled": true,
+        "deletionFences": 0,
+        "captureBackends": 0,
+        "leaseReleased": true,
+        "originalFailureRetained": true
+      },
+      "runner_container_cleanup_step": "success",
+      "limitation": "Workflow failure is retained. The authenticated original journal, under-lease database/provider readback and confirmed lease release establish completed backup/restore/cleanup and no pending operation; exact finalization failure cause is unavailable. No duplicate full backup was started merely to obtain a green workflow.",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40465320248"
+    }
+  },
+  "later_main_observation": {
+    "observed_at": "2026-10-27T07:16:16.731Z",
+    "main": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+    "verify": {
+      "id": 40456820119,
+      "head_sha": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+      "status": "in_progress",
+      "conclusion": null,
+      "attempt": 2,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40456820119"
+    },
+    "codeql": {
+      "id": 40456820112,
+      "head_sha": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40456820112"
+    }
+  },
+  "natural_backup": {
+    "cron_utc": "43 5 * * *",
+    "status": "not_observed_for_new_image",
+    "latest_observed_schedule_run": 40315670754,
+    "latest_observed_schedule_conclusion": "failure",
+    "limitation": "Manual acceptance is separate. The October 26 failure is retained; old timers remain the original operations owner’s responsibility until natural handoff is observed.",
+    "observed_at": "2026-10-27T07:25:49.190Z"
+  },
+  "reconciliation": {
+    "legacy_source_adopted_in_both_environments": true,
+    "production_begin_only_backup_reconciled": 40315670754,
+    "original_seed_and_floor_retained": true,
+    "migration_catalog_changes_from_previous_live_source": [],
+    "ordinary_release_runs_backup": false
+  },
+  "limitations": [
+    "Both successful releases and both manual backup attempts were initiated by teddashh; other accounts permissions were checked but their actual operations were not observed.",
+    "No live rollback, second-operator recovery, T-047, UF:INT-18, UF:INT-23 or AP:OPS-07 acceptance is established.",
+    "Feature flag choices and member UX acceptance are unchanged; checkout and transaction email are not enabled by deployment credentials.",
+    "Only public sanitized GitHub receipts and allowlisted readbacks are copied here; no raw dumps, object payloads, credentials or configuration secrets."
+  ],
+  "post_backup_public_health": {
+    "observedAt": "2026-10-27T07:25:49.190Z",
+    "httpStatus": 200,
+    "body": {
+      "status": "ok",
+      "mode": "public",
+      "version": "0.13.0-member-messages",
+      "money_movement_enabled": false,
+      "official": false,
+      "runtime": "cloudflare-workers",
+      "release_sha": "1db283839296e284602217140a21921072d86629",
+      "shop_key_policy": "legacy-compatible",
+      "shop_key_issuer_profile": "freedom.shop-service-key/v1"
+    }
+  }
+}

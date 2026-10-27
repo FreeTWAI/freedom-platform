@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-26T13:57:27.111935+00:00",
+  "recorded_at": "2026-10-27T07:26:38.144639+00:00",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,21 +14,34 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "274f0614208552e73c734108e73494503cf30c66",
-    "tree": "5e2388bc9e5d91fbdbebc18a5678d9e5206ee9b9",
-    "observed_at": "2026-10-26T13:48:57.954Z",
-    "observation_kind": "Exact merged main source/archive/checkout, completed main Verify/CodeQL records and per-environment deployment receipts; observed_at is the final GET Worker-binding time.",
-    "runtime_release_source": "274f0614208552e73c734108e73494503cf30c66",
+    "sha": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+    "tree": "a2de3ba8c8c3b64f381d619bb5403f423553e696",
+    "observed_at": "2026-10-27T07:16:16.731Z",
+    "observation_kind": "GitHub main readback, separate from actual deployed source.",
+    "runtime_release_source": "1db283839296e284602217140a21921072d86629",
+    "runtime_release_source_scope": "Both environments completed shared five-stage Actions release; staging manual backup passed; production backup completion independently reconciled after workflow failure.",
     "release_source_verify": {
       "conclusion": "success",
-      "source": "274f0614208552e73c734108e73494503cf30c66",
-      "head": "274f0614208552e73c734108e73494503cf30c66",
-      "run": 40323233554,
+      "source": "1db283839296e284602217140a21921072d86629",
+      "head": "1db283839296e284602217140a21921072d86629",
+      "run": 40449510394,
       "attempt": 1,
-      "tree_equals_merged_release": true,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json"
     },
     "main_verify_observation": {
+      "observed_at": "2026-10-27T07:16:16.731Z",
+      "main": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+      "main_verify_run": 40456820119,
+      "main_verify_attempt": 2,
+      "main_verify_last_reported_status": "in_progress",
+      "main_verify_conclusion": null,
+      "main_codeql_run": 40456820112,
+      "main_codeql_conclusion": "success",
+      "main_ci_complete": false,
+      "deployed_by_existing_receipt": false,
+      "limitation": "Dated observation: attempt 1 failed UI; attempt 2 was running. No claim that this newer main was deployed."
+    },
+    "previous_main_verify_observation": {
       "observed_at": "2026-10-26T13:48:57.954Z",
       "main": "274f0614208552e73c734108e73494503cf30c66",
       "main_tree": "5e2388bc9e5d91fbdbebc18a5678d9e5206ee9b9",
@@ -52,134 +65,99 @@
       "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
       "main_verify_attempt": 1
     },
-    "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
     "migrations_beyond_observed_runtime": [],
-    "previous_main_verify_observation": {
-      "observed_at": "2026-10-26T05:00:16.860Z",
-      "main": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
-      "main_tree": "ddc7515fe2df3ffc83728277dec6fb015d4586f3",
-      "main_pr": 1071,
-      "main_merged_at": "2026-10-25T23:25:12Z",
-      "integrated_head": "794be7c25225c36d9bb022721b0fd4fcda79b2f2",
-      "main_verify_run": 40244683057,
-      "main_verify_last_reported_status": "completed",
-      "main_verify_conclusion": "success",
-      "main_verify_successful_job_count": 17,
-      "main_codeql_run": 40244683121,
-      "main_codeql_last_reported_status": "completed",
-      "main_codeql_conclusion": "success",
-      "main_codeql_successful_job_count": 3,
-      "main_ci_complete": true,
-      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1071",
-      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683057",
-      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683121",
-      "deployed_by_existing_receipt": true,
-      "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
-      "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
-      "main_verify_attempt": 1
-    },
-    "runtime_release_source_scope": "兩環境S11／schema189、READ ONLY ledger gate、production公開smoke與nightly重綁；無發布備份，會員UX not_run。",
-    "previous_release_source_verify": {
-      "conclusion": "success",
-      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
-      "head": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
-      "run": 40244683057,
-      "attempt": 1,
-      "tree_equals_merged_release": true,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
-    }
+    "limitation": "Successful main CI for deployed 1db28383 is separate from later main ea84b93c. Member UX and original acceptance remain incomplete."
   },
   "deployment": {
     "production": {
       "url": "https://freetwai.com/",
-      "observed_release_sha": "274f0614208552e73c734108e73494503cf30c66",
-      "observed_at": "2026-10-26T13:48:57.954Z",
+      "observed_release_sha": "1db283839296e284602217140a21921072d86629",
+      "observed_at": "2026-10-27T05:02:35.956Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "mode": "public",
-        "runtime": "cloudflare-workers",
-        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
-        "cache_control_no_store": true
+        "release_sha": "1db283839296e284602217140a21921072d86629",
+        "observation_kind": "operator_validated_health_phase",
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452543953"
       },
-      "worker_version": "145cd129-3d8a-49af-aa4e-5b5b7947c079",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "status": "deployed_public_smoke_passed_natural_backup_pending",
-      "last_operator_release_sha": "274f0614208552e73c734108e73494503cf30c66",
-      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
-      "health_observation": "本次deploy health符合S11；production另有public smoke。",
-      "worker_binding_observed_at": "2026-10-26T13:48:57.954Z",
-      "health_observed_at": "2026-10-26T13:49:11.564Z",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "last_operator_release_sha": "1db283839296e284602217140a21921072d86629",
+      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled.",
+      "health_observation": "Exact-source health validated by the installed operator and receipt.",
+      "health_observed_at": "2026-10-27T05:02:28.705Z",
       "health_observed_between": {
-        "start": "2026-10-26T13:49:11.561Z",
-        "end": "2026-10-26T13:49:22.873Z"
+        "start": "2026-10-27T05:02:08.500Z",
+        "end": "2026-10-27T05:02:28.705Z"
       },
-      "health_observed_at_basis": "Production smoke healthAttempts內嵌時間；staging deploy health無獨立時間，binding觀察為上界。",
-      "worker_binding_observed_at_basis": "release-receipt.json active_readback_attempts內嵌時間。"
+      "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
+      "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt.",
+      "additional_public_health_readback": {
+        "observedAt": "2026-10-27T07:25:49.190Z",
+        "httpStatus": 200,
+        "body": {
+          "status": "ok",
+          "mode": "public",
+          "version": "0.13.0-member-messages",
+          "money_movement_enabled": false,
+          "official": false,
+          "runtime": "cloudflare-workers",
+          "release_sha": "1db283839296e284602217140a21921072d86629",
+          "shop_key_policy": "legacy-compatible",
+          "shop_key_issuer_profile": "freedom.shop-service-key/v1"
+        }
+      }
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "274f0614208552e73c734108e73494503cf30c66",
-      "observed_at": "2026-10-26T13:46:06.318Z",
+      "observed_release_sha": "1db283839296e284602217140a21921072d86629",
+      "observed_at": "2026-10-27T04:56:44.052Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "mode": "staging",
-        "runtime": "cloudflare-workers",
-        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
-        "cache_control_no_store": true
+        "release_sha": "1db283839296e284602217140a21921072d86629",
+        "observation_kind": "operator_validated_health_phase",
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452068872"
       },
-      "worker_version": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "status": "deployed_public_smoke_passed_natural_backup_pending",
-      "last_operator_release_sha": "274f0614208552e73c734108e73494503cf30c66",
-      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
-      "health_observation": "本次deploy health符合S11；production另有public smoke。",
-      "worker_binding_observed_at": "2026-10-26T13:46:06.318Z",
-      "health_observed_at": null,
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "last_operator_release_sha": "1db283839296e284602217140a21921072d86629",
+      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled.",
+      "health_observation": "Exact-source health validated by the installed operator and receipt.",
+      "health_observed_at": "2026-10-27T04:56:36.730Z",
       "health_observed_between": {
-        "start": null,
-        "end": "2026-10-26T13:46:06.318Z"
+        "start": "2026-10-27T04:56:19.284Z",
+        "end": "2026-10-27T04:56:36.730Z"
       },
-      "health_observed_at_basis": "Production smoke healthAttempts內嵌時間；staging deploy health無獨立時間，binding觀察為上界。",
-      "worker_binding_observed_at_basis": "release-receipt.json active_readback_attempts內嵌時間。"
+      "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
+      "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt."
     },
     "last_operator_rollout": {
-      "source": "274f0614208552e73c734108e73494503cf30c66",
-      "at": "2026-10-26T13:49:45.532745+00:00",
-      "kind": "sanitized_operator_observations",
-      "scope": "S11兩環境發布、公開smoke與nightly重綁；無發布備份。",
-      "status": "deployed_public_smoke_passed_natural_backup_pending",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "receipt_sha256": "3f7d3f7c476b699218436dc9a1cb5fe98ea38e31e9dbebb60ac1799968fe800a",
-      "database_migrations_applied": {
-        "staging": [],
-        "production": []
-      },
-      "worker_versions": {
-        "staging": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
-        "production": "145cd129-3d8a-49af-aa4e-5b5b7947c079"
-      },
-      "evidence_cutoff_at": "2026-10-26T13:49:45.532745+00:00",
-      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。"
+      "source": "1db283839296e284602217140a21921072d86629",
+      "at": "2026-10-27T05:02:35.956Z",
+      "kind": "authenticated_shared_actions_receipts",
+      "scope": "staging-next then next, same verified source and operator image",
+      "status": "passed",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled."
     },
     "last_production_rollout": {
-      "source": "274f0614208552e73c734108e73494503cf30c66",
-      "at": "2026-10-26T13:48:57.954Z",
-      "worker_version": "145cd129-3d8a-49af-aa4e-5b5b7947c079",
-      "status": "deployed_public_smoke_passed_natural_backup_pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "scope": "首試部署／health／readback；無發布備份。",
-      "timestamp_basis": "active_readback_attempts內嵌時間。"
+      "source": "1db283839296e284602217140a21921072d86629",
+      "at": "2026-10-27T05:02:35.956Z",
+      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "run_id": 40452543953,
+      "deployment_id": 7350773249,
+      "kind": "authenticated_shared_actions_receipt"
     },
     "last_staging_rollout": {
-      "source": "274f0614208552e73c734108e73494503cf30c66",
-      "at": "2026-10-26T13:46:06.318Z",
-      "worker_version": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
-      "status": "deployed_public_smoke_passed_natural_backup_pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "scope": "首試部署／health／readback；無發布備份。",
-      "timestamp_basis": "active_readback_attempts內嵌時間。"
+      "source": "1db283839296e284602217140a21921072d86629",
+      "at": "2026-10-27T04:56:44.052Z",
+      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "run_id": 40452068872,
+      "deployment_id": 7350698151,
+      "kind": "authenticated_shared_actions_receipt"
     },
     "previous_production_rollout": {
       "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
@@ -774,9 +752,28 @@
           "productionLaunchpad": "absent"
         },
         "limitation": "Same source and dist as last_operator_rollout; only the launchpad flag differs. Rollback is a redeploy of the same dist without the flag."
+      },
+      {
+        "source": "274f0614208552e73c734108e73494503cf30c66",
+        "at": "2026-10-26T13:49:45.532745+00:00",
+        "kind": "sanitized_operator_observations",
+        "scope": "S11兩環境發布、公開smoke與nightly重綁；無發布備份。",
+        "status": "deployed_public_smoke_passed_natural_backup_pending",
+        "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+        "receipt_sha256": "3f7d3f7c476b699218436dc9a1cb5fe98ea38e31e9dbebb60ac1799968fe800a",
+        "database_migrations_applied": {
+          "staging": [],
+          "production": []
+        },
+        "worker_versions": {
+          "staging": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
+          "production": "145cd129-3d8a-49af-aa4e-5b5b7947c079"
+        },
+        "evidence_cutoff_at": "2026-10-26T13:49:45.532745+00:00",
+        "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。"
       }
     ],
-    "execution_mode": "Explicitly authorized private operator invocation for an exact source; no automatic GitHub Release trigger was verified.",
+    "execution_mode": "Manual Shared release workflow_dispatch on protected main, using Environment service credentials and a digest-pinned hosted operator. No personal machine required; this is not an on-push automatic release trigger.",
     "manifest_semantics": "freedom.project.yaml deployment.trigger=published_release declares the v1 production release policy. Installed automation, signed release provenance and actual deployment observations are separate evidence; policy conformance is not inferred from this value.",
     "historical_r12_rollout": {
       "source": "8a98bb14d0ba024ac94fb704aa41272a775b0775",
@@ -968,11 +965,11 @@
       }
     },
     "main_migrations_beyond_observed_release": {
-      "source": "274f0614208552e73c734108e73494503cf30c66",
-      "runtime_source": "274f0614208552e73c734108e73494503cf30c66",
-      "runtime_observed_at": "2026-10-26T13:48:57.954Z",
+      "source": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+      "runtime_source": "1db283839296e284602217140a21921072d86629",
       "migrations": [],
-      "limitation": "S11已部署；相較S10無migration，schema189不變。"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Git migration catalog unchanged from prior S11 through deployed source and observed main. Existing dated live schema189/188-row observations and floor authority retained; this reconciliation did not run a new DB ledger query."
     }
   },
   "topology": {
@@ -3178,21 +3175,24 @@
     "scheduled_evidence": "docs/platform-plan/verification/daily-scheduled-2026-10-05.json",
     "scheduled_successes_observed_per_environment": 1,
     "limitations": [
-      "Host-dependent schedule and operator credentials",
+      "Legacy local timers remain host-dependent pending handoff; shared hosted Actions use Environment service credentials.",
       "Same Cloudflare account; no independent account disaster boundary",
       "Not PITR or production failover",
       "Same-host isolated current-schema restore passed; a second authorized operator in a new environment is not yet accepted",
       "GC/OFF daily mode remains selected; retention executor and historical unsettled PUT remain open"
     ],
-    "operator_source_note": "依owner決定，本次沒有before／after備份或backup gate，故省略備份／restore／pause／restore timer欄位；每日備份為資料復原點，Git為程式復原點。Timers維持active；deploy-start.mjs與dispatcher每步拒絕03:00–05:45Z或backup service active／PID非0。",
+    "operator_source_note": "The shared Actions image is installed and ordinary deployments passed; new-image staging manual backup passed and the production failed workflow was reconciled using its completed journal evidence and live readback. daily_operator_source and last_rollout_backup_release_pins below retain the dated legacy local-timer configuration, not the active shared image. No per-deployment backup is required. Natural schedule acceptance and legacy timer retirement remain separate.",
     "current_operator_scheduled_run": {
-      "observed_at": "2026-10-26T13:49:45.532745+00:00",
-      "status": "not_observed_for_new_wrapper",
-      "operator_source": "274f0614208552e73c734108e73494503cf30c66",
-      "dispatcher_sha256": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
-      "timers": "stayed_active",
-      "limitation": "首次S11自然備份為10/27約03:34Z staging／04:33Z production，尚未觀察；dispatcher安裝不等於備份。"
+      "observed_at": "2026-10-27T07:25:49.190Z",
+      "status": "not_observed_for_new_image",
+      "operator_source": "1db283839296e284602217140a21921072d86629",
+      "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "workflow_active": true,
+      "cron_utc": "43 5 * * *",
+      "latest_observed_schedule_run": 40315670754,
+      "latest_observed_schedule_conclusion": "failure",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Staging manual run passed; production workflow failed and its completed backup was independently reconciled. Neither proves natural scheduling. Legacy timer operation/retirement is owned separately and was not changed by this task."
     },
     "rollback": {
       "current_schema": {
@@ -3379,41 +3379,13 @@
       }
     },
     "previous_dated_operator_scheduled_observation": {
-      "observed_at": "2026-10-11T05:34:10.167209+00:00",
-      "completed_sets": [
-        {
-          "environment": "staging",
-          "label": "after-rollout",
-          "setId": "e8d94304-4a4a-48bc-b488-f05169437d94",
-          "createdAt": "2026-10-11T04:46:34.428Z",
-          "sourceRelease": "df20b66affe5578ad46dffc5b9d826f8ded2264a",
-          "operatorSource": "df20b66affe5578ad46dffc5b9d826f8ded2264a",
-          "restore": "database_and_objects_restored",
-          "remoteReadback": "verified",
-          "cleanupVerified": true,
-          "captureKind": "existing scheduled recovery set; no manual duplicate capture",
-          "adoptedAt": "2026-10-11T04:57:46.008438+00:00",
-          "canonicalCompletedSha256": "18ce90d90192ac966b370057614fbc873493f2567cbd83702dba482f94ec8f95",
-          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-r17-2026-10-11.json"
-        }
-      ],
-      "failed_sets": [
-        {
-          "setId": "1a6f59d7-07e8-4746-b3eb-2bff23ede796",
-          "createdAt": "2026-10-11T04:34:34.527Z",
-          "environment": "production",
-          "sourceRelease": "b9ed788cc380ae1bd286158ee1dc55fdbbadcceb",
-          "operatorSource": "df20b66affe5578ad46dffc5b9d826f8ded2264a",
-          "status": "failed",
-          "stage": "preflight",
-          "code": "daily_backup_phase_failed",
-          "cleanupVerified": true,
-          "captureProduced": false,
-          "cause": "not established; all five matching read-only preflight checks passed at04:41Z",
-          "willNotAdoptAsSuccessfulBackup": true
-        }
-      ],
-      "limitation": "These dated scheduled executions do not prove future reliability or second-operator recovery. Failed attempts are retained separately from successful replacement captures."
+      "observed_at": "2026-10-26T13:49:45.532745+00:00",
+      "status": "not_observed_for_new_wrapper",
+      "operator_source": "274f0614208552e73c734108e73494503cf30c66",
+      "dispatcher_sha256": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "timers": "stayed_active",
+      "limitation": "首次S11自然備份為10/27約03:34Z staging／04:33Z production，尚未觀察；dispatcher安裝不等於備份。"
     },
     "historical_r24_operator_snapshot": {
       "daily_operator_source": "dcb393515dd03413862628806f17e500d0f7bc32",
@@ -3544,7 +3516,93 @@
         },
         "limitation": "Manual restores, earlier service results and restored active timers do not establish natural execution of the new wrappers."
       }
-    ]
+    ],
+    "shared_actions_manual_backups": {
+      "observed_at": "2026-10-27T07:22:57.007674+00:00",
+      "source": "1db283839296e284602217140a21921072d86629",
+      "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+      "results": {
+        "staging-next": {
+          "runId": 40464222441,
+          "target": "staging-next",
+          "status": "passed",
+          "source": "1db283839296e284602217140a21921072d86629",
+          "event": "workflow_dispatch",
+          "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+          "artifactId": 12716506614,
+          "artifactDigest": "sha256:20013c9cb8667719584ae2bc3385f265d833fba7c32a420faf91a5fe609ac105",
+          "completedAt": "2026-10-27T07:07:37.124Z",
+          "phases": [
+            {
+              "name": "preflight",
+              "status": "passed",
+              "startedAt": "2026-10-27T06:58:39.447Z",
+              "completedAt": "2026-10-27T06:58:50.567Z"
+            },
+            {
+              "name": "backup",
+              "status": "passed",
+              "startedAt": "2026-10-27T06:58:50.568Z",
+              "completedAt": "2026-10-27T07:07:28.337Z"
+            },
+            {
+              "name": "handoff",
+              "status": "passed",
+              "startedAt": "2026-10-27T07:07:28.338Z",
+              "completedAt": "2026-10-27T07:07:36.873Z"
+            }
+          ],
+          "naturalScheduleProven": false,
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40464222441"
+        },
+        "next": {
+          "runId": 40465320248,
+          "target": "next",
+          "status": "workflow_failed_backup_completion_reconciled",
+          "workflowConclusion": "failure",
+          "error": "release_operator_process_failed",
+          "source": "1db283839296e284602217140a21921072d86629",
+          "event": "workflow_dispatch",
+          "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+          "artifactId": 12715594126,
+          "artifactDigest": "sha256:75b218bc24c1e0db47d39643d13d52c482e8cd2aa30fb2c85e3035df9a5e0f56",
+          "completedAt": "2026-10-27T07:16:59.225Z",
+          "naturalScheduleProven": false,
+          "readback": {
+            "observedAt": "2026-10-27T07:20:26.349Z",
+            "target": "next",
+            "failedRun": 40465320248,
+            "readOnlyExceptAdvisoryLease": true,
+            "remoteWrites": 0,
+            "workflowConclusion": "failure",
+            "status": "settled_readback_passed",
+            "source": "1db283839296e284602217140a21921072d86629",
+            "schemaVersion": 189,
+            "ledgerRows": 188,
+            "pending": null,
+            "journalGeneration": 17,
+            "journalSha256": "02d806073f547c0da3ff3d3bd736af36cccb0a749f950ff83eca31cb53f3b3b5",
+            "proof": {
+              "remoteReadback": "verified",
+              "restore": "database_and_objects_restored",
+              "cleanupVerified": true,
+              "archiveSha256": "c8c327f49e9f15724881f97e576428fbe3b6d119484082b0c8996dfc2a851f8f"
+            },
+            "liveBindingsUnchanged": true,
+            "gcDisabled": true,
+            "deletionFences": 0,
+            "captureBackends": 0,
+            "leaseReleased": true,
+            "originalFailureRetained": true
+          },
+          "runner_container_cleanup_step": "success",
+          "limitation": "Workflow failure is retained. The authenticated original journal, under-lease database/provider readback and confirmed lease release establish completed backup/restore/cleanup and no pending operation; exact finalization failure cause is unavailable. No duplicate full backup was started merely to obtain a green workflow.",
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40465320248"
+        }
+      },
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "natural_schedule_proven": false
+    }
   },
   "governance_current": {
     "observed_at": "2026-10-14T15:09:01.082527+00:00",
@@ -9409,6 +9467,80 @@
       "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
       "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
       "scope": "完整S10部署／備份／timer證據保留於原收據。"
+    },
+    {
+      "recorded_at": "2026-10-26T13:57:27.111935+00:00",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "scope": "Prior S11 deployment, local operator and timer evidence retained in its dated receipt and Git revision ea84b93cdc06476f0292807b0c7577e93403aa40."
     }
-  ]
+  ],
+  "shared_release_installation": {
+    "observed_at": "2026-10-27T05:06:22.157Z",
+    "status": "enabled_and_actually_deployed",
+    "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+    "workflow": "https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml",
+    "operators": [
+      {
+        "login": "teddashh",
+        "id": 233386770,
+        "permission": "admin"
+      },
+      {
+        "login": "arumwu",
+        "id": 75135621,
+        "permission": "admin"
+      },
+      {
+        "login": "Hao0321",
+        "id": 126182090,
+        "permission": "admin"
+      },
+      {
+        "login": "detna-vibe-coding",
+        "id": 267743027,
+        "permission": "admin"
+      }
+    ],
+    "environments": [
+      {
+        "target": "staging-next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "variables": {
+          "BACKUP_ENABLED": "true",
+          "RELEASE_CONFIG_SHA256": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376",
+          "RELEASE_ENABLED": "true",
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+        }
+      },
+      {
+        "target": "next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "variables": {
+          "BACKUP_ENABLED": "true",
+          "RELEASE_CONFIG_SHA256": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6",
+          "RELEASE_ENABLED": "true",
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+        }
+      }
+    ],
+    "actual_operators_observed": [
+      "teddashh"
+    ],
+    "personal_keys_distributed": false,
+    "ordinary_release_requires_daily_backup": false,
+    "natural_backup_acceptance": "not_observed_for_new_image"
+  }
 }

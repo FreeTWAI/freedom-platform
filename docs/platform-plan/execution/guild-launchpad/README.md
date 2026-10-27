@@ -6,11 +6,15 @@
 
 ## 目前狀態
 
-本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
+歷史發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=1db283839296e284602217140a21921072d86629 release.staging=1db283839296e284602217140a21921072d86629 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
-截至2026-10-26 13:49 UTC，兩環境S11 `274f0614`／schema189發布完成：技能書用途篩選、社群／公會操作修補、搜尋帶詞、站內助手、測試員地圖與新手村；任務進度／勳章僅本機。無migration，旗標與 `36bec661`／189下限不變；shared路徑未啟用。依owner決定無發布備份，nightly已重綁但10/27首次自然備份未觀察；production公開smoke14項通過，會員UX與M1／完整計畫仍未驗收。詳見[本次發布收據](../unified-foundation/rollout-main-274f0614-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
+2026-10-27：staging 與 production 已透過共用 Actions 部署 `1db28383`，四人部署入口已啟用，schema189 與原 floor 保留。staging 手動備份全程成功；production 的 Actions 收尾失敗，已由完整 journal 與持鎖讀回確認備份／還原／清理完成、無未結案操作，原失敗仍保留。自然備份接手、其他三人的實跑、會員 UX、M1／完整計畫仍未驗收。詳見[本次共用發布收據](../unified-foundation/rollout-shared-actions-2026-10-27.json)及[現況快照](../unified-foundation/current-state.json)。
+
+### 2026-10-26 13:49 歷史發布
+
+截至2026-10-26 13:49 UTC，兩環境S11 `274f0614`／schema189發布完成：技能書用途篩選、社群／公會操作修補、搜尋帶詞、站內助手、測試員地圖與新手村；任務進度／勳章僅本機。無migration，旗標與 `36bec661`／189下限不變；shared路徑當時未啟用。依owner決定無發布備份，nightly已重綁但10/27首次自然備份未觀察；production公開smoke14項通過，會員UX與M1／完整計畫仍未驗收。詳見[當時發布收據](../unified-foundation/rollout-main-274f0614-2026-10-26.json)。
 
 ### 2026-10-26 05:13 歷史發布
 

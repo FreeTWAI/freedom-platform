@@ -10,6 +10,24 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-27 共用 Actions 發布與備份接手
+
+兩環境已透過 `Shared release` 部署 `1db28383`，staging 04:56 UTC、production 05:02 UTC 完成。
+preflight、migration、deploy、health、handoff 五階段均成功；[具日期收據](rollout-shared-actions-2026-10-27.json)保存來源 CI、工具 image、Actions run、artifact digest 與正式站 HTTP 200 回讀。
+`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 權限均已核對；兩環境部署與備份開關已啟用。
+四人可用自己的 GitHub 帳號從 [Shared release](https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml) 選已驗證的完整 SHA，先 staging-next、再同版本 next，mode 選 deploy；日常 recovery run ID 留空。
+使用 Environment 服務憑證與短效映像下載授權，不需操作者的個人機器或分發個人金鑰。
+
+本輪 staging 手動備份全程成功。正式環境 Actions 在完成備份紀錄後收尾失敗；持有原 lease 讀回完整紀錄鏈、DB ledger、Worker 與清理狀態後，確認備份／遠端讀回／隔離 DB 與物件還原／清理已完成、無未結案操作。
+原 Actions 失敗保留，精確收尾錯誤原因未確認；沒有為取得綠燈重做整份備份。備份不加入普通發布前置。
+每日 05:43 UTC 的新 image 自然排程尚未觀察，手動成功不冒充自然成功；舊 timer 退役由原維運線接續。
+這些實跑的操作者均為 teddashh，其他三人的實際操作與第二操作者還原仍待觀察。
+原 seed／floor 與 schema189 保留；正式環境舊 BEGIN-only 備份失敗已讀回對帳，原失敗沒有改寫為成功。
+
+主線已前進到 `ea84b93c`，07:16 UTC 查核時 Verify attempt 2 仍執行中、CodeQL 成功；不能當成已部署。
+這次沒有啟用 checkout、交易 Email 或其他新商務旗標，也沒有執行登入會員旅程；原 168 項、T-047、真人手機／Safari與 live rollback 的未驗項保留。
+以下舊發布紀錄保留各自日期與證據邊界。
+
 ## 2026-10-26 main 274f0614 發布完成（搜尋、導覽助手與本機任務）
 
 截至13:49 UTC，兩環境已由S10 `b14916cc` 更新為S11 `274f0614`／schema189；見[發布收據](rollout-main-274f0614-2026-10-26.json)。
