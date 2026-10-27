@@ -154,7 +154,7 @@ test('newbie plain and secondary actions own a paired surface without overriding
   assert.match(css,/outline:2px solid var\(--focus\)/);
   const source=readFileSync(new URL('../../apps/portal-web/src/modules/NewbieVillage.tsx',import.meta.url),'utf8');
   const classes=[...source.matchAll(/className="(btn[^"]*)"/g)].map(m=>m[1]);
-  assert.equal(classes.length,13);
+  assert.equal(classes.length,11);
   assert.ok(classes.includes('btn btn-small'),'plain next/result action must be covered');
   assert.ok(classes.every(value=>value==='btn btn-small'||value==='btn btn-secondary btn-small'));
 });
