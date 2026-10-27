@@ -30,13 +30,28 @@ after 20 pages. Pages are observations, not an atomic environment-wide snapshot.
 The receipt assists operator scope review; it does not prove consent, enable a
 flag or authorize a deployment. No schema change is required.
 
-The list currently walks all tenant scope identities on each page request and
-reads each community store for its summary. Only page items receive full cart
-and delivery readiness; off-page items use the buyer gate alone. This is intended
-for trial scale. A measured one-product own-stock/meetup fixture used 51 SQL
-queries for full readiness versus 16 for the buyer gate, excluding caller
-authorization, transaction and admin-context restoration. Counts grow with cart
+The list still walks all tenant scope identities on each page request to compute
+whole-community totals; it is not bounded server-side pagination. Active-admission
+counts use an existence check in the instance query. Only displayed stores read
+admission details (at most the active and latest revoked row), and only displayed
+tenants check admin membership. Historical admission reasons are not read for
+off-page stores. When checkout is paused, off-page profiles are not loaded.
+
+Off-page stores use the buyer gate without product availability quotes. A store
+offering only self-shipping must also pass the same delivery-choice check as its
+displayed row; otherwise changing pages can change the accepting-orders total
+and prevent the scope receipt from downloading. This check shares the SQL-local
+delivery implementation, including the feature flag and bank-transfer condition.
+It does not call providers or change the buyer's checkout authorization.
+
+The original one-product own-stock/meetup measurement used 51 SQL queries for full
+readiness versus 16 for the buyer gate alone, excluding caller authorization,
+transaction and admin-context restoration. It is historical evidence, not the
+current complete list cost. Work still grows with tenant/store counts, cart
 batches and own-stock delivery candidates; receipt pagination repeats the walk.
+Separating bounded list reads from whole-community statistics remains follow-up
+work and must preserve community isolation, unconfigured/inactive stores and
+explicit receipt completeness rather than silently returning partial totals.
 
 `readCommerceSettings` defaults console/checkout/quarantine/email off and accepts only
 exact `true`/`false`. FREEDOM_COMMERCE_CONSOLE_ENABLED=true requires

@@ -46,7 +46,6 @@
   html .floating-message-panel .messages-thread[data-chat-open=true]>.chat-header{padding-top:10px}
   html .floating-message-panel .messages-thread[data-chat-open=true] .chat-search-trigger,
   html .floating-message-panel .messages-thread[data-chat-open=true] .messages-refresh{top:10px}
-  .floating-messages[aria-expanded=true]{display:none}
 }
 
 @media(max-width:760px){.floating-messages{top:calc(var(--chat-viewport-offset,0px) + var(--chat-viewport-height,100dvh) - 76px - var(--app-safe-bottom,0px));bottom:auto}}
@@ -58,3 +57,41 @@
 .floating-message-size input{min-width:0;width:100%;min-height:44px;accent-color:var(--green)}
 .floating-message-size .btn{min-height:44px;padding:8px 12px;font-size:14px}
 @media(max-width:760px){.floating-message-header .floating-message-size-toggle,.floating-message-size{display:none}}
+
+/* Dragging is confined to the launcher; document scrolling remains native. */
+.floating-messages{touch-action:none;user-select:none;-webkit-user-select:none;--launcher-safe-top:var(--app-safe-top,env(safe-area-inset-top,0px));--launcher-safe-bottom:var(--app-safe-bottom,env(safe-area-inset-bottom,0px));--launcher-safe-left:var(--app-safe-left,env(safe-area-inset-left,0px));--launcher-safe-right:var(--app-safe-right,env(safe-area-inset-right,0px))}
+.floating-messages[data-dragging=true]{cursor:grabbing}
+.floating-message-header .floating-message-position-toggle{width:auto;padding:8px;font-size:14px;white-space:nowrap}
+.floating-message-position{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;flex:none;max-height:40%;overflow:auto}
+.floating-message-position[hidden]{display:none}
+.floating-message-position p{flex-basis:100%;margin:0;font-size:14px;color:var(--text-muted)}
+.floating-message-position label{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;flex:1 1 200px}
+.floating-message-position input,.floating-message-position select{min-height:44px;min-width:0;flex:1;font-size:16px}
+.floating-message-position .btn{min-height:44px;font-size:14px}
+@media(max-width:760px){
+  .floating-message-header .floating-message-position-toggle{margin-inline-start:auto}
+}
+
+/* Long translations and enlarged text may wrap rather than squeeze the close control. */
+.floating-message-header{flex-wrap:wrap}
+.floating-message-header h2{min-width:0;flex:1;overflow-wrap:anywhere}
+.floating-message-header .btn{flex-shrink:0}
+
+/* Only the surface is translucent: labels, icons and unread badges stay opaque. */
+.floating-messages{color:var(--ink);background:var(--bg-elev);box-shadow:0 3px 10px #0002}
+@supports(background:color-mix(in srgb,white 75%,transparent)){
+  .floating-messages{background:color-mix(in srgb,var(--bg-elev) 75%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+}
+.floating-messages:is(:hover,:focus-visible,:active,[data-dragging=true],[aria-expanded=true]){background:var(--bg-elev)}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+  .floating-messages{background:var(--bg-elev);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media(forced-colors:active){
+  .floating-messages{background:Canvas;color:CanvasText;border-color:ButtonText;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .floating-messages:focus-visible{outline-color:Highlight}
+  .floating-messages-badge{background:Highlight;color:HighlightText;border-color:Canvas}
+}
+
+/* An open panel owns its close control. Hide the external launcher at every
+   width so visual/layout viewport differences cannot overlay panel controls. */
+.floating-messages[aria-expanded=true]{display:none}

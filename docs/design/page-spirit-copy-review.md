@@ -31,7 +31,7 @@
 | 活動集錦（會員入口） | highlights:topic-3 | 找到活動集錦列表 | `#main-content .hl-grid` | `EventHighlights.tsx:85-93` |
 | 我的定位 | positioning:topic-1 | 找到定位結果 | `#main-content #positioning-result-title` | `PositioningPanels.tsx:37-44` |
 | 小隊集合 | squads:topic-1 | 找到小隊搜尋 | `#main-content .squad-directory input[type="search"]` | `Squads.tsx:110-113` |
-| 小隊集合 | squads:topic-2 | 找到小隊邀請 | `#main-content #received-squad-invitations` | `Squads.tsx:35-40` |
+| 小隊集合 | squads:topic-2 | 找到小隊邀請 | `#main-content #received-squad-invitations` | `SquadInvitations.tsx:35` |
 | 一起開發 | cocreation:topic-1 | 找到共創專案 | `#main-content .cocreation-project-picker .discovery-search select` | `CoCreationPanel.tsx:166-169` |
 | 一起開發 | cocreation:topic-3 | 找到共創任務搜尋 | `#main-content .cocreation-task-filters input[type="search"]` | `CoCreationPanel.tsx:186` |
 | 社群分享 | social:topic-1 | 找到貼文分享表單 | `#main-content .social-composer > summary` | `SocialZone.tsx:134-137` |

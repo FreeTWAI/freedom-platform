@@ -16,7 +16,9 @@ import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
 import { backupObjectStore, backupTar, bytesStream, newBackupDirectories } from '../../shared-release/portable/backup-storage.mjs';
 import { openCapturePolicy } from '../../shared-release/portable/capture-policy.mjs';
-import { createWorkerDeployer, renderWorkerConfig } from '../../shared-release/portable/deploy.mjs';
+import { createWorkerDeployer, renderWorkerConfig, assertReleasePredecessor } from '../../shared-release/portable/deploy.mjs';
+import { readFlagDecisions, validateFlagDecisions, applyFlagDecisions, plannedFlagChanges, publicFlagChanges } from '../../shared-release/portable/flag-decisions.mjs';
+import { backupExpectation } from '../../shared-release/portable/backup-expectation.mjs';
 import { parseJsonc } from '../lib/wrangler.mjs';
 import { buildApplication, directoryDigest } from '../../shared-release/portable/build.mjs';
 import { git as fixtureGit } from './migration-fixtures.mjs';
@@ -869,22 +871,40 @@ test('capture policy refuses a new enable after ownership is lost during intent 
   }
 });
 
-async function deployFixture(t) {
+async function deployFixture(t, decisions, liveFlags = {}) {
   const workRoot = await diskFixture(t, 'fp-deploy-'), controller = new AbortController();
   const oldVersion = '11111111-1111-4111-8111-111111111111', newVersion = '22222222-2222-4222-8222-222222222222';
-  const sourceSha = 'a'.repeat(40), previous = 'b'.repeat(40), worker = 'freedom-platform-staging-next';
+  const sourceRoot = join(workRoot, 'source'); await mkdir(sourceRoot);
+  if (decisions) {
+    await mkdir(join(sourceRoot, 'deploy/shared-release'), { recursive: true });
+    await writeFile(join(sourceRoot, 'deploy/shared-release/flag-decisions.json'), JSON.stringify(decisions));
+  } else await writeFile(join(sourceRoot, 'fixture.txt'), 'Synthetic release');
+  fixtureGit(sourceRoot, ['init', '-q', '-b', 'main']); fixtureGit(sourceRoot, ['add', '.']);
+  fixtureGit(sourceRoot, ['commit', '-qm', 'Synthetic flag source']);
+  const sourceSha = fixtureGit(sourceRoot, ['rev-parse', 'HEAD']), previous = 'b'.repeat(40), worker = 'freedom-platform-staging-next';
   let published = false, polls = 0, cacheEnabled = false, failPoll = false, logs;
-  const bindings = source => [
+  let deployedFlags, dropFlagsAfterMatch = false;
+  const bindings = source => {
+    const values = [
     ...Object.entries({ APP_ORIGIN: 'https://staging.freetwai.com', FREEDOM_ENV: 'staging',
       FREEDOM_DATABASE_NAME: 'freedom_staging_next', FREEDOM_TRUST_CF_CONNECTING_IP: 'true',
-      FREEDOM_RELEASE_SHA: source, FREEDOM_COMMERCE_CHECKOUT_ENABLED: 'false' }).map(([name, text]) => ({ name, text, type: 'plain_text' })),
+      FREEDOM_RELEASE_SHA: source, FREEDOM_COMMERCE_CHECKOUT_ENABLED: 'false', ...liveFlags }).map(([name, text]) => ({ name, text, type: 'plain_text' })),
     { name: 'ASSETS', type: 'assets' }, { name: 'IMAGES', type: 'images' },
     { name: 'HYPERDRIVE', type: 'hyperdrive', id: 'c'.repeat(32) },
     { name: 'EMAIL', type: 'send_email', allowed_sender_addresses: ['no-reply@mail.freetwai.com'] },
     { name: 'MEDIA', type: 'r2_bucket', bucket_name: 'fixture-media' },
     { name: 'GUIDE_STATIC', type: 'r2_bucket', bucket_name: 'fixture-guide' },
     { name: 'TOTP_ENCRYPTION_KEY', type: 'secret_text' },
-  ];
+    ];
+    if (source === sourceSha && deployedFlags && !(dropFlagsAfterMatch && polls >= 3)) {
+      for (const [name, text] of Object.entries(deployedFlags)) {
+        const binding = values.find(row => row.name === name);
+        if (binding) binding.text = text;
+        else values.push({ name, type: 'plain_text', text });
+      }
+    }
+    return values;
+  };
   const runtime = { compatibility_date: '2026-09-21', compatibility_flags: ['nodejs_compat'], usage_model: 'standard',
     assets: { html_handling: 'auto-trailing-slash', not_found_handling: 'none', serve_directly: false, raw_run_worker_first: true, base_path: '/' } };
   const fetchImpl = async (address, options) => {
@@ -914,23 +934,25 @@ async function deployFixture(t) {
   const before = await deployer.inspect();
   const source = parseJsonc(await readFile(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'));
   return { deployer, before, sourceSha, oldVersion, newVersion, controller, fetchImpl,
-    args: { sourceSha, before, source, sourceRoot: '/fixture/source', workRoot,
+    args: { sourceSha, before, source, sourceRoot, workRoot,
       async retainIntent(value) { assert.equal(value.sourceSha, sourceSha); assert.equal(value.automaticRetry, false); },
       lease: { signal: controller.signal, assertHeld() { controller.signal.throwIfAborted(); } } },
-    publish() { published = true; }, failNextPoll() { failPoll = true; }, enableCache() { cacheEnabled = true; },
+    publish(flags) { published = true; deployedFlags = flags; }, failNextPoll() { failPoll = true; }, enableCache() { cacheEnabled = true; },
+    dropFlagsAfterMatch() { dropFlagsAfterMatch = true; },
     setLogs(value) { logs = value; } };
 }
 
 test('Worker publish preserves bindings/secrets/routes, records stale reads, and deploys once', async t => {
   const f = await deployFixture(t); let calls = 0, sleeps = 0;
-  const config = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  const expected = renderWorkerConfig({ ...f.args, target: 'staging-next' }), { config } = expected;
+  assert.equal(expected.bindingsSha256, f.before.bindingsSha256); assert.deepEqual(expected.flagChanges, []);
   assert.equal(config.keep_vars, true); assert.deepEqual(config.routes, []);
   assert.deepEqual(config.observability, { enabled: false }); assert.equal(config.logpush, false);
   assert.equal(config.vars.FREEDOM_COMMERCE_CHECKOUT_ENABLED, 'false');
   assert.equal(config.vars.FREEDOM_RELEASE_SHA, f.sourceSha);
   assert(!('TOTP_ENCRYPTION_KEY' in config.vars));
-  assert.deepEqual(config.alias, { sharp: '/fixture/source/packages/shared/sharp-unavailable.ts',
-    './model-step-node-transport.js': '/fixture/source/modules/agent-execution/model-step-worker-transport-unavailable.ts' });
+  assert.deepEqual(config.alias, { sharp: join(f.args.sourceRoot, 'packages/shared/sharp-unavailable.ts'),
+    './model-step-node-transport.js': join(f.args.sourceRoot, 'modules/agent-execution/model-step-worker-transport-unavailable.ts') });
   const result = await f.deployer.publish({ ...f.args, async execute(input) {
     calls++; assert.equal(input.sourceSha, f.sourceSha);
     assert.deepEqual(JSON.parse(await readFile(input.configPath)), config);
@@ -1446,8 +1468,8 @@ test('abandoned backup keeps history and floor; archive, release and unverified 
   assert.equal(f.chain[2].record.data.kind, 'intent');
 });
 
-async function environmentCheckFixture(t) {
-  const f = await deployFixture(t), calls = [];
+async function environmentCheckFixture(t, decisions, liveFlags) {
+  const f = await deployFixture(t, decisions, liveFlags), calls = [];
   const value = { format: 'freedom.shared-release-config/v1', target: 'staging-next', accountId: 'a'.repeat(32), zoneId: 'b'.repeat(32),
     mediaBucket: 'fixture-media', backupBucket: 'fixture-backups',
     database: { name: 'freedom_staging_next', host: 'fixture.pg.psdb.cloud', port: '5432', loginSuffix: 'fixture' },
@@ -1973,4 +1995,510 @@ test('legacy adoption verifies immutable Git SQL and live read-only state before
   appended = undefined;
   await assert.rejects(adoptLegacyPredecessor({...args, floor: {...args.floor, state: () => ({...state, pending: {kind: 'backup'}})}}));
   assert.equal(appended, undefined);
+});
+
+const flagName = 'FREEDOM_COMMERCE_CHECKOUT_ENABLED';
+const flagRecord = 'https://github.com/FreeTWAI/freedom-platform/pull/1';
+const flagDecision = (value = 'true') => ({ value, decidedBy: 'Ted', decidedAt: '2026-10-27', record: flagRecord });
+const flagFile = (staging = { [flagName]: flagDecision() }, next = {}) => ({
+  format: 'freedom.shared-release.flag-decisions/v1', targets: { 'staging-next': staging, next },
+});
+const maximalFlagDecisions = count => Object.fromEntries(Array.from({ length: count }, (_, index) => [
+  `FREEDOM_${String(index).padStart(2, '0')}_`.padEnd(56, 'X') + '_ENABLED',
+  { ...flagDecision(), record: (flagRecord + '#').padEnd(160, '\\') },
+]));
+
+test('normal deploy stops before operator, provider mutations and floor writes when GitHub creation fails', async t => {
+  const previousExitCode = process.exitCode;
+  try {
+    for (const boundary of ['deployment', 'in_progress']) {
+      const report = await environmentCheckFixture(t, flagFile()), f = report.f;
+      const sourceTree = fixtureGit(f.args.sourceRoot, ['rev-parse', 'HEAD^{tree}']);
+      const runner = join(f.args.workRoot, 'runner'), output = join(runner, 'public'); await mkdir(runner);
+      let operators = 0, mutations = 0, floorWrites = 0;
+      const writes = [], read = fixtureApi(path => path.includes('/deployments?') ? []
+        : path.includes('/commits/') ? { sha: f.sourceSha, commit: { tree: { sha: sourceTree } } } : undefined);
+      const api = async (path, options) => {
+        if (options?.method === 'POST') {
+          const operation = path.endsWith('/deployments') ? 'deployment' : options.body.state;
+          writes.push(operation);
+          if (operation === boundary) throw Error('synthetic GitHub write failed');
+          if (operation === 'deployment') return { ...options.body, id: 1, sha: options.body.ref };
+          assert(path.endsWith('/deployments/1/statuses')); return {};
+        }
+        const value = await read(path);
+        if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = f.sourceSha;
+        return value;
+      };
+      process.exitCode = previousExitCode;
+      await releaseMain({ ...environment(), ...report.env, PATH: process.env.PATH, RELEASE_SHA: f.sourceSha,
+        RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute', RUNNER_TEMP: runner,
+        RELEASE_SOURCE_DIRECTORY: f.args.sourceRoot, PUBLIC_RECEIPT_DIRECTORY: output,
+        RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image,
+      }, { api, async executeOperator({ admission }) {
+        operators++; assert.equal(admission.legacyPredecessor, undefined);
+        await f.deployer.publish({ ...f.args,
+          async retainIntent() { floorWrites++; }, async execute() {
+            mutations++; f.publish({ [flagName]: 'true' }); return { versionId: f.newVersion };
+          }, sleep: async () => {},
+        });
+        return codeResult().value.phases;
+      } });
+      const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+      assert.equal(receipt.status, 'failed'); assert.equal(receipt.error, 'release_operation_failed');
+      assert.equal(receipt.providerOutcome, 'not_started'); assert.equal(receipt.legacyPredecessor, undefined);
+      assert.equal(process.exitCode, 1);
+      assert.deepEqual(writes, boundary === 'deployment' ? ['deployment'] : ['deployment', 'in_progress', 'failure']);
+      assert.equal(operators, 0); assert.equal(mutations, 0); assert.equal(floorWrites, 0);
+      assert(report.calls.every(call => call.options.method === 'GET'));
+    }
+  } finally { process.exitCode = previousExitCode; }
+});
+
+test('16 maximal flag changes fit operator and public receipts through staging production admission', async t => {
+  const decisions = maximalFlagDecisions(64);
+  for (const [name, decision] of Object.entries(decisions)) {
+    assert.equal(name.length, 64); assert.equal(decision.record.length, 160);
+    assert.equal(new URL(decision.record).href, decision.record);
+  }
+  const liveFlags = Object.fromEntries(Object.keys(decisions).map((name, index) => [name, index < 16 ? 'false' : 'true']));
+  const report = await environmentCheckFixture(t, flagFile(decisions), liveFlags), f = report.f;
+  const expected = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  assert.equal(expected.flagChanges.length, 16);
+  const sourceTree = fixtureGit(f.args.sourceRoot, ['rev-parse', 'HEAD^{tree}']);
+  const runner = join(f.args.workRoot, 'runner'), output = join(runner, 'public'); await mkdir(runner);
+  const start = new Date().toISOString(); let deployment, operatorBytes, publishes = 0;
+  const order = [];
+  const read = fixtureApi(path => path.includes('/deployments?') ? []
+    : path.includes('/commits/') ? { sha: f.sourceSha, commit: { tree: { sha: sourceTree } } } : undefined);
+  const api = async (path, options) => {
+    if (options?.method === 'POST') {
+      if (path.endsWith('/deployments')) {
+        order.push('deployment'); return deployment = { ...options.body, id: 1, sha: options.body.ref };
+      }
+      order.push(options.body.state);
+      assert(path.endsWith('/deployments/1/statuses')); return {};
+    }
+    const value = await read(path);
+    if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = f.sourceSha;
+    return value;
+  };
+  const previousExitCode = process.exitCode;
+  t.mock.method(globalThis, 'fetch', report.fetchImpl);
+  try {
+    await releaseMain({ ...environment(), ...report.env, PATH: process.env.PATH, RELEASE_SHA: f.sourceSha,
+      RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute', GITHUB_RUN_ID: '33',
+      RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: f.args.sourceRoot, PUBLIC_RECEIPT_DIRECTORY: output,
+      RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image,
+    }, { api, executeOperator: options => {
+      assert.equal(options.admission.legacyPredecessor, undefined);
+      assert.deepEqual(order, ['deployment', 'in_progress']); order.push('operator');
+      return runOperator({ ...options,
+      registry: { username: 'teddashh', token: 'synthetic-registry' },
+      credentials: { cloudflareApiToken: 'synthetic-provider', migrationDatabaseUrl: 'synthetic-migrator',
+        runtimeDatabaseUrl: 'synthetic-runtime', stagingAccessClientId: 'synthetic-id', stagingAccessClientSecret: 'synthetic-access' },
+      async run(command, args) {
+        assert.equal(command, 'docker'); // Transport stub: never execute Docker or a provider tool.
+        if (args[0] !== 'run') return;
+        const deployed = await f.deployer.publish({ ...f.args, async execute() {
+          publishes++; f.publish(Object.fromEntries(Object.keys(decisions).map(name => [name, 'true'])));
+          return { versionId: f.newVersion };
+        }, sleep: async () => {} });
+        const input = await readFile(join(options.temporaryRoot, 'input/request.json'));
+        const value = codeResult().value;
+        Object.assign(value, { sourceSha: options.admission.sourceSha, runId: options.admission.runId,
+          runAttempt: options.admission.runAttempt, requestSha256: hash(input), configSha256: options.installation.configSha256 });
+        Object.assign(value.phases[0], { previousSourceSha: f.before.sourceSha, flagChanges: expected.flagChanges });
+        Object.assign(value.phases[2], deployed);
+        value.phases[3].sourceSha = f.sourceSha;
+        for (const phase of value.phases) phase.startedAt = phase.completedAt = new Date().toISOString();
+        const bytes = JSON.stringify(value) + '\n'; operatorBytes = Buffer.byteLength(bytes);
+        assert(operatorBytes <= 49_152, `operator result: ${operatorBytes} bytes`);
+        await writeFile(join(options.temporaryRoot, 'output/result.json'), bytes);
+        // Include the fullest progress snapshot even when a fast run beats the periodic reader.
+        await options.onProgress(operatorProgress(value, options.admission, options.installation, hash(input)));
+      },
+    });
+    } });
+    assert.equal(process.exitCode, previousExitCode);
+    assert.deepEqual(order, ['deployment', 'in_progress', 'operator', 'success']);
+    const text = await readFile(join(output, 'receipt.json'), 'utf8'), receiptBytes = Buffer.byteLength(text);
+    const archive = zipFixture([['receipt.json', text]]), decoded = decodeReceiptArchive(archive);
+    assert(receiptBytes <= 49_152, `decoded receipt: ${receiptBytes} bytes`);
+    assert.equal(decoded.status, 'passed'); assert.equal(publishes, 1);
+    assert.deepEqual(decoded.flagChanges, expected.flagChanges);
+    assert.deepEqual(decoded.operatorProgress[0].flagChanges, expected.flagChanges);
+    assert.deepEqual(decoded.operatorProgress.find(phase => phase.name === 'deploy').flagChanges, expected.flagChanges);
+    assert.deepEqual(decoded.phases.find(phase => phase.name === 'deploy').flagChanges, expected.flagChanges);
+    const staging = stagingFixture();
+    Object.assign(staging.state, { receipt: decoded, deployment, deployments: [deployment] });
+    Object.assign(staging.state.run, { run_started_at: start, updated_at: new Date().toISOString() });
+    Object.assign(staging.state.artifact, { size_in_bytes: archive.length, digest: 'sha256:' + hash(archive) });
+    staging.api.readArtifact = async artifact => {
+      assert.equal(artifact.digest, 'sha256:' + hash(archive)); return decodeReceiptArchive(archive);
+    };
+    const admitted = await requireStaging(staging.api, { ...staging.admission, sourceSha: f.sourceSha,
+      sourceTree, releaseKind: 'independent' }, installation);
+    assert.equal(admitted.deploymentId, deployment.id);
+    t.diagnostic(`maximal flag metadata: operator=${operatorBytes} bytes; decoded receipt=${receiptBytes} bytes`);
+  } finally { process.exitCode = previousExitCode; }
+});
+
+test('17 changes refuse deploy before begin or any provider mutation, and refuse check and plan with the same code', async t => {
+  const decisions = flagFile(maximalFlagDecisions(17)), report = await environmentCheckFixture(t, decisions), f = report.f;
+  const sourceTree = fixtureGit(f.args.sourceRoot, ['rev-parse', 'HEAD^{tree}']);
+  const runner = join(f.args.workRoot, 'runner'); await mkdir(runner);
+  let operators = 0, begins = 0, floorWrites = 0, mutations = 0;
+  assert.throws(() => renderWorkerConfig({ ...f.args, target: 'staging-next' }), { code: 'release_flag_changes_too_many' });
+  await assert.rejects(f.deployer.publish({ ...f.args,
+    retainIntent: async () => { floorWrites++; }, execute: async () => { mutations++; },
+  }), { code: 'release_flag_changes_too_many' });
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  const earlyGuard = entry.indexOf('if (!isBackup) applyFlagDecisions(');
+  assert(earlyGuard > 0);
+  for (const operation of ['recovery = await reconcileFailedBackup(', 'await adoptLegacyPredecessor(', 'await floor.begin(', 'floor.beginIndependent('])
+    assert(earlyGuard < entry.indexOf(operation), operation);
+  assert(entry.indexOf('built = await buildApplication(') < entry.indexOf('await floor.begin('));
+  assert(entry.indexOf('built = await buildApplication(') < entry.indexOf('floor.beginIndependent('));
+  const build = await readFile(new URL('../../shared-release/portable/build.mjs', import.meta.url), 'utf8');
+  assert(build.includes('= renderWorkerConfig('));
+  const read = fixtureApi(path => path.includes('/deployments?') ? [] : undefined), api = async (path, options) => {
+    if (['PUT', 'POST', 'PATCH', 'DELETE'].includes(options?.method)) mutations++;
+    const value = await read(path);
+    if (path.includes('/commits/')) { value.sha = f.sourceSha; value.commit.tree.sha = sourceTree; }
+    if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = f.sourceSha;
+    return value;
+  };
+  const previousExitCode = process.exitCode;
+  t.mock.method(globalThis, 'fetch', report.fetchImpl);
+  try {
+    for (const mode of ['deploy', 'check', 'plan']) {
+      const output = join(f.args.workRoot, mode);
+      process.exitCode = previousExitCode;
+      await releaseMain({ ...environment(), ...report.env, PATH: process.env.PATH, RELEASE_SHA: f.sourceSha, RELEASE_MODE: mode,
+        RELEASE_COMMAND: mode === 'plan' ? 'admit' : 'execute', RELEASE_SOURCE_DIRECTORY: f.args.sourceRoot,
+        RUNNER_TEMP: runner, RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image,
+        PUBLIC_RECEIPT_DIRECTORY: output }, { api, controllerRoot: f.args.sourceRoot,
+        executeOperator() {
+          operators++;
+          // Same preflight/render guard as the portable operator, before floor.begin.
+          renderWorkerConfig({ ...f.args, target: 'staging-next' });
+          begins++; floorWrites++; assert.fail('oversized release must not reach begin');
+        } });
+      const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+      if (mode === 'check') {
+        assert.equal(receipt.status, 'checks_failed');
+        assert.equal(receipt.environmentCheck.checks.find(row => row.name === 'worker_routes_and_hyperdrive').error,
+          'release_flag_changes_too_many');
+        assert.equal(receipt.providerOutcome, 'no_mutations');
+      } else {
+        assert.equal(receipt.status, 'failed'); assert.equal(receipt.error, 'release_flag_changes_too_many');
+      }
+    }
+    assert.equal(operators, 0); assert.equal(begins, 0); assert.equal(floorWrites, 0); assert.equal(mutations, 0);
+    const checked = await checkEnvironment(report.env, 'staging-next', { fetchImpl: report.fetchImpl, flagDecisions: decisions });
+    assert.equal(checked.status, 'failed');
+    assert.equal(checked.checks.find(row => row.name === 'worker_routes_and_hyperdrive').error, 'release_flag_changes_too_many');
+    assert(report.calls.every(call => call.options.method === 'GET'));
+  } finally { process.exitCode = previousExitCode; }
+});
+
+test('flag metadata bounds reject 65-character names and 161-character records while 64 retained decisions can have 16 changes', () => {
+  const entries = maximalFlagDecisions(64), [name, decision] = Object.entries(entries)[0];
+  assert.throws(() => validateFlagDecisions(flagFile({ [name.replace('_ENABLED', 'X_ENABLED')]: decision })),
+    { code: 'release_flag_decisions_invalid' });
+  assert.throws(() => validateFlagDecisions(flagFile({ [name]: { ...decision, record: decision.record + '1' } })),
+    { code: 'release_flag_decisions_invalid' });
+  const bindings = Object.keys(entries).slice(16).map(name => ({ name, type: 'plain_text', text: 'true' }));
+  const changes = applyFlagDecisions({ target: 'staging-next', bindings, decisions: flagFile(entries) }).flagChanges;
+  assert.equal(changes.length, 16); assert.deepEqual(publicFlagChanges(changes), changes);
+  const excessive = [...changes, { ...changes[0], name: Object.keys(entries)[16] }];
+  assert.throws(() => publicFlagChanges(excessive), { code: 'release_flag_changes_too_many' });
+  for (const make of [() => ({ value: resultFixture(), admission: request() }), () => codeResult()]) {
+    const { value, admission } = make(); value.phases.find(phase => phase.name === 'deploy').flagChanges = excessive;
+    assert.throws(() => validateOperatorResult(value, admission, installation, 'e'.repeat(64)), { code: 'release_flag_changes_too_many' });
+    assert.throws(() => operatorProgress(value, admission, installation, 'e'.repeat(64)), { code: 'release_flag_changes_too_many' });
+  }
+});
+
+test('missing decision file retains every config byte and the old retained binding hash', async t => {
+  const f = await deployFixture(t), before = JSON.stringify(f.before);
+  const expected = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  const vars = Object.fromEntries(f.before.bindings.filter(row => row.type === 'plain_text').map(row => [row.name, row.text]));
+  vars.FREEDOM_RELEASE_SHA = f.sourceSha;
+  assert.equal(JSON.stringify(expected.config.vars), JSON.stringify(vars));
+  const fixture = JSON.parse(await readFile(new URL('../../shared-release/test/fixtures/pre-flag-floor.json', import.meta.url)));
+  const baselineConfig = JSON.parse(JSON.stringify(fixture.workerConfig).replaceAll('/fixture/source', f.args.sourceRoot));
+  baselineConfig.vars.FREEDOM_RELEASE_SHA = f.sourceSha;
+  assert.equal(JSON.stringify(expected.config), JSON.stringify(baselineConfig));
+  assert.equal(expected.bindingsSha256, f.before.bindingsSha256); assert.deepEqual(expected.flagChanges, []);
+  // An untracked decision, even a malformed one, is not released-source authority.
+  await mkdir(join(f.args.sourceRoot, 'deploy/shared-release'), { recursive: true });
+  await writeFile(join(f.args.sourceRoot, 'deploy/shared-release/flag-decisions.json'), 'invalid untracked JSON');
+  const again = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  assert.equal(JSON.stringify(again.config), JSON.stringify(expected.config));
+  assert.equal(again.bindingsSha256, expected.bindingsSha256); assert.equal(JSON.stringify(f.before), before);
+});
+
+test('target decisions change or add only boolean plain-text flags and leave all other bindings intact', async t => {
+  const added = 'FREEDOM_COMMUNITY_RELATIONS_ENABLED';
+  const decisions = flagFile({ [flagName]: flagDecision(), [added]: flagDecision() },
+    { [flagName]: flagDecision('false'), FREEDOM_OTHER_ENABLED: flagDecision() });
+  const f = await deployFixture(t, decisions), before = structuredClone(f.before);
+  const expected = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+  assert.equal(expected.config.vars[flagName], 'true'); assert.equal(expected.config.vars[added], 'true');
+  assert.equal(expected.config.vars.FREEDOM_OTHER_ENABLED, undefined); assert.equal(expected.config.keep_vars, true);
+  assert.notEqual(expected.bindingsSha256, before.bindingsSha256);
+  assert.deepEqual(expected.bindings.filter(row => row.type !== 'plain_text'), before.bindings.filter(row => row.type !== 'plain_text'));
+  for (const row of before.bindings.filter(row => ![flagName, 'FREEDOM_RELEASE_SHA'].includes(row.name))) {
+    assert.deepEqual(expected.bindings.find(value => value.name === row.name), row);
+  }
+  assert.deepEqual(expected.flagChanges, [
+    { name: flagName, from: 'false', to: 'true', record: flagRecord },
+    { name: added, from: null, to: 'true', record: flagRecord },
+  ]);
+  assert.deepEqual(f.before, before);
+  assert.deepEqual(applyFlagDecisions({ target: 'staging-next', bindings: expected.bindings, decisions }).flagChanges, []);
+  const off = applyFlagDecisions({ target: 'staging-next', bindings: expected.bindings,
+    decisions: flagFile({ [added]: flagDecision('false') }) });
+  assert.deepEqual(off.flagChanges, [{ name: added, from: 'true', to: 'false', record: flagRecord }]);
+  assert.equal(off.bindings.find(row => row.name === flagName).text, 'true'); // Removing an entry retains live state.
+  const unchanged = await deployFixture(t, flagFile({ [flagName]: flagDecision('false') }));
+  const noDelta = renderWorkerConfig({ ...unchanged.args, target: 'staging-next' });
+  assert.equal(noDelta.bindingsSha256, unchanged.before.bindingsSha256); assert.deepEqual(noDelta.flagChanges, []);
+});
+
+test('decision validation rejects protected names, non-boolean values and every unknown shape/key', () => {
+  const reject = value => assert.throws(() => validateFlagDecisions(value), /release_flag_decisions_invalid/);
+  for (const name of ['APP_ORIGIN', 'FREEDOM_ENV', 'FREEDOM_DATABASE_NAME', 'FREEDOM_RELEASE_SHA',
+    'FREEDOM_TRUST_CF_CONNECTING_IP', 'OTHER_ENABLED', 'FREEDOM_FLAG', 'FREEDOM_lower_ENABLED',
+    'FREEDOM__ENABLED', 'FREEDOM_A-1_ENABLED', 'FREEDOM_A_ENABLED\n', '__proto__', 'constructor']) {
+    reject(flagFile(Object.fromEntries([[name, flagDecision()]])));
+  }
+  for (const value of [true, false, 1, 0, null, undefined, 'TRUE', 'False', '', ' true', 'false\n', {}, []]) {
+    reject(flagFile({ [flagName]: { ...flagDecision(), value } }));
+  }
+  for (const value of [null, [], {}, 'invalid', { format: 'wrong', targets: {} }, { targets: {} },
+    { ...flagFile(), extra: true }, { ...flagFile(), targets: null }, { ...flagFile(), targets: [] },
+    { ...flagFile(), targets: { unknown: {} } }, flagFile(null), flagFile([]), flagFile('true'),
+    flagFile({ [flagName]: null }), flagFile({ [flagName]: [] }), flagFile({ [flagName]: 'true' }),
+    flagFile({ [flagName]: { ...flagDecision(), extra: true } })]) reject(value);
+  for (const key of ['value', 'decidedBy', 'decidedAt', 'record']) {
+    const decision = flagDecision(); delete decision[key]; reject(flagFile({ [flagName]: decision }));
+  }
+  for (const decidedBy of ['', ' Ted', 'Ted ', '\nTed', 'T\0ed', null, 12, 'x'.repeat(129)])
+    reject(flagFile({ [flagName]: { ...flagDecision(), decidedBy } }));
+  for (const decidedAt of ['2026-02-30', '2025-02-29', '2026-13-01', '2026-00-01', '2026-1-01', '2026-10-27T00:00:00Z', null, 1])
+    reject(flagFile({ [flagName]: { ...flagDecision(), decidedAt } }));
+  for (const record of ['http://github.com/FreeTWAI/freedom-platform/pull/1', 'https://evil.example/pull/1',
+    'https://github.com/FreeTWAI/other/pull/1', 'https://github.com/FreeTWAI/freedom-platform.evil/pull/1',
+    'https://github.com/FreeTWAI/freedom-platform/', 'https://github.com/FreeTWAI/freedom-platform/../other/pull/1',
+    'https://github.com/FreeTWAI/freedom-platform/%2e%2e/other',
+    'https://user@github.com/FreeTWAI/freedom-platform/pull/1',
+    'https://github.com:443/FreeTWAI/freedom-platform/pull/1', null, 1, flagRecord + '\n'])
+    reject(flagFile({ [flagName]: { ...flagDecision(), record } }));
+  const entries = Object.fromEntries(Array.from({ length: 64 }, (_, n) => ['FREEDOM_FLAG_' + n + '_ENABLED', flagDecision()]));
+  assert.deepEqual(validateFlagDecisions(flagFile(entries)), flagFile(entries));
+  reject(flagFile({ ...entries, FREEDOM_TOO_MANY_ENABLED: flagDecision() }));
+  reject(flagFile({}, { [flagName]: { ...flagDecision(), unknown: true } })); // Other target must also validate.
+  assert.deepEqual(validateFlagDecisions(flagFile({}, {})), flagFile({}, {}));
+  assert.doesNotThrow(() => validateFlagDecisions(flagFile({ [flagName]: { ...flagDecision(), decidedAt: '2024-02-29' } })));
+});
+
+test('decisions never overwrite secrets, other binding types or expose unexpected live values', () => {
+  for (const binding of [{ name: flagName, type: 'secret_text' }, { name: flagName, type: 'r2_bucket', bucket_name: 'fixture' },
+    { name: flagName, type: 'plain_text', text: 'unexpected-private-value' }]) {
+    assert.throws(() => applyFlagDecisions({ target: 'staging-next', bindings: [binding], decisions: flagFile() }), /release_flag_live_binding_invalid/);
+  }
+  assert.throws(() => applyFlagDecisions({ target: 'unknown', bindings: [], decisions: flagFile() }), /release_flag_target_invalid/);
+});
+
+test('decision reader uses exact admitted Git blobs and refuses malformed/unavailable/non-regular sources', async t => {
+  const f = await deployFixture(t, flagFile()), sourceRoot = f.args.sourceRoot, path = join(sourceRoot, 'deploy/shared-release/flag-decisions.json');
+  await writeFile(path, JSON.stringify(flagFile({ [flagName]: flagDecision('false') })));
+  assert.deepEqual(readFlagDecisions({ sourceRoot, sourceSha: f.sourceSha }), flagFile());
+  assert.throws(() => readFlagDecisions({ sourceRoot, sourceSha: 'main' }), /release_flag_source_invalid/);
+  assert.throws(() => readFlagDecisions({ sourceRoot, sourceSha: 'f'.repeat(40) }), /release_flag_source_invalid/);
+  const commit = () => { fixtureGit(sourceRoot, ['add', '.']); fixtureGit(sourceRoot, ['commit', '-qm', 'Synthetic invalid decision']);
+    return fixtureGit(sourceRoot, ['rev-parse', 'HEAD']); };
+  await writeFile(path, '{');
+  assert.throws(() => readFlagDecisions({ sourceRoot, sourceSha: commit() }), /release_flag_decisions_invalid/);
+  await writeFile(path, Buffer.alloc(262145, 32));
+  assert.throws(() => readFlagDecisions({ sourceRoot, sourceSha: commit() }), /release_flag_source_invalid/);
+  await rm(path); await symlink('../../../fixture.txt', path);
+  assert.throws(() => readFlagDecisions({ sourceRoot, sourceSha: commit() }), /release_flag_source_invalid/);
+});
+
+test('deployer accepts expected changed bindings through stale reads, and refuses old or unrelated changed bindings', async t => {
+  for (const outcome of ['expected', 'old', 'unrelated', 'post-check-old']) {
+    const f = await deployFixture(t, flagFile()), expected = renderWorkerConfig({ ...f.args, target: 'staging-next' });
+    let publishes = 0;
+    const operation = f.deployer.publish({ ...f.args, async execute() {
+      publishes++; f.publish(outcome === 'old' ? undefined : { [flagName]: 'true', ...(outcome === 'unrelated' ? { FREEDOM_EXTRA_ENABLED: 'true' } : {}) });
+      if (outcome === 'post-check-old') f.dropFlagsAfterMatch();
+      return { versionId: f.newVersion };
+    }, sleep: async () => {} });
+    if (outcome === 'expected') {
+      const result = await operation;
+      assert.equal(result.observations, 2); assert.equal(result.bindingsSha256, expected.bindingsSha256);
+      assert.deepEqual(result.flagChanges, expected.flagChanges);
+      assert.equal((await f.deployer.inspect()).bindingsSha256, expected.bindingsSha256);
+    } else await assert.rejects(operation, outcome === 'post-check-old' ? /release_deploy_preservation_failed/ : /release_deploy_bindings_changed/);
+    assert.equal(publishes, 1);
+  }
+});
+
+test('pre-flag fixture chain replays to the exact baseline state at every prefix', async () => {
+  const fixture = JSON.parse(await readFile(new URL('../../shared-release/test/fixtures/pre-flag-floor.json', import.meta.url)));
+  assert.equal(fixture.baseline, '34390b1210e51a9ac071e32f8ac1bb6ed8d0382c');
+  assert(!Object.hasOwn(fixture.chain[1].record.data.candidate, 'bindingsSha256'));
+  const options = { isAncestor: () => true };
+  assert.deepEqual(replayReleaseFloor(fixture.chain, options).state, fixture.expectedState);
+  for (const [index, digest] of fixture.prefixStateSha256.entries()) {
+    assert.equal(hash(JSON.stringify(replayReleaseFloor(fixture.chain.slice(0, index + 1), options).state)), digest);
+  }
+});
+
+function beginFlagRelease(f, kind, bindingsSha256) {
+  const candidate = { ...f.begin.record.data.candidate, bindingsSha256 };
+  const request = { ...f.request };
+  if (kind === 'release-begin-v2') { request.releaseKind = 'independent'; candidate.schemaLedger = f.before; }
+  return f.event(kind, undefined, undefined, { request, candidate });
+}
+
+test('flag releases advance bindings only after verified deploy and the next predecessor and backup use the new floor', async t => {
+  const deployed = await deployFixture(t, flagFile()), expected = renderWorkerConfig({ ...deployed.args, target: 'staging-next' });
+  await deployed.deployer.publish({ ...deployed.args, async execute() {
+    deployed.publish({ [flagName]: 'true' }); return { versionId: deployed.newVersion };
+  }, sleep: async () => {} });
+  const live = await deployed.deployer.inspect(), released = deployed.sourceSha;
+  for (const kind of ['begin', 'release-begin-v2']) {
+    const f = floorFixture(), previousHash = deployed.before.bindingsSha256;
+    f.chain[0].record.data.state.bindingsSha256 = previousHash;
+    f.request.sourceSha = released; f.begin.record.data.candidate.sourceSha = released; f.commit.source = released;
+    f.options.isAncestor = (a, b) => (a === main && b === released) || a === b;
+    f.add(beginFlagRelease(f, kind, expected.bindingsSha256));
+    if (kind === 'begin') {
+      f.runBackup('backup-before', main);
+      f.add(f.event('intent', 'migration', f.commit, { operation: 'commit' }));
+      const committed = f.add(f.event('committed', 'migration', { ...f.commit, ledger: f.after }));
+      assert.equal(committed.bindingsSha256, previousHash);
+      f.add(f.event('passed', 'migration', { transactionId: '123', commitStatus: 'confirmed', ledgerVerified: true,
+        runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) }));
+    } else f.add(f.event('passed', 'migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true,
+      runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.before) }));
+    assert.equal(replayReleaseFloor(f.chain, f.options).state.bindingsSha256, previousHash);
+    f.add(f.event('intent', 'deploy', { sourceSha: released, previousSourceSha: main, previousVersion: f.id,
+      configSha256: '8'.repeat(64), automaticRetry: false }, { operation: 'publish' }));
+    for (const bindingsSha256 of [undefined, previousHash]) {
+      assert.throws(() => replayReleaseFloor([...f.chain, f.event('passed', 'deploy', {
+        sourceSha: released, providerConfirmed: true, versionId: f.id, bindingsSha256 })], f.options), /release_floor_deploy_bindings_unverified/);
+    }
+    let state = f.add(f.event('passed', 'deploy', { sourceSha: released, providerConfirmed: true, versionId: f.id,
+      bindingsSha256: expected.bindingsSha256 }));
+    assert.equal(state.bindingsSha256, expected.bindingsSha256);
+    assert.equal(backupExpectation(state, released).bindingsSha256, expected.bindingsSha256);
+    f.add(f.event('passed', 'health', { sourceSha: released, statusCode: 200, schemaVerified: true, smokePassed: true }));
+    if (kind === 'begin') f.runBackup('backup-after', released);
+    state = f.add(f.event('passed', 'handoff', kind === 'begin' ? { cleanupVerified: true,
+      schedule: { format: 'freedom.verified-scheduled-backup/v1', runId: 10, operatorImage: f.request.operatorImage,
+        configSha256: f.request.configSha256, receiptSha256: '9'.repeat(64), completedAt: '2026-10-25T00:00:00Z' } }
+      : { cleanupVerified: true, migrationVerified: true }));
+    assert.equal(state.pending, null);
+    assertReleasePredecessor(live, state);
+    assert.throws(() => assertReleasePredecessor({ sourceSha: released, bindingsSha256: previousHash }, state), /release_entry_predecessor_changed/);
+    assert.equal(backupExpectation(state, released).bindingsSha256, expected.bindingsSha256);
+    const next = beginFlagRelease(f, 'release-begin-v2', expected.bindingsSha256);
+    next.record.data.candidate.schemaLedger = state.schemaLedger;
+    assert.doesNotThrow(() => replayReleaseFloor([...f.chain, next], f.options));
+    const backup = f.event('backup-begin', undefined, undefined, { request: { ...f.request, sourceSha: released, sourceTree: tree } });
+    assert.equal(replayReleaseFloor([...f.chain, backup], f.options).state.bindingsSha256, expected.bindingsSha256);
+  }
+  for (const invalid of [null, '', true, 'invalid', 'a'.repeat(63)]) {
+    const f = floorFixture(); assert.throws(() => replayReleaseFloor([...f.chain, beginFlagRelease(f, 'begin', invalid)], f.options), /release_floor_candidate_invalid/);
+  }
+});
+
+test('flag receipts whitelist exact public fields and reject private values in final and progress results', () => {
+  const change = plannedFlagChanges(flagFile(), 'staging-next')[0];
+  const value = { ...change, secret: 'private-diagnostic' };
+  assert.deepEqual(publicFlagChanges([value]), [change]);
+  for (const make of [() => ({ value: resultFixture(), admission: request() }), () => codeResult()]) {
+    const f = make(), deploy = f.value.phases.find(phase => phase.name === 'deploy');
+    deploy.flagChanges = [value];
+    const result = validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64));
+    assert.deepEqual(result.find(phase => phase.name === 'deploy').flagChanges, [change]);
+    assert(!JSON.stringify(result).includes('private-diagnostic'));
+    assert.deepEqual(operatorProgress(f.value, f.admission, installation, 'e'.repeat(64))
+      .find(phase => phase.name === 'deploy').flagChanges, [change]);
+    deploy.flagChanges = [{ ...change, from: 'private-value' }];
+    assert.throws(() => validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64)), /release_flag_changes_invalid/);
+    assert.throws(() => operatorProgress(f.value, f.admission, installation, 'e'.repeat(64)), /release_flag_changes_invalid/);
+  }
+  for (const value of [null, {}, [change, change], [{ ...change, name: 'APP_ORIGIN' }], [{ ...change, to: true }],
+    [{ ...change, record: 'https://other.invalid/' }], Array(65).fill(change)])
+    assert.throws(() => publicFlagChanges(value), /release_flag_changes_invalid/);
+});
+
+test('check previews only the selected source decisions with observed live from values and no writes', async t => {
+  const f = await environmentCheckFixture(t);
+  const decisions = flagFile({ [flagName]: flagDecision(), FREEDOM_COMMUNITY_RELATIONS_ENABLED: flagDecision() },
+    { FREEDOM_OTHER_ENABLED: flagDecision() });
+  const report = await checkEnvironment(f.env, 'staging-next', { fetchImpl: f.fetchImpl, flagDecisions: decisions });
+  assert.equal(report.status, 'passed'); assert.equal(report.flagChangesObservation, 'live');
+  assert.deepEqual(report.flagChanges, [
+    { name: flagName, from: 'false', to: 'true', record: flagRecord },
+    { name: 'FREEDOM_COMMUNITY_RELATIONS_ENABLED', from: null, to: 'true', record: flagRecord },
+  ]);
+  assert.equal(report.deployment, 'not_run'); assert(f.calls.every(call => call.options.method === 'GET'));
+});
+
+test('execute check reads admitted decisions from the controller when the source checkout is absent', async t => {
+  const f = await environmentCheckFixture(t, flagFile()), controllerRoot = f.f.args.sourceRoot;
+  const output = join(f.f.args.workRoot, 'public'), sourceRoot = join(f.f.args.workRoot, 'missing-source');
+  await assert.rejects(stat(sourceRoot), { code: 'ENOENT' });
+  // The admitted Git blob, rather than working-tree bytes, supplies the decision.
+  await writeFile(join(controllerRoot, 'deploy/shared-release/flag-decisions.json'), 'invalid working-tree JSON');
+  const read = fixtureApi(), api = async path => {
+    const value = await read(path);
+    if (path.includes('/commits/')) value.sha = f.f.sourceSha;
+    if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = f.f.sourceSha;
+    return value;
+  };
+  t.mock.method(globalThis, 'fetch', f.fetchImpl);
+  const previousExitCode = process.exitCode;
+  try {
+    await releaseMain({ ...environment(), ...f.env, RELEASE_SHA: f.f.sourceSha,
+      RELEASE_COMMAND: 'execute', RELEASE_MODE: 'check', RELEASE_SOURCE_DIRECTORY: sourceRoot,
+      PUBLIC_RECEIPT_DIRECTORY: output }, { api, controllerRoot,
+      executeOperator() { assert.fail('a check cannot invoke the operator'); } });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+    assert.equal(receipt.status, 'checks_passed');
+    assert.equal(receipt.sourceSha, f.f.sourceSha); assert.equal(receipt.flagChangesObservation, 'live');
+    assert.deepEqual(receipt.flagChanges, [{ name: flagName, from: 'false', to: 'true', record: flagRecord }]);
+    assert.equal(receipt.providerOutcome, 'no_mutations');
+    assert(f.calls.length > 5); assert(f.calls.every(call => call.options.method === 'GET'));
+  } finally { process.exitCode = previousExitCode; }
+});
+
+test('plan receipt reads decisions from the exact admitted SHA and marks old values unobserved', async t => {
+  const f = await deployFixture(t, flagFile()), output = join(f.args.workRoot, 'public'), summary = join(f.args.workRoot, 'summary.md');
+  const read = fixtureApi(), api = async path => {
+    const value = await read(path);
+    if (path.includes('/commits/')) value.sha = f.sourceSha;
+    if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = f.sourceSha;
+    return value;
+  };
+  const previousExitCode = process.exitCode;
+  try {
+    await releaseMain({ ...environment(), RELEASE_SHA: f.sourceSha, RELEASE_SOURCE_DIRECTORY: f.args.sourceRoot,
+      RELEASE_COMMAND: 'admit', PUBLIC_RECEIPT_DIRECTORY: output, GITHUB_STEP_SUMMARY: summary,
+      RELEASE_CONFIG_JSON: JSON.stringify({ flagDecisions: flagFile({ [flagName]: flagDecision('false') }) }) }, { api,
+      controllerRoot: f.args.sourceRoot,
+      executeOperator() { assert.fail('a plan cannot invoke the operator'); } });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+    assert.equal(receipt.status, 'plan_passed'); assert.equal(receipt.flagChangesObservation, 'not_checked');
+    assert.deepEqual(receipt.flagChanges, [{ name: flagName, from: null, to: 'true', record: flagRecord }]);
+    assert((await readFile(summary, 'utf8')).includes(flagName));
+  } finally { process.exitCode = previousExitCode; }
 });

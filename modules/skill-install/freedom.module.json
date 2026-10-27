@@ -1,0 +1,47 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "skill-install",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/skill-install/**",
+    "apps/platform-api/src/routes/skill-install.ts",
+    "apps/portal-web/src/modules/SkillInstall.tsx",
+    "apps/portal-web/src/modules/SkillInstall.css",
+    "apps/portal-web/src/modules/skill-install-client.ts",
+    "tests/runtime/skill-install-bundle.test.ts"
+  ],
+  "public_exports": [
+    "modules/skill-install/index.ts"
+  ],
+  "dependencies": [
+    "community",
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/skill-install/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "skill-install.public-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/skill-install.ts",
+      "operations": [
+        "skill-install.bundle.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    }
+  ]
+}
