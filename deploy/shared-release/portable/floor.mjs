@@ -73,7 +73,8 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && event.request.sourceTree === state.sourceTree, 'release_floor_backup_source_changed');
       const candidate = backup ? { sourceSha: state.sourceSha, sourceTree: state.sourceTree, schemaLedger: state.schemaLedger } : event.candidate;
       check(candidate?.sourceSha === event.request.sourceSha && candidate.sourceTree === event.request.sourceTree
-        && ledger(candidate.schemaLedger) >= state.schemaVersion, 'release_floor_candidate_invalid');
+        && ledger(candidate.schemaLedger) >= state.schemaVersion
+        && (!Object.hasOwn(candidate, 'bindingsSha256') || isDigest(candidate.bindingsSha256)), 'release_floor_candidate_invalid');
       same(candidate.schemaLedger.slice(0, state.schemaLedger.length), state.schemaLedger, 'release_floor_ledger_rewind');
       check(isAncestor(state.sourceSha, candidate.sourceSha), 'release_floor_source_rewind');
       const independentRelease = event.kind === 'release-begin-v2';
@@ -175,6 +176,12 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     } else if (event.stage === 'deploy') {
       check(pending.intents['deploy:publish'] && proof?.sourceSha === pending.candidate.sourceSha
         && proof.providerConfirmed === true && UUID.test(proof.versionId), 'release_floor_deploy_unverified');
+      if (Object.hasOwn(pending.candidate, 'bindingsSha256')) {
+        check(proof.bindingsSha256 === pending.candidate.bindingsSha256, 'release_floor_deploy_bindings_unverified');
+        // Adopt only after provider confirmation, before backup-after. A later
+        // failure remains unsettled; schema COMMIT alone never changes flags.
+        state.bindingsSha256 = pending.candidate.bindingsSha256;
+      }
       state.deployedSourceSha = proof.sourceSha;
     } else if (event.stage === 'health') {
       check(proof?.sourceSha === pending.candidate.sourceSha && proof.statusCode === 200
