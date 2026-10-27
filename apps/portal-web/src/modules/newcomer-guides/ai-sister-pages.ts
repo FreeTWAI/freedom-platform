@@ -4,6 +4,7 @@ import type {PageGuideSupport} from './contracts';
 // Shared content IDs/anchors
 // retain the reviewed product facts, access boundaries and safe focus behavior.
 export const AI_SISTER_PAGE_SUPPORT={
+  'community-hub':DRAGON_PAGE_SUPPORT['community-hub'],
   'newbie-village':DRAGON_PAGE_SUPPORT['newbie-village'],
   profile:DRAGON_PAGE_SUPPORT.profile,
   ar:{status:'disabled',reason:'AR 相機採用畫面內操作提示，角色導覽尚未審核'},

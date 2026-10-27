@@ -1,7 +1,7 @@
 // Read-only installation diagnostics. No image, floor installation, deployment
 // switch or natural backup is needed to check the newly stored credentials.
 import { createHash } from 'node:crypto';
-import { requireRelease as check, isDigest, isSha } from './admission.mjs';
+import { requireRelease as check, isDigest, isSha, isReleaseFailureCode } from './admission.mjs';
 import { validatePortableConfig } from './portable/config.mjs';
 import { boundedResponseBytes } from './portable/cloudflare.mjs';
 import { createWorkerDeployer } from './portable/deploy.mjs';
@@ -42,7 +42,7 @@ export async function checkEnvironment(env, target, { fetchImpl = fetch, flagDec
     catch (error) {
       // Explicit projection: never publish provider bodies, headers, URLs,
       // credential values or exception messages (including malformed inputs).
-      result.error = /^release_[a-z_]+$/.test(error?.code ?? '') ? error.code : 'release_environment_check_failed';
+      result.error = isReleaseFailureCode(error?.code) ? error.code : 'release_environment_check_failed';
       if (Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599) result.httpStatus = error.httpStatus;
       return false;
     }

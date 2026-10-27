@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { open, mkdir, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
-import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha } from '../admission.mjs';
+import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, releaseFailureCode } from '../admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult } from '../operator.mjs';
 import { BACKUP_PHASES } from '../scheduled-admission.mjs';
 import { validatePortableConfig, portableConnections } from './config.mjs';
@@ -75,7 +75,7 @@ export async function main(args = process.argv.slice(2)) {
     const item = { name, status: 'running', startedAt: new Date().toISOString() }; result.phases.push(item); await save(path, result);
     try { Object.assign(item, await operation(), { status: 'passed', completedAt: new Date().toISOString() }); }
     catch (error) {
-      Object.assign(item, { status: 'failed', completedAt: new Date().toISOString() });
+      Object.assign(item, { status: 'failed', failureCode: releaseFailureCode(error), completedAt: new Date().toISOString() });
       if (error.backupFailure) item.backupFailure = error.backupFailure;
       throw error;
     }
@@ -122,7 +122,7 @@ export async function main(args = process.argv.slice(2)) {
         decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
       let recovery;
       if (request.recoverRunId) {
-        if (independentRelease) check(request.recoveryEvidence?.failureBoundary === 'before_capture', 'release_backup_recovery_boundary_invalid');
+        if (independentRelease) check(['before_capture', 'before_dump'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
         const previous = floor.state();
         recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, database: config.database.name, role: connections.migrator.role, deployer, lease,
           request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',

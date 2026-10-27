@@ -234,7 +234,8 @@ test('joined member loads only the current hero before interaction and each perm
       expect(requests.filter(request=>request.pageId==='messages')).toEqual([]);
       continue;
     }
-    await navigate(page,TAB_TITLES[id]);
+    const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : TAB_TITLES[id];
+    await navigate(page,navigationLabel);
     await expect(widget(page)).toHaveAttribute('data-page-id',id);
     const character = SPIRIT_CHARACTERS[id], launcher = widget(page).locator('.page-spirit-launcher');
     await expect(launcher).toHaveAccessibleName(`${character.name}・${character.title}的當頁龍娘`);

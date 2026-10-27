@@ -14,8 +14,11 @@ const TesterMap = lazy(() => import('../modules/TesterMap').then(m => ({default:
 const NewbieVillage = lazy(() => import('../modules/NewbieVillage').then(m => ({default: m.NewbieVillage})))
 const TaskBoardPanel = lazy(() => import('../modules/TaskBoardPanel').then(m => ({default: m.TaskBoardPanel})))
 
+const CommunityHub = lazy(() => import('../modules/CommunityHub').then(m=>({default:m.CommunityHub})));
+
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const communityFeatures = {
+  "community-hub": {moduleId:"community-hub",placement:"page",render:()=> <CommunityHub/>},
   "newbie-village": {moduleId:"newbie-village",placement:"page",render:()=> <NewbieVillage/>},
   "community": {
     moduleId: "community", placement: 'page',
