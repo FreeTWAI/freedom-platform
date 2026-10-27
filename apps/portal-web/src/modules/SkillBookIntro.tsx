@@ -89,7 +89,7 @@ function QuickstartCopy({commands,onSelect}:{commands:string;onSelect:()=>void})
     } finally {pending.current=false;}
   }
   return <>
-    <div className="actions"><button type="button" className="btn btn-secondary btn-small" aria-disabled={status==='pending'} onClick={()=>void copy()}>{status==='pending'?'正在複製…':'複製指令'}</button>{status==='failed'&&<button type="button" className="btn btn-ghost btn-small" onClick={onSelect}>選取指令</button>}</div>
+    <div className="actions"><button type="button" className="btn btn-ghost btn-small" aria-disabled={status==='pending'} onClick={()=>void copy()}>{status==='pending'?'正在複製…':'複製指令'}</button>{status==='failed'&&<button type="button" className="btn btn-ghost btn-small" onClick={onSelect}>選取指令</button>}</div>
     <p className="field-hint">只複製文字，不會執行或安裝；請先確認上方準備條件與適用環境，再自行選擇要執行的指令。</p>
     {status==='copied'&&<p role="status" className="field-hint">指令已複製，尚未執行。</p>}
     {status==='failed'&&<p role="status" className="field-hint">未能複製，請選取指令後使用系統複製，或長按文字手動複製。</p>}
