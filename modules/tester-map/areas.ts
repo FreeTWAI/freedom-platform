@@ -280,7 +280,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
     name: ['社群入口、小遊戲與手機 App', 'Community, mini game and phone app', 'コミュニティ・ミニゲーム・スマホアプリ', '커뮤니티 · 미니 게임 · 휴대폰 앱', 'Comunidad, minijuego y app móvil'],
     summary: ['社群連結、/play 小遊戲、安裝 App 與社群日誌。', 'Community links, /play mini game, app install and journal.', 'コミュニティリンク、/play、アプリのインストール、日誌。', '커뮤니티 링크, /play 미니 게임, 앱 설치, 일지.', 'Enlaces, minijuego /play, instalar la app y diario.'],
     features: [
-      { id: 'community.page', pages: ['community'], href: '#community', name: ['自由工坊社群頁與社群連結', 'Community page and links', 'コミュニティページとリンク', '커뮤니티 페이지와 링크', 'Página y enlaces de la comunidad'] },
+      { id: 'community.page', pages: ['community', 'community-hub'], href: '#community', name: ['自由工坊社群頁與社群連結', 'Community page and links', 'コミュニティページとリンク', '커뮤니티 페이지와 링크', 'Página y enlaces de la comunidad'] },
       { id: 'community.play', href: '/play', name: ['小遊戲（/play）', 'Mini game (/play)', 'ミニゲーム（/play）', '미니 게임(/play)', 'Minijuego (/play)'] },
       { id: 'community.install', name: ['安裝手機 App（加入主畫面）', 'Install the phone app (add to home screen)', 'スマホアプリをインストール（ホーム画面に追加）', '휴대폰 앱 설치(홈 화면에 추가)', 'Instalar la app (añadir a inicio)'] },
       { id: 'community.journal', href: '/journal', name: ['社群日誌（/journal）', 'Community journal (/journal)', 'コミュニティ日誌（/journal）', '커뮤니티 일지(/journal)', 'Diario de la comunidad (/journal)'] },
