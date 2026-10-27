@@ -86,7 +86,7 @@ function HighlightList({ client }: { client: PortalClient }) {
     {items && items.length === 0 && <p className="hl-empty">還沒有已結束的活動。活動結束後會自動出現在這裡。</p>}
     <div className="hl-grid" data-guide-anchor="highlights:list">
       {items?.map(item => <article className="hl-card" key={item.event_id} aria-label={item.title}>
-        <a className="hl-cover" href={`#highlights/${item.event_id}`}><Cover cover={item.cover} mode={item.mode} whenLabel={when(item.starts_at, item.ends_at)} /></a>
+        <a className="hl-cover" href={`#highlights/${item.event_id}`} aria-label={`查看集錦：${item.title}`}><Cover cover={item.cover} mode={item.mode} whenLabel={when(item.starts_at, item.ends_at)} /></a>
         <h2><a href={`#highlights/${item.event_id}`}>{item.title}</a></h2>
         <p>{when(item.starts_at, item.ends_at)}</p>
         <p><span className={`hl-mode hl-mode-${item.mode}`}>{modeLabel[item.mode]}</span> {item.organizer_name}</p>
@@ -109,6 +109,14 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const [title, setTitle] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const pending = useRef<object | null>(null), lifetime = useRef(0), mounted = useRef(false);
+  const session = client.sessionGeneration;
+  const scope = useRef({client, session}); scope.current = {client, session};
+  useEffect(() => {
+    mounted.current = true; lifetime.current++; pending.current = null; setSubmitting(false); setProgress(null);
+    return () => { mounted.current = false; lifetime.current++; pending.current = null; };
+  }, [client, session]);
   const [manual, setManual] = useState(false);
   const [copied, setCopied] = useState(false);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
@@ -117,10 +125,12 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
+    const epoch = lifetime.current, generation = client.sessionGeneration;
+    const current = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
     setError(null); setMissing(false);
-    try { setDetail(await client.get<Detail>(`/event-highlights/${eventId}`)); }
-    catch (err) { setDetail(null); if (err instanceof ApiError && err.status === 404) setMissing(true); else setError(message(err)); }
-  }, [client, eventId]);
+    try { const value = await client.get<Detail>(`/event-highlights/${eventId}`); if (current()) setDetail(value); }
+    catch (err) { if (current()) { setDetail(null); if (err instanceof ApiError && err.status === 404) setMissing(true); else setError(message(err)); } }
+  }, [client, eventId, session]);
   useEffect(() => { void load(); }, [load]);
   const photos = detail?.items.filter(item => item.kind === 'photo') ?? [];
   useEffect(() => {
@@ -141,34 +151,46 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!detail) return;
-    setFormError(null); setProgress(null);
+    if (!detail || pending.current || !mounted.current) return;
+    const operation = {}, epoch = lifetime.current, generation = client.sessionGeneration;
+    const current = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
+    if (!current()) return;
+    pending.current = operation; setSubmitting(true);
+    setFormError(null); setProgress('正在送出…');
     let batch:File[]|null=null,uploaded=0;
     try {
       if (kind === 'link') {
         await client.post(`/event-highlights/${eventId}/links`, { url, ...(title.trim() ? { title: title.trim() } : {}),...(outcomeId?{outcome_id:outcomeId}:{}) }, { idempotencyKey: crypto.randomUUID() });
+        if (!current()) return;
         setUrl(''); setTitle('');
       } else {
         const files = [...(fileRef.current?.files ?? [])];batch=files;
         if (!files.length) { setFormError('請先選擇圖片。'); return; }
         for (let index = 0; index < files.length; index += 1) {
+          if (!current()) return;
           const file = files[index];
           if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new ApiError({message:'請選擇 JPEG、PNG 或 WebP 圖片。',status:422});
-          setProgress(files.length > 1 ? `正在上傳第 ${index + 1}／${files.length} 張` : null);
+          setProgress(files.length > 1 ? `正在上傳第 ${index + 1}／${files.length} 張` : '正在上傳圖片…');
           const orientation = await imageOrientation(file);
+          if (!current()) return;
           await uploadHighlightImage(client, eventId, kind, file, orientation, title, crypto.randomUUID(),outcomeId??undefined);
+          if (!current()) return;
           uploaded+=1;
         }
         setTitle('');
         if (fileRef.current) fileRef.current.value = '';
       }
-      setProgress(null);
+      setProgress('正在更新活動集錦…');
       await load();
     } catch (err) {
+      if (!current()) return;
       setProgress(null);
       setFormError(`${uploaded?`已新增 ${uploaded} 張；成功項目保留，其餘尚未新增。 `:''}${message(err)}`);
       if(batch&&uploaded&&fileRef.current){const remaining=new DataTransfer();for(const file of batch.slice(uploaded))remaining.items.add(file);fileRef.current.files=remaining.files;}
       await load();
+    } finally {
+      if (pending.current === operation) pending.current = null;
+      if (current()) { setSubmitting(false); setProgress(null); }
     }
   }
   async function remove(item: Item) {
@@ -241,17 +263,17 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
       <p className="hl-quota">你還可以新增：連結 {room(detail.quota, 'links')}・照片 {room(detail.quota, 'photos')}・海報 {room(detail.quota, 'posters')}</p>
       <div className="hl-segment" role="group" aria-label="要補上的內容">
         {([['link', '影片連結'], ['photo', '照片'], ['poster', '海報']] as const).map(([value, label]) =>
-          <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>{label}</button>)}
+          <button key={value} type="button" disabled={submitting} aria-pressed={kind === value} onClick={() => setKind(value)}>{label}</button>)}
       </div>
       <p className="hl-hint">{hint}</p>
       {outcomesEnabled&&<p className="hl-hint">{outcomeId?'新增項目綁定目前選取的精華，沿用精華目前狀態與閱讀範圍；私人草稿不會匿名公開。':'尚未綁定精華：新增項目直接沿用這場活動的閱讀範圍。要保持私人草稿，請先在上方儲存並選取精華。'}</p>}
       <form onSubmit={event => void submit(event)}>
-        {kind === 'link' && <label className="hl-field">影片連結<input value={url} onChange={event => setUrl(event.target.value)} type="url" required placeholder="https://" autoComplete="off" /></label>}
-        {kind !== 'link' && <label className="hl-field">{kind === 'photo' ? '照片' : '海報'}<input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={kind === 'photo'} required /></label>}
-        <label className="hl-field">標題（選填）<input value={title} onChange={event => setTitle(event.target.value)} maxLength={120} /></label>
+        {kind === 'link' && <label className="hl-field">影片連結<input disabled={submitting} value={url} onChange={event => setUrl(event.target.value)} type="url" required placeholder="https://" autoComplete="off" /></label>}
+        {kind !== 'link' && <label className="hl-field">{kind === 'photo' ? '照片' : '海報'}<input disabled={submitting} ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={kind === 'photo'} required /></label>}
+        <label className="hl-field">標題（選填）<input disabled={submitting} value={title} onChange={event => setTitle(event.target.value)} maxLength={120} /></label>
         {progress && <p role="status">{progress}</p>}
         {formError && <p role="alert">{formError}</p>}
-        <button type="submit" className="btn btn-primary hl-btn" disabled={room(detail.quota, kind === 'link' ? 'links' : kind === 'photo' ? 'photos' : 'posters') <= 0 || Boolean(progress)}>送出</button>
+        <button type="submit" className="btn btn-primary hl-btn" disabled={room(detail.quota, kind === 'link' ? 'links' : kind === 'photo' ? 'photos' : 'posters') <= 0 || submitting}>{submitting ? '正在送出…' : '送出'}</button>
       </form>
     </details>
     <dialog ref={dialogRef} className="hl-lightbox" aria-label="活動照片" onClose={() => { setPhotoIndex(null); openerRef.current?.focus(); }} onKeyDown={event => {

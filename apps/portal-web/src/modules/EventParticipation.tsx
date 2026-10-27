@@ -3,6 +3,8 @@ import {ApiError,type PortalClient,type RequestOptions} from '../api';
 import type {SessionPayload} from '../types';
 import {formatIsoLocal,localInputToIso} from '../format';
 import './EventParticipation.css';
+import {readEventParticipationToken} from './event-participation-token';
+export {readEventParticipationToken} from './event-participation-token';
 
 export type EventParticipationDTO={
   event_id:string;event_version:number;event_state:'pending'|'published'|'rejected'|'cancelled';starts_at:string;waitlist_enabled:boolean;response_window_minutes:number|null;
@@ -15,11 +17,6 @@ export type GuestEventParticipationProps={client:PortalClient;id:string;referral
 export type OrganizerParticipationEvent={event_id:string;aggregate_version:number;starts_at:string;ends_at:string;capacity:number|null;state:string};
 export type EventParticipationOrganizerProps={client:PortalClient;session:SessionPayload;event:OrganizerParticipationEvent;onChanged?:()=>void};
 
-/** The private email capability is read only from a fragment, never a query or storage. */
-export function readEventParticipationToken(hash=window.location.hash):string|null{
-  const match=/^#participation=([A-Za-z0-9_-]{43})$/.exec(hash);
-  return match?.[1]??null;
-}
 const positive=(value:string)=>/^\d+$/.test(value)&&Number.isSafeInteger(Number(value))&&Number(value)>0;
 const options=(token:string|null):Omit<RequestOptions,'body'>=>token?{eventParticipationToken:token,skipAuthHandler:true,suppressConsole:true}:{suppressConsole:true};
 type FrozenRequest={method:'POST'|'PATCH';path:string;body:unknown;key:string;version?:number};

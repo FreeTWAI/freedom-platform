@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createConsistentAssetBackup, ConsistentBackupError } from '../../packages/media-migration/backup-coordinator.js';
+import { backupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.js';
 import { runDailyBackup, type DailyBackupAdapter, type DailyBackupContext } from '../../packages/media-migration/backup-daily.js';
 import { runDailyBackupCli } from '../../scripts/media-backup-daily.js';
 import type { MediaGcObservation } from '../../packages/media-migration/backup-gc-precondition.js';
@@ -83,5 +85,42 @@ test('snapshot-pins cleanup preserves exact policy even when the revision label 
     const result=await runDailyBackup({...context(),gcSafety:'snapshot-pins'},adapter);
     assert.equal(result.status,'failed');assert.equal(result.cleanupVerified,false);assert.equal(result.code,'daily_backup_cleanup_failed');
     assert.equal(result.sourceProtection.status,'not_verified');assert.equal(result.retentionExecuted,false);
+  }
+});
+
+test('preflight and cleanup preserve distinct bounded causes without provider text', async () => {
+  const { adapter } = fixture();
+  adapter.preflight = async () => { throw Object.assign(Error('private database detail'), { code: '42501' }); };
+  adapter.cleanup = async () => { throw Error('release_backup_worker_changed'); };
+  const result = await runDailyBackup(context(), adapter);
+  assert.equal(result.stage, 'preflight'); assert.equal(result.code, 'daily_backup_cleanup_failed');
+  assert.equal(result.phaseCode, 'backup_database_permission_denied');
+  assert.equal(result.cleanupCode, 'release_backup_worker_changed');
+  assert.equal(result.cleanupVerified, false); assert(!JSON.stringify(result).includes('private'));
+  adapter.preflight = async () => { throw Object.assign(Error('private message'), { code: 'release_backup_private_secret' }); };
+  adapter.cleanup = async () => { throw Error('private cleanup'); };
+  const unknown = await runDailyBackup(context(), adapter);
+  assert.equal(unknown.phaseCode, 'daily_backup_phase_failed');
+  assert.equal(unknown.cleanupCode, 'daily_backup_cleanup_failed');
+  assert(!JSON.stringify(unknown).includes('private'));
+});
+
+
+test('coordinator retains private connection causes while daily receipts publish only fixed diagnostics', async () => {
+  for (const original of [Object.assign(new Error('PRIVATE_DATABASE_URL'), { code: 'ECONNRESET' }),
+    Object.assign(new Error('PRIVATE_SQL_DETAIL'), { code: '55P03' })]) {
+    const pool = { options: { max: 2 }, async connect() { throw original; } };
+    const options = { enabled: true, target: { database: 'fp_daily', sourceSchema: 'public', sourceRelease: 'a'.repeat(40) },
+      maintenance: {}, source: {}, destination: {}, databaseSnapshot: {} };
+    let wrapper: unknown;
+    await assert.rejects(createConsistentAssetBackup(pool as never, options as never), error => {
+      assert(error instanceof ConsistentBackupError); assert.equal(error.code, 'backup_capture_failed');
+      assert.equal(error.cause, original); assert(!JSON.stringify(error).includes('PRIVATE'));
+      wrapper = error; return true;
+    });
+    const { adapter } = fixture(); adapter.openCapture = async () => { throw wrapper; };
+    const result = await runDailyBackup(context(), adapter);
+    assert.equal(result.status, 'failed'); assert.equal(result.phaseCode, backupDiagnosticCode(original, 'fallback'));
+    assert(!JSON.stringify(result).includes('PRIVATE')); assert(!JSON.stringify(result).includes('cause'));
   }
 });

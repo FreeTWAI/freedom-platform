@@ -4,6 +4,8 @@ export type PortalFeatureMetadata = { title: string; guidance: string };
 
 // Order is the existing navigation-search order. Metadata is not authorization.
 export const PORTAL_FEATURE_METADATA = {
+  "community-hub": {title:"社群入口總覽",guidance:"瀏覽共同經營的社群與站內參與方向。"},
+  "newbie-village": {title:"新手村任務",guidance:"用三維度反思、15 題本機測驗與方向卡，選擇第一週的小實驗。"},
   profile: {title: "我的個人空間", guidance: "瀏覽自己的貼文、作品與活動；公開分享仍由你另行設定。"},
   "ar": { title: "AR 圖案互動", guidance: "製作衣服或海報圖案，掃描本人公開名片與公開活動，拍照分享。" },
   "community-search": { title: "搜尋社群內容", guidance: "依關鍵字、類型與主題搜尋目前可閱讀的社群內容。" },
@@ -37,6 +39,7 @@ export const PORTAL_FEATURE_METADATA = {
   "social": { title: "社群分享", guidance: "發布近況與作品、按讚留言，也能分享外部社群連結。" },
   "services": { title: "社員服務", guidance: "列出社員的本業服務。用你的連結分享出去，點擊計入業務推廣排行榜。服務頁是公開的。" },
   "promotion": { title: "推廣排行榜", guidance: "查看六種分享的點擊排行。分數只供比較，不計入經驗或驗收。" },
+  "tester-map": { title: "測試員地圖", guidance: "依小組跟著分關任務測試平台功能，進度與勳章只存在本機；下方有完整功能清單與測試狀態。" },
   "highlights": { title: "活動集錦", guidance: "活動結束後會自動出現在這裡。這一頁是公開的，參加過的夥伴可以補上照片、海報和影片連結。" },
 } as const satisfies Record<TabId, PortalFeatureMetadata>;
 

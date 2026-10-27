@@ -137,3 +137,21 @@ export function listCommunityFollows(pool: Pool, actor: Actor) {
 export function listCommunityFollowUpdates(pool: Pool, actor: Actor, raw: Record<string, string | undefined>) {
   return privateRead(pool, actor, q => readFollowUpdates(q, actor, raw));
 }
+
+/** Read only this member's relation and this post through the existing content ACL. */
+export async function readCommunityPostBookmark(pool: Pool, actor: Actor, rawId: string, raw: Record<string, string | undefined>) {
+  requireCondition(Object.keys(raw).length === 0 && z.uuid().safeParse(rawId).success, 422, 'validation_failed', '書籤識別碼或查詢參數不正確。');
+  const id = rawId.toLowerCase();
+  const result = await privateRead(pool, actor, async q => {
+    const selected = (await q.query(`SELECT 1 FROM community_content_bookmarks
+      WHERE community_id=$1 AND owner_user_id=$2 AND content_kind='post' AND content_id=$3 LIMIT 1`,
+      [actor.community_id, actor.user_id, id])).rowCount === 1;
+    const page = await searchCommunityContent(q, actor, { kinds: 'post' }, { ids: { post: [id] } });
+    const available = page.items.some(item => item.kind === 'post' && item.id === id);
+    // A missing relation must not reveal whether an inaccessible post exists.
+    // Existing own references can still be removed, exactly like the private list.
+    return { kind: 'post' as const, id, selected, available };
+  });
+  requireCondition(result.selected || result.available, 404, 'not_found', '找不到這份內容。');
+  return result;
+}

@@ -69,9 +69,7 @@ network/provider writes or candidate script execution.
 
 `repositories.lock.json` is the sole mutable canonical consumer-baseline lock for
 this transition. Historical verification JSON and earlier90f receipts remain
-historical. Central `2026-09-20-file-inventory.json` must be regenerated after this
-commit is integrated using `python3 scripts/update-inventory.py`, then checked with
-`npm run verify:inventory`; no preview bundle, consumer library export, or source91
-lock regeneration follows from this baseline change. Cross-repository checkout CI
+historical. 日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
+No preview bundle, consumer library export, or source91 lock regeneration follows from this baseline change. Cross-repository checkout CI
 must use a fresh directory because the old90f checkout intentionally no longer
 matches the lock.

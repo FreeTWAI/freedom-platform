@@ -4,6 +4,7 @@ import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
+import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 
 async function composer(page:Page,email='maker@local.test'){
   await page.goto('/');
@@ -13,6 +14,88 @@ async function composer(page:Page,email='maker@local.test'){
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();
   return page.getByRole('dialog',{name:'建立貼文',exact:true});
 }
+
+test('mention search does not offer old-query members after failure or a late superseded response',async({page})=>{
+  const dialog=await composer(page),draft=dialog.getByLabel('貼文內容',{exact:true});
+  await draft.fill('保留我的貼文草稿');
+  const alice={user_id:randomUUID(),nickname:'Alice 搜尋結果'},carol={user_id:randomUUID(),nickname:'Carol 搜尋結果'};
+  let releaseSlow=()=>{},slowStarted=()=>{},writes=0;
+  const gate=new Promise<void>(resolve=>{releaseSlow=resolve}),started=new Promise<void>(resolve=>{slowStarted=resolve});
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/social-posts/notes')writes++;});
+  await page.route('**/api/v1/members?*',async route=>{
+    const query=new URL(route.request().url()).searchParams.get('search');
+    if(query==='Bob')return route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'會員搜尋暫時無法載入。'})});
+    if(query==='Slow'){slowStarted();await gate;return route.fulfill({json:{items:[alice]}});}
+    return route.fulfill({json:{items:query==='Alice'?[alice]:query==='Carol'?[carol]:[]}});
+  });
+  try{
+    await dialog.getByRole('button',{name:'標註會員',exact:true}).click();
+    const search=dialog.getByLabel('搜尋標註會員',{exact:true}),choices=dialog.locator('.social-mention-choice');
+    await search.fill('Alice');await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:alice.nickname,exact:true})).toBeVisible();
+    await search.fill('Bob');await expect(dialog.locator('.social-text-picker').getByRole('alert')).toBeVisible();
+    await expect(search).toHaveValue('Bob');await expect(choices).toHaveCount(0);await expect(draft).toHaveValue('保留我的貼文草稿');
+    await search.fill('Slow');await started;await expect(choices).toHaveCount(0);
+    await search.fill('Carol');await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:carol.nickname,exact:true})).toBeVisible();
+    const late=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/members'&&new URL(response.url()).searchParams.get('search')==='Slow');
+    releaseSlow();await (await late).finished();
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    await expect(choices).toHaveCount(1);await expect(dialog.getByRole('button',{name:carol.nickname,exact:true})).toBeVisible();await expect(dialog.locator('.social-text-picker').getByRole('alert')).toHaveCount(0);
+    await choices.click();await expect(draft).toHaveValue('保留我的貼文草稿 @Carol 搜尋結果 ');await expect(draft).toBeFocused();
+    expect(writes).toBe(0);
+  }finally{releaseSlow();}
+});
+
+for(const width of [390])test(`emoji insertion follows the caret and selection and preserves history at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true}),picker=dialog.getByRole('button',{name:'插入 emoji',exact:true});
+  await area.fill('前言後文');await area.press('Home');await area.press('ArrowRight');await area.press('ArrowRight');
+  await picker.focus();await page.keyboard.press('Enter');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(area).toHaveValue('前言🎉後文');await expect(area).toBeFocused();
+  expect(await area.evaluate((input:HTMLTextAreaElement)=>[input.selectionStart,input.selectionEnd])).toEqual([4,4]);
+  await page.keyboard.type('！');await expect(area).toHaveValue('前言🎉！後文');
+  await picker.click();await dialog.getByRole('button',{name:'插入 😂',exact:true}).click();
+  await expect(area).toHaveValue('前言🎉！😂後文');await expect(area).toBeFocused();
+  await dialog.getByRole('button',{name:'復原上一步',exact:true}).click();await expect(area).toHaveValue('前言🎉！後文');
+  await dialog.getByRole('button',{name:'重做',exact:true}).click();await expect(area).toHaveValue('前言🎉！😂後文');
+  await area.fill('前言舊字後文');await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(2,4));
+  await picker.click();await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();
+  await expect(area).toHaveValue('前言🎉後文');await expect(area).toBeFocused();
+  const full='字'.repeat(2000);await area.fill(full);await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(998,1000));
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeEnabled();
+  await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue(full.slice(0,998)+'🎉'+full.slice(1000));
+  expect(await area.evaluate((input:HTMLTextAreaElement)=>[input.value.length,input.selectionStart,input.selectionEnd])).toEqual([2000,1000,1000]);
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeDisabled();
+  await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,2));
+  await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeEnabled();
+  await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,0));
+  await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toBeDisabled();
+  await picker.click();await expect(dialog.getByRole('button',{name:'插入 🎉',exact:true})).toHaveCount(0);await expect(dialog).toBeVisible();
+});
+
+test('emoji controls honor a synthetic composition guard without changing the draft',async({page})=>{
+  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true});
+  await area.fill('輸入法草稿');await dialog.getByRole('button',{name:'插入 emoji',exact:true}).click();
+  await area.dispatchEvent('compositionstart');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue('輸入法草稿');
+  await area.dispatchEvent('compositionend');await dialog.getByRole('button',{name:'插入 🎉',exact:true}).click();
+  await expect(area).toHaveValue('輸入法草稿🎉');await expect(area).toBeFocused();
+});
+
+test('comment emoji insertion replaces selection without sending and respects its shorter limit',async({page,e2eAuthPool})=>{
+  await composer(page);const session=await page.request.get('/api/v1/session');expect(session.status()).toBe(200);
+  const userId=(await session.json()).user.user_id,postId=randomUUID(),schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA);
+  expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(schema);
+  const inserted=await e2eAuthPool.query(`INSERT INTO "${schema}".community_social_posts(post_id,community_id,author_user_id,kind,platform,title,note,state,created_at,updated_at)
+    SELECT $1,community_id,user_id,'note','other','表情插入測試','只測留言草稿，不送出。','active',timestamptz '2000-01-01',timestamptz '2000-01-01' FROM "${schema}".users WHERE user_id=$2 RETURNING post_id`,[postId,userId]);
+  expect(inserted.rowCount).toBe(1);await page.goto(`/?social-post=${postId}#social`);
+  const post=page.locator(`#social-post-${postId}`);await post.getByRole('button',{name:'留言 · 0',exact:true}).click();
+  const area=post.getByLabel('寫留言',{exact:true}),picker=post.getByRole('button',{name:'插入 emoji',exact:true});let sends=0;
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname===`/api/v1/social-posts/${postId}/comments`)sends++;});
+  await area.fill('保留舊字結尾');await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(2,4));
+  await picker.click();await post.getByRole('button',{name:'插入 🎉',exact:true}).click();await expect(area).toHaveValue('保留🎉結尾');await expect(area).toBeFocused();
+  const full='字'.repeat(1000);await area.fill(full);await area.evaluate((input:HTMLTextAreaElement)=>input.setSelectionRange(0,2));
+  await picker.click();await post.getByRole('button',{name:'插入 😂',exact:true}).click();await expect(area).toHaveValue('😂'+full.slice(2));
+  await picker.click();await expect(post.getByRole('button',{name:'插入 😂',exact:true})).toBeDisabled();expect(sends).toBe(0);
+});
 
 // Keep expected accessible names independent of the product's translation catalog.
 const composerLanguages=[
@@ -207,6 +290,57 @@ test('unknown publication locks history, retry confirms the original command and
   await dialog.getByRole('button',{name:'重試發布',exact:true}).click();await expect(dialog).not.toBeVisible();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(area).toHaveValue('');
   await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();await area.press('Control+z');await expect(area).toHaveValue('');
+});
+
+test('ordinary note publication makes external URLs clickable without a preview or automatic navigation, including comment rendering',async({page,e2eAuthPool})=>{
+  const id=randomUUID(),email=`social-link-${id}@example.test`,opened:Page[]=[],writes:string[]=[];
+  const url='https://links.example.test/docs?a=1&a=2&utm_source=post#section';
+  let externalRequests=0;
+  expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(e2eSchema(process.env.FREEDOM_E2E_SCHEMA));
+  await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+    VALUES($1,$2,$3,'外部連結測試會員',$4,$5,false)`,[id,DEMO_COMMUNITY,email,hashPassword(DEMO_PASSWORD),randomUUID()]);
+  await page.context().route('https://links.example.test/**',async route=>{externalRequests++;await route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic destination</title>'});});
+  page.context().on('page',popup=>opened.push(popup));
+  page.on('request',request=>{
+    const pathname=new URL(request.url()).pathname;
+    // Visibility read beacons are unrelated to link rendering or clicking.
+    if(request.method()==='POST'&&pathname.startsWith('/api/v1/social-posts')&&!/^\/api\/v1\/social-posts\/[^/]+\/read$/.test(pathname))writes.push(pathname);
+  });
+  try{
+    const dialog=await composer(page,email),challengeUrl=new URL('/play?game=cash&seed=42',page.url()).href;
+    const text=`直接貼網址\n${url}。\n${challengeUrl}\n<b>原文 & 換行</b>\n#話題\n結尾`;
+    await dialog.getByLabel('貼文內容',{exact:true}).fill(text);
+    expect(writes).toEqual([]);expect(opened).toEqual([]);expect(externalRequests).toBe(0);
+    const published=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/social-posts/notes');
+    await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();
+    const response=await published;expect(response.status()).toBe(201);const {post_id}=await response.json();await expect(dialog).toBeHidden();
+    expect((await e2eAuthPool.query('SELECT note FROM community_social_posts WHERE post_id=$1 AND author_user_id=$2',[post_id,id])).rows).toEqual([{note:text}]);
+    const post=page.locator(`#social-post-${post_id}`),body=post.locator('.social-note');
+    await expect(post).toBeVisible();await post.getByRole('button',{name:'顯示全文',exact:true}).click();
+    expect(await body.textContent()).toBe(text);await expect(body.locator('b')).toHaveCount(0);await expect(body).toHaveCSS('white-space','pre-wrap');
+    const link=body.getByRole('link',{name:`${url} (在新分頁開啟)`,exact:true});
+    await expect(link).toHaveAttribute('href',url);await expect(link).toHaveAttribute('target','_blank');
+    await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');
+    const challengeLink=body.getByRole('link',{name:`${challengeUrl} (在新分頁開啟)`,exact:true});
+    await expect(challengeLink).toBeVisible();await expect(challengeLink).toHaveAttribute('href','/play?game=cash&seed=42');
+    await expect(challengeLink).toHaveAttribute('target','_blank');await expect(challengeLink).toHaveAttribute('rel','noopener noreferrer');await expect(challengeLink).toHaveAttribute('referrerpolicy','no-referrer');
+    expect(writes).toEqual(['/api/v1/social-posts/notes']);expect(opened).toEqual([]);expect(externalRequests).toBe(0);
+    // A persisted comment fixture exercises the same read-only renderer, not a new write flow.
+    const comment=`${url}\nhttps://localhost/private\n<script>escaped</script>`;
+    await e2eAuthPool.query(`INSERT INTO community_social_comments(post_id,community_id,author_user_id,body) VALUES($1,$2,$3,$4)`,[post_id,DEMO_COMMUNITY,id,comment]);
+    await page.reload();await expect(post).toBeVisible();await post.getByRole('button',{name:'留言 · 1',exact:true}).click();
+    const commentBody=post.locator('.social-comment-bubble p.multiline-text');
+    await expect(commentBody).toHaveText(comment);await expect(commentBody.locator('script')).toHaveCount(0);await expect(commentBody.locator('a')).toHaveCount(1);
+    await expect(commentBody.locator('a')).toHaveAttribute('href',url);
+    expect(externalRequests).toBe(0);expect(opened).toEqual([]);
+    const [popup]=await Promise.all([page.waitForEvent('popup'),commentBody.locator('a').click()]);
+    await popup.waitForURL(url);await popup.waitForLoadState('domcontentloaded');expect(popup.url()).toBe(url);
+    expect(await popup.evaluate(()=>({opener:window.opener,referrer:document.referrer}))).toEqual({opener:null,referrer:''});
+    expect(externalRequests).toBe(1);expect(writes).toEqual(['/api/v1/social-posts/notes']);
+  }finally{
+    await Promise.all([...opened,page].map(tab=>tab.close()));
+    await e2eAuthPool.query('DELETE FROM community_social_posts WHERE author_user_id=$1',[id]);
+  }
 });
 
 test('signing out and signing in again cannot recover the previous session draft',async({page})=>{

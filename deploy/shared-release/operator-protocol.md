@@ -6,9 +6,65 @@ service credentials, independently checked authority and image/config pins are
 installed for controlled staging acceptance. Do not copy personal-host credentials
 into the image. This file is part of the reviewed controller surface.
 
+## Independent release contract
+
+The protected-main controller now requests `releaseKind: independent` and the exact
+five phases `preflight`, `migration`, `deploy`, `health`, `handoff`. With no pending SQL, migration is read-only verification of the unchanged ledger,
+canonical grants, retained constraints and runtime reads, completed before journal
+begin. Approved pending SQL remains reachable through the immutable installed
+transaction runner: SQL policy scan, ledger prefix, lease, before/after invariants,
+commit intent, confirmed floor and unknown-COMMIT refusal remain. Only the fresh
+backup requirement and backupSetId dependency are absent in this contract. The
+legacy runner mode retains its old backup contract for legacy callers. SQL review
+still determines whether a data change is appropriate; catalog hashes do not prove
+that arbitrary SQL is additive or reversible.
+
+Independent deploy does not consume scheduled-backup evidence, invoke either backup
+phase, connect as the backup role, or require `backupDatabaseUrl`. It still uses
+the existing environment config and authenticated R2 control journal, the shared
+Actions lock and database lease. Routine backups remain independent and daily.
+The new `release-begin-v2` journal event has four ordered stages after preflight;
+historical `begin` records retain the original six-stage replay semantics below.
+Successful public receipts use `release_confirmed` and
+`validated-independent-release/v1`; staging admission authenticates both genuine legacy
+and new receipts with their own phase contract, never check-mode receipts.
+
+An optional failed-backup run reference authenticates the original terminal
+workflow/artifact before reconciliation. Failed inner preflight with
+`snapshotDump: not_started` retains the BEGIN-only boundary. Failed capture with
+that same dump status is `before_dump`: either no intent exists, or the sole
+capture-policy intent still matches the exact pre-mutation policy digest (excluding
+generation). A committed capture revision uses the existing cleanup readback path.
+Independent Worker/DB/floor/GC/backend observations under the lease must pass before
+append-only abandonment. Legacy-predecessor recovery remains BEGIN-only; archive
+intents always refuse. No seed reset, deletion or backup-success assertion is allowed.
+Every failed operator phase records a bounded `release_[a-z0-9_]{1,80}` `failureCode`
+(code, then message, otherwise `release_operation_failed`). Public progress and the
+step summary expose it only for the last failed phase. Daily receipts also retain
+independent allowlisted `phaseCode` and `cleanupCode`, including standard SQLSTATE
+and fixed network identifiers; raw errors, causes and provider details stay private.
+
+The rest of this document describes retained legacy and backup contracts where
+seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
+
 ## Invocation and ownership
 
-The image must be public, independently reviewed and pinned by digest. Its fixed
+The manual `check` mode is a separate read-only diagnostic, executed by the
+reviewed main controller after the same actor/source/CI admission. It reads the
+Environment's pinned config and tests account-token verification, retained
+Worker/routes/Hyperdrive inspection, bounded R2 object listings and fixed-origin
+health with staging-only Access headers. It does not invoke the operator image,
+write a journal, access a database or create a GitHub Deployment. It works with
+release and backup switches disabled. Its `checks_passed` receipt is deliberately
+ineligible for production staging evidence. Raw responses and exception text are
+excluded; write permissions and backup/deployment readiness remain unverified.
+
+The image must be independently reviewed, readable by this repository's Actions
+and pinned by digest. A private GHCR package is supported through the job's
+`packages: read` GITHUB_TOKEN. The host sends it only to `docker login ghcr.io`
+over stdin, pulls the pinned digest using a fresh mode-0700 Docker config, then
+removes that config before starting the operator. The token and registry config
+are never mounted or passed into the container. Its fixed
 entrypoint is `/usr/local/bin/freedom-release`; arguments are only `--request`,
 `--config`, `--credentials`, `--result`, followed by fixed paths in `/release`.
 It runs as UID/GID 1001, no Linux capabilities, no Docker socket, a read-only root,
@@ -46,8 +102,9 @@ to `result.json`; the controller discards raw process output.
 | `floor` | Independently provisioned UUID `epoch` and `seedSha256` |
 | `migrationProfile` | Reviewed `freedom.migrations/legacy-v1`, `first: 1`, exact approved `last`, `known_gaps: [22]` |
 
-Worker names and public origins are fixed by target. Flags, secrets and bindings
-are preserved from observed state, matched to the retained floor. Material policy
+Worker names and public origins are fixed by target. Secrets and bindings start
+from observed state, matched to the retained floor; only reviewed source decisions
+below may change boolean plain-text feature flags. Material policy
 and coordinate authority come from original pinned legacy bytes. The config
 cannot choose programs, commands, feature decisions, arbitrary origins or roles.
 The controller binds the exact UTF-8 config bytes; the entry validates all fields.
@@ -59,15 +116,45 @@ The controller binds the exact UTF-8 config bytes; the entry validates all field
 | `preflight` | Read actual Worker/source and DB identities; compare retained rollback floor and complete ledger, preserve existing flags/secrets/bindings, acquire the same DB backup/release lease as scheduled and legacy operators, maintain heartbeat throughout |
 | `backup-before` | Capture the previously deployed release using the existing exported DB snapshot, maintenance pins and object evidence; immutable offsite archive, full readback; isolated DB/object restore and floor/policy checks; cleanup and GC-off readback |
 | `migration` | Use the reviewed installed migration runner and exact catalog; expected DB/role/schema checks; preserve transactional migrations plus runtime grants, final ledger checks and explicit commit outcome; observe an uncertain commit instead of rerunning |
-| `deploy` | Build/package only the selected reviewed source using pinned tools; preserve current bindings/flags/secrets; invoke Wrangler once and retain provider confirmation |
+| `deploy` | Build/package only the selected reviewed source using pinned tools; 僅套用該 SHA 的 owner 旗標決策，保留其他 bindings／flags／secrets；invoke Wrangler once and retain provider confirmation |
 | `health` | Read the actual public health endpoint and schema evidence, verify exact release SHA and approved smoke observations; HTTP 200 alone is insufficient |
 | `backup-after` | Capture and offsite-readback the new source/schema, then restore DB and objects in owned isolated services, retain floor/material-policy/quarantine checks, cleanup |
 | `handoff` | Advance the external retained floor at the approved point, confirm scheduled backup ownership still works, settle all owned temporary resources and maintenance pins, release the lease |
 
 Use the existing daily backup pipeline's source/object/restore semantics, not only
-`pg_dump`. Do not change application feature flags during this infrastructure port.
+`pg_dump`.
 Only owner-recorded feature decisions authorize flag values; Environment config
-does not independently approve a new flag. The controller invokes Wrangler once;
+does not independently approve a new flag.
+
+旗標變更須以經 code owner 審查的 PR 編輯 released source 的
+`deploy/shared-release/flag-decisions.json`（`freedom.shared-release.flag-decisions/v1`）：
+`targets` 僅接受 `staging-next`／`next`，各 target 最多 64 筆；每筆只有
+`value`（字串 `"true"`／`"false"`）、`decidedBy`、`decidedAt`（`YYYY-MM-DD`）及
+`record`（`https://github.com/FreeTWAI/freedom-platform/` 下、最多 160 字元的 HTTPS URL）。
+名稱總長最多 64 字元，只接受 `^FREEDOM_[A-Z0-9_]+_ENABLED$`，不接受其他變數，
+也不能覆寫 secret 或其他 binding 類型。所有未知欄位 fail closed。
+決策可累積至每 target 64 筆，與 live 不同的變更每次發布最多 16 筆，另查核以
+16 筆最大 metadata 推導的序列化預算，確保重複欄位仍符合 operator／公開收據大小限制。
+超限在 floor begin／provider publish 前以 `release_flag_changes_too_many` 拒絕；
+`check`／`plan` 亦拒絕。`plan` 未讀 live，保守地將本 target 決策視為變更。
+需要變更多個旗標時，請拆成多次發布。
+合併後正常發布該精確 main SHA，先 staging-next，再依既有 staging 成功准入發布 next。
+移除 entry 不會把旗標關閉；必須明設 `"false"`。缺檔表示沒有決策，保留舊設定及 hash。
+
+決策僅讀取准入 source SHA 的 Git blob，不能由 workflow input、環境設定、
+`RELEASE_CONFIG_JSON` 或網路提供。render 從 live bindings 套用本 target 決策，保留
+`keep_vars` 及 topology／runtime 查核；新版本的觀察與 post-check 比對預期 hash。
+舊版本 propagation 觀察仍比對 predecessor hash，不觸發再次部署。
+begin candidate 記錄預期 `bindingsSha256`；確認 deploy phase 成功後才更新 state，
+使 backup-after 與後續備份／發布讀取新 hash。schema COMMIT 不會提前套用旗標；
+之後若失敗仍保留 unsettled journal。缺少此欄位的舊 chain 完全沿用原 replay 行為。
+
+`plan`／`check` 與公開 JSON 收據僅白名單列出 `name/from/to/record`。
+plan 的 `from: null` 表示未觀察；check 的 `null` 表示 live 缺少該變數，兩者均不套用設定。
+Ted 於 2026-10-27 決定兩環境的 `FREEDOM_COMMUNITY_RELATIONS_ENABLED="true"`，
+既有 `FREEDOM_COMMUNITY_SEARCH_ENABLED` 仍依 live 保留。
+
+The controller invokes Wrangler once;
 pinned Wrangler 4.138 can internally retry a version upload up to three attempts
 on retryable network/API errors. This is not exactly-once provider mutation. Provider
 deployment-list and edge-health propagation use bounded reads, preserving every
@@ -132,6 +219,16 @@ and only the five already-reviewed PG18 restore definition variants. Original
 legacy material-policy bytes remain authoritative; this port cannot bootstrap a
 floor from the live database. Independent live provisioning is still needed.
 
+Legacy seed v1 requires the deployed source/tree to equal the original migration
+floor. Seed v2 explicitly supports an already deployed code-only descendant:
+the provisioner independently checks its exact main/CI identity and provider
+state before pinning it. On every open, the operator verifies Git ancestry, both
+immutable trees and the descendant's entire regular SQL catalog against the
+original ledger, using the existing `migrationDigest` format. Added, removed or
+changed migrations fail. The original legacy floor, schema ledger, material
+policy and coordinate authority stay byte-pinned and unchanged; v2 does not
+invent migration events or approve a live database as new schema authority.
+
 `buildApplication` copies the selected Git commit into a fresh independent build
 directory, installs its lockfile, builds the portal and runs the image's fixed
 Wrangler dry-run without inherited provider/DB/job credentials. It verifies the
@@ -175,7 +272,10 @@ excludes `.git` and private/untracked files. Immutable Node24 and PG18 bases,
 locked dependencies, fixed TS loader and the reviewed import closure produce the
 image. Its native fixture runs as UID1001 with read-only root and no network,
 then the short-lived job token publishes GHCR. Publication does not alter pins
-or enable an environment; public pull must be verified before installation.
+or enable an environment; a separate job's authenticated pull must be verified
+before installation. The `verify-pull` job uses a fresh runner and only
+`packages: read`, exercising the same download helper as release/backup.
+Organization package-publication policy need not change.
 
 `shared-backup.yml` has a separate `BACKUP_ENABLED` switch. It backs up each
 actually deployed, main/CI-admitted SHA under the same DB lease and shared journal.
@@ -240,7 +340,8 @@ Additional required successful evidence fields:
 Exit zero only after every actual operation and cleanup succeeds. On failure,
 persist a bound progress record and exit nonzero; never continue to later phases.
 Unknown mutation outcomes require readback/reconciliation, not automatic replay.
-The controller projects phase names/status/times only into public receipts;
+The controller projects phase names/status/times, the last failed phase's fixed `failureCode`
+and validated public flag changes into public receipts;
 an interrupted run's progress is explicitly a report, not confirmed completion.
 Schema validation authenticates neither the image nor the provider observations:
 image review, environment pins and actual staging acceptance remain necessary.

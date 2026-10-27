@@ -78,9 +78,12 @@ const labelFunctions=['enclosingShadowRootOrDocument','getIdRefs','getAriaLabell
 const getLabels=runInNewContext(labelFunctions+';getElementLabels',{
  normalizedWhitespaceCache:undefined,Node:{TEXT_NODE:3,COMMENT_NODE:8,ELEMENT_NODE:1},HTMLInputElement:class{},CSS:{escape:(id:string)=>id},
 }) as (cache:Map<unknown,unknown>,element:unknown)=>{normalized:string}[];
+const operationStart=source.indexOf('function useGuildOperation('),operationEnd=source.indexOf('export function GuildAnnouncements(',operationStart);
+assert.ok(operationStart>=0&&operationEnd>operationStart);
+const operationSource=source.slice(operationStart,operationEnd);
 const councilStart=source.indexOf('function Council('),councilEnd=source.indexOf('\ntype MaintainerBook=',councilStart);
 assert.ok(councilStart>=0&&councilEnd>councilStart);
-const councilCode=transformSync(source.slice(councilStart,councilEnd),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
+const councilCode=transformSync(operationSource+source.slice(councilStart,councilEnd),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
 function councilMarkup(mode:'create'|'reply',draft:string,frozen:boolean){
  let stateIndex=0;
  const current={thread_id:'fixture',title:'Synthetic thread',body:'Synthetic body',author_name:'Synthetic author',created_at:'2026-10-25',replies:[]};
@@ -126,26 +129,32 @@ for(const mode of ['create','reply'] as const)test(`council ${mode} keeps exact 
 
 // Small hook ports execute the real announcement read/write handlers. Promises
 // are explicitly settled by each test; there are no timers or browser claims.
-function announcementHarness(){
+function announcementHarness(write:Writer=async()=>{throw new Error('unknown write outcome');},isCurrent=()=>true,onConsoleEvent:(event:any)=>void=()=>{}){
  const begin=source.indexOf('function AnnouncementEditor('),end=source.indexOf('\ntype SkillEditorProps=',begin);
  assert.ok(begin>=0&&end>begin);
- const code=transformSync(source.slice(begin,end),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
+ const code=transformSync(operationSource+source.slice(begin,end),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
  const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
+ const guildChanges:string[]=[],consoleEvents:unknown[]=[];
  const reads:{resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
- const api={get:()=>new Promise((resolve,reject)=>reads.push({resolve,reject})),post:async()=>{throw new Error('unknown write outcome');}};
+ const api={isCurrent,get:()=>new Promise((resolve,reject)=>reads.push({resolve,reject})),post:write};
  let currentApi=api;
  const memo=(value:any,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n]))slots[i]={value,deps};return slots[i].value;};
  const Editor=runInNewContext(code+';AnnouncementEditor',{
   React,useState:(initial:unknown)=>{const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],(next:any)=>{slots[i]=typeof next==='function'?next(slots[i]):next;}];},
   useRef:(initial:unknown)=>{const i=cursor++;return slots[i]??(slots[i]={current:initial});},useCallback:memo,
   useEffect:(run:()=>void,deps:unknown[])=>{const i=cursor++,old=slots[i];if(!old||deps.some((x,n)=>x!==old.deps[n])){old?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=run();});}},
-  failure:(error:Error)=>error.message,date:String,logConsoleEvent:()=>{},consoleChannel:()=>'',
+  failure:(error:Error)=>error.message,date:String,logConsoleEvent:(event:unknown)=>{consoleEvents.push(event);onConsoleEvent(event);},consoleChannel:()=>'',
  });
- const render=()=>{cursor=0;const tree=Editor({api:currentApi,guilds:[{guild_key:'fixture',name:'Synthetic guild'}],guild:'fixture',onGuildChange:()=>{}});for(const effect of effects.splice(0))effect();return tree;};
+ const render=()=>{cursor=0;const tree=Editor({api:currentApi,guilds:[{guild_key:'fixture',name:'Synthetic guild'},{guild_key:'other',name:'Other guild'}],guild:'fixture',onGuildChange:(value:string)=>guildChanges.push(value)});for(const effect of effects.splice(0))effect();return tree;};
  const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
  const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
  const buttons=(name:string)=>nodes(render()).find(n=>n.type==='button'&&text(n.props.children)===name);
- return {reads,render,text,html:()=>renderToStaticMarkup(render()),
+ return {unmount:()=>{for(const slot of slots)slot?.cleanup?.();},consoleEvents,reads,render,text,guildChanges,html:()=>renderToStaticMarkup(render()),
+  editFirst:()=>buttons('編輯公告').props.onClick(),newAnother:()=>buttons('新增另一則')?.props.onClick(),
+  switchGuild:(value='other')=>nodes(render()).find(n=>n.type==='select').props.onChange({target:{value}}),
+  publish:()=>nodes(render()).filter(n=>n.type==='select')[1].props.onChange({target:{value:'published'}}),
+  controls:()=>nodes(render()).filter(n=>['input','textarea','select'].includes(n.type)).map(n=>Boolean(n.props.disabled)),
+  buttonDisabled:(name:string)=>Boolean(buttons(name)?.props.disabled),
   reload:()=>buttons('重新載入列表').props.onClick(),
   draft:(title:string,body:string)=>{for(const [label,value]of [['公告標題',title],['公告內容',body]]){const field=nodes(render()).find(n=>n.type==='label'&&text(n.props.children)===label);nodes(field).find(n=>n.type==='input'||n.type==='textarea').props.onChange({target:{value}});}},
   values:()=>nodes(render()).filter(n=>n.type==='input'||n.type==='textarea').map(n=>n.props.value),
@@ -183,10 +192,10 @@ test('an older failed announcement refresh cannot overwrite a newer successful r
 
 // Actual Council handlers with controlled promises and explicit hook ports.
 // Layout, focus and native lifecycle are left to hosted E2E, not emulated here.
-function councilReadHarness(){
+function councilReadHarness(write:Writer=async()=>{throw Object.assign(new Error('unknown council write'),{status:503});},isCurrent=()=>true){
  const slots:any[]=[],effects:(()=>void)[]=[];let cursor=0;
  const reads:{path:string;resolve:(value:unknown)=>void;reject:(error:Error)=>void}[]=[];
- const api={get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:async()=>{throw Object.assign(new Error('unknown council write'),{status:503});}};
+ const api={isCurrent,get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:write};
  let currentApi=api;
  const Council=runInNewContext(councilCode+';Council',{
   React,useId:()=> 'synthetic-council',date:String,failure:(error:Error)=>error.message,
@@ -199,7 +208,7 @@ function councilReadHarness(){
  const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
  const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
  const button=(name:string)=>nodes(render()).find(n=>n.type==='button'&&text(n.props.children)===name);
- return {reads,render,html:()=>renderToStaticMarkup(render()),
+ return {unmount:()=>{for(const slot of slots)slot?.cleanup?.();},reads,render,html:()=>renderToStaticMarkup(render()),
   reload:()=>button('重讀討論').props.onClick(),
   open:()=>button('新增討論').props.onClick(),
   select:(id?:string)=>nodes(render()).find(n=>n.type==='button'&&String(n.props.className).includes('guild-thread-select')&&(!id||n.key===id)).props.onClick(),
@@ -265,4 +274,200 @@ for(const obsolete of ['success','failure'] as const)test(`council old client de
  assert.match(h.html(),/current detail failed/);assert.doesNotMatch(h.html(),/<h4>Previously loaded discussion<\/h4>|obsolete client detail error/);
  h.reload();h.reads[4].resolve({items:[storedThread]});h.reads[5].resolve(storedThread);await settleCouncil();
  assert.doesNotMatch(h.html(),/current detail failed/);assert.match(h.html(),/<h4>Previously loaded discussion<\/h4>/);
+});
+
+async function settleAnnouncementWrite(){for(let i=0;i<8;i++)await Promise.resolve();}
+
+// Actual component + actual retry writer, with synthetic receipt/storage ports.
+// These prove intent/key handling, not a browser or production database outcome.
+for(const kind of ['create','edit'] as const){
+ for(const denied of [403,412])test(`announcement ${kind}: unknown then ${denied} freezes every tuple entry until original ACK`,async()=>{
+  const calls:{path:string;body:any;version:number|undefined;key:string}[]=[],receipts=new Map<string,unknown>();let effects=0;
+  const row={...storedAnnouncement,aggregate_version:2,state:'draft'};
+  const write=retrySafeWriter(async(path,body,version,key)=>{
+   calls.push({path,body,version,key});
+   if(calls.length===2)throw rejection(denied);
+   if(!receipts.has(key)){effects++;receipts.set(key,{...row,...body as object,aggregate_version:3});}
+   if(calls.length===1)throw rejection(503);
+   return receipts.get(key);
+  });
+  const h=announcementHarness(write);h.render();h.reads[0].resolve({items:[row]});await settleRead();
+  if(kind==='edit')h.editFirst();h.draft('Original title','Original body');await h.save();
+  assert.deepEqual(h.controls(),[true,true,true,true]);
+  assert.equal(h.buttonDisabled('編輯公告'),true);assert.equal(h.buttonDisabled('重新載入列表'),false);
+  if(kind==='edit')assert.equal(h.buttonDisabled('新增另一則'),true);
+  // Programmatic handler calls must not bypass disabled controls.
+  h.draft('Changed','Changed');h.publish();h.switchGuild('fixture');h.switchGuild();h.editFirst();h.newAnother();
+  assert.deepEqual(h.values(),['Original title','Original body']);assert.deepEqual(h.guildChanges,[]);
+  await h.save();assert.deepEqual(h.controls(),[true,true,true,true]);
+  h.reload();h.reads[1].resolve({items:[{...row,aggregate_version:99}]});await settleRead();h.editFirst();
+  const recovery=h.save();await settleAnnouncementWrite();h.reads[2].resolve({items:[row]});await recovery;
+  assert.equal(effects,1);assert.equal(new Set(calls.map(c=>c.key)).size,1);
+  assert.ok(calls.every(c=>c.path===calls[0].path&&c.version===(kind==='edit'?2:undefined)&&JSON.stringify(c.body)===JSON.stringify({title:'Original title',body:'Original body',state:'draft'})));
+  assert.deepEqual(h.controls(),[false,false,false,false]);assert.deepEqual(h.values(),['','']);
+  h.draft('New intention','New body');const next=h.save();await settleAnnouncementWrite();h.reads[3].resolve({items:[]});await next;
+  assert.equal(effects,2);assert.notEqual(calls[3].key,calls[2].key);
+ });
+ test(`announcement ${kind}: initial definitive rejection permits corrected intent`,async()=>{
+  const calls:{body:any;key:string}[]=[];
+  const h=announcementHarness(retrySafeWriter(async(_path,body,_version,key)=>{calls.push({body,key});throw rejection(400);}));
+  h.render();h.reads[0].resolve({items:[{...storedAnnouncement,aggregate_version:2}]});await settleRead();if(kind==='edit')h.editFirst();
+  h.draft('Invalid original','Original');await h.save();assert.deepEqual(h.controls(),[false,false,false,false]);
+  h.draft('Corrected','Corrected body');await h.save();assert.notEqual(calls[0].key,calls[1].key);assert.equal(calls[1].body.title,'Corrected');
+ });
+}
+
+for(const flag of ['network','timedOut'])test(`writer keeps the key for a 4xx carrying ${flag}`,async()=>{
+ const keys:string[]=[];
+ const write=retrySafeWriter(async(_path,_body,_version,key)=>{keys.push(key);if(keys.length===1)throw Object.assign(rejection(408),{[flag]:true});if(keys.length===2)throw rejection(403);return 'ACK';});
+ await assert.rejects(write('/announcement',{title:'Original'}));await assert.rejects(write('/announcement',{title:'Original'}));await write('/announcement',{title:'Original'});
+ assert.equal(new Set(keys).size,1);
+});
+
+for(const flag of ['network','timedOut'])test(`announcement treats 4xx ${flag} as unknown and retains original payload`,async()=>{
+ const calls:{body:any;key:string}[]=[];
+ const h=announcementHarness(retrySafeWriter(async(_path,body,_version,key)=>{calls.push({body,key});throw Object.assign(rejection(408),{[flag]:true});}));
+ h.render();h.reads[0].resolve({items:[]});await settleRead();h.draft('Original','Original body');await h.save();
+ assert.deepEqual(h.controls(),[true,true,true,true]);h.draft('Changed','Changed');await h.save();
+ assert.equal(calls[0].key,calls[1].key);assert.equal(calls[1].body.title,'Original');
+});
+
+test('announcement pending send blocks reentrant submit and all mutation handlers',async()=>{
+ let reject!:(error:Error)=>void,calls=0;
+ const h=announcementHarness(async()=>{calls++;return new Promise((_resolve,no)=>{reject=no;});});
+ h.render();h.reads[0].resolve({items:[{...storedAnnouncement,aggregate_version:2}]});await settleRead();h.editFirst();h.draft('Original','Original body');
+ const sending=h.save();await h.save();h.draft('Changed','Changed');h.publish();h.editFirst();h.newAnother();h.switchGuild();
+ assert.equal(calls,1);assert.deepEqual(h.values(),['Original','Original body']);assert.deepEqual(h.guildChanges,[]);
+ reject(rejection(400));await sending;assert.deepEqual(h.controls(),[false,false,false,false]);
+});
+
+for(const reply of [false,true])for(const flag of ['network','timedOut'])test(`council ${reply?'reply':'create'} keeps a 4xx ${flag} outcome frozen through denied retry`,async()=>{
+ const calls:{path:string;body:unknown;key:string}[]=[];
+ const h=councilReadHarness(retrySafeWriter(async(path,body,_version,key)=>{calls.push({path,body,key});if(calls.length===1)throw Object.assign(rejection(408),{[flag]:true});throw rejection(403);}));
+ h.render();h.reads[0].resolve({items:[storedThread]});await settleCouncil();
+ if(reply){h.select();h.render();h.reads[1].resolve(storedThread);await settleCouncil();}else h.open();
+ h.draft();const original=h.fields().map(f=>f.value);h.submit();await settleCouncil();assert.ok(h.fields().every(f=>f.disabled));assert.match(h.html(),/上次送出的結果尚未確認/);
+ h.submit();await settleCouncil();assert.ok(h.fields().every(f=>f.disabled));assert.deepEqual(h.fields().map(f=>f.value),original);assert.equal(JSON.stringify(calls[0]),JSON.stringify(calls[1]));
+});
+
+// Session accessors are the production PortalClient implementation; transport
+// ports are held promises, never real accounts or network calls.
+const portalSource=readFileSync('apps/portal-web/src/api.ts','utf8'),authStart=portalSource.indexOf('export class PortalClient {'),authEnd=portalSource.indexOf('  onUnauthorized:',authStart);
+assert.ok(authStart>=0&&authEnd>authStart);
+const GuildAuthClient=runInNewContext(stripTypeScriptTypes(portalSource.slice(authStart,authEnd).replace('export ','')+'}')+';PortalClient',{Map});
+const ownedStart=source.indexOf('async function ownedGuildRequest<T>('),ownedEnd=source.indexOf('// Read refreshes must not invalidate',ownedStart);
+assert.ok(ownedStart>=0&&ownedEnd>ownedStart);
+const ownedHooks=runInNewContext(stripTypeScriptTypes(source.slice(ownedStart,ownedEnd).replace('export ',''))+';({useMemberClient,useAdminClient})',{useMemo:(fn:()=>unknown)=>fn(),retrySafeWriter});
+for(const kind of ['member'] as const)for(const method of ['get','post'] as const)test(`${kind} guild API ${method} rejects stale entry and a late old-owner response`,async()=>{
+ const client=kind==='member'?new GuildAuthClient():{csrf:'synthetic-A'};if(kind==='member')client.csrfToken='synthetic-A';
+ let resolve!:(value:unknown)=>void,calls=0;const send=()=>{calls++;return new Promise(yes=>resolve=yes);};client.get=send;client.post=send;client.request=send;
+ const api=kind==='member'?ownedHooks.useMemberClient(client):ownedHooks.useAdminClient(client),pending=method==='get'?api.get('/synthetic'):api.post('/synthetic',{title:'synthetic'});
+ if(kind==='member'){client.csrfToken=null;client.csrfToken='synthetic-B';}else client.csrf='synthetic-B';
+ resolve({synthetic:true});await assert.rejects(pending,/登入已變更/);assert.equal(api.isCurrent(),false);
+ await assert.rejects(method==='get'?api.get('/synthetic'):api.post('/synthetic',{title:'synthetic'}),/登入已變更/);assert.equal(calls,1);
+});
+for(const flow of ['announcement','create','reply'] as const)for(const change of ['unmount','session','api'] as const)for(const outcome of ['success','failure'] as const)test(`${flow}: late ${outcome} after ${change} has no follow-up reads or console text`,async()=>{
+ let resolve!:(value:unknown)=>void,reject!:(error:Error)=>void,current=true;
+ const write=()=>new Promise((yes,no)=>{resolve=yes;reject=no;});
+ const h=flow==='announcement'?announcementHarness(write,()=>current):councilReadHarness(write,()=>current);
+ h.render();h.reads[0].resolve({items:flow==='announcement'?[]:[storedThread]});await settleCouncil();
+ if(flow==='announcement'){const a=h as ReturnType<typeof announcementHarness>;a.draft('Synthetic old title','Synthetic old body');a.publish();}
+ else{const c=h as ReturnType<typeof councilReadHarness>;if(flow==='reply'){c.select();c.render();c.reads[1].resolve(storedThread);await settleCouncil();}else c.open();c.draft();}
+ const before=h.reads.length;const pending=flow==='announcement'?(h as ReturnType<typeof announcementHarness>).save():(h as ReturnType<typeof councilReadHarness>).submit();
+ if(change==='unmount')h.unmount();else if(change==='session')current=false;else h.replaceClient();const afterChange=h.reads.length;
+ if(outcome==='success')resolve({announcement_id:'synthetic',updated_at:'2026-10-25T20:00:00Z'});else reject(rejection(503));
+ await pending;await settleCouncil();assert.equal(h.reads.length,afterChange);if(change!=='api')assert.equal(afterChange,before);
+ if(flow==='announcement')assert.deepEqual((h as ReturnType<typeof announcementHarness>).consoleEvents,[]);
+});
+
+function operationHarness(){
+ const refs:any[]=[],cleanups:(()=>void)[]=[];let cursor=0,setup!:()=>()=>void;
+ const api={isCurrent:()=>true},context:any={useRef:(initial:unknown)=>refs[cursor++]??(refs[cursor-1]={current:initial}),useEffect:(run:()=>()=>void)=>{setup=run;cleanups.push(run());}};
+ const useOperation=runInNewContext(stripTypeScriptTypes(operationSource)+';useGuildOperation',context),capture=useOperation(api);
+ return {capture,api,cleanup:()=>{for(const cleanup of cleanups.splice(0))cleanup();},setup:()=>{cleanups.push(setup());},replaceApi:()=>{cursor=0;useOperation({...api});}};
+}
+test('operation cleanup/setup never revives the old promise but allows a new same-owner operation',()=>{
+ const h=operationHarness(),old=h.capture();assert.equal(old(),true);h.cleanup();assert.equal(old(),false);h.setup();assert.equal(old(),false);assert.equal(h.capture()(),true);
+});
+for(const outcome of ['success','failure'] as const)test(`admin assign late ${outcome} after unmount has no follow-up read or notification`,async()=>{
+ const start=source.indexOf('  async function assign('),end=source.indexOf('  const current=books.find(',start);assert.ok(start>=0&&end>start);
+ const h=operationHarness(),updates:string[]=[];let resolve!:(value:unknown)=>void,reject!:(error:Error)=>void;
+ const ctx:any={captureOperation:h.capture,lock:{current:false},reason:'Synthetic reason',book:'synthetic',books:[],api:{post:()=>new Promise((yes,no)=>{resolve=yes;reject=no;})},load:async()=>updates.push('read'),failure:(e:Error)=>e.message};
+ for(const name of ['setBusy','setError','setNotice','setMember','setReason'])ctx[name]=()=>updates.push(name);
+ const assign=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+';assign',ctx),pending=assign('synthetic-member',true);h.cleanup();updates.length=0;
+ if(outcome==='success')resolve({});else reject(rejection(503));await pending;assert.deepEqual(updates,[]);
+});
+test('replacing an operation API does not transfer an older in-flight intent',()=>{const h=operationHarness(),old=h.capture();h.replaceApi();assert.equal(old(),false);});
+
+test('the actual Workspace session key remounts ownership and permits a fresh save without reviving old work',async()=>{
+ const app=readFileSync('apps/portal-web/src/App.tsx','utf8');
+ const keys=[...app.matchAll(/<Workspace key=\{(`[^`]+`)\}/g)];assert.equal(keys.length,1,'actual session mount boundary');
+ const client=new GuildAuthClient();client.csrfToken='synthetic-A';
+ const key=(user:string)=>runInNewContext(keys[0][1],{session:{user:{user_id:user}},client});
+ const firstKey=key('synthetic-member-A'),writes:{body:unknown;resolve:(value:unknown)=>void}[]=[];
+ client.post=(_path:string,body:unknown)=>new Promise(resolve=>writes.push({body,resolve}));
+ const oldApi=ownedHooks.useMemberClient(client),old=announcementHarness(oldApi.post,oldApi.isCurrent);
+ old.render();old.reads[0].resolve({items:[]});await settleCouncil();old.draft('Old draft','Old body');old.save();await settleCouncil();assert.equal(writes.length,1);
+ client.csrfToken=null;client.csrfToken='synthetic-B';assert.notEqual(key('synthetic-member-A'),firstKey,'same user with a new session also remounts');assert.notEqual(key('synthetic-member-B'),firstKey);
+ // Explicit hook-port remount follows the actual JSX key; not a React renderer.
+ old.unmount();const newApi=ownedHooks.useMemberClient(client),fresh=announcementHarness(newApi.post,newApi.isCurrent);
+ assert.equal(oldApi.isCurrent(),false);assert.equal(newApi.isCurrent(),true);
+ fresh.render();fresh.reads[0].resolve({items:[]});await settleCouncil();fresh.draft('New draft','New body');fresh.save();await settleCouncil();assert.equal(writes.length,2);assert.equal((writes[1].body as {title:string}).title,'New draft');
+ writes[0].resolve(storedAnnouncement);await settleCouncil();assert.ok(fresh.controls().every(Boolean),'old finally cannot unlock the new save');assert.equal(old.reads.length,1);assert.deepEqual(old.consoleEvents,[]);
+ writes[1].resolve(storedAnnouncement);await settleCouncil();assert.equal(fresh.reads.length,2);fresh.reads[1].resolve({items:[]});await settleCouncil();assert.ok(fresh.controls().every(value=>!value));assert.deepEqual(fresh.values(),['','']);assert.match(fresh.html(),/公告已保存/);
+});
+
+test('the member ownership wrapper preserves same-session unknown receipt retries and normal reads',async()=>{
+ const client=new GuildAuthClient();client.csrfToken='synthetic-A';const keys:string[]=[];client.get=async()=>({synthetic:true});
+ client.post=async(_path:string,_body:unknown,options:any)=>{keys.push(options.idempotencyKey);if(keys.length===1)throw rejection(503);if(keys.length===2)throw rejection(403);return 'ACK';};
+ const api=ownedHooks.useMemberClient(client);assert.equal((await api.get('/synthetic')).synthetic,true);
+ await assert.rejects(api.post('/synthetic',{body:'same'}));await assert.rejects(api.post('/synthetic',{body:'same'}));assert.equal(await api.post('/synthetic',{body:'same'}),'ACK');assert.equal(new Set(keys).size,1);
+});
+test('a late announcement ACK cannot deliver old content to the replacement console subscriber',async()=>{
+ const consoleSource=readFileSync('apps/portal-web/src/game-console-core.ts','utf8');
+ const core=runInNewContext(stripTypeScriptTypes(consoleSource.replace(/^export /gm,''))+';({logConsoleEvent,subscribeGameConsole})',{crypto:globalThis.crypto,Set,Date});
+ let resolve!:(value:unknown)=>void;const received:unknown[]=[];
+ const h=announcementHarness(()=>new Promise(yes=>resolve=yes),()=>true,core.logConsoleEvent);h.render();h.reads[0].resolve({items:[]});await settleCouncil();h.draft('Synthetic old member title','Synthetic old member body');h.publish();const pending=h.save();h.unmount();
+ const unsubscribe=core.subscribeGameConsole((event:unknown)=>received.push(event));
+ try{resolve({announcement_id:'synthetic',updated_at:'2026-10-25T20:00:00Z'});await pending;assert.deepEqual(received,[]);assert.equal(h.reads.length,1);}finally{unsubscribe();}
+});
+
+for(const method of ['get','post'] as const)for(const stale of [false,true])test(`member ${method} failure ${stale?'redacts an obsolete owner detail':'preserves the current owner error'}`,async()=>{
+ const client=new GuildAuthClient();client.csrfToken='synthetic-A';let reject!:(error:Error)=>void;const failure=Object.assign(new Error('Synthetic old private detail'),{status:400});
+ client.get=client.post=()=>new Promise((_yes,no)=>reject=no);const api=ownedHooks.useMemberClient(client),pending=method==='get'?api.get('/synthetic'):api.post('/synthetic',{});
+ if(stale)client.csrfToken='synthetic-B';reject(failure);
+ await assert.rejects(pending,(error:Error)=>stale?error!==failure&&/登入已變更/.test(error.message)&&!error.message.includes('private detail'):error===failure);
+});
+
+test('grant ACK probe settles after actual body/handler continuations without requiring a stale reload',async()=>{
+ const spec=readFileSync('tests/e2e/guild-workspace.spec.ts','utf8'),start=spec.indexOf('function installGrantAckProbe('),end=spec.indexOf('\ntest.beforeEach(',start);assert.ok(start>=0&&end>start,'actual browser probe boundary');
+ const tasks:(()=>void)[]=[],channels:any[]=[];
+ class Channel{port1={onmessage:null as null|(()=>void),close(){}};port2={postMessage:()=>tasks.push(()=>this.port1.onmessage?.()),close(){}};constructor(){channels.push(this);}}
+ class Broadcast{postMessage(_value:unknown){}}
+ let release!:(value:Response)=>void;
+ const originalFetch=()=>new Promise<Response>(resolve=>release=resolve),originalBroadcast=Broadcast.prototype.postMessage,root:any={fetch:originalFetch};
+ const install=runInNewContext(stripTypeScriptTypes(spec.slice(start,end))+';installGrantAckProbe',{window:root,location:{href:'http://localhost/',origin:'http://localhost'},URL,Request,MessageChannel:Channel,BroadcastChannel:Broadcast});
+ const path='/api/v1/guilds/synthetic-guild/announcements',title='Synthetic removed draft';install({path,title});
+ const readStart=portalSource.indexOf('async function readJson('),readEnd=portalSource.indexOf('\nfunction instanceCandidates(',readStart);assert.ok(readStart>=0&&readEnd>readStart);
+ const readJson=runInNewContext(stripTypeScriptTypes(portalSource.slice(readStart,readEnd))+';readJson',{ApiError:Error});
+ const old=announcementHarness(async()=>readJson(await root.fetch(path,{method:'POST',body:JSON.stringify({title})})),()=>true,event=>new Broadcast().postMessage({type:'event',event}));
+ old.render();old.reads[0].resolve({items:[]});await settleCouncil();old.draft(title,'Old body');old.publish();old.save();await settleCouncil();old.unmount();
+ const fresh=announcementHarness();fresh.render();fresh.reads[0].resolve({items:[]});await settleCouncil();fresh.draft('Replacement draft','Replacement body');
+ assert.equal(root.__guildGrantAckProbe.settled,false);assert.equal(tasks.length,0,'network ACK has not arrived');
+ release(new Response(JSON.stringify({...storedAnnouncement,announcement_id:'synthetic-announcement',title})));await settleCouncil();
+ assert.equal(tasks.length,1,'only a valid parsed fixture ACK queues the next task');assert.equal(root.__guildGrantAckProbe.settled,false,'microtask continuation precedes the task barrier');
+ assert.equal(old.reads.length,1);assert.deepEqual(old.consoleEvents,[]);assert.deepEqual(fresh.values(),['Replacement draft','Replacement body']);
+ tasks.shift()!();assert.equal(root.__guildGrantAckProbe.settled,true);assert.equal(root.__guildGrantAckProbe.reads,0);assert.equal(root.__guildGrantAckProbe.events,0);assert.equal(channels.length,1);
+ root.__guildGrantAckProbe.restore();assert.equal(root.fetch,originalFetch);assert.equal(Broadcast.prototype.postMessage,originalBroadcast);
+});
+for(const mismatch of ['origin','path','method','title','invalid-json','response-id','disposed'] as const)test(`grant ACK probe does not mark unrelated ${mismatch} as settled`,async()=>{
+ const spec=readFileSync('tests/e2e/guild-workspace.spec.ts','utf8'),start=spec.indexOf('function installGrantAckProbe('),end=spec.indexOf('\ntest.beforeEach(',start);assert.ok(start>=0&&end>start);
+ let tasks=0;class Channel{port1={onmessage:null,close(){}};port2={postMessage(){tasks++;},close(){}};}
+ class Broadcast{postMessage(_value:unknown){}}
+ const title='Synthetic fixture',path='/api/v1/guilds/synthetic-guild/announcements';
+ const response=new Response(mismatch==='invalid-json'?'invalid':JSON.stringify({announcement_id:mismatch==='response-id'?'unrelated':'synthetic-announcement',title})),read=response.text;
+ const root:any={fetch:async()=>response};const original=root.fetch;
+ const install=runInNewContext(stripTypeScriptTypes(spec.slice(start,end))+';installGrantAckProbe',{window:root,location:{href:'http://localhost/',origin:'http://localhost'},URL,Request,MessageChannel:Channel,BroadcastChannel:Broadcast});install({path,title});
+ const result=await root.fetch(mismatch==='origin'?'http://example.test'+path:mismatch==='path'?'/unrelated':path,{method:mismatch==='method'?'GET':'POST',body:JSON.stringify({title:mismatch==='title'?'unrelated':title})});
+ assert.equal(result,response);if(!['invalid-json','response-id','disposed'].includes(mismatch))assert.equal(result.text,read,'unrelated response body remains untouched');if(mismatch==='disposed')root.__guildGrantAckProbe.restore();await result.text();assert.equal(tasks,0);assert.equal(root.__guildGrantAckProbe.settled,false);root.__guildGrantAckProbe.restore();assert.equal(root.fetch,original);
 });

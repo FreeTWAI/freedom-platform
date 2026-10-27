@@ -2,8 +2,33 @@
 export type HomeRefreshReason = 'initial' | 'manual' | 'automatic';
 export type HomeTaskAction = 'resume' | 'tasks' | 'showcase';
 
-/** Only the platform-owned journal route can be configured. Empty disables the entry. */
-export function resolveHomeJournalUrl(value:unknown='/journal'):string|null{return value==='/journal'?'/journal':null;}
+/** Fixed public embed destination; an explicit empty setting disables the entry. */
+export function resolveHomeJournalUrl(value: unknown = 'https://aisns.evitina.tw/'): string | null {
+  return value === 'https://aisns.evitina.tw/' ? 'https://aisns.evitina.tw/' : null;
+}
+
+// App imports this before rendering or rewriting any SPA route. The address bar
+// can change later, but only a new document can change the frame-src policy.
+const journalDocumentPath = typeof window === 'undefined' ? null : window.location.pathname;
+const journalIntentKey = 'freedom-home-journal-open';
+
+export function requestHomeJournalOpen(canLeave: () => boolean): boolean {
+  if (journalDocumentPath === '/') return true;
+  if (!canLeave()) return false;
+  try { sessionStorage.setItem(journalIntentKey, String(Date.now())); }
+  catch { /* Home remains usable; the member can click again after navigation. */ }
+  window.location.assign('/');
+  return false;
+}
+
+export function consumeHomeJournalIntent(): boolean {
+  try {
+    const intent = sessionStorage.getItem(journalIntentKey);
+    sessionStorage.removeItem(journalIntentKey);
+    const age = intent === null ? NaN : Date.now() - Number(intent);
+    return journalDocumentPath === '/' && age >= 0 && age < 30_000;
+  } catch { return false; }
+}
 
 export interface HomeReadTicket {
   readonly signal: AbortSignal;

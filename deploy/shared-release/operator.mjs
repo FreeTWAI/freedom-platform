@@ -1,3 +1,5 @@
+import { isReleaseFailureCode, releasePhases } from './admission.mjs';
+import { isBackupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -5,11 +7,12 @@ import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PHASES, requireRelease, isSha, isDigest } from './admission.mjs';
 import { BACKUP_PHASES } from './scheduled-admission.mjs';
+import { publicFlagChanges } from './portable/flag-decisions.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value, null, 2) + '\n';
 export const operatorCommand = (image, source, privateDir, resultDir, name, workDir) => [
-  'run', '--name', name, '--init', '--read-only', '--cap-drop=ALL',
+  'run', '--pull=never', '--name', name, '--init', '--read-only', '--cap-drop=ALL',
   '--security-opt=no-new-privileges', '--pids-limit=512', '--user=1001:1001',
   '--tmpfs=/tmp:rw,nosuid,nodev,size=2g,uid=1001,gid=1001',
   '--mount', `type=bind,src=${source},dst=/release/source,readonly`,
@@ -23,14 +26,36 @@ export const operatorCommand = (image, source, privateDir, resultDir, name, work
 
 // Operator output is private; even error text may contain a database URI or token.
 // Never forward stdout/stderr to Actions logs, the summary or an uploaded artifact.
-export function quietCommand(command, args, timeout = 90 * 60_000) {
+export function quietCommand(command, args, timeout = 90 * 60_000, { input } = {}) {
   return new Promise((accept, reject) => {
-    const child = spawn(command, args, { stdio: 'ignore', timeout, killSignal: 'SIGKILL',
+    const child = spawn(command, args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'ignore', 'ignore'], timeout, killSignal: 'SIGKILL',
       env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8' } });
+    // Registry credentials travel only over stdin, never command arguments or logs.
+    if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(input); }
     child.once('error', () => reject(Object.assign(new Error('release_operator_process_failed'), { code: 'release_operator_process_failed' })));
     child.once('exit', (code, signal) => code === 0 && signal === null ? accept()
       : reject(Object.assign(new Error('release_operator_process_failed'), { code: 'release_operator_process_failed' })));
   });
+}
+
+// The job's short-lived GITHUB_TOKEN may read a private, repository-linked GHCR
+// package. Its temporary Docker config is removed before the operator starts;
+// neither the token nor that directory enters the container or public receipt.
+export async function pullOperatorImage({ image, temporaryRoot, registry, run = quietCommand }) {
+  requireRelease(/^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(image),
+    'release_operator_image_invalid');
+  requireRelease(registry && typeof registry.username === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(registry.username)
+    && typeof registry.token === 'string' && registry.token.length > 0 && registry.token.length <= 16384
+    && !/[\r\n\0]/.test(registry.token), 'release_registry_credentials_missing');
+  const directory = join(temporaryRoot, 'registry');
+  await mkdir(directory, { mode: 0o700 });
+  try {
+    await run('docker', ['--config', directory, 'login', 'ghcr.io', '--username', registry.username, '--password-stdin'],
+      60_000, { input: registry.token });
+    await run('docker', ['--config', directory, 'pull', image], 10 * 60_000);
+  } catch {
+    throw Object.assign(new Error('release_registry_pull_failed'), { code: 'release_registry_pull_failed' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
 async function boundedJson(path) {
@@ -46,18 +71,36 @@ async function boundedJson(path) {
 // provider state. The operator must perform the observations before reporting.
 export function validateOperatorResult(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
-  requireRelease(Array.isArray(value.phases) && value.phases.length === PHASES.length, 'release_operator_phases_incomplete');
+  const phases = releasePhases(admission);
+  requireRelease(Array.isArray(value.phases) && value.phases.length === phases.length, 'release_operator_phases_incomplete');
   let previous = Date.parse(admission.admittedAt);
   requireRelease(Number.isFinite(previous), 'release_operator_phase_invalid');
   const observedAt = Date.now();
-  for (let i = 0; i < PHASES.length; i++) {
+  for (let i = 0; i < phases.length; i++) {
     const phase = value.phases[i];
     const start = Date.parse(phase.startedAt), end = Date.parse(phase.completedAt);
-    requireRelease(phase.name === PHASES[i] && phase.status === 'passed'
+    requireRelease(phase.name === phases[i] && phase.status === 'passed'
       && Number.isFinite(start) && Number.isFinite(end) && start >= previous && end >= start
       && end <= observedAt + 60_000,
     'release_operator_phase_invalid');
     previous = end;
+  }
+  if (admission.releaseKind === 'independent') {
+    const [preflight, schema, deploy, health, handoff] = value.phases;
+    requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
+      && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
+      && isSha(preflight.previousSourceSha), 'release_operator_preflight_incomplete');
+    requireRelease(((schema.outcome === 'unchanged' && schema.readOnly === true)
+      || (schema.outcome === 'committed' && schema.commitStatus === 'confirmed' && /^[1-9][0-9]*$/.test(schema.transactionId)))
+      && schema.ledgerVerified === true && schema.runtimeGrantsVerified === true, 'release_schema_unconfirmed');
+    requireRelease(deploy.sourceSha === admission.sourceSha && deploy.providerConfirmed === true
+      && health.sourceSha === admission.sourceSha && health.statusCode === 200
+      && health.schemaVerified === true && health.smokePassed === true, 'release_health_unconfirmed');
+    requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
+      && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
+    return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+      ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
+      startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
   }
   const [preflight, before, migration, deploy, health, after, handoff] = value.phases;
   requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
@@ -76,8 +119,9 @@ export function validateOperatorResult(value, admission, installation, requestDi
   requireRelease(handoff.scheduledBackupsVerified === true && handoff.cleanupVerified === true
     && handoff.leaseReleased === true && handoff.retainedFloorAdvanced === true,
   'release_handoff_incomplete');
-  // Fixed fields only: arbitrary operator text, paths and URLs never reach public receipts.
+  // Fixed fields only; flag record URLs must pass the repository URL whitelist.
   return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+    ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
     startedAt: new Date(Date.parse(phase.startedAt)).toISOString(),
     completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
 }
@@ -112,17 +156,35 @@ export function validateBackupOperatorResult(value, admission, installation, req
 
 export function operatorProgress(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
-  const phases = admission.mode === 'backup' ? BACKUP_PHASES : PHASES;
+  const phases = admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission);
   requireRelease(Array.isArray(value.phases) && value.phases.length <= phases.length, 'release_operator_progress_invalid');
   return value.phases.map((phase, i) => {
     requireRelease(phase.name === phases[i] && ['passed', 'running', 'failed'].includes(phase.status)
       && (i === value.phases.length - 1 || phase.status === 'passed'), 'release_operator_progress_invalid');
-    return { name: phase.name, reportedStatus: phase.status };
+    const failure = phase.backupFailure;
+    // Even a validly bound operator result may contain private diagnostics.
+    // Publish only fixed daily-runner codes, never arbitrary error strings.
+    const stages = ['preflight', 'capture', 'seal', 'offsite', 'readback', 'restore', 'cleanup'];
+    const codes = ['daily_backup_phase_failed', 'daily_backup_target_mismatch', 'daily_backup_gc_not_disabled',
+      'daily_backup_evidence_required', 'daily_backup_remote_mismatch', 'daily_backup_restore_mismatch',
+      'daily_backup_cleanup_failed', 'daily_backup_aborted', 'daily_backup_ports_invalid',
+      'daily_backup_policy_mismatch', 'daily_backup_protection_lost'];
+    const diagnostic = ['backup', 'backup-before', 'backup-after'].includes(phase.name) && phase.status === 'failed'
+      && stages.includes(failure?.stage) && codes.includes(failure?.code) && typeof failure.cleanupVerified === 'boolean'
+      ? { backupFailure: { stage: failure.stage, code: failure.code, cleanupVerified: failure.cleanupVerified,
+        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => isBackupDiagnosticCode(failure[key]))
+          .map(key => [key, failure[key]])),
+        ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
+    return { name: phase.name, reportedStatus: phase.status, ...diagnostic,
+      ...(i === value.phases.length - 1 && phase.status === 'failed' && isReleaseFailureCode(phase.failureCode)
+        ? { failureCode: phase.failureCode } : {}),
+      ...(['preflight', 'deploy'].includes(phase.name) && phase.flagChanges !== undefined
+        ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}) };
   });
 }
 
-export async function runOperator({ admission, installation, sourceRoot, temporaryRoot,
-  config, credentials, scheduleEvidence, run = quietCommand, onProgress = async () => {} }) {
+export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
+  config, credentials, scheduleEvidence, recoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -134,7 +196,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     && parsedConfig.target === admission.target,
   'release_config_binding_invalid');
   requireRelease(credentials && typeof credentials === 'object' && !Array.isArray(credentials), 'release_credentials_missing');
-  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl', 'backupDatabaseUrl']) {
+  for (const key of ['cloudflareApiToken', 'migrationDatabaseUrl', 'runtimeDatabaseUrl',
+    ...(admission.releaseKind === 'independent' && admission.mode !== 'backup' ? [] : ['backupDatabaseUrl'])]) {
     requireRelease(typeof credentials[key] === 'string' && credentials[key].length > 0, 'release_credentials_missing');
   }
   if (admission.target === 'staging-next') {
@@ -143,8 +206,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
         && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
     }
   }
-  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence,
-    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : PHASES });
+  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence,
+    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission) });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });
   await mkdir(resultDir, { recursive: false, mode: 0o700 });
@@ -162,7 +225,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await writeFile(join(privateDir, 'credentials.json'), json(credentials), { mode: 0o600, flag: 'wx' });
     // Hosted Ubuntu runner UID is 1001. Refuse other hosts rather than widening file permissions.
     requireRelease(process.getuid?.() === 1001 || run !== quietCommand, 'release_runner_uid_invalid');
-    await run('docker', ['pull', installation.image], 10 * 60_000);
+    await pullOperatorImage({ image: installation.image, temporaryRoot, registry, run });
     timer = setInterval(() => { progressTask = progressTask.then(readProgress); }, 10_000);
     containerAttempted = true;
     await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name, workDir));
@@ -173,7 +236,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await readProgress();
     // Keep failure details bounded even for a malformed/private provider exception.
     const failure = Object.assign(new Error('release_operator_failed'), { code: 'release_operator_failed', operatorProgress: progress });
-    if (typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)) failure.code = error.code;
+    if (isReleaseFailureCode(error?.code)) failure.code = error.code;
     throw failure;
   } finally {
     clearInterval(timer);

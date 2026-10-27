@@ -131,17 +131,18 @@ test('PUBLIC-POST-03 visitors receive at most three short public previews; openi
   const target=new URL(href!,e2eOrigin()).searchParams.get('post_return');expect(data.related.map((item:{post_id:string})=>item.post_id)).toContain(target);
   await next.click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();await expect(publicArticle(page)).toHaveCount(0);
   await signInForm(page,author.email);await expect(page).toHaveURL(e2eOrigin()+publicPath(target!));await expect(publicArticle(page)).toBeVisible();
-  await expect(page.getByRole('link',{name:'開啟貼文與討論',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'回原貼文提問與分享心得',exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'更多工坊分享',exact:true}).locator('a[href^="/posts/"]')).toHaveCount(3);
 });
 
 test('PUBLIC-POST-04 an existing member signs in and returns to the exact shared post, then opens its original discussion',async({author,page})=>{
-  const text=`登入後繼續原篇-${randomUUID()}`,post=await createPost(author,text);await setSharing(author,post.post_id,true);
+  const text=`登入後繼續原篇-${randomUUID()}\n/development/skills/local-workspace-mcp`,post=await createPost(author,text);await setSharing(author,post.post_id,true);
   await page.goto(publicPath(post.post_id));await page.locator(`a[href="${loginPath(post.post_id)}"]`).first().click();
   await signInForm(page,author.email);await expect(page).toHaveURL(e2eOrigin()+publicPath(post.post_id));await expect(publicArticle(page)).toContainText(text);
+  await expect(page.locator('.catalog-resource-link')).toHaveAttribute('href','/development/skills/local-workspace-mcp');
   const [onboarding]=await Promise.all([
     page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/v1/me/onboarding'),
-    page.getByRole('link',{name:'開啟貼文與討論',exact:true}).click(),
+    page.getByRole('link',{name:'回原貼文提問與分享心得',exact:true}).click(),
   ]);expect(onboarding.status()).toBe(200);await onboarding.finished();
   await expect(page.locator(`#social-post-${post.post_id}`)).toBeVisible();await expect(page.locator('.social-card')).toHaveCount(1);
   expect(new URL(page.url()).searchParams.get('social-post')).toBe(post.post_id);
@@ -166,13 +167,19 @@ test('PUBLIC-POST-06 closed registration metadata removes join controls and dire
   // Client capability fixture only; server rejection is covered by the public
   // runtime tests. This local browser harness deliberately enables registration.
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),registration_enabled:false}});});
-  let registrations=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/auth/register')registrations++;});
-  await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(post.note);
-  await expect(page.locator('a[href*="join=1"]:visible')).toHaveCount(0);
-  await page.goto(loginPath(post.post_id,true));await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'建立帳號',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true})).toHaveCount(0);
-  await page.locator(`a[href="${publicPath(post.post_id)}"]`).click();await expect(publicArticle(page)).toContainText(post.note);expect(registrations).toBe(0);
+  try{
+    let registrations=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/auth/register')registrations++;});
+    await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(post.note);
+    await expect(page.locator('a[href*="join=1"]:visible')).toHaveCount(0);
+    await page.goto(loginPath(post.post_id,true));await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'建立帳號',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true})).toHaveCount(0);
+    await page.locator(`a[href="${publicPath(post.post_id)}"]`).click();await expect(publicArticle(page)).toContainText(post.note);expect(registrations).toBe(0);
+  }finally{
+    // The returned article is server-rendered before its site metadata settles.
+    // Drain this page's only route before context teardown disposes its response.
+    await page.unrouteAll({behavior:'wait'});
+  }
 });
 
 test('PUBLIC-POST-07 editing invalidates consent; reopening the reviewed version and withdrawing update HTML, JSON, image and preview metadata',async({author,page})=>{
@@ -225,29 +232,38 @@ test('PUBLIC-POST-09 cancelling the share dialog and native handoff never opts a
   expect(control.calls[0]).toEqual({data:{title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${post.post_id}#social`},active:true});expect(control.copies).toBe(0);expect(writes).toEqual([]);expect(await sharing(author,post.post_id)).toEqual(before);
 });
 
-test('PUBLIC-POST-10 public reading fits 320, 390 and 1280 pixels with usable touch controls, visible brand and keyboard login',async({author,page},testInfo)=>{
-  const text=`手機閱讀-${randomUUID()}\n${'一段很長但仍然要換行的公開貼文'.repeat(35)}`,post=await createPost(author,text,true);await setSharing(author,post.post_id,true);
-  for(const width of [320,390,1280]){
-    await page.setViewportSize({width,height:900});await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(text);
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await expect(page.locator('img[src="/brand/freedom-workshop.webp"]')).toBeVisible();
-    const controls=page.locator('a[href*="post_return="]:visible');expect(await controls.count()).toBeGreaterThan(0);
-    for(const control of await controls.all())expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await page.screenshot({path:testInfo.outputPath(`public-post-${width}.png`),fullPage:true});
+test('PUBLIC-POST-10 public resources fit short mobile and desktop viewports in all three themes with keyboard return',async({author,page},testInfo)=>{
+  const text=`手機閱讀-${randomUUID()}\n${'一段很長但仍然要換行的公開貼文'.repeat(35)}\n/development/skills/local-workspace-mcp\n/development/skills/editkin\n/development/skills/positioning-companion`,post=await createPost(author,text,true);await setSharing(author,post.post_id,true);
+  for(const theme of ['light','dark','versefolk']){
+    await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),theme);
+    for(const width of [320,390,1280]){
+      await page.setViewportSize({width,height:420});await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(text);
+      await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await expect(page.locator('img[src="/brand/freedom-workshop.webp"]')).toBeVisible();
+      await expect(page.locator('.catalog-resource-link')).toHaveCount(3);
+      const controls=page.locator('a[href*="post_return="]:visible,.catalog-resource-link');expect(await controls.count()).toBeGreaterThan(0);
+      for(const control of await controls.all())expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({path:testInfo.outputPath(`public-post-${theme}-${width}.png`),fullPage:true});
+    }
   }
+  const resource=page.locator('.catalog-resource-link').first();await resource.focus();await expect(resource).toBeFocused();await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(e2eOrigin()+'/development/skills/local-workspace-mcp');
+  await page.goBack();await expect(page).toHaveURL(e2eOrigin()+publicPath(post.post_id));await expect(page.locator('.catalog-resource-link')).toHaveCount(3);
   const login=page.locator(`a[href="${loginPath(post.post_id)}"]`).first();await login.focus();await expect(login).toBeFocused();await page.keyboard.press('Enter');
   await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();await expect(page.locator(`a[href="${publicPath(post.post_id)}"]`)).toBeVisible();
   await page.goBack();await expect(page).toHaveURL(e2eOrigin()+publicPath(post.post_id));await expect(publicArticle(page)).toContainText(text);
 });
 
 test('PUBLIC-POST-11 returning to an open page refreshes revised text, author and related previews; withdrawal removes its text and OG',async({author,page})=>{
-  const original=`切回分頁前-${randomUUID()}`,post=await createPost(author,original,true);await setSharing(author,post.post_id,true);
+  const original=`切回分頁前-${randomUUID()}\n/development/skills/local-workspace-mcp`,post=await createPost(author,original,true);await setSharing(author,post.post_id,true);
   const previous=await createPost(author,`原本相關分享-${randomUUID()}`);await setSharing(author,previous.post_id,true);
   await page.goto(publicPath(post.post_id));await page.bringToFront();await expect(publicArticle(page)).toContainText(original);
   const firstVersion=await publicArticle(page).getAttribute('data-public-version');expect(firstVersion).toMatch(/^[0-9a-f]{64}$/);
+  await expect(page.locator('.catalog-resource-link')).toHaveAttribute('href','/development/skills/local-workspace-mcp');
   await expect(page.getByRole('region',{name:'更多工坊分享',exact:true})).toContainText(previous.note);
 
-  const revised=`回來就看到修訂-${randomUUID()}`,renamed=`更新後作者 ${randomUUID().slice(0,8)}`;
+  const revised=`回來就看到修訂-${randomUUID()}\n/development/skills/editkin`,renamed=`更新後作者 ${randomUUID().slice(0,8)}`;
   const edit=await author.context.request.post(`/api/v1/social-posts/${post.post_id}/edit`,{headers:headers(author,String(post.revision)),data:{text:revised}});expect(edit.status(),await edit.text()).toBe(200);
   await setSharing(author,post.post_id,true);
   const profileResponse=await author.context.request.get('/api/v1/me/account');expect(profileResponse.status()).toBe(200);
@@ -262,6 +278,7 @@ test('PUBLIC-POST-11 returning to an open page refreshes revised text, author an
   const refreshed=page.waitForResponse(response=>response.request().isNavigationRequest()&&new URL(response.url()).pathname===publicPath(post.post_id));
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));expect((await refreshed).status()).toBe(200);
   await expect(publicArticle(page)).toContainText(revised);await expect(publicArticle(page)).toContainText(renamed);
+  await expect(page.locator('.catalog-resource-link')).toHaveAttribute('href','/development/skills/editkin');
   await expect(publicArticle(page)).not.toContainText(original);await expect(publicArticle(page)).not.toHaveAttribute('data-public-version',firstVersion!);
   const related=page.getByRole('region',{name:'更多工坊分享',exact:true});await expect(related).toContainText(replacement.note);await expect(related).not.toContainText(previous.note);
   await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content',revised);
@@ -270,6 +287,7 @@ test('PUBLIC-POST-11 returning to an open page refreshes revised text, author an
   const withdrawn=page.waitForResponse(response=>response.request().isNavigationRequest()&&new URL(response.url()).pathname===publicPath(post.post_id));
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));expect((await withdrawn).status()).toBe(404);
   await expect(publicArticle(page)).toHaveCount(0);await expect(page.getByRole('heading',{name:'目前無法閱讀這則貼文',exact:true})).toBeVisible();
+  await expect(page.locator('.catalog-resources')).toHaveCount(0);
   await expect(page.locator('meta[property^="og:"]')).toHaveCount(0);
   const unavailable=await page.content();for(const value of [original,revised,renamed,replacement.note,publicApi(post.post_id)+'/image'])expect(unavailable).not.toContain(value);
   expect((await page.request.get(publicApi(post.post_id))).status()).toBe(404);expect((await page.request.get(publicApi(post.post_id)+'/image')).status()).toBe(404);
@@ -350,11 +368,38 @@ test('PUBLIC-POST-13 a delayed signed-in capability response cannot overwrite a 
     // After the old body arrives, allow the next browser paint to flush its
     // promise continuations and any attempted capability DOM updates.
     await author.page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve())));
-    await expect(author.page.locator('[data-post-login]')).toHaveText('登入看更多與留言');
+    await expect(author.page.locator('[data-post-login]')).toHaveText('登入回原貼文交流');
     await expect(author.page.locator('[data-post-login]')).toHaveAttribute('href',loginPath(post.post_id));
     await expect(author.page.locator(`[data-related-post="${related.post_id}"]`)).toHaveAttribute('href',loginPath(related.post_id));
     await expect(author.page.locator('[data-post-join]')).toBeVisible();
-    expect(await author.page.evaluate(()=>(window as any).publicCapabilityChanges)).not.toContain('開啟貼文與討論');
+    expect(await author.page.evaluate(()=>(window as any).publicCapabilityChanges)).not.toContain('回原貼文提問與分享心得');
     await expect(publicArticle(author.page)).toContainText(post.note);
   }finally{release();if(!author.page.isClosed())await author.page.unrouteAll({behavior:'wait'});}
+});
+
+test('PUBLIC-POST-14 no-JS visitors can read three known resources from public text, return, and see no invented empty shelf',async({author,browser})=>{
+  const paths=['local-workspace-mcp','editkin','positioning-companion','freedom-party-guild-lounge'].map(id=>'/development/skills/'+id);
+  // Node public-page metadata uses the configured canonical origin, not the fixture request Host.
+  const note=`我的實作用法-${randomUUID()}\nhttps://freetwai.com${paths[0]}?intro=7\n${paths[0]}\n${paths.slice(1).join('\n')}\nhttps://elsewhere.test${paths[0]}\n${e2eOrigin()}@elsewhere.test${paths[0]}\n/development/skills/unknown-book`;
+  const post=await createPost(author,note);await setSharing(author,post.post_id,true);
+  const empty=await createPost(author,`分享心得但沒有技能連結-${randomUUID()}`);await setSharing(author,empty.post_id,true);
+  const anonymous=await browser.newContext({baseURL:e2eOrigin(),javaScriptEnabled:false,viewport:{width:320,height:420}}),reader=await anonymous.newPage(),writes:string[]=[];
+  reader.on('request',request=>{if(request.method()!=='GET')writes.push(request.url());});
+  try{
+    const response=await reader.goto(publicPath(post.post_id));expect(response?.status()).toBe(200);
+    expect(response?.headers()['cache-control']).toContain('no-store');expect(response?.headers()['x-robots-tag']).toBe('noindex, nofollow');
+    await expect(publicArticle(reader)).toContainText(note);await expect(publicArticle(reader)).toContainText(author.name);
+    const resources=reader.getByRole('region',{name:'貼文提到的技能資源',exact:true});await expect(resources).toBeVisible();
+    await expect(resources.locator('a')).toHaveCount(3);
+    expect(await resources.locator('a').evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual(paths.slice(0,3));
+    await expect(resources).toContainText('原作與授權見資源頁');
+    await resources.locator('a').first().click();await expect(reader).toHaveURL(e2eOrigin()+paths[0]);
+    await expect(reader.getByRole('heading',{name:'Local Workspace MCP 本機工作助手',exact:true})).toBeVisible();
+    await reader.goBack();await expect(reader).toHaveURL(e2eOrigin()+publicPath(post.post_id));
+    await expect(reader.locator('[data-post-login]')).toHaveAttribute('href',loginPath(post.post_id));
+    await reader.goto(publicPath(empty.post_id));await expect(reader.locator('.catalog-resources')).toHaveCount(0);
+    await expect(reader.locator('[data-post-login]')).toHaveText('登入回原貼文交流');
+    expect(await reader.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(writes).toEqual([]);
+  }finally{await anonymous.close();}
 });

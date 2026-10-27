@@ -1,3 +1,4 @@
+import { isReleaseFailureCode } from './failure-codes.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -53,7 +54,7 @@ export function artifactReader(repository, token, fetchImpl = fetch) {
         'release_staging_artifact_digest_mismatch');
       return decodeReceiptArchive(bytes);
     } catch (error) {
-      if (/^release_staging_[a-z_]+$/.test(error?.code ?? '')) throw error;
+      if (isReleaseFailureCode(error?.code) && error.code.startsWith('release_staging_')) throw error;
       throw fail('release_staging_download_failed');
     }
   };

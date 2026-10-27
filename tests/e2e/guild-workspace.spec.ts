@@ -4,6 +4,27 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 const caps={managed_guilds:[{guild_key:'synthetic-guild',name:'測試公會'}],managed_books:[{book_id:'video-autopilot',title:'測試剪輯技能'}],can_discuss:true};
 const announcement={announcement_id:'synthetic-announcement',guild_key:'synthetic-guild',title:'週末共創',body:'帶一段合成素材一起測試。',state:'published',aggregate_version:2,created_at:'2026-09-23T10:00:00Z',updated_at:'2026-09-23T10:00:00Z'};
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();}
+// Observe only one synthetic write. The next task runs after the response-body
+// promise and its synchronous await continuations, not after an arbitrary sleep.
+function installGrantAckProbe({path,title}:{path:string;title:string}){
+ const root=window as any,originalFetch=window.fetch,originalBroadcast=BroadcastChannel.prototype.postMessage;
+ const channels:MessageChannel[]=[];let active=true;
+ const probe={settled:false,reads:0,events:0,restore:()=>{active=false;window.fetch=originalFetch;BroadcastChannel.prototype.postMessage=originalBroadcast;for(const channel of channels){channel.port1.close();channel.port2.close();}}};
+ root.__guildGrantAckProbe=probe;
+ BroadcastChannel.prototype.postMessage=function(message){if(message?.type==='event'&&message.event?.message===title)probe.events++;return originalBroadcast.call(this,message);};
+ window.fetch=async(input,init)=>{
+  const url=new URL(input instanceof Request?input.url:String(input),location.href),method=init?.method??(input instanceof Request?input.method:'GET');
+  const matches=url.origin===location.origin&&url.pathname===path;
+  if(matches&&method==='GET')probe.reads++;
+  let selected=false;if(matches&&method==='POST'&&typeof init?.body==='string'){try{selected=JSON.parse(init.body).title===title;}catch{/* Not the synthetic fixture. */}}
+  const response=await originalFetch(input,init);if(!selected)return response;
+  const read=response.text.bind(response);response.text=async()=>{
+   const text=await read();let fixture=false;try{const value=JSON.parse(text);fixture=response.ok&&value.announcement_id==='synthetic-announcement'&&value.title===title;}catch{/* No valid ACK; never signal settlement. */}
+   if(fixture&&active){const channel=new MessageChannel();channels.push(channel);channel.port1.onmessage=()=>{if(active)probe.settled=true;channel.port1.close();channel.port2.close();};channel.port2.postMessage(null);}
+   return text;
+  };return response;
+ };
+}
 test.beforeEach(async({page})=>{
   await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:caps}));
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:false,connected:false,github_user:null}}));
@@ -134,7 +155,7 @@ test('a pending announcement save survives tab changes and retries an unknown re
 
 test('removing selected management targets clears their hidden drafts without reviving them when grants return',async({page})=>{
   const otherGuild={guild_key:'another-guild',name:'另一公會'},otherBook={book_id:'another-book',title:'另一技能書'};
-  let permissions={...caps,managed_guilds:[...caps.managed_guilds,otherGuild],managed_books:[...caps.managed_books,otherBook]},release=()=>{},saving=false;
+  let permissions={...caps,managed_guilds:[...caps.managed_guilds,otherGuild],managed_books:[...caps.managed_books,otherBook]},release=()=>{},saving=false,failed=false;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:permissions}));
   await page.route('**/api/v1/guilds/*/announcements',async route=>{
@@ -146,8 +167,10 @@ test('removing selected management targets clears their hidden drafts without re
   try{
   await login(page);await navigate(page,'公會管理');
   const workspace=page.locator('.guild-workspace'),tabs=workspace.getByRole('navigation',{name:'公會管理功能'});
+  await page.evaluate(installGrantAckProbe,{path:'/api/v1/guilds/synthetic-guild/announcements',title:'撤權後不可保留的公告'});
   await workspace.getByLabel('公告標題',{exact:true}).fill('撤權後不可保留的公告');
   await workspace.getByLabel(/^公告內容/).fill('原公會待確認的正文');
+  await workspace.getByRole('combobox',{name:'發布狀態',exact:true}).selectOption('published');
   await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await expect.poll(()=>saving).toBe(true);
   await tabs.getByRole('button',{name:'技能書編輯',exact:true}).click();
   await workspace.getByLabel('一句話摘要',{exact:true}).fill('撤權後不可保留的技能草稿');
@@ -160,11 +183,11 @@ test('removing selected management targets clears their hidden drafts without re
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveValue('');
   await workspace.getByLabel('公告標題',{exact:true}).fill('新公會尚未保存的公告');
   const completed=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/guilds/synthetic-guild/announcements'));
-  const oldReload=page.waitForResponse(response=>response.request().method()==='GET'&&response.url().endsWith('/guilds/synthetic-guild/announcements'));
+  const oldReads=await page.evaluate(()=>(window as any).__guildGrantAckProbe.reads);
   release();const completedResponse=await completed;expect(completedResponse.status()).toBe(200);await completedResponse.finished();
-  // The old save clears its local draft before this follow-up read. Waiting for
-  // that continuation makes the replacement-draft assertion deterministic.
-  await (await oldReload).finished();
+  await page.waitForFunction(()=>(window as any).__guildGrantAckProbe.settled===true);
+  expect(await page.evaluate(()=>(window as any).__guildGrantAckProbe.reads)).toBe(oldReads);
+  expect(await page.evaluate(()=>(window as any).__guildGrantAckProbe.events)).toBe(0);
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveValue('新公會尚未保存的公告');
   await expect(workspace.getByLabel('公告標題',{exact:true})).toBeEnabled();
   await expect(workspace.getByText('公告已保存。',{exact:true})).toHaveCount(0);
@@ -182,7 +205,8 @@ test('removing selected management targets clears their hidden drafts without re
   await page.evaluate(()=>window.dispatchEvent(new Event('freedom-profile-updated')));
   await expect(tabs.getByRole('button',{name:'技能書編輯',exact:true})).toHaveCount(0);
   await expect(workspace.getByLabel('公告標題',{exact:true})).toHaveCount(0);await expect(workspace.getByLabel('一句話摘要',{exact:true})).toHaveCount(0);
-  }finally{release();}
+  }catch(error){failed=true;throw error;}
+  finally{release();try{if(!page.isClosed())await page.evaluate(()=>{const root=window as any;root.__guildGrantAckProbe?.restore();delete root.__guildGrantAckProbe;});}catch(error){if(!failed)throw error;}}
 });
 test('a removed skill editor cannot lock its replacement with a late guild-required save rejection',async({page})=>{
   const otherBook={book_id:'another-book',title:'另一技能書'};
@@ -432,4 +456,70 @@ test('council detail recovery clears its read error without losing an unknown re
   await expect(council.getByRole('alert')).toHaveCount(1);await expect(council.getByRole('alert')).toHaveText(writeError);expect(writes).toHaveLength(1);
   await council.getByRole('button',{name:'發布回覆',exact:true}).click();await expect(council.getByRole('status')).toContainText('回覆已發布');await expect(reply).toBeEnabled();await expect(reply).toHaveValue('');
   expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);await expect(council.locator('.guild-council-reply')).toHaveCount(1);
+});
+
+for(const mode of ['create','edit'] as const)for(const denied of [403,412])test(`announcement ${mode} keeps its original tuple after unknown then ${denied} until ACK`,async({page})=>{
+  await page.route('**/api/v1/guild-workspace',route=>route.fulfill({json:{...caps,managed_guilds:[...caps.managed_guilds,{guild_key:'other-synthetic-guild',name:'另一測試公會'}]}}));
+  const calls:{path:string;body:unknown;key:string|undefined;version:string|undefined}[]=[];let reads=0;
+  const respond=async(route:Route)=>{
+    const request=route.request();calls.push({path:new URL(request.url()).pathname,body:request.postDataJSON(),key:request.headers()['idempotency-key'],version:request.headers()['if-match']});
+    if(calls.length===1)return route.fulfill({status:503,json:{detail:'Synthetic committed response lost.'}});
+    if(calls.length===2)return route.fulfill({status:denied,json:{detail:'Synthetic replay denial.'}});
+    return route.fulfill({json:{...announcement,aggregate_version:3}});
+  };
+  await page.route('**/api/v1/guilds/synthetic-guild/announcements',route=>{
+    if(route.request().method()==='POST')return respond(route);
+    reads++;return route.fulfill({json:{items:[{...announcement,aggregate_version:reads>1?99:2}]}});
+  });
+  await page.route('**/api/v1/guild-announcements/synthetic-announcement/edit',respond);
+  await login(page);await navigate(page,'公會管理');const workspace=page.locator('.guild-workspace');
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  if(mode==='edit')await workspace.getByRole('button',{name:'編輯公告',exact:true}).click();
+  const title=workspace.getByRole('textbox',{name:'公告標題',exact:true}),body=workspace.getByRole('textbox',{name:'公告內容',exact:true});
+  await title.fill('尚待確認的原公告');await body.fill('只重試這份原內容。');
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByText('上次保存的結果尚未確認。請用原內容重試，確認前不能修改公告或切換公會。',{exact:true})).toBeVisible();
+  for(const field of [title,body,workspace.getByRole('combobox',{name:'管理公會',exact:true}),workspace.getByRole('combobox',{name:'發布狀態',exact:true})])await expect(field).toBeDisabled();
+  await expect(workspace.getByRole('button',{name:'編輯公告',exact:true})).toBeDisabled();
+  if(mode==='edit')await expect(workspace.getByRole('button',{name:'新增另一則',exact:true})).toBeDisabled();
+  await workspace.getByRole('button',{name:'重新載入列表',exact:true}).click();
+  await expect(workspace.getByRole('heading',{name:announcement.title,exact:true})).toBeVisible();
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toContainText('Synthetic replay denial.');await expect(title).toBeDisabled();
+  await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();
+  expect(calls).toHaveLength(3);expect(calls[0].key).toBeTruthy();expect(calls.every(call=>JSON.stringify(call)===JSON.stringify(calls[0]))).toBe(true);
+  expect(calls[0].version).toBe(mode==='edit'?'"2"':undefined);await expect(title).toBeEnabled();await expect(title).toHaveValue('');
+  await title.fill('確認後的新意圖');await body.fill('第二則獨立公告。');await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+  await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();expect(calls).toHaveLength(4);expect(calls[3].key).not.toBe(calls[0].key);
+});
+
+test('a held announcement ACK after logout cannot enter the replacement session console or start its reads',async({page})=>{
+  const syntheticTitle='Synthetic old-session announcement';let held:Route|undefined,captured!:()=>void,reads=0,writes=0;
+  const requested=new Promise<void>(resolve=>captured=resolve),pattern='**/api/v1/guilds/synthetic-guild/announcements';
+  const handler=(route:Route)=>{if(route.request().method()==='POST'){writes++;if(writes===1){held=route;captured();return;}return route.fulfill({json:{...announcement,...route.request().postDataJSON()}});}reads++;return route.fulfill({json:{items:[]}});};
+  await page.route(pattern,handler);
+  try{
+    await login(page);await navigate(page,'公會管理');const original=await (await page.request.get('/api/v1/session')).json();
+    const workspace=page.locator('.guild-workspace');await workspace.getByRole('textbox',{name:'公告標題',exact:true}).fill(syntheticTitle);await workspace.getByRole('textbox',{name:'公告內容',exact:true}).fill('Synthetic content from the previous session.');await workspace.getByRole('combobox',{name:'發布狀態',exact:true}).selectOption('published');
+    await workspace.getByRole('button',{name:'保存公告',exact:true}).click();await requested;
+    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.locator('.login-card')).toBeVisible();
+    // No page.goto: the old callback must survive in this same document.
+    await page.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();
+    const replacement=await (await page.request.get('/api/v1/session')).json();expect(replacement.user.user_id).not.toBe(original.user.user_id);expect(replacement.csrf_token).not.toBe(original.csrf_token);
+    await navigate(page,'公會管理');await expect(workspace.getByText('尚未建立公告。',{exact:true})).toBeVisible();const settledReads=reads;
+    // Observe only this synthetic event's count, never store other console data.
+    await page.evaluate(title=>{const root=window as any;if(typeof BroadcastChannel==='undefined')throw new Error('BroadcastChannel is required for this console delivery assertion');const original=BroadcastChannel.prototype.postMessage;root.__guildLifetimeProbe={events:0,restore:()=>{BroadcastChannel.prototype.postMessage=original;}};BroadcastChannel.prototype.postMessage=function(message){if(message?.type==='event'&&message.event?.message===title)root.__guildLifetimeProbe.events++;return original.call(this,message);};},syntheticTitle);
+    const oldWrite=held!;const finished=page.waitForEvent('requestfinished',request=>request===oldWrite.request());await oldWrite.fulfill({json:{...announcement,title:syntheticTitle}});held=undefined;await finished;
+    await workspace.getByRole('textbox',{name:'公告標題',exact:true}).fill('Replacement session draft');
+    await expect(workspace.getByRole('textbox',{name:'公告標題',exact:true})).toHaveValue('Replacement session draft');expect(reads).toBe(settledReads);
+    expect(await page.evaluate(()=>(window as any).__guildLifetimeProbe.events)).toBe(0);
+    await workspace.getByRole('textbox',{name:'公告內容',exact:true}).fill('Replacement session body');
+    await workspace.getByRole('button',{name:'保存公告',exact:true}).click();
+    await expect(workspace.getByText('公告已保存。',{exact:true})).toBeVisible();
+    await expect(workspace.getByRole('textbox',{name:'公告標題',exact:true})).toHaveValue('');expect(writes).toBe(2);
+  }finally{
+    if(held){try{await held.abort();}catch{/* Already completed or fixture teardown. */}}
+    await page.unroute(pattern,handler);
+    if(!page.isClosed())await page.evaluate(()=>{const root=window as any;root.__guildLifetimeProbe?.restore();delete root.__guildLifetimeProbe;});
+  }
 });

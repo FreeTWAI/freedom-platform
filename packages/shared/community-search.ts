@@ -26,3 +26,18 @@ export const communitySearchPageSchema = z.object({
   operation_id: z.string().optional(),
 }).strict();
 export type CommunitySearchPage = z.infer<typeof communitySearchPageSchema>;
+
+// Member directory projection only. Guilds are not content-topic, bookmark or
+// participation-metric kinds, and never enter CommunitySearchPage.items.
+export const guildSearchItemSchema = z.object({
+  kind: z.literal('guild'),
+  guild_key: z.string().max(120).regex(/^(guild_[a-z0-9_]+|guild_custom_[0-9A-Fa-f]{32})$/),
+  name: z.string(),
+  purpose: z.string().max(1000), // SQL excerpt: at most 500 Unicode code points.
+  path: z.string(),
+}).strict().refine(item => item.path === `#guilds/${item.guild_key}`);
+export const guildSearchPageSchema = z.object({
+  items: z.array(guildSearchItemSchema).max(20),
+  next_cursor: z.string().max(512).nullable(),
+}).strict();
+export type GuildSearchPage = z.infer<typeof guildSearchPageSchema>;

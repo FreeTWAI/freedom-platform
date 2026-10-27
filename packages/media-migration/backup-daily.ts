@@ -1,3 +1,4 @@
+import { backupDiagnosticCode, isBackupDiagnosticCode } from './backup-diagnostics.js';
 import type { Pool } from 'pg';
 import type { ObjectStore } from '../asset-storage/index.js';
 import { createConsistentAssetBackup } from './backup-coordinator.js';
@@ -101,6 +102,7 @@ export async function runDailyBackup(raw: DailyBackupContext, adapter: DailyBack
   let before: MediaGcObservation | undefined, sealed: RecoverySetVerification | undefined;
   let readback: RecoverySetVerification | undefined, restored: Awaited<ReturnType<typeof restoreRecoverySet>> | undefined;
   let cleanupVerified = false, remoteVerified = false;
+  let phaseCode: string | null = null, cleanupCode: string | null = null;
   let captureId: string | undefined, protectionChecks = 0, protectedAfterRestore = false;
   let publication: Awaited<ReturnType<DailyBackupAdapter['publishAndOpen']>>['publication'] | undefined;
   const proceed = (next: Stage) => { stage = next; if (context.signal.aborted) fail('daily_backup_aborted'); };
@@ -161,6 +163,8 @@ export async function runDailyBackup(raw: DailyBackupContext, adapter: DailyBack
     protectedAfterRestore = context.gcSafety === 'snapshot-pins';
   } catch (error) {
     failedStage = stage;
+    const diagnostic = backupDiagnosticCode(error, 'daily_backup_phase_failed');
+    phaseCode = isBackupDiagnosticCode(diagnostic) ? diagnostic : 'daily_backup_phase_failed';
     code = error instanceof DailyBackupError ? error.code : 'daily_backup_phase_failed';
   } finally {
     stage = 'cleanup';
@@ -174,11 +178,16 @@ export async function runDailyBackup(raw: DailyBackupContext, adapter: DailyBack
         if (Date.parse(result.gc.observedAt) <= Date.parse(before.observedAt)) fail('daily_backup_policy_mismatch');
       } else if (before && assessPostDumpSupersetWindow(before, result.gc).status !== 'superset_window_safe') fail('daily_backup_gc_not_disabled');
       cleanupVerified = true;
-    } catch { failedStage ??= 'cleanup'; code = 'daily_backup_cleanup_failed'; }
+    } catch (error) {
+      const diagnostic = backupDiagnosticCode(error, 'daily_backup_cleanup_failed');
+      cleanupCode = isBackupDiagnosticCode(diagnostic) ? diagnostic : 'daily_backup_cleanup_failed';
+      failedStage ??= 'cleanup'; code = 'daily_backup_cleanup_failed';
+    }
   }
   const passed = !code && !!restored && cleanupVerified && !context.signal.aborted;
   return Object.freeze({ format: 'freedom.daily-recovery-backup/v1', status: passed ? 'passed' : 'failed',
     stage: passed ? 'complete' : failedStage ?? stage, code: code ?? (context.signal.aborted ? 'daily_backup_aborted' : null),
+    phaseCode, cleanupCode,
     environment: context.environment, database: context.database, schema: context.schema, sourceRelease: context.sourceRelease,
     operatorSource: context.operatorSource, setId: context.setId, createdAt: context.createdAt,
     manifestSha256: sealed?.manifestSha256 ?? null, dump: sealed?.dump ?? null, objects: sealed?.objects ?? null,

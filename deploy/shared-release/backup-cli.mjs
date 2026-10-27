@@ -2,8 +2,8 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { githubClient, admitActor, admitRelease, admitInstallation, requireRelease as check } from './admission.mjs';
-import { backupRequestFromEnvironment } from './scheduled-admission.mjs';
+import { githubClient, admitActor, admitRelease, admitInstallation, isReleaseFailureCode, requireRelease as check } from './admission.mjs';
+import { backupRequestFromEnvironment, requireFailedBackup } from './scheduled-admission.mjs';
 import { validatePortableConfig } from './portable/config.mjs';
 import { createCloudflareRecoveryTransport } from './portable/cloudflare.mjs';
 import { verifyApplicationSource } from './portable/build.mjs';
@@ -34,18 +34,27 @@ export async function main(env = process.env) {
     }
     const sourceRoot = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     await verifyApplicationSource(sourceRoot, admission.sourceSha, admission.sourceTree);
+    const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
+    if (recoveryEvidence) receipt.recoveryEvidence = recoveryEvidence;
     check(env.RUNNER_TEMP && !sourceRoot.startsWith(resolve(env.RUNNER_TEMP) + '/'), 'release_runner_paths_invalid');
     const temporaryRoot = join(env.RUNNER_TEMP, `shared-backup-${admission.target}-${admission.runId}-${admission.runAttempt}`);
     await mkdir(temporaryRoot, { mode: 0o700 });
     receipt.status = 'running'; receipt.providerOutcome = 'unknown_until_confirmed';
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await runOperator({ admission, installation, sourceRoot, temporaryRoot, config: env.RELEASE_CONFIG_JSON,
+    receipt.phases = await runOperator({ admission, installation, sourceRoot, temporaryRoot, config: env.RELEASE_CONFIG_JSON, recoveryEvidence,
+      registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
+      onProgress: async phases => {
+        receipt.operatorProgress = phases;
+        await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
+        const current = phases.at(-1);
+        if (current) process.stdout.write(`Backup phase: ${current.name} (${current.reportedStatus})\n`);
+      },
       credentials: { cloudflareApiToken: env.CLOUDFLARE_API_TOKEN, migrationDatabaseUrl: env.MIGRATION_DATABASE_URL,
         runtimeDatabaseUrl: env.RUNTIME_DATABASE_URL, backupDatabaseUrl: env.BACKUP_DATABASE_URL,
         ...(admission.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID, stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}) } });
     receipt.status = 'passed'; receipt.providerOutcome = 'backup_and_restore_confirmed'; receipt.operatorEvidence = 'validated-backup-phases/v1';
   } catch (error) {
-    receipt.status = 'failed'; receipt.error = /^release_[a-z_]+$/.test(error?.code ?? '') ? error.code : 'release_backup_failed';
+    receipt.status = 'failed'; receipt.error = isReleaseFailureCode(error?.code) ? error.code : 'release_backup_failed';
     process.exitCode = 1;
   } finally {
     receipt.completedAt = new Date().toISOString(); await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });

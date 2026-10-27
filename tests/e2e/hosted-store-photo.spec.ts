@@ -2075,7 +2075,7 @@ test('SC-E2E-78 a material upload answered after a business or account switch ch
   const path = (m: typeof m1) => `/api/v1${m.store.root}/supply-materials/${m.id}/content`;
   async function enter(m: typeof m1, switchBusiness = false) {
     if (switchBusiness) await materialConsole(page).getByRole('link', {name: '切換事業', exact: true}).click();
-    else await navigate(page, '我的供貨商品庫');
+    else await navigate(page, '供貨商品管理');
     await page.locator('.hosted-store article').filter({has: page.getByRole('heading', {level: 3, name: `合成素材商品庫 ${m === m1 ? 'A1' : m === m2 ? 'A2' : 'Z1'}-${suffix}`, exact: true})})
       .getByRole('link', {name: '查看商品與供貨', exact: true}).click();
     await materialConsole(page).getByRole('navigation', {name: '營運中心', exact: true}).getByRole('link', {name: '行銷素材', exact: true}).click();

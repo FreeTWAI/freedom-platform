@@ -13,11 +13,15 @@ on:
         type: choice
         options: [staging-next, next]
       mode:
-        description: 'Plan checks version/permissions only; deploy requires installed environment operator'
+        description: 'plan: GitHub admission; check: read-only Cloudflare/Access checks; deploy: installed operator'
         required: true
         type: choice
         default: plan
-        options: [plan, deploy]
+        options: [plan, check, deploy]
+      recover_backup_run_id:
+        description: 'Optional failed BEGIN-only backup to reconcile by readback; never starts a backup'
+        required: false
+        type: string
 permissions:
   contents: read
 # One release across BOTH environments: the current databases/operator schedules
@@ -43,6 +47,7 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: controller
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -55,6 +60,7 @@ jobs:
           RELEASE_SHA: ${{ inputs.release_sha }}
           RELEASE_TARGET: ${{ inputs.target }}
           RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
           RELEASE_COMMAND: admit
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
         run: node controller/deploy/shared-release/cli.mjs
@@ -68,7 +74,7 @@ jobs:
           retention-days: 90
   deploy:
     needs: admission
-    if: needs.admission.outputs.mode == 'deploy'
+    if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check'
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     environment:
@@ -80,14 +86,17 @@ jobs:
       contents: read
       actions: read
       deployments: write
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: controller
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.admission.outputs.mode == 'deploy'
         with:
           ref: ${{ needs.admission.outputs.source_sha }}
           path: source
@@ -104,7 +113,8 @@ jobs:
           CONTROLLER_SHA: ${{ job.workflow_sha }}
           RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
           RELEASE_TARGET: ${{ needs.admission.outputs.target }}
-          RELEASE_MODE: deploy
+          RELEASE_MODE: ${{ needs.admission.outputs.mode }}
+          RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
           RELEASE_COMMAND: execute
           RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
@@ -115,7 +125,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
           RUNTIME_DATABASE_URL: ${{ secrets.RUNTIME_DATABASE_URL }}
-          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: node controller/deploy/shared-release/cli.mjs

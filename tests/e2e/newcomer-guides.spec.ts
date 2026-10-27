@@ -95,6 +95,10 @@ async function expectQuietCompanion(page: Page, blocked = false) {
   await expect(actor(page)).toBeVisible();
   if(blocked) {
     const controls=widget(page).locator('.page-spirit-launcher,.page-spirit-entry-actions button');
+    // Foreign blocking surfaces revoke the helper bridge, not the original guide controls.
+    await expect(widget(page).getByRole('button',{name:'問路助手',exact:true})).toHaveCount(0);
+    await expect(widget(page).getByRole('button',{name:'問本頁',exact:true})).toBeDisabled();
+    await expect(widget(page).getByRole('button',{name:'帶我看',exact:true})).toBeDisabled();
     await expect(controls).toHaveCount(3);
     for(const button of await controls.all()) {
       await expect(button).toBeDisabled();
@@ -230,7 +234,8 @@ test('joined member loads only the current hero before interaction and each perm
       expect(requests.filter(request=>request.pageId==='messages')).toEqual([]);
       continue;
     }
-    await navigate(page,TAB_TITLES[id]);
+    const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : TAB_TITLES[id];
+    await navigate(page,navigationLabel);
     await expect(widget(page)).toHaveAttribute('data-page-id',id);
     const character = SPIRIT_CHARACTERS[id], launcher = widget(page).locator('.page-spirit-launcher');
     await expect(launcher).toHaveAccessibleName(`${character.name}・${character.title}的當頁龍娘`);

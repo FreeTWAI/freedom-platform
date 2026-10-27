@@ -13,7 +13,7 @@ const GuildsPanel = lazy(() => import('../guild-blocks/GuildDirectoryPage').then
 export const guildsFeatures = {
   "home": {
     moduleId: "social-feed", placement: 'page',
-    render: ({client, session, site, selectTab}) => <MemberHome client={client} session={session} onNavigate={selectTab} personalContentEnabled={site?.personal_content_enabled === true} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} shortVideos={site?.short_videos_enabled === true} onOpenSupply={() => selectTab('stores', '#stores/supply')} firstParticipationEnabled={site?.first_participation_enabled===true}/>,
+    render: ({client, session, site, selectTab, openHomeJournal}) => <MemberHome openHomeJournal={openHomeJournal} bookmarksEnabled={site?.community_search_enabled===true && site.community_relations_enabled===true} client={client} session={session} onNavigate={selectTab} personalContentEnabled={site?.personal_content_enabled === true} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} shortVideos={site?.short_videos_enabled === true} onOpenSupply={() => selectTab('stores', '#stores/supply')} firstParticipationEnabled={site?.first_participation_enabled===true}/>,
   },
   "positioning": {
     moduleId: "positioning", placement: 'page',

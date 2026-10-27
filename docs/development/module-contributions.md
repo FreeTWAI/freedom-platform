@@ -69,7 +69,7 @@ node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --scope community-se
 node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --paths modules/community-calendar/freedom.module.json,modules/community-calendar/README.md,modules/community-calendar/index.ts,modules/community-calendar/service.ts,tests/runtime/community-calendar.test.ts
 ```
 
-新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；建立 descriptor 是解除這個特定 blocker 的工作，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
+新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；這是警告而非 blocker，仍保留全庫規則與 fallback suites，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
 
 核對輸出的 repository、head、base 與 affected modules。小範圍輸出 `freedom.coding-context/v1`，讀完 `context_path` 指向的 bundle；大範圍輸出 manifest，依 `chunk_count` 讀完所有 chunk，再檢查完整性：
 
@@ -115,9 +115,9 @@ npm run typecheck
 npm run build
 ```
 
-`module:check` 檢查 `apps/`、`modules/`、`packages/` 的 TS、JS 與 CSS 產品來源；回報會列出完整掃描範圍與排除項。測試、型別宣告、生成或 vendor 資料及已編譯 public assets 不納入產品來源統計，手寫 public JS / CSS 與 production fixtures 仍納入。真正的依賴、引用檔或來源歸屬問題會使命令失敗。現有 `test:governance` 會執行真實 checkout 的來源覆蓋測試，新增未歸屬程式會讓 CI 失敗。
+`module:check` 檢查 `apps/`、`modules/`、`packages/` 的 TS、JS 與 CSS 產品來源；回報會列出完整掃描範圍與排除項。測試、型別宣告、生成或 vendor 資料及已編譯 public assets 不納入產品來源統計，手寫 public JS / CSS 與 production fixtures 仍納入。schema、依賴、引用檔與循環問題會使命令失敗；未歸屬程式只印出 `surface_unmapped` 警告，selector 仍保守跑 full。現有 `test:governance` 會檢查真實 checkout 的 descriptor 與引用。
 
-檢查沒有證明 import 隔離、runtime 註冊、授權或業務行為；這些仍需對應測試與審查。`--paths` 可協助診斷局部路徑，但不能用局部結果宣稱全庫通過。也不要刪掉舊 ownership、降低既有測試或提高 descriptor 上限來消除錯誤；同一個專屬功能資料夾可使用合理的 `/**`，混合目錄則明確列出來源。
+檢查沒有證明 import 隔離、runtime 註冊、授權或業務行為；這些仍需對應測試與審查。`--paths` 可協助診斷局部路徑，但不能用局部結果宣稱全庫通過。也不要刪掉舊 ownership 或降低既有測試來消除錯誤；owned_paths 上限為 256（含未被涵蓋的 descriptor 自身）；同一個專屬功能資料夾可使用合理的 `/**`，混合目錄則明確列出來源。
 
 依實際範圍執行既有 runtime、契約、governance 與瀏覽器驗證，再以固定 baseline 產生本機報告：
 
@@ -129,3 +129,5 @@ git diff --check
 需要資料庫的測試先準備獨立、可丟棄的 PostgreSQL；CLI 使用明確的 `TEST_DATABASE_URL`，設定規則見 [本機 runtime](local-runtime.md) 與 [governance](../../governance/README.md)。缺資料庫、瀏覽器或固定行為證據時，寫實際的 `not_run` / unavailable 與原因；`verify` 的 exit 2 不是成功，也不要求為了開 PR 假造所有驗收已完成。新功能模組目前仍會保留 `registration_behavior_audit_required`；即使選定測試通過，也要列出 runtime 註冊與行為審查的未驗項。不要為了消除檢查錯誤重建歷史 inventory；依本次 PR 實際套用的 CI 要求執行，source-boundaries 與 pin 轉換狀態見 [驗證說明](../../scripts/ci/release-inventory.md)。
 
 最後 push 自己的分支，建立 PR 到中央 `main`。使用自動帶入的 PR 模板交代問題、結果、模組、跨模組依賴、實跑命令與未驗項。新功能若需要 migration 或旗標，再說明其啟用條件與回退限制。PR、CI 成功與功能正式啟用是不同狀態；合併及部署依既有 [貢獻發布途徑](contribution-release-paths.md) 辦理。
+
+寫清楚本輪完成條件、未驗項目與原因；卡點與下一棒依既有[發布途徑](contribution-release-paths.md)由維護者更新同一則摘要。

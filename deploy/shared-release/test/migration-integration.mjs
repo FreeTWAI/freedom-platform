@@ -10,7 +10,7 @@ import { readMigrationSources } from '../../../packages/db/migration-files.mjs';
 import { runMigrationPlan } from '../../../packages/db/migration-runner.mjs';
 import { LEGACY_MIGRATIONS } from '../../../packages/db/migration-plan.mjs';
 import { observeBackupControl } from '../portable/backup.mjs';
-import { preparePortableMigration, runPortableMigration, observeMigrationOutcome } from '../portable/migration.mjs';
+import { preparePortableMigration, runPortableMigration, observeMigrationOutcome, verifyUnchangedSchema } from '../portable/migration.mjs';
 import { runCanonicalSql } from '../portable/canonical-sql.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 
@@ -96,13 +96,30 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.equal(intentCalls, 0); assert.equal(floorCalls, 0);
 
     const goodRoot = await journalRoot('migration-confirmed');
-    const result = await runPortableMigration({ ...args, journalRoot: goodRoot });
+    const result = await runPortableMigration({ ...args, independent: true, beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined, journalRoot: goodRoot });
     assert.equal(result.outcome, 'committed'); assert.equal(result.commitStatus, 'confirmed');
     assert.deepEqual(result.applied, [pending]); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 1);
+    assert.deepEqual(result.probes.map(value => value.role), [runtime]);
     assert(result.probes.every(value => value.readOnly && value.tables > 300));
     assert.equal((await pool.query('SELECT count(*)::int count FROM shared_release_fixture')).rows[0].count, 1);
     const nextPlan = prepare(plan.afterLedger); let commits = 0;
+    const readOnlySql = [], codePool = { async connect() {
+      const q = await pool.connect(); return { release: destroy => q.release(destroy), async query(sql, values) {
+        readOnlySql.push(sql); return q.query(sql, values);
+      } };
+    } };
+    const codeArgs = { pool: codePool, runtimePool, database, plan: nextPlan, expected, lease,
+      floor: { assertCurrent: async () => lease.assertHeld(), verifyDatabase: async q => {
+        assert.deepEqual((await q.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, plan.afterLedger);
+      } } };
+    assert.equal((await verifyUnchangedSchema(codeArgs)).readOnly, true);
+    assert(readOnlySql.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+    assert(!readOnlySql.some(sql => /^(COMMIT|UPDATE|DELETE|INSERT|ALTER|CREATE|GRANT)/i.test(sql)));
+    await assert.rejects(verifyUnchangedSchema({ ...codeArgs, plan }), { code: 'release_schema_change_requires_migration' });
+    await assert.rejects(verifyUnchangedSchema({ ...codeArgs, expected: { ...expected, materialPolicySha256: 'f'.repeat(64) } }),
+      { code: 'release_migration_policy_changed' });
+
     const lostReply = { async connect() {
       const client = await pool.connect();
       return { on: (...items) => client.on(...items), removeListener: (...items) => client.removeListener(...items),
@@ -113,7 +130,8 @@ INSERT INTO shared_release_fixture VALUES(1);
         } };
     } };
     const unknownRoot = await journalRoot('migration-unknown');
-    await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot }), /synthetic lost COMMIT reply/);
+    await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot, independent: true,
+      beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined }), /synthetic lost COMMIT reply/);
     assert.equal(commits, 1); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 2);
     const failure = JSON.parse(await readFile(join(unknownRoot, 'failed.json'))); assert.equal(failure.commitStatus, 'unknown');
@@ -124,8 +142,8 @@ INSERT INTO shared_release_fixture VALUES(1);
     await assert.rejects(runPortableMigration({ ...args, plan: nextPlan, journalRoot: unknownRoot }), { code: 'EEXIST' });
     assert.equal(commits, 1); lease.assertHeld();
     return { status: 'passed', realMigratorRole: true, migrationAndGrantsAtomic: true, existingIntentRefusesReplay: true,
-      actualRuntimeAndBackupProbes: true, unknownCommitObservedWithoutReplay: true,
-      failedSharedIntentRollsBack: true,
+      actualRuntimeProbe: true, directBackupRoleProbe: 'not_run_independent_release', unknownCommitObservedWithoutReplay: true,
+      failedSharedIntentRollsBack: true, codeReleaseChecksSchemaWithoutMutationOrBackup: true,
       sourceInstallationVerified: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
   } finally {
     if (lease) await lease.release();

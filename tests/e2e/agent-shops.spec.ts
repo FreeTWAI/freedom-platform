@@ -21,7 +21,7 @@ async function archiveUpload(page:Page,value:{name:string}){
 }
 
 test('AI-first shops download complete MD, preview/import files, select catalog and register a public shop',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await login(page);await navigate(page,'我有東西要賣');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await login(page);await navigate(page,'AI 整理供貨商品');
  await expect(page.getByRole('heading',{name:'有商品，就能開始。',exact:true})).toBeVisible();
  await expect(page.getByLabel('商品名稱',{exact:true})).toHaveCount(0);
  const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();const d=await waiting;
@@ -37,7 +37,7 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await privateShop.getByRole('button',{name:'產生／重建連線金鑰'}).click();const privateToken=await privateShop.getByLabel('一次性顯示的連線金鑰').inputValue();await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();
  // The removed sweep ended at 320px; keep the remaining real business journey on phone.
  await page.setViewportSize({width:320,height:900});
- await signOut(page);await login(page,'client@local.test');await navigate(page,'我可以賣東西');
+ await signOut(page);await login(page,'client@local.test');await navigate(page,'AI 製作銷售網站');
  await expect(page.getByRole('button',{name:'下載公開商店 MD',exact:true})).toBeDisabled();
  await page.getByRole('region',{name:'挑選這次想賣的商品',exact:true}).getByLabel('搜尋商品',{exact:true}).fill('AI 茶葉目錄');
  await page.getByLabel('選入「AI 茶葉目錄」',{exact:true}).check();
@@ -51,12 +51,12 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  await publicShop.getByRole('button',{name:'查看訂單與付款'}).click();await expect(publicShop.getByText('目前沒有訂單。完成金流與商店連線後，交易會出現在這裡。',{exact:true})).toBeVisible();
  await publicShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await publicShop.getByRole('button',{name:'產生／重建連線金鑰'}).click();await expect(publicShop.getByLabel('一次性顯示的連線金鑰')).toHaveValue(/^fw_shop_/);const publicToken=await publicShop.getByLabel('一次性顯示的連線金鑰').inputValue();
  await publicShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await expect(publicShop.getByLabel('一次性顯示的連線金鑰')).toHaveCount(0);
- await signOut(page);await login(page);await navigate(page,'我有東西要賣');
+ await signOut(page);await login(page);await navigate(page,'AI 整理供貨商品');
  const requests=page.getByRole('region',{name:'待接受的實際售價',exact:true});
  await expect(requests.getByRole('heading',{name:'AI 茶葉目錄',exact:true})).toBeVisible();
  await requests.getByRole('button',{name:'接受這一版售價',exact:true}).click();
  await expect(requests.getByText('已接受這一版售價',{exact:true})).toBeVisible();
- await signOut(page);await login(page,'client@local.test');await navigate(page,'我可以賣東西');
+ await signOut(page);await login(page,'client@local.test');await navigate(page,'AI 製作銷售網站');
  const selling=page.getByRole('region',{name:'我的公開商店',exact:true}).getByRole('article').filter({has:page.getByRole('heading',{name:manifest.name,exact:true})});
  await selling.getByRole('button',{name:'查看訂單與付款'}).click();
  const headers={Authorization:`Bearer ${publicToken}`},privateHeaders={Authorization:`Bearer ${privateToken}`};
@@ -67,7 +67,7 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  expect((await page.request.post(`/shop-api/v1/transfers/${transfer.transfer_id}/payment-link`,{headers:privateHeaders,data:{url:'https://private.example.com/pay/browser-order'}})).status()).toBe(200);
  await selling.getByRole('button',{name:'重新整理訂單'}).click();await expect(selling.getByRole('link',{name:'支付商品成本'})).toHaveAttribute('href','https://private.example.com/pay/browser-order');
  expect((await page.request.post(`/shop-api/v1/orders/${order.order_id}/transfers/${transfer.transfer_id}/payment`,{headers:privateHeaders,data:{...receipt,event_id:'browser-cost-paid',transaction_ref:'browser-cost-transaction',amount_minor:36000}})).status()).toBe(200);
- await signOut(page);await login(page);await navigate(page,'我有東西要賣');await privateShop.getByRole('button',{name:'查看訂單與付款'}).click();await privateShop.getByText('登記出貨',{exact:true}).click();
+ await signOut(page);await login(page);await navigate(page,'AI 整理供貨商品');await privateShop.getByRole('button',{name:'查看訂單與付款'}).click();await privateShop.getByText('登記出貨',{exact:true}).click();
  await privateShop.getByLabel('物流公司',{exact:true}).fill('合成物流');await privateShop.getByLabel('物流單號',{exact:true}).fill('BROWSER-SYNTHETIC');await privateShop.getByLabel('出貨日期與時間',{exact:true}).fill('2026-09-01T10:00');await privateShop.getByRole('button',{name:'保存出貨登記'}).click();await expect(privateShop.getByText(/出貨方已登記：.*BROWSER-SYNTHETIC/)).toBeVisible();
  const read=await page.request.get(`/shop-api/v1/orders/${order.order_id}`,{headers});expect((await read.json()).transfers[0].shipment.source).toBe('shipper_entered');
  expect(errors).toEqual([]);
@@ -75,13 +75,13 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
 
 for(const kind of ['internal','public'] as const)test(`${kind} shop layout keeps readable controls inside the workspace at every viewport`,async({page})=>{
  // Each layout case owns its setup; none borrows a shop from the business journey.
- await login(page,'reviewer@local.test');await navigate(page,'我有東西要賣');
+ await login(page,'reviewer@local.test');await navigate(page,'AI 整理供貨商品');
  const internal={...productManifest,mode:'test',name:`版型 ${kind} 供貨店`,products:[{...productManifest.products[0],sku:`LAYOUT-${kind}`,title:`版型 ${kind} 商品`}]};
  const internalId=await archiveUpload(page,internal);let shopName=internal.name;
  if(kind==='public'){
   const catalog=await page.request.get('/api/v1/commerce/catalog'),item=(await catalog.json()).items.find((row:any)=>row.shop_id===internalId);
   const manifest={schema:'freedom-shop/v1',mode:'test',kind:'public',name:'版型公開選物店',description:'合成版型資料',website_url:'https://layout.example.com',contact:'合成客服',currency:'TWD',selections:[{item_id:item.item_id,retail_price_minor:50000,sale_terms:'合成選品條件'}]};
-  await navigate(page,'我可以賣東西');await archiveUpload(page,manifest);shopName=manifest.name;
+  await navigate(page,'AI 製作銷售網站');await archiveUpload(page,manifest);shopName=manifest.name;
  }
  const card=page.getByRole('region',{name:kind==='internal'?'我的內部商店':'我的公開商店',exact:true}).getByRole('article').filter({has:page.getByRole('heading',{name:shopName,exact:true})});
  const controls=[card.getByRole('link',{name:kind==='internal'?'開啟我的內部商店':'開啟公開商店',exact:true}),card.getByRole('button',{name:'查看訂單與付款',exact:true}),card.getByRole('button',{name:/接單/})];
@@ -119,14 +119,14 @@ for(const kind of ['internal','public'] as const)test(`${kind} shop layout keeps
 });
 
 test('bad or wrong-role manifests never create a shop; form stays simple',async({page})=>{
- await login(page,'reviewer@local.test');await navigate(page,'我可以賣東西');
+ await login(page,'reviewer@local.test');await navigate(page,'AI 製作銷售網站');
  await upload(page,productManifest);await expect(page.getByRole('alert')).toContainText('請到另一個開店入口匯入');await expect(page.getByRole('button',{name:'確認並歸檔'})).toHaveCount(0);
  await upload(page,{...productManifest,api_key:'must-not-import'});await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByRole('button',{name:'確認並歸檔'})).toHaveCount(0);
  await page.getByText('我有成果檔網址',{exact:true}).click();await page.getByLabel('成果檔網址',{exact:true}).fill('https://127.0.0.1/secrets.json');await page.getByRole('button',{name:'讀取成果',exact:true}).click();await expect(page.getByRole('alert')).toContainText('原始 JSON');
 });
 
 test('result files reject malformed UTF-8, clear stale previews and preserve valid Unicode at the byte limit',async({page})=>{
- await login(page);await navigate(page,'我有東西要賣');await page.setViewportSize({width:320,height:900});
+ await login(page);await navigate(page,'AI 整理供貨商品');await page.setViewportSize({width:320,height:900});
  // Literal U+FFFD is valid input; only malformed source bytes must fail.
  const value={...productManifest,mode:'test',name:'UTF-8 合成茶店 🫖 �',products:[{...productManifest.products[0],sku:'UTF8-ROUNDTRIP',title:'茶葉 🫖 �'}]};
  const json=Buffer.from(JSON.stringify(value)),bom=Buffer.from([0xef,0xbb,0xbf]);
@@ -164,7 +164,7 @@ test('result files reject malformed UTF-8, clear stale previews and preserve val
 });
 
 test('escaped 24KB result rejects inner scalars, then confirms and replays exact SQL content on phone',async({page,e2eAuthPool})=>{
- await login(page);await navigate(page,'我有東西要賣');await page.setViewportSize({width:320,height:900});
+ await login(page);await navigate(page,'AI 整理供貨商品');await page.setViewportSize({width:320,height:900});
  const value='繁中😀𐀀�\\u0000\\ud800\\udc00';
  const manifest={...productManifest,mode:'test',name:'24KB 跳脫保真成果',products:Array.from({length:10},(_,i)=>({...productManifest.products[0],sku:`ESCAPED-${i}`,description:value+'\\'.repeat(950),shipping_terms:value,return_terms:value}))};
  const md='# 合成成果\n```json\n'+JSON.stringify(manifest)+'\n```';
@@ -196,8 +196,8 @@ test('escaped 24KB result rejects inner scalars, then confirms and replays exact
 
 test('both shop page guides open and close without clipping on phone',async({page})=>{
  await login(page);await page.setViewportSize({width:320,height:900});
- for(const title of ['我有東西要賣','我可以賣東西']){
-  await navigate(page,title);await openPageTools(page); await page.getByRole('button',{name:'頁面說明',exact:true}).click();
+ for(const [label, title] of [['AI 整理供貨商品', '我有東西要賣'], ['AI 製作銷售網站', '我可以賣東西']]){
+  await navigate(page,label);await openPageTools(page); await page.getByRole('button',{name:'頁面說明',exact:true}).click();
   const guide=page.getByRole('dialog',{name:`${title}：頁面說明`,exact:true});
   await expect(guide).toBeVisible();
   const summary=guide.locator('.page-tools-lead'),steps=guide.locator('.page-tools-help-steps li');
@@ -210,7 +210,7 @@ test('both shop page guides open and close without clipping on phone',async({pag
 });
 
 for(const nextEmail of ['reviewer@local.test','maker@local.test'])test(`a pending file read cannot preview under a replacement login (${nextEmail})`,async({page})=>{
- await login(page);await navigate(page,'我有東西要賣');
+ await login(page);await navigate(page,'AI 整理供貨商品');
  const previews:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/commerce/preview')previews.push(request.postData()??'');});
  await page.evaluate(()=>{
   const state=window as unknown as {heldFile?:{started:boolean;release:()=>void}};
@@ -223,7 +223,7 @@ for(const nextEmail of ['reviewer@local.test','maker@local.test'])test(`a pendin
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {heldFile:{started:boolean}}).heldFile.started)).toBe(true);
  await signOut(page);
  // Keep this document alive: a page.goto() would discard the held File promise.
- await page.getByLabel('電子郵件',{exact:true}).fill(nextEmail);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();await navigate(page,'我有東西要賣');
+ await page.getByLabel('電子郵件',{exact:true}).fill(nextEmail);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();await navigate(page,'AI 整理供貨商品');
  await page.evaluate(async()=>{(window as unknown as {heldFile:{release:()=>void}}).heldFile.release();await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
  expect(previews).toEqual([]);await expect(page.getByRole('heading',{name:`確認這次成果：${productManifest.name}`,exact:true})).toHaveCount(0);
  await upload(page,productManifest);await expect(page.getByRole('heading',{name:`確認這次成果：${productManifest.name}`,exact:true})).toBeVisible();
@@ -231,7 +231,7 @@ for(const nextEmail of ['reviewer@local.test','maker@local.test'])test(`a pendin
 });
 
 test('a completed kit response cannot download after its page is replaced',async({page})=>{
- await login(page);await navigate(page,'我有東西要賣');
+ await login(page);await navigate(page,'AI 整理供貨商品');
  let entered!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
  const downloads:string[]=[];page.on('download',download=>downloads.push(download.suggestedFilename()));
  const path='**/api/v1/commerce/agent-kit';
@@ -241,6 +241,6 @@ test('a completed kit response cannot download after its page is replaced',async
   await navigate(page,'會員首頁');const completed=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/commerce/agent-kit');release();await completed;
   await page.evaluate(async()=>{await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
   expect(downloads).toEqual([]);await page.unroute(path);
-  await navigate(page,'我有東西要賣');const current=page.waitForEvent('download');await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();await current;expect(downloads).toHaveLength(1);
+  await navigate(page,'AI 整理供貨商品');const current=page.waitForEvent('download');await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();await current;expect(downloads).toHaveLength(1);
  }finally{release();await page.unroute(path);}
 });
