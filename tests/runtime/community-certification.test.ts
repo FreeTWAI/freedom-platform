@@ -57,6 +57,30 @@ test('initial virtual CAS, application, explicit display opt-in and manual appro
  assert.deepEqual(Object.keys(current).sort(),['aggregate_version','policy_version','show_community_certification','state','statement']);
  assert.equal((await own(m)).response.headers.get('cache-control'),'private, no-store');
 });
+test('display toggles preserve review proof and audit for every reviewed state; resubmission clears proof',async()=>{
+ const a=await administrator();
+ for(const reviewedState of ['active','rejected','revoked'] as const){
+  const m=await member(`Applicant ${reviewedState}`);await apply(m);
+  assert.equal((await decide(a,m,{...review,decision:reviewedState==='rejected'?'reject':'approve'})).status,200);
+  if(reviewedState==='revoked')assert.equal((await decide(a,m,{...review,decision:'revoke'},3)).status,200);
+  const proof=async()=>(await pool.query('SELECT reviewed_by,reviewer_user_id,reviewed_at,statement FROM member_community_certifications WHERE user_id=$1',[m.id])).rows[0];
+  const before=await proof();assert.equal(before.reviewed_by,a.id);assert.equal(before.reviewer_user_id,a.member.id);assert.ok(before.reviewed_at);
+  const auditBefore=(await pool.query('SELECT * FROM platform_admin_audit ORDER BY audit_id')).rows;
+  let version=(await state(m)).aggregate_version;
+  for(const visible of [true,false]){
+   const result=await own(m,{show_community_certification:visible},version,undefined,'display');
+   assert.equal(result.status,200,JSON.stringify(result.data));assert.equal(result.data.state,reviewedState);
+   assert.equal(result.data.show_community_certification,visible);assert.equal(result.data.aggregate_version,++version);
+   assert.deepEqual(await proof(),before);
+   assert.deepEqual((await pool.query('SELECT * FROM platform_admin_audit ORDER BY audit_id')).rows,auditBefore);
+  }
+  if(reviewedState!=='active'){
+   const result=await own(m,application,version);assert.equal(result.status,200);assert.equal(result.data.state,'pending');
+   const after=await proof();assert.equal(after.reviewed_by,null);assert.equal(after.reviewer_user_id,null);assert.equal(after.reviewed_at,null);
+   assert.deepEqual((await pool.query('SELECT * FROM platform_admin_audit ORDER BY audit_id')).rows,auditBefore);
+  }
+ }
+});
 test('display first never grants certification and first-use races honor CAS',async()=>{
  const m=await member('Applicant');const results=await Promise.all([own(m,{show_community_certification:true},1,undefined,'display'),own(m,application,1)]);
  assert.deepEqual(results.map(x=>x.status).sort(),[200,412]);assert.equal(await count('member_community_certifications'),1);assert.notEqual((await state(m)).state,'active');

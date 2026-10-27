@@ -38,13 +38,18 @@ export async function changeOwnCertification(pool:Pool,input:Command,action:'app
   if(action==='apply')await authRateLimitInTransaction(q,'community-certification-application',input.actor.user_id,3,86400);
   const statement=action==='apply'?(body as z.infer<typeof ApplicationInput>).statement:previous.statement;
   const display=action==='display'?(body as z.infer<typeof DisplayInput>).show_community_certification:previous.show_community_certification;
-  const row=(await q.query<Row>(`INSERT INTO member_community_certifications(user_id,community_id,state,statement,show_community_certification,aggregate_version)
-   VALUES($1,$2,$3,$4,$5,2) ON CONFLICT(user_id) DO UPDATE SET state=$3,statement=$4,show_community_certification=$5,
-   aggregate_version=member_community_certifications.aggregate_version+1,updated_at=clock_timestamp(),
-   reviewed_by=CASE WHEN $6 THEN NULL ELSE member_community_certifications.reviewed_by END,
-   reviewer_user_id=CASE WHEN $6 THEN NULL ELSE member_community_certifications.reviewer_user_id END,
-   reviewed_at=CASE WHEN $6 THEN NULL ELSE member_community_certifications.reviewed_at END RETURNING ${columns}`,
-   [input.actor.user_id,input.actor.community_id,state,statement,display,action==='apply'])).rows[0];
+  // CHECK constraints run on an INSERT candidate before ON CONFLICT. Reviewed
+  // rows must be updated directly so display changes retain their review proof.
+  const values=[input.actor.user_id,input.actor.community_id,state,statement,display];
+  const row=previous===empty
+   ?(await q.query<Row>(`INSERT INTO member_community_certifications(user_id,community_id,state,statement,show_community_certification,aggregate_version)
+     VALUES($1,$2,$3,$4,$5,2) RETURNING ${columns}`,values)).rows[0]
+   :(await q.query<Row>(`UPDATE member_community_certifications SET state=$3,statement=$4,show_community_certification=$5,
+     aggregate_version=aggregate_version+1,updated_at=clock_timestamp(),
+     reviewed_by=CASE WHEN $6 THEN NULL ELSE reviewed_by END,
+     reviewer_user_id=CASE WHEN $6 THEN NULL ELSE reviewer_user_id END,
+     reviewed_at=CASE WHEN $6 THEN NULL ELSE reviewed_at END
+     WHERE user_id=$1 AND community_id=$2 RETURNING ${columns}`,[...values,action==='apply'])).rows[0];
   await journal(q,input.actor,'community_certification',input.actor.user_id,row.aggregate_version,`certification_${action}`,{state,show_community_certification:display});
   // No private application text or stale badge assertion in replayable receipts.
   return {updated:true};

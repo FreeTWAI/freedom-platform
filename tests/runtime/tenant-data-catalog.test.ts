@@ -251,6 +251,24 @@ test('T-021 installed schema matches the frozen tenant data catalog', async () =
   }
 });
 
+test('T-021 personal profile asset coverage fails closed on each omitted location and upload target', async () => {
+  await rolled(async q => {
+    const snapshot = await liveSnapshot(q);
+    assert.deepEqual(checkTenantCatalog(snapshot, TENANT_DATA_CATALOG), []);
+    for (const table of ['member_profile_cover_targets', 'member_profile_cover_versions', 'member_profile_publications']) {
+      const missing: TenantDataCatalog = { ...TENANT_DATA_CATALOG, datasets: TENANT_DATA_CATALOG.datasets.map(dataset => ({
+        ...dataset, physical_locations: dataset.physical_locations.filter(location => location.kind !== 'table' || location.table !== table),
+      })) };
+      assert.deepEqual(checkTenantCatalog(snapshot, missing), [{ code: 'unregistered_table', subject: table }]);
+    }
+    const missingColumn: TenantDataCatalog = { ...TENANT_DATA_CATALOG, datasets: TENANT_DATA_CATALOG.datasets.map(dataset => ({
+      ...dataset, physical_locations: dataset.physical_locations.map(location => location.kind === 'table' && location.table === 'asset_upload_intents'
+        ? { ...location, columns: location.columns.filter(column => column !== 'target_profile_cover_id') } : location),
+    })) };
+    assert.deepEqual(checkTenantCatalog(snapshot, missingColumn), [{ code: 'unregistered_column', subject: 'asset_upload_intents.target_profile_cover_id' }]);
+  });
+});
+
 test('T-021 catalog checker rejects unregistered columns, tables, policy drift, force, and unbounded retention', async () => {
   assert.deepEqual(await rolled(async q => checkTenantCatalog(await liveSnapshot(q), TENANT_DATA_CATALOG)), []);
   assert.deepEqual(await rolled(async q => {
