@@ -1,7 +1,14 @@
-# 個人空間訪客投影：第一階段後端候選
+# 個人空間訪客投影：整合候選與歷史設計
 
-基準 `4d2484286a82e5795826ffe9e743cbaef33b86a6`。已提交 [Draft PR #1135](https://github.com/FreeTWAI/freedom-platform/pull/1135)，未部署、未啟用；**完整功能尚未完成**。
-依 [Ted #1135 最新更正](https://github.com/FreeTWAI/freedom-platform/pull/1135#issuecomment-6442736697)，本地改用main最小空號 `191_member_profile_publications.sql`。與 #1043 同號是明確允許的暫定碰撞；後合併者由Ted同步檔名、部署last、preflight期望與release recognition後改號。沒有修改known_gaps或引入GoogleSQL。先前191缺190的失敗收據保留。新表的精確檔名納入FOUNDATION_NAMES，只代表辨識schema，不授予公開、合併或部署權限；runtime grants／隔離DB／原生驗證仍未執行。
+## 目前整合狀態（2026-10-27，PR #1147 head `6d0e89d6`）
+
+[Draft PR #1147](https://github.com/FreeTWAI/freedom-platform/pull/1147) 已在 `6d0e89d6744220924e65f8adc632ce68e39483e5` 整合 main `bdcbb74209db4017fd87375d5f5ad79816b21d85` 的 Google 登入與 `190_google_identity.sql`；主頁、封面佈置、社群認證與社群稱號依序暫編 **191–194**。Google190 與所有已發布歷史 SQL 位元組不變，沒有更改 `known_gaps` 或正式環境已套用版本。這是已推送供審查的 Draft，不是已合併、已部署或已啟用；6d 的 hosted runtime 分組已通過，但原生 UI 仍有一項失敗；不能把局部通過當成完整驗收。
+
+下列第一／第二階段內容是 #1135 的歷史設計紀錄，不是目前整合狀態清單；其文字-only DTO、未含認證欄位等限制描述歷史版本。目前佈置與隱藏區塊界線見本文後半，認證與稱號另遵守各模組契約與本人獨立同意。
+
+## 第一階段歷史候選（2026-10-27 整理）
+
+早期基準為 `4d2484286a82e5795826ffe9e743cbaef33b86a6`，提交於 [Draft PR #1135](https://github.com/FreeTWAI/freedom-platform/pull/1135)。[Ted 當時的暫編協調](https://github.com/FreeTWAI/freedom-platform/pull/1135#issuecomment-6442736697) 與未引入 Google SQL 的說明僅適用該早期候選；目前排序已由上方 6d 整合取代。先前 migration 缺號的失敗收據保留。精確檔名納入 `FOUNDATION_NAMES` 只代表辨識 schema，不授予公開、合併或部署權限。
 
 ## 獨立同意與範圍
 
@@ -21,7 +28,7 @@
 
 兩種reader都沒有列表、搜尋、分頁或私人inventory fanout。所有回應no-store、Vary:Cookie、noindex/nofollow，不發ETag，不以If-None-Match回304。每次重新讀目前權限；已下載的內容無法追回。單一SQL快照是文字讀取的權限判定點；不承諾撤銷能抹除已完成讀取。
 
-## 第二階段本地候選（未發布、原生與 DB 未驗）
+## 第二階段歷史候選（當時本地原生與 DB 未驗）
 
 已加入Owner可見範圍設定與草稿預覽、visitor頁面、既有名錄頭像點擊連結、好友incoming/outgoing/accepted/self狀態與既有私訊入口。會員投影使用單一SQL／HTTP回應的 `{profile,actions}`；匿名契約不變，沒有actions。頭像必須另有明確同意、版本綁定及物件讀取前後權限重查；第一階段不接受include_avatar，不把私人頭像URL放入DTO。
 好友／私訊只在本人點擊後沿用既有command與server封鎖／會員資格；看個人頁不自動建立對話或送訊息。不把mute當ACL，不發明friends-only私訊限制。
@@ -29,7 +36,31 @@
 
 ## 驗證界線
 
-Pure policy/schema與synthetic HTTP檢查不等於PostgreSQL ACL／並行交易驗證。DB完整測試、migration／grants、撤銷競態、hosted CI均待具備安全的schema分配與環境。瀏覽器／原生驗證未執行；不重試已知Chromium/socket限制、不使用本地DB、不安裝套件。
+Pure policy/schema 與 synthetic HTTP 檢查不等於 PostgreSQL ACL／並行交易驗證。必須分開記錄執行環境與精確 head：
+
+- **本地**：6d 候選跑過純測試、TypeScript、portal Vite compile 與瀏覽器測試列舉；本地 PostgreSQL／原生瀏覽器仍為 `not_run`。不重試已知 Chromium/socket 限制、不啟動本地 DB、不安裝套件。
+- **較早 head 的 hosted CI**：見下方精確來源紀錄；不是「所有 hosted CI 都未執行」，也不是目前 6d 或正式環境的驗收證明。
+- **目前 6d**：hosted runtime 8 個分組通過；原生 UI 為 1,703 通過、58 跳過、1 失敗，詳見下方精確來源。正式環境限制角色 grants、封面儲存／decoder／policy 啟用與更廣泛競態的缺口，不能由有限測試計數推論已關閉。
+
+### 目前 6d hosted 結果（2026-10-27）
+
+`6d0e89d6744220924e65f8adc632ce68e39483e5` 的 [run 40587917162](https://github.com/FreeTWAI/freedom-platform/actions/runs/40587917162)：
+
+- [runtime aggregate job 122503792041](https://github.com/FreeTWAI/freedom-platform/actions/runs/40587917162/job/122503792041)：8 個 runtime 分組通過。
+- [原生 UI job 122487202144](https://github.com/FreeTWAI/freedom-platform/actions/runs/40587917162/job/122487202144)：1,703 通過、58 跳過、1 失敗。主題欄位已越過；失敗出現在 `getByLabel('關於我',{exact:true})` 同時匹配文字欄位與區塊顯示 checkbox。該失敗案例後續的取消／重設／封面相關斷言尚不能宣稱通過。
+
+本次後續修正候選以明確 textbox role 限定編輯欄位；上述數字只屬於修正前 6d，不能移作後續 commit 的驗收結果。原生 UI 尚未全綠，也不是正式環境驗收。
+
+### 已核對的較早 hosted 結果（不是 6d 驗收）
+
+`44d58e17260e609828567ef9a4b4b2aeb27a4624` 的 [run 40575890632](https://github.com/FreeTWAI/freedom-platform/actions/runs/40575890632) 已有真實 hosted 執行紀錄：
+
+- [runtime job 122442912400](https://github.com/FreeTWAI/freedom-platform/actions/runs/40575890632/job/122442912400)：社群認證 19、tenant-data catalog 31 項通過。
+- [runtime job 122442912051](https://github.com/FreeTWAI/freedom-platform/actions/runs/40575890632/job/122442912051)：社群稱號 17 項通過。
+- [runtime aggregate job 122460030424](https://github.com/FreeTWAI/freedom-platform/actions/runs/40575890632/job/122460030424)：8 個 runtime 分組成功。
+- [原生 UI job 122442911999](https://github.com/FreeTWAI/freedom-platform/actions/runs/40575890632/job/122442911999)：1,662 通過、1 失敗、58 跳過；失敗為 profile 主題欄位的精確 label 定位。6d 已修正主題 label；新 head 的不同失敗與結果另列上方，不混用兩次結果。
+
+這些是各測試檔案／分組在 44 head 的有限結果，不代表所有封面流程、正式環境角色權限或所有競態均已驗證，也不授權啟用任何功能。
 
 ## 跨功能文字／認證界線
 
@@ -74,9 +105,11 @@ earlier historical SQL bytes remain unchanged. The new policy row defaults unava
 quota, retention, and production policy activation are operator decisions outside this
 code grant. UI displays real availability instead of a fake successful upload. Routes are
 unconditionally mounted, so eventual deployment requires the integrated schema first.
-Local pure/SSR/mock-HTTP checks are not a DB/privacy proof. Native browser, PostgreSQL,
-restricted-role grants and real concurrent races for customization remain `not_run` here;
-hosted checks of older ab8 text-only candidate are distinct evidence.
+Local pure/SSR/mock-HTTP checks are not a DB/privacy proof. Native browser and PostgreSQL
+remain `not_run` **locally**; this does not erase separately recorded hosted results on older
+heads. Older ab8 text-only evidence and the 44d58e integration evidence above must not be
+attributed to current 6d. Production restricted-role grants, storage/decoder/policy activation
+and broader cover/concurrency gaps remain separate, unproven acceptance obligations.
 
 
 ## Hidden-block visitor data boundary
