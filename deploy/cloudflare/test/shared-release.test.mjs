@@ -18,7 +18,7 @@ import { backupObjectStore, backupTar, bytesStream, newBackupDirectories } from 
 import { openCapturePolicy } from '../../shared-release/portable/capture-policy.mjs';
 import { createWorkerDeployer, renderWorkerConfig, assertReleasePredecessor } from '../../shared-release/portable/deploy.mjs';
 import { readFlagDecisions, validateFlagDecisions, applyFlagDecisions, plannedFlagChanges, publicFlagChanges } from '../../shared-release/portable/flag-decisions.mjs';
-import { backupExpectation } from '../../shared-release/portable/backup.mjs';
+import { backupExpectation } from '../../shared-release/portable/backup-expectation.mjs';
 import { parseJsonc } from '../lib/wrangler.mjs';
 import { buildApplication, directoryDigest } from '../../shared-release/portable/build.mjs';
 import { git as fixtureGit } from './migration-fixtures.mjs';

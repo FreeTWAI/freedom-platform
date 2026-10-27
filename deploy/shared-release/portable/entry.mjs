@@ -16,7 +16,8 @@ import { createCloudflareRecoveryTransport, waitForPublicRelease } from './cloud
 import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
-import { runPortableBackup, backupExpectation } from './backup.mjs';
+import { runPortableBackup } from './backup.mjs';
+import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
