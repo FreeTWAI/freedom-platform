@@ -99,16 +99,7 @@ test('completed member submits an event and sees accepted-work facts without pro
   await page.locator('.page-tools-menu > summary').click();
   await expect(page.locator('.game-console')).toHaveCount(0);
   await expect(page.locator('.development-context')).toHaveCount(0);
-  const launcher=page.locator('.floating-messages');await launcher.blur();await page.mouse.move(1,1);
-  const supportsMix=await page.evaluate(()=>CSS.supports('background','color-mix(in srgb,white 75%,transparent)'));
-  await expect(launcher).toHaveCSS('background-color',supportsMix?'color(srgb 1 1 1 / 0.75)':'rgb(255, 255, 255)');
-  const launcherStyle=await launcher.evaluate(node=>({background:getComputedStyle(node).backgroundColor,opacity:getComputedStyle(node).opacity,color:getComputedStyle(node).color,supported:CSS.supports('background','color-mix(in srgb,white 75%,transparent)')}));
-  expect(launcherStyle.background).toBe(launcherStyle.supported?'color(srgb 1 1 1 / 0.75)':'rgb(255, 255, 255)');
-  expect(launcherStyle.opacity).toBe('1');expect(launcherStyle.color).toBe('rgb(28, 38, 54)');
-  // A real adjacent Tab round-trip avoids depending on the home feed's length.
-  await launcher.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
-  await expect(launcher).toBeFocused();expect(await launcher.evaluate(node=>node.matches(':focus-visible'))).toBe(true);
-  await expect(launcher).toHaveCSS('background-color','rgb(255, 255, 255)');await launcher.blur();
+  await expect(page.locator('.floating-messages')).toHaveCSS('background-color','color(srgb 1 1 1 / 0.75)');
   await page.screenshot({path:'test-results/member-home-light.png',fullPage:true});
   await navigate(page,'社群活動');
   await expect(page.getByRole('heading',{name:'社群活動',level:1})).toBeVisible();

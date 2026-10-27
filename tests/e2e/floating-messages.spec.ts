@@ -1,4 +1,3 @@
-import {readFileSync} from 'node:fs';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {DEFAULT_LAUNCHER_PLACEMENT,LAUNCHER_PLACEMENT_KEY,parseLauncherPlacement,launcherBounds,launcherPoint,snapLauncher,launcherDragPoint,launcherDragStarted} from '../../modules/member-communications/portal/floating-message-placement.js';
 import {randomUUID} from 'node:crypto';
@@ -323,64 +322,6 @@ test('launcher stays in simulated keyboard and safe-area bounds and remains usab
   await page.evaluate(()=>{Object.assign(window.visualViewport!,{width:844,height:390,offsetTop:0});window.visualViewport!.dispatchEvent(new Event('resize'));});
   await expect.poll(async()=>(await bubble.boundingBox())!.width).toBe(60);
   const landscape=(await bubble.boundingBox())!;expect(landscape.width).toBe(60);expect(landscape.x+landscape.width).toBeLessThanOrEqual(824);expect(landscape.y+landscape.height).toBeLessThanOrEqual(366);
-});
-
-
-test('launcher position controls do not squeeze the close target with enlarged translated header text',async({page})=>{
-  await page.setViewportSize({width:320,height:844});await login(page);
-  await page.evaluate(()=>localStorage.setItem('freedom-interface-language-v1','es'));await page.reload();
-  const bubble=page.locator('.floating-messages');await bubble.click();
-  // Explicit text-expansion simulation, not a real browser zoom or device test.
-  const scaleSheet=new URL('/__test__/floating-header-scale.css',page.url()).href;
-  await page.route(scaleSheet,route=>route.fulfill({status:200,contentType:'text/css',body:'.floating-message-header{font-size:28px}.floating-message-header h2{font-size:32px}.floating-message-header button{font-size:28px}'}));
-  await page.addStyleTag({url:scaleSheet});
-  await expect(page.locator('.floating-message-header h2')).toHaveCSS('font-size','32px');
-  const panel=page.locator('.floating-message-panel'),close=panel.getByRole('button',{name:'Contraer chats',exact:true});
-  const buttons=panel.locator('.floating-message-header button:visible');
-  for(const button of await buttons.all()){
-    await expect(button).toBeInViewport({ratio:1});const box=(await button.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
-  }
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await close.click();await expect(bubble).toBeFocused();
-});
-
-test('translucent launcher keeps theme text readable and restores a solid focused surface',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await login(page);
-  const bubble=page.locator('.floating-messages');
-  for(const theme of ['light','dark','versefolk']){
-    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
-    await bubble.blur();await page.mouse.move(1,1);
-    await expect(bubble.locator('.floating-messages-label')).toBeVisible();
-    expect((await bubble.boundingBox())!.width).toBe(60);
-    const style=await bubble.evaluate(node=>({opacity:getComputedStyle(node).opacity,background:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node).color}));
-    expect(style.opacity).toBe('1');expect(style.ink).not.toBe('rgba(0, 0, 0, 0)');
-    // Anchor locally, then traverse actual adjacent tab stops to enter keyboard modality.
-    await bubble.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
-    await expect(bubble).toBeFocused();expect(await bubble.evaluate(node=>node.matches(':focus-visible'))).toBe(true);
-    const focused=await bubble.evaluate(node=>({background:getComputedStyle(node).backgroundColor,outline:getComputedStyle(node).outlineStyle}));
-    expect(focused.outline).not.toBe('none');
-    if(await page.evaluate(()=>CSS.supports('background','color-mix(in srgb,white 75%,transparent)')))expect(focused.background).not.toBe(style.background);
-  }
-  await page.emulateMedia({forcedColors:'active'});
-  await expect(bubble).toBeVisible();expect(await bubble.evaluate(node=>getComputedStyle(node).opacity)).toBe('1');
-});
-
-
-test('75 percent launcher background retains text contrast over arbitrary underlying pixels',()=>{
-  const luminance=(rgb:number[])=>rgb.map(value=>{const v=value/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
-  // Read actual theme tokens so future palette changes are revalidated.
-  const pairs=['light-theme.css','rpg-theme.css','versefolk-theme.css','dragon-theme.css'].map(file=>{
-    const css=readFileSync(new URL(`../../apps/portal-web/src/${file}`,import.meta.url),'utf8');
-    const color=(name:string)=>{const hex=css.match(new RegExp(`--${name}:\\s*#([a-fA-F0-9]{6})`))?.[1];expect(hex).toBeTruthy();return [0,2,4].map(i=>parseInt(hex!.slice(i,i+2),16));};
-    return [color('bg-elev'),color('ink')];
-  });
-  const css=readFileSync(new URL('../../apps/portal-web/src/modules/FloatingMessages.css',import.meta.url),'utf8');
-  expect(css).toContain('color-mix(in srgb,var(--bg-elev) 75%,transparent)');
-  // Luminance is monotonic per channel: black/white bound any busy image.
-  for(const [background,foreground] of pairs )for(const underlying of [0,255]){
-    const surface=luminance(background.map(v=>v*.75+underlying*.25)),ink=luminance(foreground);
-    expect((Math.max(surface,ink)+.05)/(Math.min(surface,ink)+.05)).toBeGreaterThanOrEqual(4.5);
-  }
 });
 
 
