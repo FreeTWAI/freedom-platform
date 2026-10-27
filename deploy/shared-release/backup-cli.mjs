@@ -2,7 +2,7 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { githubClient, admitActor, admitRelease, admitInstallation, requireRelease as check } from './admission.mjs';
+import { githubClient, admitActor, admitRelease, admitInstallation, isReleaseFailureCode, requireRelease as check } from './admission.mjs';
 import { backupRequestFromEnvironment, requireFailedBackup } from './scheduled-admission.mjs';
 import { validatePortableConfig } from './portable/config.mjs';
 import { createCloudflareRecoveryTransport } from './portable/cloudflare.mjs';
@@ -54,7 +54,7 @@ export async function main(env = process.env) {
         ...(admission.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID, stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}) } });
     receipt.status = 'passed'; receipt.providerOutcome = 'backup_and_restore_confirmed'; receipt.operatorEvidence = 'validated-backup-phases/v1';
   } catch (error) {
-    receipt.status = 'failed'; receipt.error = /^release_[a-z_]+$/.test(error?.code ?? '') ? error.code : 'release_backup_failed';
+    receipt.status = 'failed'; receipt.error = isReleaseFailureCode(error?.code) ? error.code : 'release_backup_failed';
     process.exitCode = 1;
   } finally {
     receipt.completedAt = new Date().toISOString(); await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
