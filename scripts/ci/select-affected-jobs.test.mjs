@@ -9,11 +9,13 @@ import { validateDescriptor, ROOT_INSTRUCTIONS, selectImpact, owns } from '../..
 import {
   ALWAYS_ON_INTEGRITY_COMMANDS, DOCS_ALLOWLIST_PREFIXES, GENERATED_INVENTORY_PATH, JOB_OUTPUT_KEYS, SELECTABLE_JOBS, FRONTEND_LEAF_PROFILES, FRONTEND_LEAF_JOBS,
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
-  heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
+  deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
   MINIMAL_JOB_PROFILES, decideMinimalProfile,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { PINNED_SUITES } from '../../packages/contribution-tools/pinned-suites.mjs';
+import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const selector = fileURLToPath(new URL('./select-affected-jobs.mjs', import.meta.url));
@@ -1354,4 +1356,250 @@ test('minimal lanes use clean exact integration Git blobs, reject executable blo
   git(['add',planReceiptPaths[0]]);git(['update-index','--chmod=+x',planReceiptPaths[0]]);git(['commit','-qm','executable head']);
   const executableHead=git(['rev-parse','HEAD']), executableCandidate=merge(executableBase,executableHead);
   assert.equal(collectRepositoryDecision({...input,base:executableBase,head:executableHead,candidate:executableCandidate}).mode,'full');
+});
+
+test('delivery tooling runs its existing coverage on PR and main without unrelated product jobs', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-delivery-select-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const git = (args, input) => execFileSync('/usr/bin/git', ['-C', directory, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
+    input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 'Delivery Test', GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Delivery Test', GIT_COMMITTER_EMAIL: 'test@example.invalid'},
+  }).trim();
+  const put = async (path, body) => { await mkdir(dirname(join(directory, path)), {recursive: true}); await writeFile(join(directory, path), body); };
+  const commit = message => { git(['add', '.']); git(['commit', '-qm', message]); return git(['rev-parse', 'HEAD']); };
+  const merge = (base, head) => { const sha = git(['commit-tree', git(['rev-parse', `${head}^{tree}`]), '-p', base, '-p', head], 'integration\n'); git(['checkout', '-q', sha]); return sha; };
+  git(['init', '-q', '-b', 'main']);
+  const descriptors = [
+    moduleDescriptor('governance', ['scripts/ci/**', '.github/workflows/verify.yml', 'packages/contribution-tools/**'], {tests:['governance.unit','runtime.full']}),
+    moduleDescriptor('media-migration', ['packages/media-migration/**', 'tests/runtime/media-backup-daily.test.ts'], {tests:['runtime.full']}),
+    moduleDescriptor('shared-release', ['deploy/shared-release/**', '.github/workflows/shared-release.yml'], {dependencies: ['governance', 'media-migration'],tests:['governance.unit','runtime.full']}),
+  ];
+  for (const d of descriptors) await put(`modules/${d.module_id}/freedom.module.json`, JSON.stringify(d));
+  const paths = ['deploy/shared-release/portable/entry.mjs', '.github/workflows/shared-release.yml',
+    'packages/media-migration/backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
+    'scripts/ci/select-affected-jobs.mjs', '.github/workflows/verify.yml', GENERATED_INVENTORY_PATH];
+  for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('before'):'// before\n');
+  const registryPath='packages/contribution-tools/pinned-suites.mjs';
+  const registry=await readFile(join(root,registryPath),'utf8');
+  const dailyLine=registry.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  await put(registryPath,registry.replace(dailyLine,''));
+  const base = commit('base');
+  await put(registryPath,registry);
+  for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('after'):'// after\n');
+  await put('packages/media-migration/backup-diagnostics.ts', 'new diagnostic helper\n');
+  const head = commit('release and daily backup'), candidate = merge(base, head);
+  const input = {repository: directory, event: 'pull_request', base, head, candidate};
+  const selected = collectRepositoryDecision(input);
+  assert.equal(selected.reason, 'delivery_tooling');
+  assert.deepEqual(Object.entries(selected.jobs).filter(([, run]) => run).map(([id]) => id), ['deploy-preflight']);
+  assert.deepEqual(collectRepositoryDecision({...input, event: 'push', head: candidate}), selected);
+  const results = Object.fromEntries(SELECTABLE_JOBS.map(id => [id, selected.jobs[id] ? 'success' : 'skipped']));
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true);
+  for (const result of ['skipped', 'failure', 'cancelled'])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected, {...results, 'deploy-preflight': result})).ok, false);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results, {integrity: 'failure'})).ok, false);
+  for (const extra of [{candidate: head}, {base: head}, {head: base}, {event: 'merge_group'}])
+    assert.equal(collectRepositoryDecision({...input, ...extra}).mode, 'full');
+  await put(paths[0], 'dirty\n'); assert.equal(collectRepositoryDecision(input).mode, 'full'); git(['checkout', '--', paths[0]]);
+  // Mixing even one product/helper, migration, descriptor or unrelated control
+  // change must restore its wider coverage; operator naming grants no exemption.
+  for (const path of ['apps/portal-web/src/App.tsx', 'modules/agent-commerce/hosted/store.ts',
+    'packages/media-migration/inventory.ts', 'packages/db/migrations.ts',
+    '.github/workflows/codeql.yml', 'deploy/shared-release/freedom.module.json',
+    'scripts/ci/run-pinned-suite.mjs']) {
+    git(['checkout', '-q', head]); await put(path, 'mixed\n');
+    const mixed = commit('mixed change'), integration = merge(base, mixed);
+    assert.equal(collectRepositoryDecision({...input, head: mixed, candidate: integration}).mode, 'full', path);
+  }
+  git(['checkout', '-q', head]); git(['rm', paths[0]]); const deleted = commit('delete');
+  assert.equal(collectRepositoryDecision({...input, head: deleted, candidate: merge(base, deleted)}).mode, 'full');
+  git(['checkout', '-q', head]); git(['update-index', '--chmod=+x', paths[0]]); git(['commit', '-qm', 'mode']);
+  const mode = git(['rev-parse', 'HEAD']); git(['checkout', '--', paths[0]]);
+  assert.equal(collectRepositoryDecision({...input, head: mode, candidate: merge(base, mode)}).mode, 'full');
+  git(['checkout', '-q', head]);
+  const restoreTest = 'deploy/cloudflare/test/media-restore-container.test.mjs';
+  await put(restoreTest, '// already-covered operator harness\n');
+  await put('modules/media-migration/freedom.module.json', JSON.stringify({...descriptors[1],
+    owned_paths: [...descriptors[1].owned_paths, restoreTest]}));
+  const owner = commit('assign operator harness owner');
+  assert.deepEqual(collectRepositoryDecision({...input, head: owner, candidate: merge(base, owner)}), selected);
+  for(const changed of [registry.replace('timeoutMs: 900000','timeoutMs: 900001'),registry.replace("loader: 'node'","loader: 'tsx'")]) {
+    git(['checkout','-q',candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await put(registryPath,changed);const wrong=commit('existing suite change');
+    assert.equal(collectRepositoryDecision({...input,head:wrong,candidate:merge(base,wrong)}).mode,'full');
+  }
+  // Each counterexample starts from the admitted exact integration.
+  for (const replacement of [deliveryWorkflow('after').replace('npm run test:e2e','exit 1'),
+    deliveryWorkflow('after').replace('  pull_request:', '  push:')]) {
+    git(['checkout','-q',candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await put('.github/workflows/verify.yml',replacement);
+    const wrong=commit('unrelated workflow behavior');
+    assert.equal(collectRepositoryDecision({...input,head:wrong,candidate:merge(base,wrong)}).mode,'full');
+  }
+  for (const extra of [
+    moduleDescriptor('new-consumer',['modules/new/**'],{dependencies:['shared-release'],tests:['governance.unit','runtime.full']}),
+    {...moduleDescriptor('instruction-consumer',['modules/other/**']),instructions:['deploy/shared-release/AGENTS.md']},
+  ]) {
+    git(['checkout','-q',head]);await put('modules/'+extra.module_id+'/freedom.module.json',JSON.stringify(extra));
+    await put('deploy/shared-release/AGENTS.md','local instructions');const adopted=commit('adopted consumer');
+    await put('deploy/shared-release/AGENTS.md','changed local instructions');await put(paths[0],'// changed controller');
+    const next=commit('controller with consumer');
+    assert.equal(collectRepositoryDecision({...input,base:adopted,head:next,candidate:merge(adopted,next)}).mode,'full');
+  }
+  git(['checkout', '-q', head]);
+  await put('modules/governance/freedom.module.json', JSON.stringify({...descriptors[0], tests: ['runtime.full']}));
+  const drift = commit('descriptor drift');
+  assert.equal(collectRepositoryDecision({...input, head: drift, candidate: merge(base, drift)}).mode, 'full');
+});
+
+test('delivery CI retains native restore and daily backup diagnostics in its selected job', async () => {
+  const workflow = await readFile(workflowPath, 'utf8');
+  const job = jobBlock(workflow, 'deploy-preflight');
+  assert.match(job, /--suite ci\.deploy-preflight/);
+  assert.match(job, /--suite ci\.migration-postgres/);
+  assert.match(job, /postgres-integration\.mjs --source \./);
+  assert.match(job, /run-pinned-suite\.mjs --root \. --suite ci\.daily-backup/);
+  assert.match(job, /node node_modules\/typescript\/bin\/tsc --noEmit/);
+  assert.match(jobBlock(workflow, 'select'), /github\.event\.pull_request\.base\.sha \|\| github\.event\.before/);
+});
+
+function deliveryWorkflow(value) {
+  return `name: Verify
+on:
+  pull_request:
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ${value}
+  deploy-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ${value}
+  ui-e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: npm run test:e2e
+`;
+}
+
+test('delivery Verify comparison preserves unrelated jobs and global execution policy', async () => {
+  const before=deliveryWorkflow('before'),after=deliveryWorkflow('after');
+  assert.equal(deliveryVerifyWiringOnly(before,after),true);
+  for(const changed of [after.replace('npm run test:e2e','exit 1'),after.replace('name: Verify','name: Other'),
+    after.replace('  pull_request:', '  push:'),after+'permissions:\n  contents: write\n',
+    after.replace('run: echo after','run: &shared echo after'),after.replace('  ui-e2e:', '  runtime-full:')])
+    assert.equal(deliveryVerifyWiringOnly(before,changed),false);
+  const actual=await readFile(workflowPath,'utf8');
+  assert.equal(deliveryVerifyWiringOnly(actual,actual),true,'real workflow expressions are not YAML tags');
+  assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('Verify complete daily backup orchestration evidence','Daily coverage')),true);
+  assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('--suite ci.worker-unit','--suite ci.unknown')),false);
+  for(const header of ['  \"outside-job\":','  outside_job:']) {
+    const appended=actual+'\n'+header+'\n    runs-on: ubuntu-24.04\n    steps:\n      - run: exit 1\n';
+    assert.equal(deliveryVerifyWiringOnly(actual,appended),false,header);
+  }
+});
+
+
+test('actual delivery coverage keeps daily-backup bounded and rejects new consumers, instructions and suites', () => {
+  const sha=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  const loaded=loadModuleDescriptors(root,sha);assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const files=parseLsTreeZ(execFileSync('git',['-C',root,'ls-tree','-r','-z',sha],{encoding:'utf8',maxBuffer:16000000})).files;
+  const cache=new Map(),read=path=>{
+    if(!cache.has(path))cache.set(path,execFileSync('git',['-C',root,'show',sha+':'+path],{encoding:'utf8',maxBuffer:16000000}));
+    return cache.get(path);
+  };
+  const paths=['deploy/shared-release/operator.mjs','packages/media-migration/backup-daily.ts'];
+  const prove=(g=graph,f=files,r=read)=>deliveryCoverageProven([g,g],paths,[{graph:g,files:f,read:r}]);
+  assert.equal(prove(),true,'the real graph/source positive must narrow before checking negative mutations');
+  for(const mutate of [
+    g=>g.set('new-consumer',moduleDescriptor('new-consumer',['modules/new/**'],{dependencies:['shared-release'],tests:['governance.unit','runtime.full']})),
+    g=>g.set('new-media-consumer',moduleDescriptor('new-media-consumer',['modules/new-media/**'],{dependencies:['media-migration'],tests:['runtime.full']})),
+    g=>g.get('shared-release').tests.push('ui.default'),
+    g=>g.get('media-migration').tests.push('runtime.member-card'),
+    g=>g.get('community').instructions.push(paths[0]),
+    g=>g.get('media-migration').public_exports.push(paths[1]),
+  ]) {const g=structuredClone(graph);mutate(g);assert.equal(prove(g),false);}
+  const path='modules/community/events.ts',f=new Map(files);
+  assert.ok(owns(graph.get('community'),path),'owned consumer is checked by the selector');
+  f.set(path,{mode:'100644',type:'blob',oid:oid()});
+  for(const source of [
+    "import {runDailyBackup} from '../../packages/media-migration/backup-daily.js';",
+    "export * from '../../packages/media-migration/backup-diagnostics.js';",
+    "const x=import('../../packages/media-migration/backup-daily.js');",
+    "const target=process.env.TARGET; const x=import(target);",
+    "import Alias = require('../../packages/media-migration/backup-daily.js');",
+  ]) assert.equal(prove(graph,f,p=>p===path?source:read(p)),false,source);
+  assert.equal(prove(graph,f,p=>p===path?"export const unaffected=1;":read(p)),true);
+});
+
+
+test('unowned ownership warnings do not bypass the retained delivery import boundary', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'fp-delivery-ownership-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const sha=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  execFileSync('git',['clone','--quiet','--shared','--no-checkout',root,directory],{stdio:'pipe'});
+  execFileSync('git',['-C',directory,'checkout','--quiet',sha],{stdio:'pipe'});
+  const gate='packages/contribution-tools/test/modules-repository.test.mjs';
+  assert.ok(PINNED_SUITES['ci.governance-unit'].baseline.includes(gate));
+  assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(command=>command.includes('--suite ci.governance-unit')));
+  const run=()=>spawnSync(process.execPath,['--test',join(directory,gate)],{cwd:directory,encoding:'utf8',env:verificationEnvironment()});
+  const positive=run();assert.equal(positive.status,0,positive.stdout+positive.stderr);
+  assert.match(positive.stdout,/pass 1/,'the mandatory test actually executed');
+  const path='modules/community/review-consumer.ts';
+  await writeFile(join(directory,path),"import {runDailyBackup} from '../../packages/media-migration/backup-daily.js';\n");
+  const warned=run();assert.equal(warned.status,0,warned.stdout+warned.stderr);
+  assert.match(warned.stdout+warned.stderr,/surface_unmapped/);
+  assert.ok((warned.stdout+warned.stderr).includes(path));
+  const loaded=loadModuleDescriptors(directory,sha);assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  const prove=source=>deliveryCoverageProven([graph,graph],['deploy/shared-release/operator.mjs'],[{graph,files,read:()=>source}]);
+  assert.equal(prove('export const unrelated=1;'),true);
+  assert.equal(prove(await readFile(join(directory,path),'utf8')),false);
+  // Ownership is now an advisory warning. Literal delivery imports still expand
+  // selection; an independent mandatory integrity failure still fails verify.
+  const selected={mode:'affected',reason:'delivery_tooling',jobs:Object.fromEntries(SELECTABLE_JOBS.map(id=>[id,id==='deploy-preflight']))};
+  const results={...allResults('skipped'),'deploy-preflight':'success'};
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,results)).ok,true);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,results,{integrity:'failure'})).ok,false);
+});
+
+
+test('daily registry exception preserves all existing suites and required completeness coverage', async () => {
+  const after=await readFile(join(root,'packages/contribution-tools/pinned-suites.mjs'),'utf8');
+  const line=after.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  const before=after.replace(line,'');
+  assert.equal(deliveryDailyRegistryAddition(before,after),true);
+  for(const changed of [after.replace("loader: 'node'","loader: 'tsx'"),
+    after.replace('timeoutMs: 900000','timeoutMs: 900001'),after.replace("database: true","database: false"),
+    after.replace("pattern: /^[a-z]","pattern: /^[b-z]"),after+line,
+    after.replace('tests/runtime/media-backup-daily.test.ts','tests/runtime/other.test.ts'),
+    after.replace("'ci.worker-unit':","'ci.renamed-worker':")])
+    assert.equal(deliveryDailyRegistryAddition(before,changed),false);
+  assert.equal(deliveryDailyRegistryAddition(after,before),false);
+  assert.ok(PINNED_SUITES['ci.governance-unit'].baseline.includes('packages/contribution-tools/test/pinned-suite.test.mjs'));
+  assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(c=>c.includes('--suite ci.governance-unit')));
+  const integrity=jobBlock(await readFile(workflowPath,'utf8'),'source-integrity');
+  assert.match(integrity,/\n      - run: node \.freedom\/trusted\/scripts\/ci\/run-pinned-suite\.mjs --root \. --suite ci\.governance-unit\n/);
+});
+
+
+test('owned outside source cannot introduce literal delivery consumers without a declared dependency', () => {
+  const loaded=loadModuleDescriptors(root,'HEAD');assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const path='packages/contribution-tools/io.mjs';
+  assert.ok(loaded.descriptors.some(d=>owns(d,path)),'fixture is already owned');
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  for(const changed of ['packages/media-migration/backup-daily.ts','deploy/shared-release/operator.mjs']) {
+    const prove=source=>deliveryCoverageProven([graph,graph],[changed],[{graph,files,read:()=>source}]);
+    assert.equal(prove('export const unrelated=1;'),true);
+    for(const target of ['../media-migration/backup-daily.js','../../deploy/shared-release/operator.mjs'])
+      for(const source of [`import * as x from '${target}';`,`export * from '${target}';`,
+        `const x=import('${target}');`,`const x=require('${target}');`,`type T=import('${target}').T;`])
+        assert.equal(prove(source),false,changed+': '+source);
+  }
 });

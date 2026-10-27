@@ -6,6 +6,11 @@ export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
   Hao0321: 126182090, 'detna-vibe-coding': 267743027 });
 export const PHASES = Object.freeze(['preflight', 'backup-before', 'migration', 'deploy',
   'health', 'backup-after', 'handoff']);
+export const INDEPENDENT_PHASES = Object.freeze(['preflight', 'migration', 'deploy', 'health', 'handoff']);
+export const releasePhases = request => {
+  requireRelease(request.releaseKind === undefined || request.releaseKind === 'independent', 'release_contract_invalid');
+  return request.releaseKind === 'independent' ? INDEPENDENT_PHASES : PHASES;
+};
 export const requireRelease = (condition, code) => {
   if (!condition) throw Object.assign(new Error(code), { code });
 };
@@ -28,9 +33,13 @@ export function requestFromEnvironment(env) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
       && positiveId(Number(env[key])), 'release_run_identity_invalid');
   }
-  return { format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
+  const recovery = env.RELEASE_RECOVER_BACKUP_RUN_ID;
+  requireRelease(!recovery || (env.RELEASE_MODE === 'deploy' && /^[1-9][0-9]{0,15}$/.test(recovery)
+    && positiveId(Number(recovery)) && String(Number(recovery)) === recovery && recovery !== env.GITHUB_RUN_ID),
+  'release_backup_recovery_request_invalid');
+  return { ...(recovery ? { recoverRunId: Number(recovery) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
-    mode: env.RELEASE_MODE, controllerSha: env.CONTROLLER_SHA,
+    mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID),
     triggeringActor: env.GITHUB_TRIGGERING_ACTOR,
     runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) };
@@ -174,7 +183,10 @@ export async function requireStaging(api, admission, installation) {
     && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
   requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
-    && receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1'
+    && (receipt.releaseKind === undefined || receipt.releaseKind === 'independent')
+    && (receipt.releaseKind === 'independent'
+      ? receipt.releaseKind === 'independent' && receipt.providerOutcome === 'release_confirmed' && receipt.operatorEvidence === 'validated-independent-release/v1'
+      : receipt.providerOutcome === 'release_and_recovery_confirmed' && receipt.operatorEvidence === 'validated-seven-phases/v1')
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
     && receipt.controllerSha === binding.controllerSha && receipt.target === 'staging-next' && receipt.mode === 'deploy'
@@ -186,10 +198,10 @@ export async function requireStaging(api, admission, installation) {
   let previous = Date.parse(receipt.admittedAt);
   requireRelease(Number.isFinite(start) && Number.isFinite(previous) && Number.isFinite(completed) && Number.isFinite(end)
     && previous >= start && completed >= previous && completed <= end && end <= Date.now() + 60_000
-    && Array.isArray(receipt.phases) && receipt.phases.length === PHASES.length, 'release_staging_receipt_invalid');
+    && Array.isArray(receipt.phases) && receipt.phases.length === releasePhases(receipt).length, 'release_staging_receipt_invalid');
   for (const [index, phase] of receipt.phases.entries()) {
     const from = Date.parse(phase.startedAt), to = Date.parse(phase.completedAt);
-    requireRelease(phase.name === PHASES[index] && phase.status === 'passed' && Number.isFinite(from)
+    requireRelease(phase.name === releasePhases(receipt)[index] && phase.status === 'passed' && Number.isFinite(from)
       && Number.isFinite(to) && from >= previous && to >= from && to <= completed, 'release_staging_receipt_invalid');
     previous = to;
   }

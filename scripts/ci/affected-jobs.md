@@ -1,5 +1,60 @@
 # Bounded affected job selection
 
+## Minimum sufficient CI
+
+Every change should select checks for the behavior it can affect. Reuse coverage
+already supplied by another required check; do not add unrelated product tests
+or repeat successful checks without a changed input or unresolved failure.
+A broader fallback means the dependency scope is not yet established, not that
+all changes inherently require every test. Extend bounded profiles as ownership
+and coverage become clear; retain failures and distinguish skipped from passed.
+
+The `delivery_tooling` profile applies to exact release/backup workflow and
+operator paths, the daily backup orchestrator/diagnostics/test, and the selector
+and Verify workflow controls. It runs **deploy-preflight**: operator/preflight
+unit tests, isolated migration/native PostgreSQL/R2 restoration, and the daily
+backup orchestration tests. The already-required source-integrity job runs
+selector/workflow and governance tests. CodeQL and non-author code-owner review
+continue independently. Product runtime partitions, browser/UI, static Worker
+and consumer repository suites do not run for these operator-only changes.
+
+This profile works for both PR integration trees and a direct main successor.
+The selector verifies the actual immutable base/candidate trees, checkout and
+ordered parents; main uses GitHub's `before` SHA. It accepts ordinary additions
+or modifications within proven operator ownership. Ownership additions for
+already-covered operator files use the existing governance tests; removed ownership
+or changed dependencies, tests and surfaces remain full. Mixed product, schema,
+other CI runner, deletion, rename or mode changes fall back to broader selection. Generated inventory may accompany a scoped change.
+It does not reuse a green result for a different source or weaken deployment
+source/actor/lease/health checks. Ordinary code deployment and daily backups are
+separate operations; deployment need not repeat a full daily backup.
+
+Coverage refinements keep Verify edits confined to the `select` and
+`deploy-preflight` blocks; global execution controls and every other job must
+remain unchanged. The exact daily-backup test uses `ci.daily-backup` through the
+existing pinned completeness runner, which rejects empty, skipped, TODO and
+failed cases. Deployment preflight also retains TypeScript checking without
+running unrelated UI tests.
+
+The bounded mapping checks the actual governance/shared-release reverse closure,
+instruction consumers and declared suite obligations. For the two exact daily
+backup sources, the other direct media consumers and remaining media-owned
+source are parsed from both immutable trees to reject new references into the
+daily subgraph. New reverse consumers, new suites, public exports, local aliases
+or unresolved loaders invalidate that mapping; the unrelated transitive media
+product closure is not selected merely because it shares a coarse module.
+This is a bounded source/dependency policy, not a universal dynamic-code proof.
+
+Unowned product source produces the existing `surface_unmapped` governance
+warning. It does not weaken the retained direct literal-import boundary: a
+regression proves the same unowned consumer passes ownership validation with a
+warning but is rejected by delivery selection. Owned importing consumers remain
+selector-level negatives too. Mandatory source-integrity failure still rejects
+the aggregate; ownership warnings are not mislabeled as that failure.
+
+The older profiles below retain their own event and path limits. In particular,
+the statements about full push selection below exclude this delivery profile.
+
 The selector and aggregate are loaded from the installed workflow source, not
 from candidate configuration. This candidate adds an `affected` mode for the
 exact frontend files in `FRONTEND_LEAF_PROFILES` in `select-affected-jobs.mjs`:
@@ -26,6 +81,7 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: guild presentation | Guild presentation and static/worker |
 | `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
 | `affected`: plan_document_inputs | Governance consumers |
+| `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does
@@ -128,3 +184,25 @@ source-integrity, CodeQL, fixed guild integration/preview checks and strict
 main protections remain unchanged. This control-plane PR itself requires full CI;
 local regression results do not establish hosted savings or independent guild
 maintainer assignments.
+
+
+The exact `ci.daily-backup` registry metadata addition may accompany delivery
+changes. Removing that one literal declaration must reproduce the complete
+baseline registry bytes. Existing suite definitions, test discovery baselines,
+loaders, environment forwarding and timeouts therefore remain unchanged; edits
+to them keep broader selection. The existing pinned-suite contract test remains
+in mandatory `ci.governance-unit`, including empty/skipped/failed daily-suite
+regressions. Its test file may accompany the addition; the suite runner itself
+has no delivery exemption.
+
+
+The Verify mask rejects noncanonical job-level structure, including quoted and
+underscore job headers after the final deployment job. A bounded direct-import
+check additionally reads outside JS/TS sources in both immutable trees, regardless
+of ownership/dependency declarations, and rejects relative literal imports/re-exports,
+literal dynamic imports, CommonJS requires and type imports into daily-backup or
+shared-release. It runs for release-only changes too. Limits are 4,096 files,
+2 MB per file and 64 MB per snapshot; unchanged blobs share one read cache.
+This is a direct relative literal-import boundary, not comprehensive proof about computed
+loaders, arbitrary executable strings or transitive imports. Existing stricter
+media-boundary parser checks and mandatory ownership validation remain separate.
