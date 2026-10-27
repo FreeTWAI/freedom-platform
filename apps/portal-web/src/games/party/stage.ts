@@ -1,6 +1,7 @@
 import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,NearestFilter,NoToneMapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from '../stage-batch';
+import {createTofuOpaqueBatch} from './tofu-batch';
 import {PARTY_RULES as R,type PartyGameId} from './catalog';
 import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,type PartyRun,type TofuLayer} from './domain';
 
@@ -11,10 +12,10 @@ const C={ink:'#45433b',cream:'#fff0c9',sage:'#74ae98',leaf:'#397c5e',peach:'#e99
 export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>void):PartyStage {
   const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:true});
   const geometries=new Set<BufferGeometry>(),materials=new Set<Material>(),textures=new Set<Texture>();
-  let disposed=false,last:PartyRun|null=null;
+  let disposed=false,last:PartyRun|null=null,tofuBatch:ReturnType<typeof createTofuOpaqueBatch>|null=null;
   const key=new DirectionalLight('#fff3dc',1.4);
   const lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
-  const dispose=()=>{if(disposed)return;disposed=true;renderer.domElement.removeEventListener('webglcontextlost',lost);geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());key.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+  const dispose=()=>{if(disposed)return;disposed=true;renderer.domElement.removeEventListener('webglcontextlost',lost);tofuBatch?.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());key.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
   try {
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
@@ -81,7 +82,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       mesh(world,cylinder,C.sage,0,.08,0,2.65,.17,2.65);mesh(world,cylinder,C.cream,0,.2,0,2.4,.17,2.4);mesh(world,torus,C.gold,0,.29,0,2.2,2.2,2.2).rotation.x=-Math.PI/2;
       const bottle=group(world,-3.6,.1,1.5);mesh(bottle,cylinder,C.wood,0,.5,0,.25,1,.25);rb(bottle,C.navy,0,1.06,0,.4,.2,.4);rb(bottle,C.cream,0,.5,.25,.35,.5,.03);
       const chop=rb(world,C.wood,3.4,.15,1.3,.09,.1,3);chop.rotation.y=.3;const chop2=rb(world,C.wood,3.7,.15,1.3,.09,.1,3);chop2.rotation.y=.3;
-      tofus=Array.from({length:R.tofuGoal+1},()=>tofu(world));activeTofu=tofu(world);crumb=tofu(world);
+      tofus=Array.from({length:R.tofuGoal+1},()=>tofu(world));activeTofu=tofu(world);crumb=tofu(world);tofuBatch=createTofuOpaqueBatch(world,[...tofus,activeTofu,crumb]);
     }else{
       camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
       sign(world,'今日公休委員會','SAVE YOUR WEEKEND',0,1.4,-4.8,3.5);plant(world,-4,-3.5);plant(world,4,-3.5);
@@ -128,7 +129,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       }
       const burst=s.game==='holiday'?s.pick&&s.elapsed-s.pick.at<500:s.game==='chair'?s.elapsed-s.hitAt<600:feedbackAge<600;
       papers.forEach((p,i)=>{p.visible=motion&&!!burst&&s.status!=='ready';if(!p.visible)return;const age=s.game==='holiday'?s.elapsed-(s.pick?.at??0):s.game==='chair'?s.elapsed-s.hitAt:feedbackAge,a=i*2.4,origin=s.game==='holiday'&&s.pick?anchorPositions[s.pick.hole]:new Vector3(s.game==='chair'?s.x*1.5:0,1,s.game==='chair'?2.4:0);p.position.set(origin.x+Math.sin(a)*age/280,origin.y+1.3+age/350-age*age/200000,origin.z+Math.cos(a)*age/400);p.rotation.set(t*3+i,t*2,age/150+i);});
-      renderer.render(scene,camera);
+      tofuBatch?.update();renderer.render(scene,camera);
     }
     return {
       update,

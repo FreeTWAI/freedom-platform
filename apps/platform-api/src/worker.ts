@@ -148,6 +148,9 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_ADMIN_CSRF_SECRET?: string;
   GITHUB_SOCIAL_TOKEN_KEY?: string;
   TOTP_ENCRYPTION_KEY?: string;
+  FREEDOM_GOOGLE_LOGIN_ENABLED?: string;
+  GOOGLE_LOGIN_CLIENT_ID?: string;
+  GOOGLE_LOGIN_CLIENT_SECRET?: string;
   /** Optional read-only GitHub token: Workers share egress IPs, so anonymous GitHub quota is gone. */
   GITHUB_METRICS_TOKEN?: string;
   /** Optional. Without it only POST /api/v1/maintainer/github/webhook answers 503. */
@@ -320,6 +323,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     registrationCommunityId: () => community,
     githubTokenKey: () => tokenKey,
     totpEncryptionKey: () => env.TOTP_ENCRYPTION_KEY,
+    googleLogin:env.FREEDOM_GOOGLE_LOGIN_ENABLED==='true'&&env.GOOGLE_LOGIN_CLIENT_ID&&env.GOOGLE_LOGIN_CLIENT_SECRET?{enabled:true,clientId:env.GOOGLE_LOGIN_CLIENT_ID,clientSecret:env.GOOGLE_LOGIN_CLIENT_SECRET}:undefined,
     githubMetricsToken: () => metricsToken,
     maintainerWebhookSecret: () => maintainerWebhookSecret,
     adminVerifier: workerAdminVerifier(env),

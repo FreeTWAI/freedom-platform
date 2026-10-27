@@ -4,7 +4,11 @@ import {parseDishInit,parseDishView,type DishReply} from './dish-worker-protocol
 // A dedicated worker owns exactly one transferred canvas. No network or idle loop.
 const scope=self as unknown as {onmessage:((event:MessageEvent)=>void)|null;postMessage:(message:DishReply)=>void;close:()=>void};
 let owner:number|undefined,sequence=0,stage:DishCanvasStage|null=null,failed=false;
-const fail=()=>{if(failed)return;failed=true;stage?.dispose();stage=null;if(owner!==undefined)scope.postMessage({version:1,kind:'failed',owner});scope.close();};
+const fail=()=>{if(failed)return;failed=true;
+ // Notify the owner before cleanup: a renderer disposal error must not leave a ready UI.
+ try{if(owner!==undefined)scope.postMessage({version:1,kind:'failed',owner});}
+ finally{try{stage?.dispose();}finally{stage=null;scope.close();}}
+};
 scope.onmessage=event=>{
  if(failed)return;
  try{

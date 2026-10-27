@@ -248,7 +248,7 @@ test('AR-UI-13 failure of the optional 3D preview preserves the authored draft a
   await expect(page.getByLabel('要顯示的文字')).toHaveValue('預覽斷線也要保留的介紹');await expect(page.getByLabel('選擇衣服或海報上的圖片')).toBeEnabled();
 });
 
-test('AR-UI-12 devices without a second WebGL context still track, draw fallback effects and capture',async({page,e2eAuthPool})=>{
+test('AR-UI-12 devices without a second WebGL context still track, draw fallback effects and capture',async({page,e2eAuthPool},testInfo)=>{
   test.setTimeout(90000);await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
   await login(page);const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',text:'Synthetic fallback camera',effect:'confetti'}),'Synthetic fallback camera');
   await page.route('**/_ar-test/positive.webm',route=>route.fulfill({contentType:'video/webm',body:readFileSync(new URL('../fixtures/community-ar/positive.webm',import.meta.url))}));
@@ -257,6 +257,7 @@ test('AR-UI-12 devices without a second WebGL context still track, draw fallback
     HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,kind:string,...args:unknown[]){if(this.classList.contains('ar-spatial-layer')&&kind==='webgl')return null;return (original as any).call(this,kind,...args);} as typeof original;
     Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{const replay=document.createElement('video');replay.src='/_ar-test/positive.webm';replay.loop=true;replay.muted=true;replay.playsInline=true;await replay.play();await new Promise<void>(resolve=>replay.requestVideoFrameCallback(()=>resolve()));(window as any).arReplay=replay;const stream=(replay as HTMLVideoElement&{captureStream:()=>MediaStream}).captureStream();(window as any).arTestStream=stream;return stream;}});
   });
+  await page.addInitScript(installArCaptureDiagnostics);
   try{
     await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();
     // Tracking and fallback state can precede drawing, and target loss clears the canvas.
@@ -271,7 +272,10 @@ test('AR-UI-12 devices without a second WebGL context still track, draw fallback
       const context=canvas.getContext('2d');
       return context!==null&&context.getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0);
     }),{timeout:30000,intervals:[100]}).toBe(true);
-    await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+    await withArCaptureFailureAttachment(async()=>{
+      await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+    },()=>page.evaluate(()=>(window as unknown as {__arCaptureDiagnosticRead:()=>unknown}).__arCaptureDiagnosticRead()),
+    body=>testInfo.attach('ar-capture-stages.json',{body,contentType:'application/json'}));
     await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);
   }finally{await page.evaluate(()=>{(window as any).arReplay?.pause();(window as any).arTestStream?.getTracks().forEach((track:MediaStreamTrack)=>track.stop());});}
 });

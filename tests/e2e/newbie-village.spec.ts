@@ -1,5 +1,5 @@
 import {test,expect} from './fixtures.js';
-import {QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
+import {CLASSES_V2,CAREER_GUILDS,DIMENSIONS,calculateResult,QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('freedom-interface-language-v1','zh-Hant'));
@@ -78,6 +78,30 @@ test('NEWBIE-003 blocked storage stays usable and reports that progress cannot p
   await page.locator('#nv-quiz input').first().check();
   await page.getByRole('button',{name:'下一題',exact:true}).click();
   await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[1].q);
+});
+
+test('NEWBIE-005 quiz result shows next-step actions and suggested guild links once',async({page})=>{
+  await page.goto('/#newbie-village');
+  await expect(page.getByTestId('nv-next-step')).toHaveCount(0);
+  const answers=QUESTIONS_V2.map(()=>[0]);
+  for(let i=0;i<QUESTIONS_V2.length;i++){
+    await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[i].q);
+    await page.locator('#nv-quiz input').first().check();
+    await page.locator('#nv-quiz').getByRole('button',{name:i===14?'查看結果':'下一題',exact:true}).click();
+  }
+  const result=calculateResult(answers),career=result.primary;
+  const suggestedCareers=[...new Set([career,...DIMENSIONS.map(d=>result.dimensionWinners[d])])];
+  const screen=page.locator('#nv-quiz');
+  const card=page.getByTestId('nv-next-step');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('heading',{name:'下一步',exact:true})).toBeVisible();
+  await expect(card.locator('ol > li')).toHaveCount(3);
+  await expect(card.locator('ol > li')).toHaveText(CLASSES_V2[career].actions);
+  for(const action of CLASSES_V2[career].actions)await expect(screen.getByText(action,{exact:true})).toHaveCount(1);
+  for(const c of suggestedCareers)for(const guild of CAREER_GUILDS[c]){
+    await expect(screen.getByRole('link',{name:guild.name,exact:true})).toHaveCount(1);
+    await expect(card.getByRole('link',{name:guild.name,exact:true})).toHaveAttribute('href',`#guilds/${guild.guildId}`);
+  }
 });
 
 // Use the real main.tsx theme imports and persisted profiles, not an isolated CSS fixture.

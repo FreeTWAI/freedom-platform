@@ -936,6 +936,18 @@ for(const outcome of ['success','error','late'] as const)test(`UX-15d: dish prev
 
 // The unchanged UX-15c five-second real download assertion remains the primary
 // responsiveness acceptance. These cases also execute the actual emitted worker.
+// E2E-only instrumentation of the actual emitted worker; no product command or mocked rendering.
+const dishWorkerEvidence=new WeakMap<Page,unknown[]>();
+async function probeDishWorkerBoundary(page:Page){
+ const records:unknown[]=[];dishWorkerEvidence.set(page,records);
+ page.on('console',message=>{const text=message.text();if(!text.startsWith('dish-worker-probe ')||text.length>512||records.length>=64)return;try{records.push(JSON.parse(text.slice(18)));}catch{/* diagnostic only */}});
+ await page.route('**/assets/dish-worker-*.js',async route=>{
+  const response=await route.fetch();
+  const probe=`;(()=>{let count=0;const emit=(phase,data,started)=>{if(count++>=64)return;const row={phase,at:performance.now()};if(started!==undefined)row.duration=performance.now()-started;if(data&&['init','view','ready','rendered','failed'].includes(data.kind))row.kind=data.kind;for(const k of ['owner','sequence'])if(Number.isSafeInteger(data?.[k]))row[k]=data[k];console.debug('dish-worker-probe '+JSON.stringify(row));};let proto=self,descriptor;while(proto&&!descriptor){descriptor=Object.getOwnPropertyDescriptor(proto,'onmessage');proto=Object.getPrototypeOf(proto);}if(descriptor?.set){let handler=null;Object.defineProperty(self,'onmessage',{configurable:true,get:()=>handler,set(fn){handler=fn;descriptor.set.call(self,typeof fn==='function'?function(event){const start=performance.now();emit('received',event.data);try{return fn.call(this,event);}finally{emit('task-ended',event.data,start);}}:fn);}});}else emit('probe-unavailable');const post=self.postMessage.bind(self);self.postMessage=(data,...args)=>{emit('reply',data);return post(data,...args);};self.addEventListener('error',()=>emit('worker-error'));})();\n`;
+  await route.fulfill({response,body:probe+await response.text()});
+ });
+}
+test.afterEach(async({page},testInfo)=>{const records=dishWorkerEvidence.get(page);if(records)await testInfo.attach('dish-worker-boundary',{body:JSON.stringify({scope:'test-only actual worker event/task boundaries, not GPU completion',records}),contentType:'application/json'});});
 function observeDishWorkers(){
  const NativeWorker=window.Worker,records:{worker:Worker;terminated:number;messages:unknown[]}[]=[];
  Object.defineProperty(window,'dishWorkers',{value:records});
@@ -945,7 +957,7 @@ function observeDishWorkers(){
 }
 test('UX-15f native background dish rendering preserves download, controls and exact worker cleanup',async({page})=>{
  test.setTimeout(60000);const f=kitchenCheckpoint('result');
- await page.addInitScript(observeDishWorkers);
+ await probeDishWorkerBoundary(page);await page.addInitScript(observeDishWorkers);
  await page.addInitScript(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
  await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
  const download=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await expect(download).toBeVisible();
@@ -976,7 +988,7 @@ test('UX-15f unsupported background rendering keeps a truthful usable static res
 });
 
 test('UX-15f malformed native worker commands fail closed, preserve PNG and retry with a fresh owner',async({page})=>{
- test.setTimeout(60000);const f=kitchenCheckpoint('result');await page.addInitScript(observeDishWorkers);
+ test.setTimeout(60000);const f=kitchenCheckpoint('result');await probeDishWorkerBoundary(page);await page.addInitScript(observeDishWorkers);
  await page.addInitScript(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
  await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
  await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});

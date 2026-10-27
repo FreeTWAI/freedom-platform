@@ -1,4 +1,4 @@
-/** Test-only scalar instrumentation for the synthetic AR-UI-05 replay.
+/** Test-only scalar instrumentation for the synthetic AR-UI-05 and AR-UI-12 replays.
  * Adds overhead; timings are diagnostic, not an uninstrumented benchmark.
  * No pixels, URLs, text, errors, credentials or File names are collected.
  * Self-contained so Playwright can serialize it as an init script.

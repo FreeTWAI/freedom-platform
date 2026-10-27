@@ -37,6 +37,20 @@ test('UX-15f absolute dish view coalescing preserves clamp, turn and reset order
  assert.deepEqual(nextDishView(view,'reset',0,'rice-balls'),{angle:-.12,zoom:1.38});
 });
 
+test('UX-15f actual worker reports failure before throwing cleanup and always closes (non-native)',()=>{
+ const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-worker.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code;
+ for(const scenario of ['invalid-owner','render-throws','cleanup-throws','post-throws'] as const){
+  const events:string[]=[],scope:any={onmessage:null,postMessage(m:any){events.push(m.kind);if(scenario==='post-throws'&&m.kind==='failed')throw Error('closed port');},close(){events.push('close');}};
+  const stage={stats:()=>({calls:1,triangles:2,geometries:3,textures:4}),view(){events.push('render');if(scenario==='render-throws')throw Error('render');},dispose(){events.push('dispose');if(scenario==='cleanup-throws')throw Error('cleanup');}};
+  const module={exports:{}};
+  runInNewContext(source,{self:scope,module,exports:module.exports,require:(path:string)=>path==='./dish-stage'?{createDishCanvasStage:()=>stage}:{parseDishInit:(m:any)=>m.kind==='init'?m:null,parseDishView}});
+  scope.onmessage({data:{kind:'init',owner:7}});assert.deepEqual(events,['ready']);
+  const message={version:1,kind:'view',owner:scenario==='render-throws'?7:-1,sequence:1,angle:0,zoom:1};
+  scope.onmessage({data:message});assert.deepEqual(events,scenario==='render-throws'?['ready','render','failed','dispose','close']:['ready','failed','dispose','close']);
+  scope.onmessage({data:message});assert.equal(events.filter(x=>x==='failed').length,1);assert.equal(events.filter(x=>x==='dispose').length,1);assert.equal(events.filter(x=>x==='close').length,1);
+ }
+});
+
 test('UX-15f actual dish worker client has one bounded in-flight view and terminates stale owners',()=>{
  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-preview-worker.ts',import.meta.url),'utf8').replaceAll('import.meta.url',JSON.stringify('https://example.test/assets/dish-preview-worker.js'));
  const workers:any[]=[],canvases:any[]=[],module={exports:{} as any},timers=new Map<number,{fn:()=>void;ms:number}>();let timerId=0,throwPost=false;
@@ -419,7 +433,7 @@ function reset(){encodes=[];readers=[];canvases=[];}
 async function png(signal){const p=resultExports(input,null,signal);await tick();assert.equal(encodes.length,1);const job=encodes.shift();assert.deepEqual([job.canvas.width,job.canvas.height,job.type,job.quality],[960,1200,'image/png',undefined]);const bytes=new Blob(['exact-png'],{type:'image/png'});job.cb(bytes);const value=await p;assert.equal(value.png,bytes);assert.equal(await value.file.text(),'exact-png');assert.equal(value.file.name,'離譜日常-kitchen-42.png');assert.equal(value.file.type,'image/png');assert.equal(encodes.length,0);assert.equal('site' in value,false);return value;}
 function completeEncode(type='image/jpeg'){const j=encodes.shift();j.cb(new Blob(['jpeg'],{type}));return j;}
 function completeReader(value='data:image/jpeg;base64,am9i'){const r=readers.shift();r.result=value;r.onload();return r;}
-let passed=0;async function check(name,fn){await t.test(name,async()=>{reset();await fn();passed++;});}
+let passed=0;async function check(name,fn){await runCheck(name,async()=>{reset();await fn();passed++;});}
 await check('PNG resolves independently; exact File payload; JPEG dimensions/quality',async()=>{const v=await png();const p=v.prepareJpegs();let j=completeEncode();assert.deepEqual([j.canvas.width,j.canvas.height,j.quality],[1200,675,.87]);await tick();completeReader();await tick();j=completeEncode();assert.deepEqual([j.canvas.width,j.canvas.height,j.quality],[960,1200,.85]);await tick();completeReader();assert.deepEqual(await p,{site:'data:image/jpeg;base64,am9i',preview:'data:image/jpeg;base64,am9i'});});
 await check('pre-aborted owner never creates image/canvas',async()=>{const a=new AbortController();a.abort();await assert.rejects(resultExports(input,null,a.signal),{name:'AbortError'});assert.equal(canvases.length,0);});
 await check('abort pending image decode suppresses work',async()=>{const a=new AbortController();const p=resultExports(input,null,a.signal);a.abort();await assert.rejects(p,{name:'AbortError'});await tick();assert.equal(encodes.length,0);});
@@ -434,7 +448,9 @@ await check('FileReader native error propagates and preserves PNG',async()=>{con
 await check('canvas synchronous encode failure rejects',async()=>{const create=document.createElement;document.createElement=(tag)=>{const c=create(tag);c.toBlob=()=>{throw new Error('encode failed');};return c;};try{await assert.rejects(resultExports(input),/encode failed/);}finally{document.createElement=create;}});
 assert.equal(passed,12);
 `;
-  await runInNewContext(`${source}\n(async()=>{${harness}})()`,{assert,t,partyOf,Blob,File,DOMException,AbortController,queueMicrotask});
+  // Declare subtests in this real source file so strict reporter provenance remains bound.
+  const runCheck=(name:string,fn:()=>Promise<void>)=>t.test(name,fn);
+  await runInNewContext(`${source}\n(async()=>{${harness}})()`,{assert,runCheck,partyOf,Blob,File,DOMException,AbortController,queueMicrotask});
 });
 
 test('UX-15d optional dish scheduling waits for primary settlement, bounds only its own wait, and cleans stale owners',()=>{

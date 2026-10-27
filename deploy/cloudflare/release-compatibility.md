@@ -565,3 +565,32 @@ and `commerce.hosted-checkout.v1`; restoring below188 cannot erase the retained
 shape. Exact source, artifact and migration ledger approval remains required.
 This is a compatibility shape, not a feature flag, refund verification or
 permission to deploy. Existing console authorization gates the seller routes.
+
+## Schema 190: provider-only credentials and retained auth safety
+
+`190_google_identity.sql` is recognized by its exact name and SQL digest. Every
+active and candidate release must independently be approved for
+`identity.passwordless-null-safe.v1` once the planned or retained ledger reaches
+190, even with empty shape arrays and Google login OFF. Recognition alone never
+adds that capability to an approval. It is a binary compatibility requirement,
+not an `enable_shapes` entry, provider permission or deployment authorization.
+
+For migration 190 this capability denotes the complete compatible auth behavior,
+not merely avoiding a NULL-hash exception: NULL credentials reject password
+checks, verified-mailbox recovery establishes a real password, existing sensitive
+operation checks and TOTP remain intact, and identity generation/tombstone and
+session lifecycle protections are preserved. In particular, ordinary auth flows
+must invalidate the Google browser-flow marker and pending authority; dormant
+Google sessions cannot authenticate before their bound one-use ACK. An older
+binary patched only with a NULL guard does not thereby satisfy this contract.
+The host must review the exact source/artifact and schema approval evidence; the
+flag, migration presence or candidate's self-assertion cannot supply it.
+
+The 190 ledger is a conservative compatibility floor, without scanning whether a
+provider-only member currently exists. Restoring/planning 189 cannot erase a
+retained 190 ledger. Capability-only retained history also requires both planned
+and actually observed schema 190; planning to reapply 190 does not repair an
+observed lower schema. Existing target, recovery generation, digest, freshness
+and complete active-release checks remain unchanged. A compatible report still
+has deployment_authority, execution_authority and restore_proof all false.
+No real approval, host watermark, credentials, grants or live migration are added.

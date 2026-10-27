@@ -1,0 +1,14 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "member-recognition",
+  "owner_role": "foundation",
+  "owned_paths": ["modules/member-recognition/**", "tests/runtime/member-recognition-policy.test.ts", "docs/development/member-recognition.md", "docs/development/member-recognition-schema-proposal.sql"],
+  "public_exports": [],
+  "dependencies": [],
+  "contract_families": [],
+  "client_profiles": [],
+  "instructions": ["AGENTS.md", "docs/platform-plan/execution/unified-foundation/00-baseline-and-decisions.md"],
+  "invariants": ["no-secrets-in-artifacts", "current-authority-before-replay"],
+  "tests": ["runtime.full"],
+  "surfaces": []
+}
