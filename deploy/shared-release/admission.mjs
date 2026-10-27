@@ -125,6 +125,41 @@ export function admitInstallation(env) {
   return { image: env.RELEASE_OPERATOR_IMAGE, configSha256: env.RELEASE_CONFIG_SHA256 };
 }
 
+// The initial shared journal may predate the last release by the legacy
+// operator. Authenticate that existing deployment; the image must still match
+// it to the live Worker and unchanged SQL/DB authority under the release lease.
+export async function requireLegacyPredecessor(api, admission) {
+  const prefix = `/repos/${REPOSITORY}`;
+  const latest = async () => {
+    const rows = await api(`${prefix}/deployments?environment=${admission.target}&per_page=100`);
+    requireRelease(Array.isArray(rows) && rows.every(row => positiveId(row.id)), 'release_legacy_deployments_invalid');
+    return rows.filter(row => row.environment === admission.target).sort((a, b) => b.id - a.id)[0];
+  };
+  const deployment = await latest();
+  if (!deployment || deployment.payload?.format === 'freedom.shared-release/v1') return undefined;
+  requireRelease(deployment.task === 'deploy' && isSha(deployment.sha)
+    && deployment.payload && Object.keys(deployment.payload).length === 0, 'release_legacy_deployment_invalid');
+  const creator = await admitActor(api, deployment.creator?.login, deployment.creator?.id);
+  const status = async () => {
+    const rows = await api(`${prefix}/deployments/${deployment.id}/statuses?per_page=1`);
+    requireRelease(Array.isArray(rows) && rows.length === 1 && positiveId(rows[0].id)
+      && rows[0].state === 'success' && Number.isFinite(Date.parse(rows[0].created_at)), 'release_legacy_deployment_not_successful');
+    await admitActor(api, rows[0].creator?.login, rows[0].creator?.id);
+    return rows[0];
+  };
+  const successful = await status();
+  const verified = await admitRelease({ ...admission, sourceSha: deployment.sha }, api);
+  const ancestry = await api(`${prefix}/compare/${deployment.sha}...${admission.sourceSha}`);
+  requireRelease(['ahead', 'identical'].includes(ancestry.status)
+    && ancestry.merge_base_commit?.sha === deployment.sha, 'release_legacy_successor_invalid');
+  requireRelease((await latest())?.id === deployment.id && (await status()).id === successful.id,
+    'release_legacy_deployment_changed');
+  return { format: 'freedom.verified-legacy-deployment/v1', target: admission.target,
+    deploymentId: deployment.id, statusId: successful.id, creator, completedAt: successful.created_at,
+    sourceSha: verified.sourceSha, sourceTree: verified.sourceTree, verification: verified.verification,
+    admittedRunId: admission.runId, admittedRunAttempt: admission.runAttempt };
+}
+
 export async function requireStaging(api, admission, installation) {
   if (admission.target !== 'next') return;
   const prefix = `/repos/${REPOSITORY}`;

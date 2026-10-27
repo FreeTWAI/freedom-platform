@@ -133,10 +133,10 @@ Run from the repository root with Node 24 and Git:
 
 ```sh
 node --test packages/contribution-tools/test/worker-unit-{routing,dispatch,http}.test.mjs
-python3 scripts/update-inventory.py
-npm run verify:inventory
 git diff --check
 ```
+
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 
 The test is also discovered by the existing governance suite; no workflow changes
 are needed. No database, npm dependency, provider credential or network is needed

@@ -45,12 +45,12 @@ or unresolved loaders invalidate that mapping; the unrelated transitive media
 product closure is not selected merely because it shares a coarse module.
 This is a bounded source/dependency policy, not a universal dynamic-code proof.
 
-Unowned product source remains the responsibility of the existing mandatory
-`ci.governance-unit` ownership test (`modules-repository.test.mjs`). Regression
-coverage adds an unowned importing consumer to a clean checkout, proves that
-this exact test fails, and proves that required source-integrity failure rejects
-the aggregate even with successful deployment checks. Owned importing consumers
-remain selector-level negatives. No redundant global ownership scan is added.
+Unowned product source produces the existing `surface_unmapped` governance
+warning. It does not weaken the retained direct literal-import boundary: a
+regression proves the same unowned consumer passes ownership validation with a
+warning but is rejected by delivery selection. Owned importing consumers remain
+selector-level negatives too. Mandatory source-integrity failure still rejects
+the aggregate; ownership warnings are not mislabeled as that failure.
 
 The older profiles below retain their own event and path limits. In particular,
 the statements about full push selection below exclude this delivery profile.
@@ -79,7 +79,8 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `docs` | None; always-on integrity still runs |
 | `affected`: frontend leaves | Full eight-part runtime plus aggregate, full browser, static/worker |
 | `affected`: guild presentation | Guild presentation and static/worker |
-| `affected`: informational handoffs | Governance consumers |
+| `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
+| `affected`: plan_document_inputs | Governance consumers |
 | `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
@@ -100,42 +101,21 @@ Local tests use real Git commits and the actual CLI as well as graph/aggregate
 negative cases. They do not prove installed GitHub enforcement or cost savings.
 UF:INT-17 also requires the corresponding TS/Rust conformance evidence; full
 fallback alone does not supply a missing conformance adapter. The existing
-main source archive/restore and daily `verify:inventory` obligations remain separate.
+main source archive/restore remains separate. 日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 
-## Informational handoff documents
+## 最小 CI 路徑與消費者證據（2026-10-26）
 
-The fixed `informational_handoff_docs` profile accepts only ordinary modifications
-of these existing files, optionally with the exact generated inventory:
+Owner 原則：「當有其他的機制已經覆蓋到了, 就應該相信其他的機制」。新增 lane 只選既有 jobs，不新增 gate；source-integrity 仍處理契約生成、runtime text、治理、migration 與本機連結。
 
-- `docs/platform-plan/execution/commerce/work-plan.md`
-- `docs/platform-plan/execution/supplier-console/work-plan.md`
-- `docs/platform-plan/execution/guild-launchpad/README.md`
-- `docs/platform-plan/execution/unified-foundation/closeout.md`
-- `docs/platform-plan/execution/unified-foundation/current-state.json`
+- `plan_receipt_docs`：全部變更為 `docs/platform-plan/**` 的 `.md/.json/.yaml/.yml/.csv/.txt`，即使 descriptor 擁有也不加 heavy job。排除 contracts 非 Markdown、contracts/tests、execution/tools、AGENTS；已知 Python 文件輸入改走下列 lane。
+- `plan_document_inputs`：上述文件包含 `execution/{first-work-batch.md,acceptance-matrix.md,milestones.md,spec-index.md}`、`execution/specs/**`、`execution/guild-launchpad/**` 或 `execution/unified-foundation/current-state.json` 時，只選 `governance-consumers`。證據：contracts 的 `test_{five_clock_invariants,work_reviewer_capacity,reviewer_appointment_entitlement,low_ops_contracts}.py`；execution/tools 的 `check_specs.py`、`check_package_dag.py` 與 `tests/test_guild_launchpad_status.py:21–24`。`ci.contracts-pytest` 在該 job 執行，guild-launchpad validator 也讀該 pack 的 Markdown／traceability／acceptance-progress。
+- `module_app_markdown`：全部變更僅為 `modules/**/*.md` 或 `apps/**/*.md`，不選 heavy job。排除 AGENTS、隱藏路徑、runtime text、guild presentation 路徑，以及 runtime 測試確實讀取的 `modules/agent-commerce/operations/notifications/README.md`（`commerce-email-templates.test.ts:286`）與 `modules/module-registry/platform-hold.md`（`module-instance-lifecycle.test.ts:845`）；它們保留既有選擇。公會展示 Markdown 保留原 profile。
 
-The trusted selector proves the exact PR base/head and clean integration checkout
-with those two ordered parents. Every changed entry must be a non-executable
-regular blob in both trees. Complete descriptor graphs must be valid and unchanged;
-the fixed owners, dependencies, reverse consumers and suites must still match.
-An allowed document used as a module instruction or runtime text stays full.
-General context ownership and its full fallback are unchanged.
+消費者追查使用 `git grep` 搜尋所有 tracked JS／TS／Python／shell／workflow 的 `.md`、`docs/platform-plan`、`readFile/read_text/open/glob`。`scripts/generate-guild-blocks.mjs` 實際讀 descriptor JSON 的 surfaces 與 entry existence，沒有讀取一般模組 Markdown；`guild-presentation-profile.mjs` 讀 module tree（含 Markdown）並保留原 profile。rollout receipts、closeout、requirement-evidence、work-plan 與 tester-map COORDINATION 未找到 domain code／test 的內容讀取；文件連結、descriptor instructions 和歷史 hash 索引不等於 domain 輸入。此清單以目前 source 為界，新消費者需同步 selector。
 
-`governance-consumers` remains selected: its existing contract tests check guild
-status against current-state and source facts. Source-integrity, select, the required
-verify aggregate and CodeQL keep their existing obligations. Only the exact reason
-and job-output shape pass the aggregate; selected skips or missing results fail.
+實際檔案列表與原派工的兩處差異保留：#1083 的 README／current-state 確為 Python 測試輸入，因此整組只選 governance-consumers；`git diff --name-only b267f472 95aae4da` 的 #1087 列表含 `tests/e2e/absurd-daily.spec.ts`，整組保留 full。Shared-release 工具與 workflows 維持 full，對應的 `delivery_tooling` lane 由 #1094 負責。
 
-Inventory alone, new/unknown paths, rename/copy/delete/mode changes, mixed code,
-tests, specs, acceptance/traceability, schemas, policy, workflow/runner/descriptor
-changes and every `rollout-*.json` retain full CI. No schema authenticates those
-dated receipts for this exception; the original six-file #876 therefore stays full.
-Push and merge-group events remain full. #885 changes the selector itself and
-also receives full CI; local tests establish no hosted time or cost saving.
-
-The `deploy-preflight` job enables setup-node's npm download cache before
-`npm ci --ignore-scripts`; it still performs a clean install and runs the same
-pinned preflight and migration suites. A hosted second-run cache hit and timing
-improvement remain unverified locally.
+新 lanes 使用明確 reason 和全部七個 boolean outputs；aggregate 逐一核對確切 job 集合。只有完整 PR diff、有效 baseline/candidate graph、乾淨且 ordered-parent 的 integration tree 和非 executable regular blobs 才能窄化。code、被讀取的 data、deploy、verify/codeql、governance、selector/tooling 控制檔與 status/mode 不明的變更維持 full。Push／merge_group 維持 full；既有前端 leaf 行為不變。
 
 ## Root README documentation policy proposal
 
@@ -226,3 +206,31 @@ shared-release. It runs for release-only changes too. Limits are 4,096 files,
 This is a direct relative literal-import boundary, not comprehensive proof about computed
 loaders, arbitrary executable strings or transitive imports. Existing stricter
 media-boundary parser checks and mandatory ownership validation remain separate.
+
+
+## Bounded CI tools coverage
+
+`ci_tools` selects no heavy job: mandatory source integrity already runs selector,
+governance and pinned-suite contract tests. `ci_tools_document_inputs` adds the
+existing governance-consumers job only when a known plan-document input changes.
+The profile covers exact selector/context/module tooling files and their existing
+tests, supporting prose, and only the module schema's owned-path limit increase
+from 64 to 256. Other schema changes, runtime files and unknown source stay broad.
+
+The sole deletion allowance is the paired retirement of `circleci-worker-status.mjs`
+and its test. Both must be ordinary blobs before deletion. Verify must equal its
+baseline after removing precisely the obsolete provider checkout/status step,
+its statuses permission and the condition on the existing pinned worker suite;
+all other executable workflow bytes remain unchanged. Candidate source/workflows
+must contain no remaining direct import or workflow reference to that helper.
+The source check also rejects outside direct consumers of the changed context,
+module and schema libraries. Complete descriptor graphs remain unchanged and the
+reviewed governance reverse closure retains its existing unit-test mapping.
+No commit/tree pins, general deletion exemption or new test platform are used.
+
+Ownership warnings do not permit an unowned product source to add an unresolved
+computed import/require, eval or Function loader and still select delivery-only
+checks. This small check uses the existing product-source scope; harmless unowned
+sources and literal unrelated imports remain warnings. It is not general
+JavaScript or transitive dependency analysis. Source-integrity and aggregate
+failure semantics, CodeQL and non-author review remain required.

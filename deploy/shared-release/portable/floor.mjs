@@ -30,6 +30,14 @@ function verifyBackup(proof, intent, capture, sourceSha) {
     && proof.cleanupVerified === true && proof.exposure === 'quarantine', 'release_floor_backup_unverified');
 }
 
+function legacyEvidence(value) {
+  check(value?.format === 'freedom.verified-legacy-deployment/v1' && ['staging-next', 'next'].includes(value.target)
+    && isSha(value.sourceSha) && isSha(value.sourceTree)
+    && [value.deploymentId, value.statusId, value.admittedRunId, value.admittedRunAttempt].every(id => Number.isSafeInteger(id) && id > 0)
+    && Number.isFinite(Date.parse(value.completedAt)) && Array.isArray(value.verification) && value.verification.length === 2,
+  'release_floor_legacy_evidence_invalid');
+}
+
 /** Pure replay. The store authenticates all record bytes against its seed and
  * chain; isAncestor is the image's fixed Git graph check, never a config program.
  * Success proofs are produced by the installed operator, not caller booleans. */
@@ -47,6 +55,17 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   for (const item of chain.slice(1)) {
     const event = item.record.data;
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
+    if (event.kind === 'legacy-source-adopted') {
+      const proof = event.proof, evidence = proof?.evidence; legacyEvidence(evidence);
+      check(state.pending === null && proof.previousSourceSha === state.sourceSha
+        && evidence.sourceSha !== state.sourceSha && isAncestor(state.sourceSha, evidence.sourceSha)
+        && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.materialPolicySha256 === state.materialPolicySha256 && proof.readOnly === true
+        && Number.isFinite(Date.parse(proof.observedAt)) && Date.parse(proof.observedAt) >= Date.parse(evidence.completedAt),
+      'release_floor_legacy_adoption_invalid');
+      state.sourceSha = evidence.sourceSha; state.deployedSourceSha = evidence.sourceSha; state.sourceTree = evidence.sourceTree;
+      continue;
+    }
     if (event.kind === 'begin' || event.kind === 'backup-begin' || event.kind === 'release-begin-v2') {
       check(state.pending === null, 'release_floor_unsettled'); request(event.request);
       const backup = event.kind === 'backup-begin';
@@ -73,6 +92,13 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
       const beginOnly = !capture && Object.keys(pending.intents).length === 0
         && recovery?.failureBoundary === 'before_capture' && proof?.failureBoundary === 'before_capture';
+      if (proof?.legacyPredecessor) {
+        legacyEvidence(proof.legacyPredecessor);
+        check(beginOnly && isAncestor(state.sourceSha, proof.legacyPredecessor.sourceSha)
+          && proof.legacyPredecessor.admittedRunId === proof.settledBy?.runId
+          && proof.legacyPredecessor.admittedRunAttempt === proof.settledBy?.runAttempt,
+        'release_floor_legacy_recovery_invalid');
+      }
       check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || (capture && Object.keys(pending.intents).length === 1))
         && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
@@ -258,6 +284,16 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
   };
   return Object.freeze({
     state() { return structuredClone(current.state); },
+    verifyLegacySource(evidence) {
+      legacyEvidence(evidence);
+      check(evidence.target === store.target, 'release_floor_legacy_target_changed');
+      verifyAdoptedSource(sourceRoot, { migration: { release: current.state.sourceSha, tree: current.state.sourceTree } },
+        { ...current.state, sourceSha: evidence.sourceSha, sourceTree: evidence.sourceTree });
+    },
+    async adoptLegacySource(proof) {
+      this.verifyLegacySource(proof.evidence);
+      return append({ kind: 'legacy-source-adopted', proof });
+    },
     async assertCurrent() {
       const actual = await store.load();
       check(actual.at(-1).sha256 === current.head.sha256, 'release_floor_external_state_changed');

@@ -72,7 +72,9 @@ API、DB、connector metrics 都只綁 loopback。Cloudflare 控制台應顯示 
 
 ## 更新與回退
 
-1. 在開發副本完成 typecheck、build、runtime／瀏覽器測試、inventory 驗證並推送確切 commit。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
+
+1. 在開發副本完成 typecheck、build、runtime／瀏覽器測試並推送確切 commit。
 2. clone repo 到新的 `releases/<git-sha>`，checkout 該 commit；在新目錄執行 `npm ci`、`npm run build`。
 3. `systemctl --user start freedom-staging-backup.service`；若有 schema migration，先審核相容性與回退策略。002–004 為新增會員模組資料表，不重設舊紀錄；用實際 staging role 執行 `npm run db:migrate`（DATABASE_URL 僅從私密檔案載入），不要把密碼放在 CLI 參數。
 4. 記下 `readlink -f ~/.local/share/freedom-staging/current`，把 `current` 原子切換到新目錄，再 `systemctl --user restart freedom-staging.service`。
