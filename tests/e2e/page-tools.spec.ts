@@ -29,6 +29,10 @@ test('every workspace page exposes contextual tools, filtered issues and agent g
   await expect(idea.getByRole('alert')).toContainText('至少 3 字的標題與 10 字');
   await expect(direct).toBeEnabled();
   await idea.getByRole('textbox',{name:'想法與期待'}).fill('讓會員首頁的入口更清楚容易理解。');
+  await idea.getByRole('button',{name:'關閉',exact:true}).click();
+  await openPageTools(page);await page.getByRole('button',{name:'提出想法',exact:true}).click();
+  await expect(idea.getByRole('textbox',{name:'標題'})).toHaveValue('首頁想法');
+  await expect(idea.getByRole('textbox',{name:'想法與期待'})).toHaveValue('讓會員首頁的入口更清楚容易理解。');
   await expect(idea.locator('pre')).toContainText('<!-- freedom-page:home -->');
   await page.evaluate(()=>{(window as typeof window&{issuedGitHubUrl?:string}).open=(url)=>{(window as typeof window&{issuedGitHubUrl?:string}).issuedGitHubUrl=String(url);return null}});
   await idea.getByRole('button',{name:'到 GitHub 檢查並送出'}).click();
@@ -115,6 +119,10 @@ test('unlinked member gets GitHub guidance and screenshot handoff',async({page})
   await idea.getByRole('textbox',{name:'想法與期待'}).fill('希望首頁的入口更容易閱讀，截圖標示了目前的問題。');
   await idea.getByLabel('截圖（選填）').setInputFiles({name:'example.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==','base64')});
   await expect(idea.getByRole('img',{name:'待附上的 Issue 截圖預覽'})).toBeVisible();
+  await idea.getByRole('button',{name:'關閉',exact:true}).click();
+  await openPageTools(page);await page.getByRole('button',{name:'提出想法',exact:true}).click();
+  await expect(idea.getByText('example.png',{exact:true})).toBeVisible();
+  await expect(idea.getByRole('textbox',{name:'標題'})).toHaveValue('首頁截圖建議');
   await expect(idea.getByRole('button',{name:'用我的 GitHub 發布'})).toHaveCount(0);
   await page.evaluate(()=>{(window as typeof window&{issuedGitHubUrl?:string}).open=(url)=>{(window as typeof window&{issuedGitHubUrl?:string}).issuedGitHubUrl=String(url);return null}});
   await idea.getByRole('button',{name:'到 GitHub 貼上截圖並送出'}).click();
@@ -123,4 +131,54 @@ test('unlinked member gets GitHub guidance and screenshot handoff',async({page})
   await page.screenshot({path:'test-results/page-tools-screenshot-mobile.png'});
   await idea.getByRole('button',{name:'移除截圖'}).click();
   await expect(idea.getByRole('button',{name:'到 GitHub 檢查並送出'})).toBeVisible();
+});
+
+test('page tools load on demand, ignore cancelled or older opens, and recover a failed chunk by reloading',async({page})=>{
+  const chunk=/\/assets\/Dialog-[^/]+\.js(?:\?.*)?$/;
+  let mode:'hold'|'fail'|'pass'='hold',requests=0,release=()=>{};
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.route(chunk,async route=>{
+    requests++;const responseMode=mode;
+    if(responseMode==='hold')await new Promise<void>(resolve=>{release=resolve});
+    if(responseMode==='fail')await route.abort('failed');else await route.continue();
+  });
+  const chooseHelp=async()=>{await openPageTools(page);await page.getByRole('button',{name:'頁面說明',exact:true}).click()};
+  const settle=async()=>{const response=page.waitForResponse(chunk);release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve())))};
+  try{
+    await page.goto('/');await openPageTools(page);expect(requests).toBe(0);
+    await chooseHelp();await expect(page.getByRole('status').filter({hasText:'正在開啟頁面說明'})).toBeVisible();
+    await expect.poll(()=>requests).toBe(1);
+    await page.keyboard.press('Escape');await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
+    await chooseHelp();await page.locator('.page-tools-menu > summary').click();
+    await expect(page.getByRole('button',{name:'關閉頁面工具',exact:true})).toHaveCount(0);
+    await chooseHelp();const email=page.getByLabel('電子郵件',{exact:true});await email.click();
+    await expect(page.getByRole('button',{name:'關閉頁面工具',exact:true})).toHaveCount(0);await expect(email).toBeFocused();
+    await settle();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
+    await chooseHelp();await expect(page.getByRole('dialog',{name:'註冊與登入：頁面說明'})).toBeVisible();
+    expect(requests).toBe(1);
+
+    await page.reload();await chooseHelp();await expect.poll(()=>requests).toBe(2);
+    await page.evaluate(()=>{window.location.hash='tester-map'});
+    await expect(page.getByRole('heading',{name:'測試員地圖',level:1})).toBeVisible();
+    await settle();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
+    const currentHelp=page.getByRole('button',{name:'頁面說明',exact:true});await currentHelp.click();
+    const currentDialog=page.getByRole('dialog',{name:'測試員地圖：頁面說明'});await expect(currentDialog).toBeVisible();
+    await currentDialog.getByRole('button',{name:'關閉',exact:true}).click();await expect(currentHelp).toBeFocused();
+    // Cold noncompact opening must restore the initiating tool, not a later focused control.
+    await page.reload();await expect(currentHelp).toBeVisible();await currentHelp.click();
+    await expect(page.getByRole('status').filter({hasText:'正在開啟頁面說明'})).toBeVisible();
+    await expect.poll(()=>requests).toBe(3);
+    const otherTool=page.getByRole('button',{name:'參與編修',exact:true});await otherTool.focus();
+    await expect(otherTool).toBeFocused();await settle();await expect(currentDialog).toBeVisible();
+    await currentDialog.getByRole('button',{name:'關閉',exact:true}).click();await expect(currentHelp).toBeFocused();
+
+    mode='fail';await page.goto('/');await chooseHelp();
+    await expect(page.getByRole('alert')).toContainText('頁面工具暫時無法載入');
+    await page.getByRole('button',{name:'關閉頁面工具',exact:true}).click();await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
+    await chooseHelp();await expect(page.getByRole('alert')).toContainText('頁面工具暫時無法載入');
+    mode='pass';await page.getByRole('button',{name:'重新載入頁面',exact:true}).click();
+    await expect(page.locator('.page-tools')).toBeVisible();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
+    await chooseHelp();await expect(page.getByRole('dialog',{name:'註冊與登入：頁面說明'})).toBeVisible();
+    expect(errors).toEqual([]);
+  }finally{mode='pass';release();await page.unrouteAll({behavior:'wait'})}
 });

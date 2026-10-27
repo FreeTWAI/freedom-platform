@@ -19,7 +19,25 @@ export type RunResult = {
         details: string;
     }[];
 };
-function imageOf(src: string): Promise<HTMLImageElement> { return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(Error('成果照片未能讀取，請重新選取。')); image.src = src; }); }
+type ExportSignals = readonly AbortSignal[];
+function checkActive(signals: ExportSignals) {
+    if (signals.some(signal => signal.aborted)) throw new DOMException('成果圖處理已取消。', 'AbortError');
+}
+function onAbort(signals: ExportSignals, callback: () => void) {
+    for (const signal of signals) signal.addEventListener('abort', callback, { once: true });
+    return () => { for (const signal of signals) signal.removeEventListener('abort', callback); };
+}
+function imageOf(src: string, signals: ExportSignals): Promise<HTMLImageElement> {
+    checkActive(signals);
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        const cleanup = () => { image.onload = null; image.onerror = null; removeAbort(); };
+        const removeAbort = onAbort(signals, () => { cleanup(); image.src = ''; reject(new DOMException('成果圖處理已取消。', 'AbortError')); });
+        image.onload = () => { cleanup(); resolve(image); };
+        image.onerror = () => { cleanup(); reject(Error('成果照片未能讀取，請重新選取。')); };
+        image.src = src;
+    });
+}
 function contain(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) { const s = Math.min(w / img.width, h / img.height), dw = img.width * s, dh = img.height * s; ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); }
 function lines(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, width: number, lineHeight: number) { let line = '', row = 0; for (const ch of text) {
     if (ch === '\n' || ctx.measureText(line + ch).width > width) {
@@ -29,10 +47,43 @@ function lines(ctx: CanvasRenderingContext2D, text: string, x: number, y: number
     else
         line += ch;
 } ctx.fillText(line, x, y + row * lineHeight); return y + (row + 1) * lineHeight; }
-function blobOf(canvas: HTMLCanvasElement) { return new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(Error('圖片未能產生，請重試。')), 'image/png')); }
+function blobOf(canvas: HTMLCanvasElement, signals: ExportSignals, type = 'image/png', quality?: number): Promise<Blob> {
+    checkActive(signals);
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (blob: Blob | null, error?: unknown) => {
+            if (settled) return;
+            settled = true; removeAbort();
+            if (error) reject(error);
+            else if (!blob || blob.type !== type) reject(Error('圖片未能產生，請重試。'));
+            else resolve(blob);
+        };
+        const removeAbort = onAbort(signals, () => finish(null, new DOMException('成果圖處理已取消。', 'AbortError')));
+        // Browser encoding itself is not cancellable; a stale callback must not publish.
+        try { canvas.toBlob(blob => finish(blob), type, quality); } catch (error) { finish(null, error); }
+    });
+}
+function dataUrlOf(blob: Blob, signals: ExportSignals): Promise<string> {
+    checkActive(signals);
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        const cleanup = () => { reader.onload = null; reader.onerror = null; reader.onabort = null; removeAbort(); };
+        const removeAbort = onAbort(signals, () => { cleanup(); reader.abort(); reject(new DOMException('成果圖處理已取消。', 'AbortError')); });
+        reader.onload = () => {
+            const value = reader.result; cleanup();
+            if (typeof value === 'string' && value.startsWith('data:image/jpeg;base64,')) resolve(value);
+            else reject(Error('成果預覽未能產生，請重試。'));
+        };
+        reader.onerror = () => { const error = reader.error; cleanup(); reject(error ?? Error('成果預覽未能讀取，請重試。')); };
+        reader.onabort = () => { cleanup(); reject(new DOMException('成果圖處理已取消。', 'AbortError')); };
+        try { reader.readAsDataURL(blob); } catch (error) { cleanup(); reject(error); }
+    });
+}
 /** AD-7: preserve the complete 4:3 image in both export compositions. */
-export async function resultExports(result: RunResult, logo?: HTMLImageElement | null) {
-    const img = await imageOf(result.image), portrait = document.createElement('canvas'), site = document.createElement('canvas');
+export async function resultExports(result: RunResult, logo?: HTMLImageElement | null, signal?: AbortSignal) {
+    const signals = signal ? [signal] : [];
+    const img = await imageOf(result.image, signals), portrait = document.createElement('canvas'), site = document.createElement('canvas');
+    checkActive(signals);
     portrait.width = 960;
     portrait.height = 1200;
     site.width = 1200;
@@ -80,6 +131,20 @@ export async function resultExports(result: RunResult, logo?: HTMLImageElement |
         ctx.font = `bold ${wide ? 23 : 24}px sans-serif`;
         ctx.fillText(`同題 #${result.seed}　換你試試看`, wide ? 765 : 63, wide ? 568 : 1140);
     }
-    const png = await blobOf(portrait);
-    return { png, file: new File([png], `離譜日常-${result.game}-${result.seed}.png`, { type: 'image/png' }), site: site.toDataURL('image/jpeg', .87), preview: portrait.toDataURL('image/jpeg', .85) };
+    const png = await blobOf(portrait, signals);
+    checkActive(signals);
+    return {
+        png, file: new File([png], `離譜日常-${result.game}-${result.seed}.png`, { type: 'image/png' }),
+        // JPEG failure/retry is independent of the already completed download/share PNG.
+        async prepareJpegs(jpegSignal?: AbortSignal) {
+            const owners = jpegSignal && jpegSignal !== signal ? [...signals, jpegSignal] : signals;
+            checkActive(owners);
+            const siteJpeg = await blobOf(site, owners, 'image/jpeg', .87);
+            const siteUrl = await dataUrlOf(siteJpeg, owners);
+            const previewJpeg = await blobOf(portrait, owners, 'image/jpeg', .85);
+            const previewUrl = await dataUrlOf(previewJpeg, owners);
+            checkActive(owners);
+            return { site: siteUrl, preview: previewUrl };
+        }
+    };
 }

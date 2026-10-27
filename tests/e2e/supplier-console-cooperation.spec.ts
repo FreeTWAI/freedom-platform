@@ -746,7 +746,7 @@ test('SC-E2E-14 a request outside the first 200 opens from every entry and after
     };
 
     // All list/detail entry paths are reached through visible navigation and links.
-    await navigate(pageA,'我的供貨商品庫');
+    await navigate(pageA,'供貨商品管理');
     await pageA.getByRole('article').filter({has:pageA.getByRole('heading',{name:catalogName,exact:true})})
       .getByRole('link',{name:'查看商品與供貨',exact:true}).click();
     const todo=activePage(pageA).getByRole('listitem').filter({hasText:label});

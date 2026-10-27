@@ -342,3 +342,37 @@ test('UX-8 preview operator: refuses output reuse, symlinks and changed image/so
     await writeFile(join(root,'source.js'),'changed');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp),/source_drift/);
   }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+// Controlled Image/canvas/FileReader callbacks test ownership and ordering only.
+// This does NOT establish native PNG/JPEG pixels, browser performance or GPU readiness.
+test('AD-7 phased export ownership and encoding contract (non-native)',async t=>{
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/result-card.ts',import.meta.url),'utf8'),{loader:'ts',target:'es2023',format:'esm'}).code.replace(/^import .*;\n/gm,'').replace(/^export \{[\s\S]*?\};?\n?/gm,'');
+  const harness=String.raw`// NON-NATIVE: controlled Image/canvas/FileReader doubles, not PNG/rendering evidence.
+let encodes=[], readers=[], canvases=[];
+const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+class FakeImage {width=960;height=720;set src(value){this.value=value;if(value)queueMicrotask(()=>this.onload?.());}}
+class FakeReader {readAsDataURL(blob){this.blob=blob;readers.push(this);} abort(){this.aborted=true;this.onabort?.();}}
+globalThis.Image=FakeImage;globalThis.FileReader=FakeReader;
+globalThis.document={createElement(tag){assert.equal(tag,'canvas');const c={width:0,height:0,getContext(){return new Proxy({measureText:()=>({width:1})},{get:(o,k)=>o[k]??(()=>{})});},toBlob(cb,type,quality){encodes.push({canvas:c,cb,type,quality});}};canvases.push(c);return c;}};
+const input={game:'kitchen',seed:42,title:'飯糰',caption:'95分',details:'原始結果',image:'data:image/jpeg;base64,a'};
+function reset(){encodes=[];readers=[];canvases=[];}
+async function png(signal){const p=resultExports(input,null,signal);await tick();assert.equal(encodes.length,1);const job=encodes.shift();assert.deepEqual([job.canvas.width,job.canvas.height,job.type,job.quality],[960,1200,'image/png',undefined]);const bytes=new Blob(['exact-png'],{type:'image/png'});job.cb(bytes);const value=await p;assert.equal(value.png,bytes);assert.equal(await value.file.text(),'exact-png');assert.equal(value.file.name,'離譜日常-kitchen-42.png');assert.equal(value.file.type,'image/png');assert.equal(encodes.length,0);assert.equal('site' in value,false);return value;}
+function completeEncode(type='image/jpeg'){const j=encodes.shift();j.cb(new Blob(['jpeg'],{type}));return j;}
+function completeReader(value='data:image/jpeg;base64,am9i'){const r=readers.shift();r.result=value;r.onload();return r;}
+let passed=0;async function check(name,fn){await t.test(name,async()=>{reset();await fn();passed++;});}
+await check('PNG resolves independently; exact File payload; JPEG dimensions/quality',async()=>{const v=await png();const p=v.prepareJpegs();let j=completeEncode();assert.deepEqual([j.canvas.width,j.canvas.height,j.quality],[1200,675,.87]);await tick();completeReader();await tick();j=completeEncode();assert.deepEqual([j.canvas.width,j.canvas.height,j.quality],[960,1200,.85]);await tick();completeReader();assert.deepEqual(await p,{site:'data:image/jpeg;base64,am9i',preview:'data:image/jpeg;base64,am9i'});});
+await check('pre-aborted owner never creates image/canvas',async()=>{const a=new AbortController();a.abort();await assert.rejects(resultExports(input,null,a.signal),{name:'AbortError'});assert.equal(canvases.length,0);});
+await check('abort pending image decode suppresses work',async()=>{const a=new AbortController();const p=resultExports(input,null,a.signal);a.abort();await assert.rejects(p,{name:'AbortError'});await tick();assert.equal(encodes.length,0);});
+await check('abort pending PNG ignores late native callback',async()=>{const a=new AbortController();const p=resultExports(input,null,a.signal);await tick();const j=encodes.shift();a.abort();await assert.rejects(p,{name:'AbortError'});j.cb(new Blob(['late'],{type:'image/png'}));assert.equal(readers.length,0);});
+await check('JPEG MIME mismatch rejects without invalidating PNG; retry possible',async()=>{const v=await png();const p=v.prepareJpegs();completeEncode('image/png');await assert.rejects(p);assert.equal(await v.file.text(),'exact-png');const a=new AbortController();const retry=v.prepareJpegs(a.signal);assert.equal(encodes.length,1);a.abort();await assert.rejects(retry,{name:'AbortError'});});
+await check('JPEG reader abort cancels reader; no subsequent encoding',async()=>{const v=await png();const a=new AbortController();const p=v.prepareJpegs(a.signal);completeEncode();await tick();const reader=readers[0];a.abort();await assert.rejects(p,{name:'AbortError'});assert.equal(reader.aborted,true);assert.equal(reader.onload,null);assert.equal(encodes.length,0);});
+await check('original owner abort also invalidates phase2',async()=>{const a=new AbortController();const v=await png(a.signal);a.abort();await assert.rejects(v.prepareJpegs(),{name:'AbortError'});assert.equal(encodes.length,0);});
+await check('null PNG rejects original error path',async()=>{const p=resultExports(input);await tick();encodes.shift().cb(null);await assert.rejects(p,/圖片未能產生/);});
+await check('invalid JPEG data URL rejects; keeps PNG',async()=>{const v=await png();const p=v.prepareJpegs();completeEncode();await tick();completeReader('data:image/png;base64,bad');await assert.rejects(p,/成果預覽未能產生/);assert.equal(v.png.type,'image/png');});
+await check('original image decode rejection preserved',async()=>{const Image=globalThis.Image;globalThis.Image=class {set src(v){if(v)queueMicrotask(()=>this.onerror?.());}};try{await assert.rejects(resultExports(input),/成果照片未能讀取/);assert.equal(encodes.length,0);}finally{globalThis.Image=Image;}});
+await check('FileReader native error propagates and preserves PNG',async()=>{const v=await png();const p=v.prepareJpegs();completeEncode();await tick();const r=readers.shift();r.error=new Error('read failed');r.onerror();await assert.rejects(p,/read failed/);assert.equal(v.png.type,'image/png');});
+await check('canvas synchronous encode failure rejects',async()=>{const create=document.createElement;document.createElement=(tag)=>{const c=create(tag);c.toBlob=()=>{throw new Error('encode failed');};return c;};try{await assert.rejects(resultExports(input),/encode failed/);}finally{document.createElement=create;}});
+assert.equal(passed,12);
+`;
+  await runInNewContext(`${source}\n(async()=>{${harness}})()`,{assert,t,partyOf,Blob,File,DOMException,AbortController,queueMicrotask});
+});

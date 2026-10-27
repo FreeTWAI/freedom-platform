@@ -125,7 +125,12 @@ test('workerd: strict host, JSON 404 for machine paths, assets with security hea
 });
 
 async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit) => Promise<Response>) {
-  const security = await fetch('/');
+  const security = await fetch('/guilds');
+  const homeSecurity = await fetch('/');
+  const baseCsp = security.headers.get('content-security-policy') ?? '';
+  assert.doesNotMatch(baseCsp, /(?:^|;)\s*frame-src(?:\s|;|$)/);
+  assert.equal(homeSecurity.headers.get('content-security-policy'),
+    baseCsp.replace("; base-uri", "; frame-src https://aisns.evitina.tw; base-uri"));
   const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
   assert.equal(security.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(security.headers.get('referrer-policy'), 'no-referrer');
@@ -141,7 +146,8 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
     for (const path of ['/', '/guilds', '/assets/skill-social.js', '/outside-AbCdEf12.js', '/assets/short-AbCd.js', '/assets/page-AbCdEf12.html', '/assets/x-AbCdEf12.js', '/api/unknown', '/api/v1/health']) {
       const response = await fetch(path, { method });
       assert.equal(response.headers.get('cache-control'), 'no-store', path);
-      for (const name of securityHeaders) assert.equal(response.headers.get(name), security.headers.get(name), `${path}: ${name}`);
+      for (const name of securityHeaders) assert.equal(response.headers.get(name),
+        (path === '/' ? homeSecurity : security).headers.get(name), `${path}: ${name}`);
       if (path === '/assets/x-AbCdEf12.js' && method === 'GET') assert.equal(await response.text(), SHELL, 'missing ASSETS 404 must fall through to the uncached shell');
     }
   }

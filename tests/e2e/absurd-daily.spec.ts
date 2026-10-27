@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
 import {buildSync} from 'esbuild';
 import {createRequire} from 'node:module';
@@ -12,7 +13,160 @@ import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/por
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 
+// Proposed E2E-only injection; no product module imports or production telemetry.
+// Records timing/category/dimensions only, never image contents or user strings.
+function installExportTimingProbe(){
+  type Event={phase:string;at:number;id?:number;width?:number;height?:number;kind?:string};
+  const events:Event[]=[];let dropped=0,sequence=0;
+  const record=(event:Omit<Event,'at'>)=>{if(events.length<128)events.push({...event,at:performance.now()});else dropped++;};
+  Object.defineProperty(window,'__exportTimingProbe',{value:{events,get dropped(){return dropped;}}});
+  const imageSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src')!;
+  Object.defineProperty(HTMLImageElement.prototype,'src',{...imageSrc,set(value:string){
+    const id=++sequence,kind=value.startsWith('data:image/')?'data-image':value.startsWith('blob:')?'blob-image':'other-image';
+    record({phase:'image-src',id,kind});
+    const finish=(phase:string)=>{this.removeEventListener('load',loaded);this.removeEventListener('error',failed);record({phase,id,width:this.naturalWidth,height:this.naturalHeight,kind});};
+    const loaded=()=>finish('image-load'),failed=()=>finish('image-error');
+    this.addEventListener('load',loaded);this.addEventListener('error',failed);imageSrc.set!.call(this,value);
+  }});
+  const toBlob=HTMLCanvasElement.prototype.toBlob,toDataURL=HTMLCanvasElement.prototype.toDataURL;
+  HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){
+    const id=++sequence;record({phase:'blob-start',id,width:this.width,height:this.height,kind:type??'image/png'});
+    return toBlob.call(this,function(blob){record({phase:blob?'blob-done':'blob-null',id});callback(blob);},type,quality);
+  };
+  HTMLCanvasElement.prototype.toDataURL=function(type,quality){
+    const id=++sequence;record({phase:'data-url-start',id,width:this.width,height:this.height,kind:type??'image/png'});
+    try{return toDataURL.call(this,type,quality);}finally{record({phase:'data-url-end',id});}
+  };
+  let dish='',download=false;
+  const observer=new MutationObserver(()=>{
+    const next=document.querySelector('[data-dish-view]')?.getAttribute('data-dish-view')??'';
+    if(next!==dish){dish=next;record({phase:`dish-${next||'absent'}`});}
+    const available=!!document.querySelector('.ad-result a[download][href^="blob:"]');
+    if(available!==download){download=available;record({phase:available?'download-published':'download-removed'});}
+  });
+  observer.observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['data-dish-view','href']});
+}
+
+test.afterEach(async({page},testInfo)=>{
+  if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload')return;
+  const probe=await page.evaluate(()=>{
+    const value=(window as unknown as {__exportTimingProbe?:{events:unknown[];dropped:number}}).__exportTimingProbe;
+    return value?{events:value.events,dropped:value.dropped,scope:'current production document only; DOM times are observer delivery, not exact mutation time'}:null;
+  }).catch(()=>null);
+  if(probe)await testInfo.attach('export-phase-timings',{body:JSON.stringify(probe),contentType:'application/json'});
+});
+
+async function checkResultRetryOwnership(page:Page,result:RunResult){
+  // Bundle the complete actual module, exposing its private Result only inside
+  // this existing isolated fixture. Product exports and production build stay unchanged.
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8');
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../../apps/portal-web/src/games/',import.meta.url)),loader:'tsx',contents:source+`
+    import React from 'react';
+    import {createRoot} from 'react-dom/client';
+    const NativeImage=window.Image,loads=[],jpegLoads=[],createdUrls=[],revokedUrls=[],shared=[];
+    const oldCanShare=Object.getOwnPropertyDescriptor(navigator,'canShare'),oldShare=Object.getOwnPropertyDescriptor(navigator,'share');
+    Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});
+    Object.defineProperty(navigator,'share',{configurable:true,value:async payload=>{shared.push(payload);}});
+    const nativeToBlob=HTMLCanvasElement.prototype.toBlob,nativeCreate=URL.createObjectURL,nativeRevoke=URL.revokeObjectURL;
+    URL.createObjectURL=function(blob){const url=nativeCreate.call(URL,blob);createdUrls.push(url);return url;};
+    URL.revokeObjectURL=function(url){revokedUrls.push(url);return nativeRevoke.call(URL,url);};
+    HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){
+      if(type!=='image/jpeg')return nativeToBlob.call(this,callback,type,quality);
+      const entry={ready:false,released:false,blob:null,deliver:null,fail:null};jpegLoads.push(entry);
+      return nativeToBlob.call(this,blob=>{entry.ready=!!blob;entry.blob=blob;entry.deliver=()=>{if(!entry.ready||entry.released)throw Error('JPEG not pending');entry.released=true;callback(blob);};entry.fail=()=>{if(!entry.ready||entry.released)throw Error('JPEG cannot fail');entry.released=true;callback(null);};},type,quality);
+    };
+    function HeldImage(width,height){
+      const image=new NativeImage(width,height),entry={ready:false,released:false,cancelled:false,deliver:null,fail:null};
+      loads.push(entry);let loaded=null,failed=null;
+      Object.defineProperty(image,'onload',{configurable:true,get:()=>loaded,set:value=>{if(value===null&&loaded&&!entry.released)entry.cancelled=true;loaded=value;}});
+      Object.defineProperty(image,'onerror',{configurable:true,get:()=>failed,set:value=>{failed=value;if(value)entry.fail=()=>{entry.released=true;value.call(image,new Event('error'));};}});
+      image.addEventListener('load',event=>{
+        entry.ready=image.naturalWidth>0&&image.naturalHeight>0;
+        entry.deliver=()=>{if(!entry.ready||entry.released||!loaded)throw Error('Result image is not pending');entry.released=true;loaded.call(image,event);};
+        // Deliberate error delivery tests rejection ownership, not failed native decoding.
+        const failure=failed;entry.fail=()=>{if(!entry.ready||entry.released||!failure)throw Error('Result image cannot reject');entry.released=true;failure.call(image,new Event('error'));};
+      });return image;
+    }
+    HeldImage.prototype=NativeImage.prototype;Object.setPrototypeOf(HeldImage,NativeImage);window.Image=HeldImage;
+    const root=createRoot(document.getElementById('root'));let mounted=true;
+    const original=${JSON.stringify(result)},fixture={...original,game:'photo',photos:[
+      {image:original.image,stars:1,caption:'第一張',details:'原始成果'},
+      {image:original.image,stars:2,caption:'第二張',details:'另一個選擇'}]};
+    window.resultRetryProbe={loads,jpegLoads,createdUrls,revokedUrls,shared,release:index=>loads[index].deliver(),fail:index=>loads[index].fail(),
+      releaseJpeg:index=>jpegLoads[index].deliver(),failJpeg:index=>jpegLoads[index].fail(),
+      unmount:()=>{if(!mounted)return;mounted=false;root.unmount();},
+      restore:()=>{window.Image=NativeImage;HTMLCanvasElement.prototype.toBlob=nativeToBlob;URL.createObjectURL=nativeCreate;URL.revokeObjectURL=nativeRevoke;if(oldCanShare)Object.defineProperty(navigator,'canShare',oldCanShare);else delete navigator.canShare;if(oldShare)Object.defineProperty(navigator,'share',oldShare);else delete navigator.share;}};
+    root.render(<React.StrictMode><Result result={fixture} onBack={()=>{}} onReplay={()=>{}} onNext={()=>{}}/></React.StrictMode>);
+  `},bundle:true,write:false,format:'iife',platform:'browser',loader:{'.css':'empty'},define:{'process.env.NODE_ENV':'"development"'}}).outputFiles[0].text;
+  await page.addScriptTag({content:script});
+  type Probe={shared:{files:File[]}[];loads:{ready:boolean;released:boolean;cancelled:boolean}[];jpegLoads:{ready:boolean;released:boolean;blob:Blob|null}[];createdUrls:string[];revokedUrls:string[];releaseJpeg:(index:number)=>void;failJpeg:(index:number)=>void;release:(index:number)=>void;fail:(index:number)=>void;unmount:()=>void;restore:()=>void};
+  const loads=()=>page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.loads.map(x=>({ready:x.ready,released:x.released,cancelled:x.cancelled})));
+  const retry=page.getByRole('button',{name:'重試產生成果圖',exact:true});
+  try{
+    await expect.poll(loads).toEqual([{ready:false,released:false,cancelled:true},{ready:true,released:false,cancelled:false}]);
+    await expect(retry).toBeDisabled();
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.fail(0));
+    await expect(retry).toBeDisabled();
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.fail(1));
+    await expect(retry).toBeEnabled();
+    await retry.evaluate(button=>{button.dispatchEvent(new MouseEvent('click',{bubbles:true}));button.dispatchEvent(new MouseEvent('click',{bubbles:true}));});
+    await expect.poll(loads).toEqual([{ready:false,released:true,cancelled:true},{ready:true,released:true,cancelled:false},{ready:true,released:false,cancelled:false}]);
+    await expect(retry).toBeDisabled();
+    await page.locator('.ad-photo-choices button').nth(1).click();
+    await expect.poll(async()=>(await loads()).length).toBe(4);
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.fail(2));
+    await expect(retry).toBeDisabled();
+    await expect.poll(async()=>(await loads())[3]).toEqual({ready:true,released:false,cancelled:false});
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.release(3));
+    const download=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await expect(download).toBeVisible();
+    const event=page.waitForEvent('download');await download.click();
+    const downloaded=readFileSync((await (await event).path())!);const metadata=await sharp(downloaded).metadata();expect([metadata.format,metadata.width,metadata.height]).toEqual(['png',960,1200]);
+    const workshop=page.getByRole('button',{name:'發到自由工坊',exact:true});await expect(workshop).toBeDisabled();
+    await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();
+    const shared=await page.evaluate(async()=>{const file=(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.shared[0].files[0];return {name:file.name,type:file.type,bytes:Array.from(new Uint8Array(await file.arrayBuffer()))};});
+    expect([shared.name,shared.type]).toEqual([`離譜日常-photo-${result.seed}.png`,'image/png']);expect(Buffer.from(shared.bytes).equals(downloaded)).toBe(true);
+
+    const jpegReady=(index:number)=>page.evaluate(i=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.jpegLoads[i]?.ready,index);
+    await expect.poll(()=>jpegReady(0)).toBe(true);
+    // Change ownership while a real encoded JPEG callback is held. The old PNG
+    // URL is revoked and late JPEG completion must not enable the new workshop.
+    const oldUrl=await download.getAttribute('href');
+    await page.locator('.ad-photo-choices button').nth(0).click();await expect(download).toHaveCount(0);await expect(workshop).toBeDisabled();
+    await expect.poll(async()=>(await loads())[4]).toEqual({ready:true,released:false,cancelled:false});
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.releaseJpeg(0));
+    await expect(workshop).toBeDisabled();await expect(download).toHaveCount(0);
+    expect(await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.jpegLoads.length)).toBe(1);
+    expect(await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.revokedUrls)).toContain(oldUrl);
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.release(4));
+    await expect(download).toBeVisible();await expect.poll(()=>jpegReady(1)).toBe(true);
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.failJpeg(1));
+    await expect(download).toBeVisible();await expect(workshop).toBeDisabled();
+    const jpegRetry=page.getByRole('button',{name:'重試準備工坊圖片',exact:true});await expect(jpegRetry).toBeEnabled();
+    await jpegRetry.evaluate(button=>{button.dispatchEvent(new MouseEvent('click',{bubbles:true}));button.dispatchEvent(new MouseEvent('click',{bubbles:true}));});
+    await expect.poll(()=>jpegReady(2)).toBe(true);
+    expect(await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.jpegLoads.length)).toBe(3);
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.releaseJpeg(2));
+    await expect.poll(()=>jpegReady(3)).toBe(true);await expect(workshop).toBeDisabled();
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.releaseJpeg(3));
+    await expect(workshop).toBeEnabled();await expect(download).toBeVisible();
+    const jpegBytes=await page.evaluate(async()=>{const p=(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe;return Promise.all(p.jpegLoads.slice(2,4).map(async e=>Array.from(new Uint8Array(await e.blob!.arrayBuffer()))));});
+    const metas=await Promise.all(jpegBytes.map(bytes=>sharp(Buffer.from(bytes)).metadata()));expect(metas.map(m=>[m.format,m.width,m.height])).toEqual([['jpeg',1200,675],['jpeg',960,1200]]);
+    // Unmount another owner during its JPEG phase. Its already encoded callback
+    // may arrive, but cannot create another JPEG, publish UI or leak a live URL.
+    await page.locator('.ad-photo-choices button').nth(1).click();
+    await expect.poll(async()=>(await loads())[5]).toEqual({ready:true,released:false,cancelled:false});
+    await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.release(5));
+    await expect(download).toBeVisible();await expect.poll(()=>jpegReady(4)).toBe(true);
+    await page.evaluate(async()=>{const p=(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe;p.unmount();p.releaseJpeg(4);await Promise.resolve();await Promise.resolve();});
+    await expect(page.locator('.ad-result')).toHaveCount(0);
+    expect(await page.evaluate(()=>(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe.jpegLoads.length)).toBe(5);
+    expect(await loads()).toHaveLength(6);
+    const urls=await page.evaluate(()=>{const p=(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe;return {created:p.createdUrls,revoked:p.revokedUrls};});expect(urls.created.length).toBeGreaterThan(0);expect([...urls.revoked].sort()).toEqual([...urls.created].sort());
+  }finally{await page.evaluate(()=>{const p=(window as unknown as {resultRetryProbe:Probe}).resultRetryProbe;p.unmount();p.restore();});}
+}
+
 test('UX-15c: completed guided export survives development StrictMode replay and production cold reload',async({page,browser,baseURL})=>{
+  await page.addInitScript(installExportTimingProbe);
   test.setTimeout(60000);const f=kitchenCheckpoint('result'),errors:string[]=[];let posts=0;
   page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});
   // Same ordinary browser pass, actual component and development React; no new host.
@@ -75,6 +229,7 @@ test('UX-15c: completed guided export survives development StrictMode replay and
     await replay.evaluate(()=> (window as unknown as {cookingReplay:Probe}).cookingReplay.unmount());
     await expect(replay.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
     observed=await snapshot();expect(observed.results).toHaveLength(1);expect(observed.effects).toEqual(['setup','cleanup','setup','cleanup']);
+    await checkResultRetryOwnership(replay,observed.results[0]);
   }finally{await replayContext.close();}
   // Preserve the real production-dist restore/reload and downloaded PNG checks.
   await page.addInitScript(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
@@ -680,7 +835,7 @@ test('UX-8: the native completed meal rotates with pointer and keyboard, keeps s
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const f=kitchenCheckpoint('result');await page.addInitScript(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15_000});await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();
   const canvas=page.locator('.ck-dish-canvas canvas'),surface=page.locator('.ck-dish-surface'),score=await page.locator('.ad-result-heading').innerText();await surface.scrollIntoViewIfNeeded();const before=await canvas.screenshot(),box=(await surface.boundingBox())!;await page.mouse.move(box.x+box.width*.35,box.y+box.height*.5);await page.mouse.down();await surface.dispatchEvent('pointercancel',{pointerId:99,isPrimary:false});await page.mouse.move(box.x+box.width*.72,box.y+box.height*.5,{steps:8});await page.mouse.up();expect((await canvas.screenshot()).equals(before)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();expect((await canvas.screenshot()).equals(before)).toBe(true);await surface.focus();await page.keyboard.press('ArrowLeft');expect((await canvas.screenshot()).equals(before)).toBe(false);
   await page.getByRole('button',{name:'回正',exact:true}).click();await surface.scrollIntoViewIfNeeded();const touchBox=(await surface.boundingBox())!,cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});const cy=touchBox.y+touchBox.height*.5,cx=touchBox.x+touchBox.width*.5;await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:cx-25,y:cy,id:1},{x:cx+25,y:cy,id:2}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:cx-65,y:cy,id:1},{x:cx+65,y:cy,id:2}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});expect((await canvas.screenshot()).equals(before)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();expect((await canvas.screenshot()).equals(before)).toBe(true);await cdp.detach();
-  const old=await canvas.evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await old.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());await expect(page.locator('[data-dish-view="fallback"]')).toBeVisible();await expect(canvas).toHaveCount(0);expect(await page.locator('.ad-result-heading').innerText()).toBe(score);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await page.getByRole('button',{name:'重試3D成品',exact:true}).click();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible();expect(await old.evaluate(gl=>gl.isContextLost())).toBe(true);await old.dispose();
+  const old=await canvas.evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await old.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());await expect(page.locator('[data-dish-view="fallback"]')).toBeVisible();await expect(canvas).toHaveCount(0);expect(await page.locator('.ad-result-heading').innerText()).toBe(score);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await page.getByRole('button',{name:'重試3D成品',exact:true}).click();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15_000});expect(await old.evaluate(gl=>gl.isContextLost())).toBe(true);await old.dispose();
   const current=await canvas.evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(canvas).toHaveCount(0);expect(await current.evaluate(gl=>gl.isContextLost())).toBe(true);await current.dispose();expect(errors).toEqual([]);
 });
 
@@ -712,7 +867,7 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
 });
 
 test('UX-9: WebGL loss, reload and restart confirmation preserve the exact unfinished corn dog and pause its clock',async({page})=>{
- test.setTimeout(90000);await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,8000);const gl=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await gl.evaluate(g=>g.getExtension('WEBGL_lose_context')!.loseContext());await page.clock.runFor(40);await expect(page.locator('[data-market-status="paused"]')).toBeVisible();const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);await marketTime(page,10000);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.elapsed,MARKET_SAVE_KEY)).toBe(saved.elapsed);await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expect(page.locator('.mk-canvas canvas')).toBeVisible();expect(await gl.evaluate(g=>g.isContextLost())).toBe(true);await gl.dispose();await page.reload();await expectNativeMarketReady(page,'繼續這一盤');const restored=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(restored.portions).toEqual(saved.portions);await page.locator('.mk-help summary').click();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await expect(page.getByRole('dialog',{name:'重新做這道料理'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'重新做這一道'})).toBeFocused();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await page.getByRole('button',{name:'重新開攤',exact:true}).click();const reset=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(reset.status).toBe('ready');expect(reset.portions).toEqual([]);await page.reload();await expect(page.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible();
+ test.setTimeout(90000);await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,8000);const gl=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await gl.evaluate(g=>g.getExtension('WEBGL_lose_context')!.loseContext());await page.clock.runFor(40);await expect(page.locator('[data-market-status="paused"]')).toBeVisible();const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);await marketTime(page,10000);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.elapsed,MARKET_SAVE_KEY)).toBe(saved.elapsed);await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expect(page.locator('.mk-canvas canvas')).toBeVisible();expect(await gl.evaluate(g=>g.isContextLost())).toBe(true);await gl.dispose();await page.reload();await expectNativeMarketReady(page,'繼續這一盤');const restored=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(restored.portions).toEqual(saved.portions);await page.locator('.mk-help summary').click();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await expect(page.getByRole('dialog',{name:'重新做這道料理'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'重新做這一道'})).toBeFocused();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await page.getByRole('button',{name:'重新開攤',exact:true}).click();const reset=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(reset.status).toBe('ready');expect(reset.portions).toEqual([]);await page.reload();await expectNativeMarketReady(page);
 });
 
 test('UX-9: delayed native cooking module falls back after 15 seconds and rejects its late scene before explicit retry',async({page})=>{

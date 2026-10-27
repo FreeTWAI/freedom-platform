@@ -346,7 +346,12 @@ test('desktop dragged launcher stays hidden while the panel is open and restores
   expect((await bubble.boundingBox())!.y).toBe(saved.y);
   await bubble.click();await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();expect((await bubble.boundingBox())!.y).toBe(saved.y);
   for(const viewport of [{width:1440,height:360},{width:780,height:400}]){
-    await page.setViewportSize(viewport);const before=(await bubble.boundingBox())!;
+    await page.setViewportSize(viewport);
+    // This online desktop fixture has a 60px launcher and zero safe-area insets.
+    const expectedY=launcherPoint(parseLauncherPlacement(preference),launcherBounds({left:0,top:0,...viewport},60,{left:0,right:0,top:0,bottom:0})).y;
+    // Wait for resize handling before the baseline; Chromium quantizes layout to 1/64px.
+    await expect.poll(async()=>Math.abs((await bubble.boundingBox())!.y-expectedY)).toBeLessThan(1/64);
+    const before=(await bubble.boundingBox())!;
     await bubble.focus();await bubble.press('Enter');await expect(panel).toBeVisible();
     await expect(bubble).toBeHidden();
     expect(await close.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);

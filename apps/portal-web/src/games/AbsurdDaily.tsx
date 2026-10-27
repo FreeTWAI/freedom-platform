@@ -315,23 +315,57 @@ function Result({ result, onBack, onReplay, onNext }: {
     onReplay: () => void;
     onNext: () => void;
 }) {
-    const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), linkRef = useRef<HTMLInputElement>(null);
+    const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), [exportPhase, setExportPhase] = useState<'pending'|'ready'|'error'>('pending'), linkRef = useRef<HTMLInputElement>(null);
     const link = result.game === 'kitchen' || partyOf(result.game) ? new URL(`/play?${new URLSearchParams({game:result.game,...(result.recipe?{recipe:result.recipe}:{}),...(result.cookingMode==='guided'?{practice:'1'}:{}),seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, gameOf(result.game)!, result.seed);
+    const exportRetryAllowed=useRef(false),exportSelection=useRef(selected),exportOwner=useRef<RunResult|null>(null);
+    const exportAbort=useRef<AbortController|null>(null),jpegAbort=useRef<AbortController|null>(null),jpegRetryAllowed=useRef(false);
+    const [jpegs,setJpegs]=useState<{site:string;preview:string}|null>(null),[jpegPhase,setJpegPhase]=useState<'idle'|'pending'|'ready'|'error'>('idle'),[jpegGeneration,setJpegGeneration]=useState(0);
     const text = gameShareText(selected,link), shareOwner = useRef(0), sharingRef = useRef(false);
-    useEffect(() => { let current = true; shareOwner.current++; sharingRef.current=false;setSharing(false);setExports(null); setStatus('正在整理成果圖…'); const logo = document.querySelector<HTMLImageElement>('.ad-brand img'); void resultExports(selected, logo).then(value => { if (current) {
-        setExports(value);
-        setStatus('成果圖好了。選一個方式，把這份作品帶走。');
-    } }).catch(() => { if (current)
-        setStatus('成果圖未能產生，請按重試。'); }); return () => { current = false; shareOwner.current++; }; }, [selected, generation]);
-    useEffect(() => { if (!exports) {
-        setObjectUrl('');
-        return;
-    } const url = URL.createObjectURL(exports.png); setObjectUrl(url); return () => URL.revokeObjectURL(url); }, [exports]);
+    useEffect(() => {
+        let current=true;const controller=new AbortController();exportAbort.current=controller;
+        shareOwner.current++;sharingRef.current=false;setSharing(false);setExports(null);exportOwner.current=null;
+        exportRetryAllowed.current=false;setExportPhase('pending');setStatus('正在整理成果圖…');
+        const logo=document.querySelector<HTMLImageElement>('.ad-brand img');
+        void resultExports(selected,logo,controller.signal).then(value=>{
+            if(!current||exportSelection.current!==selected)return;
+            exportOwner.current=selected;setExports(value);setExportPhase('ready');
+            setStatus('成果圖好了。選一個方式，把這份作品帶走。');
+        }).catch(()=>{
+            if(!current||controller.signal.aborted||exportSelection.current!==selected)return;
+            exportRetryAllowed.current=true;setExportPhase('error');setStatus('成果圖未能產生，請按重試。');
+        });
+        return()=>{current=false;controller.abort();exportRetryAllowed.current=false;shareOwner.current++;};
+    },[selected,generation]);
+    useEffect(()=>{
+        if(!exports||exportOwner.current!==selected){setObjectUrl('');return;}
+        const url=URL.createObjectURL(exports.png);setObjectUrl(url);return()=>URL.revokeObjectURL(url);
+    },[exports,selected]);
+    // PNG download and native sharing no longer wait for the optional JPEG compositions.
+    useEffect(()=>{
+        jpegRetryAllowed.current=false;setJpegs(null);
+        if(!exports||exportOwner.current!==selected){setJpegPhase('idle');return;}
+        let current=true;const controller=new AbortController();jpegAbort.current=controller;setJpegPhase('pending');
+        void exports.prepareJpegs(controller.signal).then(value=>{
+            if(!current||exportSelection.current!==selected)return;
+            setJpegs(value);setJpegPhase('ready');
+        }).catch(()=>{
+            if(!current||controller.signal.aborted||exportSelection.current!==selected)return;
+            jpegRetryAllowed.current=true;setJpegPhase('error');
+        });
+        return()=>{current=false;controller.abort();jpegRetryAllowed.current=false;};
+    },[exports,selected,jpegGeneration]);
+    function choosePhoto(index:number){
+        const photo=result.photos?.[index];if(!photo)return;
+        const next={...result,...photo};exportSelection.current=next;exportOwner.current=null;
+        exportAbort.current?.abort();jpegAbort.current?.abort();shareOwner.current++;
+        exportRetryAllowed.current=false;jpegRetryAllowed.current=false;
+        setExports(null);setJpegs(null);setObjectUrl('');setExportPhase('pending');setJpegPhase('idle');setPhotoIndex(index);setSelected(next);
+    }
     useEffect(() => { if (manualLink) {
         linkRef.current?.focus();
         linkRef.current?.select();
     } }, [manualLink]);
-    async function share() { if (!exports || sharingRef.current)
+    async function share() { if (!exports || exportOwner.current!==selected || exportSelection.current!==selected || sharingRef.current)
         return; const owner=shareOwner.current;sharingRef.current=true;setSharing(true); try {
         const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text } : { title: selected.title, text: `${selected.caption}\n${selected.details}`, url: link };
         if (!navigator.share) {
@@ -362,15 +396,15 @@ function Result({ result, onBack, onReplay, onNext }: {
         setManualLink(true);
         setStatus('請長按或選取下方連結複製。');
     } }
-    function workshop() { if (!exports)
+    function workshop() { if (!jpegs||exportSelection.current!==selected)
         return; try {
-        saveGameDraft(sessionStorage, { version: 1, createdAt: Date.now(), game: result.game, ...(result.recipe ? {recipe:result.recipe} : {}), seed: result.seed, title: selected.title, text, image: exports.site });
+        saveGameDraft(sessionStorage, { version: 1, createdAt: Date.now(), game: result.game, ...(result.recipe ? {recipe:result.recipe} : {}), seed: result.seed, title: selected.title, text, image: jpegs.site });
         location.assign('/?game-share=1#home');
     }
     catch {
         setStatus('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。');
     } }
-    return <section className={`ad-result ${result.market?'ad-market-result':''}`}><div className="ad-result-heading"><p className="ad-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{result.game==='kitchen'?selected.title:selected.caption}</h1>{result.game==='kitchen'?!result.market&&<p aria-label="料理分數">{selected.caption}</p>:<p>{selected.details}</p>}</div><div className="ad-result-layout"><div className="ad-result-photo">{result.game==='kitchen'&&recipeOf(result.recipe)&&<DishShowcase recipe={recipeOf(result.recipe)!} market={result.market}/>}{result.game==='kitchen'?<details className="ck-export-preview"><summary>查看分享成果圖</summary><img src={exports?.preview??selected.image} alt={`${selected.title}・完整分享成果圖`} width="960" height="1200"/></details>:<img src={selected.image} alt={`${selected.title}・本局遊戲畫面與成績`} width="960" height="720"/>}{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => { setPhotoIndex(i); setSelected({ ...result, ...p }); }}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel">{result.market&&<MarketScore run={result.market}/>}<h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!exports} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small><button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" onClick={() => setGeneration(n => n + 1)}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onNext}>{result.game==='kitchen'?'換一道料理 →':'換個玩法 →'}</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
+    return <section className={`ad-result ${result.market?'ad-market-result':''}`}><div className="ad-result-heading"><p className="ad-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{result.game==='kitchen'?selected.title:selected.caption}</h1>{result.game==='kitchen'?!result.market&&<p aria-label="料理分數">{selected.caption}</p>:<p>{selected.details}</p>}</div><div className="ad-result-layout"><div className="ad-result-photo">{result.game==='kitchen'&&recipeOf(result.recipe)&&<DishShowcase recipe={recipeOf(result.recipe)!} market={result.market}/>}{result.game==='kitchen'?<details className="ck-export-preview"><summary>查看分享成果圖</summary><img src={jpegs?.preview??selected.image} alt={`${selected.title}・完整分享成果圖`} width="960" height="1200"/></details>:<img src={selected.image} alt={`${selected.title}・本局遊戲畫面與成績`} width="960" height="720"/>}{!!result.photos?.length && <div className="ad-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => choosePhoto(i)}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="ad-share-panel">{result.market&&<MarketScore run={result.market}/>}<h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!jpegs} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small>{jpegPhase==='pending'&&<p role="status">正在準備工坊圖片，PNG 已可下載或分享。</p>}{jpegPhase==='error'&&<><p role="status">工坊圖片未能產生，PNG 仍可下載或分享。</p><button className="ad-secondary" onClick={()=>{if(!jpegRetryAllowed.current||exportSelection.current!==selected)return;jpegRetryAllowed.current=false;setJpegPhase('pending');setJpegGeneration(n=>n+1);}}>重試準備工坊圖片</button></>}<button className="ad-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="ad-button ad-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="ad-secondary" disabled={exportPhase!=='error'} onClick={() => {if(!exportRetryAllowed.current||exportSelection.current!==selected)return;exportRetryAllowed.current=false;setExportPhase('pending');setGeneration(n => n + 1);}}>重試產生成果圖</button>}<button className="ad-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="ad-notice" role="status">{status}</p>{manualLink && <label className="ad-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="ad-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="ad-secondary" onClick={onNext}>{result.game==='kitchen'?'換一道料理 →':'換個玩法 →'}</button><button className="ad-secondary" onClick={onBack}>回遊樂場</button></div><p className="ad-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
 }
 export function AbsurdDaily() {
     const [game,setGame]=useState<ArcadeGameId|null>(initialGame),[recipe,setRecipe]=useState(()=>recipeOf(new URLSearchParams(location.search).get('recipe'))),[seed,setSeed]=useState(()=>seedOf(new URLSearchParams(location.search).get('seed'))),[result,setResult]=useState<RunResult|null>(null),[run,setRun]=useState(0),[fresh,setFresh]=useState(false);

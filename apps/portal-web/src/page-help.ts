@@ -1,6 +1,7 @@
 /** Human-facing help for the current screen. Development instructions live in the Agent section. */
 export type PageHelp={summary:string;steps:string[];note?:string};
 export const pageHelp:Record<string,PageHelp>={
+  'community-hub':{summary:'自由工坊共同經營的社群入口與參與方向。',steps:['依平台瀏覽社群，選擇想交流的主題。','社群邀請在新分頁開啟。','從我們正在做什麼前往站內原有頁面。'],note:'站內頁面仍依原登入與權限流程開放。'},
   'newbie-village':{summary:'AI 時代定位的新手村任務；所有作答與進度只存在本機。',steps:['閱讀做自己、過生活、用強項三維度。','完成 15 題並檢查分數與公會建議，公會由本人選擇。','寫方向卡，透過既有連結探索公會與小隊，再回顧第一週行動。'],note:'這不是診斷測驗，不向教練或伺服器傳送資料；本機勳章不是 XP 或官方紀錄。'},
 
   profile:{summary:'瀏覽自己的貼文、作品、技能投稿與活動。',steps:['選擇內容分區，再用分頁瀏覽。','開啟貼文可閱讀原始討論與留言。','資料與分享設定仍在獨立設定頁。'],note:'這是本人空間，不是公開個人牆；不會自動公開名片或私人草稿。'},
