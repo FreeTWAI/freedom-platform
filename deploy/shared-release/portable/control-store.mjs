@@ -61,11 +61,12 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
         code = response.status === 429 ? 'release_control_read_rate_limited' : 'release_control_read_unavailable';
         const after = response.headers.get('retry-after');
         await response.body?.cancel().catch(() => {});
-        if (/^\d{1,6}$/.test(after ?? '')) {
+        if (/^\d+$/.test(after ?? '')) {
           // Respect the provider's delay. A larger window stops this operation
           // rather than retrying early or holding the lease without a bound.
-          if (Number(after) > 300) throw Error(code);
-          wait = Math.max(wait, Number(after) * 1000);
+          const seconds = after.replace(/^0+/, '') || '0';
+          if (seconds.length > 3 || Number(seconds) > 300) throw Error(code);
+          wait = Math.max(wait, Number(seconds) * 1000);
         }
       } catch (error) {
         assertHeld();

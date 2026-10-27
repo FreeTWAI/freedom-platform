@@ -1176,13 +1176,13 @@ test('control GET distinguishes its deadline without retrying authorization or d
   await assert.rejects(timed.load(), /release_control_read_timeout/); assert.equal(reads, 3); assert.equal(f.puts(), 0);
 });
 
-test('control GET stops its retry backoff when the release lease is lost', async t => {
+for (const after of ['300', '0000300']) test(`control GET stops ${after}-second backoff when the release lease is lost`, async t => {
   const f = await controlFixture(t); let reads = 0, timer;
   t.after(() => clearTimeout(timer));
   const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
     if (url.endsWith(f.seedKey)) {
       reads++; timer = setTimeout(() => f.controller.abort(Error('release_lease_lost')), 1);
-      return new Response(null, { status: 429, headers: { 'retry-after': '300' } });
+      return new Response(null, { status: 429, headers: { 'retry-after': after } });
     }
     return f.options.fetchImpl(url, options);
   } });
@@ -1190,15 +1190,18 @@ test('control GET stops its retry backoff when the release lease is lost', async
 });
 
 test('control GET stops instead of retrying before an excessive provider delay', async t => {
-  const f = await controlFixture(t); let reads = 0;
-  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
-    if (url.endsWith(f.seedKey)) {
-      reads++; return new Response(null, { status: 429, headers: { 'retry-after': '301' } });
-    }
-    return f.options.fetchImpl(url, options);
-  } });
-  await assert.rejects(store.load(), /release_control_read_rate_limited/);
-  assert.equal(reads, 1); assert.equal(f.puts(), 0);
+  const f = await controlFixture(t);
+  for (const after of ['301', '1000000', '0000301', '9'.repeat(1000)]) {
+    let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) {
+        reads++; return new Response(null, { status: 429, headers: { 'retry-after': after } });
+      }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), /release_control_read_rate_limited/);
+    assert.equal(reads, 1); assert.equal(f.puts(), 0);
+  }
 });
 
 test('control intent survives an unknown PUT and setup ownership loss submits zero PUTs', async t => {
