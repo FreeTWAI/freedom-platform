@@ -115,6 +115,7 @@ export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
   'shop.business': { status: '未測' },
   // 社群入口、小遊戲與手機 App
   'community.page': { status: '未測' },
+  'community.hub': { status: '未測' },
   'community.play': { status: '未測' },
   'community.install': { status: '未測' },
   'community.journal': { status: '未測' },
