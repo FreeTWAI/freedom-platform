@@ -1,6 +1,7 @@
 // Conservative job selection for .github/workflows/verify.yml.
 // Operator-only changes use existing deploy and integrity coverage on PR/main.
-// Bounded CI tools also use mandatory integrity coverage on proven main pushes.
+// Bounded CI tools use mandatory integrity coverage on proven main pushes;
+// browser-spec-only changes retain UI, typecheck and the fixed spec consumers.
 // Other pull requests narrow through docs, frontend leaf, guild presentation
 // or minimal profiles. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
@@ -58,6 +59,7 @@ export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09
 // These profiles select existing jobs only. Consumer evidence and exclusions are
 // documented in affected-jobs.md; ownership metadata alone does not execute docs.
 export const MINIMAL_JOB_PROFILES = Object.freeze({
+  browser_specs_only: Object.freeze(['ui-e2e']),
   ci_tools: Object.freeze([]),
   ci_tools_document_inputs: Object.freeze(['governance-consumers']),
   plan_receipt_docs: Object.freeze([]),
@@ -94,16 +96,38 @@ const CI_TOOL_FILES = new Set([
   'packages/contribution-tools/context.mjs', 'packages/contribution-tools/modules.mjs',
   'packages/contribution-tools/test/context.test.mjs', 'packages/contribution-tools/test/modules.test.mjs',
   'packages/contribution-tools/test/modules-repository.test.mjs',
+  'packages/contribution-tools/pinned-suites.mjs',
   'scripts/ci/select-affected-jobs.mjs', 'scripts/ci/select-affected-jobs.test.mjs',
   'scripts/ci/guild-presentation-profile.test.mjs',
 ]);
 const CI_TOOL_DOCS = new Set(['governance/README.md', 'packages/contribution-tools/worker-unit-routing.md',
   'scripts/ci/affected-jobs.md', 'scripts/ci/release-inventory.md', 'scripts/repository-bootstrap/consumer-source-profiles.md']);
+const BROWSER_SPEC_TYPECHECK = "      - name: Typecheck browser-only changes\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node node_modules/typescript/bin/tsc --noEmit\n";
+const BROWSER_SPEC_CONSUMERS = "      - name: Check existing browser-spec consumers\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers\n";
+const BROWSER_SPEC_SUITE = "  'ci.browser-spec-consumers': Object.freeze({ files: Object.freeze(['tests/runtime/public-social-post-page.test.ts', 'tests/runtime/newcomer-guides.test.ts', 'tests/runtime/social-share.test.ts', 'tests/runtime/social-feed-write-order.test.ts', 'tests/runtime/guild-workspace-writer.test.ts', 'tests/runtime/guild-member-tier-fixture.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),\n";
+export function ciToolsBrowserRegistryProven(before, after) {
+  if (before === after) return true;
+  const marker = 'export const PINNED_SUITES = Object.freeze({\n';
+  return before.split(marker).length === 2 && !before.includes('ci.browser-spec-consumers')
+    && after === before.replace(marker, marker + BROWSER_SPEC_SUITE);
+}
+function browserTypecheckAddition(before, after) {
+  const marker = '\n  ui-e2e:\n', anchor = '      - run: npm run contracts:build\n';
+  const runner = '      - name: Run the pinned browser plan for the exact integration tree\n';
+  if (before.split(marker).length !== 2 || before.includes(BROWSER_SPEC_TYPECHECK) || before.includes(BROWSER_SPEC_CONSUMERS)) return false;
+  const start = before.indexOf(marker) + marker.length, rest = before.slice(start);
+  const next = rest.search(/\n  [a-z][a-z0-9-]*:\n/), end = next < 0 ? before.length : start + next;
+  const block = before.slice(start, end);
+  if (block.split(anchor).length !== 2 || block.split(runner).length !== 2) return false;
+  return after === before.slice(0, start) + block.replace(anchor, anchor + BROWSER_SPEC_TYPECHECK)
+    .replace(runner, BROWSER_SPEC_CONSUMERS + runner) + before.slice(end);
+}
 const RETIRED_WORKER_STEPS = "      - name: Checkout the pinned worker status guard\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: ${{ job.workflow_repository }}\n          ref: ${{ job.workflow_sha }}\n          path: .freedom/worker-status\n          persist-credentials: false\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n        with:\n          node-version: '24'\n      - name: Require CircleCI worker success for an identical same-repository PR tree\n        id: worker-provider\n        env:\n          GH_STATUS_TOKEN: ${{ github.token }}\n        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs\n";
 export function ciToolsWorkflowProven(before, after) {
   const clean = text => text.split('\n').filter(line => !line.trimStart().startsWith('#')).join('\n');
   if (typeof before !== 'string' || typeof after !== 'string' || before.length > 128000 || after.length > 128000) return false;
   if (clean(before) === clean(after)) return true;
+  if (browserTypecheckAddition(clean(before), clean(after))) return true;
   const marker='\n  static-worker:\n';
   if(before.split(marker).length!==2)return false;
   const start=before.indexOf(marker)+marker.length,rest=before.slice(start);
@@ -149,6 +173,8 @@ export function decideCiToolsProfile(input) {
 function ciToolsSourcesProven(root,base,candidate,diff) {
   const read=(sha,path)=>runGit(root,['show','--end-of-options',`${sha}:${path}`]).toString('utf8');
   if (!ciToolsWorkflowProven(read(base,'.github/workflows/verify.yml'),read(candidate,'.github/workflows/verify.yml'))) return false;
+  if (diff.changes.some(c => c.path === 'packages/contribution-tools/pinned-suites.mjs')
+    && !ciToolsBrowserRegistryProven(read(base,'packages/contribution-tools/pinned-suites.mjs'),read(candidate,'packages/contribution-tools/pinned-suites.mjs'))) return false;
   if(diff.changes.some(c=>c.path==='governance/schemas/module.schema.json')
     && !ciToolsSchemaProven(read(base,'governance/schemas/module.schema.json'),read(candidate,'governance/schemas/module.schema.json'))) return false;
   const ts=loadGuildPresentationParsers()?.ts;if(!ts)return false;
@@ -193,6 +219,25 @@ export function decideMinimalProfile(input) {
     && !path.endsWith('/AGENTS.md') && !RUNTIME_TEXT.has(path) && !MODULE_MARKDOWN_INPUTS.has(path)
     && !guildPresentationPath(path))) reason = 'module_app_markdown';
   return reason ? {profile: reason, reason} : fallback;
+}
+
+// Existing browser specs keep their browser plan, typecheck and the known
+// runtime source consumers without the unrelated runtime matrix. Require an
+// unchanged graph and ordinary content-only integration diff.
+export function decideBrowserSpecProfile(input) {
+  const full = {profile: 'full', reason: 'outside_browser_specs'};
+  if (!['pull_request', 'push'].includes(input?.event) || input.diffComplete !== true
+    || input.nonExecutableBlobsProven !== true || input.descriptorsProven !== true
+    || !Array.isArray(input.changes) || !input.changes.length || input.changes.length > CHANGE_LIMIT) return full;
+  const paths = input.changes.map(change => change?.path);
+  if (new Set(paths).size !== paths.length || input.changes.some(change => change?.status !== 'M'
+    || change.previousPath || !/^tests\/e2e\/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts$/.test(change.path))) return full;
+  try {
+    const graphs = [validatedDescriptorGraph(input.baseline), validatedDescriptorGraph(input.candidate)];
+    if (!graphs[0].size || !sameSet([...graphs[0].keys()], [...graphs[1].keys()])) return full;
+    for (const [id, descriptor] of graphs[0]) if (JSON.stringify(descriptor) !== JSON.stringify(graphs[1].get(id))) return full;
+  } catch { return full; }
+  return {profile: 'browser_specs_only', reason: 'browser_specs_only'};
 }
 
 // Host-owned paths and expected module obligations, never a candidate glob or
@@ -847,6 +892,8 @@ export function collectRepositoryDecision({ repository, event, ref = '', base = 
   const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (delivery) return delivery;
   if (tools.reason === 'ci_tools_sources_unproven') return full(tools.reason);
+  const browser = collectIntegrationProfile({repository, event, ref, base, head, candidate, pullRequest, allowFetch}, decideBrowserSpecProfile);
+  if (browser.profile === 'browser_specs_only') return decision('affected', browser.reason, false);
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
   const minimal = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideMinimalProfile);
   if (Object.hasOwn(MINIMAL_JOB_PROFILES, minimal.profile)) return decision('affected', minimal.reason, false);
@@ -937,7 +984,7 @@ export function collectRepositoryE2eDecision(input = {}) { return collectIntegra
 export function collectRepositoryGuildDecision(input = {}) { return collectIntegrationProfile(input, decideGuildPresentationProfile); }
 function collectIntegrationProfile({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
   const fallback = reason => ({ profile: 'full', reason });
-  const mainPush = decide === decideCiToolsProfile && event === 'push' && ref === 'refs/heads/main';
+  const mainPush = [decideCiToolsProfile, decideBrowserSpecProfile].includes(decide) && event === 'push' && ref === 'refs/heads/main';
   if (event !== 'pull_request' && !mainPush) return fallback('non_pull_request');
   if (typeof repository !== 'string' || !isAbsolute(repository)
     || ![base, head, candidate].every(value => SHA.test(value))) return fallback('candidate_unproven');

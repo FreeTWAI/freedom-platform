@@ -296,3 +296,50 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
       WHERE o.instance_id=p.instance_id AND o.tenant_id=p.tenant_id AND s.owner_id=$1 AND o.state='offered'`, [supplier.id]);
   }
 });
+
+function supplierRetryPage(title: string, next_cursor: string | null) {
+  return SupplierReservationPageSchema.parse({items:[{
+    profile:'freedom.hosted-supplier-reservations/v1',order_id:randomUUID(),version:'1',
+    store:{slug:'retry-fixture-store',name:'合成零售店'},currency:'TWD',state:'reserved',
+    created_at:'2026-10-01T00:00:00.000Z',reservation_expires_at:'2026-10-01T00:30:00.000Z',closed_at:null,
+    items:[{product_id:randomUUID(),offer_id:randomUUID(),acceptance_id:randomUUID(),sku:'P0001',title,quantity:1,unit_supply_price_minor:100,supply_total_minor:100}],
+    payment_enabled:false,fulfilment_enabled:false,money_movement_enabled:false,
+  }],next_cursor});
+}
+
+// Read-only synthetic pages: this regression creates no orders, payments or stock writes.
+test('supplier order pagination retries the failed cursor and keeps refresh at newest', async ({page, e2eAuthPool}) => {
+  const member = await person(e2eAuthPool); await fixtureLogin(page, member.email);
+  const tenant = randomUUID(), instance = randomUUID();
+  const root = `/tenants/${tenant}/storefronts/${instance}/supply-reservations`;
+  const cursors: (string | null)[] = [];
+  let fail = true; const gate: {release?: () => void} = {};
+  await page.route('**/api/v1' + root + '*', async route => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor'); cursors.push(cursor);
+    if (cursor && fail) return route.fulfill({status:503, contentType:'application/problem+json', body:JSON.stringify({title:'暫時無法讀取',status:503})});
+    if (cursor === 'older-page-cursor') await new Promise<void>(resolve => {gate.release = resolve;});
+    await route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(supplierRetryPage(cursor === null ? '最新頁商品' : '較早頁商品',cursor === null ? 'older-page-cursor' : cursor === 'older-page-cursor' ? 'last-page-cursor' : null))});
+  });
+  await open(page, `stores/${tenant}/${instance}/supply-orders`);
+  const older = page.getByRole('button', {name:'較早的供貨預留',exact:true});
+  const retry = page.getByRole('button', {name:'重試載入這一頁',exact:true});
+  const refresh = page.getByRole('button', {name:'更新供貨訂單',exact:true});
+  await older.click(); await expect(retry).toBeVisible();
+  await retry.click(); await expect(retry).toBeEnabled();
+  expect(cursors).toEqual([null,'older-page-cursor','older-page-cursor']);
+  fail = false;
+  try {
+    await retry.click(); await expect.poll(() => gate.release !== undefined).toBe(true);
+    await expect(retry).toBeDisabled(); await expect(refresh).toBeDisabled();
+    await expect(page.getByRole('status').filter({hasText:'正在確認供貨訂單'})).toBeVisible();
+  } finally {gate.release?.();}
+  await expect(retry).toHaveCount(0); await expect(older).toBeEnabled();
+  await expect(page.locator('.hosted-store')).toContainText('較早頁商品');
+  await expect(page.locator('.hosted-store')).not.toContainText('最新頁商品');
+  fail = true; await older.click(); await expect(retry).toBeVisible();
+  expect(cursors.at(-1)).toBe('last-page-cursor');
+  await refresh.click(); await expect(older).toBeVisible(); await expect(retry).toHaveCount(0);
+  expect(cursors.at(-1)).toBeNull();
+  await expect(page.locator('.hosted-store')).toContainText('最新頁商品');
+  await expect(page.locator('.hosted-store')).not.toContainText('較早頁商品');
+});

@@ -88,8 +88,9 @@ async function enroll(session: Session, index = 0) {
 async function sessionCount(index = 0): Promise<number> {
   return (await pool.query('SELECT count(*)::int AS n FROM sessions WHERE user_id=$1', [DEMO_USERS[index].user_id])).rows[0].n;
 }
-function noSession(reply: Reply) {
-  assert.equal(reply.response.headers.get('set-cookie'), null);
+function noSession(reply: Reply, googleMarkerCleared = false) {
+  if (googleMarkerCleared) assert.deepEqual(reply.response.headers.getSetCookie(), ['freedom_google_flow=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict']);
+  else assert.equal(reply.response.headers.get('set-cookie'), null);
   assert.equal(reply.data.csrf_token, undefined);
   assert.equal(reply.data.user, undefined);
   assert.equal(reply.data.token, undefined);
@@ -298,7 +299,9 @@ test('mailbox password reset keeps MFA enabled and never issues an authenticated
   const reset = await request('/auth/reset/confirm', { token, password: newPassword }, session);
   assert.equal(reset.status, 200);
   assert.deepEqual(reset.data, { reset: true, totp_required: true, expires_after_minutes: 30 });
-  noSession(reset); assert.equal(await sessionCount(), initial);
+  // Successful recovery clears only the Google flow marker even when Google is OFF.
+  // The exact deletion header cannot create a member session; all issuance checks stay strict.
+  noSession(reset, true); assert.equal(await sessionCount(), initial);
   assert.equal((await request('/session', undefined, session)).status, 401);
   assert.equal((await request('/auth/reset/confirm', { token, password: newPassword })).status, 422);
   assert.equal((await request('/auth/login', { email, password: DEMO_PASSWORD, code: codes[0] })).status, 401);

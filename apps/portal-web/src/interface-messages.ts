@@ -34,6 +34,7 @@ export const interfaceMessages = {
   "nv.previous": ["上一題", "Previous question", "前の質問", "이전 질문", "Pregunta anterior"],
   "nv.results": ["查看結果", "View results", "結果を見る", "결과 보기", "Ver resultados"],
   "nv.resultTitle": ["我的定位草稿", "My direction draft", "方向性の下書き", "내 방향 초안", "Mi borrador de rumbo"],
+  "nv.nextStep": ["下一步", "Next step", "次の一歩", "다음 단계", "Siguiente paso"],
   "nv.baseline": ["過生活底線", "Lifestyle baseline", "暮らしの譲れない条件", "생활의 기준선", "Límites de estilo de vida"],
   "nv.firstWeek": ["第一週行動", "First-week action", "最初の週の行動", "첫 주 행동", "Acción de la primera semana"],
   "nv.rhythm": ["30 天節奏（作者示例，由你調整）", "30-day rhythm (author example; adapt it)", "30日の流れ（著者の例・調整可）", "30일 리듬 (저자 예시, 직접 조정)", "Ritmo de 30 días (ejemplo adaptable)"],

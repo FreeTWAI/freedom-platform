@@ -1,3 +1,4 @@
+import type {GoogleLoginOptions} from '../../../modules/identity-membership/google/service.js';
 import type {StoreGalleryAssets} from '../../../modules/assets/storefront-gallery.js';
 import type {StoreAppearanceAssets} from '../../../modules/assets/storefront-appearance.js';
 import type { SupplyMaterialAssets } from '../../../modules/agent-commerce/supplier-console/material-media.js';
@@ -35,6 +36,8 @@ export const SHARED_NETWORK_KEY = 'shared-server';
  * bindings, so no configuration is shared through process-wide state.
  */
 export type PlatformRuntime = {
+  /** Optional Google login; false/absent is OFF. Secrets never enter public config. */
+  googleLogin?: GoogleLoginOptions;
   afterResponse?:(work:()=>Promise<void>)=>void;
   commerceQueryTransport?:PaymentQueryTransport;
   commercePayments?:{gateway?:EcpayPaymentGateway;journal:EffectJournalPort;profiles:readonly string[]};
