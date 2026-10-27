@@ -77,14 +77,16 @@ export async function requireFailedBackup(api, admission, installation) {
   check([start, end, finish].every(Number.isFinite) && finish >= start && finish <= end && end <= Date.now() + 60000,
     'release_backup_recovery_receipt_invalid');
   const progress = receipt.operatorProgress;
-  const preCapture = Array.isArray(progress) && progress.length === 2
+  const beforeDump = Array.isArray(progress) && progress.length === 2
     && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
     && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
-    && progress[1].backupFailure?.stage === 'preflight' && progress[1].backupFailure?.snapshotDump === 'not_started';
-  check(!independentRelease || preCapture, 'release_backup_recovery_boundary_invalid');
+    && progress[1].backupFailure?.snapshotDump === 'not_started';
+  const preCapture = beforeDump && progress[1].backupFailure?.stage === 'preflight';
+  const preDump = beforeDump && progress[1].backupFailure?.stage === 'capture';
+  check(!independentRelease || preCapture || preDump, 'release_backup_recovery_boundary_invalid');
   checkRun(await api(`${prefix}/actions/runs/${id}`));
   return Object.freeze({ format: 'freedom.verified-failed-backup/v1',
-    ...(preCapture ? { failureBoundary: 'before_capture' } : {}), runId: id, runAttempt: run.run_attempt,
+    ...(preCapture ? { failureBoundary: 'before_capture' } : preDump ? { failureBoundary: 'before_dump' } : {}), runId: id, runAttempt: run.run_attempt,
     sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree, target: receipt.target, controllerSha: run.head_sha,
     operatorImage: receipt.operatorImage, configSha256: receipt.configSha256, artifactId: artifact.id, artifactDigest: artifact.digest,
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });

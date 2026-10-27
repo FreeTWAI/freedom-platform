@@ -11,10 +11,12 @@ async function login(page:import('@playwright/test').Page){
 
 test('confirmed Issue remains visible after a lost publish response and modal reopen',async({page})=>{
   await login(page);
-  let operationKey='';
-  await page.route('**/api/v1/me/github/pages/home/issues',route=>{
+  let operationKey='',posts=0,releasePublish=()=>{};
+  const publishResponse=new Promise<void>(resolve=>{releasePublish=resolve});
+  await page.route('**/api/v1/me/github/pages/home/issues',async route=>{
     if(route.request().method()==='POST'){
-      operationKey=route.request().headers()['idempotency-key']??'';
+      posts++;operationKey=route.request().headers()['idempotency-key']??'';
+      await publishResponse;
       return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({code:'unavailable'})});
     }
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[
@@ -30,7 +32,16 @@ test('confirmed Issue remains visible after a lost publish response and modal re
   await expect(idea.getByRole('link',{name:/#16/})).toBeVisible();
   await idea.getByRole('textbox',{name:'標題'}).fill('改善首頁');
   await idea.getByRole('textbox',{name:'想法與期待'}).fill('希望首頁提供更容易找到的入口。');
-  await idea.getByRole('button',{name:'用我的 GitHub 發布'}).click();
+  try{
+    await idea.getByRole('button',{name:'用我的 GitHub 發布'}).click();
+    await expect.poll(()=>posts).toBe(1);
+    await idea.getByRole('button',{name:'關閉',exact:true}).click();
+    await openPageTools(page);await page.getByRole('button',{name:'提出想法',exact:true}).click();
+    await expect(idea.getByRole('button',{name:'正在發布…',exact:true})).toBeDisabled();
+    await expect(idea.getByRole('textbox',{name:'標題'})).toHaveValue('改善首頁');
+    expect(posts).toBe(1);
+  }finally{releasePublish()}
+
   await expect(idea.getByRole('status').filter({hasText:'已由你的 GitHub 帳號發布'})).toBeVisible();
   await expect(idea.getByRole('link',{name:'#17 改善首頁 ↗'})).toBeVisible();
   await expect(idea.getByText('發布結果尚未確認')).toHaveCount(0);
@@ -40,6 +51,8 @@ test('confirmed Issue remains visible after a lost publish response and modal re
   await expect(idea.getByRole('link',{name:/#16/})).toBeVisible();
   await expect(idea.getByRole('link',{name:'#17 改善首頁 ↗'})).toBeVisible();
   expect(operationKey).not.toBe('');
+  expect(posts).toBe(1);
+  await expect(idea.getByRole('textbox',{name:'標題'})).toHaveValue('改善首頁');
   await page.screenshot({path:'test-results/page-issue-recovery-desktop.png'});
 });
 

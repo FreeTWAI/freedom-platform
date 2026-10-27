@@ -6,7 +6,11 @@ import { artifactPath, parseJson, readBounded, sha256 } from './io.mjs';
 
 
 const PROGRESS_SCHEMA = 'freedom.test-file-progress/v1';
-const PROGRESS_MAX_BYTES = 1_048_576, PROGRESS_MAX_LINE = 2048, PROGRESS_MAX_FILES = 512, PROGRESS_MAX_FAILURES = 64;
+// Shared with runtime.full admission, including its unsharded process selection.
+export const MAX_RUNTIME_FILES = 1024;
+const PROGRESS_MAX_BYTES = 1_048_576, PROGRESS_MAX_LINE = 2048, PROGRESS_MAX_FILES = MAX_RUNTIME_FILES, PROGRESS_MAX_FAILURES = 64;
+// One array node plus each selected path; allow 1,024 artifact paths of up to 240 bytes.
+const PROGRESS_SELECTION_MAX_BYTES = 262_144, PROGRESS_SELECTION_MAX_NODES = PROGRESS_MAX_FILES + 2;
 // Cover the largest partition runtime budget (eight hosts, 2,100s) (suite-runner PARTITION_BUDGET_MS).
 // This diagnostic bound does not extend execution or result-admission deadlines.
 export const PROGRESS_MAX_ELAPSED_MS = 2_100_000;
@@ -54,7 +58,7 @@ async function fileProgress() {
   const epoch=performance.now();let selected;
   try{
     if(typeof process.env.FREEDOM_TEST_PROGRESS_FILES!=='string')return ()=>{};
-    const paths=parseJson(process.env.FREEDOM_TEST_PROGRESS_FILES,{maxBytes:131_072,maxDepth:2,maxNodes:514});
+    const paths=parseJson(process.env.FREEDOM_TEST_PROGRESS_FILES,{maxBytes:PROGRESS_SELECTION_MAX_BYTES,maxDepth:2,maxNodes:PROGRESS_SELECTION_MAX_NODES});
     if(!Array.isArray(paths)||paths.length>PROGRESS_MAX_FILES||new Set(paths).size!==paths.length)throw Error();
     selected=new Map();let total=0;
     for(const path of paths){progressPath(path);const bytes=await readBounded(process.cwd(),path);total+=bytes.length;if(total>32_000_000)throw Error();selected.set(path,{digest:sha256(bytes),lines:bytes.toString('utf8').split('\n').length});}
@@ -84,8 +88,8 @@ async function fileProgress() {
 
 async function failureDiagnostics() {
   try {
-    const paths=parseJson(process.env.FREEDOM_TEST_PROGRESS_FILES,{maxBytes:131072,maxDepth:2,maxNodes:514});
-    if(!Array.isArray(paths)||paths.length>512)return ()=>{};
+    const paths=parseJson(process.env.FREEDOM_TEST_PROGRESS_FILES,{maxBytes:PROGRESS_SELECTION_MAX_BYTES,maxDepth:2,maxNodes:PROGRESS_SELECTION_MAX_NODES});
+    if(!Array.isArray(paths)||paths.length>PROGRESS_MAX_FILES)return ()=>{};
     const sources=[];
     for(const path of ['tests/runtime/model-broker-bridge-adversarial.test.ts','tests/runtime/media-verify.test.ts','tests/runtime/credential-ingest-process.test.ts','tests/runtime/credential-ingest-adversarial.test.ts','tests/runtime/member-model-settings-process.test.ts','tests/runtime/credential-ingest-rate-budget.test.ts']) {
       if(!paths.includes(path))continue;

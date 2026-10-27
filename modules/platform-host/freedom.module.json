@@ -11,6 +11,7 @@
     "apps/platform-api/src/session-cookie.ts",
     "apps/platform-api/src/static-assets.ts",
     "apps/platform-api/src/static-assets-node.ts",
+    "tests/worker/workerd.test.ts",
     "tests/runtime/session-cookie-security.test.ts",
     "tests/runtime/onboarding-diagnostics.test.ts"
   ],
