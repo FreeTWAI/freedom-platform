@@ -36,7 +36,8 @@
     "tests/e2e/audit-identity-final.spec.ts",
     "tests/runtime/guild-workspace-writer.test.ts",
     "tests/runtime/guild-member-operation.test.ts",
-    "tests/e2e/guild-member-operations.spec.ts"
+    "tests/e2e/guild-member-operations.spec.ts",
+    "tests/e2e/guild-members.spec.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-search.ts",

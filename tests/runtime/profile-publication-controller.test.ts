@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createProfileReader,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
-import {parseProfileRoute,visitorProfileHash,canOpenGuestProfile} from '../../apps/portal-web/src/modules/profile-publication-route.js';
+import {parseProfileRoute,visitorProfileHash,canOpenGuestProfile,directoryVisitorProfileHref} from '../../apps/portal-web/src/modules/profile-publication-route.js';
 const id='10000000-0000-4000-8000-000000000001';
 const tick=()=>new Promise<void>(resolve=>queueMicrotask(resolve));
 test('profile routes reject malformed/duplicate/unknown parameters; OAuth is not a guest profile',()=>{
@@ -60,4 +60,12 @@ for(const type of ['profile-publication-settings',`visitor-profile:${id}`])test(
  const oldOperation=performModuleMutation(client,state,'/synthetic-command',{},2);assert.equal(guard(),false);
  setSharingDraftAccount(null,103);assert.equal(guard(),true,'stale account guard must not trap the new session');
  resolve({updated:true});await oldOperation;assert.equal(profileMutationBlocksLeave(null),false);
+});
+
+test('directory link eligibility never throws or constructs routes for invalid IDs; navigation stays strict',()=>{
+ assert.equal(directoryVisitorProfileHref(id),visitorProfileHash(id));
+ assert.equal(directoryVisitorProfileHref(id.toUpperCase()),visitorProfileHash(id));
+ for(const value of ['member-0','',null,undefined,123,'javascript:alert(1)',`${id}&view=settings`,`${id}/`,{}])assert.equal(directoryVisitorProfileHref(value),null);
+ assert.throws(()=>visitorProfileHash('member-0'),/Invalid member id/);
+ assert.deepEqual(parseProfileRoute('#profile?member=member-0'),{kind:'invalid'});
 });

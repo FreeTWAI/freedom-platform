@@ -9,6 +9,8 @@ export function parseProfileRoute(hash:string):ProfileRoute|null{
   const id=params.get('member');return id&&uuid.test(id)?{kind:'visitor',id:id.toLowerCase()}:{kind:'invalid'};
 }
 export function visitorProfileHash(id:string){if(!uuid.test(id))throw new Error('Invalid member id');return `#profile?member=${id.toLowerCase()}`;}
+/** Directory rows remain readable when a legacy/malformed identifier cannot form a visitor route. */
+export function directoryVisitorProfileHref(id:unknown):string|null{return typeof id==='string'&&uuid.test(id)?visitorProfileHash(id):null;}
 /** Raw OAuth callbacks must retain the authentication flow before public routing. */
 export function canOpenGuestProfile(hash:string,search:string){
   const params=new URLSearchParams(search);

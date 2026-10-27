@@ -1,4 +1,4 @@
-import {visitorProfileHash} from './profile-publication-route';
+import {directoryVisitorProfileHref} from './profile-publication-route';
 import './ProfilePublication.css';
 import {ReportButton,OwnReports} from './MemberReporting';
 import {AccountDeactivation} from './AccountDeactivation';
@@ -110,6 +110,7 @@ const defaultDirectoryFilters:DirectoryFilters={search:'',guild_key:'',primary_g
 
 export function DirectoryMemberRow({member,labels,children,client}:{member:MemberCardData;labels:Record<string,string>;children?:React.ReactNode;client:PortalClient}){
   const [detailsOpen,setDetailsOpen]=useState(false);
+  const profileHref=directoryVisitorProfileHref(member.user_id);
   const skillLabel=(id:string)=>id.startsWith('custom:')?id.slice(7):labels[id]??id;
   const featured=(member.featured_capabilities??member.capabilities.slice(0,3)).slice(0,3);
   const abilities=[...member.capabilities,...(member.custom_capabilities??[]).map(value=>`custom:${value}`)];
@@ -117,7 +118,7 @@ export function DirectoryMemberRow({member,labels,children,client}:{member:Membe
   const joined=member.joined_at&&Number.isFinite(Date.parse(member.joined_at))?member.joined_at:null;
   const contacts=(Object.keys(contactLabels) as (keyof typeof contactLabels)[]).filter(key=>typeof member.contacts[key]==='string'&&member.contacts[key]);
   return <article className="directory-member" data-member-id={member.user_id} aria-label={member.nickname}>
-    <div className="directory-member-identity"><a className="directory-member-profile-link" href={visitorProfileHash(member.user_id)} aria-label={`查看${member.nickname}的個人頁`}><MemberAvatar nickname={member.nickname} avatarUrl={member.avatar_url}/></a><div><div className="directory-member-name"><h3><a className="directory-member-profile-link" href={visitorProfileHash(member.user_id)}>{member.nickname}</a></h3><IdentityBadge value={member.identity_label}/>{member.is_self&&<span className="badge">你</span>}</div><p className="directory-member-title">{member.positioning_title??'探索自己的方向'}</p><p className="directory-member-guild">{member.category_primaries?member.category_primaries.map(item=>`${SECTION_LABELS[item.category]}：${item.guild?.name??'尚未選擇'}`).join(' · '):(member.primary_guild?.name??'尚未設定主要公會')}</p></div></div>
+    <div className="directory-member-identity">{profileHref?<a className="directory-member-profile-link" href={profileHref} aria-label={`查看${member.nickname}的個人頁`}><MemberAvatar nickname={member.nickname} avatarUrl={member.avatar_url}/></a>:<MemberAvatar nickname={member.nickname} avatarUrl={member.avatar_url}/>}<div><div className="directory-member-name"><h3>{profileHref?<a className="directory-member-profile-link" href={profileHref}>{member.nickname}</a>:member.nickname}</h3><IdentityBadge value={member.identity_label}/>{member.is_self&&<span className="badge">你</span>}</div><p className="directory-member-title">{member.positioning_title??'探索自己的方向'}</p><p className="directory-member-guild">{member.category_primaries?member.category_primaries.map(item=>`${SECTION_LABELS[item.category]}：${item.guild?.name??'尚未選擇'}`).join(' · '):(member.primary_guild?.name??'尚未設定主要公會')}</p></div></div>
     <div className="directory-member-skills" aria-label="擅長的能力"><span className="hint">本人填寫的專長</span>{featured.length?featured.map(id=><span className="pill" key={id}>{skillLabel(id)}</span>):<span className="muted">尚未填寫專長</span>}</div>
     {!member.is_self&&<ReportButton kind="member" id={member.user_id} label={`${member.nickname}的名片`}/>}
     <div className="directory-member-meta"><MemberPresence online={member.is_online} lastSeen={member.last_seen_at}/>{joined?<span><time dateTime={joined} title={member.joined_at_source==='launch_day'?'開站日 · 台北時間':'台北時間'}>{new Date(joined).toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'})}</time> 加入</span>:<span>加入日期未記錄</span>}{children}</div>

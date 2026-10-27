@@ -30,13 +30,19 @@ Successful public receipts use `release_confirmed` and
 and new receipts with their own phase contract, never check-mode receipts.
 
 An optional failed-backup run reference authenticates the original terminal
-workflow/artifact before any BEGIN-only reconciliation. Its failed inner preflight
-and `snapshotDump: not_started` plus the authenticated empty-intent journal are
-necessary, not sufficient: independent Worker/DB/floor/GC/backend observations
-under the lease must pass before append-only abandonment. No seed reset, deletion,
-archive/capture-intent recovery or backup-success assertion is part of deploy.
-Daily receipts now retain independent allowlisted `phaseCode` and `cleanupCode`;
-raw error strings and provider detail never enter these fields.
+workflow/artifact before reconciliation. Failed inner preflight with
+`snapshotDump: not_started` retains the BEGIN-only boundary. Failed capture with
+that same dump status is `before_dump`: either no intent exists, or the sole
+capture-policy intent still matches the exact pre-mutation policy digest (excluding
+generation). A committed capture revision uses the existing cleanup readback path.
+Independent Worker/DB/floor/GC/backend observations under the lease must pass before
+append-only abandonment. Legacy-predecessor recovery remains BEGIN-only; archive
+intents always refuse. No seed reset, deletion or backup-success assertion is allowed.
+Every failed operator phase records a bounded `release_[a-z0-9_]{1,80}` `failureCode`
+(code, then message, otherwise `release_operation_failed`). Public progress and the
+step summary expose it only for the last failed phase. Daily receipts also retain
+independent allowlisted `phaseCode` and `cleanupCode`, including standard SQLSTATE
+and fixed network identifiers; raw errors, causes and provider details stay private.
 
 The rest of this document describes retained legacy and backup contracts where
 seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
@@ -334,7 +340,8 @@ Additional required successful evidence fields:
 Exit zero only after every actual operation and cleanup succeeds. On failure,
 persist a bound progress record and exit nonzero; never continue to later phases.
 Unknown mutation outcomes require readback/reconciliation, not automatic replay.
-The controller projects phase names/status/times and validated public flag changes into public receipts;
+The controller projects phase names/status/times, the last failed phase's fixed `failureCode`
+and validated public flag changes into public receipts;
 an interrupted run's progress is explicitly a report, not confirmed completion.
 Schema validation authenticates neither the image nor the provider observations:
 image review, environment pins and actual staging acceptance remain necessary.

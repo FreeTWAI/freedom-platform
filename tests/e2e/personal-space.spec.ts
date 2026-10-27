@@ -232,7 +232,12 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  const identityBox=(await identity.boundingBox())!,avatarBox=(await hero.locator('.member-avatar').boundingBox())!,actionBox=(await action.boundingBox())!;
  expect(identityBox.y).toBeCloseTo(avatarBox.y,0);expect(identityBox.width).toBeGreaterThan(120);
  expect(actionBox.y).toBeGreaterThanOrEqual(Math.max(identityBox.y+identityBox.height,avatarBox.y+avatarBox.height));
- expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);expect((await action.getByRole('link').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await expect(action.getByRole('link')).toHaveCount(2);
+ for(const [name,href] of [['編輯資料與分享設定','#account'],['對外個人頁與可見範圍','#profile?view=settings']]){
+  const link=action.getByRole('link',{name,exact:true});await expect(link).toBeVisible();await expect(link).toHaveAttribute('href',href);
+  const box=(await link.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
+ }
  expect((await hero.boundingBox())!.height).toBeLessThan(300);
  expect((await page.locator('.personal-space-entry').first().boundingBox())!.y).toBeLessThan(844);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -242,5 +247,5 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.keyboard.press('Space');await expect(details).not.toHaveAttribute('open');await expect(summary).toBeFocused();
  longIdentity=true;await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link')).toHaveAttribute('href','#account');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link',{name:'編輯資料與分享設定',exact:true})).toHaveAttribute('href','#account');await expect(action.getByRole('link',{name:'對外個人頁與可見範圍',exact:true})).toHaveAttribute('href','#profile?view=settings');
 });

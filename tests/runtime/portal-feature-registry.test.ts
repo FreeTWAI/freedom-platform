@@ -15,7 +15,7 @@ function fixture(overrides: Partial<PortalFeatureContext> = {}): PortalFeatureCo
     session: { user: { user_id: 'synthetic-member-a', display_name: '測試會員' }, csrf_token: 'synthetic-csrf-a' } as SessionPayload,
     site: null,
     locationHash: '#reservations',
-    selectTab: () => {}, friendScope: 'accepted', notificationTarget: null, headerMember: null,
+    selectTab: () => {}, openHomeJournal: () => false, friendScope: 'accepted', notificationTarget: null, headerMember: null,
     registerPageLeave: () => {}, replaceBuyerLocation: () => {}, onSessionExpired: () => {},
     openMemberMessage: () => {}, showIncomingFriends: () => {},
     ...overrides,

@@ -1,0 +1,6 @@
+.workspace-navigation .nav-commerce-groups { grid-column: 1 / -1; display: grid; gap: 12px; min-width: 0; }
+.workspace-navigation .nav-commerce-group { display: grid; gap: 2px; min-width: 0; }
+.workspace-navigation .nav-commerce-heading { margin: 4px 10px; color: var(--muted); font-size: 14px; font-weight: 700; }
+.workspace-navigation .nav-commerce-item { align-items: flex-start; min-width: 0; white-space: normal; }
+.workspace-navigation .nav-commerce-copy { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.workspace-navigation .nav-commerce-purpose { color: var(--muted); font-size: 14px; font-weight: 400; line-height: 1.45; }

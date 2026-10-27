@@ -1,5 +1,7 @@
 // GitHub facts are acquired using the job token, never supplied as dispatch inputs.
 import { artifactReader } from './artifacts.mjs';
+import { isReleaseFailureCode } from './failure-codes.mjs';
+export { isReleaseFailureCode } from './failure-codes.mjs';
 export const REPOSITORY = 'FreeTWAI/freedom-platform';
 export const REPOSITORY_ID = 1378081342;
 export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
@@ -14,6 +16,7 @@ export const releasePhases = request => {
 export const requireRelease = (condition, code) => {
   if (!condition) throw Object.assign(new Error(code), { code });
 };
+export const releaseFailureCode = error => [error?.code, error?.message].find(isReleaseFailureCode) ?? 'release_operation_failed';
 export const isSha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const isDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
