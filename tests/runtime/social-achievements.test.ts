@@ -65,8 +65,8 @@ test('paused awards keep valid days; appeal restore recomputes without resetting
 // accepted Work command and its hook, not a synthetic historical helper replay.
 const workOrigin='http://127.0.0.1:4310';
 interface WorkSession {cookie:string;csrf:string;user:any}
-function workFlow(enabled=true){
- const app=createApp(pool,workOrigin,'local',{socialAchievementsEnabled:enabled});
+function workFlow(enabled=true,db:Pool=pool){
+ const app=createApp(db,workOrigin,'local',{socialAchievementsEnabled:enabled,memberBlockingEnabled:true});
  async function request(path:string,session?:WorkSession,body?:unknown,version?:string,key=randomUUID()){
   const headers:Record<string,string>={Origin:workOrigin,...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{})};
   if(body!==undefined){headers['Content-Type']='application/json';headers['Idempotency-Key']=key;if(version)headers['If-Match']=`"${version}"`;}
@@ -85,7 +85,7 @@ function workFlow(enabled=true){
   const accepted=await request(path,reviewer,body,version,key);assert.equal(accepted.response.status,200,JSON.stringify(accepted.data));
   return {replay:()=>request(path,reviewer,body,version,key)};
  }
- return {signIn,accept};
+ return {signIn,accept,request};
 }
 test('actual accepted Work credits opposite deliverers once each without changing contribution facts',async()=>{
  await enroll();const flow=workFlow(),a=await flow.signIn(0),b=await flow.signIn(1),accepted=await flow.accept(a,b);
@@ -115,3 +115,88 @@ test('active opted-in members without mailbox verification can start, but inacti
  await pool.query("UPDATE users SET onboarding_required=false,email='synthetic@example.invalid' WHERE user_id=$1",[B]);await exchange('2026-01-04');assert.equal((await readSocialAchievements(pool,actor)).chat.days,1);
  await pool.query('UPDATE users SET email=$2 WHERE user_id=$1',[B,DEMO_USERS[1].email]);await exchange('2026-01-05');assert.equal((await readSocialAchievements(pool,actor)).chat.days,2,'restored current eligibility permits the next day without mailbox verification');
 });
+
+// These cases use the real authenticated send route and its transaction hook.
+// The scheduling gate below delays one real query; it never fabricates query results.
+const chatPath='/me/channels/world/world/messages';
+const consentBody={policy_version:'social_days_v1',counting_enabled:true,show_title:false,selected_title:null};
+async function chatStart(flow:ReturnType<typeof workFlow>,a:WorkSession,b:WorkSession){
+ const first=await flow.request(chatPath,a,{body:'Synthetic first message'});assert.equal(first.response.status,201,JSON.stringify(first.data));
+ const second=await flow.request(chatPath,b,{body:'Synthetic reply',reply_to_message_id:first.data.message_id});assert.equal(second.response.status,201,JSON.stringify(second.data));
+ return {body:'Synthetic final reply',reply_to_message_id:second.data.message_id};
+}
+async function rowCount(table:'social_achievement_days'|'social_achievement_awards'|'social_achievement_pairs'){
+ return (await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n as number;
+}
+test('actual chat send hook credits both members, dedupes day/replay, and cannot backfill after erase',async()=>{
+ const flow=workFlow(),a=await flow.signIn(0),b=await flow.signIn(1);
+ for(const member of [a,b]){const saved=await flow.request('/me/social-achievements',member,consentBody);assert.equal(saved.response.status,200,JSON.stringify(saved.data));}
+ const body=await chatStart(flow,a,b),key=randomUUID();
+ const sent=await flow.request(chatPath,a,body,undefined,key);assert.equal(sent.response.status,201,JSON.stringify(sent.data));
+ assert.equal(await rowCount('social_achievement_days'),4);assert.equal(await rowCount('social_achievement_awards'),4);assert.equal(await rowCount('social_achievement_pairs'),1);
+ const replay=await flow.request(chatPath,a,body,undefined,key);assert.equal(replay.response.status,201);assert.equal(replay.data.message_id,sent.data.message_id);
+ assert.equal(await rowCount('social_achievement_pairs'),1);
+ const again=await flow.request(chatPath,a,await chatStart(flow,a,b));assert.equal(again.response.status,201);assert.equal(await rowCount('social_achievement_days'),4);
+ const state=(await flow.request('/me/social-achievements',a)).data;
+ const erased=await flow.request('/me/social-achievements/erase',a,{confirm:true},state.aggregate_version);assert.equal(erased.response.status,200);
+ const saved=await flow.request('/me/social-achievements',a,consentBody,erased.data.aggregate_version);assert.equal(saved.response.status,200);
+ assert.equal((await flow.request(chatPath,a,body,undefined,key)).response.status,201);
+ assert.equal((await flow.request('/me/social-achievements',a)).data.chat.days,0);
+ assert.equal((await flow.request('/me/social-achievements',b)).data.chat.days,1);
+});
+test('actual chat hook is default-off and late consent never backfills a successful send replay',async()=>{
+ await enroll();const off=workFlow(false),a=await off.signIn(0),b=await off.signIn(1);
+ assert.equal((await off.request(chatPath,a,await chatStart(off,a,b))).response.status,201);assert.equal(await rowCount('social_achievement_days'),0);
+ await pool.query('DELETE FROM social_achievement_settings');const on=workFlow(),body=await chatStart(on,a,b),key=randomUUID();
+ assert.equal((await on.request(chatPath,a,body,undefined,key)).response.status,201);
+ for(const member of [a,b])assert.equal((await on.request('/me/social-achievements',member,consentBody)).response.status,200);
+ assert.equal((await on.request(chatPath,a,body,undefined,key)).response.status,201);assert.equal(await rowCount('social_achievement_days'),0);
+});
+function beforeAdvisory(prefix:string){
+ let enter!:()=>void,resume!:()=>void,armed=false;
+ const entered=new Promise<void>(resolve=>{enter=resolve;}),released=new Promise<void>(resolve=>{resume=resolve;});
+ const db=new Proxy(pool,{get(target,property){
+  if(property==='connect')return async()=>{
+   const client=await target.connect();
+   return new Proxy(client,{get(connection,key){
+    if(key==='query')return async(...args:any[])=>{
+     if(armed&&typeof args[0]==='string'&&args[0]==='SELECT pg_advisory_xact_lock(hashtextextended($1,0))'&&String(args[1]?.[0]).startsWith(prefix)){
+      armed=false;enter();await released;
+     }
+     return (connection.query as any)(...args);
+    };
+    const value=Reflect.get(connection,key);return typeof value==='function'?value.bind(connection):value;
+   }});
+  };
+  const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
+ }});
+ return {db,arm:()=>{armed=true;},release:resume,async wait(){
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{await Promise.race([entered,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Actual chat hook did not reach the expected advisory fence')),5000);})]);}
+  finally{clearTimeout(timer);}
+ }};
+}
+for(const mutation of ['withdraw-first','withdraw-second','erase','block-reciprocal'] as const){
+ test(`actual in-flight chat cannot award after ${mutation} commits before its fence`,{timeout:20000},async t=>{
+  const controlPool=new Pool({connectionString:url,options:`-c search_path=${schema} -c statement_timeout=5000`});
+  t.after(()=>controlPool.end());
+  await enroll();const control=workFlow(true,controlPool),a=await control.signIn(0),b=await control.signIn(1);
+  if(mutation==='erase')assert.equal((await control.request(chatPath,a,await chatStart(control,a,b))).response.status,201);
+  const gate=beforeAdvisory(mutation==='block-reciprocal'?'friend/':'social-achievements/'),chat=workFlow(true,gate.db);
+  const body=await chatStart(chat,a,b);gate.arm();
+  // A successful reply is already inserted but not committed when the hook pauses.
+  const pending=chat.request(chatPath,a,body);
+  try{
+   await gate.wait();
+   const who=mutation==='withdraw-second'||mutation==='block-reciprocal'?b:a;
+   const state=(await control.request('/me/social-achievements',who)).data;
+   const changed=mutation==='block-reciprocal'
+    ?await control.request(`/me/blocks/${A}/block`,b,{})
+    :await control.request('/me/social-achievements'+(mutation==='erase'?'/erase':''),who,mutation==='erase'?{confirm:true}:{...consentBody,counting_enabled:false},state.aggregate_version);
+   assert.equal(changed.response.status,200,JSON.stringify(changed.data));
+  }finally{gate.release();await pending;}
+  const sent=await pending;assert.equal(sent.response.status,201,JSON.stringify(sent.data));
+  assert.equal(await rowCount('social_achievement_days'),mutation==='erase'?2:0);assert.equal(await rowCount('social_achievement_awards'),mutation==='erase'?2:0);assert.equal(await rowCount('social_achievement_pairs'),mutation==='erase'?1:0);
+  assert.equal((await control.request('/me/social-achievements',a)).data.chat.days,0);
+ });
+}

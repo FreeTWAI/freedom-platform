@@ -101,3 +101,75 @@ test('late SQL projection rejects a session that expires while its domain query 
  const expired=await blockedRead(true);assert.equal(expired.status,401);assert.equal(expired.data.code,'session_expired');assert.equal(JSON.stringify(expired.data).includes(marker),false);
  const current=await blockedRead(false);assert.equal(current.status,200);assert.equal(current.data.profile.bio,marker);
 });
+
+// Gate the real domain advisory lock, not JavaScript scheduling: both requests
+// must be observed waiting in PostgreSQL before either mutation can proceed.
+async function competingSaves(owner:Session,expected?:string){
+ const keys=[randomUUID(),randomUUID()],bodies=['parallel A','parallel B'].map(bio=>({...draft,bio}));
+ assert.equal((await request('/me/profile-publication',owner)).status,200); // warm session presence
+ const gate=await admin.connect();let pending:ReturnType<typeof request>[]=[];
+ try{
+  await gate.query('BEGIN');
+  await gate.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`profile-publication/${owner.id}`]);
+  const holder=(await gate.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=bodies.map((body,i)=>request('/me/profile-publication',owner,body,expected,keys[i]));
+  const deadline=Date.now()+8000;
+  for(;;){
+   const waiting=Number((await admin.query(`SELECT count(*) AS n FROM pg_stat_activity
+    WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))`,[schema,holder])).rows[0].n);
+   if(waiting===2)break;
+   assert.ok(Date.now()<deadline,'both profile writers must actually wait on the domain lock');await setImmediate();
+  }
+  await gate.query('ROLLBACK');
+  const results=await Promise.all(pending);
+  const winner=results.findIndex(result=>result.status===200);
+  assert.notEqual(winner,-1);
+  const stored=(await pool.query('SELECT bio,aggregate_version::text AS version FROM member_profile_publications WHERE user_id=$1',[owner.id])).rows;
+  assert.equal(stored.length,1);assert.equal(stored[0].bio,bodies[winner].bio);
+  const receipts=(await pool.query('SELECT idempotency_key,response FROM command_receipts WHERE user_id=$1 AND idempotency_key=ANY($2::text[])',[owner.id,keys])).rows;
+  assert.deepEqual(receipts,[{idempotency_key:keys[winner],response:{updated:true}}]);
+  return {results,version:stored[0].version};
+ }finally{await gate.query('ROLLBACK');gate.release();await Promise.allSettled(pending);}
+}
+test('parallel first publication commits exactly once and requires a version from the loser',{timeout:30000},async()=>{
+ const owner=await member('First publication race'),result=await competingSaves(owner);
+ assert.deepEqual(result.results.map(item=>item.status).sort(),[200,428]);assert.equal(result.version,'1');
+ const loser=result.results.find(item=>item.status!==200)!;assert.equal(loser.data.code,'version_required');
+ assert.equal(Number((await pool.query("SELECT count(*) AS n FROM transition_journal WHERE aggregate_id=$1 AND command='save_profile_publication'",[owner.id])).rows[0].n),1);
+});
+test('parallel updates with the same If-Match commit one winner and roll back stale receipt/journal',{timeout:30000},async()=>{
+ const owner=await member('Update race'),first=await request('/me/profile-publication',owner,draft);assert.equal(first.status,200);
+ const result=await competingSaves(owner,first.data.aggregate_version);
+ assert.deepEqual(result.results.map(item=>item.status).sort(),[200,412]);assert.equal(result.version,'2');
+ assert.equal(result.results.find(item=>item.status===412)!.data.code,'version_conflict');
+ assert.equal(Number((await pool.query("SELECT count(*) AS n FROM transition_journal WHERE aggregate_id=$1 AND command='save_profile_publication'",[owner.id])).rows[0].n),2);
+});
+test('synthetic restricted runtime role saves, reads, replays and revokes publication without DDL privileges',{timeout:30000},async()=>{
+ // This verifies an explicit synthetic grant set, NOT deployed application grants.
+ const owner=await member('Restricted profile owner'),role=`fp_profile_role_${process.pid}_${Date.now()}`;
+ const {authenticate}=await import('../../modules/identity-membership/service.js');
+ const {saveProfilePublication,publicVisitorProfile,profilePublicationSettings}=await import('../../modules/identity-membership/profile-publication.js');
+ const actor=await authenticate(pool,owner.cookie.slice(owner.cookie.indexOf('=')+1));
+ let runtime:Pool|undefined;
+ await admin.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`);
+ try{
+  await admin.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+  // UPDATE is required by PostgreSQL SELECT ... FOR SHARE, even on auth rows.
+  await admin.query(`GRANT SELECT,UPDATE ON ${schema}.users,${schema}.sessions TO ${role}`);
+  await admin.query(`GRANT SELECT,INSERT,UPDATE ON ${schema}.member_profile_publications TO ${role}`);
+  await admin.query(`GRANT SELECT,INSERT ON ${schema}.command_receipts,${schema}.transition_journal TO ${role}`);
+  await admin.query(`GRANT SELECT ON ${['member_account_classification','member_profile_cover_versions','assets','resource_scopes','principals'].map(table=>schema+'.'+table).join(',')} TO ${role}`);
+  runtime=new Pool({connectionString:database,options:`-c search_path=${schema} -c role=${role}`,max:3});
+  assert.equal((await runtime.query('SELECT current_user AS name')).rows[0].name,role);
+  assert.equal((await runtime.query('SELECT rolsuper OR rolbypassrls OR rolcreaterole AS elevated FROM pg_roles WHERE rolname=current_user')).rows[0].elevated,false);
+  const input={actor,operation:'profile.publication.synthetic',body:{...draft,visibility:'public',confirm_public:true},key:randomUUID()};
+  const saved=await saveProfilePublication(runtime,input);assert.equal(saved.aggregate_version,'1');
+  assert.equal((await publicVisitorProfile(runtime,owner.id)).bio,draft.bio);
+  assert.equal((await saveProfilePublication(runtime,input)).aggregate_version,'1');
+  const revoked=await saveProfilePublication(runtime,{...input,key:randomUUID(),body:{...input.body,visibility:'private'},expected:'1'});
+  assert.equal(revoked.aggregate_version,'2');assert.equal((await profilePublicationSettings(runtime,actor)).visibility,'private');
+  await assert.rejects(()=>publicVisitorProfile(runtime!,owner.id),(error:any)=>error.status===404);
+  await assert.rejects(()=>runtime!.query('ALTER TABLE member_profile_publications ADD COLUMN forbidden boolean'),(error:any)=>error.code==='42501');
+  await assert.rejects(()=>runtime!.query('TRUNCATE member_profile_publications'),(error:any)=>error.code==='42501');
+ }finally{await runtime?.end();await admin.query(`DROP OWNED BY ${role}`);await admin.query(`DROP ROLE ${role}`);}
+});
