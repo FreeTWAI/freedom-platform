@@ -1,5 +1,5 @@
 import { runPortableMigration } from '../../shared-release/portable/migration.mjs';
-import { reconcileFailedBackup } from '../../shared-release/portable/backup-recovery.mjs';
+import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
-  admitInstallation, requireStaging, githubClient } from '../../shared-release/admission.mjs';
+  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
@@ -28,6 +28,7 @@ import { validatePortableConfig, portableConnections } from '../../shared-releas
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
+import { main as releaseMain } from '../../shared-release/cli.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -1631,6 +1632,12 @@ test('BEGIN-only floor recovery preserves history and refuses intents, unrelated
   const capture = f.event('intent', 'backup', { format: 'freedom.shared-capture-policy-intent/v1', pid: 123,
     application: 'fp-capture-' + f.id, revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false }, { operation: 'capture-policy' });
   assert.throws(() => replayReleaseFloor([...f.chain, capture, f.event('backup-abandoned', 'backup', proof)], f.options));
+  const advanced = { ...proof, legacyPredecessor: legacyEvidenceFixture({admittedRunId: 13}) };
+  assert.equal(replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', advanced)], f.options).state.pending, null);
+  for (const patch of [{admittedRunId: 99}, {admittedRunAttempt: 2}, {sourceSha: 'f'.repeat(40)}])
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-abandoned', 'backup', {
+      ...advanced, legacyPredecessor: {...advanced.legacyPredecessor, ...patch} })], f.options));
+  assert.throws(() => replayReleaseFloor([...f.chain, capture, f.event('backup-abandoned', 'backup', advanced)], f.options));
   const state = f.add(f.event('backup-abandoned', 'backup', proof));
   assert.deepEqual(state, { ...prior, pending: null }); assert.equal(f.chain.length, 3);
   assert.equal(f.chain[1].record.data.kind, 'backup-begin');
@@ -1825,4 +1832,145 @@ test('independent migration preflight read failure never begins a durable releas
   assert.equal(began, 0); assert.equal(released, true);
   const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
   assert(entry.indexOf('unchangedProof = await verifyUnchangedSchema') < entry.indexOf('const begin = () => floor.beginIndependent'));
+});
+
+function legacyEvidenceFixture(extra = {}) {
+  return { format: 'freedom.verified-legacy-deployment/v1', target: 'staging-next', sourceSha: sha, sourceTree: tree,
+    deploymentId: 100, statusId: 101, admittedRunId: 12, admittedRunAttempt: 1,
+    completedAt: '2026-10-26T00:00:00Z', verification: [{workflow: '.github/workflows/verify.yml'}, {workflow: '.github/workflows/codeql.yml'}], ...extra };
+}
+
+test('legacy pre-adoption failure preserves predecessor for retry; later failures and uncertain POST stay recorded', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'legacy-retry-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const previousExitCode = process.exitCode; t.after(() => { process.exitCode = previousExitCode; });
+  const source = join(root, 'source'); await mkdir(source);
+  fixtureGit(source, ['init', '-q']); await writeFile(join(source, 'app.txt'), 'synthetic source');
+  fixtureGit(source, ['add', '.']); fixtureGit(source, ['commit', '-qm', 'fixture']);
+  const sourceSha = fixtureGit(source, ['rev-parse', 'HEAD']), sourceTree = fixtureGit(source, ['rev-parse', 'HEAD^{tree}']);
+  const creator = {login: 'teddashh', id: OPERATORS.teddashh};
+  let runId = 200;
+  for (const boundary of ['pull', 'preflight', 'after-adoption', 'uncertain-post']) {
+    const deployments = [{id: 100, environment: 'staging-next', task: 'deploy', sha: sourceSha, payload: {}, creator}];
+    const statuses = []; let posts = 0, executions = 0;
+    const read = fixtureApi(path => path.includes('/deployments?') ? deployments
+      : path.includes('/statuses?') ? [{id: 101, state: 'success', creator, created_at: '2026-10-26T00:00:00Z'}]
+      : path.includes('/commits/') ? {sha: sourceSha, commit: {tree: {sha: sourceTree}}} : undefined);
+    const api = async (path, options) => {
+      if (options?.method === 'POST') {
+        if (path.endsWith('/deployments')) {
+          posts++; deployments.unshift({...options.body, sha: options.body.ref, id: 200, creator});
+          if (boundary === 'uncertain-post') throw Error('synthetic reply lost after POST');
+          return deployments[0];
+        }
+        assert(path.endsWith('/deployments/200/statuses')); statuses.push(options.body.state); return {};
+      }
+      const value = await read(path);
+      if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = sourceSha;
+      return value;
+    };
+    const invoke = async executeOperator => {
+      const runner = join(root, String(++runId)); await mkdir(runner);
+      process.exitCode = previousExitCode;
+      await releaseMain({...environment(), PATH: process.env.PATH, RELEASE_SHA: sourceSha, RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute',
+        GITHUB_RUN_ID: String(runId), GITHUB_RUN_ATTEMPT: '1', RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: source,
+        RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_CONFIG_SHA256: installation.configSha256,
+        PUBLIC_RECEIPT_DIRECTORY: join(runner, 'public')}, {api, executeOperator: async options => {
+          executions++; assert.equal(options.admission.legacyPredecessor.deploymentId, 100);
+          return executeOperator(options);
+        }});
+      return JSON.parse(await readFile(join(runner, 'public/receipt.json'), 'utf8'));
+    };
+    const passed = [{name: 'preflight', reportedStatus: 'passed'}];
+    const failed = await invoke(async ({onProgress}) => {
+      if (boundary === 'preflight') await onProgress([{name: 'preflight', reportedStatus: 'failed'}]);
+      if (boundary === 'after-adoption') await onProgress([...passed, {name: 'migration', reportedStatus: 'failed'}]);
+      if (boundary === 'uncertain-post') {
+        // The operator's progress observer catches callback errors. Final creation
+        // must still surface the original uncertainty, never send a second POST.
+        await onProgress(passed).catch(() => {}); await onProgress(passed).catch(() => {});
+        return codeResult().value.phases;
+      }
+      throw Object.assign(Error('synthetic failed boundary'), {code: boundary === 'pull' ? 'release_registry_pull_failed' : 'release_operator_failed'});
+    });
+    assert.equal(failed.status, 'failed'); assert.equal(executions, 1, failed.error);
+    assert.equal(failed.providerOutcome, 'unknown_until_confirmed');
+    if (['pull', 'preflight'].includes(boundary)) {
+      assert.equal(posts, 0); assert.equal(deployments[0].id, 100); assert.equal(failed.deploymentId, undefined);
+      const retried = await invoke(async ({onProgress}) => {
+        await onProgress(passed); await onProgress(passed);
+        assert.equal(posts, 1); return codeResult().value.phases;
+      });
+      assert.equal(retried.status, 'passed'); assert.equal(retried.deploymentId, 200);
+      assert.equal(posts, 1); assert.deepEqual(statuses, ['in_progress', 'success']);
+    } else {
+      assert.equal(posts, 1); assert.equal(deployments[0].id, 200);
+      if (boundary === 'after-adoption') assert.deepEqual(statuses, ['in_progress', 'failure']);
+      else assert.deepEqual(statuses, []);
+    }
+  }
+});
+
+test('legacy predecessor requires latest successful authorized deployment and exact main CI', async () => {
+  const creator = { login: 'teddashh', id: OPERATORS.teddashh };
+  const deployment = { id: 100, environment: 'staging-next', task: 'deploy', sha, payload: {}, creator };
+  const status = { id: 101, state: 'success', creator, created_at: '2026-10-26T00:00:00Z' };
+  const setup = (d = deployment, s = status, override = () => undefined) => fixtureApi(path => override(path)
+    ?? (path.includes('/deployments?') ? [d] : path.includes('/statuses?') ? [s] : undefined));
+  const admission = { ...request(), sourceSha: main, target: 'staging-next' };
+  const proof = await requireLegacyPredecessor(setup(), admission);
+  assert.equal(proof.sourceSha, sha); assert.equal(proof.deploymentId, 100); assert.equal(proof.verification.length, 2);
+  assert.equal(await requireLegacyPredecessor(setup({...deployment, payload: {format: 'freedom.shared-release/v1'}}), admission), undefined);
+  for (const patch of [{state: 'failure'}, {state: 'in_progress'}, {creator: {login: 'unknown', id: 1}}, {id: 0}])
+    await assert.rejects(requireLegacyPredecessor(setup(deployment, {...status, ...patch}), admission));
+  for (const patch of [{sha: 'invalid'}, {creator: {...creator, id: 9}}, {payload: {unknown: true}}])
+    await assert.rejects(requireLegacyPredecessor(setup({...deployment, ...patch}), admission));
+  await assert.rejects(requireLegacyPredecessor(setup(deployment, status, path => path.includes('/actions/runs/11')
+    ? {status: 'completed', conclusion: 'failure'} : undefined), admission));
+  let reads = 0;
+  await assert.rejects(requireLegacyPredecessor(setup(deployment, status, path => path.includes('/deployments?')
+    ? [{...deployment, id: ++reads === 1 ? 100 : 102}] : undefined), admission), /release_legacy_deployment_changed/);
+});
+
+test('legacy journal adoption appends source history without changing schema or original seed', () => {
+  const f = floorFixture(), original = JSON.stringify(f.chain[0]), state = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { evidence: legacyEvidenceFixture(), previousSourceSha: main, bindingsSha256: state.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(state.schemaLedger), materialPolicySha256: state.materialPolicySha256,
+    readOnly: true, observedAt: '2026-10-26T01:00:00Z' };
+  const adopted = replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, proof)], f.options).state;
+  assert.equal(adopted.sourceSha, sha); assert.equal(adopted.deployedSourceSha, sha);
+  assert.deepEqual(adopted.schemaLedger, state.schemaLedger); assert.equal(JSON.stringify(f.chain[0]), original);
+  for (const patch of [{readOnly: false}, {previousSourceSha: sha}, {ledgerSha256: '0'.repeat(64)},
+    {bindingsSha256: '0'.repeat(64)}, {materialPolicySha256: '0'.repeat(64)},
+    {evidence: legacyEvidenceFixture({sourceSha: 'f'.repeat(40)})}])
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, {...proof, ...patch})], f.options));
+  f.add(f.begin);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.event('legacy-source-adopted', undefined, proof)], f.options));
+});
+
+test('legacy adoption verifies immutable Git SQL and live read-only state before appending', async t => {
+  const f = await adoptionFixture(t), floor = await f.open();
+  await writeFile(join(f.sourceRoot, 'app.txt'), 'new legacy deployment'); const deployed = f.commit();
+  const evidence = legacyEvidenceFixture(deployed), calls = []; let appended;
+  const state = floor.state();
+  const q = { async query(sql) { calls.push(sql); return { rows: sql.includes('domain_media_storage_policy')
+    ? f.legacy.retained172.materialPolicy.policies : [] }; }, release() {} };
+  const args = { floor: {...floor, verifyDatabase: async () => calls.push('verify-ledger'),
+    adoptLegacySource: async proof => { appended = proof; }}, pool: {connect: async () => q},
+    deployer: {inspect: async () => ({sourceSha: deployed.sourceSha, bindingsSha256: state.bindingsSha256})},
+    lease: {signal: new AbortController().signal, assertHeld() {}},
+    request: {...request(), runId: 12, runAttempt: 1, releaseKind: 'independent', target: 'staging-next', legacyPredecessor: evidence} };
+  await adoptLegacyPredecessor(args); assert.equal(appended.evidence.sourceSha, deployed.sourceSha);
+  assert(calls.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')); assert(calls.includes('verify-ledger'));
+  assert(!calls.some(sql => /UPDATE|DELETE|INSERT|CREATE/.test(sql)));
+  for (const patch of [{sourceTree: f.previous.sourceTree}, {target: 'next'}, {sourceSha: f.previous.sourceSha}]) {
+    appended = undefined;
+    await assert.rejects(adoptLegacyPredecessor({...args, request: {...args.request, legacyPredecessor: {...evidence, ...patch}}}));
+    assert.equal(appended, undefined);
+  }
+  await writeFile(join(f.sourceRoot, 'migrations/190_forbidden.sql'), 'SELECT 1;'); const schemaChange = f.commit();
+  assert.throws(() => floor.verifyLegacySource({...evidence, ...schemaChange}), /release_floor_adoption_catalog_changed/);
+  appended = undefined;
+  await assert.rejects(adoptLegacyPredecessor({...args, floor: {...args.floor, state: () => ({...state, pending: {kind: 'backup'}})}}));
+  assert.equal(appended, undefined);
 });

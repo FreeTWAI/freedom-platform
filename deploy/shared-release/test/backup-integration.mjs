@@ -15,7 +15,7 @@ import { observeMediaGcState } from '../../../packages/media-migration/backup-gc
 import { runPortableBackup, observeBackupControl } from '../portable/backup.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 import { createCloudflareRecoveryTransport } from '../portable/cloudflare.mjs';
-import { reconcileFailedBackup } from '../portable/backup-recovery.mjs';
+import { reconcileFailedBackup, adoptLegacyPredecessor } from '../portable/backup-recovery.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -218,13 +218,27 @@ export async function verifyBackup({ root, openCluster, execute }) {
       await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
     } finally { backend.release(true); }
     assert.equal(abandoned, 2);
+    // The legacy code-only rollout changed the Worker after a failed BEGIN.
+    // Recovery and adoption must still use real read-only ledger/policy checks.
+    const legacy = { format: 'freedom.verified-legacy-deployment/v1', target: 'staging-next',
+      sourceSha: 'f'.repeat(40), sourceTree: '9'.repeat(40), admittedRunId: 11, admittedRunAttempt: 1 };
+    state.pending.intents = {}; recovery.request.recoveryEvidence.failureBoundary = 'before_capture';
+    recovery.request.legacyPredecessor = legacy;
+    recovery.deployer = { inspect: async () => ({ sourceSha: legacy.sourceSha, bindingsSha256: state.bindingsSha256 }) };
+    floor.verifyLegacySource = evidence => assert.deepEqual(evidence, legacy); // Git/catalog proof is covered by real Git fixtures.
+    await reconcileFailedBackup(recovery); assert.equal(abandoned, 3);
+    state.pending = null; let adopted = 0;
+    floor.adoptLegacySource = async proof => { assert.equal(proof.readOnly, true); assert.equal(proof.previousSourceSha, old.sourceSha); adopted++; };
+    await adoptLegacyPredecessor({ ...recovery, request: { ...recovery.request, releaseKind: 'independent', mode: 'deploy' } });
+    assert.equal(adopted, 1);
+    assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
     const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
     await assertBackupReadOnly();
     return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
       remoteTarReadback: 'synthetic-provider', corruptionStopsBeforeRestore: true, lostPutIsNotRetried: true,
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
-      failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
+      failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, legacyHandoffReadOnly: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
       crossEnvironmentTransportRefused: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };
   } finally {
