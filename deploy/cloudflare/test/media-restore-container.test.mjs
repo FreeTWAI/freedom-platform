@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { symlinkSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 test('media restore runner reconciles late create acknowledgement by exact owned name before removing its intent', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'fp-restore-create-test-'));
+  const root = resolve('.freedom'); mkdirSync(root, { recursive: true });
+  const directory = mkdtempSync(join(root, 'fp-restore-create-test-'));
   const record = join(directory, 'record.json');
   try {
-    writeFileSync(join(directory, 'docker'), `#!${process.execPath}
+    writeFileSync(join(directory, 'docker.cjs'), `#!${process.execPath}
 const fs=require('node:fs'),p=${JSON.stringify(record)},args=process.argv.slice(2);
 let s=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):{calls:[],inspections:0};s.calls.push(args);
 const save=()=>fs.writeFileSync(p,JSON.stringify(s));
@@ -21,8 +21,15 @@ if(args[0]==='inspect'){
  console.log(JSON.stringify([{Id:'a'.repeat(64),Name:'/'+s.name,Config:{Image:s.image,Labels:{'freedom.task':'media-restore-drill','freedom.owner':'run-media-restore-test'}},HostConfig:{NetworkMode:'none',PortBindings:{},Tmpfs:{}},Mounts:[{Type:'bind',Source:s.socket,Destination:'/pgsocket'},{Type:'volume',Destination:'/var/lib/postgresql'}]}]));
 }else if(args[0]==='rm'){s.removed=args[2];save();}else{save();process.exit(2);}
 `, { mode: 0o700 });
-    const result = spawnSync(process.execPath, ['scripts/run-media-restore-test.mjs'], { cwd: resolve('.'), env: { ...process.env, PATH: directory + ':' + process.env.PATH }, encoding: 'utf8', timeout: 15000 });
+    symlinkSync('docker.cjs', join(directory, 'docker'));
+    // Isolate the runner's owned disk directory as well as Docker. Do not rely
+    // on the caller's home existing/writable, or repurpose HOME credentials.
+    const preload = join(directory, 'fixture-home.mjs');
+    writeFileSync(preload, `import os from 'node:os'; import { syncBuiltinESMExports } from 'node:module';
+os.homedir = () => ${JSON.stringify(directory)}; syncBuiltinESMExports();`);
+    const result = spawnSync(process.execPath, ['--import', preload, 'scripts/run-media-restore-test.mjs'], { cwd: resolve('.'), env: { ...process.env, PATH: directory + ':' + process.env.PATH }, encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 1, 'unknown create acknowledgement remains an actual failed drill');
+    assert(existsSync(record), 'mock Docker was not reached: ' + result.stderr);
     const actual = JSON.parse(readFileSync(record, 'utf8'));
     assert.equal(actual.calls.filter(a => a[0] === 'create').length, 1, 'never retry unknown creation');
     const create=actual.calls.find(a=>a[0]==='create');

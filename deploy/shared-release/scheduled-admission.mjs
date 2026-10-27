@@ -31,7 +31,8 @@ export function backupRequestFromEnvironment(env, sourceSha) {
  * This is permission to inspect its pending intent, never proof of DB cleanup. */
 export async function requireFailedBackup(api, admission, installation) {
   const id = admission.recoverRunId;
-  check(admission.mode === 'backup' && admission.event === 'workflow_dispatch' && positive(id) && id !== admission.runId,
+  const independentRelease = admission.mode === 'deploy' && admission.releaseKind === 'independent';
+  check((independentRelease || (admission.mode === 'backup' && admission.event === 'workflow_dispatch')) && positive(id) && id !== admission.runId,
     'release_backup_recovery_request_invalid');
   const workflow = await api(`${prefix}/actions/workflows/shared-backup.yml`);
   check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', 'release_backup_recovery_workflow_invalid');
@@ -66,7 +67,8 @@ export async function requireFailedBackup(api, admission, installation) {
     && receipt.event === run.event && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
-    && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
+    && (independentRelease ? isSha(receipt.sourceSha) && isSha(receipt.sourceTree)
+      : receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree)
     && /^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(receipt.operatorImage ?? '')
     && receipt.configSha256 === installation.configSha256 && isDigest(receipt.configSha256)
     && sameActor(run.actor, receipt.original) && sameActor(run.triggering_actor, receipt.triggeredBy),
@@ -74,8 +76,15 @@ export async function requireFailedBackup(api, admission, installation) {
   const start = Date.parse(run.run_started_at), end = Date.parse(run.updated_at), finish = Date.parse(receipt.completedAt);
   check([start, end, finish].every(Number.isFinite) && finish >= start && finish <= end && end <= Date.now() + 60000,
     'release_backup_recovery_receipt_invalid');
+  const progress = receipt.operatorProgress;
+  const preCapture = Array.isArray(progress) && progress.length === 2
+    && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
+    && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
+    && progress[1].backupFailure?.stage === 'preflight' && progress[1].backupFailure?.snapshotDump === 'not_started';
+  check(!independentRelease || preCapture, 'release_backup_recovery_boundary_invalid');
   checkRun(await api(`${prefix}/actions/runs/${id}`));
-  return Object.freeze({ format: 'freedom.verified-failed-backup/v1', runId: id, runAttempt: run.run_attempt,
+  return Object.freeze({ format: 'freedom.verified-failed-backup/v1',
+    ...(preCapture ? { failureBoundary: 'before_capture' } : {}), runId: id, runAttempt: run.run_attempt,
     sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree, target: receipt.target, controllerSha: run.head_sha,
     operatorImage: receipt.operatorImage, configSha256: receipt.configSha256, artifactId: artifact.id, artifactDigest: artifact.digest,
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });

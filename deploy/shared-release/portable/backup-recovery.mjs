@@ -5,11 +5,13 @@ import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 /** Only a stopped backup with no archive intent can be abandoned. Observe the
  * actual DB/Worker under the shared lease; never reset a seed or mark it passed.
  * Migration/deploy intents and unknown archive uploads need separate recovery. */
-export async function reconcileFailedBackup({ floor, pool, deployer, lease, request }) {
+export async function reconcileFailedBackup({ floor, pool, database, role, deployer, lease, request }) {
   const state = floor.state(), pending = state.pending, evidence = request.recoveryEvidence;
   const capture = pending?.intents?.['backup:capture-policy'];
+  const beginOnly = !capture && pending?.intents && Object.keys(pending.intents).length === 0
+    && evidence?.failureBoundary === 'before_capture';
   check(request.mode === 'backup' && request.event === 'workflow_dispatch' && pending?.kind === 'backup'
-    && pending.stage === 0 && capture && Object.keys(pending.intents).length === 1
+    && pending.stage === 0 && (beginOnly || (capture && Object.keys(pending.intents).length === 1))
     && request.recoverRunId === pending.request.runId && request.runId !== pending.request.runId
     && evidence?.format === 'freedom.verified-failed-backup/v1'
     && request.sourceSha === state.sourceSha && request.sourceTree === state.sourceTree
@@ -29,12 +31,15 @@ export async function reconcileFailedBackup({ floor, pool, deployer, lease, requ
     await q.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await q.query("SET LOCAL statement_timeout='30000'; SET LOCAL lock_timeout='3000'");
     const identity = (await q.query('SELECT current_database() database,current_user role')).rows[0];
-    check(identity?.database === capture.database && identity.role === capture.role, 'release_backup_recovery_database_changed');
+    check(identity?.database === (beginOnly ? database : capture.database)
+      && identity.role === (beginOnly ? role : capture.role), 'release_backup_recovery_database_changed');
     await floor.verifyDatabase(q);
     const policy = (await q.query(`SELECT enabled,domain_media_enabled,revision FROM asset_maintenance_policy WHERE singleton`)).rows;
     check(policy.length === 1 && policy[0].enabled === false && policy[0].domain_media_enabled === false
-      && policy[0].revision === capture.revision, 'release_backup_recovery_cleanup_unconfirmed');
-    const backend = (await q.query(`SELECT pid FROM pg_stat_activity
+      && (beginOnly || policy[0].revision === capture.revision), 'release_backup_recovery_cleanup_unconfirmed');
+    const backend = beginOnly ? (await q.query(`SELECT pid FROM pg_stat_activity
+      WHERE datname=current_database() AND usename=current_user AND left(application_name,11)='fp-capture-'`)).rows
+      : (await q.query(`SELECT pid FROM pg_stat_activity
       WHERE pid=$1 AND datname=$2 AND usename=$3 AND application_name=$4`,
     [capture.pid, capture.database, capture.role, capture.application])).rows;
     const fences = (await q.query('SELECT count(*)::int count FROM assets WHERE deletion_fence<>0')).rows[0];
@@ -44,7 +49,7 @@ export async function reconcileFailedBackup({ floor, pool, deployer, lease, requ
     check(createHash('sha256').update(JSON.stringify(material)).digest('hex') === state.materialPolicySha256,
       'release_backup_recovery_policy_changed');
     observations = { maintenanceEnabled: false, domainMaintenanceEnabled: false, deletionFences: 0,
-      captureBackendAbsent: true, captureRevision: policy[0].revision };
+      captureBackendAbsent: true, ...(beginOnly ? { failureBoundary: 'before_capture' } : { captureRevision: policy[0].revision }) };
     await q.query('COMMIT');
   } catch (error) { await q.query('ROLLBACK').catch(() => {}); throw error; }
   finally { q.release(); }
