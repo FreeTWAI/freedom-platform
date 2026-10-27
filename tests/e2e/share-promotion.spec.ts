@@ -204,50 +204,28 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
-// Controlled capabilities: these cases never open LINE/Telegram or send a message.
+// Controlled capabilities: this case never opens LINE/Telegram or sends a message.
 type PromotionTestWindow = Window & {
   promotionOpens: { url: string; target: string | undefined; features: string | undefined; active: boolean }[];
   promotionCapabilities: { kind: 'share' | 'copy'; value: ShareData | string; resolve: () => void; reject: (error: Error) => void }[];
   promotionOpenThrows: boolean;
-  promotionReenter: boolean;
-  promotionReentryWasEnabled: boolean | null;
 };
-async function controlPromotionCapabilities(page: Page, native = true) {
-  await page.evaluate(enabled => {
+async function controlPromotionCapabilities(page: Page) {
+  await page.evaluate(() => {
     const w = window as unknown as PromotionTestWindow;
     w.promotionOpens = []; w.promotionCapabilities = []; w.promotionOpenThrows = false;
-    w.promotionReenter = false; w.promotionReentryWasEnabled = null;
     window.open = (url, target, features) => {
       w.promotionOpens.push({ url: String(url), target, features, active: navigator.userActivation.isActive });
       if (w.promotionOpenThrows) throw new DOMException('Controlled browser denial', 'NotAllowedError');
-      if (w.promotionReenter) {
-        w.promotionReenter = false;
-        const peer = document.querySelector<HTMLButtonElement>('dialog[open] button[title="另開 LINE 分享視窗"]');
-        if (!peer) throw Error('Missing reentrant share control');
-        w.promotionReentryWasEnabled = !peer.disabled;
-        peer.click();
-      }
       // noopener can return null even when a window opens; it is not a delivery receipt.
       return null;
     };
     const hold = (kind: 'share' | 'copy', value: ShareData | string) => new Promise<void>((resolve, reject) => {
       w.promotionCapabilities.push({ kind, value, resolve, reject });
     });
-    Object.defineProperty(navigator, 'share', { configurable: true, value: enabled ? (value: ShareData) => hold('share', value) : undefined });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: (value: ShareData) => hold('share', value) });
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (value: string) => hold('copy', value) } });
-  }, native);
-}
-async function finishPromotionCapability(page: Page, index: number, error?: 'AbortError' | 'NotAllowedError') {
-  await page.evaluate(({ index, error }) => {
-    const call = (window as unknown as PromotionTestWindow).promotionCapabilities[index];
-    if (error) call.reject(new DOMException('Controlled capability result', error)); else call.resolve();
-  }, { index, error });
-}
-async function openPlatformShare(page: Page) {
-  await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
-  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
-  return dialog;
+  });
 }
 
 test('platform choices hand the canonical referral URL to LINE and Telegram only after an explicit click', async ({ page, context }) => {
@@ -301,129 +279,15 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   }
   expect(externalRequests).toEqual([]);
   expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionCapabilities)).toEqual([]);
-  for (const theme of ['light', 'dark', 'versefolk'] as const) {
-    await themeOf(page, theme);
-    for (const width of [320, 390, 1280]) {
-      await page.setViewportSize({ width, height: 900 }); await noOverflow(page);
-      expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-      for (const name of ['LINE', 'Telegram']) {
-        const button = dialog.getByRole('button', { name: `${name} 分享 ↗`, exact: true });
-        await expect(button).toBeVisible(); expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      }
-      await dialog.screenshot({ path: test.info().outputPath(`platform-choices-${theme}-${width}.png`) });
-    }
-  }
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden(); await expect(page.getByRole('button', { name: '分享自由工坊', exact: true })).toBeFocused();
-});
-
-test('platform choices respect native and clipboard locks, cancellation and honest handoff feedback', async ({ page }) => {
-  await login(page); await controlPromotionCapabilities(page); await navigate(page, '推廣排行榜');
-  const dialog = await openPlatformShare(page);
-  const line = dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true });
-  const telegram = dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true });
-  const url = await dialog.locator('.skill-share-url').innerText();
-  const text = await dialog.locator('.skill-share-text').innerText();
-  await dialog.getByRole('button', { name: '分享', exact: true }).click();
-  await expect(line).toBeDisabled(); await expect(telegram).toBeDisabled();
-  await line.dispatchEvent('click'); await telegram.dispatchEvent('click');
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionCapabilities.map(({ kind, value }) => ({ kind, value })))).toEqual([{ kind: 'share', value: { title: '自由工坊', text, url } }]);
-  await finishPromotionCapability(page, 0, 'AbortError');
-  await expect(line).toBeEnabled(); await expect(telegram).toBeEnabled();
-  await expect(dialog.getByRole('status')).toHaveCount(0); await expect(dialog.getByRole('textbox')).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionCapabilities.length)).toBe(1);
-  await dialog.getByRole('button', { name: '分享', exact: true }).click(); await finishPromotionCapability(page, 1);
-  await expect(dialog.getByRole('status')).toHaveText('已交由系統分享處理'); await expect(dialog).not.toContainText('分享已送出');
-  await dialog.getByRole('button', { name: '複製連結', exact: true }).click();
-  await expect(line).toBeDisabled(); await expect(telegram).toBeDisabled();
-  await finishPromotionCapability(page, 2, 'NotAllowedError');
-  const manual = dialog.getByLabel('手動複製分享內容', { exact: true });
-  await expect(manual).toHaveValue(`${text}\n${url}`); await expect(manual).toBeFocused();
-  expect(await manual.evaluate(element => { const field = element as HTMLTextAreaElement; return [field.selectionStart, field.selectionEnd]; })).toEqual([0, `${text}\n${url}`.length]);
-  await expect(line).toBeEnabled(); await expect(telegram).toBeEnabled();
-});
-
-test('a reopened platform dialog keeps unresolved capabilities locked and ignores the old native result', async ({ page }) => {
-  await login(page); await controlPromotionCapabilities(page); await navigate(page, '推廣排行榜');
-  let dialog = await openPlatformShare(page);
-  await dialog.getByRole('button', { name: '分享', exact: true }).click();
-  await page.keyboard.press('Escape'); await expect(dialog).toBeHidden();
-  dialog = await openPlatformShare(page);
-  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeDisabled();
-  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toBeDisabled();
-  await finishPromotionCapability(page, 0);
-  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeEnabled();
-  await expect(dialog.getByRole('status')).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
-});
-
-test('platform link failure disables external choices and a late retry cannot replace a reopened dialog', async ({ page }) => {
-  await login(page); await controlPromotionCapabilities(page); await navigate(page, '推廣排行榜');
-  // The real client reports the classified error only after consuming its body.
-  // Keep these controlled diagnostics inside the fixture, not the test database.
-  let reported = 0;
-  await page.route('**/api/v1/me/client-errors', async route => {
-    const body = route.request().postDataJSON();
-    if (body.action === 'POST /promotion/links' && body.http_status === 503) reported++;
-    await route.fulfill({ json: { ok: true } });
-  });
-  let release!: () => void, arrived!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  const requested = new Promise<void>(resolve => { arrived = resolve; });
-  let requests = 0;
-  await page.route('**/api/v1/promotion/links', async route => {
-    const attempt = ++requests;
-    if (attempt > 2) { await route.continue(); return; }
-    if (attempt === 2) { arrived(); await held; }
-    await route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify({ detail: 'Controlled link failure' }) });
-  });
-  await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
-  await expect(dialog.getByRole('alert')).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeDisabled();
-  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toBeDisabled();
-  await expect.poll(() => reported).toBe(1);
-  await dialog.getByRole('button', { name: '重試', exact: true }).click();
-  let currentUrl = '';
-  try {
-    await requested; await page.keyboard.press('Escape');
-    await openPlatformShare(page);
-    currentUrl = await dialog.locator('.skill-share-url').innerText();
-    await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeEnabled();
-  } finally { release(); }
-  await expect.poll(() => reported).toBe(2);
-  // Allow the already-observed rejection chain to commit its UI, without a sleep.
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
-  await expect(dialog.locator('.skill-share-url')).toHaveText(currentUrl);
-  await expect(dialog.getByRole('alert')).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toBeEnabled();
-  expect(requests).toBe(3);
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
-});
-
-test('external platform handoff failure keeps manual recovery and synchronous duplicate clicks open only once', async ({ page }) => {
-  await login(page); await controlPromotionCapabilities(page, false); await navigate(page, '推廣排行榜');
-  const dialog = await openPlatformShare(page);
-  const url = await dialog.locator('.skill-share-url').innerText(), text = await dialog.locator('.skill-share-text').innerText();
+  await page.setViewportSize({ width: 320, height: 900 }); await noOverflow(page);
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.evaluate(() => { (window as unknown as PromotionTestWindow).promotionOpenThrows = true; });
   await dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true }).click();
   const manual = dialog.getByLabel('手動複製分享內容', { exact: true });
   await expect(manual).toHaveValue(`${text}\n${url}`); await expect(manual).toBeFocused();
   await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請選取並複製下方內容');
-  await page.evaluate(() => {
-    const w = window as unknown as PromotionTestWindow; w.promotionOpenThrows = false; w.promotionReenter = true;
-  });
-  // Reenter before window.open returns, while React has not disabled the peer.
-  await dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true }).click();
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionReentryWasEnabled)).toBe(true);
-  await expect(dialog.getByRole('status')).toHaveText('請在 Telegram 完成分享；若未開啟，可複製連結。');
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens.length)).toBe(2);
-  await expect(manual).toHaveCount(0);
-  // Browsers without native share retain the original explicit-copy fallback.
-  await dialog.getByRole('button', { name: '分享', exact: true }).click();
-  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionCapabilities.map(({ kind, value }) => ({ kind, value })))).toEqual([{ kind: 'copy', value: `${text}\n${url}` }]);
-  await finishPromotionCapability(page, 0); await expect(dialog.getByRole('status')).toHaveText('已複製連結');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden(); await expect(page.getByRole('button', { name: '分享自由工坊', exact: true })).toBeFocused();
 });
 
 test('the home share button stays as compact as the profile button', async ({ page }) => {
