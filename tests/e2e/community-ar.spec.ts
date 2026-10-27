@@ -333,3 +333,90 @@ test('AR-UI-09 storage-limit retries retain one target and known failure permits
   const abandoned=await e2eAuthPool.query("SELECT state,asset_id FROM community_ar_targets WHERE title='Synthetic quota abandonment'");expect(abandoned.rows).toEqual([{state:'draft',asset_id:null}]);
   expect(creates).toBe(2);
 });
+
+function installArHeldCapture(){
+  const native=HTMLCanvasElement.prototype.toBlob;
+  const held:{canvas:HTMLCanvasElement;callback:BlobCallback;type?:string;quality?:number}[]=[];
+  const state={
+    calls:0,streams:[] as MediaStream[],replays:[] as HTMLVideoElement[],snapshots:[] as HTMLCanvasElement[],
+    pending:()=>held.length,
+    release:(fail=false)=>{const call=held.shift();if(!call)throw new Error('No held AR JPEG');if(fail)call.callback(null);else native.call(call.canvas,call.callback,call.type,call.quality);},
+  };
+  (window as any).arHeldCapture=state;
+  HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){
+    if(type==='image/jpeg'){state.snapshots.push(this);held.push({canvas:this,callback,type,quality});}
+    else native.call(this,callback,type,quality);
+  };
+  Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{
+    state.calls++;const replay=document.createElement('video');state.replays.push(replay);replay.src='/_ar-test/positive.webm';replay.loop=true;replay.muted=true;replay.playsInline=true;
+    await replay.play();await new Promise<void>(resolve=>replay.requestVideoFrameCallback(()=>resolve()));
+    const stream=(replay as HTMLVideoElement&{captureStream:()=>MediaStream}).captureStream();state.streams.push(stream);return stream;
+  }});
+}
+
+test('AR-UI-14 capture quiesces the camera before encoding and publishes only the owned photo',async({page,e2eAuthPool})=>{
+  test.setTimeout(90000);
+  await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
+  await login(page);const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',text:'Synthetic quiesced photo',effect:'sparkle'}),'Synthetic quiesced photo');
+  await page.route('**/_ar-test/positive.webm',route=>route.fulfill({contentType:'video/webm',body:readFileSync(new URL('../fixtures/community-ar/positive.webm',import.meta.url))}));
+  await page.addInitScript(installArHeldCapture);
+  try{
+    await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();
+    await expect(page.getByRole('button',{name:'拍照',exact:true})).toBeEnabled();
+    await expect.poll(()=>page.getByLabel('相機即時畫面').evaluate(node=>(node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+    await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','webgl');
+    await page.getByRole('button',{name:'拍照',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>(window as any).arHeldCapture.pending())).toBe(1);
+    expect(await page.evaluate(()=>{const tracks=(window as any).arHeldCapture.streams.flatMap((stream:MediaStream)=>stream.getTracks());return tracks.length>0&&tracks.every((track:MediaStreamTrack)=>track.readyState==='ended');})).toBe(true);
+    expect(await page.getByLabel('相機即時畫面').evaluate(node=>(node as HTMLVideoElement).srcObject===null)).toBe(true);
+    await expect(page.locator('.ar-scanner .ar-status')).toHaveText('正在產生照片…');
+    await expect(page.locator('.ar-stage-intro strong')).toHaveText('正在產生照片…');
+    await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeDisabled();
+    await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toHaveCount(0);
+    await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','stopped');
+    await page.evaluate(()=>(window as any).arHeldCapture.release());
+    await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+    await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeEnabled();
+    await expect(page.locator('.ar-scanner .ar-status')).toHaveText('相機已暫停。可以分享照片，或繼續掃描。');
+    expect(await page.evaluate(()=>(window as any).arHeldCapture.snapshots.every((canvas:HTMLCanvasElement)=>canvas.width===0&&canvas.height===0))).toBe(true);
+  }finally{await page.evaluate(()=>{const state=(window as any).arHeldCapture;state.replays.forEach((replay:HTMLVideoElement)=>replay.pause());state.streams.forEach((stream:MediaStream)=>stream.getTracks().forEach(track=>track.stop()));});}
+});
+
+test('AR-UI-15 encoding failure needs an explicit restart, and a cancelled capture never publishes late',async({page,e2eAuthPool})=>{
+  test.setTimeout(90000);const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");
+  await login(page);const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',text:'Synthetic capture recovery',effect:'halo'}),'Synthetic capture recovery');
+  await page.route('**/_ar-test/positive.webm',route=>route.fulfill({contentType:'video/webm',body:readFileSync(new URL('../fixtures/community-ar/positive.webm',import.meta.url))}));
+  await page.addInitScript(installArHeldCapture);
+  try{
+    await page.goto(path);await page.getByRole('button',{name:'開啟相機',exact:true}).click();
+    await expect(page.getByRole('button',{name:'拍照',exact:true})).toBeEnabled();
+    await expect.poll(()=>page.getByLabel('相機即時畫面').evaluate(node=>(node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+    await page.getByRole('button',{name:'拍照',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>(window as any).arHeldCapture.pending())).toBe(1);
+    await page.evaluate(()=>(window as any).arHeldCapture.release(true));
+    await expect(page.getByRole('alert')).toHaveText('照片未產生，請重新開啟相機再拍一次。');
+    await expect(page.getByRole('button',{name:'拍照',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'重新開啟',exact:true})).toBeEnabled();
+    await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toHaveCount(0);
+    const calls=await page.evaluate(()=>(window as any).arHeldCapture.calls);
+    await page.waitForTimeout(1000);expect(await page.evaluate(()=>(window as any).arHeldCapture.calls)).toBe(calls);
+    await page.getByRole('button',{name:'重新開啟',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>(window as any).arHeldCapture.calls)).toBe(calls+1);
+    await expect(page.getByRole('button',{name:'拍照',exact:true})).toBeEnabled();
+    await expect.poll(()=>page.getByLabel('相機即時畫面').evaluate(node=>(node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+    await page.getByRole('button',{name:'拍照',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>(window as any).arHeldCapture.pending())).toBe(1);
+    await page.evaluate(()=>{
+      const previous=Object.getOwnPropertyDescriptor(document,'visibilityState');
+      try{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));}
+      finally{if(previous)Object.defineProperty(document,'visibilityState',previous);else delete (document as any).visibilityState;}
+    });
+    await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeDisabled();
+    await page.evaluate(()=>(window as any).arHeldCapture.release());
+    await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeEnabled();
+    await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toHaveCount(0);
+    expect(await page.evaluate(()=>(window as any).arHeldCapture.snapshots.every((canvas:HTMLCanvasElement)=>canvas.width===0&&canvas.height===0))).toBe(true);
+    expect(errors).toEqual([]);
+  }finally{await page.evaluate(()=>{const state=(window as any).arHeldCapture;state.replays.forEach((replay:HTMLVideoElement)=>replay.pause());state.streams.forEach((stream:MediaStream)=>stream.getTracks().forEach(track=>track.stop()));});}
+});
