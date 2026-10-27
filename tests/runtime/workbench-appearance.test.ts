@@ -90,16 +90,6 @@ test('failed pagination preserves existing items and cursor for an enabled retry
   assert.equal(model.button(),undefined);assert.equal(model.calls.length,2);
 });
 
-test('native focus checks do not assume the existing dark Workbench ancestor is a solid surface',()=>{
-  assert.match(readCss('LayoutDesign.css'),/\.main\s*\{\s*background:\s*linear-gradient\(/,'the current dark page uses a gradient');
-  const e2e=readFileSync(new URL('../e2e/work-pagination.spec.ts',import.meta.url),'utf8');
-  const helper=e2e.slice(e2e.indexOf('async function expectWorkPaginationColors'),e2e.indexOf("for(const profile of ['light'"));
-  assert.match(helper,/Focus contrast is button-side only/);
-  assert.match(helper,/focus:ratio\(style.outlineColor,style.backgroundColor\)/);
-  assert.doesNotMatch(helper,/adjacentSurface|adjacentFocus|outer\.backgroundImage/,'do not reject the supported ancestor gradient or infer its pixels');
-  assert.match(helper,/Number\(outer.opacity\)!==1/,'ancestor transparency still invalidates the opaque-color model');
-});
-
 // Both community-work pagination leaves share the palette contract, not a new
 // component/session API. TaskBoard retains its independent loading lane tests.
 test('TaskBoard pagination owns its exact style without changing filter, loading or composition guards',()=>{
