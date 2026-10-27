@@ -1,5 +1,8 @@
 import sharp from 'sharp';
+import {buildSync} from 'esbuild';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import type {RunResult} from '../../apps/portal-web/src/games/result-card.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
@@ -9,9 +12,71 @@ import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/por
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 
-test('UX-15c: a completed guided checkpoint exports through StrictMode replay and a cold reload',async({page})=>{
+test('UX-15c: completed guided export survives development StrictMode replay and production cold reload',async({page,browser,baseURL})=>{
   test.setTimeout(60000);const f=kitchenCheckpoint('result'),errors:string[]=[];let posts=0;
   page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});
+  // Same ordinary browser pass, actual component and development React; no new host.
+  // Pause only this temporary context's clock so native decoded images can be held
+  // across cleanup without consuming the product's 8s deadline. This tests
+  // deterministic completion order, not real-time timeout or GPU performance.
+  const replayContext=await browser.newContext({baseURL});
+  try{
+    const replay=await replayContext.newPage();
+    replay.on('pageerror',e=>errors.push(e.message));replay.on('request',r=>{if(r.method()==='POST')posts++;});
+    await replay.clock.install({time:new Date('2026-01-01T00:00:00Z')});await replay.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
+    await replay.route('**/__cooking-replay-fixture',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><div id="root"></div></body></html>'}));
+    await replay.goto('/__cooking-replay-fixture');
+    await replay.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
+    const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),loader:'tsx',contents:`
+      import React,{useEffect} from 'react';
+      import {createRoot} from 'react-dom/client';
+      import {CookingGame} from './apps/portal-web/src/games/cooking/CookingGame';
+      import {recipeOf} from './apps/portal-web/src/games/cooking/catalog';
+      const run=JSON.parse(sessionStorage.getItem('freedom.cooking.run.v1')).run;
+      const effects=[],loads=[],results=[],completed=[],NativeImage=window.Image;
+      // Return actual native images. Only delivery of their real load event to
+      // cookingResult is gated; decoding, dimensions and canvas pixels are real.
+      function GatedImage(width,height){
+        const image=new NativeImage(width,height),entry={ready:false,released:false,deliver:null};
+        loads.push(entry);let onload=null;
+        Object.defineProperty(image,'onload',{configurable:true,get:()=>onload,set:value=>{onload=value;}});
+        image.addEventListener('load',event=>{
+          entry.ready=image.naturalWidth>0&&image.naturalHeight>0;
+          entry.deliver=()=>{if(!entry.ready||entry.released||!onload)throw Error('Export image is not pending');entry.released=true;onload.call(image,event);};
+        });return image;
+      }
+      GatedImage.prototype=NativeImage.prototype;Object.setPrototypeOf(GatedImage,NativeImage);window.Image=GatedImage;
+      function ReplaySentinel(){useEffect(()=>{effects.push('setup');return()=>effects.push('cleanup');},[]);return null;}
+      const root=createRoot(document.getElementById('root'));
+      window.cookingReplay={effects,loads,results,completed,
+        release:async index=>{loads[index].deliver();await Promise.resolve();await Promise.resolve();},
+        unmount:()=>{root.unmount();window.Image=NativeImage;}};
+      root.render(<React.StrictMode><ReplaySentinel/><CookingGame recipe={recipeOf(run.recipeId)} seed={run.seed}
+        onBack={()=>{}} onComplete={value=>completed.push(value.id)} onResult={value=>results.push(value)}/></React.StrictMode>);
+    `},bundle:true,write:false,format:'iife',platform:'browser',define:{'process.env.NODE_ENV':'"development"'}}).outputFiles[0].text;
+    await replay.addScriptTag({content:script});
+    type Probe={effects:string[];loads:{ready:boolean;released:boolean}[];results:RunResult[];completed:string[];release:(index:number)=>Promise<void>;unmount:()=>void};
+    const snapshot=()=>replay.evaluate(()=>{const p=(window as unknown as {cookingReplay:Probe}).cookingReplay;return {effects:p.effects,loads:p.loads.map(x=>({ready:x.ready,released:x.released})),results:p.results,completed:p.completed};});
+    await expect.poll(async()=>{const s=await snapshot();return {effects:s.effects,loads:s.loads};}).toEqual({effects:['setup','cleanup','setup'],loads:[{ready:true,released:false},{ready:true,released:false}]});
+    // The sentinel alone is insufficient: two real export loads belong to the
+    // actual CookingGame, and only its replacement may publish a result.
+    await replay.evaluate(()=> (window as unknown as {cookingReplay:Probe}).cookingReplay.release(0));
+    let observed=await snapshot();expect(observed.results).toEqual([]);expect(observed.completed).toEqual([f.run.id]);
+    expect(observed.loads).toEqual([{ready:true,released:true},{ready:true,released:false}]);
+    await replay.evaluate(()=> (window as unknown as {cookingReplay:Probe}).cookingReplay.release(1));
+    await expect.poll(async()=>(await snapshot()).results.length).toBe(1);
+    observed=await snapshot();expect(observed.completed).toEqual([f.run.id]);
+    expect(observed.results[0]).toMatchObject({game:'kitchen',cookingMode:'guided',recipe:f.recipe.id,seed:f.run.seed,title:f.recipe.name,caption:`${cookingScore(f.run)}分`});
+    const native=await sharp(Buffer.from(observed.results[0].image.split(',')[1],'base64')).metadata();expect([native.format,native.width,native.height]).toEqual(['jpeg',960,720]);
+    // DOM ownership only: the first lazy setup can be invalidated before it
+    // creates a renderer. Do not require two contexts or claim GPU reclamation.
+    await expect(replay.locator('[data-cooking-visual]')).toHaveAttribute('data-cooking-visual','3d',{timeout:15000});
+    await expect(replay.locator('.ck-kitchen-canvas canvas')).toHaveCount(1);
+    await replay.evaluate(()=> (window as unknown as {cookingReplay:Probe}).cookingReplay.unmount());
+    await expect(replay.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+    observed=await snapshot();expect(observed.results).toHaveLength(1);expect(observed.effects).toEqual(['setup','cleanup','setup','cleanup']);
+  }finally{await replayContext.close();}
+  // Preserve the real production-dist restore/reload and downloaded PNG checks.
   await page.addInitScript(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
   for(let visit=0;visit<2;visit++){
     if(!visit)await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);else await page.reload();
@@ -466,7 +531,7 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
 });
 
 import {RECIPES,recipeOf,type Recipe,type Technique} from '../../apps/portal-web/src/games/cooking/catalog.js';
-import {actCooking,advanceCooking,currentStep,newCookingRun,type CookingAction,type CookingRun} from '../../apps/portal-web/src/games/cooking/domain.js';
+import {actCooking,advanceCooking,cookingScore,currentStep,newCookingRun,type CookingAction,type CookingRun} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {COOKBOOK_KEY,COOKING_RUN_KEY} from '../../apps/portal-web/src/games/cooking/storage.js';
 async function openKitchen(page:Page,id:string){
   await page.clock.install({time:new Date('2026-10-25T02:00:00Z')});await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);
