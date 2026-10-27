@@ -5,5 +5,3 @@
 CLI 的實作與 schema 權威仍在 governance 模組的 `packages/contribution-tools/`。不要另建 descriptor 格式、測試執行器、權限機制或可攜 verifier。新文件與模板不改變根 AGENTS、CONTRIBUTING、可信 CI、合併或部署規則。
 
 更新文件時使用實際 CLI 檢查參數，保留新模組建立前後的 context 差異、v1 bundle 與 chunk manifest 的區別、verify unavailable 的真實狀態。不能把本機 metadata 檢查說成完整 runtime/import/授權驗收。
-
-PR 入口只整理原有認領、完成條件與交接證據：真人接手者未確認時明寫未指定，來源 review 與精確整合候選 CI 分開記錄。沿用既有摘要更新卡點及下一棒，不另建任命、審查權限或驗證豁免；不相關欄位可以省略。

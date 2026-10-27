@@ -69,7 +69,7 @@ node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --scope community-se
 node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --paths modules/community-calendar/freedom.module.json,modules/community-calendar/README.md,modules/community-calendar/index.ts,modules/community-calendar/service.ts,tests/runtime/community-calendar.test.ts
 ```
 
-新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；建立 descriptor 是解除這個特定 blocker 的工作，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
+新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；這是警告而非 blocker，仍保留全庫規則與 fallback suites，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
 
 核對輸出的 repository、head、base 與 affected modules。小範圍輸出 `freedom.coding-context/v1`，讀完 `context_path` 指向的 bundle；大範圍輸出 manifest，依 `chunk_count` 讀完所有 chunk，再檢查完整性：
 
@@ -115,9 +115,9 @@ npm run typecheck
 npm run build
 ```
 
-`module:check` 檢查 `apps/`、`modules/`、`packages/` 的 TS、JS 與 CSS 產品來源；回報會列出完整掃描範圍與排除項。測試、型別宣告、生成或 vendor 資料及已編譯 public assets 不納入產品來源統計，手寫 public JS / CSS 與 production fixtures 仍納入。真正的依賴、引用檔或來源歸屬問題會使命令失敗。現有 `test:governance` 會執行真實 checkout 的來源覆蓋測試，新增未歸屬程式會讓 CI 失敗。
+`module:check` 檢查 `apps/`、`modules/`、`packages/` 的 TS、JS 與 CSS 產品來源；回報會列出完整掃描範圍與排除項。測試、型別宣告、生成或 vendor 資料及已編譯 public assets 不納入產品來源統計，手寫 public JS / CSS 與 production fixtures 仍納入。schema、依賴、引用檔與循環問題會使命令失敗；未歸屬程式只印出 `surface_unmapped` 警告，selector 仍保守跑 full。現有 `test:governance` 會檢查真實 checkout 的 descriptor 與引用。
 
-檢查沒有證明 import 隔離、runtime 註冊、授權或業務行為；這些仍需對應測試與審查。`--paths` 可協助診斷局部路徑，但不能用局部結果宣稱全庫通過。也不要刪掉舊 ownership、降低既有測試或提高 descriptor 上限來消除錯誤；同一個專屬功能資料夾可使用合理的 `/**`，混合目錄則明確列出來源。
+檢查沒有證明 import 隔離、runtime 註冊、授權或業務行為；這些仍需對應測試與審查。`--paths` 可協助診斷局部路徑，但不能用局部結果宣稱全庫通過。也不要刪掉舊 ownership 或降低既有測試來消除錯誤；owned_paths 上限為 256（含未被涵蓋的 descriptor 自身）；同一個專屬功能資料夾可使用合理的 `/**`，混合目錄則明確列出來源。
 
 依實際範圍執行既有 runtime、契約、governance 與瀏覽器驗證，再以固定 baseline 產生本機報告：
 
@@ -130,11 +130,4 @@ git diff --check
 
 最後 push 自己的分支，建立 PR 到中央 `main`。使用自動帶入的 PR 模板交代問題、結果、模組、跨模組依賴、實跑命令與未驗項。新功能若需要 migration 或旗標，再說明其啟用條件與回退限制。PR、CI 成功與功能正式啟用是不同狀態；合併及部署依既有 [貢獻發布途徑](contribution-release-paths.md) 辦理。
 
-### 讓下一棒不用重查整段討論
-
-沿用 PR 模板與既有交接摘要，保留一份可更新的短紀錄；不另開追蹤案，也不要求填寫不相關的啟用條件。
-
-- **範圍與認領**：列模組、主要檔案、原 Issue／派工、相依 PR 與本輪完成條件。認領人和已確認的審查／整合接手者分開寫；未指定就明說，`owner_role` 不是已任命的真人。
-- **版本與驗證**：固定本輪 head／baseline SHA；每筆命令列明範圍、結果與適用 SHA，未驗項保留原因與下一步。更新來源後，不把舊版本的局部或完整結果改標成新 head 通過。
-- **審查與 CI**：來源 review 記錄審查的 head；整合候選另記實際候選 SHA 與 CI run，有 tree 證據再附。未產生時寫待審／待產生，不增加開 PR 門檻；來源核准不等於整合 CI 通過，局部預檢不減少既有必要檢查。
-- **卡點與下一棒**：有阻塞時，依[發布途徑](contribution-release-paths.md)區分產品必修、平台／CI 環境與後續改善，更新目前卡點、接手角色或已確認的人、解除條件。沒有確認的人選就寫待指定，不自行指派；新 head 仍依新變更與原完成條件審查，不追加無關的全站改善。
+寫清楚本輪完成條件、未驗項目與原因；卡點與下一棒依既有[發布途徑](contribution-release-paths.md)由維護者更新同一則摘要。

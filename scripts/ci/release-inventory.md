@@ -18,10 +18,8 @@ links; contract generation/diff and runtime-text checks remain. It does not use
 the candidate's dated inventory to decide correctness. Existing dated inventories
 remain historical; `verify:inventory` can reproduce the old bytes when needed.
 
-This is source for a workflow transition, **not evidence that the organization
-ruleset has installed its pin**. Until the reviewed pin is installed and read back,
-the prior daily inventory gate still applies. Record full/shadow comparison,
-source archive/restore evidence and a real qualifying PR after installation.
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
+目前 `.github/workflows/verify.yml` 的 PR source-integrity 檢查 Git 來源邊界；main pushes 產生完整 source archive 並還原核對。這是 repo source 行為，不能取代實際 hosted run 或遠端 ruleset 的讀回證據。
 
 Use the reviewed tool on Linux with Python 3.11+ and `/usr/bin/git`. Supply the
 source commit and tree from the independent release decision. The output parent

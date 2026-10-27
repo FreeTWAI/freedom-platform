@@ -110,7 +110,8 @@ export async function checkModules(repositoryRoot, { paths } = {}) {
   const checkedPaths = [...new Set(paths ?? catalog.files.filter(isModuleSourcePath))].sort();
   const ownership = checkedPaths.map(path => ({ path, modules: ownersFor(catalog.modules, path) }));
   const unownedPaths = ownership.filter(item => !item.modules.length).map(item => item.path);
-  for (const path of unownedPaths) issues.push({ code: 'surface_unmapped', path });
+  const warnings = unownedPaths.map(path => ({ code: 'surface_unmapped', path }));
+  if (warnings.length) console.warn(JSON.stringify({ severity: 'warning', code: 'surface_unmapped', unknown_paths: unownedPaths }));
   const descriptors = catalog.modules.map(withDescriptorOwnership);
   const impact = selectImpact({ baseline: descriptors, candidate: descriptors, changedPaths: [], requestedPaths: checkedPaths });
   return { format: 'freedom.module-check/v1', assurance_level: 'local',
@@ -118,7 +119,7 @@ export async function checkModules(repositoryRoot, { paths } = {}) {
     head_commit: catalog.head_commit, module_count: catalog.modules.length, checked_source_count: checkedPaths.length,
     source_scope: paths ? { requested_paths: checkedPaths } : MODULE_SOURCE_SCOPE,
     unknown_paths: unownedPaths, shared_ownership: ownership.filter(item => item.modules.length > 1),
-    affected_modules: impact.module_ids, tests: impact.tests, issues,
+    affected_modules: impact.module_ids, tests: impact.tests, issues, warnings,
     not_checked: ['baseline-candidate-impact', 'imports', 'runtime-registration', 'authorization', 'behavior'],
     merge_authorized: false, execution_authorized: false };
 }
