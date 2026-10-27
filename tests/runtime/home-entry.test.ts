@@ -200,8 +200,41 @@ for(const target of ['#profile','#profile?view=settings','#profile?member=300000
  const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);assert.equal(blocked.state.mobileOpen,true);
 });
 
-test('recognition account entry uses existing guarded history and rejects unknown account query destinations',()=>{
- const h=navigationHistoryHarness();h.move('#account?view=recognition');assert.equal(h.context.tab,'account');assert.equal(h.state.focus,'main');assert.equal(h.state.mobileOpen,false);
- const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move('#account?view=recognition');assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);
+for(const view of ['recognition','connections'])test(`${view} account entry uses existing guarded history and rejects unknown account query destinations`,()=>{
+ const h=navigationHistoryHarness();h.move(`#account?view=${view}`);assert.equal(h.context.tab,'account');assert.equal(h.state.focus,'main');assert.equal(h.state.mobileOpen,false);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(`#account?view=${view}`);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);
  const invalid=navigationHistoryHarness();invalid.move('#account?view=unknown');assert.equal(invalid.context.tab,'home');
+});
+
+// Execute the actual disclosure effect; this models focus scheduling, not native
+// browser acceptance. The shelf E2E exercises the visible action at both widths.
+function connectionsDisclosureHarness(requested=true){
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/Membership.tsx',import.meta.url),'utf8');
+ const effect=source.match(/  useEffect\(\(\)=>\{\n    const details=connectionsRef.current;[\s\S]*?\n  \},\[focusConnections\]\);/);assert.ok(effect);
+ let focused=0,cleanup:(()=>void)|undefined;
+ class Details {open=false;isConnected=true;parentElement:Details|null=null;querySelector(){return summary;}}
+ const summary={focus(){focused++;}};const outer=new Details(),details=new Details();details.parentElement=outer;
+ const body={},document={body,activeElement:body as {id?:string},querySelector:(_selector:string)=>null as object|null};
+ const window={location:{hash:'#account?view=connections'}};const frames=new Map<number,()=>void>();
+ const context={connectionsRef:{current:details},focusConnections:requested,HTMLDetailsElement:Details,document,window,
+  requestAnimationFrame:(callback:()=>void)=>{frames.set(1,callback);return 1;},cancelAnimationFrame:(id:number)=>frames.delete(id),useEffect:(callback:()=>void|(()=>void))=>{cleanup=callback()||undefined;}};
+ runInNewContext(transformSync(effect[0],{loader:'ts'}).code,context);
+ return {details,outer,document,window,get focused(){return focused;},cleanup:()=>cleanup?.(),flush:()=>{for(const callback of frames.values())callback();frames.clear();}};
+}
+test('explicit GitHub management reveals both disclosures then focuses after shell focus',()=>{
+ const h=connectionsDisclosureHarness();assert.equal(h.outer.open,true);assert.equal(h.details.open,true);assert.equal(h.focused,0);
+ h.document.activeElement={id:'main-content'};h.flush();assert.equal(h.focused,1);
+});
+test('ordinary account visits keep tools collapsed',()=>{
+ const h=connectionsDisclosureHarness(false);h.flush();assert.equal(h.outer.open,false);assert.equal(h.details.open,false);assert.equal(h.focused,0);
+});
+for(const reason of ['unmount','navigation','closed','detached','modal','other-control'])test(`GitHub destination does not steal stale focus after ${reason}`,()=>{
+ const h=connectionsDisclosureHarness();
+ if(reason==='unmount')h.cleanup();
+ if(reason==='navigation')h.window.location.hash='#skills';
+ if(reason==='closed')h.details.open=false;
+ if(reason==='detached')h.details.isConnected=false;
+ if(reason==='modal')h.document.querySelector=()=>({});
+ if(reason==='other-control')h.document.activeElement={id:'nickname'};
+ h.flush();assert.equal(h.focused,0);
 });

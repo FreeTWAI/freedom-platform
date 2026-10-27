@@ -1,4 +1,4 @@
-import { navigate } from './navigation.js';
+import { navigate, openAccountSettings } from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 
 // Synthetic route fixtures only: they prove loading, error and recovery display, not a real client or member.
@@ -9,10 +9,8 @@ async function openConnections(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await navigate(page, '我的名片');
+  await openAccountSettings(page,'帳號與安全','連結 GitHub 與其他工具');
   const heading=page.getByRole('heading',{name:'連接我的客戶端（讀取）',exact:true});
-  // The member card may fold this section; open it the way a member would.
-  const fold=heading.locator('xpath=ancestor::details[1]');
-  if(await fold.count()&&!await fold.evaluate(element=>(element as HTMLDetailsElement).open))await fold.locator(':scope > summary').click();
   await expect(heading).toBeVisible();
   return heading.locator('xpath=ancestor::section[1]');
 }

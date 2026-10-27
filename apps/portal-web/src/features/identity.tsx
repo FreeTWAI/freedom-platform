@@ -24,7 +24,7 @@ export const identityFeatures = {
   }},
   "account": {
     moduleId: "member-card", placement: 'page',
-    render: ({client, session, site, selectTab, registerPageLeave,locationHash}) => <AccountPanel client={client} session={session} onNavigate={selectTab} registerLeave={registerPageLeave} focusProfileExtras={locationHash==='#account?view=recognition'} profileExtras={site?.community_certification_enabled===true||site?.social_achievements_enabled===true?registerLeave=><>
+    render: ({client, session, site, selectTab, registerPageLeave,locationHash}) => <AccountPanel client={client} session={session} onNavigate={selectTab} registerLeave={registerPageLeave} focusConnections={locationHash==='#account?view=connections'} focusProfileExtras={locationHash==='#account?view=recognition'} profileExtras={site?.community_certification_enabled===true||site?.social_achievements_enabled===true?registerLeave=><>
       {site?.community_certification_enabled===true&&<CommunityCertificationPanel key={session.user.user_id+':'+client.sessionGeneration} client={client} registerLeave={registerLeave}/>}
       {site?.social_achievements_enabled===true&&<SocialAchievements key={session.user.user_id+':'+client.sessionGeneration} client={client} registerLeave={registerLeave}/>}
     </>:undefined}>

@@ -42,11 +42,11 @@ function guildRoleLabel(member:MemberCardData,guildKey:string){const category=me
 const audienceOptions: [Audience,string][]=[['public','平台公開'],['friends','平台好友'],['squad','小隊夥伴'],['guild','公會夥伴']];
 const contactLabels={email:'聯絡 E-mail',discord:'Discord 帳號',github:'GitHub 帳號',line:'LINE ID'} as const;
 const fail=(e:unknown)=>e instanceof Error?e.message:'暫時無法讀取，請稍後再試。';
-type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean};
+type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean;focusConnections?:boolean};
 export function AccountPanel(props:AccountPanelProps){
   return <AccountSettings key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
 }
-function AccountSettings({client,session,onNavigate,registerLeave,children,profileExtras,focusProfileExtras}:AccountPanelProps){
+function AccountSettings({client,session,onNavigate,registerLeave,children,profileExtras,focusProfileExtras,focusConnections}:AccountPanelProps){
   const [account,setAccount]=useState<Account|null>(null),[nickname,setNickname]=useState(''),[identityLabel,setIdentityLabel]=useState<IdentityLabel|''>(''),[contacts,setContacts]=useState<Account['contacts']|null>(null),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[member,setMember]=useState<MemberCardData|null>(null),[labels,setLabels]=useState<Record<string,string>>({});
   const mutationScope={userId:session.user.user_id,type:'account-settings'};
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client,mutationScope);
@@ -54,6 +54,23 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
   const formId=useId(),generation=client.sessionGeneration;
   const childGuards=useRef(createSettingsLeaveRegistry()).current;
   const profileExtrasRef=useRef<HTMLDetailsElement>(null);
+  const connectionsRef=useRef<HTMLDetailsElement>(null);
+  useEffect(()=>{
+    const details=connectionsRef.current;
+    if(!focusConnections||!details)return;
+    let ancestor=details.parentElement;
+    while(ancestor){if(ancestor instanceof HTMLDetailsElement)ancestor.open=true;ancestor=ancestor.parentElement;}
+    details.open=true;
+    // The shell focuses main after navigation. Reveal this explicit destination
+    // afterwards, without stealing focus from a modal or a newly used control.
+    const frame=requestAnimationFrame(()=>{
+      const summary=details.querySelector('summary');
+      const active=document.activeElement;
+      if(!details.isConnected||!details.open||window.location.hash!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[focusConnections]);
   const hasProfileExtras=Boolean(profileExtras);
   useEffect(()=>{
     const details=profileExtrasRef.current;
@@ -170,7 +187,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
         <details className="account-settings-more"><summary>兩步驟驗證</summary>{account&&<TotpSettings key={session.user.user_id} client={client} email={account.login_email}/>}</details>
         <details className="account-settings-more"><summary>更換登入信箱</summary>{account&&<EmailChangePanel client={client} email={account.login_email}/>}</details>
         {typeof children==='function'?children(childGuards.register):children}
-        <details className="account-settings-more"><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><ClientConnections client={client}/></details>
+        <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><ClientConnections client={client}/></details>
         <OwnReports client={client}/>
         <details className="account-settings-more"><summary>停用帳號</summary>{account&&<AccountDeactivation client={client} version={account.aggregate_version} disabled={locked}/>}</details>
       </div>
