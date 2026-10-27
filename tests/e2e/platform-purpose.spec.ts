@@ -48,7 +48,8 @@ test('existing members reach their chosen entry and all six collaboration destin
     await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
     // The legacy intent remains reachable through its canonical global entry,
     // rather than duplicating six role-oriented buttons on the member home.
-    await test.step(label, () => navigate(page, heading));
+    const navigationLabel = target === 'supplier' ? 'AI 整理供貨商品' : target === 'retail' ? 'AI 製作銷售網站' : heading;
+    await test.step(label, () => navigate(page, navigationLabel));
     await expect(page).toHaveURL(new RegExp(`#${target}$`));
     await expect(page.getByRole('heading',{name:heading,exact:true,level:1})).toBeVisible();
   }

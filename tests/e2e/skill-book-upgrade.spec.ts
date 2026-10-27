@@ -550,7 +550,7 @@ test('member card headings keep their margin outside the upload dialog', async (
   const heading = page.locator('.account-panel .member-card-body h4').first();
   await expect(heading).toBeVisible();
   await expect(heading).toHaveCSS('margin-top', '0px');
-  await navigate(page, '我可以賣東西');
+  await navigate(page, 'AI 製作銷售網站');
   await expect(page.getByRole('heading', { name: '挑選這次想賣的商品', exact: true })).toBeVisible();
   const photo = page.locator('.shop-product img');
   if (await photo.count()) await expect(photo.first()).toHaveCSS('object-fit', 'contain');

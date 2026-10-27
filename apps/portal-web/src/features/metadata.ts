@@ -4,6 +4,7 @@ export type PortalFeatureMetadata = { title: string; guidance: string };
 
 // Order is the existing navigation-search order. Metadata is not authorization.
 export const PORTAL_FEATURE_METADATA = {
+  "community-hub": {title:"社群入口總覽",guidance:"瀏覽共同經營的社群與站內參與方向。"},
   "newbie-village": {title:"新手村任務",guidance:"用三維度反思、15 題本機測驗與方向卡，選擇第一週的小實驗。"},
   profile: {title: "我的個人空間", guidance: "瀏覽自己的貼文、作品與活動；公開分享仍由你另行設定。"},
   "ar": { title: "AR 圖案互動", guidance: "製作衣服或海報圖案，掃描本人公開名片與公開活動，拍照分享。" },

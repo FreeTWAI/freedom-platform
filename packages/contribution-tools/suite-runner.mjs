@@ -12,7 +12,7 @@ import { RUNTIME_SUITES, FULL_RUNTIME_BASELINE, NODE_CONSUMER_SUITES, FIXED_NODE
 import { PINNED_SUITES } from './pinned-suites.mjs';
 import { RUNTIME_FILE_WEIGHTS, DEFAULT_RUNTIME_FILE_WEIGHT } from './runtime-file-weights.mjs';
 
-import { createProgressDecoder } from './test-reporter.mjs';
+import { createProgressDecoder, MAX_RUNTIME_FILES } from './test-reporter.mjs';
 
 const MAX_OUTPUT = 16_000_000, MAX_FILES = 512;
 const COUNT_KEYS = ['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo'];
@@ -39,7 +39,7 @@ async function suiteFiles(root, id) {
       .filter(name => /^[a-z][a-z0-9_-]*\.test\.ts$/.test(name)).map(name => 'tests/runtime/' + name);
     files = [...new Set([...FULL_RUNTIME_BASELINE, ...found])].sort();
   } else files = RUNTIME_SUITES[id];
-  if (files.length > MAX_FILES) throw new Error('file_limit');
+  if (files.length > (id === 'runtime.full' ? MAX_RUNTIME_FILES : MAX_FILES)) throw new Error('file_limit');
   for (const path of files) await readBounded(root, path);
   return files;
 }
