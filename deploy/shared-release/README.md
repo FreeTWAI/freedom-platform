@@ -19,6 +19,13 @@ COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，�
 這不是備份成功，也不執行新備份。capture／archive／migration／deploy intent 或任何不確定狀態仍拒絕。
 尚未確認 live run 的 journal 符合此條件，不可據此聲稱現場已恢復。
 
+首次接手時，舊操作者可能已在共用 journal 建立後發布較新的程式。Controller 會核對
+該環境最新 GitHub deployment 的成功狀態、四位操作者身分、main／CI 及新舊版本關係；
+image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、DB ledger、原政策
+與座標限制，才追加 `legacy-source-adopted`。不重設 seed、不改 schema、不抹除舊紀錄。
+若同時有 BEGIN-only 備份失敗，先依原失敗收據與唯讀檢查追加 abandonment，再銜接版本。
+有 capture／archive／migration／deploy intent、未核准版本、schema 或設定變動仍會停止。
+
 以下安裝紀錄為具日期的歷史觀察；新 controller 與新 digest-pinned image 都須通過審查／CI 並安裝，
 本補丁及本機測試不表示已部署。`plan`、`check` 成功也不表示已發布。
 

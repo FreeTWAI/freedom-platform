@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitInstallation,
-  requireStaging, requireRelease } from './admission.mjs';
+  requireStaging, requireLegacyPredecessor, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
 import { checkEnvironment } from './environment-check.mjs';
@@ -47,6 +47,8 @@ export async function main(env = process.env) {
     const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
     if (recoveryEvidence) receipt.backupReconciliation = recoveryEvidence;
     receipt.stagingEvidence = await requireStaging(api, admission, installation);
+    admission.legacyPredecessor = await requireLegacyPredecessor(api, admission);
+    if (admission.legacyPredecessor) receipt.legacyPredecessor = admission.legacyPredecessor;
     const source = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     const git = args => execFileSync('git', ['-C', source, ...args], {
       encoding: 'utf8', timeout: 30_000, maxBuffer: 1_000_000, stdio: ['ignore', 'pipe', 'ignore'],

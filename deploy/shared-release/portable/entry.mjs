@@ -18,7 +18,7 @@ import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
-import { reconcileFailedBackup } from './backup-recovery.mjs';
+import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -124,6 +124,7 @@ export async function main(args = process.argv.slice(2)) {
           request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',
             sourceSha: previous.sourceSha, sourceTree: previous.sourceTree } : request });
       }
+      if (independentRelease) await adoptLegacyPredecessor({ floor, pool: pools.migrator, deployer, lease, request });
       const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       before = await deployer.inspect();
       check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
