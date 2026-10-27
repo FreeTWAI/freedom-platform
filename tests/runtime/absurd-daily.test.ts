@@ -298,3 +298,47 @@ test('UX-15e: all 72 menu covers have distinct immutable local assets, bounded b
   for(const atlas of manifest.atlases){const prompt=await readFile(new URL(`../../${atlas.prompt}`,import.meta.url));assert.equal(createHash('sha256').update(prompt).digest('hex'),atlas.prompt_sha256);}
   assert.equal(bytes,manifest.total_bytes);assert.ok(bytes<=5*1024*1024);
 });
+
+test('UX-8 preview operator: dry plan and pure receipt validation never imply native execution',async()=>{
+  const tool=await import(new URL('../../modules/absurd-daily/tools/native-previews.mjs',import.meta.url).href);
+  const planned=await tool.plan();assert.equal(planned.mode,'dry-plan');assert.deepEqual([...planned.recipes].sort(),RECIPES.map(r=>r.id).sort());
+  // Synthetic validator fixture ONLY: no browser, DOM or fabricated native evidence is saved.
+  const receipt=()=>({status:'captured',errors:[],environment:{browser:'validator-fixture',renderer:'not-native',dpr:1},source_inputs:structuredClone(planned.source_inputs),
+    build:{factory:'assets/dish.js',inputs:[planned.source_inputs[0]],chunks:[{file:'assets/dish.js',sha256:'a'.repeat(64),imports:[],modules:['apps/portal-web/src/games/cooking/dish-stage.ts']}]},
+    total_bytes:66,previews:RECIPES.map(r=>({recipe:r.id,path:`apps/portal-web/public/games/absurd-daily/cooking/3d/${r.id}.webp`,width:512,height:384,bytes:1,sha256:'b'.repeat(64),source_png_sha256:'c'.repeat(64),native:{calls:1,geometries:1,triangles:1,textures:1},canvas_after_dispose:0}))});
+  assert.equal(tool.validateCapture(receipt(),planned),true);
+  for(const mutate of [
+    (r:any)=>{r.status='failed';},(r:any)=>{r.errors.push('decode failure');},(r:any)=>{r.environment.renderer=null;},
+    (r:any)=>{r.previews.pop();},(r:any)=>{r.previews[1]=r.previews[0];},(r:any)=>{r.previews[0].width=511;},
+    (r:any)=>{r.previews[0].sha256='bad';},(r:any)=>{r.previews[0].bytes=-1;},(r:any)=>{r.total_bytes++;},
+    (r:any)=>{r.previews[0].native.calls=101;},(r:any)=>{r.previews[0].native.geometries=100;},(r:any)=>{r.previews[0].native.textures=-1;},(r:any)=>{r.previews[0].native.textures=NaN;},(r:any)=>{r.previews[0].canvas_after_dispose=1;},
+    (r:any)=>{r.source_inputs[0].sha256='d'.repeat(64);},(r:any)=>{r.build.chunks[0].imports=['assets/missing.js'];},
+    (r:any)=>{r.build.chunks[0].modules=[];},(r:any)=>{r.previews[0].path='../escape.webp';},
+  ]){const r=receipt();mutate(r);assert.throws(()=>tool.validateCapture(r,planned));}
+  for(const path of ['../escape','/absolute','a/../b','a\\b','a//b'])assert.throws(()=>tool.safeRelative(path));
+});
+
+test('UX-8 preview operator: refuses output reuse, symlinks and changed image/source bytes',async()=>{
+  const tool=await import(new URL('../../modules/absurd-daily/tools/native-previews.mjs',import.meta.url).href);
+  const {mkdtemp,mkdir,writeFile,symlink,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const dir=await mkdtemp(join(tmpdir(),'native-preview-validator-'));
+  try{
+    const root=join(dir,'source'),out=join(dir,'evidence');await mkdir(root);await tool.freshOutput(root,out);
+    await assert.rejects(tool.freshOutput(root,out));await assert.rejects(tool.freshOutput(root,join(root,'nested')));
+    await writeFile(join(root,'source.js'),'source');await symlink(join(root,'source.js'),join(root,'link.js'));await assert.rejects(tool.regularFile(root,'link.js'));
+    const png=await sharp({create:{width:640,height:480,channels:3,background:'#888'}}).png().toBuffer(),webp=await sharp(png).resize(512,384).webp().toBuffer();
+    await mkdir(join(out,'portal'));await mkdir(join(out,'portal/assets'));await writeFile(join(out,'portal/assets/dish.js'),'chunk');
+    const source_inputs=[{path:'source.js',sha256:tool.digest(Buffer.from('source'))}],expected={recipes:RECIPES.map(r=>r.id),source_inputs};
+    const receipt={status:'captured',errors:[],environment:{browser:'validator-fixture',renderer:'not-native',dpr:1},source_inputs,
+      build:{factory:'assets/dish.js',inputs:source_inputs,chunks:[{file:'assets/dish.js',sha256:tool.digest(Buffer.from('chunk')),imports:[],modules:['apps/portal-web/src/games/cooking/dish-stage.ts']}]},
+      total_bytes:66*webp.length,previews:RECIPES.map(r=>({recipe:r.id,path:`apps/portal-web/public/games/absurd-daily/cooking/3d/${r.id}.webp`,width:512,height:384,bytes:webp.length,sha256:tool.digest(webp),source_png_sha256:tool.digest(png),native:{calls:1,geometries:1,triangles:1,textures:1},canvas_after_dispose:0}))};
+    for(const r of RECIPES){await writeFile(join(out,r.id+'.png'),png);await writeFile(join(out,r.id+'.webp'),webp);}
+    await tool.validateFiles(root,out,receipt,expected,sharp);
+    await writeFile(join(out,RECIPES[0].id+'.webp'),'corrupt');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp));
+    await writeFile(join(out,RECIPES[0].id+'.webp'),webp);
+    const wrong=await sharp(png).resize(511,384).webp().toBuffer();const bad=structuredClone(receipt);bad.previews[0].sha256=tool.digest(wrong);bad.previews[0].bytes=wrong.length;bad.total_bytes+=wrong.length-webp.length;
+    await writeFile(join(out,RECIPES[0].id+'.webp'),wrong);await assert.rejects(tool.validateFiles(root,out,bad,expected,sharp),/output_bytes_or_dimensions/);
+    await writeFile(join(out,RECIPES[0].id+'.webp'),webp);await writeFile(join(out,'portal/assets/dish.js'),'wrong');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp),/compiled_drift/);await writeFile(join(out,'portal/assets/dish.js'),'chunk');
+    await writeFile(join(root,'source.js'),'changed');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp),/source_drift/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});

@@ -33,3 +33,19 @@ UX-13修正當時的實際旅程（器皿改版前）：[總分頁面](review/cu
 UX-14器皿：[牛排鐵盤示例](review/native-steak-iron-20261025.png)／[陶盤示例](review/native-ceramic-20261025.png)。示例由production renderer產生，與真實玩家完成局分開標記。最新實際旅程：[手機牛排成品](review/current-steak-iron-phone-20261025.png)／[實際下載牛排PNG](review/current-steak-iron-share-20261025.png)。
 
 UX-15e新介面：[桌面大廳](review/illustrated-lobby-desktop-20261026.png)／[手機料理目錄](review/illustrated-kitchen-phone-20261026.png)／[炸熱狗開場](review/corn-dog-illustrated-ready-20261026.png)。均為實際production頁面，生成方向mockup與否決原圖分別封存E槽。50項runtime、最後13條受影響瀏覽器與17張修復追查通過；完整56條首輪的53通過／3失敗及31張首輪的18通過／13失敗仍保留，詳見開發紀錄，不把不同版本加總成一次完整全通過。
+
+## 可重現的原生預覽候選（operator tool，非驗收）
+
+`node modules/absurd-daily/tools/native-previews.mjs` 預設只輸出 dry plan，不建置、不啟動瀏覽器／server、不寫檔。需要另獲准的原生執行環境，且已安裝 Vite／Playwright／sharp／Chromium，才可明確執行：
+
+```sh
+node modules/absurd-daily/tools/native-previews.mjs capture /absolute/new-evidence-directory /absolute/installed-chromium
+```
+
+輸出目錄必須全新、在 repo 外，不覆寫既有成果。工具使用既有 Vite production config 的 write:false 編譯，保存 emitted module metadata／chunk hash、觀察到的 file-backed transform input hashes 與 declared source inputs；保留 synthetic module ID，不把有限來源清單冒充所有工具鏈／環境的完整證明。只透過 loopback 提供 emitted JS，禁止頁面向外請求，不執行 npm／安裝／skill-client 打包／API／資料庫／部署。這不是完整標準 build。
+
+依序呼叫真正 emitted `createDishStage` 生成全部66道，保存原生PNG、512×384 WebP（quality82）、實際 browser／renderer／DPR、來源／輸出 hash、native calls／geometry／textures／triangles、canvas cleanup及 import／construct／capture wall timing。最後重新驗所有來源／chunk／輸出 bytes、尺寸與預算；少一張、重複、來源漂移、錯誤或失敗都不產生 candidate manifest。成功只寫 evidence 內的 `candidate-manifest.json`，仍待視覺審查；**不自動更新 repo manifest／圖片，不代表遊玩、FPS、GPU memory 回收或完整 CI 通過**。operator 應保留原PNG及receipt，核對66個id與現行catalog後，再另行審查素材更新。
+
+目前已知限制：2026-10-27 own-cloud Chromium 在啟動時因 socket EPERM 中止，0／66生成；不得用修改 sandbox／profile／flags 重試來規避。此工具的純驗證測試不代替原生執行。原 `cooking-3d-art.json` 的來源 gate 仍如實失敗；不能只換 hash 宣稱重新生成。
+
+預算依本工具實際的 `createDishStage` 預覽契約：calls≤100、geometries<100；textures 如實記錄並驗非負整數。既有66張預覽記錄為6–14 textures，不能套用 `kitchen-stage` 引導麵團觸控測試的≤3 textures門檻；後者是另一個場景／取樣契約，仍原樣保留。
