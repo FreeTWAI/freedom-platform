@@ -5,7 +5,9 @@ import { formatIsoLocal } from '../format';
 import { logConsoleEvent } from '../game-console-core';
 import { consoleChannel } from '../game-console-routing';
 import { useModuleMutation } from './shared';
-import { CHAT_JSON_MAX_BYTES, chatSkillInstruction, parseChatSkillJson, repositoryKey, seedCopyBlock, type ChatSkillSeed } from './skill-upload-chat';
+import { CHAT_JSON_MAX_BYTES, chatSkillInstruction, parseChatSkillJson, repositoryKey, type ChatSkillSeed } from './skill-upload-chat';
+import { agentInstruction, SKILL_UPLOAD_GUIDE as GUIDE } from './skill-upload-instruction';
+export { agentInstruction } from './skill-upload-instruction';
 import './SkillUpload.css';
 import { PublishedSkillLinks, skillPublicationPath } from './SkillPublication';
 
@@ -23,7 +25,6 @@ type HeldGrant = { id: string; token: string; submitUrl: string; version: number
 
 const statusLabels: Record<Submission['status'], string> = { awaiting_upload: '等待 Agent 上傳', ready_for_review: '待你預覽送出', published: '已公開為社群技能書', revoked: '已撤銷' };
 export const relationshipLabels: Record<Relationship, string> = { author: '原作者', maintainer: '維護者', contributor: '貢獻者', curator: '推薦／整理者' };
-const GUIDE = '/development/skill-upload';
 
 function httpsLink(value: string | null | undefined) {
   try { const url = new URL(value ?? ''); return url.protocol === 'https:' && !url.username && !url.password ? url.href : null; } catch { return null; }
@@ -44,42 +45,6 @@ function draftsLeadList(list: { status: string; seed?: unknown }[]) {
 }
 function plainGrantUsable(item: Submission) {
   return item.status === 'awaiting_upload' && !item.seed && !item.grant_revoked_at && !(item.grant_expires_at && isExpired(item.grant_expires_at));
-}
-
-export function agentInstruction(origin: string, secret: Secret, seed?: ChatSkillSeed | null) {
-  const copied = seed ? `${seedCopyBlock(seed)}\n\n` : '';
-  return `# 自由工坊 · 技能上傳（私人指令，請勿轉傳）
-先閱讀公開指南：${origin}${GUIDE}/SKILL.md（完整欄位規格與插圖格式以指南為準）。
-
-任務：讀取「目前工作目錄」這個 repository 的 README、LICENSE 與程式碼，依實際內容以繁體中文撰寫：
-1. title：技能名稱。
-2. description：真實介紹，只寫專案確實具備的功能與授權。
-3. use_notes：適合誰、需要什麼、第一個使用步驟與限制。
-4. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
-5. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
-
-規則：
-- relationship 預設 curator（推薦／整理者）；只有我明確聲明是原作者、維護者或貢獻者，才改為 author／maintainer／contributor。這是本人自行聲明，不是身分驗證。
-- 不捏造使用人數、成效、官方身分或授權；不確定就寫「尚未確認」。
-- 不讀取專案中的 .env、cookie、私鑰或客戶資料，不附上其他憑證；只用下方 Authorization 標頭，不使用任何瀏覽器 cookie。
-- 本指令只交給我選擇的 Agent，不轉傳、不寫入 Repo、shell history 或日誌。憑證只能用於下方上傳端點。
-- 這只會上傳私人草稿；是否公開由我本人在自由工坊預覽後決定。
-
-${copied}POST ${secret.submitUrl}
-Authorization: Bearer ${secret.token}
-Content-Type: application/json
-（一次性憑證，只能上傳這份草稿，${formatIsoLocal(secret.expiresAt)} 到期）
-
-{
-  "repository_url": "https://github.com/<owner>/<repository>",
-  "title": "技能名稱",
-  "description": "真實介紹",
-  "use_notes": "如何開始使用與限制",
-  "demo_url": null,
-  "relationship": "curator",
-  "share_introductions": ["第 1 則分享短文", "第 2 則分享短文", "……共 100 則，彼此不同"]
-}
-`;
 }
 
 function CopySecret({ label, value, hint, rootRef, copyButtonRef }: { label: string; value: string; hint: string; rootRef?: Ref<HTMLDivElement>; copyButtonRef?: Ref<HTMLButtonElement> }) {

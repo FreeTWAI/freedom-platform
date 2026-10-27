@@ -1,0 +1,1886 @@
+{
+  "format": "freedom.main-rollout/v1",
+  "status": "deployed_production_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "recorded_at": "2026-10-26T05:24:55.334791+00:00",
+  "evidence_cutoff_at": "2026-10-26T05:13:02.219497+00:00",
+  "status_breakdown": {
+    "deployed": "Both environments run b14916cc at schema 189, replacing 1f7aee36. Deploy helpers completed with attempts=1 and exact active readback accepted on attempt 1.",
+    "member_visible_change": "Mobile navigation docks below the top bar and can be closed, with renamed navigation entries (#1047). The guild directory has a collapsible topic filter, matching count and relocated secondary settings (#1055). Guild management adds per-tab purpose lines and lists discussions first; a collapsed discussion draft survives only while staying on that page (#1056). Activity submission stays disabled until the first activity-list load settles, including its error completion (#1068); later refreshes do not reapply this initial gate.",
+    "public_smoke": "Production only: 14 checks passed; exact-source health matched on attempt 1. Staging has deploy health/homepage/binding checks only.",
+    "backups_and_isolated_restores": "Four selected release sets passed readback, isolated restore and cleanup. Staging before is a natural Q4 scheduled run; production before is manual through Q4 after the owner push instruction. Production after attempt 1 failed; attempt 2 is the pointer. A separate Q5 Persistent catch-up also passed.",
+    "operator_dispatcher": "Both sources bound to 14279926; original timers restored after a refused first restore and supervised Persistent catch-up, with unchanged schedules and service argv.",
+    "preserved_refusals": "Production after-backup attempt 1 failed with cleanupVerified=false; later read-only checks required no cleanup. Codex capacity interruption and first timer-restore refusal are retained separately.",
+    "natural_scheduled_backup": "not_observed_for_new_wrapper",
+    "member_ux_acceptance": "not_run"
+  },
+  "source": {
+    "selected_release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+    "tree": "ddc7515fe2df3ffc83728277dec6fb015d4586f3",
+    "parents": [
+      "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+      "794be7c25225c36d9bb022721b0fd4fcda79b2f2"
+    ],
+    "merge_pr": 1071,
+    "included_prs": [
+      {
+        "pr": 1069,
+        "description": "HostedStore page areas split into components; refactor with no intended behavior change.",
+        "merge_commit": "fa155e2a1132a6d009d16a89cfb7e792ffa62982",
+        "ordered_parents": [
+          "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "13158d7529df766ef80d398dc7d47fd608d378d3"
+        ],
+        "branch": "refactor/hosted-store-areas-20261025",
+        "integrated_head": "13158d7529df766ef80d398dc7d47fd608d378d3",
+        "included_prs": []
+      },
+      {
+        "pr": 1070,
+        "description": "Unchanged heads of #1038 (shared Actions release path, including read-only backup/migrator role separation), #1068 (initial activity-list submission gate) and #1057 (browser/SQL fixture cleanup and bounded diagnostics, tests only), plus a bounded storefront failed-forget focus repair. Shared release and backup environments are not enabled (RELEASE_ENABLED=false, BACKUP_ENABLED=false); this release used local kit Q5. Checkout and transaction email remain OFF, so members cannot create new checkout orders through the normal purchase flow. The bounded storefront repair requests focus once after React commits an enabled trigger following a failed forget-browser dialog. Existing authorized order reads and browser-forget operations are not gated by checkoutEnabled (quarantine is false), so flags alone do not prove that this order path is unreachable; no existing-order member journey was tested.",
+        "merge_commit": "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+        "ordered_parents": [
+          "fa155e2a1132a6d009d16a89cfb7e792ffa62982",
+          "1114e20684b6718129d7852ea0a74ba28b58068c"
+        ],
+        "branch": "codex/integrate-delivery-reliability",
+        "integrated_head": "1114e20684b6718129d7852ea0a74ba28b58068c",
+        "included_prs": [
+          1038,
+          1068,
+          1057
+        ]
+      },
+      {
+        "pr": 1071,
+        "description": "Unchanged heads of #1047 navigation, #1055 guild directory and #1056 guild management. Mobile navigation docks below the top bar and can be closed, with renamed navigation entries (#1047). The guild directory has a collapsible topic filter, matching count and relocated secondary settings (#1055). Guild management adds per-tab purpose lines and lists discussions first; a collapsed discussion draft survives only while staying on that page (#1056). Activity submission stays disabled until the first activity-list load settles, including its error completion (#1068); later refreshes do not reapply this initial gate.",
+        "merge_commit": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "ordered_parents": [
+          "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+          "794be7c25225c36d9bb022721b0fd4fcda79b2f2"
+        ],
+        "branch": "codex/integrate-navigation-guilds",
+        "integrated_head": "794be7c25225c36d9bb022721b0fd4fcda79b2f2",
+        "included_prs": [
+          1047,
+          1055,
+          1056
+        ]
+      }
+    ],
+    "previous_release": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+    "dist_sha256": "a57001b954d235b04146b3117cc862751f638b845bdb4b0d15346d086ba021c1",
+    "dist_file_count": 450,
+    "schema": 189,
+    "migrations_applied": [],
+    "first_parent_chain": [
+      {
+        "pr": 1069,
+        "source": "fa155e2a1132a6d009d16a89cfb7e792ffa62982",
+        "parents": [
+          "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "13158d7529df766ef80d398dc7d47fd608d378d3"
+        ],
+        "head": "13158d7529df766ef80d398dc7d47fd608d378d3",
+        "head_ref": "refactor/hosted-store-areas-20261025",
+        "merged_at": "2026-10-25T20:28:55Z",
+        "tree": "747cd0e4b27ba0d0d96577f208056db3a18ba1a3"
+      },
+      {
+        "pr": 1070,
+        "source": "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+        "parents": [
+          "fa155e2a1132a6d009d16a89cfb7e792ffa62982",
+          "1114e20684b6718129d7852ea0a74ba28b58068c"
+        ],
+        "head": "1114e20684b6718129d7852ea0a74ba28b58068c",
+        "head_ref": "codex/integrate-delivery-reliability",
+        "merged_at": "2026-10-25T21:55:09Z",
+        "tree": "17850c802ffc353ed666aff59e1b9e1afcfbd861"
+      },
+      {
+        "pr": 1071,
+        "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "parents": [
+          "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+          "794be7c25225c36d9bb022721b0fd4fcda79b2f2"
+        ],
+        "head": "794be7c25225c36d9bb022721b0fd4fcda79b2f2",
+        "head_ref": "codex/integrate-navigation-guilds",
+        "merged_at": "2026-10-25T23:25:12Z",
+        "tree": "ddc7515fe2df3ffc83728277dec6fb015d4586f3"
+      }
+    ],
+    "integrated_pr_heads": [
+      {
+        "pr": 1038,
+        "head": "ad94f54f1c856fe99bdb222eae2a27b54d2b831c",
+        "integration_merge": "445091240c469b3e04418faa63631c71581a0e0a",
+        "ordered_parents": [
+          "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "ad94f54f1c856fe99bdb222eae2a27b54d2b831c"
+        ]
+      },
+      {
+        "pr": 1068,
+        "head": "451796666ca15d54bf9dbed2fd5e2207dad6c35b",
+        "integration_merge": "5923eef9fc00d62c75b2f69d9c3d24c9ee0299df",
+        "ordered_parents": [
+          "445091240c469b3e04418faa63631c71581a0e0a",
+          "451796666ca15d54bf9dbed2fd5e2207dad6c35b"
+        ]
+      },
+      {
+        "pr": 1057,
+        "head": "daf84b80ffb0295df0abf735143a004887ed5681",
+        "integration_merge": "bf5ccb6e71d4e1a982788b8ce7b6f3b55f4773f3",
+        "ordered_parents": [
+          "5923eef9fc00d62c75b2f69d9c3d24c9ee0299df",
+          "daf84b80ffb0295df0abf735143a004887ed5681"
+        ]
+      },
+      {
+        "pr": 1047,
+        "head": "3d5fe68d1b83c6791197193243d4a16bf22635fb",
+        "integration_merge": "4df312a5030a649a0b2cbe20c4406c7feb1f89d2",
+        "ordered_parents": [
+          "2009a10806316d8285ec2ab7bcdf6525f29e78ac",
+          "3d5fe68d1b83c6791197193243d4a16bf22635fb"
+        ]
+      },
+      {
+        "pr": 1055,
+        "head": "080689f238fda697c82e2e9a48dd7f6119e82883",
+        "integration_merge": "fe900cc33aa5d03c547afe82435308313ba199e8",
+        "ordered_parents": [
+          "4df312a5030a649a0b2cbe20c4406c7feb1f89d2",
+          "080689f238fda697c82e2e9a48dd7f6119e82883"
+        ]
+      },
+      {
+        "pr": 1056,
+        "head": "ef0d719bf1dffcd4d2eee6b97a462d1002b668a7",
+        "integration_merge": "79b87632fd78fffb20693eb16d86d4d6eb7fc7b6",
+        "ordered_parents": [
+          "fe900cc33aa5d03c547afe82435308313ba199e8",
+          "ef0d719bf1dffcd4d2eee6b97a462d1002b668a7"
+        ]
+      }
+    ],
+    "storefront_focus_repair": {
+      "commit": "1114e20684b6718129d7852ea0a74ba28b58068c",
+      "path": "apps/portal-web/src/storefront/main.tsx",
+      "scope": "Checkout and transaction email remain OFF, so members cannot create new checkout orders through the normal purchase flow. The bounded storefront repair requests focus once after React commits an enabled trigger following a failed forget-browser dialog. Existing authorized order reads and browser-forget operations are not gated by checkoutEnabled (quarantine is false), so flags alone do not prove that this order path is unreachable; no existing-order member journey was tested.",
+      "source_evidence": [
+        "apps/platform-api/src/routes/hosted-store.ts",
+        "apps/platform-api/src/routes/hosted-checkout.ts",
+        "modules/agent-commerce/checkout/public-commands.ts"
+      ]
+    },
+    "shared_release": {
+      "release_enabled": false,
+      "backup_enabled": false,
+      "executed_by": "local_kit_Q5",
+      "enablement_basis": "Operator history supplied in the release task and authorization; this documentation job made no GitHub environment query.",
+      "isolation_receipt_sha256": "cd6ae77a407edc6d0f2caa189d802c2471b5181bd123cccecb44133bd71f25d0",
+      "status": "merged_not_enabled",
+      "limitation": "Source merge and local offline tests do not establish hosted Actions activation or scheduler handoff."
+    },
+    "main_verify": {
+      "run_id": 40244683057,
+      "attempt": 1,
+      "job_count": 17,
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683057",
+      "updated_at": "2026-10-26T00:14:52Z",
+      "last_job_completed_at": "2026-10-26T00:14:51Z",
+      "run_receipt_sha256": "54c4e4d97799fb921ddbff2034f77dbd20e5a80938ecd6ae97b45e4450dd5121",
+      "jobs_receipt_sha256": "27e8f525422477b6e9266700cb798e7db8a4f5c60e1220a999145a61eb04dc22",
+      "verify_job_completed_at": "2026-10-26T00:14:51Z"
+    },
+    "main_codeql": {
+      "run_id": 40244683121,
+      "attempt": 1,
+      "job_count": 3,
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683121",
+      "updated_at": "2026-10-25T23:43:48Z",
+      "last_job_completed_at": "2026-10-25T23:43:48Z",
+      "run_receipt_sha256": "890fe449e5176cabced096e3271d08f4eb03b194db30f1c3722e142580afa69b",
+      "jobs_receipt_sha256": "9f78be8844e46f54afa33ae3e38aa6d39a891cf1a609fb70e6093382a833c166"
+    },
+    "preparation": {
+      "source_receive_receipt_sha256": "9e163dcd0d7c26d16890a4de56ff8bdc8783f8547c352cad48898f690a338fd9",
+      "source_build_receipt_sha256": "af0a05dd7273702ea2d692c69df49d64aeeabd10edd5df34f55a920b8cb8bd5a",
+      "archive_verification_sha256": "ce981df6c807fbadd4df87dfa977847cf7398bfcbc4f014f912c3cfe39dafa37",
+      "checkout_verification_sha256": "32d7d0ee1cb18a62601d5a3b25e7a3400d8cfe8ab3d820daebe2f7f2d530c4fe",
+      "binding_receipt_sha256": "a42cbfb0cdf9eb4ac169007885ebab1a9cb999ba40d7571bfaad9d65a9bf150e",
+      "limitation": "Preparation fullCiApproved=false and deploymentAuthorized=false are retained; main CI, owner intent and completed operations are separate evidence. Receive did not itself grant release approval."
+    },
+    "first_parent_merges_log_sha256": "105346ae9f83ed8664a801859e94daf83342aaad856d22ec9273160af42b96ba",
+    "first_parent_merges_log_basis": "git log --first-parent --merges --format=%H %s 1f7aee36d9ba2424e4eeddf9f0399fec95aeca77..b14916ccd75cff70bcd4ba979088ddd8c3d88583 (including trailing newline)",
+    "first_parent_merge_count": 3,
+    "first_parent_merge_prs": [
+      1069,
+      1070,
+      1071
+    ],
+    "merged_at": "2026-10-25T23:25:12Z",
+    "merge_time_basis": "release-target.json records GitHub merged_at=2026-10-25T23:25:12Z, also the immutable S10 git commit time. The earlier two merges have distinct GitHub and git commit timestamps."
+  },
+  "targets": {
+    "staging": {
+      "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
+      "release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "previous_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+      "worker_version": "7677d18e-3403-40b2-9cae-cd2527dddfdf",
+      "previous_worker_version": "75a94c52-dbd4-4b6a-9324-618b69a29397",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "5e8ebb57ea69f1f0a390be0ec2004f184ca714b5917de524d6ab728f8abbc970",
+      "deploy_attempts": 1,
+      "deploy_attempts_basis": "Successful deploy helper invocation only; backup attempts are recorded separately.",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+      "route_unchanged": true,
+      "route": {
+        "id": "407b27e7a6944a6ebdf6ddc9dba063fa",
+        "pattern": "staging.freetwai.com/*",
+        "script": "freedom-platform-staging-next"
+      },
+      "route_id_before": "407b27e7a6944a6ebdf6ddc9dba063fa",
+      "route_id_after": "407b27e7a6944a6ebdf6ddc9dba063fa",
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "set_id": "7b71eb09-06f3-46ee-8bce-208d7f6d0824",
+          "created_at": "2026-10-26T03:32:58.807Z",
+          "completed_receipt_sha256": "5bba58e003d43234fe234f8de2736e3ca39d107446463649714782b84f992733",
+          "manifest_sha256": "0c2962872285ec7d2bf36f970a51e8524a839995022f119cee56bb86ff456e57",
+          "dump": {
+            "sha256": "9dc47a39e3de1070a5b5d1ce32f6b92dc846e923f933b78805172a4c50effbe9",
+            "byteSize": 3412446
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "evidence_directory": "freedom-release-batch1064-20261025/after-staging-backup-runs/7b71eb09-06f3-46ee-8bce-208d7f6d0824",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "pointer_sha256": "e05f9dae2f7d10671f2957119f5735c0835c7171f87e7518a2c66ee5fbad2f8d",
+          "pointer_path": "commerce-audit/staging-backup-before.pointer.json",
+          "basis": "Fresh October 26 capture through Q4 installed after-wrapper, source/operator 1f7aee36/schema189; Q5 holds the pointer and Q4 holds the run. All freshness and source gates apply.",
+          "trigger": "natural_calendar_schedule"
+        },
+        "after": {
+          "status": "passed",
+          "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+          "set_id": "ab983996-ea80-4b66-8b6b-8189831725ae",
+          "created_at": "2026-10-26T03:46:02.903Z",
+          "completed_receipt_sha256": "c4d3a3e5ffc067efee57525015e651ac9f0ddcb2547ea53b88bcec4706da84c5",
+          "manifest_sha256": "0ce62641083cfb3218725604121a4cbc26d45d638332914e1d71bae45f96b0d9",
+          "dump": {
+            "sha256": "6200f2179d4c506c195c7b1460a844c8f39b855368e4839f9f0f73295e48099b",
+            "byteSize": 3412892
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 66,
+            "bytes": 142089
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+          "evidence_directory": "freedom-release-b14916cc-20261026/after-staging-backup-runs/ab983996-ea80-4b66-8b6b-8189831725ae",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "staging",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": {
+              "planSha256": "d5672fd6f744755acaabeb18de5cc4c7ca06e19321c5ff559d120e0338a27314",
+              "attemptSha256": "639da98cfb2e31da9ae5722ea5aa7a7a67f79ca3b621b06f7bc7ee22878ad8ee",
+              "receiptSha256": "85a02c07b6db4ec2e4e6438c14841c7eebd0b573e88a61af1b80d3fcf5af464c"
+            },
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "fcd53ac766501695133cb69c6bfd0d794348dc6d344153c55fe2aa3d79650746",
+          "restored_coordinate_fence": {
+            "status": "not_applicable",
+            "target": "staging"
+          },
+          "restored_coordinate_fence_sha256": "bda6386dd47bc2b723caaaeae7b6e933f43e384c0579d1b5a22b83138921a50b",
+          "pointer_sha256": "a8d054435f1995e4689535ea579ddebb3ecddf22895ff885903ee774118733cd",
+          "pointer_path": "commerce-audit/staging-backup-after.pointer.json",
+          "trigger": "manual_operator_run"
+        }
+      },
+      "active_readback_attempts": [
+        {
+          "attempt": 1,
+          "observed_at": "2026-10-26T03:45:11.026Z",
+          "active": {
+            "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+            "supplier": "true",
+            "features": {
+              "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+              "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+              "FREEDOM_COMMERCE_QUARANTINE": "false",
+              "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+              "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+              "FREEDOM_EVENT_BANNER_ENABLED": "true",
+              "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+              "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+              "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+              "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+              "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+              "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+              "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+              "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+              "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+              "FREEDOM_PRIVATE_AI_ENABLED": "false",
+              "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+              "FREEDOM_SERVICE_COVER_ENABLED": "true",
+              "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+              "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+              "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+              "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true",
+              "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+            },
+            "percentage": 100,
+            "version": "7677d18e-3403-40b2-9cae-cd2527dddfdf"
+          },
+          "accepted": true
+        }
+      ],
+      "receipt_issuer": "Deploy helper completed successfully; no reconciliation-issued release receipt.",
+      "deploy_completed_at_approx": "2026-10-26T03:45:15.188931+00:00",
+      "deploy_completion_time_basis": "Receipt mtime only; no embedded deploy completion timestamp.",
+      "acceptance": {
+        "status": "not_run",
+        "scope": "No staging acceptance window; deploy health/homepage and final GET binding only.",
+        "member_ux_acceptance": "not_run",
+        "human_acceptance": false,
+        "temporary_access_cleanup": "revoked",
+        "access_grant_receipt_sha256": "bfeedb03802e2dc975f60ad9c2db9559959f1457c9ec0176a0fe1153fd41c706",
+        "access_revoke_receipt_sha256": "dcdddeac76eed82f7e5944d6946a6d979f82405bf92c5c474f5a4187914c85ae"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "dispatcher_sha256": "14279926a002fc7003a95ccb79f5a4acbf91648e64f4913914717994d4b59401",
+        "installed_receipt_sha256": "4e38a69f63ff10d0c1f691fcadf80eca175128e5dda3288693ab371f5b9e293f",
+        "backup_set_id": "ab983996-ea80-4b66-8b6b-8189831725ae",
+        "completed_receipt_sha256": "c4d3a3e5ffc067efee57525015e651ac9f0ddcb2547ea53b88bcec4706da84c5",
+        "wrapper": "run-after-staging-backup",
+        "wrapper_sha256": "82870c2483fa8e181bf680abb9ad43b76a6aa457a354b551cc365f16c04925e9",
+        "adapter": "backup-adapter.after-staging.mts",
+        "adapter_sha256": "358cec3e4f4adeba7a60e07a56393549cec49114036279567a83010f628afa6a",
+        "runtime_pins_sha256": "09c409c464deb4107b2192d6624a45a0087a1640cbe1d68cbd6e116897cd8de0"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-27T03:34:32Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-26T05:00:16.860Z",
+      "worker_binding_receipt_sha256": "054a0c6c44a36c3456424d0d4e3f9ea1a330291eecc2948587cbc4cf91bb5126",
+      "github_deployment": {
+        "at": "2026-10-26T05:13:01.270314+00:00",
+        "environment": "staging-next",
+        "sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "deploymentId": 7324602016,
+        "statusId": 20590722672,
+        "state": "success",
+        "environmentUrl": "https://staging.freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "target": "staging",
+        "pinsSha256": "275f20b85eb98c12e76f922e45794974b72b97122de91679bdd5340094c84cef",
+        "wrapperSha256": "9e12c10e679507b89e8f1f70954dc595b4a43a6175d40ed936f664aa34a91d8c",
+        "planSha256": "e7a5f4a6c3c37c04d5334d382aa6ba1f6560841e2ccd56cb0602e7307515c941",
+        "renderedSha256": "cfc91e726ba3613966c2f3a72bab9355a519b796544ede42ae0ddaebb943dc4c",
+        "providerMutations": false
+      },
+      "migration": {
+        "status": "not_run_schema_unchanged",
+        "role": "freedom_staging_next_migrator",
+        "schema_before": 189,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "migrations_applied": [],
+        "read_only": true,
+        "schema_unchanged_receipt_sha256": "79369bd39f8bb37299dd590b0077fe73d60c4318cbedb1878dfb377052e10bdc",
+        "ledger_sha256": "ec5a9b2622426e83f60368aa6782bdcda8bbc4edf81014760f6db3d7d9c47476",
+        "floor_receipt_sha256": "d3d2015678d846b095e86859ee875b80121f039acb6e1184739441e969f093b1",
+        "floor_evidence": "freedom-release-f987bb74-20261024/migrate/staging.floor.json",
+        "rollback_floor": {
+          "environment": "staging",
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "new_floor_created": false,
+        "observation_basis": "Successful deploy gates require READ ONLY exact ledger equality plus retained floor, roles, TLS, material policy and coordinate guards. Retained READ ONLY rehearsals verify the same ledger and floor. No separate timestamped formal deploy-gate query receipt is retained; labelled rehearsal mtimes and deployment observations are distinct.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_AR_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_DISCOVERY_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_RELATIONS_ENABLED": "OFF",
+        "FREEDOM_EVENT_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_EVENT_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_FIRST_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_MEMBER_REPORTING_ENABLED": "OFF",
+        "FREEDOM_PARTICIPATION_METRICS_ENABLED": "OFF",
+        "FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED": "OFF",
+        "FREEDOM_SQUAD_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF",
+        "FREEDOM_UNIFIED_SHARING_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_DROP_SHIP_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "55bd201412e14749628b60cbf92f231b26c1e31eef3b1bfc6ff7240a943b6ead",
+      "absent_flags_scope": "20 source-declared absent flags remain default OFF, including FREEDOM_COMMERCE_DROP_SHIP_ENABLED. No new live FREEDOM_* setting or value change."
+    },
+    "production": {
+      "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+      "release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "previous_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+      "worker_version": "b03e839f-17b3-4a06-88ed-fa7f53aaa4d4",
+      "previous_worker_version": "656e04a5-6088-4389-a22f-905dd7790783",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "db21f8459c3acf97b2ba65c592d49f88b8c4f960caf2971859bcd45980f1e42a",
+      "deploy_attempts": 1,
+      "deploy_attempts_basis": "Successful deploy helper invocation only; backup attempts are recorded separately.",
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "cache_control_no_store": true
+      },
+      "health_timestamp_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+      "route_unchanged": true,
+      "route": {
+        "id": "703bcbfd976d46c6ac6d444f02055e6e",
+        "pattern": "freetwai.com/*",
+        "script": "freedom-platform-next"
+      },
+      "route_id_before": "703bcbfd976d46c6ac6d444f02055e6e",
+      "route_id_after": "703bcbfd976d46c6ac6d444f02055e6e",
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": {},
+      "other_flags_unchanged": true,
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [],
+      "backups": {
+        "before": {
+          "status": "passed",
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "set_id": "ee172b97-4154-46ac-b26c-97864e908a6c",
+          "created_at": "2026-10-26T03:59:00.330Z",
+          "completed_receipt_sha256": "fe3aaea25d8f64acc2ff2d41a29d05e26b33f33a758f532402cea7905461dd0b",
+          "manifest_sha256": "f2f8c17171e4b9a8d11d4babc5dc1e3af07d5f4107e2a8736d3d11353f39c84d",
+          "dump": {
+            "sha256": "c736015467c7a4c1db74c210342d345da6b55acde84aee2fa5365b61b00b9ff4",
+            "byteSize": 7635786
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 1,
+          "operator_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "evidence_directory": "freedom-release-batch1064-20261025/after-production-backup-runs/ee172b97-4154-46ac-b26c-97864e908a6c",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "4e926bc1c6e5815d96a1028635ec442c848854816c6fea81a2b0ff5af2aeaff1",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "20108990f2e88ae0c030d2b6a01f7a8cc38cdba41cd02c285f364f834360f95d",
+          "pointer_sha256": "ba50bb9d4a13380bdb68e1660401675d9715b152a208fac4c1818daa0faa9e8d",
+          "pointer_path": "commerce-audit/production-backup-before.pointer.json",
+          "basis": "Fresh October 26 capture through Q4 installed after-wrapper, source/operator 1f7aee36/schema189; Q5 holds the pointer and Q4 holds the run. All freshness and source gates apply.",
+          "trigger": "manual_operator_run"
+        },
+        "after": {
+          "status": "passed",
+          "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+          "set_id": "acc0a813-f953-4f88-aeb9-df756960eaea",
+          "created_at": "2026-10-26T04:49:12.253Z",
+          "completed_receipt_sha256": "d45139fe25fc09f48d9fee385e9de1b87d77edb2d38277af600c201e35ff3793",
+          "manifest_sha256": "4a96713555cbc4bbd9907f3937d4dd2a7fc3c32091061324d8d66120ad81e9b6",
+          "dump": {
+            "sha256": "086062b2b2d3e222cc8a082ee683d527ce7acf88fe499f93742ff545a3525209",
+            "byteSize": 7639180
+          },
+          "remote_readback": "verified",
+          "restore": "database_and_objects_restored",
+          "objects": {
+            "count": 53,
+            "bytes": 735662
+          },
+          "cleanup_verified": true,
+          "gc_safety": "disabled",
+          "exposure": "quarantine_not_approved_for_exposure",
+          "attempt": 2,
+          "operator_source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+          "evidence_directory": "freedom-release-b14916cc-20261026/after-production-backup-runs/acc0a813-f953-4f88-aeb9-df756960eaea",
+          "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+          "restored_schema189_floor": {
+            "status": "passed",
+            "schema": 189,
+            "restoredLedgerMatches": true,
+            "oldRollbackRejected": true,
+            "quarantineRetained": true,
+            "publicAdmission": false
+          },
+          "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+          "restored_material_policy": {
+            "status": "verified",
+            "target": "production",
+            "policies": 12,
+            "supplierPolicies": 2,
+            "activationEvidence": null,
+            "arPersistenceOff": true,
+            "sourcePolicyRowsMatch": true
+          },
+          "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+          "restored_coordinate_fence": {
+            "status": "verified",
+            "target": "production",
+            "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+            "constraints": 10,
+            "comparison": "exact_reviewed_pg18_definition_variants",
+            "canonicalSavedFloorVerified": true,
+            "inventoryReceiptSha256": "f676e07beadfaa9fe6710e26cf7a5361d20216757145f2d1c006af20d7ff33c2",
+            "accepted": [
+              {
+                "table": "canonical_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "catalog_repo_observations",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "development_grants",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "github_items",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_events",
+                "definition": "original"
+              },
+              {
+                "table": "github_repository_metrics",
+                "definition": "original"
+              },
+              {
+                "table": "github_sync_repositories",
+                "definition": "original"
+              },
+              {
+                "table": "maintainer_repositories",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "oss_projects",
+                "definition": "reviewed_pg18_roundtrip"
+              },
+              {
+                "table": "skill_star_support",
+                "definition": "original"
+              }
+            ]
+          },
+          "restored_coordinate_fence_sha256": "c141f262774a3674461240eb1829eb76f975047200575d94ad3a0a9a7712b7c9",
+          "pointer_sha256": "8aea2642b8ef0b98570fdd906859e275fb86ee2c277c089387d75fb359eafbd9",
+          "pointer_path": "commerce-audit/production-backup-after.pointer.json",
+          "trigger": "manual_operator_run"
+        }
+      },
+      "active_readback_attempts": [
+        {
+          "attempt": 1,
+          "observed_at": "2026-10-26T04:11:55.006Z",
+          "active": {
+            "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+            "supplier": "true",
+            "features": {
+              "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+              "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+              "FREEDOM_COMMERCE_QUARANTINE": "false",
+              "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+              "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+              "FREEDOM_EVENT_BANNER_ENABLED": "true",
+              "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+              "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+              "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+              "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+              "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+              "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+              "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+              "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+              "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+              "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+              "FREEDOM_PRIVATE_AI_ENABLED": "false",
+              "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+              "FREEDOM_SERVICE_COVER_ENABLED": "true",
+              "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+              "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+              "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+              "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+              "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+              "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false",
+              "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+            },
+            "percentage": 100,
+            "version": "b03e839f-17b3-4a06-88ed-fa7f53aaa4d4"
+          },
+          "accepted": true
+        }
+      ],
+      "receipt_issuer": "Deploy helper completed successfully; no reconciliation-issued release receipt.",
+      "deploy_completed_at_approx": "2026-10-26T04:11:58.284477+00:00",
+      "deploy_completion_time_basis": "Receipt mtime only; no embedded deploy completion timestamp.",
+      "acceptance": {
+        "status": "passed",
+        "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
+        "receipt_sha256": "aa6c86613b61b09a42664e0d7b9014ec7999ae866b3602238d7797aba18186b6",
+        "started_at": "2026-10-26T04:12:09.209Z",
+        "completed_at": "2026-10-26T04:12:20.537Z",
+        "check_count": 14,
+        "checks": [
+          "public health exact release and no-store",
+          "Short videos enabled for everyone",
+          "public supplier/commerce enabled checkout disabled",
+          "protocol matches deployed source",
+          "public homepage serves HTML",
+          "homepage CSP permits only youtube-nocookie frame origin",
+          "Cloudflare Access blocks anonymous /admin before the Worker",
+          "Cloudflare Access blocks anonymous /admin/github/callback before the Worker",
+          "protected CSP excludes Short frames /pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "exact deployed source omits Short frames on admin and payment paths",
+          "anonymous denied /checkout-orders",
+          "anonymous denied /supplier-console/products",
+          "share script/styles and merchant styles match exact build; unhashed assets no-store",
+          "anonymous catalog introduction exposes purpose/start/source destination"
+        ],
+        "asset_hashes": {
+          "go.js": "92d341ce09e8fe106b080698687ccf65847633802d38e855012b034b893d6644",
+          "go.css": "050e1c886d4965aea7923a5219248babf65c4e0c708e9bcc944efa9a68e4cca7",
+          "shops.css": "03dfebfb52ec4240e521420e83aad2eddafedb411b2ceaa76d0f6fd12f789864"
+        },
+        "protectedPaths": {
+          "/admin": "access_redirect_worker_not_reached",
+          "/admin/github/callback": "access_redirect_worker_not_reached",
+          "/pay/ecpay/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA": "worker_csp_verified"
+        },
+        "liveAdminWorkerCsp": "not_observed_access_protected",
+        "adminCspSource": "exact_source_function",
+        "priorFailedAttempt": {
+          "path": "freedom-short-videos-20261020/production-public-smoke.attempt1-failed.json",
+          "sha256": "18c91e14c555af4846791e0504453b618844c6a4621cc281d81e0e3b7bf54773",
+          "status": "failed"
+        },
+        "member_login": false,
+        "human_acceptance": false,
+        "orders_created": 0,
+        "member_ux_acceptance": "not_run",
+        "priorFailedAttempt_scope": "Historical Short release failure and Access-fix background only; not an attempt of this release.",
+        "health_attempts": [
+          {
+            "attempt": 1,
+            "at": "2026-10-26T04:12:09.228Z",
+            "http": 200,
+            "status": "ok",
+            "release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+            "matched": true
+          }
+        ],
+        "health_attempt_receipt_sha256": "e8eccc111b83ed577649b7d63611169b814286ee98b6b3389695aa88070aa522"
+      },
+      "operator_binding": {
+        "status": "installed",
+        "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "dispatcher_sha256": "14279926a002fc7003a95ccb79f5a4acbf91648e64f4913914717994d4b59401",
+        "installed_receipt_sha256": "4e38a69f63ff10d0c1f691fcadf80eca175128e5dda3288693ab371f5b9e293f",
+        "backup_set_id": "acc0a813-f953-4f88-aeb9-df756960eaea",
+        "completed_receipt_sha256": "d45139fe25fc09f48d9fee385e9de1b87d77edb2d38277af600c201e35ff3793",
+        "wrapper": "run-after-production-backup",
+        "wrapper_sha256": "8a97b4ba9b0ab683d8def9b877b152f644d1dce5620684e90d11a2c5e08e65fc",
+        "adapter": "backup-adapter.after-production.mts",
+        "adapter_sha256": "71214496c434186420b53e351fba68cc54d033bc5a7193dbc9eea35270101f61",
+        "runtime_pins_sha256": "09c409c464deb4107b2192d6624a45a0087a1640cbe1d68cbd6e116897cd8de0"
+      },
+      "timer": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-27T04:33:26Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "worker_binding_observed_at": "2026-10-26T05:00:16.860Z",
+      "worker_binding_receipt_sha256": "054a0c6c44a36c3456424d0d4e3f9ea1a330291eecc2948587cbc4cf91bb5126",
+      "github_deployment": {
+        "at": "2026-10-26T05:13:02.219497+00:00",
+        "environment": "next",
+        "sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "deploymentId": 7324602177,
+        "statusId": 20590723478,
+        "state": "success",
+        "environmentUrl": "https://freetwai.com/"
+      },
+      "deploy_seal": {
+        "format": "freedom.successor-deploy-seal/v1",
+        "status": "sealed-for-root-review-not-executed",
+        "release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "target": "production",
+        "pinsSha256": "8ef63792d2e9daaf083b23196b7f3093b22278ba8f5b6557b91e476f3c9565ca",
+        "wrapperSha256": "002597216f80a759e458b2f72dc68514ef16b26aa498314609f9b4e057d8ae5d",
+        "planSha256": "2ec6cbf2ecf4ecf702a2ff306024a41cc197a9d47cb2de5a24ce7f04f177a12b",
+        "renderedSha256": "aed85487d83edd94b74e0d7433a52635cdf291c7c0b05cdf575f0ee6dc45d006",
+        "providerMutations": false
+      },
+      "migration": {
+        "status": "not_run_schema_unchanged",
+        "role": "freedom_next_migrator",
+        "schema_before": 189,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "migrations_applied": [],
+        "read_only": true,
+        "schema_unchanged_receipt_sha256": "79369bd39f8bb37299dd590b0077fe73d60c4318cbedb1878dfb377052e10bdc",
+        "ledger_sha256": "ec5a9b2622426e83f60368aa6782bdcda8bbc4edf81014760f6db3d7d9c47476",
+        "floor_receipt_sha256": "84cf8c4071f70b1e47cb4ea9b99c35aa9178320fa7c21e71958dce5a30f3e5e4",
+        "floor_evidence": "freedom-release-f987bb74-20261024/migrate/production.floor.json",
+        "rollback_floor": {
+          "environment": "production",
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "new_floor_created": false,
+        "observation_basis": "Successful deploy gates require READ ONLY exact ledger equality plus retained floor, roles, TLS, material policy and coordinate guards. Retained READ ONLY rehearsals verify the same ledger and floor. No separate timestamped formal deploy-gate query receipt is retained; labelled rehearsal mtimes and deployment observations are distinct.",
+        "automatic_retry": false
+      },
+      "absent_new_flags": {
+        "FREEDOM_AR_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_ORDER_NOTIFICATIONS_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_SELF_SHIP_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_DISCOVERY_ENABLED": "OFF",
+        "FREEDOM_COMMUNITY_RELATIONS_ENABLED": "OFF",
+        "FREEDOM_EVENT_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_EVENT_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_FIRST_PARTICIPATION_ENABLED": "OFF",
+        "FREEDOM_MEMBER_REPORTING_ENABLED": "OFF",
+        "FREEDOM_PARTICIPATION_METRICS_ENABLED": "OFF",
+        "FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED": "OFF",
+        "FREEDOM_SQUAD_OUTCOMES_ENABLED": "OFF",
+        "FREEDOM_STORE_APPEARANCE_ENABLED": "OFF",
+        "FREEDOM_STORE_CATEGORIES_ENABLED": "OFF",
+        "FREEDOM_STORE_GALLERY_ENABLED": "OFF",
+        "FREEDOM_STORE_POLICIES_ENABLED": "OFF",
+        "FREEDOM_STORE_VARIANTS_ENABLED": "OFF",
+        "FREEDOM_SUPPLY_OFFER_PHOTOS_ENABLED": "OFF",
+        "FREEDOM_UNIFIED_SHARING_ENABLED": "OFF",
+        "FREEDOM_COMMERCE_DROP_SHIP_ENABLED": "OFF"
+      },
+      "absent_flags_receipt_sha256": "55bd201412e14749628b60cbf92f231b26c1e31eef3b1bfc6ff7240a943b6ead",
+      "absent_flags_scope": "20 source-declared absent flags remain default OFF, including FREEDOM_COMMERCE_DROP_SHIP_ENABLED. No new live FREEDOM_* setting or value change."
+    }
+  },
+  "daily_operator": {
+    "status": "both_sources_bound_original_timers_restored",
+    "source_by_environment": {
+      "staging": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "production": "b14916ccd75cff70bcd4ba979088ddd8c3d88583"
+    },
+    "dispatcher_sha256": "14279926a002fc7003a95ccb79f5a4acbf91648e64f4913914717994d4b59401",
+    "installed_receipt_sha256": "4e38a69f63ff10d0c1f691fcadf80eca175128e5dda3288693ab371f5b9e293f",
+    "live_binding_observed_at": "2026-10-26T05:00:16.860Z",
+    "live_binding_receipt_sha256": "054a0c6c44a36c3456424d0d4e3f9ea1a330291eecc2948587cbc4cf91bb5126",
+    "timer_observed_at": "2026-10-26T05:12:56.378125+00:00",
+    "timer_receipt_sha256": "48b2e0359a32dd6e3ea06c0872bc4124a05405088a72348106cc57aa7d726a09",
+    "unit_or_schedule_changed": false,
+    "service_argv_unchanged": true,
+    "restoration": {
+      "staging": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "03:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-27T03:34:32Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      },
+      "production": {
+        "active": "active",
+        "enabled": "enabled",
+        "calendar_utc": "04:30:00",
+        "randomized_delay": "5min",
+        "persistent": "yes",
+        "next_scheduled_utc": "2026-10-27T04:33:26Z",
+        "service_active": "inactive",
+        "service_pid": 0,
+        "service_argv_unchanged": true,
+        "natural_scheduled_execution": "not_observed_for_new_wrapper"
+      }
+    },
+    "natural_scheduled_run": "not_observed_for_new_wrapper",
+    "transitions": [
+      {
+        "stage": "staging",
+        "before": "64bdeee1b9bbd34d191db507ed25d9b23efa024734b33a835399708500b477fd",
+        "after": "98dc8d87b688027402d5f857af9f4e3ebaa47fb43346e504233d96d1f3c2386f",
+        "materialize_receipt_sha256": "91e9b0794811e8831db8aa8a47b31f2ed0dcb84c149555ed3a5b51f5a47f7ab7",
+        "installed_receipt_sha256": "aa7f4e39afb3af1c70a73552d8e853a67c121d55e9a0bb287830ca004ad2e1a6",
+        "transition_log_sha256": "9c998253a70781c87e3b20147b2b4c342a0f70bb0e81929545719caa65439e7e",
+        "installed_at_approx": "2026-10-26T04:11:05.036090+00:00",
+        "timestamp_basis": "installed.json mtime; no embedded installation timestamp."
+      },
+      {
+        "stage": "both",
+        "before": "98dc8d87b688027402d5f857af9f4e3ebaa47fb43346e504233d96d1f3c2386f",
+        "after": "14279926a002fc7003a95ccb79f5a4acbf91648e64f4913914717994d4b59401",
+        "materialize_receipt_sha256": "b2ca417ac7bc7619991b7a11f26388165774d520d1d769c190ef5f2826b84b70",
+        "installed_receipt_sha256": "4e38a69f63ff10d0c1f691fcadf80eca175128e5dda3288693ab371f5b9e293f",
+        "transition_log_sha256": "39f78abed0ac87a497a20b13e771b1c0b8b201548346bf395afc4ff721c1076e",
+        "installed_at_approx": "2026-10-26T05:00:16.876462+00:00",
+        "timestamp_basis": "installed.json mtime; no embedded installation timestamp."
+      }
+    ],
+    "cutover": {
+      "original_snapshot_receipt_sha256": "f3440ff114a0f06a24f1dbce6af5f9d379655d9212cf73c870d1ab7d22c81abc",
+      "snapshot_recorded_at": "2026-10-26T03:44:16.113634+00:00",
+      "timers_paused": true,
+      "services_quiescent": true,
+      "restored_by": "restore-timers.py"
+    },
+    "service_argv_comparison_basis": "Compare only argv[] in systemd ExecStart; historical PID and start/stop timestamps are not executable arguments.",
+    "persistent_catch_up": {
+      "status": "passed",
+      "environment": "production",
+      "timer": "freedom-next-backup.timer",
+      "missed_slot_utc": "2026-10-26T04:33:02Z",
+      "operator_started_at": "2026-10-26T05:01:34Z",
+      "backup": {
+        "status": "passed",
+        "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "set_id": "98d243d1-6da9-49b0-89c1-5396b6d38be8",
+        "created_at": "2026-10-26T05:01:41.246Z",
+        "completed_receipt_sha256": "efc96f9a191a764498c0b8c0a7795d34ab889f3e5dfc1000ae68c277590b7e31",
+        "manifest_sha256": "d89d8106be95084a387d6d7fc9bc2482ff46204e90bf4e2eaf10e55c2a656d80",
+        "dump": {
+          "sha256": "ed9630090455a58d5e89f2c4f180f49086fd9f8e2ba99670f52a178713474143",
+          "byteSize": 7639658
+        },
+        "remote_readback": "verified",
+        "restore": "database_and_objects_restored",
+        "objects": {
+          "count": 53,
+          "bytes": 735662
+        },
+        "cleanup_verified": true,
+        "gc_safety": "disabled",
+        "exposure": "quarantine_not_approved_for_exposure",
+        "attempt": 1,
+        "operator_source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "evidence_directory": "freedom-release-b14916cc-20261026/after-production-backup-runs/98d243d1-6da9-49b0-89c1-5396b6d38be8",
+        "limitation": "created_at is set creation, not completion. Isolated restore is not a fresh live-ledger query or permission to expose restored data.",
+        "restored_schema189_floor": {
+          "status": "passed",
+          "schema": 189,
+          "restoredLedgerMatches": true,
+          "oldRollbackRejected": true,
+          "quarantineRetained": true,
+          "publicAdmission": false
+        },
+        "restored_schema189_floor_sha256": "b47165e68797998fb1d00b2d3f2c61c81c4b15865621ccce4b5a6a7cb455da7e",
+        "restored_material_policy": {
+          "status": "verified",
+          "target": "production",
+          "policies": 12,
+          "supplierPolicies": 2,
+          "activationEvidence": null,
+          "arPersistenceOff": true,
+          "sourcePolicyRowsMatch": true
+        },
+        "restored_material_policy_sha256": "2815b70fab89e520e65e17a76946170a36095be7ddcb8bc6d53ea1299c1afe17",
+        "restored_coordinate_fence": {
+          "status": "verified",
+          "target": "production",
+          "sqlSha256": "2b889632c877b2fe3dc6dac2a0474004d82cbfa81f0afe48aa67855d8c26dec8",
+          "constraints": 10,
+          "comparison": "exact_reviewed_pg18_definition_variants",
+          "canonicalSavedFloorVerified": true,
+          "inventoryReceiptSha256": "15a5e941f1c24edc308bfe6fcc5e04284d5177289ea202ba1667801610056b0b",
+          "accepted": [
+            {
+              "table": "canonical_repositories",
+              "definition": "reviewed_pg18_roundtrip"
+            },
+            {
+              "table": "catalog_repo_observations",
+              "definition": "reviewed_pg18_roundtrip"
+            },
+            {
+              "table": "development_grants",
+              "definition": "reviewed_pg18_roundtrip"
+            },
+            {
+              "table": "github_items",
+              "definition": "original"
+            },
+            {
+              "table": "github_repository_events",
+              "definition": "original"
+            },
+            {
+              "table": "github_repository_metrics",
+              "definition": "original"
+            },
+            {
+              "table": "github_sync_repositories",
+              "definition": "original"
+            },
+            {
+              "table": "maintainer_repositories",
+              "definition": "reviewed_pg18_roundtrip"
+            },
+            {
+              "table": "oss_projects",
+              "definition": "reviewed_pg18_roundtrip"
+            },
+            {
+              "table": "skill_star_support",
+              "definition": "original"
+            }
+          ]
+        },
+        "restored_coordinate_fence_sha256": "d400697bd9f100f8a17e5eb8b5acbaa7f10edce52004e5fd4e7a3c5cacd89e9e",
+        "trigger": "persistent_timer_catch_up_operator_started",
+        "selected_as_release_pointer": false
+      },
+      "procedure": "After the first unchanged restore-timers.py refused without starting a timer, the orchestrator followed its RUNBOOK procedure: kept timers stopped, confirmed the installed dispatcher SHA matched the both after pin and checked the path, then started only the production timer. Persistent catch-up ran immediately through the installed both dispatcher and Q5 production after-wrapper. After both services were inactive with MainPID=0, both timers were stopped and restore-timers.py was rerun unchanged.",
+      "operator_history_basis": "Timer start, dispatcher pin confirmation and service supervision are operator history; completed.json and restored timer receipts corroborate the outcomes.",
+      "restored_receipt_sha256": "d9f6d7ac56ae1a25d874cddb402d7d1e9211158ee2ffec479a2f395a1cfe9f83",
+      "limitation": "Timer-triggered but operator-started, not a natural calendar-slot execution of the S10 wrapper. Keep naturalScheduledExecution=not_observed_for_new_wrapper. First S10 calendar runs are due October 27 at the exact next_scheduled_utc values in restoration."
+    }
+  },
+  "attempts_preserved": [
+    {
+      "phase": "kit-preparation-capacity-interruption",
+      "status": "interrupted_then_resumed",
+      "approximate_time": "about 01:55Z (operator history)",
+      "exit_code": 1,
+      "message": "Selected model is at capacity",
+      "same_session_resumed": true,
+      "resume_record": "release-kit-b14916cc.resume1.md",
+      "resume_record_sha256": "710165c38af68f706ed33ddb3e95558d68b9e1770e9931dab37e96854275d1d4",
+      "observation": "Codex job release-kit-b14916cc stopped on upstream model capacity, then resumed in the same session. The resume instruction also preserved the prior unreviewed native esbuild launcher refusal and required byte verification plus an exact reviewed-launcher count; it did not waive the check.",
+      "basis": "Capacity time and exit are operator history supplied by the orchestrator; the resume instruction corroborates the interruption. This is not a deployment attempt."
+    },
+    {
+      "phase": "production-after-backup",
+      "attempt": 1,
+      "status": "failed",
+      "set_id": "cb9c333f-9d21-4486-975d-d59b485525c2",
+      "created_at": "2026-10-26T04:13:01.261Z",
+      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "operator_source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "stage": "capture",
+      "code": "daily_backup_cleanup_failed",
+      "cleanup_verified": false,
+      "remote_readback": "not_verified",
+      "restore": "not_verified",
+      "manifest_sha256": null,
+      "dump": null,
+      "objects": null,
+      "failed_receipt_sha256": "8012aff8b50712ac730f6ee61b778498b77450dc5d93f9bb30056a90134e3351",
+      "evidence_directory": "freedom-release-b14916cc-20261026/after-production-backup-runs/cb9c333f-9d21-4486-975d-d59b485525c2",
+      "note": "attempt1-after-production/NOTE.txt",
+      "note_sha256": "ccab00b4d21e640ac69c22acd350300587f93028792d9430252449637c137e9b",
+      "log_sha256": "29e732f170325a7c8cac090e12b890723e5f118f4d1983329921fc90728795ff",
+      "selected_as_pointer": false,
+      "pg_dump_observation": {
+        "started_at_approx": "2026-10-26T04:17:03Z",
+        "ended_at_approx": "2026-10-26T04:26:11Z",
+        "duration_seconds": 547,
+        "partial_bytes": 5402082,
+        "error": "server closed the connection unexpectedly",
+        "operation": "COPY public.commerce_order_quotes",
+        "comparison": "About five times slower than normal, as reported by the operator. These are partial bytes, not a completed backup dump."
+      },
+      "read_only_follow_up": {
+        "approximate_window": "04:27-04:29Z (operator history)",
+        "dump_container_left": false,
+        "production_material_policy_enabled": false,
+        "policy_revision": "daily-recovery-cb9c333f-9d21-4486-975d-d59b485525c2",
+        "live_fp_daily_sessions": false,
+        "policy_cleanup_needed": false,
+        "policy_cleanup_run": false
+      },
+      "provider_status_observation": "PlanetScale status page showed no incident (operator history); this does not identify the cause of the connection failure.",
+      "retry": {
+        "attempt": 2,
+        "set_id": "acc0a813-f953-4f88-aeb9-df756960eaea",
+        "status": "passed",
+        "pg_dump_duration_seconds": 156,
+        "selected_as_pointer": true
+      },
+      "limitation": "failed.json remains cleanupVerified=false. Subsequent read-only checks do not rewrite that failure as verified cleanup, and the successful attempt 2 is separate. Dump timing, bytes, read-only checks and provider status are operator history corroborated in part by NOTE.txt; the retained wrapper log records the failed outcome."
+    },
+    {
+      "phase": "timer-restore",
+      "attempt": 1,
+      "status": "refused",
+      "reason": "persistent_catch_up_pending: freedom-next-backup.timer",
+      "timer_started": false,
+      "log_sha256": "cd69ddb6055802873dd9ce7a9d003eca21b48e5147f40d9d878b4e5a1a61f4d3",
+      "missed_slot_utc": "2026-10-26T04:33:02Z",
+      "observation": "The production slot in the pause snapshot passed while timers were paused. The first restore refused before starting any timer. The orchestrator followed the printed RUNBOOK procedure and supervised the Persistent catch-up; a second unchanged restore passed at 05:12:56Z.",
+      "final_restore_receipt_sha256": "48b2e0359a32dd6e3ea06c0872bc4124a05405088a72348106cc57aa7d726a09"
+    }
+  ],
+  "historical_evidence_preserved": [
+    "rollout-2026-10-09.json",
+    "rollout-2026-10-10.json",
+    "rollout-commerce-buyer-2026-10-17.json",
+    "rollout-commerce-cohorts-2026-10-20.json",
+    "rollout-main-1f7aee36-2026-10-25.json",
+    "rollout-main-36bec661-2026-10-25.json",
+    "rollout-main-54961dd8-2026-10-24.json",
+    "rollout-main-758cabe2-2026-10-25.json",
+    "rollout-main-c140a346-2026-10-23.json",
+    "rollout-member-consoles-2026-10-19.json",
+    "rollout-merchant-readiness-2026-10-19.json",
+    "rollout-r15-2026-10-10.json",
+    "rollout-r16-2026-10-10.json",
+    "rollout-r17-2026-10-11.json",
+    "rollout-r18-2026-10-11.json",
+    "rollout-r19-2026-10-11.json",
+    "rollout-r20-2026-10-12.json",
+    "rollout-r21-2026-10-12.json",
+    "rollout-r22-2026-10-12.json",
+    "rollout-r23-2026-10-12.json",
+    "rollout-r24-2026-10-12.json",
+    "rollout-security-2026-10-14.json",
+    "rollout-short-videos-2026-10-20.json",
+    "rollout-three-outcomes-2026-10-19.json"
+  ],
+  "limitations": [
+    "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance.",
+    "The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF.",
+    "The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src.",
+    "Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP.",
+    "Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints.",
+    "Mobile navigation docks below the top bar and can be closed, with renamed navigation entries (#1047). The guild directory has a collapsible topic filter, matching count and relocated secondary settings (#1055). Guild management adds per-tab purpose lines and lists discussions first; a collapsed discussion draft survives only while staying on that page (#1056). Activity submission stays disabled until the first activity-list load settles, including its error completion (#1068); later refreshes do not reapply this initial gate.",
+    "Checkout and transaction email remain OFF, so members cannot create new checkout orders through the normal purchase flow. The bounded storefront repair requests focus once after React commits an enabled trigger following a failed forget-browser dialog. Existing authorized order reads and browser-forget operations are not gated by checkoutEnabled (quarantine is false), so flags alone do not prove that this order path is unreachable; no existing-order member journey was tested.",
+    "Shared Actions source #1038 is merged, including the backup/migrator role separation repair, but RELEASE_ENABLED and BACKUP_ENABLED remain false. Local kit Q5 executed this release; shared-path activation and hosted scheduler handoff are not established.",
+    "Four selected sets passed readback, isolated DB/object restore and cleanup. Staging before is the first observed natural scheduled run of Q4 after-wrapper; production before was manual after the owner push instruction. Production after attempt 1 failed, attempt 2 is the pointer, and a separate timer catch-up passed. Q5 did not create a new rollback floor.",
+    "Network/IO observations retain final-hop probe loss and the unstable 04:13-04:46Z interval. Staging after has an IO gate but no separate recorded mtr. Operator network observations are not repository evidence; raw diagnostic outputs were not copied or read by this documentation job.",
+    "Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized/schema189/188 ledger rows/floor36bec661. Fix E now reports observed timer labels: staging timers_active_observed and production timers_paused_observed. Neither rehearsal authorizes deployment.",
+    "The retained offline-audit.final.log is the sandbox attempt: content gates passed, then four managed mount modes refused. Reviewed operator stdout records two later full audits passed outside the sandbox at RUNBOOK steps 0 and 1, both exit 0 before candidate creation and receive at 02:13:34Z. These counts are operator history, not repository evidence. verification-20261026T020200Z independently retains all four verify-offline.py command exits=0. These histories are distinct, and this documentation job did not rerun the kit or weaken checks.",
+    "Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved.",
+    "Q4 staging natural execution is now observed for the previous wrapper, without changing its older receipt. Q5 production catch-up was timer-triggered but operator-started. A natural calendar-slot run of the new S10 wrapper is still not_observed_for_new_wrapper; exact next slots are October 27 03:34:32Z staging and 04:33:26Z production. Human acceptance, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified.",
+    "This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps."
+  ],
+  "owner_authorization": {
+    "owner": "Ted",
+    "observed_at": "2026-10-26T01:34:24.774Z",
+    "standing_instruction_at": "2026-10-24T18:08:00.318Z",
+    "instruction": "當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了",
+    "consent_basis": "Release main b14916cc to staging then production under the standing instruction, preserving backup/read-only schema/health/receipt gates and no staging acceptance window.",
+    "receipt_sha256": "d04643ce79281db557b8a7e4e9cb3b53dc7132a1fdc17163dc81259f75e8b6e9",
+    "authorization_sha256": "9bd1adf1a07ac1f4e3708e67310b8acf2c223ac3e4cdbb6328df6204bb25884b",
+    "staging_acceptance_required": false,
+    "member_ux_acceptance": "not_run",
+    "orchestrator_decision": {
+      "decided_at": "2026-10-26T01:34:24.774Z",
+      "status": "release_decision",
+      "previous_release": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+      "previous_release_decided_at": "2026-10-25T18:01:38.931Z"
+    },
+    "push_instruction": "快點推",
+    "push_instruction_time": "about 03:28Z (operator history)",
+    "push_instruction_effect": "The orchestrator stopped waiting for the production natural 04:30Z backup slot and ran a manual production before-backup through the installed Q4 after-wrapper after the IO gate.",
+    "limitation": "Intent state preparing is authorization evidence, not proof of completion. Push-instruction time is approximate operator history, not an invented exact timestamp."
+  },
+  "kit_corrections": [
+    {
+      "job": "release-kit-b14916cc",
+      "predecessor": "freedom-release-batch1064-20261025",
+      "task_sha256": "8d6748bac99966a7574e366ce68351c68f20fab231ba1b32161aa18d65841cec",
+      "report_sha256": "fdd0a6498d8bd8e5375ed62a6225850b401c34ab18b747f901ce4e4564dd36e1",
+      "adaptation_sha256": "94487c2a7747ee80070252835925e3c8ae2be96092edb1e06defab5bad60a6ec",
+      "scope": "Q5 was built from Q4 for S10 before receive/build/bind/deploy. The kit report unstarted wording is dated handoff history; later operation receipts establish completion.",
+      "fixes": [
+        {
+          "id": "E",
+          "scope": "Derive the non-gating rehearsal timer label from observed states.",
+          "labels": [
+            "timers_active_observed",
+            "timers_paused_observed",
+            "timers_mixed_observed"
+          ]
+        },
+        {
+          "id": "F",
+          "scope": "A natural scheduled run may serve as the before-backup pointer only when every source, authorization, restore, freshness and retained-floor gate passes; never overlap backups."
+        }
+      ],
+      "retained_preparation_history": "The report retains two initial dispatcher fixture failures and their subsequent corrections, plus native launcher and file-mode checks. Final offline verification passed; the sandbox full-audit mount refusal remains preserved."
+    }
+  ],
+  "offline_verification": {
+    "attempts_record": "offline-verification.json",
+    "attempts_record_sha256": "2c2de45b6766ff09974af0ad8eeb728b46fd424d71c64a2603141abfc9497f80",
+    "scope": "Retained offline fixture suites passed. Sandbox refusal is history; two later full audits passed outside the sandbox at RUNBOOK steps 0 and 1. Reviewed stdout counts are operator history, not repository evidence. No kit rerun or assertions relaxed by this documentation job.",
+    "retained_final_audit_log_sha256": "ff24a133bafede20012636df3caca82c392e2ea7d9e09025975f5981be0aba99",
+    "retained_sandbox_refusal": {
+      "status": "refused",
+      "reason": "managed_mount_modes",
+      "refused_mode_count": 4,
+      "exit_code": 1
+    },
+    "sandbox_content_checks": [
+      {
+        "inlinePins": {
+          "status": "passed",
+          "textFilesScanned": 150,
+          "pinsChecked": 54,
+          "shellPins": 20
+        }
+      },
+      {
+        "selfRoots": {
+          "status": "passed",
+          "sourceFiles": 89,
+          "reviewedPredecessorReferences": 73
+        }
+      },
+      {
+        "jsSymbols": {
+          "typescript": "6.0.3",
+          "files": 45,
+          "findings": []
+        }
+      },
+      {
+        "hexTokens": {
+          "adaptedFiles": 239,
+          "legacyFiles": 1124,
+          "legacyTokens": 9636,
+          "checkedTokens": 5570
+        }
+      },
+      {
+        "prebindState": "unstarted"
+      },
+      {
+        "contentGates": "passed",
+        "protectedChanges": 1,
+        "existingFlags": 27,
+        "retention": "unchanged all in both",
+        "dropShip": "absent",
+        "varCount": 37,
+        "schemaLedger": [
+          188,
+          0,
+          188
+        ],
+        "syntaxChecks": 86,
+        "runbookBlocks": 20,
+        "adaptedDiffs": 112,
+        "orchestratorImportRunByThisJob": false,
+        "providerOperations": false
+      }
+    ],
+    "full_audit_status": "passed_outside_sandbox_runbook_steps_0_and_1_operator_history",
+    "outside_sandbox_passes": [
+      {
+        "runbook_step": 0,
+        "status": "passed",
+        "exit_code": 0,
+        "evidence_kind": "operator_history",
+        "inlinePins": {
+          "status": "passed",
+          "textFilesScanned": 155,
+          "pinsChecked": 54,
+          "shellPins": 20
+        },
+        "selfRoots": {
+          "status": "passed",
+          "sourceFiles": 89,
+          "reviewedPredecessorReferences": 73
+        },
+        "jsSymbols": {
+          "typescript": "6.0.3",
+          "files": 45,
+          "findings": []
+        },
+        "hexTokens": {
+          "adaptedFiles": 239,
+          "legacyFiles": 1124,
+          "legacyTokens": 9636,
+          "checkedTokens": 5570
+        },
+        "contentGates": {
+          "contentGates": "passed",
+          "protectedChanges": 1,
+          "existingFlags": 27,
+          "retention": "unchanged all in both",
+          "dropShip": "absent",
+          "varCount": 37,
+          "schemaLedger": [
+            188,
+            0,
+            188
+          ],
+          "syntaxChecks": 86,
+          "runbookBlocks": 20,
+          "adaptedDiffs": 112,
+          "orchestratorImportRunByThisJob": false,
+          "providerOperations": false
+        },
+        "externalPinsUnchanged": 7
+      },
+      {
+        "runbook_step": 1,
+        "status": "passed",
+        "exit_code": 0,
+        "evidence_kind": "operator_history",
+        "inlinePins": {
+          "status": "passed",
+          "textFilesScanned": 155,
+          "pinsChecked": 54,
+          "shellPins": 20
+        },
+        "selfRoots": {
+          "status": "passed",
+          "sourceFiles": 89,
+          "reviewedPredecessorReferences": 73
+        },
+        "jsSymbols": {
+          "typescript": "6.0.3",
+          "files": 45,
+          "findings": []
+        },
+        "hexTokens": {
+          "adaptedFiles": 239,
+          "legacyFiles": 1124,
+          "legacyTokens": 9636,
+          "checkedTokens": 5570
+        },
+        "contentGates": {
+          "contentGates": "passed",
+          "protectedChanges": 1,
+          "existingFlags": 27,
+          "retention": "unchanged all in both",
+          "dropShip": "absent",
+          "varCount": 37,
+          "schemaLedger": [
+            188,
+            0,
+            188
+          ],
+          "syntaxChecks": 86,
+          "runbookBlocks": 20,
+          "adaptedDiffs": 112,
+          "orchestratorImportRunByThisJob": false,
+          "providerOperations": false
+        },
+        "externalPinsUnchanged": 7
+      }
+    ],
+    "receive_followed_at": "2026-10-26T02:13:34Z",
+    "sequence_basis": "RUNBOOK steps 0 and 1 each require offline-audit.py exit 0 before candidate creation. Reviewed operator stdout records both passes then candidate_validated_not_bound; receive time is operator history, not an audit timestamp.",
+    "final_fixture_verification": {
+      "status": "passed",
+      "at": "2026-10-26T02:02:45.175639+00:00",
+      "receipt_sha256": "c86bb7e01df4232a085634dca3d490e053fa779880c73d5d5ff940c1f72b2c46",
+      "checks": [
+        {
+          "command": [
+            "/usr/bin/node",
+            "--test",
+            "--test-reporter=tap",
+            "--test-concurrency=1",
+            "successor-builder.test.mjs",
+            "schema/unchanged.test.mjs",
+            "schema/readonly.test.mjs",
+            "renderer-config.test.mjs",
+            "before-backup.test.mjs",
+            "after-import/real-import-check.test.mjs",
+            "smoke-health-wait.test.mjs",
+            "readback-poll.test.mjs",
+            "adapter-run.test.mjs",
+            "wrapper-log.test.mjs",
+            "candidate-chain.test.mjs",
+            "runtime-errors.test.mjs",
+            "gate-error-propagation.test.mjs",
+            "gate-runner.test.mjs",
+            "deploy-gate.test.mjs",
+            "operator-preflight/readonly-reconcile.test.mjs"
+          ],
+          "exit": 0,
+          "log": "verification-20261026T020200Z/node-offline-tests.log",
+          "log_sha256": "7b2b7fdc462cab969e0eb470e9a186bddf6e2b1236550626daccd443cfd87dca"
+        },
+        {
+          "command": [
+            "python3",
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "source-preparation",
+            "-p",
+            "test_*.py"
+          ],
+          "exit": 0,
+          "log": "verification-20261026T020200Z/prepare-source-tests.final.log",
+          "log_sha256": "5172d2a116bfdab27cdbf268b0fa7fb3fc3fe07a9d36bb66c2dd893272bd96bb"
+        },
+        {
+          "command": [
+            "python3",
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "dispatcher",
+            "-p",
+            "test_*.py"
+          ],
+          "exit": 0,
+          "log": "verification-20261026T020200Z/materialize-tests.final.log",
+          "log_sha256": "4edf14df6191f4f1147c9e1a8bcdebb122cb713a0db030382ca25219a70fdf9e"
+        },
+        {
+          "command": [
+            "python3",
+            "-B",
+            "-m",
+            "unittest",
+            "test_wait_io.py",
+            "test_offline_audit.py"
+          ],
+          "exit": 0,
+          "log": "verification-20261026T020200Z/io-wait-tests.final.log",
+          "log_sha256": "65a5280c29c79c873a3dbc8dfbeb4393bd58235f7d533a68dac33c36a4b2a1b6"
+        }
+      ],
+      "counts": {
+        "node": 168,
+        "sourcePreparationPython": 23,
+        "dispatcherPython": 31,
+        "ioAndAuditPython": 28,
+        "totalTopLevelTests": 250,
+        "observerNodeSubtestsInsideDispatcherPython": 8
+      }
+    }
+  },
+  "io_gates": [
+    {
+      "path": "io-check-06068261-e9c0-4fe3-a321-5021f8afe176.json",
+      "sha256": "544ccd2edb5254fd09f62e99a33297befeb659e7e727704effd45c4b04dbd94d",
+      "status": "passed",
+      "sample_count": 2
+    },
+    {
+      "path": "io-check-37ab9ba6-62d2-4ede-80c7-f0d0af1434ac.json",
+      "sha256": "ea37ca01fa254fa66ca22df0c5597be4acfff1a41c00a990cfb839efcbbd2b3f",
+      "status": "passed",
+      "sample_count": 2
+    },
+    {
+      "path": "io-check-6371292d-1658-4062-9aaf-e48f3da38c65.json",
+      "sha256": "08c0f1b25bc216f02790f70650d50c0b4f572793f0bf0cdd2260ddd1d24ecd1f",
+      "status": "passed",
+      "sample_count": 2
+    },
+    {
+      "path": "io-check-88ff5dcb-76b7-457d-b811-97da50f6d0ba.json",
+      "sha256": "5bf91257da1c40c7bb817ba2c90034545c2cc6baf7617a0ca80a1d013b007313",
+      "status": "passed",
+      "sample_count": 2
+    },
+    {
+      "path": "io-check-de81a292-5539-4b55-9ec0-decb25ae78dd.json",
+      "sha256": "7118d218caf5ae1f0f3ba76c47a27044078351bb4cc06058cd8d9d43ab33a1fb",
+      "status": "passed",
+      "sample_count": 2
+    }
+  ],
+  "evidence_directory": "freedom-release-b14916cc-20261026",
+  "observations": [
+    {
+      "phase": "backup-network-prechecks",
+      "status": "operator_observation",
+      "observation": "Latency was stable apart from the 04:13-04:46Z window. Final-hop probe loss is retained as observed; this was not uniformly a clean path. Every Q5-run backup passed the kit IO gate.",
+      "samples": [
+        {
+          "environment": "staging",
+          "phase": "planned-before-manual-not-run",
+          "approximate_time": "03:29Z",
+          "mtr_cycles": 30,
+          "final_hop_probe_loss_percent": 10,
+          "average_ms": 177,
+          "backup_run": false,
+          "reason": "The natural staging run was due around 03:32Z, so the planned manual backup was not run."
+        },
+        {
+          "environment": "production",
+          "phase": "before",
+          "approximate_time": "03:57Z",
+          "mtr_cycles": 30,
+          "final_hop_probe_loss_percent": 0,
+          "average_ms": 182
+        },
+        {
+          "environment": "staging",
+          "phase": "after",
+          "approximate_time": "03:45Z (operator history; set creation was 03:46:02.903Z)",
+          "io_gate": "passed",
+          "separate_mtr": "not recorded"
+        },
+        {
+          "environment": "production",
+          "phase": "after-attempt1-failure-follow-up",
+          "approximate_window": "04:27-04:29Z",
+          "mtr_cycles": 30,
+          "final_hop_probe_loss_percent": 13.3,
+          "average_ms": 188,
+          "worst_ms": 423,
+          "db_rtt_median_ms": 195,
+          "db_rtt_p90_ms": 239,
+          "db_rtt_max_ms": 610
+        },
+        {
+          "environment": "production",
+          "phase": "path-watcher-before-after-attempt2",
+          "approximate_window": "04:29-04:47Z",
+          "required_consecutive_samples": 2,
+          "thresholds": {
+            "db_rtt_p90_max_ms": 260,
+            "db_rtt_max_ms": 800,
+            "host_tcp_retransmits_max": 1
+          },
+          "failed_samples_window": "04:29-04:46Z",
+          "observed_connect_max_seconds": 5.6,
+          "observed_rtt_max_seconds": 5.7,
+          "observed_host_tcp_retransmits_max": 82,
+          "mtr_observation": "Jitter on ISP and backbone hops.",
+          "healthy_at_approx": "04:47Z",
+          "mtr_cycles": 30,
+          "final_hop_probe_loss_percent": 0,
+          "average_ms": 180.5,
+          "worst_ms": 183.5,
+          "attempt2_started_after_healthy": true
+        },
+        {
+          "environment": "production",
+          "phase": "before-timer-catch-up",
+          "approximate_time": "05:01Z",
+          "mtr_cycles": 20,
+          "final_hop_probe_loss_percent": 25,
+          "average_ms": 171.5,
+          "worst_ms": 184.7,
+          "stdev_ms": 4.3,
+          "db_rtt_p50_ms": 189,
+          "db_rtt_p90_ms": 201,
+          "db_rtt_max_ms": 209
+        }
+      ],
+      "limitation": "Operator history supplied by the orchestrator; raw diagnostic outputs are not repository evidence and were not read or copied. TCP probe loss is not proof of equivalent database payload loss or a diagnosed outage. No hostnames, addresses or credentials included."
+    },
+    {
+      "phase": "readonly-deploy-gate-rehearsal",
+      "environment": "staging",
+      "status": "observed",
+      "receipt": {
+        "status": "rehearsed_readonly_not_deploy_authorized",
+        "deploymentAuthorized": false,
+        "timerPrecondition": "timers_active_observed",
+        "observedTimers": [
+          {
+            "timer": {
+              "ActiveState": "active"
+            },
+            "service": {
+              "ActiveState": "inactive",
+              "MainPID": "0"
+            }
+          },
+          {
+            "timer": {
+              "ActiveState": "active"
+            },
+            "service": {
+              "ActiveState": "inactive",
+              "MainPID": "0"
+            }
+          }
+        ],
+        "target": "staging",
+        "release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "schema": 189,
+        "migrations": [],
+        "schemaProof": {
+          "status": "schema_unchanged",
+          "schema": 189,
+          "ledgerRows": 188,
+          "ledgerSha256": "ec5a9b2622426e83f60368aa6782bdcda8bbc4edf81014760f6db3d7d9c47476",
+          "floorRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        }
+      },
+      "receipt_sha256": "f1d3746e5da3c86f103e1ca5a86ac1e5be4442afce441b494cd02c4e0631cda9",
+      "observed_at_approx": "2026-10-26T03:44:11.445664+00:00",
+      "timestamp_basis": "rehearsal.json mtime; no embedded operation timestamp.",
+      "observation": "Fix E reports actual timer states: timers_active_observed. This READ ONLY rehearsal verifies schema189, 188 ledger rows and floor36bec661; it is not deploy authorization.",
+      "runbook_sha256": "74ada52d1c78614cf6395e2ace30719dbe2fc66fa2146bcc1efcb5c8945888f8"
+    },
+    {
+      "phase": "readonly-deploy-gate-rehearsal",
+      "environment": "production",
+      "status": "observed",
+      "receipt": {
+        "status": "rehearsed_readonly_not_deploy_authorized",
+        "deploymentAuthorized": false,
+        "timerPrecondition": "timers_paused_observed",
+        "observedTimers": [
+          {
+            "timer": {
+              "ActiveState": "inactive"
+            },
+            "service": {
+              "ActiveState": "inactive",
+              "MainPID": "0"
+            }
+          },
+          {
+            "timer": {
+              "ActiveState": "inactive"
+            },
+            "service": {
+              "ActiveState": "inactive",
+              "MainPID": "0"
+            }
+          }
+        ],
+        "target": "production",
+        "release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "schema": 189,
+        "migrations": [],
+        "schemaProof": {
+          "status": "schema_unchanged",
+          "schema": 189,
+          "ledgerRows": 188,
+          "ledgerSha256": "ec5a9b2622426e83f60368aa6782bdcda8bbc4edf81014760f6db3d7d9c47476",
+          "floorRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        }
+      },
+      "receipt_sha256": "f5477effb547db7d29a03fa7244b752e3edda85702f73d46dd673fa740f60d63",
+      "observed_at_approx": "2026-10-26T04:10:46.259306+00:00",
+      "timestamp_basis": "rehearsal.json mtime; no embedded operation timestamp.",
+      "observation": "Fix E reports actual timer states: timers_paused_observed. This READ ONLY rehearsal verifies schema189, 188 ledger rows and floor36bec661; it is not deploy authorization.",
+      "runbook_sha256": "74ada52d1c78614cf6395e2ace30719dbe2fc66fa2146bcc1efcb5c8945888f8"
+    },
+    {
+      "phase": "predecessor-wrapper-natural-scheduled-run",
+      "environment": "staging",
+      "status": "observed",
+      "set_id": "7b71eb09-06f3-46ee-8bce-208d7f6d0824",
+      "completed_receipt_sha256": "5bba58e003d43234fe234f8de2736e3ca39d107446463649714782b84f992733",
+      "pointer_sha256": "e05f9dae2f7d10671f2957119f5735c0835c7171f87e7518a2c66ee5fbad2f8d",
+      "observation": "First observed natural calendar execution of Q4 installed after-wrapper through the installed dispatcher. The staging timer uses OnCalendar 03:30:00Z plus randomized delay; operator history places the service start at 03:32:51Z, and completed.json records set creation at 03:32:58.807Z. Q5 selected its pointer after all freshness/source gates.",
+      "corroboration": "The cutover and restored timer snapshots retain LastTriggerUSec and the successful service history; trigger provenance is operator history, while the completed receipt establishes backup results.",
+      "timer_snapshot_sha256": "f3440ff114a0f06a24f1dbce6af5f9d379655d9212cf73c870d1ab7d22c81abc",
+      "limitation": "This establishes a Q4 wrapper natural run, not a natural S10/Q5 calendar run. The older 1f7aee36 receipt remains unchanged."
+    }
+  ],
+  "not_run": {
+    "member_ux_acceptance": {
+      "status": "not_run",
+      "reason": "No staging acceptance window per owner instruction; public smoke is not member UX acceptance."
+    },
+    "real_phone_and_safari": {
+      "status": "not_run",
+      "reason": "No real-device or Safari evidence was produced for this rollout."
+    },
+    "production_authenticated_member_journey": {
+      "status": "not_run",
+      "reason": "Production smoke was anonymous and read-only, with no member login or orders."
+    },
+    "live_rollback_drill": {
+      "status": "not_run",
+      "reason": "Isolated restore is not live rollback. Both environments retain the unchanged 36bec661/schema189 floor and require compatible forward repair."
+    },
+    "second_operator_restore": {
+      "status": "not_run",
+      "reason": "No new authorized second-operator recovery evidence; the prior outstanding item remains."
+    },
+    "original_requirement_and_human_outcome_acceptance": {
+      "status": "not_run",
+      "reason": "This operator receipt does not close the original 168 requirement IDs, T-047 or outstanding human outcomes."
+    },
+    "migration": {
+      "status": "not_run",
+      "reason": "No migration delta; READ ONLY exact ledger equality checks replaced migration execution. Q5 created no new floor."
+    },
+    "shared_actions_activation": {
+      "status": "not_run",
+      "reason": "RELEASE_ENABLED and BACKUP_ENABLED remain false; this release used local kit Q5."
+    },
+    "storefront_existing_order_member_journey": {
+      "status": "not_run",
+      "reason": "Checkout and transaction email remain OFF, so members cannot create new checkout orders through the normal purchase flow. The bounded storefront repair requests focus once after React commits an enabled trigger following a failed forget-browser dialog. Existing authorized order reads and browser-forget operations are not gated by checkoutEnabled (quarantine is false), so flags alone do not prove that this order path is unreachable; no existing-order member journey was tested."
+    }
+  }
+}

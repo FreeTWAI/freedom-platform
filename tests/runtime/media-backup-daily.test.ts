@@ -85,3 +85,20 @@ test('snapshot-pins cleanup preserves exact policy even when the revision label 
     assert.equal(result.sourceProtection.status,'not_verified');assert.equal(result.retentionExecuted,false);
   }
 });
+
+test('preflight and cleanup preserve distinct bounded causes without provider text', async () => {
+  const { adapter } = fixture();
+  adapter.preflight = async () => { throw Object.assign(Error('private database detail'), { code: '42501' }); };
+  adapter.cleanup = async () => { throw Error('release_backup_worker_changed'); };
+  const result = await runDailyBackup(context(), adapter);
+  assert.equal(result.stage, 'preflight'); assert.equal(result.code, 'daily_backup_cleanup_failed');
+  assert.equal(result.phaseCode, 'backup_database_permission_denied');
+  assert.equal(result.cleanupCode, 'release_backup_worker_changed');
+  assert.equal(result.cleanupVerified, false); assert(!JSON.stringify(result).includes('private'));
+  adapter.preflight = async () => { throw Object.assign(Error('private message'), { code: 'release_backup_private_secret' }); };
+  adapter.cleanup = async () => { throw Error('private cleanup'); };
+  const unknown = await runDailyBackup(context(), adapter);
+  assert.equal(unknown.phaseCode, 'daily_backup_phase_failed');
+  assert.equal(unknown.cleanupCode, 'daily_backup_cleanup_failed');
+  assert(!JSON.stringify(unknown).includes('private'));
+});

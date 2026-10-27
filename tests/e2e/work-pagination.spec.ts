@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { DEMO_USERS, DEMO_WORK } from '../../packages/testing/seed.js';
 import { navigate } from './navigation.js';
+import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
+import {EXPERIENCE_PROFILES} from '../../apps/portal-web/src/experience-profiles.js';
 import { test, expect, type Page } from './fixtures.js';
 
 async function seedWorks(pool: Pool) {
@@ -36,7 +38,7 @@ test('workbench and task board load bounded work pages without losing microsecon
   const ids=await seedWorks(e2eAuthPool);
   await page.setViewportSize({width: 1280, height: 900});
   await login(page);
-  await navigate(page, '我的工作');
+  await navigate(page, '任務協作');
   await expect(paginationHeadings(page)).toHaveCount(24);
   const workbenchMore = page.getByRole('button', {name: '載入較早的社群工作', exact: true});
   await expect(workbenchMore).toBeVisible();
@@ -88,4 +90,80 @@ test('workbench and task board load bounded work pages without losing microsecon
     await expect(older).toBeVisible();await expect(paginationHeadings(page)).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }finally{releaseStale();}
+});
+
+// Real application/theme cascade with synthetic page responses. The existing test
+// above retains the separate real-PostgreSQL pagination coverage.
+async function expectWorkPaginationColors(action:import('@playwright/test').Locator,focused=false){
+  const observed=await action.evaluate(async element=>{
+    // Force style resolution, then wait for the existing color transitions rather
+    // than sampling the .16s intermediate palette after hover/profile changes.
+    void getComputedStyle(element).color;
+    for(let ancestor:Element|null=element;ancestor;ancestor=ancestor.parentElement){
+      const animations=ancestor.getAnimations().filter(animation=>animation instanceof CSSTransition&&/^(?:color|background-color|outline-color|border(?:-(?:top|right|bottom|left))?-color)$/.test(animation.transitionProperty));
+      if(animations.some(animation=>animation.playState==='paused'))throw Error('Paused color transition');
+      await Promise.all(animations.map(animation=>animation.finished.catch(()=>{})));
+    }
+    const style=getComputedStyle(element);
+    const rgba=(value:string)=>{
+      const match=/^rgba?\(([^)]+)\)$/.exec(value);
+      if(!match)throw Error('Unsupported computed color: '+value);
+      const parts=match[1].split(',').map(value=>Number(value.trim()));
+      if(![3,4].includes(parts.length)||parts.some(value=>!Number.isFinite(value))||parts.slice(0,3).some(value=>value<0||value>255))throw Error('Invalid RGB color');
+      const alpha=parts[3]??1;if(alpha<0||alpha>1)throw Error('Invalid alpha');
+      return {rgb:parts.slice(0,3),alpha};
+    };
+    const luminance=(value:string)=>{
+      const parsed=rgba(value);if(parsed.alpha!==1)throw Error('Expected opaque measured color');
+      const c=parsed.rgb.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+      return c[0]*.2126+c[1]*.7152+c[2]*.0722;
+    };
+    if(style.backgroundImage!=='none')throw Error('Unexpected action background image');
+    for(let ancestor=element.parentElement;ancestor;ancestor=ancestor.parentElement){
+      const outer=getComputedStyle(ancestor);
+      if(Number(outer.opacity)!==1)throw Error('Unexpected ancestor opacity');
+    }
+    // Focus contrast is button-side only: the dark page has a gradient, whose
+    // adjacent pixels are not established by this opaque-button color check.
+    const ratio=(a:string,b:string)=>{const v=[luminance(a),luminance(b)].sort((a,b)=>a-b);return(v[1]+.05)/(v[0]+.05);};
+    return {text:ratio(style.color,style.backgroundColor),focus:ratio(style.outlineColor,style.backgroundColor),
+      outline:style.outlineStyle,outlineWidth:parseFloat(style.outlineWidth),focusVisible:element.matches(':focus-visible'),
+      height:element.getBoundingClientRect().height,opacity:Number(style.opacity)};
+  });
+  expect(observed.text).toBeGreaterThanOrEqual(4.5);
+  expect(observed.height).toBeGreaterThanOrEqual(44);
+  expect(observed.opacity).toBe(1);
+  if(focused){
+    expect(observed.focusVisible).toBe(true);expect(observed.outline).not.toBe('none');
+    expect(observed.outlineWidth).toBeGreaterThanOrEqual(2);expect(observed.focus).toBeGreaterThanOrEqual(3);
+  }
+}
+
+const paginationPages=[
+  {pageName:'任務協作',selector:'.workbench-load-more',loadName:'載入較早的社群工作'},
+  {pageName:'社群任務',selector:'.task-board-load-more',loadName:'載入較早的工坊工作'},
+];
+// One authenticated journey per page. Existing pagination/loading tests retain
+// the two-width and failure/retry coverage; these cases only exercise appearance.
+for(const panel of paginationPages)test(`${panel.pageName} pagination keeps five profile palettes`,async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await page.route('**/api/v1/co-creation/projects',route=>route.fulfill({json:{items:[]}}));
+  await page.route('**/api/v1/work-items/page*',route=>route.fulfill({json:{items:[],next_cursor:'synthetic-workbench-cursor'}}));
+  await login(page);await navigate(page,panel.pageName);
+  const action=page.locator(panel.selector);
+  await expect(action).toHaveAccessibleName(panel.loadName);await expect(action).toBeVisible();
+  for(const profile of Object.values(EXPERIENCE_PROFILES)){
+    await openSettingsPanel(page,'appearance');
+    await page.getByRole('menuitemradio',{name:profile.label,exact:true}).click();
+    await closeSettingsMenu(page);
+    await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile.id);
+    expect(await page.evaluate(()=>localStorage.getItem('freedom-theme'))).toBe(profile.id);
+    await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();
+    // Clear the previous sample's pointer/focus before checking the idle state.
+    await page.mouse.move(0,0);await page.getByRole('button',{name:'設定',exact:true}).focus();
+    await expectWorkPaginationColors(action);
+    await action.hover();await expectWorkPaginationColors(action);
+    await action.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
+    await expect(action).toBeFocused();await expectWorkPaginationColors(action,true);
+  }
 });

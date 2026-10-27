@@ -17,7 +17,7 @@ import { formatMinor } from '../../modules/agent-commerce/hosted/format.js';
 
 const RESPONSIVE_WIDTHS = [1440, 1280, 768, 390, 320] as const;
 
-test('one-time link redemption, same-link revisit, used-link rejection, no-access 404s and forget flow preserve token isolation', async ({
+for (const focusOrdering of ['natural', 'close-before-commit', 'newer-navigation'] as const) test(`one-time link redemption, same-link revisit, used-link rejection, no-access 404s and forget flow preserve token isolation (${focusOrdering})`, async ({
   browser,
   baseURL,
   e2eAuthPool,
@@ -28,6 +28,45 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
   const firstContext = await browser.newContext({ baseURL });
   try {
     const page = await firstContext.newPage();
+    if (focusOrdering !== 'natural') await page.addInitScript(({newerNavigation}) => {
+      const control = window as typeof window & {forgetOrdering?: {armed: boolean; held: boolean; closeDisabled: boolean; released: boolean}};
+      const NativeChannel = window.MessageChannel;
+      let pending: (() => void) | null = null, closed = false;
+      const release = () => {
+        if (!closed || !pending) return;
+        const resume = pending; pending = null;
+        // Let the native close event finish before the held React commit.
+        setTimeout(resume, 0);
+      };
+      window.MessageChannel = class extends NativeChannel {
+        constructor() {
+          super();
+          this.port1.addEventListener('message', event => {
+            const evidence = control.forgetOrdering;
+            if (!evidence?.armed || evidence.held) return;
+            evidence.held = true; event.stopImmediatePropagation();
+            pending = () => {
+              if (newerNavigation) {
+                const next = document.createElement('button'); next.id = 'newer-focus'; next.textContent = '合成：新的操作';
+                document.body.append(next); next.focus();
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+              evidence.released = true;
+              this.port1.dispatchEvent(new MessageEvent('message', {data: event.data}));
+            };
+            release();
+          });
+          this.port1.start();
+        }
+      };
+      document.addEventListener('close', event => {
+        if (!control.forgetOrdering?.armed || !(event.target instanceof HTMLDialogElement) || event.target.getAttribute('aria-labelledby') !== 'shop-forget-title') return;
+        const trigger = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === '在這個瀏覽器忘記我的訂單');
+        control.forgetOrdering.closeDisabled = trigger?.disabled === true;
+        closed = true; release();
+      }, true);
+    }, {newerNavigation: focusOrdering === 'newer-navigation'});
+
     const recordedRequests: { method: string; url: string; postData: string | null }[] = [];
     page.on('request', req => {
       recordedRequests.push({
@@ -178,6 +217,9 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     await page.route('**/api/v1/public/order-access/forget', async route => {
       if (failForgetOnce) {
         failForgetOnce = false;
+        if (focusOrdering !== 'natural') await page.evaluate(() => {
+          (window as typeof window & {forgetOrdering: object}).forgetOrdering = {armed: true, held: false, closeDisabled: false, released: false};
+        });
         await route.fulfill({
           status: 503,
           contentType: 'application/json',
@@ -193,7 +235,9 @@ test('one-time link redemption, same-link revisit, used-link rejection, no-acces
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('alert')).toHaveText('無法忘記訂單，請稍後重試。');
     await expect(trigger).toBeEnabled();
-    await expect(trigger).toBeFocused();
+    if (focusOrdering !== 'natural') expect(await page.evaluate(() => (window as typeof window & {forgetOrdering: object}).forgetOrdering)).toEqual({armed: true, held: true, closeDisabled: true, released: true});
+    if (focusOrdering === 'newer-navigation') await expect(page.locator('#newer-focus')).toBeFocused();
+    else await expect(trigger).toBeFocused();
 
     // Real confirm forget: transitions to forgotten state, clears cookie, revokes DB row, reload shows not found.
     await trigger.click();

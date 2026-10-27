@@ -172,6 +172,7 @@ test('the member list shows ended events newest first and filters by mode', asyn
   await expect(page.getByText('驗收帳號的活動')).toHaveCount(0);
   await expect(page.getByText('即將舉辦')).toHaveCount(0);
   await expect(cards.nth(0).locator('.hl-cover img')).toBeVisible();
+  await expect(cards.nth(0).locator('.hl-cover')).toHaveAccessibleName('查看集錦：線上分享回顧');
   const titleGap = await cards.first().evaluate(article => {
     const cover = article.querySelector('.hl-cover')!.getBoundingClientRect();
     const title = article.querySelector('h2')!.getBoundingClientRect();
@@ -179,6 +180,7 @@ test('the member list shows ended events newest first and filters by mode', asyn
   });
   expect(titleGap).toBeGreaterThanOrEqual(8);
   await expect(cards.nth(1).locator('.hl-placeholder')).toContainText('實體');
+  await expect(cards.nth(1).locator('.hl-cover')).toHaveAccessibleName('查看集錦：實體公會聚會');
   await expect(page.getByText(LOCATION)).toHaveCount(0);
   await expect(page.getByText(MEETING)).toHaveCount(0);
   await page.screenshot({path: `${SHOTS}/member-list-light-1280.png`, fullPage: true});
@@ -199,6 +201,84 @@ test('the member list shows ended events newest first and filters by mode', asyn
   await expect(page.getByRole('article', {name: '線上分享回顧'})).toHaveCount(0);
   await page.getByRole('button', {name: '全部', exact: true}).click();
   await expect(cards).toHaveCount(2);
+});
+
+// Controlled transport checks: successful mock ACKs below do not claim persisted media.
+test('pending photo submission dispatches once and preserves input after failure', async ({page}) => {
+  await login(page);
+  await page.goto(`/#highlights/${ONLINE}`);
+  await expect(page.getByRole('heading', {name: '線上分享回顧', level: 2})).toBeVisible();
+  await page.getByText('補上照片或影片連結', {exact: true}).click();
+  const group = page.getByRole('group', {name: '要補上的內容'});
+  await group.getByRole('button', {name: '照片', exact: true}).click();
+  const form = page.locator('.hl-add form');
+  await form.getByLabel('標題（選填）').fill('保留這份輸入');
+  await form.locator('input[type=file]').setInputFiles({name: 'pending.png', mimeType: 'image/png', buffer: await sharp({create: {width: 40, height: 20, channels: 3, background: '#325677'}}).png().toBuffer()});
+  const gate: {release: () => void} = {release: () => {}};
+  const held = new Promise<void>(resolve => {gate.release = resolve;});
+  const requests: string[] = [];
+  await page.route(`**/api/v1/event-highlights/${ONLINE}/photos`, async route => {
+    requests.push(route.request().headers()['idempotency-key']);
+    if (requests.length === 1) {await held; await route.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({detail: '合成暫時失敗'})});}
+    else await route.fulfill({status: 201, contentType: 'application/json', body: '{}'});
+  });
+  try {
+    // Two submissions before React's next render also exercise the synchronous guard.
+    await form.evaluate(element => {const form = element as HTMLFormElement; form.requestSubmit(); form.requestSubmit();});
+    await expect.poll(() => requests.length).toBe(1);
+    await expect(form.getByRole('button', {name: '正在送出…', exact: true})).toBeDisabled();
+    await expect(form.getByLabel('標題（選填）')).toBeDisabled();
+    for (const button of await group.getByRole('button').all()) await expect(button).toBeDisabled();
+    await expect(form.locator('input[type=file]')).toBeDisabled();
+    await expect(form.getByRole('status')).toBeVisible();
+    await form.evaluate(element => (element as HTMLFormElement).requestSubmit());
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(requests).toHaveLength(1);
+    gate.release();
+    await expect(form.getByRole('alert')).toHaveText('合成暫時失敗');
+    await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
+    await expect(form.getByLabel('標題（選填）')).toHaveValue('保留這份輸入');
+    expect(await form.locator('input[type=file]').evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe('pending.png');
+    await form.getByRole('button', {name: '送出', exact: true}).click();
+    await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
+    await expect(form.getByRole('alert')).toHaveCount(0);
+    await expect(form.getByLabel('標題（選填）')).toHaveValue('');
+    expect(requests).toHaveLength(2);
+  } finally {gate.release();}
+});
+
+test('a late upload completion does not clear the replacement event draft or send its next image', async ({page}) => {
+  await login(page); await page.goto(`/#highlights/${ONLINE}`);
+  await page.getByText('補上照片或影片連結', {exact: true}).click();
+  await page.getByRole('group', {name: '要補上的內容'}).getByRole('button', {name: '照片', exact: true}).click();
+  const image = await sharp({create: {width: 40, height: 20, channels: 3, background: '#334466'}}).png().toBuffer();
+  await page.locator('.hl-add input[type=file]').setInputFiles([{name: 'old-1.png', mimeType: 'image/png', buffer: image}, {name: 'old-2.png', mimeType: 'image/png', buffer: image}]);
+  const gate: {release: () => void; settled: () => void} = {release: () => {}, settled: () => {}};
+  const held = new Promise<void>(resolve => {gate.release = resolve;});
+  const settled = new Promise<void>(resolve => {gate.settled = resolve;});
+  let writes = 0;
+  await page.route(`**/api/v1/event-highlights/${ONLINE}/photos`, async route => {
+    writes++; await held;
+    try {await route.fulfill({status: 201, contentType: 'application/json', body: '{}'});} finally {gate.settled();}
+  });
+  try {
+    const oldRequest = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith(`/event-highlights/${ONLINE}/photos`));
+    await page.locator('.hl-add').getByRole('button', {name: '送出', exact: true}).click();
+    const request = await oldRequest;
+    await page.evaluate(id => {window.location.hash = `highlights/${id}`;}, GUILD);
+    await expect(page.getByRole('heading', {name: '實體公會聚會', level: 2})).toBeVisible();
+    await page.getByText('補上照片或影片連結', {exact: true}).click();
+    const form = page.locator('.hl-add form');
+    await form.getByLabel('影片連結').fill('https://example.com/new-draft');
+    await form.getByLabel('標題（選填）').fill('新活動草稿');
+    gate.release(); await settled;
+    const response = await request.response(); if (response) await response.finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(writes).toBe(1);
+    await expect(form.getByLabel('標題（選填）')).toHaveValue('新活動草稿');
+    await expect(form.getByLabel('影片連結')).toHaveValue('https://example.com/new-draft');
+    await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
+  } finally {gate.release();}
 });
 
 test('a member adds a video link, photos and a poster, then uses the lightbox', async ({page}) => {

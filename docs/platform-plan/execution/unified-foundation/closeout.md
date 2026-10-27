@@ -10,6 +10,57 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-26 main 274f0614 發布完成（搜尋、導覽助手與本機任務）
+
+截至13:49 UTC，兩環境已由S10 `b14916cc` 更新為S11 `274f0614`／schema189；見[發布收據](rollout-main-274f0614-2026-10-26.json)。
+技能書加入用途／分類篩選；社群統一文字／連結發文，改善失敗重試、舊讀覆蓋與未知結果確認；公會公告及操作保留原意圖並隔離遲到回應。
+功能搜尋可帶詞進社群搜尋；新增確定性站內導覽助手、測試員地圖與新手村；進度／勳章僅本機，非XP或正式驗收，無同步／排行榜。
+六個first-parent merges為 #1076／#1079／#1078／#1085／#1087／#1090；shared工具已合併但未啟用，本次由本機Q6發布。
+Main Verify 40323233554 attempt1的17 jobs、CodeQL 40323233590的3 jobs成功；READ ONLY ledger188列、schema189與 `36bec661`／189回退下限不變，無migration。
+27旗標加contact retention `all`共28設定、各37 vars不變；checkout／交易Email仍OFF，兩個tester quest旗標僅文件、未設定。
+Owner原話：「部署流程不要去管備份了. 我們平常有備份就好 + github 本來就有版本的概念, 搞什麼」；本次無before／after備份或backup gate，每日備份為資料復原點、Git為程式復原點。
+Timers維持active；deploy／dispatcher步驟拒絕03:00–05:45Z及backup service active。Nightly重綁 `14279926`→`c723ae3d`→`476945eb`，10/27約03:34Z／04:33Z首次S11自然備份尚未觀察。
+兩環境首試部署成功；production公開smoke14項通過、health首試符合；admin為Access302，僅驗精確來源CSP，未觀察live admin Worker CSP。
+Kit follow-up容量中斷後同session續跑；會員UX、真人手機／Safari、第二操作者、live rollback、原168項與T-047未驗項保留。
+
+## 2026-10-26 main b14916cc 發布完成（導覽、公會與活動載入）
+
+截至05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`／189；完整證據見[發布收據](rollout-main-b14916cc-2026-10-26.json)。
+會員取得手機選單停靠頂欄下方並可關閉、導覽項目改名（#1047）；公會目錄可收合主題篩選、顯示符合數量並移動次要設定（#1055）。
+公會管理各分頁有用途說明、先列討論；收合討論草稿僅在留於該頁期間保留（#1056）。「提交活動」待第一次列表載入結束才開放，後續重讀不重套此初始gate（#1068）。
+三個first-parent merges為 #1069／#1070／#1071；HostedStore拆區無預期行為變更、#1057僅測試；#1038含backup／migrator角色分離修補，已合併但 `RELEASE_ENABLED`／`BACKUP_ENABLED` 均false，本次由本機Q5發布。
+Storefront僅修失敗關閉dialog後於React commit再回焦一次；checkout與交易Email仍OFF、無新購物流程，既有授權訂單讀取／忘記瀏覽器路徑未被checkout旗標關閉，本次未驗會員操作。
+Main Verify 40244683057 attempt1的17 jobs、CodeQL 40244683121的3 jobs成功；無migration，READ ONLY核對188列ledger，schema189及 `36bec661`／189回退下限不變，Q5未建新floor。
+27旗標加contact retention `all`共28設定、各37 vars、路由與cron不變；無新增線上 `FREEDOM_*` 名稱。
+四組正式備份讀回／隔離DB與物件還原／清理通過：staging before `7b71eb09`為Q4 wrapper首次觀察到的自然排程，after `ab983996`；production before `ee172b97`在Ted約03:28Z（操作者歷史）原話「快點推」後改為手動、通過IO gate，after pointer為第二次 `acc0a813`。
+Production after首試 `cb9c333f`於capture失敗、`daily_backup_cleanup_failed`／cleanupVerified=false；dump547秒後連線中斷。事後唯讀確認無殘留container／session、policy已disabled，未需或執行清理；第二次dump156秒成功，不覆寫首試。
+網路probe loss與04:13–04:46Z不穩窗口另列操作者觀察；path watcher於04:47Z健康後才重試，staging after無另錄mtr；不能改寫為全程乾淨路徑。
+Q5由Q4加入E觀察timer label與F合格自然備份pointer；Codex約01:55Z容量中斷exit1後同session續跑。Sandbox audit的mount拒絕保留；完整audit其後於sandbox外RUNBOOK steps0／1均exit0、隨後02:13:34Z receive，stdout計數屬操作者歷史、非repo evidence；02:02:45Z fixture驗證四命令exit0另列。
+兩次READ ONLY rehearsal均189／188列／floor36bec661，staging為 `timers_active_observed`、production為 `timers_paused_observed`，不是部署授權。
+Production公開smoke04:12:20.537Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過、最終 `14279926`；首次timer restore因錯過04:33:02Z production slot而拒絕、未啟動timer。依RUNBOOK於05:01:34Z只啟動production timer，catch-up `98d243d1`通過；兩service inactive／PID0後停timers、原程式重跑於05:12:56Z恢復active／enabled，排程／argv不變。
+Catch-up是operator啟動timer觸發，S10自然calendar-slot仍 `not_observed_for_new_wrapper`；下次10-27約03:34Z staging／04:33Z production。Deployments success為7324602016／20590722672、7324602177／20590723478。
+無staging acceptance window，會員UX為 `not_run`；真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留；隔離還原不授權公開資料。
+
+## 2026-10-25 main 1f7aee36 發布完成（遊戲結束少一次繪製）
+
+截至19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`／189；完整證據見[發布收據](rollout-main-1f7aee36-2026-10-25.json)。
+會員幾乎沒有可見變化：最多是 #1058 的 AbsurdDaily 最後分類後少一次重複繪製；其餘為測試、文件、無行為變更的重構或OFF旗標後的程式。
+前版以來兩個first-parent merges：#1064原樣整合 #1022／#1023／#1031／#1042；#1067原樣整合 #1053／#1058。
+#1042買家同意已發布商店政策仍無作用：兩環境 `FREEDOM_STORE_POLICIES_ENABLED` 不存在、OFF，checkout亦OFF；須由owner開啟兩者才會呈現。
+Main Verify 40219224039 attempt1的17個jobs、CodeQL 40219224127的3個jobs成功；無migration，READ ONLY核對188列ledger，schema189與 `36bec661`／189回退下限不變，Q4未建立新floor。
+27個既有旗標加contact retention `all`、各37 vars、路由與cron均不變；無新增線上 `FREEDOM_*` 名稱。
+Kit在 #1064 合併前以provisional batch head／授權建立；Follow-up0補安全診斷與rehearsal wrappers，Follow-up1改選S8／新授權，Follow-up2改選S9。
+S8 Verify 40208964551三次未成功：回條clock flake、native compile timeout後由orchestrator取消、guild-member-tiers timeout連帶duplicate key；細節為操作者歷史。#1053修首項，S8未receive／bind／deploy。
+兩組S8 staging before備份 `4b32ec82`（15:56:55.913Z）、`f2efe8e7`（17:22:07.856Z）均passed但未作pointer：前者無法滿足2h窗口，兩者亦早於S9的18:01:38.931Z授權，原證據保留。
+四組正式備份通過讀回、隔離DB／物件還原及清理：staging before `be5309c9`／after `f646857e`，production before `384c830a`／after `e7b182bc`；before在Q3 installed after-wrapper run dir，Q4保留pointer。
+每次備份前均執行IO／最終hop TCP mtr／DB RTT；staging before丟包10%，after 20次探測30%後重跑30次0%／RTT183ms；production before10%／177ms、after20%／179ms，延遲穩定，僅列操作者觀察，不改寫為乾淨路徑。
+兩次READ ONLY rehearsal均為 `rehearsed_readonly_not_deploy_authorized`／189／188列／floor36bec661；staging timers active，production已由step7暫停而inactive，常數 `timers_active_expected` 不代表實際active，符合RUNBOOK10b。
+Production公開唯讀smoke19:32:15.364Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過，最終綁定 `64bdeee1`；19:44:03.881729Z原timers恢復active／enabled、排程／argv不變；Deployments success為7318209181／20564861826、7318209366／20564862554。
+無staging acceptance window，會員UX為 `not_run`；自然排程仍 `not_observed_for_new_wrapper`，真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+保留Follow-up2 sandbox的managed mount modes拒絕歷史；完整offline audit其後於sandbox外RUNBOOK steps0／1均exit0，屬操作者歷史、非repo evidence；隔離還原不授權公開資料。
+
 ## 2026-10-25 main 758cabe2 發布完成（搜尋可見的 Repo 名稱）
 
 截至11:58 UTC，兩環境已部署 `758cabe2`／schema189，接續 `36bec661`／189；完整證據見[發布收據](rollout-main-758cabe2-2026-10-25.json)。

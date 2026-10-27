@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {test,expect,type Page} from './fixtures.js';
+import {installArCaptureDiagnostics,withArCaptureFailureAttachment} from '../fixtures/community-ar/capture-diagnostics.js';
 import {createArExperience} from '../../packages/asset-storage/ar-target.js';
 
 const pattern=readFileSync(new URL('../fixtures/community-ar/card.mind',import.meta.url));
@@ -83,11 +84,12 @@ test('AR-UI-04 narrow/mobile/desktop editor keeps controls reachable with all ex
   await expect.poll(()=>page.evaluate(()=>(window as any).arPreviewVideo.currentTime)).toBeGreaterThan(0);
   await page.getByRole('button',{name:'文字',exact:true}).click();expect(await page.evaluate(()=>(window as any).arPreviewVideo.paused)).toBe(true);
 });
-test('AR-UI-05 actual replay camera renders a tracked overlay, captures a photo and lights selected platform logos',async({page,e2eAuthPool})=>{
+test('AR-UI-05 actual replay camera renders a tracked overlay, captures a photo and lights selected platform logos',async({page,e2eAuthPool},testInfo)=>{
   test.setTimeout(90000);await e2eAuthPool.query("UPDATE domain_media_storage_policy SET mode='r2_only',policy_revision='synthetic-e2e-ar-v1',persistence_allowed=true,retained_byte_limit=104857600 WHERE purpose='member.ar-target'");await login(page);
   const path=await publish(page,createArExperience(pattern,{version:1,kind:'effect',text:'Synthetic camera overlay',effect:'sparkle'}),'Synthetic AR camera');
   await page.route('**/_ar-test/positive.webm',route=>route.fulfill({contentType:'video/webm',body:readFileSync(new URL('../fixtures/community-ar/positive.webm',import.meta.url))}));
   await page.addInitScript(()=>{Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{const replay=document.createElement('video');replay.src='/_ar-test/positive.webm';replay.loop=true;replay.muted=true;replay.playsInline=true;await replay.play();await new Promise<void>(resolve=>replay.requestVideoFrameCallback(()=>resolve()));(window as any).arReplay=replay;const stream=(replay as HTMLVideoElement&{captureStream:()=>MediaStream}).captureStream();(window as any).arTestStream=stream;return stream;}});});
+  await page.addInitScript(installArCaptureDiagnostics);
   await page.goto(path);await expect(page.getByRole('button',{name:'開啟相機',exact:true})).toBeEnabled();await page.getByRole('button',{name:'開啟相機',exact:true}).click();
   // Observe both in one browser turn: replay tracking can disappear between reads.
   await expect.poll(()=>page.evaluate(()=>{
@@ -101,7 +103,10 @@ test('AR-UI-05 actual replay camera renders a tracked overlay, captures a photo 
   }),{timeout:30000,intervals:[100]}).toBe(true);
   await expect(page.locator('.ar-spatial-layer')).toHaveAttribute('data-renderer','webgl');
   await expect.poll(async()=>Number(await page.locator('.ar-spatial-layer').getAttribute('data-triangles'))).toBeGreaterThan(0);
-  await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+  await withArCaptureFailureAttachment(async()=>{
+    await page.getByRole('button',{name:'拍照',exact:true}).click();await expect(page.getByRole('img',{name:'剛拍攝的相機與 AR 合成照片'})).toBeVisible();
+  },()=>page.evaluate(()=>(window as unknown as {__arCaptureDiagnosticRead:()=>unknown}).__arCaptureDiagnosticRead()),
+  body=>testInfo.attach('ar-capture-stages.json',{body,contentType:'application/json'}));
   await page.getByRole('button',{name:'X',exact:true}).click();await expect(page.getByRole('button',{name:'X',exact:true})).toHaveAttribute('aria-pressed','true');await page.getByRole('button',{name:'Facebook',exact:true}).click();await expect(page.getByRole('button',{name:'Facebook',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page.getByRole('button',{name:'繼續掃描',exact:true})).toBeEnabled();
   await expect.poll(()=>page.evaluate(()=>(window as any).arTestStream.getTracks().every((track:MediaStreamTrack)=>track.readyState==='ended'))).toBe(true);

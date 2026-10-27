@@ -151,8 +151,8 @@ if (enabled) test('no-key and revoked-key members save avatars in shared R2 whil
   const session = await page.request.get('/api/v1/session');
   expect(session.status()).toBe(200);
   const csrf = (await session.json()).csrf_token as string;
-  await navigate(page, '私人工作與 AI');
-  await expect(page.getByRole('heading', { level: 1, name: '私人工作與 AI' })).toBeVisible();
+  await navigate(page, '私人 AI 工作室');
+  await expect(page.getByRole('heading', { level: 1, name: '私人 AI 工作室' })).toBeVisible();
   await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '執行一次推論', exact: true })).toHaveCount(0);
   for (const path of ['/api/v1/me/model-settings', '/api/v1/me/model-steps', '/api/v1/me/model-credentials', '/api/v1/me/credential-ingests']) {

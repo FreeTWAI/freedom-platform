@@ -1,0 +1,10 @@
+/* Only the community-work pagination action; other Work controls keep their variants. */
+.workbench-load-more.btn-secondary {
+  background: var(--bg-elev);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.workbench-load-more.btn-secondary:hover:not(:disabled),
+.workbench-load-more.btn-secondary:focus-visible {
+  border-color: var(--focus);
+}

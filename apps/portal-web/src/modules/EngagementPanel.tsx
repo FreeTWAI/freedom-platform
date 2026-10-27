@@ -3,6 +3,7 @@ import { requireItems } from '../api'
 import { client, usePortal, describeError, type ActionError, type PortalContextValue } from '../portal-session'
 import { ErrorPanel } from '../portal-feedback'
 import { ModuleBanner } from './ModuleBanner'
+import { WorkSharingEntry } from './WorkSharingEntry'
 import { engagementStateLabel, formatIsoLocal, formatMinor, localInputToIso, looksLikeUrl, parseMajorToMinor } from '../format'
 import type { Engagement } from '../types'
 
@@ -37,6 +38,7 @@ export function EngagementPanel() {
 
   return (
     <div className="panels">
+      <WorkSharingEntry current="engagement"/>
       <ModuleBanner eyebrow="JOURNAL / 一起完成的旅程" title="約定、交付與確認" description=""/>
       <FlowLegend />
       <p className="lede">
@@ -45,7 +47,7 @@ export function EngagementPanel() {
       {engagements.length === 0 ? (
         <div className="empty">
           <strong>還沒有合作紀錄</strong>
-          <p>先到<a href="#showcase">作品與需求</a>分享作品或提出需求；作者提出合作後，雙方都會在這裡看到紀錄。</p>
+          <p>先到<a href="#showcase">作品與合作</a>分享作品或提出需求；作者提出合作後，雙方都會在這裡看到紀錄。</p>
         </div>
       ) : (
         <div className="card-grid">

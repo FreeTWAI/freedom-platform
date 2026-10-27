@@ -89,7 +89,7 @@
 11. 測試 harness：`tests/runtime/module-registry-harness.ts` 與 `scripts/e2e-server.ts` 若需要新表的權限要一起改。
 12. 有契約變更時重新產生（`modules/guild-workspace/generate-contracts.ts`）。
 13. 升級測試：舊資料在新 schema 下仍成立。例如 `tests/runtime/hosted-direct-orders.test.ts` 的 v1 fixture 要配合 168 新增的 FK 改用 `CASCADE` 重建。
-14. 最後才跑 `python3 -B scripts/update-inventory.py`，再 `npm run verify:inventory`；改了前端先 `npm run build` 再跑瀏覽器測試。
+14. 日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。改了前端先 `npm run build` 再跑瀏覽器測試。
 
 ## 5. 來源權利（DC07）
 

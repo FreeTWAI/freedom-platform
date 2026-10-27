@@ -1,0 +1,411 @@
+{
+  "format": "freedom.main-rollout/v1",
+  "kind": "sanitized_operator_observations",
+  "issue": "https://github.com/FreeTWAI/freedom-platform/issues/234",
+  "status": "deployed_public_smoke_passed_natural_backup_pending",
+  "recorded_at": "2026-10-26T13:57:27.111935+00:00",
+  "evidence_cutoff_at": "2026-10-26T13:49:45.532745+00:00",
+  "status_breakdown": {
+    "deployed": "兩環境S10→S11，schema189→189；均首試成功。",
+    "member_visible_change": "技能書架與社群技能書加入用途／分類篩選（#1024）；社群統一文字／連結發文、失敗列表重試保留閱讀位置，已確認互動不被舊讀取或遲到回條覆蓋，未知編輯／Short按讚可明確確認（#1044）。公會公告保留未確認意圖，公會操作回應受原元件／session約束（#1073、#1081）；租戶成員呈現拆分無預期行為變更（#1082）。功能搜尋可帶詞進社群搜尋（#1040）；會員可開啟依既有頁面說明運作的確定性站內助手（#1054，非生成式AI）。測試員地圖提供分關任務／功能狀態（#1046）；新手村提供15題反思測驗、19職業對應18公會與方向卡（#1060）。兩者進度／勳章僅存本機，不是XP、正式測試或入會紀錄；同步與排行榜未實作。",
+    "public_smoke": "Production 14項通過，health首試符合。",
+    "operator_dispatcher": "nightly adapters已重綁；檔案安裝不代表執行備份。",
+    "natural_scheduled_backup": "not_observed_for_new_wrapper",
+    "member_ux_acceptance": "not_run"
+  },
+  "source": {
+    "selected_release": "274f0614208552e73c734108e73494503cf30c66",
+    "tree": "5e2388bc9e5d91fbdbebc18a5678d9e5206ee9b9",
+    "parents": [
+      "95aae4daccb01eabfca6feff551a7f8f3b9a178d",
+      "90e9a6c6a7e45c32ae65ba5b293078ee80830923"
+    ],
+    "merge_pr": 1090,
+    "included_prs": [
+      1076,
+      1079,
+      1078,
+      1085,
+      1087,
+      1090
+    ],
+    "previous_release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+    "schema": 189,
+    "migrations_applied": [],
+    "first_parent_chain": [
+      {
+        "pr": 1076,
+        "source": "700a7d3526e7e7325ed10b5e51b2f6597264be28",
+        "integrated_prs": [],
+        "scope": "#1076：private image／安裝檢查與既有版本接手。"
+      },
+      {
+        "pr": 1079,
+        "source": "3dd3850a59d2d3690feed88ba6878371a9bbf527",
+        "integrated_prs": [],
+        "scope": "#1079：token類型與health redirect錯誤說明。"
+      },
+      {
+        "pr": 1078,
+        "source": "d99d7b540cdffe869e5a6d67ce62bedbeb3835a7",
+        "integrated_prs": [
+          1024,
+          1073,
+          1075,
+          1077
+        ],
+        "scope": "技能書用途篩選、公會公告未知結果保留；S9文件與AD5測試預算。"
+      },
+      {
+        "pr": 1085,
+        "source": "b267f472f9a0a0a8108175110c7570bd7babee50",
+        "integrated_prs": [
+          1044,
+          1081,
+          1082,
+          1084
+        ],
+        "scope": "社群發文／讀寫順序、公會操作元件隔離、租戶成員呈現重構與AD6測試等待。"
+      },
+      {
+        "pr": 1087,
+        "source": "95aae4daccb01eabfca6feff551a7f8f3b9a178d",
+        "integrated_prs": [],
+        "scope": "shared備份失敗清理核對、每小時handoff檢查及owner指定每日排程恢復。"
+      },
+      {
+        "pr": 1090,
+        "source": "274f0614208552e73c734108e73494503cf30c66",
+        "integrated_prs": [
+          1040,
+          1046,
+          1054,
+          1060,
+          1083
+        ],
+        "scope": "搜尋帶詞、測試員地圖、站內助手、新手村與S10收據。"
+      }
+    ],
+    "shared_release": {
+      "release_enabled": false,
+      "backup_enabled": false,
+      "executed_by": "local Q6 kit",
+      "enablement_basis": "authorization.json orchestrator observation，非本文件工作另查線上設定。"
+    },
+    "main_verify": {
+      "run_id": 40323233554,
+      "attempt": 1,
+      "job_count": 17,
+      "status": "completed",
+      "conclusion": "success",
+      "run_receipt_sha256": "5404ef57b99ddedf68f77d1d97406c7adeef221628a733cdea9fda98f3caa0f6",
+      "jobs_receipt_sha256": "31adfa471861a0242f9fab328e55c681572a5a654f584cd5d11acc1a62e0186b"
+    },
+    "main_codeql": {
+      "run_id": 40323233590,
+      "attempt": 1,
+      "job_count": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "run_receipt_sha256": "9d53fad76f9acd1de9d150e1f0c54058f35645ced485cf5a56ffd2747eadc88e",
+      "jobs_receipt_sha256": "946940826d8c37173b0f558621773b068774d38963e458513909e579878be982"
+    },
+    "dist_sha256": "3b84285ee86d3cacb0483f048ee5a3012afc330856850e8fbf367e26b500c462",
+    "dist_file_count": 448
+  },
+  "targets": {
+    "staging": {
+      "status": "complete",
+      "release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "previous_release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "worker_version": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
+      "previous_worker_version": "7677d18e-3403-40b2-9cae-cd2527dddfdf",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "058fa52852fa6ff005f973f50076f746f2714dae4f2aa5283811ec848ba14a60",
+      "deploy_attempts": 1,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "staging",
+        "runtime": "cloudflare-workers",
+        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
+        "cache_control_no_store": true
+      },
+      "worker_binding_observed_at": "2026-10-26T13:46:06.318Z",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "true",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "true",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": [],
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [],
+      "migration": {
+        "status": "not_run_schema_unchanged",
+        "schema_before": 189,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "read_only": true,
+        "schema_unchanged_receipt_sha256": "ae8eb7b4da96a4291a080b2043780a7346d7e104a0d8a7b04d450c570bbdda5f",
+        "rollback_floor": {
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "new_floor_created": false,
+        "observation_basis": "成功deploy gate要求READ ONLY逐列ledger相等；未另保留帶時間的查詢收據。"
+      },
+      "github_deployment": {
+        "environment": "staging-next",
+        "deploymentId": 7333544107,
+        "statusId": 20628325986,
+        "state": "success"
+      },
+      "acceptance": {
+        "status": "not_run",
+        "scope": "僅deploy health／homepage／binding檢查，無會員驗收window。"
+      }
+    },
+    "production": {
+      "status": "complete",
+      "release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "previous_release_sha": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "worker_version": "145cd129-3d8a-49af-aa4e-5b5b7947c079",
+      "previous_worker_version": "b03e839f-17b3-4a06-88ed-fa7f53aaa4d4",
+      "traffic_percentage": 100,
+      "deployment_receipt_sha256": "e7ff2d052fae373c030652bcee13262072f3c91d2b6b6eef62e69c13b616a309",
+      "deploy_attempts": 1,
+      "health": {
+        "http": 200,
+        "status": "ok",
+        "mode": "public",
+        "runtime": "cloudflare-workers",
+        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
+        "cache_control_no_store": true
+      },
+      "worker_binding_observed_at": "2026-10-26T13:48:57.954Z",
+      "route_unchanged": true,
+      "cron": [
+        "*/10 * * * *"
+      ],
+      "flags": {
+        "FREEDOM_COMMERCE_CHECKOUT_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONSOLE_ENABLED": "true",
+        "FREEDOM_COMMERCE_EMAIL_ENABLED": "false",
+        "FREEDOM_COMMERCE_QUARANTINE": "false",
+        "FREEDOM_COMMUNITY_SEARCH_ENABLED": "true",
+        "FREEDOM_DISTRIBUTION_PHOTOS_ENABLED": "false",
+        "FREEDOM_EVENT_BANNER_ENABLED": "true",
+        "FREEDOM_EVENT_HIGHLIGHT_ENABLED": "true",
+        "FREEDOM_EVENT_VIDEO_ENABLED": "true",
+        "FREEDOM_GUILD_LAUNCHPAD_ENABLED": "true",
+        "FREEDOM_HOSTED_RESERVATIONS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTOS_ENABLED": "true",
+        "FREEDOM_HOSTED_STORE_PHOTO_UPLOADS_ENABLED": "true",
+        "FREEDOM_MEMBER_BLOCKING_ENABLED": "true",
+        "FREEDOM_MESSAGE_IMAGE_ENABLED": "true",
+        "FREEDOM_NOTIFICATION_PREFERENCES_ENABLED": "true",
+        "FREEDOM_PASSWORD_RESET_EMAIL_ENABLED": "true",
+        "FREEDOM_PERSONAL_CONTENT_ENABLED": "true",
+        "FREEDOM_PRIVATE_AI_ENABLED": "false",
+        "FREEDOM_PUBLIC_GUIDE_ENABLED": "true",
+        "FREEDOM_SERVICE_COVER_ENABLED": "true",
+        "FREEDOM_SHORT_VIDEOS_ENABLED": "true",
+        "FREEDOM_SKILL_IMAGE_ENABLED": "true",
+        "FREEDOM_SOCIAL_THUMBNAIL_ENABLED": "true",
+        "FREEDOM_SUPPLIER_CONSOLE_ENABLED": "true",
+        "FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED": "false",
+        "FREEDOM_SUPPLY_MATERIAL_UPLOADS_ENABLED": "false",
+        "FREEDOM_COMMERCE_CONTACT_RETENTION": "all"
+      },
+      "flag_changes": [],
+      "plain_var_count": 37,
+      "unchanged_live_flag_count": 27,
+      "unchanged_setting_count": 28,
+      "new_live_freedom_names": [],
+      "migrations_applied": [],
+      "migration": {
+        "status": "not_run_schema_unchanged",
+        "schema_before": 189,
+        "schema_after": 189,
+        "ledger_rows": 188,
+        "read_only": true,
+        "schema_unchanged_receipt_sha256": "ae8eb7b4da96a4291a080b2043780a7346d7e104a0d8a7b04d450c570bbdda5f",
+        "rollback_floor": {
+          "minimumSchema": 189,
+          "candidateRelease": "36bec661d8e87759cbb5af4796816032bfcc0073"
+        },
+        "new_floor_created": false,
+        "observation_basis": "成功deploy gate要求READ ONLY逐列ledger相等；未另保留帶時間的查詢收據。"
+      },
+      "github_deployment": {
+        "environment": "next",
+        "deploymentId": 7333544519,
+        "statusId": 20628327649,
+        "state": "success"
+      },
+      "acceptance": {
+        "status": "passed",
+        "receipt_sha256": "efa233839b5eb95ed9d56c19196e4463090fb3c64d581ba5f8970eacb567e93d",
+        "started_at": "2026-10-26T13:49:11.561Z",
+        "completed_at": "2026-10-26T13:49:22.873Z",
+        "check_count": 14,
+        "health_attempts": [
+          {
+            "attempt": 1,
+            "at": "2026-10-26T13:49:11.564Z",
+            "http": 200,
+            "status": "ok",
+            "release_sha": "274f0614208552e73c734108e73494503cf30c66",
+            "matched": true
+          }
+        ],
+        "liveAdminWorkerCsp": "not_observed_access_protected",
+        "adminCspSource": "exact_source_function",
+        "csp_scope": "首頁允許youtube-nocookie frame；付款路徑無frame-src。admin兩路徑Access302，未觀察live admin Worker CSP，只驗精確來源函式。",
+        "member_login": false,
+        "orders_created": 0,
+        "member_ux_acceptance": "not_run"
+      }
+    }
+  },
+  "daily_operator": {
+    "status": "both_sources_bound_timers_stayed_active",
+    "source_by_environment": {
+      "staging": "274f0614208552e73c734108e73494503cf30c66",
+      "production": "274f0614208552e73c734108e73494503cf30c66"
+    },
+    "transitions": [
+      {
+        "stage": "staging",
+        "before": "14279926a002fc7003a95ccb79f5a4acbf91648e64f4913914717994d4b59401",
+        "after": "c723ae3d2458792351b8047b36da935c936e471d02b81da37109e6f34efca973",
+        "status": "installed",
+        "source_by_environment": {
+          "staging": "274f0614208552e73c734108e73494503cf30c66",
+          "production": "b14916ccd75cff70bcd4ba979088ddd8c3d88583"
+        },
+        "transition_log_sha256": "82df42e4cb060070aaf3ef02a51aa1d367299c0f20a2721509ff4efeb91b236a"
+      },
+      {
+        "stage": "both",
+        "before": "c723ae3d2458792351b8047b36da935c936e471d02b81da37109e6f34efca973",
+        "after": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c",
+        "status": "installed",
+        "source_by_environment": {
+          "staging": "274f0614208552e73c734108e73494503cf30c66",
+          "production": "274f0614208552e73c734108e73494503cf30c66"
+        },
+        "transition_log_sha256": "874915546d68af81cab761d70c374416f573e2f385e4e5b7555518464410b238"
+      }
+    ],
+    "natural_scheduled_run": "not_observed_for_new_wrapper",
+    "next_natural_runs_utc": {
+      "staging": "2026-10-27約03:34Z",
+      "production": "2026-10-27約04:33Z"
+    },
+    "unit_or_schedule_changed": false,
+    "limitation": "僅nightly binding檔案安裝；本次未執行備份。",
+    "dispatcher_sha256": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c"
+  },
+  "owner_authorization": {
+    "owner": "Ted",
+    "observed_at": "2026-10-26T12:49:27.724Z",
+    "instruction": "當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了",
+    "authorization_sha256": "cc6dfcd726f0096a3ba41bca85963b0ab3624bb54ca4a9f1aaa5a583100313fc",
+    "authorization_record": "release-kit-274f0614.authorization.json",
+    "orchestrator_decision": {
+      "decided_at": "2026-10-26T12:49:27.724Z",
+      "status": "release_decision"
+    },
+    "owner_no_backup_decision": {
+      "record": "release-kit-274f0614.owner-no-backup.json",
+      "sha256": "79c73579c65265bd1f7bb7fe258fe343f9eca89f12ab0fc08d1e7b4fc1d797a0",
+      "recorded_at": "2026-10-26T12:58:44.280Z",
+      "verbatim": "部署流程不要去管備份了. 我們平常有備份就好 + github 本來就有版本的概念, 搞什麼"
+    },
+    "member_ux_acceptance": "not_run"
+  },
+  "backup_policy": "依owner決定，本次沒有before／after備份或backup gate，故省略備份／restore／pause／restore timer欄位；每日備份為資料復原點，Git為程式復原點。Timers維持active；deploy-start.mjs與dispatcher每步拒絕03:00–05:45Z或backup service active／PID非0。",
+  "attempts_preserved": [
+    {
+      "job": "release-kit-274f0614.fu1",
+      "event": "Selected model is at capacity",
+      "continuation": "同session續跑",
+      "evidence": "release-kit-274f0614.fu1.resume1.md；report.md Follow-up 1記錄完成後結果。",
+      "scope": "kit作者工作中斷，非部署失敗；兩環境deploy與production smoke均首試成功。"
+    }
+  ],
+  "historical_evidence_preserved": [
+    "rollout-main-b14916cc-2026-10-26.json；舊closeout段落維持原bytes。",
+    "production-public-smoke.json的priorFailedAttempt為歷史Short發布，非S11失敗。"
+  ],
+  "limitations": [
+    "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
+    "shared工具已合併但未啟用；checkout與交易Email仍OFF。",
+    "兩個tester quest旗標名稱僅在modules/tester-map/COORDINATION.md，本次未設定。"
+  ],
+  "evidence_directory": "freedom-release-274f0614-20261026",
+  "observations": [
+    "技能書架與社群技能書加入用途／分類篩選（#1024）；社群統一文字／連結發文、失敗列表重試保留閱讀位置，已確認互動不被舊讀取或遲到回條覆蓋，未知編輯／Short按讚可明確確認（#1044）。公會公告保留未確認意圖，公會操作回應受原元件／session約束（#1073、#1081）；租戶成員呈現拆分無預期行為變更（#1082）。功能搜尋可帶詞進社群搜尋（#1040）；會員可開啟依既有頁面說明運作的確定性站內助手（#1054，非生成式AI）。測試員地圖提供分關任務／功能狀態（#1046）；新手村提供15題反思測驗、19職業對應18公會與方向卡（#1060）。兩者進度／勳章僅存本機，不是XP、正式測試或入會紀錄；同步與排行榜未實作。"
+  ],
+  "not_run": {
+    "member_ux_acceptance": {
+      "status": "not_run",
+      "reason": "無會員驗收window。"
+    },
+    "migration": {
+      "status": "not_run",
+      "reason": "schema189不變。"
+    },
+    "release_backups": {
+      "status": "not_run",
+      "reason": "owner明確取消。"
+    },
+    "shared_actions_activation": {
+      "status": "not_run",
+      "reason": "RELEASE_ENABLED／BACKUP_ENABLED仍false。"
+    },
+    "natural_s11_backup": {
+      "status": "not_run",
+      "reason": "10/27自然排程尚未觀察。"
+    }
+  },
+  "kit_corrections": [
+    "Follow-up 1依owner決定移除發布備份／IO／timer pause與restore；保留每日排程adapter與啟動限制。"
+  ],
+  "offline_verification": {
+    "scope": "本文件工作未重跑kit；report.md Follow-up 1記錄最終234 fixture tests通過，sandbox audit只拒絕4個managed mounts。此為kit準備歷史，非發布失敗或本輪驗證。"
+  }
+}

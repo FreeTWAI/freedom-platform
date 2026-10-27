@@ -9,11 +9,13 @@ import { validateDescriptor, ROOT_INSTRUCTIONS, selectImpact, owns } from '../..
 import {
   ALWAYS_ON_INTEGRITY_COMMANDS, DOCS_ALLOWLIST_PREFIXES, GENERATED_INVENTORY_PATH, JOB_OUTPUT_KEYS, SELECTABLE_JOBS, FRONTEND_LEAF_PROFILES, FRONTEND_LEAF_JOBS,
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
-  heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
-  HANDOFF_DOCS_PATHS, HANDOFF_DOCS_JOBS, decideHandoffDocsProfile,
+  deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
+  MINIMAL_JOB_PROFILES, decideMinimalProfile, decideCiToolsProfile, ciToolsWorkflowProven, ciToolsSchemaProven,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { PINNED_SUITES } from '../../packages/contribution-tools/pinned-suites.mjs';
+import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const selector = fileURLToPath(new URL('./select-affected-jobs.mjs', import.meta.url));
@@ -221,7 +223,7 @@ test('new workflows keep every job selected, including beside docs and generated
   }
 });
 
-test('the generated inventory is metadata only beside an allowlisted document', () => {
+test('the historical inventory is metadata beside docs and qualifies as a plan document alone', () => {
   const inventoryOwner = [moduleDescriptor('governance', ['modules/example/**', 'docs/platform-plan/verification/**'])];
   const accompanied = pull([
     edited('docs/development/notes.md'), edited(GENERATED_INVENTORY_PATH, 'A'),
@@ -230,7 +232,7 @@ test('the generated inventory is metadata only beside an allowlisted document', 
   assert.equal(accompanied.reason, 'docs_allowlist');
   for (const id of SELECTABLE_JOBS) assert.equal(accompanied.jobs[id], false);
   assert.equal(accompanied.jobs['runtime-full'], accompanied.jobs['runtime-aggregate']);
-  assert.equal(pull([edited(GENERATED_INVENTORY_PATH)], { baseline: inventoryOwner, candidate: inventoryOwner }).reason, 'governance_security_or_shared_runtime');
+  assert.equal(pull([edited(GENERATED_INVENTORY_PATH)], { baseline: inventoryOwner, candidate: inventoryOwner }).reason, 'plan_receipt_docs');
   assert.equal(pull([edited(GENERATED_INVENTORY_PATH, 'D')]).reason, 'deleted_path');
   assert.equal(pull([{ path: GENERATED_INVENTORY_PATH, previousPath: 'docs/development/old.md', status: 'R' }]).reason, 'renamed_or_copied_path');
   assert.equal(pull([edited('docs/development/notes.md'), edited(GENERATED_INVENTORY_PATH), edited('docs/platform-plan/verification/verify_revision.py')]).reason, 'governance_security_or_shared_runtime');
@@ -415,7 +417,7 @@ const knownDomainPaths = [
 function knownDomainGraph() {
   // Match the existing real-checkout tests: CI tests the committed candidate.
   const graph = loadModuleDescriptors(root, 'HEAD');
-  assert.equal(graph.ok, true, 'including implicit descriptor ownership within the 64-path bound');
+  assert.equal(graph.ok, true, 'including implicit descriptor ownership within the 256-path bound');
   return graph.descriptors;
 }
 
@@ -491,17 +493,17 @@ test('descriptor self-ownership respects the path bound and fails closed when no
       GIT_COMMITTER_NAME: 'Selector Test', GIT_COMMITTER_EMAIL: 'selector@example.invalid'},
   }).trim();
   const path = 'modules/example/freedom.module.json';
-  const extras = Array.from({length: 64}, (_, index) => `modules/other/file-${index}.ts`);
+  const extras = Array.from({length: 256}, (_, index) => `modules/other/file-${index}.ts`);
   await mkdir(dirname(join(directory, path)), {recursive: true});
   git(['init', '-q', '-b', 'main']);
-  for (const covered of [true, false]) for (const count of [63, 64]) {
+  for (const covered of [true, false]) for (const count of [255, 256]) {
     const paths = covered ? ['modules/example/**', ...extras.slice(0, count - 1)] : extras.slice(0, count);
     await writeFile(join(directory, path), JSON.stringify(moduleDescriptor('example', paths)));
     await writeFile(join(directory, 'README.md'), '# Before\n');
     git(['add', '.']); git(['commit', '-qm', `coverage=${covered} count=${count}`]);
     const base = git(['rev-parse', 'HEAD']);
     const loaded = loadModuleDescriptors(directory, base);
-    assert.equal(loaded.ok, covered || count < 64);
+    assert.equal(loaded.ok, covered || count < 256);
     if (loaded.ok) {
       const [descriptor] = loaded.descriptors;
       validateDescriptor(descriptor);
@@ -799,6 +801,14 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
   assert.match(consumers, /--suite ci\.consumer-repositories/);
   assert.match(jobBlock(text, 'deploy-preflight'), /--suite ci\.deploy-preflight/);
   assert.match(jobBlock(text, 'deploy-preflight'), /--suite ci\.migration-postgres/);
+});
+
+test('static-worker runs its existing Worker suite without a provider status wait', async () => {
+  const workflow = await readFile(workflowPath, 'utf8'), block = jobBlock(workflow, 'static-worker');
+  assert(!block.includes('worker-provider'));
+  assert(!block.includes('worker-status'));
+  assert(!block.includes('statuses: read'));
+  assert.match(block, /--suite ci\.worker-unit\n        env:/);
 });
 
 test('deploy preflight caches npm downloads before its clean install', async () => {
@@ -1193,151 +1203,124 @@ test('additional composition runtime ownership keeps the guide browser obligatio
   }
 });
 
-function handoffDescriptors() {
-  return [
-    moduleDescriptor('governance', [HANDOFF_DOCS_PATHS[3], HANDOFF_DOCS_PATHS[4], GENERATED_INVENTORY_PATH], {tests:['governance.unit', 'runtime.full']}),
-    ...['agent-commerce', 'hosted-distribution', 'asset-lifecycle'].map(id => moduleDescriptor(id, [`modules/${id}/**`])),
-    moduleDescriptor('supplier-console', [HANDOFF_DOCS_PATHS[1]], {
-      dependencies:['agent-commerce', 'hosted-distribution', 'asset-lifecycle'], tests:['runtime.full', 'e2e.harness']}),
-    moduleDescriptor('guild-supply', ['modules/guild-supply/**'], {dependencies:['supplier-console'], tests:['runtime.guild-blocks']}),
-    moduleDescriptor('application-composition', ['apps/platform-api/**'], {dependencies:['guild-supply'], tests:['runtime.full']}),
-    moduleDescriptor('commerce-publication', ['modules/agent-commerce/publication/**'], {
-      dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}),
-  ];
-}
-function handoffInput(paths = HANDOFF_DOCS_PATHS, extra = {}) {
-  const graph = handoffDescriptors();
-  return {event:'pull_request', diffComplete:true, nonExecutableBlobsProven:true, descriptorsProven:true,
-    changes:paths.map(path => edited(path)), baseline:graph, candidate:graph, ...extra};
-}
-const handoffSelection = () => ({mode:'affected', reason:'informational_handoff_docs',
-  jobs:Object.fromEntries(SELECTABLE_JOBS.map(id => [id, HANDOFF_DOCS_JOBS.includes(id)]))});
+const planReceiptPaths = [
+  'docs/platform-plan/execution/guild-launchpad/README.md',
+  'docs/platform-plan/execution/unified-foundation/closeout.md',
+  'docs/platform-plan/execution/unified-foundation/current-state.json',
+  'docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json',
+  GENERATED_INVENTORY_PATH,
+];
+const minimalSelection = reason => ({mode: 'affected', reason,
+  jobs: Object.fromEntries(SELECTABLE_JOBS.map(id => [id, MINIMAL_JOB_PROFILES[reason].includes(id)]))});
 
-test('five exact informational handoffs retain governance consumers, including both workplans', () => {
-  assert.deepEqual(HANDOFF_DOCS_PATHS, [
+test('plan receipts ignore descriptor ownership; real #1083 inputs retain only their Python consumer', () => {
+  const actual = loadModuleDescriptors(root, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim());
+  assert.equal(actual.ok, true);
+  assert.deepEqual(pull(planReceiptPaths.map(path => edited(path)), {baseline:actual.descriptors, candidate:actual.descriptors}),
+    minimalSelection('plan_document_inputs'));
+  for (const path of [planReceiptPaths[1], planReceiptPaths[3], GENERATED_INVENTORY_PATH,
     'docs/platform-plan/execution/commerce/work-plan.md',
     'docs/platform-plan/execution/supplier-console/work-plan.md',
-    'docs/platform-plan/execution/guild-launchpad/README.md',
-    'docs/platform-plan/execution/unified-foundation/closeout.md',
-    'docs/platform-plan/execution/unified-foundation/current-state.json',
-  ]);
-  assert.deepEqual(HANDOFF_DOCS_JOBS, ['governance-consumers']);
-  for (const paths of [...HANDOFF_DOCS_PATHS.map(path => [path]), HANDOFF_DOCS_PATHS,
-    [...HANDOFF_DOCS_PATHS, GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[1], GENERATED_INVENTORY_PATH]]) {
-    assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'informational_handoff_docs');
-  }
-  assert.equal(pull([edited(HANDOFF_DOCS_PATHS[0])]).mode, 'full', 'path-only selector cannot establish integration proof');
-});
-
-test('actual handoff graph retains new reverse consumers and only proven documents keep the narrow lane',()=>{
-  const actual=loadModuleDescriptors(root,execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim());
-  assert.equal(actual.ok,true);
-  for(const path of [HANDOFF_DOCS_PATHS[0],HANDOFF_DOCS_PATHS[2]])
-    assert.equal(decideHandoffDocsProfile(handoffInput([path],
-      {baseline:actual.descriptors,candidate:actual.descriptors})).profile,'informational_handoff_docs',path);
-  const reviewed=handoffDescriptors();
-  for(const [path,consumer,suites] of [
-    [HANDOFF_DOCS_PATHS[1],'platform-api-features',['e2e.harness','runtime.full','runtime.guild-blocks']],
-    [HANDOFF_DOCS_PATHS[3],'contribution-experience',['governance.unit','runtime.full']],
-    [HANDOFF_DOCS_PATHS[4],'contribution-experience',['governance.unit','runtime.full']],
-  ])for(const [baseline,candidate] of [[actual.descriptors,actual.descriptors],[reviewed,actual.descriptors],[actual.descriptors,reviewed]]) {
-    const value=handoffInput([path],{baseline,candidate}),impact=selectImpact({baseline,candidate,changedPaths:[path]});
-    assert.deepEqual(impact.unknown_paths,[],path);
-    assert.ok(impact.module_ids.includes(consumer),path+': '+consumer);
-    assert.deepEqual(impact.tests,suites,path);
-    assert.deepEqual(decideHandoffDocsProfile(value),{profile:'full',reason:'handoff_impact_unproven'},path);
-    const result=decideAffectedJobs(value);
-    assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS],path);
-  }
-  assert.deepEqual(decideHandoffDocsProfile(handoffInput(HANDOFF_DOCS_PATHS,
-    {baseline:actual.descriptors,candidate:actual.descriptors})),{profile:'full',reason:'handoff_impact_unproven'});
-});
-
-test('supplier handoff refuses an unknown reverse consumer even without additional test obligations', () => {
-  const baseline = handoffDescriptors(), expanded = structuredClone(baseline), path = HANDOFF_DOCS_PATHS[1];
-  expanded.push(moduleDescriptor('unknown-supplier-consumer', ['modules/unknown-supplier-consumer/**'], {
-    dependencies:['supplier-console'], tests:['runtime.full', 'e2e.harness']}));
-  assert.deepEqual(selectImpact({baseline:expanded, candidate:expanded, changedPaths:[path]}).tests,
-    selectImpact({baseline, candidate:baseline, changedPaths:[path]}).tests);
-  assert.deepEqual(decideHandoffDocsProfile(handoffInput([path], {baseline:expanded, candidate:expanded})),
-    {profile:'full', reason:'handoff_impact_unproven'});
-});
-
-test('handoff profile refuses unproven events, receipt JSON, controls and non-content changes', () => {
-  const denied = [
-    'docs/platform-plan/execution/unified-foundation/rollout-commerce-buyer-2026-10-17.json',
-    'docs/platform-plan/execution/unified-foundation/rollout-new-2099-01-01.json',
-    'docs/platform-plan/execution/unified-foundation/acceptance.md',
     'docs/platform-plan/execution/unified-foundation/requirement-evidence.json',
-    'docs/platform-plan/execution/commerce/EC-SPEC-01-product-visual.md',
-    'docs/platform-plan/execution/commerce/new-work-plan.md',
-    'docs/platform-plan/execution/supplier-console/README.md',
-    'docs/platform-plan/execution/guild-launchpad/validate-spec-pack.py',
-    'governance/schemas/module.schema.json', 'AGENTS.md', 'CONTRIBUTING.md',
-    '.github/workflows/verify.yml', 'packages/contribution-tools/freedom.module.json',
-    'scripts/ci/select-affected-jobs.mjs', 'scripts/runtime-full.mjs', 'migrations/001_initial.sql',
-    'modules/module-registry/platform-hold.md', 'tests/runtime/flows.test.ts', 'unknown.md',
+    'docs/platform-plan/contracts/README.md']) {
+    assert.deepEqual(pull([edited(path)], {baseline:actual.descriptors, candidate:actual.descriptors}),
+      minimalSelection('plan_receipt_docs'), path);
+  }
+  for (const path of [planReceiptPaths[0], planReceiptPaths[2],
+    'docs/platform-plan/execution/milestones.md', 'docs/platform-plan/execution/spec-index.md',
+    'docs/platform-plan/execution/specs/FND-01.md', 'docs/platform-plan/execution/first-work-batch.md',
+    'docs/platform-plan/execution/acceptance-matrix.md',
+    'docs/platform-plan/execution/guild-launchpad/traceability.json',
+    'docs/platform-plan/execution/guild-launchpad/acceptance-progress.json']) {
+    assert.deepEqual(pull([edited(path)]), minimalSelection('plan_document_inputs'), path);
+  }
+});
+
+test('real #1087 diff retains full selection', () => {
+  // Captured from git diff --name-only b267f472 95aae4da at 274f0614.
+  // Keep the real list without requiring historical objects in shallow PR CI.
+  const paths = [
+    '.github/workflows/shared-backup.yml',
+    'deploy/cloudflare/test/shared-release.test.mjs',
+    'deploy/shared-release/README.md',
+    'deploy/shared-release/backup-cli.mjs',
+    'deploy/shared-release/operator.mjs',
+    'deploy/shared-release/portable/backup-recovery.mjs',
+    'deploy/shared-release/portable/backup.mjs',
+    'deploy/shared-release/portable/entry.mjs',
+    'deploy/shared-release/portable/floor.mjs',
+    'deploy/shared-release/scheduled-admission.mjs',
+    'deploy/shared-release/test/backup-integration.mjs',
+    'tests/e2e/absurd-daily.spec.ts',
   ];
-  for (const path of denied) assert.equal(decideHandoffDocsProfile(handoffInput([HANDOFF_DOCS_PATHS[0], path])).profile, 'full', path);
-  // Original #876 includes a rollout receipt: no whole-PR savings claim.
-  assert.equal(decideHandoffDocsProfile(handoffInput([
-    'README.md', HANDOFF_DOCS_PATHS[2], HANDOFF_DOCS_PATHS[3], HANDOFF_DOCS_PATHS[4], denied[0], GENERATED_INVENTORY_PATH])).profile, 'full');
+  assert(paths.includes('tests/e2e/absurd-daily.spec.ts'), 'record the actual mixed diff instead of silently dropping a file');
+  assert.equal(pull(paths.map(path => edited(path))).mode, 'full');
+});
+
+test('module/app prose skips heavy jobs while real Markdown inputs retain their existing obligations', () => {
+  for (const path of ['modules/tester-map/COORDINATION.md', 'modules/identity-membership/README.md',
+    'apps/portal-web/README.md']) {
+    const graph = [moduleDescriptor('notes', [path])];
+    assert.deepEqual(pull([edited(path)], {baseline:graph}), minimalSelection('module_app_markdown'));
+  }
+  for (const path of ['modules/agent-commerce/operations/notifications/README.md',
+    'modules/module-registry/platform-hold.md', 'modules/guild-supply/README.md',
+    'modules/module-data/AGENTS.md']) assert.equal(pull([edited(path)]).mode, 'full', path);
+  // Existing guild presentation integration/dependency tests still exercise its profile.
+  assert.equal(pull([edited('apps/portal-web/src/App.tsx')]).mode, 'full');
+  const graph = FRONTEND_LEAF_PROFILES.map(profile => moduleDescriptor(profile.module, profile.paths,
+    {dependencies:profile.dependencies, tests:profile.tests}));
+  for (const id of ['command-core', 'public-guide-assets']) graph.push(moduleDescriptor(id, [`modules/${id}/**`]));
+  assert.deepEqual(pull([edited(FRONTEND_LEAF_PROFILES[0].paths[0])], {baseline:graph}).jobs,
+    Object.fromEntries(SELECTABLE_JOBS.map(id => [id, FRONTEND_LEAF_JOBS.includes(id)])));
+});
+
+test('minimal lanes retain code, data consumers, destructive diffs and invalid graphs', () => {
+  for (const path of ['docs/platform-plan/execution/tools/tests/test_guild_launchpad_status.py',
+    'docs/platform-plan/execution/guild-launchpad/validate-spec-pack.py',
+    'docs/platform-plan/contracts/project-manifest.schema.json',
+    'docs/platform-plan/contracts/tests/fixtures/five-clocks/catalog.yaml',
+    'docs/platform-plan/verification/verify_revision.py', 'docs/platform-plan/execution/new.ts',
+    'docs/platform-plan/execution/commerce/ecpay-logistics-status-map.tsv'])
+    assert.equal(pull([edited(path)]).mode, 'full', path);
   for (const event of ['push', 'merge_group', 'workflow_dispatch', undefined])
-    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {event})).profile, 'full');
+    assert.equal(pull([edited(planReceiptPaths[1])], {event}).mode, 'full');
   for (const extra of [{diffComplete:false}, {descriptorsProven:false}, {nonExecutableBlobsProven:false},
-    {nonExecutableBlobsProven:undefined}, {changes:[]}, {baseline:[]}, {candidate:[]}])
-    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, extra)).profile, 'full');
-  for (const status of ['A', 'D', 'R', 'R100', 'C', 'T', 'U', 'X'])
-    assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {changes:[edited(HANDOFF_DOCS_PATHS[0],status)]})).profile, 'full');
-  for (const paths of [[GENERATED_INVENTORY_PATH], [HANDOFF_DOCS_PATHS[0], HANDOFF_DOCS_PATHS[0]],
-    [HANDOFF_DOCS_PATHS[0], GENERATED_INVENTORY_PATH, GENERATED_INVENTORY_PATH]])
-    assert.equal(decideHandoffDocsProfile(handoffInput(paths)).profile, 'full');
-  assert.equal(decideHandoffDocsProfile(handoffInput(undefined,
-    {changes:[{...edited(HANDOFF_DOCS_PATHS[0]),previousPath:'other.md'}]})).profile, 'full');
+    {baseline:[]}, {candidate:[]}]) assert.equal(pull([edited(planReceiptPaths[1])], extra).mode, 'full');
+  for (const status of ['D', 'R', 'R100', 'C', 'T', 'U', 'X'])
+    assert.equal(pull([edited(planReceiptPaths[1], status)]).mode, 'full');
+  for (const mutate of [graph => graph.push(structuredClone(graph[0])),
+    graph => graph[0].dependencies.push('absent'), graph => graph[0].dependencies.push('example')]) {
+    const graph = narrow(); mutate(graph);
+    assert.equal(pull([edited(planReceiptPaths[1])], {candidate:graph}).mode, 'full');
+  }
+  assert.equal(decideMinimalProfile({event:'pull_request',diffComplete:true,changes:[]}).profile,'full');
 });
 
-test('handoff documents cannot drop ownership, instructions, graph or reverse-consumer obligations', () => {
-  for (const mutate of [
-    graph => graph.push(structuredClone(graph[0])),
-    graph => graph[0].dependencies.push('absent'),
-    graph => graph[0].dependencies.push('governance'),
-    graph => graph[0].owned_paths.push(HANDOFF_DOCS_PATHS[0]),
-    graph => graph[0].owned_paths.splice(0,1),
-    graph => graph[0].instructions.push(HANDOFF_DOCS_PATHS[4]),
-    graph => { graph[0].owner_role = 'consumer'; },
-    graph => graph[4].dependencies.pop(),
-    graph => graph[4].tests.push('governance.unit'),
-    graph => graph.push(moduleDescriptor('new-consumer', ['modules/new-consumer/**'], {dependencies:['governance']})),
-    graph => graph.push(moduleDescriptor('new-consumer', ['modules/new-consumer/**'], {dependencies:['supplier-console']})),
-  ]) {
-    const baseline=handoffDescriptors(), candidate=structuredClone(baseline); mutate(candidate);
-    for (const before of [baseline, candidate])
-      assert.equal(decideHandoffDocsProfile(handoffInput(undefined, {baseline:before,candidate})).profile, 'full');
+test('each minimal aggregate accepts only its exact outputs and successful selected evidence', () => {
+  for (const reason of Object.keys(MINIMAL_JOB_PROFILES)) {
+    const selected = minimalSelection(reason);
+    const results = Object.fromEntries(SELECTABLE_JOBS.map(id => [id, selected.jobs[id] ? 'success' : 'skipped']));
+    assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true, reason);
+    for (const id of SELECTABLE_JOBS) {
+      const missing = needsFor(selected, results); delete missing[id];
+      assert.equal(evaluateVerifyAggregate(missing).ok, false);
+      const forged = needsFor(selected, results);
+      forged.select.outputs[JOB_OUTPUT_KEYS[id]] = String(!selected.jobs[id]);
+      assert.equal(evaluateVerifyAggregate(forged).ok, false);
+      for (const result of ['failure', 'cancelled', ...(selected.jobs[id] ? ['skipped'] : [])])
+        assert.equal(evaluateVerifyAggregate(needsFor(selected, {...results, [id]:result})).ok, false);
+    }
+    for (const options of [{select:'failure'}, {integrity:'failure'}, {integrity:'skipped'}])
+      assert.equal(evaluateVerifyAggregate(needsFor(selected, results, options)).ok, false);
+    for (const reason of ['invented_profile', 'constructor']) {
+      const unknown = needsFor(selected, results); unknown.select.outputs.reason = reason;
+      assert.equal(evaluateVerifyAggregate(unknown).ok, false);
+    }
   }
 });
 
-test('handoff aggregate requires its exact reason, shape and successful governance evidence', () => {
-  const selected=handoffSelection(), results={...allResults('skipped'), 'governance-consumers':'success'};
-  assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true);
-  for (const result of ['skipped','failure','cancelled',undefined])
-    assert.equal(evaluateVerifyAggregate(needsFor(selected,{...results,'governance-consumers':result})).ok,false);
-  for (const job of SELECTABLE_JOBS) {
-    const needs=needsFor(selected,results); delete needs[job]; assert.equal(evaluateVerifyAggregate(needs).ok,false);
-    for (const result of ['failure','cancelled'])
-      assert.equal(evaluateVerifyAggregate(needsFor(selected,{...results,[job]:result})).ok,false);
-    const forged=needsFor(selected,results);
-    forged.select.outputs[JOB_OUTPUT_KEYS[job]]=String(!selected.jobs[job]);
-    assert.equal(evaluateVerifyAggregate(forged).ok,false);
-  }
-  for (const reason of ['frontend_leaf_profiles','guild_presentation_dependency_closure','unknown_profile']) {
-    const needs=needsFor(selected,results);needs.select.outputs.reason=reason;
-    assert.equal(evaluateVerifyAggregate(needs).ok,false);
-  }
-  for (const options of [{select:'failure'},{integrity:'failure'},{integrity:'skipped'}])
-    assert.equal(evaluateVerifyAggregate(needsFor(selected,results,options)).ok,false);
-});
-
-test('handoff selection uses clean exact integration Git blobs, rejects executable blobs and ignores candidate selector code', async t => {
+test('minimal lanes use clean exact integration Git blobs, reject executable blobs and ignore candidate selector code', async t => {
   const directory=await mkdtemp(join(tmpdir(),'fp-handoff-select-'));
   t.after(() => rm(directory,{recursive:true,force:true}));
   const git=(args,input) => execFileSync('/usr/bin/git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
@@ -1348,29 +1331,392 @@ test('handoff selection uses clean exact integration Git blobs, rejects executab
   const commit=message => {git(['add','.']);git(['commit','-qm',message]);return git(['rev-parse','HEAD']);};
   const merge=(base,head) => {const candidate=git(['commit-tree',git(['rev-parse',`${head}^{tree}`]),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);return candidate;};
   git(['init','-q','-b','main']);
-  for (const d of handoffDescriptors()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
-  for (const p of [...HANDOFF_DOCS_PATHS,GENERATED_INVENTORY_PATH]) await put(p,'before\n');
+  for (const d of narrow()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
+  for (const p of planReceiptPaths.filter(path => path !== planReceiptPaths[3])) await put(p,'before\n');
   await put('.gitignore','tests/e2e/generated.spec.ts\n');
   await put('scripts/ci/select-affected-jobs.mjs','throw new Error("candidate selector must not run");\n');
   const base=commit('base');
-  for (const p of [...HANDOFF_DOCS_PATHS,GENERATED_INVENTORY_PATH]) await put(p,'after\n');
+  for (const p of [...planReceiptPaths,GENERATED_INVENTORY_PATH]) await put(p,'after\n');
   const head=commit('informational handoffs'), candidate=merge(base,head);
   const input={repository:directory,event:'pull_request',base,head,candidate};
-  assert.deepEqual(collectRepositoryDecision(input),handoffSelection());
+  assert.deepEqual(collectRepositoryDecision(input),minimalSelection('plan_document_inputs'));
   const output=join(directory,'.git','selection-output');
   const cli=spawnSync(process.execPath,[selector,'--event','pull_request','--repository',directory,'--base',base,'--head',head,'--candidate',candidate,'--github-output',output],{encoding:'utf8'});
-  assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout),handoffSelection());
-  assert.equal(await readFile(output,'utf8'),githubOutput(handoffSelection()));
+  assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout),minimalSelection('plan_document_inputs'));
+  assert.equal(await readFile(output,'utf8'),githubOutput(minimalSelection('plan_document_inputs')));
   for (const extra of [{event:'push'},{event:'merge_group'},{candidate:head},{head:base},{base:head},{candidate:''}])
     assert.equal(collectRepositoryDecision({...input,...extra}).mode,'full');
-  await put(HANDOFF_DOCS_PATHS[0],'dirty');assert.equal(collectRepositoryDecision(input).mode,'full');git(['checkout','--',HANDOFF_DOCS_PATHS[0]]);
+  await put(planReceiptPaths[0],'dirty');assert.equal(collectRepositoryDecision(input).mode,'full');git(['checkout','--',planReceiptPaths[0]]);
   await put('unexpected.md','untracked');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'unexpected.md'));
   await put('tests/e2e/generated.spec.ts','ignored');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'tests/e2e/generated.spec.ts'));
   const reversed=git(['commit-tree',git(['rev-parse',`${head}^{tree}`]),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
   assert.equal(collectRepositoryDecision({...input,candidate:reversed}).mode,'full');
-  git(['checkout','-q',base]);git(['update-index','--chmod=+x',HANDOFF_DOCS_PATHS[0]]);git(['commit','-qm','executable base']);
-  const executableBase=git(['rev-parse','HEAD']);await put(HANDOFF_DOCS_PATHS[0],'executable edit');
-  git(['add',HANDOFF_DOCS_PATHS[0]]);git(['update-index','--chmod=+x',HANDOFF_DOCS_PATHS[0]]);git(['commit','-qm','executable head']);
+  git(['checkout','-q',base]);git(['update-index','--chmod=+x',planReceiptPaths[0]]);git(['commit','-qm','executable base']);
+  const executableBase=git(['rev-parse','HEAD']);await put(planReceiptPaths[0],'executable edit');
+  git(['add',planReceiptPaths[0]]);git(['update-index','--chmod=+x',planReceiptPaths[0]]);git(['commit','-qm','executable head']);
   const executableHead=git(['rev-parse','HEAD']), executableCandidate=merge(executableBase,executableHead);
   assert.equal(collectRepositoryDecision({...input,base:executableBase,head:executableHead,candidate:executableCandidate}).mode,'full');
+});
+
+test('delivery tooling runs its existing coverage on PR and main without unrelated product jobs', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-delivery-select-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const git = (args, input) => execFileSync('/usr/bin/git', ['-C', directory, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
+    input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 'Delivery Test', GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Delivery Test', GIT_COMMITTER_EMAIL: 'test@example.invalid'},
+  }).trim();
+  const put = async (path, body) => { await mkdir(dirname(join(directory, path)), {recursive: true}); await writeFile(join(directory, path), body); };
+  const commit = message => { git(['add', '.']); git(['commit', '-qm', message]); return git(['rev-parse', 'HEAD']); };
+  const merge = (base, head) => { const sha = git(['commit-tree', git(['rev-parse', `${head}^{tree}`]), '-p', base, '-p', head], 'integration\n'); git(['checkout', '-q', sha]); return sha; };
+  git(['init', '-q', '-b', 'main']);
+  const descriptors = [
+    moduleDescriptor('governance', ['scripts/ci/**', '.github/workflows/verify.yml', 'packages/contribution-tools/**'], {tests:['governance.unit','runtime.full']}),
+    moduleDescriptor('media-migration', ['packages/media-migration/**', 'tests/runtime/media-backup-daily.test.ts'], {tests:['runtime.full']}),
+    moduleDescriptor('shared-release', ['deploy/shared-release/**', '.github/workflows/shared-release.yml'], {dependencies: ['governance', 'media-migration'],tests:['governance.unit','runtime.full']}),
+  ];
+  for (const d of descriptors) await put(`modules/${d.module_id}/freedom.module.json`, JSON.stringify(d));
+  const paths = ['deploy/shared-release/portable/entry.mjs', '.github/workflows/shared-release.yml',
+    'packages/media-migration/backup-daily.ts', 'tests/runtime/media-backup-daily.test.ts',
+    'scripts/ci/select-affected-jobs.mjs', '.github/workflows/verify.yml', GENERATED_INVENTORY_PATH];
+  for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('before'):'// before\n');
+  const registryPath='packages/contribution-tools/pinned-suites.mjs';
+  const registry=await readFile(join(root,registryPath),'utf8');
+  const dailyLine=registry.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  await put(registryPath,registry.replace(dailyLine,''));
+  const base = commit('base');
+  await put(registryPath,registry);
+  for (const path of paths) await put(path, path==='.github/workflows/verify.yml'?deliveryWorkflow('after'):'// after\n');
+  await put('packages/media-migration/backup-diagnostics.ts', 'new diagnostic helper\n');
+  const head = commit('release and daily backup'), candidate = merge(base, head);
+  const input = {repository: directory, event: 'pull_request', base, head, candidate};
+  const selected = collectRepositoryDecision(input);
+  assert.equal(selected.reason, 'delivery_tooling');
+  assert.deepEqual(Object.entries(selected.jobs).filter(([, run]) => run).map(([id]) => id), ['deploy-preflight']);
+  assert.deepEqual(collectRepositoryDecision({...input, event: 'push', head: candidate}), selected);
+  const results = Object.fromEntries(SELECTABLE_JOBS.map(id => [id, selected.jobs[id] ? 'success' : 'skipped']));
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results)).ok, true);
+  for (const result of ['skipped', 'failure', 'cancelled'])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected, {...results, 'deploy-preflight': result})).ok, false);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected, results, {integrity: 'failure'})).ok, false);
+  for (const extra of [{candidate: head}, {base: head}, {head: base}, {event: 'merge_group'}])
+    assert.equal(collectRepositoryDecision({...input, ...extra}).mode, 'full');
+  await put(paths[0], 'dirty\n'); assert.equal(collectRepositoryDecision(input).mode, 'full'); git(['checkout', '--', paths[0]]);
+  // Mixing even one product/helper, migration, descriptor or unrelated control
+  // change must restore its wider coverage; operator naming grants no exemption.
+  for (const path of ['apps/portal-web/src/App.tsx', 'modules/agent-commerce/hosted/store.ts',
+    'packages/media-migration/inventory.ts', 'packages/db/migrations.ts',
+    '.github/workflows/codeql.yml', 'deploy/shared-release/freedom.module.json',
+    'scripts/ci/run-pinned-suite.mjs']) {
+    git(['checkout', '-q', head]); await put(path, 'mixed\n');
+    const mixed = commit('mixed change'), integration = merge(base, mixed);
+    assert.equal(collectRepositoryDecision({...input, head: mixed, candidate: integration}).mode, 'full', path);
+  }
+  git(['checkout', '-q', head]); git(['rm', paths[0]]); const deleted = commit('delete');
+  assert.equal(collectRepositoryDecision({...input, head: deleted, candidate: merge(base, deleted)}).mode, 'full');
+  git(['checkout', '-q', head]); git(['update-index', '--chmod=+x', paths[0]]); git(['commit', '-qm', 'mode']);
+  const mode = git(['rev-parse', 'HEAD']); git(['checkout', '--', paths[0]]);
+  assert.equal(collectRepositoryDecision({...input, head: mode, candidate: merge(base, mode)}).mode, 'full');
+  git(['checkout', '-q', head]);
+  const restoreTest = 'deploy/cloudflare/test/media-restore-container.test.mjs';
+  await put(restoreTest, '// already-covered operator harness\n');
+  await put('modules/media-migration/freedom.module.json', JSON.stringify({...descriptors[1],
+    owned_paths: [...descriptors[1].owned_paths, restoreTest]}));
+  const owner = commit('assign operator harness owner');
+  assert.deepEqual(collectRepositoryDecision({...input, head: owner, candidate: merge(base, owner)}), selected);
+  for(const changed of [registry.replace('timeoutMs: 900000','timeoutMs: 900001'),registry.replace("loader: 'node'","loader: 'tsx'")]) {
+    git(['checkout','-q',candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await put(registryPath,changed);const wrong=commit('existing suite change');
+    assert.equal(collectRepositoryDecision({...input,head:wrong,candidate:merge(base,wrong)}).mode,'full');
+  }
+  // Each counterexample starts from the admitted exact integration.
+  for (const replacement of [deliveryWorkflow('after').replace('npm run test:e2e','exit 1'),
+    deliveryWorkflow('after').replace('  pull_request:', '  push:')]) {
+    git(['checkout','-q',candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await put('.github/workflows/verify.yml',replacement);
+    const wrong=commit('unrelated workflow behavior');
+    assert.equal(collectRepositoryDecision({...input,head:wrong,candidate:merge(base,wrong)}).mode,'full');
+  }
+  for (const extra of [
+    moduleDescriptor('new-consumer',['modules/new/**'],{dependencies:['shared-release'],tests:['governance.unit','runtime.full']}),
+    {...moduleDescriptor('instruction-consumer',['modules/other/**']),instructions:['deploy/shared-release/AGENTS.md']},
+  ]) {
+    git(['checkout','-q',head]);await put('modules/'+extra.module_id+'/freedom.module.json',JSON.stringify(extra));
+    await put('deploy/shared-release/AGENTS.md','local instructions');const adopted=commit('adopted consumer');
+    await put('deploy/shared-release/AGENTS.md','changed local instructions');await put(paths[0],'// changed controller');
+    const next=commit('controller with consumer');
+    assert.equal(collectRepositoryDecision({...input,base:adopted,head:next,candidate:merge(adopted,next)}).mode,'full');
+  }
+  git(['checkout', '-q', head]);
+  await put('modules/governance/freedom.module.json', JSON.stringify({...descriptors[0], tests: ['runtime.full']}));
+  const drift = commit('descriptor drift');
+  assert.equal(collectRepositoryDecision({...input, head: drift, candidate: merge(base, drift)}).mode, 'full');
+});
+
+test('delivery CI retains native restore and daily backup diagnostics in its selected job', async () => {
+  const workflow = await readFile(workflowPath, 'utf8');
+  const job = jobBlock(workflow, 'deploy-preflight');
+  assert.match(job, /--suite ci\.deploy-preflight/);
+  assert.match(job, /--suite ci\.migration-postgres/);
+  assert.match(job, /postgres-integration\.mjs --source \./);
+  assert.match(job, /run-pinned-suite\.mjs --root \. --suite ci\.daily-backup/);
+  assert.match(job, /node node_modules\/typescript\/bin\/tsc --noEmit/);
+  assert.match(jobBlock(workflow, 'select'), /github\.event\.pull_request\.base\.sha \|\| github\.event\.before/);
+});
+
+function deliveryWorkflow(value) {
+  return `name: Verify
+on:
+  pull_request:
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ${value}
+  deploy-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ${value}
+  ui-e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: npm run test:e2e
+`;
+}
+
+test('delivery Verify comparison preserves unrelated jobs and global execution policy', async () => {
+  const before=deliveryWorkflow('before'),after=deliveryWorkflow('after');
+  assert.equal(deliveryVerifyWiringOnly(before,after),true);
+  for(const changed of [after.replace('npm run test:e2e','exit 1'),after.replace('name: Verify','name: Other'),
+    after.replace('  pull_request:', '  push:'),after+'permissions:\n  contents: write\n',
+    after.replace('run: echo after','run: &shared echo after'),after.replace('  ui-e2e:', '  runtime-full:')])
+    assert.equal(deliveryVerifyWiringOnly(before,changed),false);
+  const actual=await readFile(workflowPath,'utf8');
+  assert.equal(deliveryVerifyWiringOnly(actual,actual),true,'real workflow expressions are not YAML tags');
+  assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('Verify complete daily backup orchestration evidence','Daily coverage')),true);
+  assert.equal(deliveryVerifyWiringOnly(actual,actual.replace('--suite ci.worker-unit','--suite ci.unknown')),false);
+  for(const header of ['  \"outside-job\":','  outside_job:']) {
+    const appended=actual+'\n'+header+'\n    runs-on: ubuntu-24.04\n    steps:\n      - run: exit 1\n';
+    assert.equal(deliveryVerifyWiringOnly(actual,appended),false,header);
+  }
+});
+
+
+test('actual delivery coverage keeps daily-backup bounded and rejects new consumers, instructions and suites', () => {
+  const sha=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  const loaded=loadModuleDescriptors(root,sha);assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const files=parseLsTreeZ(execFileSync('git',['-C',root,'ls-tree','-r','-z',sha],{encoding:'utf8',maxBuffer:16000000})).files;
+  const cache=new Map(),read=path=>{
+    if(!cache.has(path))cache.set(path,execFileSync('git',['-C',root,'show',sha+':'+path],{encoding:'utf8',maxBuffer:16000000}));
+    return cache.get(path);
+  };
+  const paths=['deploy/shared-release/operator.mjs','packages/media-migration/backup-daily.ts'];
+  const prove=(g=graph,f=files,r=read)=>deliveryCoverageProven([g,g],paths,[{graph:g,files:f,read:r}]);
+  assert.equal(prove(),true,'the real graph/source positive must narrow before checking negative mutations');
+  for(const mutate of [
+    g=>g.set('new-consumer',moduleDescriptor('new-consumer',['modules/new/**'],{dependencies:['shared-release'],tests:['governance.unit','runtime.full']})),
+    g=>g.set('new-media-consumer',moduleDescriptor('new-media-consumer',['modules/new-media/**'],{dependencies:['media-migration'],tests:['runtime.full']})),
+    g=>g.get('shared-release').tests.push('ui.default'),
+    g=>g.get('media-migration').tests.push('runtime.member-card'),
+    g=>g.get('community').instructions.push(paths[0]),
+    g=>g.get('media-migration').public_exports.push(paths[1]),
+  ]) {const g=structuredClone(graph);mutate(g);assert.equal(prove(g),false);}
+  const path='modules/community/events.ts',f=new Map(files);
+  assert.ok(owns(graph.get('community'),path),'owned consumer is checked by the selector');
+  f.set(path,{mode:'100644',type:'blob',oid:oid()});
+  for(const source of [
+    "import {runDailyBackup} from '../../packages/media-migration/backup-daily.js';",
+    "export * from '../../packages/media-migration/backup-diagnostics.js';",
+    "const x=import('../../packages/media-migration/backup-daily.js');",
+    "const target=process.env.TARGET; const x=import(target);",
+    "import Alias = require('../../packages/media-migration/backup-daily.js');",
+  ]) assert.equal(prove(graph,f,p=>p===path?source:read(p)),false,source);
+  assert.equal(prove(graph,f,p=>p===path?"export const unaffected=1;":read(p)),true);
+});
+
+
+test('unowned ownership warnings do not bypass the retained delivery import boundary', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'fp-delivery-ownership-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const sha=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  execFileSync('git',['clone','--quiet','--shared','--no-checkout',root,directory],{stdio:'pipe'});
+  execFileSync('git',['-C',directory,'checkout','--quiet',sha],{stdio:'pipe'});
+  const gate='packages/contribution-tools/test/modules-repository.test.mjs';
+  assert.ok(PINNED_SUITES['ci.governance-unit'].baseline.includes(gate));
+  assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(command=>command.includes('--suite ci.governance-unit')));
+  const run=()=>spawnSync(process.execPath,['--test',join(directory,gate)],{cwd:directory,encoding:'utf8',env:verificationEnvironment()});
+  const positive=run();assert.equal(positive.status,0,positive.stdout+positive.stderr);
+  assert.match(positive.stdout,/pass 1/,'the mandatory test actually executed');
+  const path='modules/community/review-consumer.ts';
+  await writeFile(join(directory,path),"import {runDailyBackup} from '../../packages/media-migration/backup-daily.js';\n");
+  const warned=run();assert.equal(warned.status,0,warned.stdout+warned.stderr);
+  assert.match(warned.stdout+warned.stderr,/surface_unmapped/);
+  assert.ok((warned.stdout+warned.stderr).includes(path));
+  const loaded=loadModuleDescriptors(directory,sha);assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  const prove=source=>deliveryCoverageProven([graph,graph],['deploy/shared-release/operator.mjs'],[{graph,files,read:()=>source}]);
+  assert.equal(prove('export const unrelated=1;'),true);
+  assert.equal(prove(await readFile(join(directory,path),'utf8')),false);
+  // Ownership is now an advisory warning. Literal delivery imports still expand
+  // selection; an independent mandatory integrity failure still fails verify.
+  const selected={mode:'affected',reason:'delivery_tooling',jobs:Object.fromEntries(SELECTABLE_JOBS.map(id=>[id,id==='deploy-preflight']))};
+  const results={...allResults('skipped'),'deploy-preflight':'success'};
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,results)).ok,true);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,results,{integrity:'failure'})).ok,false);
+});
+
+
+test('daily registry exception preserves all existing suites and required completeness coverage', async () => {
+  const after=await readFile(join(root,'packages/contribution-tools/pinned-suites.mjs'),'utf8');
+  const line=after.split('\n').find(line=>line.startsWith("  'ci.daily-backup':"))+'\n';
+  const before=after.replace(line,'');
+  assert.equal(deliveryDailyRegistryAddition(before,after),true);
+  for(const changed of [after.replace("loader: 'node'","loader: 'tsx'"),
+    after.replace('timeoutMs: 900000','timeoutMs: 900001'),after.replace("database: true","database: false"),
+    after.replace("pattern: /^[a-z]","pattern: /^[b-z]"),after+line,
+    after.replace('tests/runtime/media-backup-daily.test.ts','tests/runtime/other.test.ts'),
+    after.replace("'ci.worker-unit':","'ci.renamed-worker':")])
+    assert.equal(deliveryDailyRegistryAddition(before,changed),false);
+  assert.equal(deliveryDailyRegistryAddition(after,before),false);
+  assert.ok(PINNED_SUITES['ci.governance-unit'].baseline.includes('packages/contribution-tools/test/pinned-suite.test.mjs'));
+  assert.ok(ALWAYS_ON_INTEGRITY_COMMANDS.some(c=>c.includes('--suite ci.governance-unit')));
+  const integrity=jobBlock(await readFile(workflowPath,'utf8'),'source-integrity');
+  assert.match(integrity,/\n      - run: node \.freedom\/trusted\/scripts\/ci\/run-pinned-suite\.mjs --root \. --suite ci\.governance-unit\n/);
+});
+
+
+test('owned outside source cannot introduce literal delivery consumers without a declared dependency', () => {
+  const loaded=loadModuleDescriptors(root,'HEAD');assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d]));
+  const path='packages/contribution-tools/io.mjs';
+  assert.ok(loaded.descriptors.some(d=>owns(d,path)),'fixture is already owned');
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  for(const changed of ['packages/media-migration/backup-daily.ts','deploy/shared-release/operator.mjs']) {
+    const prove=source=>deliveryCoverageProven([graph,graph],[changed],[{graph,files,read:()=>source}]);
+    assert.equal(prove('export const unrelated=1;'),true);
+    for(const target of ['../media-migration/backup-daily.js','../../deploy/shared-release/operator.mjs'])
+      for(const source of [`import * as x from '${target}';`,`export * from '${target}';`,
+        `const x=import('${target}');`,`const x=require('${target}');`,`type T=import('${target}').T;`])
+        assert.equal(prove(source),false,changed+': '+source);
+  }
+});
+
+
+async function ciToolsWorkflowFixture() {
+  const after=await readFile(workflowPath,'utf8'),block=jobBlock(after,'static-worker');
+  const beforeBlock=block.replace('      contents: read\n','      contents: read\n      statuses: read\n')
+    .replace('    steps:\n','    steps:\n'+"      - name: Checkout the pinned worker status guard\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: ${{ job.workflow_repository }}\n          ref: ${{ job.workflow_sha }}\n          path: .freedom/worker-status\n          persist-credentials: false\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n        with:\n          node-version: '24'\n      - name: Require CircleCI worker success for an identical same-repository PR tree\n        id: worker-provider\n        env:\n          GH_STATUS_TOKEN: ${{ github.token }}\n        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs\n")
+    .replace('      - run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.worker-unit\n',
+      "      - run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.worker-unit\n        if: steps.worker-provider.outputs.run_github == 'true'\n");
+  return {before:after.replace(block,beforeBlock),after};
+}
+test('CI-tools proof permits only provider retirement and the bounded module schema increase',async()=>{
+  const {before,after}=await ciToolsWorkflowFixture();
+  assert.equal(ciToolsWorkflowProven(before,after),true);
+  assert.equal(ciToolsWorkflowProven(after,after),true);
+  for(const changed of [after.replace('--suite ci.worker-unit','--suite ci.unknown'),
+    after.replace('timeout-minutes: 40','timeout-minutes: 41'),after+'permissions:\n  contents: write\n',
+    after.replace('node node_modules/typescript/bin/tsc --noEmit','echo skipped')])
+    assert.equal(ciToolsWorkflowProven(before,changed),false);
+  const schema=JSON.parse(await readFile(join(root,'governance/schemas/module.schema.json'),'utf8'));
+  const old=structuredClone(schema);old.properties.owned_paths.maxItems=64;
+  assert.equal(ciToolsSchemaProven(JSON.stringify(old),JSON.stringify(schema)),true);
+  for(const mutate of [s=>s.properties.owned_paths.maxItems=512,s=>s.properties.owned_paths.minItems=0,s=>delete s.required]){
+    const changed=structuredClone(schema);mutate(changed);assert.equal(ciToolsSchemaProven(JSON.stringify(old),JSON.stringify(changed)),false);
+  }
+});
+
+test('unowned computed delivery loaders cannot use the ownership-warning path',()=>{
+  const loaded=loadModuleDescriptors(root,'HEAD');assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d])),path='modules/community/unowned-loader.ts';
+  assert.ok(!loaded.descriptors.some(d=>owns(d,path)));
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  for(const changed of ['deploy/shared-release/operator.mjs','packages/media-migration/backup-daily.ts']){
+    const prove=source=>deliveryCoverageProven([graph,graph],[changed],[{graph,files,read:()=>source}]);
+    assert.equal(prove('export const harmless=1;'),true);
+    assert.equal(prove("const fs=import('node:fs');"),true);
+    for(const source of ["const target=process.env.TARGET; import(target);",
+      "const target=process.env.TARGET; require(target);",
+      "const target='../../deploy/shared-release/'; import(target+'operator.mjs');",
+      "const name='operator'; import(`../../deploy/shared-release/${name}.mjs`);",
+      "const f=new Function('return import(process.env.TARGET)');"])
+      assert.equal(prove(source),false,source);
+  }
+});
+
+test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps runtime deletions broad',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'fp-ci-tools-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const env={...verificationEnvironment(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'CI Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'CI Fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git=(args,input)=>execFileSync('git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put=async(path,body)=>{await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit=()=>{git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  const integrate=(base,head)=>{const candidate=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);return {repository:directory,event:'pull_request',base,head,candidate};};
+  git(['init','-q','-b','main']);
+  const catalog=execFileSync('git',['-C',root,'ls-tree','-r','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(p=>p.endsWith('/freedom.module.json')||p==='freedom.module.json');
+  for(const path of catalog)await put(path,execFileSync('git',['-C',root,'show','HEAD:'+path],{encoding:'utf8'}));
+  const workflows=await ciToolsWorkflowFixture();await put('.github/workflows/verify.yml',workflows.before);
+  const schema=JSON.parse(await readFile(join(root,'governance/schemas/module.schema.json'),'utf8'));const old=structuredClone(schema);old.properties.owned_paths.maxItems=64;
+  await put('governance/schemas/module.schema.json',JSON.stringify(old));
+  const retired=['packages/contribution-tools/circleci-worker-status.mjs','packages/contribution-tools/test/circleci-worker-status.test.mjs'];
+  for(const path of [...retired,'scripts/ci/select-affected-jobs.mjs','packages/contribution-tools/context.mjs','packages/contribution-tools/test/context.test.mjs','packages/db/command-core.ts'])await put(path,'export const fixture=true;\n');
+  const state='docs/platform-plan/execution/unified-foundation/current-state.json';await put(state,'{}');
+  const base=commit();
+  await put('.github/workflows/verify.yml',workflows.after);await put('governance/schemas/module.schema.json',JSON.stringify(schema));
+  await put('packages/contribution-tools/context.mjs','export const updated=true;\n');
+  for(const path of retired)await rm(join(directory,path));
+  const head=commit(),input=integrate(base,head),selected=minimalSelection('ci_tools');
+  assert.deepEqual(collectRepositoryDecision(input),selected);
+  const push = value => ({...value,event:'push',ref:'refs/heads/main',head:value.candidate});
+  const pushInput=push(input);
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  for(const extra of [{ref:''},{ref:'refs/heads/topic'},{ref:'refs/tags/main'},
+    {event:'merge_group'},{head},{base:head},{candidate:head},{head:oid('0')},{base:oid('0')}])
+    assert.equal(collectRepositoryDecision({...pushInput,...extra}).mode,'full',JSON.stringify(extra));
+  const tree=git(['rev-parse',head+'^{tree}']);
+  for(const parents of [[head,base],[head]]) {
+    const forged=git(['commit-tree',tree,...parents.flatMap(p=>['-p',p])],'wrong first parent\n');
+    git(['checkout','-q',forged]);
+    assert.equal(collectRepositoryDecision({...pushInput,head:forged,candidate:forged}).mode,'full');
+  }
+  git(['checkout','-q',input.candidate]);
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  await put('packages/contribution-tools/context.mjs','// dirty\n');
+  assert.equal(collectRepositoryDecision(pushInput).mode,'full');
+  git(['checkout','--','packages/contribution-tools/context.mjs']);
+  await put('untracked.txt','untracked');
+  assert.equal(collectRepositoryDecision(pushInput).mode,'full');
+  await rm(join(directory,'untracked.txt'));
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  // A direct single-parent successor is valid too; no historical merge object is required.
+  git(['checkout','-q',head]);
+  assert.deepEqual(collectRepositoryDecision({...pushInput,head,candidate:head}),selected);
+  git(['checkout','-q',input.candidate]);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'))).ok,true);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'),{integrity:'failure'})).ok,false);
+  for(const mutate of [
+    async()=>rm(join(directory,'packages/db/command-core.ts')),
+    async()=>put('packages/db/command-core.ts','export const runtimeChanged=true;'),
+    async()=>put(retired[0],'export const restored=true;'),
+    async()=>put('packages/contribution-tools/test/context.test.mjs',"import '../circleci-worker-status.mjs';"),
+    async()=>put('.github/workflows/verify.yml',workflows.after.replace('--suite ci.worker-unit','--suite ci.unknown')),
+    async()=>put('governance/schemas/module.schema.json',JSON.stringify({...schema,required:[]})),
+  ]){
+    git(['checkout','-q',input.candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await mutate();
+    const mixed=integrate(base,commit());
+    assert.equal(collectRepositoryDecision(mixed).mode,'full');
+    assert.equal(collectRepositoryDecision(push(mixed)).mode,'full');
+  }
+  git(['checkout','-q',head]);await put(state,'{ "updated":true }');
+  const documentInput=integrate(base,commit());
+  assert.deepEqual(collectRepositoryDecision(documentInput),minimalSelection('ci_tools_document_inputs'));
+  assert.deepEqual(collectRepositoryDecision(push(documentInput)),minimalSelection('ci_tools_document_inputs'));
+  git(['checkout','-q',head]);
+  await put('scripts/ci/select-affected-jobs.mjs','export const selectorChanged=true;');
+  const toolingOnly=integrate(head,commit());
+  assert.deepEqual(collectRepositoryDecision(toolingOnly),selected);
+  assert.deepEqual(collectRepositoryDecision(push(toolingOnly)),selected);
 });

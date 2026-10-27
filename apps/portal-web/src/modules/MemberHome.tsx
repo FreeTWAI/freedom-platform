@@ -59,7 +59,7 @@ const shortcuts: { id: TabId; title: string }[] = [
 // The third next-step button follows real work facts, in this order: a claim of mine that is not finished (/dashboard, work.ts),
 // then the open task board, then work sharing. Titles stay on their own pages and no count is shown.
 const taskActions = {
-  resume: { tab: 'workbench', label: '回到我的工作', hint: '你有認領中的工作還沒結案，可以回到「我的工作」繼續。' },
+  resume: { tab: 'workbench', label: '回到任務協作', hint: '你有認領中的工作還沒結案，可以回到「任務協作」繼續。' },
   tasks: { tab: 'tasks', label: '查看社群任務', hint: '社群任務板有開放中的任務，可自行挑選一件參與。' },
   showcase: { tab: 'showcase', label: '分享作品與需求', hint: null },
 } satisfies Record<string, { tab: TabId; label: string; hint: string | null }>;
@@ -71,7 +71,7 @@ type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
 type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
 type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
-export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, bookmarksEnabled=false, onOpenSupply }: ModulePanelProps&{firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; bookmarksEnabled?:boolean; onOpenSupply?:()=>void}) {
   const {t} = useLanguage();
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
@@ -232,7 +232,7 @@ export function MemberHome({ client, session, onNavigate, firstParticipationEnab
     <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
     </div>
     </details>
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
     <div className="home-support">
