@@ -301,7 +301,11 @@ test('ordinary note publication makes external URLs clickable without a preview 
     VALUES($1,$2,$3,'外部連結測試會員',$4,$5,false)`,[id,DEMO_COMMUNITY,email,hashPassword(DEMO_PASSWORD),randomUUID()]);
   await page.context().route('https://links.example.test/**',async route=>{externalRequests++;await route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic destination</title>'});});
   page.context().on('page',popup=>opened.push(popup));
-  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.startsWith('/api/v1/social-posts'))writes.push(new URL(request.url()).pathname);});
+  page.on('request',request=>{
+    const pathname=new URL(request.url()).pathname;
+    // Visibility read beacons are unrelated to link rendering or clicking.
+    if(request.method()==='POST'&&pathname.startsWith('/api/v1/social-posts')&&!/^\/api\/v1\/social-posts\/[^/]+\/read$/.test(pathname))writes.push(pathname);
+  });
   try{
     const dialog=await composer(page,email),challengeUrl=new URL('/play?game=cash&seed=42',page.url()).href;
     const text=`直接貼網址\n${url}。\n${challengeUrl}\n<b>原文 & 換行</b>\n#話題\n結尾`;
