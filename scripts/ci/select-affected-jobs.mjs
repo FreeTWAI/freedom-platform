@@ -20,7 +20,7 @@ import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCT
 import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
-import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { GUIDE_COMPOSITION_PROFILE, PUBLIC_READING_FILES } from '../../packages/contribution-tools/pinned-e2e.mjs';
 import { GUILD_PRESENTATION_PROFILE, guildPresentationPath, guildPresentationDependenciesProven, loadGuildPresentationParsers } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 import { runtimeTextSources } from '../generate-runtime-text.mjs';
 
@@ -58,6 +58,7 @@ export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09
 // These profiles select existing jobs only. Consumer evidence and exclusions are
 // documented in affected-jobs.md; ownership metadata alone does not execute docs.
 export const MINIMAL_JOB_PROFILES = Object.freeze({
+  public_reading_maintenance: Object.freeze(['ui-e2e']),
   ci_tools: Object.freeze([]),
   ci_tools_document_inputs: Object.freeze(['governance-consumers']),
   plan_receipt_docs: Object.freeze([]),
@@ -121,6 +122,70 @@ export function ciToolsSchemaProven(before, after) {
     a.properties.owned_paths.maxItems=256;
     return JSON.stringify(a) === JSON.stringify(b);
   } catch { return false; }
+}
+// The first maintenance scope has no mode-dependent cases. Every existing case
+// must still pass; the pinned runner independently lists and accounts for them.
+export function publicReadingSpecShapeProven(before, after) {
+  const ts = loadGuildPresentationParsers()?.ts;
+  if (!ts) return false;
+  const shape = source => {
+    if (typeof source !== 'string' || Buffer.byteLength(source) > 256 * 1024) throw Error();
+    const file = ts.createSourceFile('maintenance.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+    if (file.parseDiagnostics.length) throw Error();
+    const bodies=[], imports=[], controls=[];
+    let nodes=0;
+    const visit = node => {
+      if (++nodes > 30000) throw Error();
+      if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword
+        || ts.isIdentifier(node.expression) && ['require','eval','Function'].includes(node.expression.text))) imports.push(node.getText(file));
+      if (ts.isNewExpression(node) && node.expression.getText(file)==='Function') imports.push(node.getText(file));
+      ts.forEachChild(node,visit);
+    };
+    visit(file);
+    for (const statement of file.statements) {
+      if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+      const call=statement.expression;
+      if (!ts.isIdentifier(call.expression) || call.expression.text!=='test') continue;
+      if (call.arguments.length!==2 || !ts.isStringLiteral(call.arguments[0])) throw Error();
+      // PUBLIC-POST-07 is itself consumed by a runtime contract. This first
+      // scope edits only the site-metadata fixture in case 06; all other cases
+      // and their downstream source inputs remain byte-identical.
+      if (!call.arguments[0].text.startsWith('PUBLIC-POST-06 ')) continue;
+      const callback=call.arguments[1];
+      if (!ts.isArrowFunction(callback) || !ts.isBlock(callback.body)) throw Error();
+      const control = node => {
+        // Preserve references to test controls, process/loader globals and
+        // computed member access; case bodies cannot acquire new skip/fixture
+        // mode controls or hide new imports behind aliases.
+        if (ts.isIdentifier(node) && ['test','base','testInfo','process','globalThis','global','module','require','eval','Function','Reflect','constructor'].includes(node.text))
+          controls.push(node.parent.getText(file));
+        if (ts.isElementAccessExpression(node) || ts.isImportTypeNode(node)) controls.push(node.getText(file));
+        ts.forEachChild(node,control);
+      };
+      control(callback.body);
+      bodies.push([callback.body.getStart(file),callback.body.end]);
+    }
+    if (bodies.length!==1) throw Error();
+    for (const [start,end] of bodies.reverse()) source=source.slice(0,start)+'{}'+source.slice(end);
+    return JSON.stringify({source,imports,controls});
+  };
+  try {
+    // Match the actual runtime consumer's textual input, including its first
+    // marker lookup; adding a marker string inside case 06 must not redirect it.
+    const consumed = source => source.slice(source.indexOf("test('PUBLIC-POST-07"),source.indexOf("test('PUBLIC-POST-08"));
+    return shape(before)===shape(after) && consumed(before)===consumed(after);
+  } catch { return false; }
+}
+export function decidePublicReadingMaintenance(input) {
+  const fallback={profile:'full',reason:'public_reading_maintenance_unproven'};
+  if (!['pull_request','push'].includes(input?.event) || input.diffComplete!==true
+    || input.nonExecutableBlobsProven!==true || input.descriptorsProven!==true
+    || input.changes?.length!==1 || input.changes[0].status!=='M'
+    || input.changes[0].previousPath || input.changes[0].path!==PUBLIC_READING_FILES[0]) return fallback;
+  try {
+    for (const descriptors of [input.baseline,input.candidate]) validatedDescriptorGraph(descriptors);
+    return {profile:'public-reading-maintenance',reason:'public_reading_maintenance'};
+  } catch {return fallback;}
 }
 export function decideCiToolsProfile(input) {
   const full = {profile:'full',reason:'outside_ci_tools'};
@@ -842,6 +907,8 @@ function loadTrees(repository, base, head) {
   } catch { return null; }
 }
 export function collectRepositoryDecision({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
+  const reading = collectIntegrationProfile({repository,event,ref,base,head,candidate,pullRequest,allowFetch},decidePublicReadingMaintenance);
+  if (reading.profile==='public-reading-maintenance') return decision('affected',reading.reason,false);
   const tools = collectIntegrationProfile({repository, event, ref, base, head, candidate, pullRequest, allowFetch}, decideCiToolsProfile);
   if (['ci_tools','ci_tools_document_inputs'].includes(tools.profile)) return decision('affected',tools.reason,false);
   const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
@@ -933,11 +1000,14 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
 // Host event SHAs, not a candidate profile/file list, authorize the pilot.
 // Read the exact integration tree: a head-only or stale-base comparison cannot
 // prove the browser checkout. Any missing evidence keeps the complete suite.
-export function collectRepositoryE2eDecision(input = {}) { return collectIntegrationProfile(input, decideE2eProfile); }
+export function collectRepositoryE2eDecision(input = {}) {
+  const reading=collectIntegrationProfile(input,decidePublicReadingMaintenance);
+  return reading.profile==='public-reading-maintenance' ? reading : collectIntegrationProfile(input, decideE2eProfile);
+}
 export function collectRepositoryGuildDecision(input = {}) { return collectIntegrationProfile(input, decideGuildPresentationProfile); }
 function collectIntegrationProfile({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
   const fallback = reason => ({ profile: 'full', reason });
-  const mainPush = decide === decideCiToolsProfile && event === 'push' && ref === 'refs/heads/main';
+  const mainPush = [decideCiToolsProfile,decidePublicReadingMaintenance].includes(decide) && event === 'push' && ref === 'refs/heads/main';
   if (event !== 'pull_request' && !mainPush) return fallback('non_pull_request');
   if (typeof repository !== 'string' || !isAbsolute(repository)
     || ![base, head, candidate].every(value => SHA.test(value))) return fallback('candidate_unproven');
@@ -963,6 +1033,10 @@ function collectIntegrationProfile({ repository, event, ref = '', base = '', hea
         || decide === decideMinimalProfile && diff?.ok === true
         && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
           .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
+    if (result.profile==='public-reading-maintenance' && !publicReadingSpecShapeProven(
+      runGit(root,['show',`${base}:${PUBLIC_READING_FILES[0]}`]).toString('utf8'),
+      runGit(root,['show',`${candidate}:${PUBLIC_READING_FILES[0]}`]).toString('utf8')))
+      return fallback('public_reading_maintenance_unproven');
     if (['ci_tools','ci_tools_document_inputs'].includes(result.profile) && !ciToolsSourcesProven(root,base,candidate,diff))
       return {profile:'full',reason:'ci_tools_sources_unproven'};
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {

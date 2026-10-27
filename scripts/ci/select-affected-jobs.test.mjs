@@ -728,13 +728,18 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
     assert.match(trusted, /persist-credentials: false/u);
     assert.match(trusted, /test "\$\(git -C \.freedom\/trusted rev-parse HEAD\)" = "\$PINNED_SHA"/u);
 
-    const checkout = trusted.indexOf('path: .freedom/trusted');
+    // One exact pinned-directory install is allowed; lifecycle execution and
+    // candidate commands between trusted checkout/execution remain forbidden.
+    const pinnedParserStep = "      - name: Install the pinned maintenance parser without lifecycle scripts\n        if: ${{ needs.select.outputs.reason == 'public_reading_maintenance' }}\n        working-directory: .freedom/trusted\n        run: npm ci --ignore-scripts --no-audit --no-fund\n";
+    const execution = id === 'ui-e2e' ? trusted.replace(pinnedParserStep, '') : trusted;
+    if (id === 'ui-e2e') assert.notEqual(execution,trusted);
+    const checkout = execution.indexOf('path: .freedom/trusted');
     assert.ok(checkout > 0, `Missing checkout in ${id}`);
-    const first = trusted.indexOf('node .freedom/trusted/');
-    const last = trusted.lastIndexOf('node .freedom/trusted/');
+    const first = execution.indexOf('node .freedom/trusted/');
+    const last = execution.lastIndexOf('node .freedom/trusted/');
     assert.ok(first > checkout, `Trusted execution must come after checkout in ${id}`);
-    assert.ok(trusted.lastIndexOf('npm ci') < checkout, `Last npm ci must come before checkout in ${id}`);
-    assert.doesNotMatch(trusted.slice(checkout, last), /(?:^|\s)(?:npm|npx|node scripts\/|bash scripts\/)/mu, `No candidate command may run between checkout and last trusted command in ${id}`);
+    assert.ok(execution.lastIndexOf('npm ci') < checkout, `Last candidate npm ci must come before checkout in ${id}`);
+    assert.doesNotMatch(execution.slice(checkout, last), /(?:^|\s)(?:npm|npx|node scripts\/|bash scripts\/)/mu, `No candidate command may run between checkout and last trusted command in ${id}`);
   }
 
   const e2e = jobBlock(text, 'ui-e2e');
@@ -1719,4 +1724,64 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
   const toolingOnly=integrate(head,commit());
   assert.deepEqual(collectRepositoryDecision(toolingOnly),selected);
   assert.deepEqual(collectRepositoryDecision(push(toolingOnly)),selected);
+});
+
+test('public-reading maintenance preserves real declarations/imports and selects the complete spec only',async t=>{
+  const {publicReadingSpecShapeProven}=await import('./select-affected-jobs.mjs');
+  const path='tests/e2e/public-social-posts.spec.ts';
+  const workflow=await readFile(workflowPath,'utf8');
+  assert.match(workflow,/Install the pinned maintenance parser without lifecycle scripts\n        if: \$\{\{ needs.select.outputs.reason == 'public_reading_maintenance' \}\}\n        working-directory: \.freedom\/trusted\n        run: npm ci --ignore-scripts --no-audit --no-fund/);
+  const source=await readFile(join(root,path),'utf8');
+  const fixed=source.replace("expect(registrations).toBe(0);", "expect(registrations).toBe(0);await page.unrouteAll({behavior:'wait'});");
+  assert.notEqual(source,fixed);assert.equal(publicReadingSpecShapeProven(source,fixed),true);
+  const consumed=s=>s.slice(s.indexOf("test('PUBLIC-POST-07"),s.indexOf("test('PUBLIC-POST-08"));
+  assert.equal(consumed(source),consumed(fixed));
+  assert.match(await readFile(join(root,'tests/runtime/public-social-post-page.test.ts'),'utf8'),/const reopenJourney=publicJourney.slice/);
+  for(const changed of [fixed.replace("from './fixtures.js'","from './other.js'"),
+    fixed.replace('PUBLIC-POST-06','RENAMED-06'),fixed.replace("test('PUBLIC-POST-06","test.skip('PUBLIC-POST-06"),
+    fixed.replace("  const original=","  const originalChanged="),
+    fixed.replace('function headers(','function changedHeaders('),fixed+"\ntest('new',async()=>{});",
+    fixed.replace("await page.unrouteAll", "await import('./other.js');await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "test.skip();await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "const t=test;t.skip();await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "process.env.FREEDOM_E2E_PRIVATE_AI_FIXTURE='1';await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "globalThis['require']('./other.js');await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "test.info().skip();await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "test.use({});await page.unrouteAll"),
+    fixed.replace("await page.unrouteAll", "const marker=\"test('PUBLIC-POST-07\";await page.unrouteAll")])
+    assert.equal(publicReadingSpecShapeProven(source,changed),false);
+  const directory=await mkdtemp(join(tmpdir(),'fp-public-reading-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const env={...verificationEnvironment(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'CI Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'CI Fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git=(args,input)=>execFileSync('git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put=async(p,body)=>{await mkdir(dirname(join(directory,p)),{recursive:true});await writeFile(join(directory,p),body);};
+  const commit=()=>{git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  git(['init','-q','-b','main']);
+  for(const p of execFileSync('git',['-C',root,'ls-tree','-r','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(p=>p.endsWith('/freedom.module.json')||p==='freedom.module.json'))
+    await put(p,execFileSync('git',['-C',root,'show','HEAD:'+p],{encoding:'utf8'}));
+  await put(path,source);await put('tests/e2e/fixtures.ts','export const fixture=true;');const base=commit();
+  await put(path,fixed);const head=commit();
+  const candidate=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);
+  const input={repository:directory,event:'pull_request',base,head,candidate};
+  const selected=minimalSelection('public_reading_maintenance');
+  const push={...input,event:'push',ref:'refs/heads/main',head:candidate};
+  for(const value of [input,push]){
+    assert.deepEqual(collectRepositoryDecision(value),selected);
+    assert.equal(collectRepositoryE2eDecision(value).profile,'public-reading-maintenance');
+  }
+  for(const extra of [{ref:''},{ref:'refs/heads/topic'},{base:head},{head},{candidate:head},{event:'merge_group'}])
+    assert.equal(collectRepositoryDecision({...push,...extra}).mode,'full');
+  await put('untracked.ts','');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'untracked.ts'));
+  await put(path,fixed+'\n');assert.equal(collectRepositoryDecision(input).mode,'full');git(['checkout','--',path]);
+  for(const p of ['tests/e2e/fixtures.ts','packages/testing/e2e-origin.ts','.github/workflows/verify.yml','playwright.config.ts','packages/db/command-core.ts','AGENTS.md']){
+    git(['checkout','-q',head]);await put(p,'export const changed=true;');const mixed=commit();
+    assert.equal(collectRepositoryDecision({...push,head:mixed,candidate:mixed}).mode,'full',p);
+  }
+  git(['checkout','-q',head]);git(['rm',path]);const deleted=commit();
+  assert.equal(collectRepositoryDecision({...push,head:deleted,candidate:deleted}).mode,'full');
+  git(['checkout','-q',head]);git(['mv',path,'tests/e2e/public-social-renamed.spec.ts']);const renamed=commit();
+  assert.equal(collectRepositoryDecision({...push,head:renamed,candidate:renamed}).mode,'full');
+  git(['checkout','-q',head]);git(['update-index','--chmod=+x',path]);git(['commit','-qm','mode']);const executable=git(['rev-parse','HEAD']);
+  assert.equal(collectRepositoryDecision({...push,head:executable,candidate:executable}).mode,'full');
+  for(const result of ['skipped','failure','cancelled'])
+    assert.equal(evaluateVerifyAggregate(needsFor(selected,{...allResults('skipped'),'ui-e2e':result})).ok,false);
 });

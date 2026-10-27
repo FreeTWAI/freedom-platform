@@ -243,3 +243,34 @@ checks. This small check uses the existing product-source scope; harmless unowne
 sources and literal unrelated imports remain warnings. It is not general
 JavaScript or transitive dependency analysis. Source-integrity and aggregate
 failure semantics, CodeQL and non-author review remain required.
+
+## Public-reading test maintenance
+
+The bounded `public_reading_maintenance` job decision selects the existing UI
+job only, with source-integrity, required aggregate and CodeQL unchanged. That
+job installs the workflow-pinned parser without lifecycle scripts only for this
+profile; it never loads the parser from candidate dependencies. The
+pinned runner independently derives `public-reading-maintenance` from the same
+clean immutable PR integration or direct-first-parent main-push evidence. It
+accepts only modification of the existing `tests/e2e/public-social-posts.spec.ts`.
+Every other tracked input must remain unchanged, including production, helpers,
+configuration, imports, workflow, descriptors and instructions. No caller file
+list or profile override is accepted.
+
+Within the spec, only the existing PUBLIC-POST-06 callback body may differ.
+The runtime test `public-social-post-page.test.ts` consumes PUBLIC-POST-07; its
+source input and consumer remain unchanged. Other case edits retain full CI.
+Declarations, titles, callback parameters, imports and shared fixture/helpers
+remain byte-identical; bounded TypeScript parsing additionally preserves loader,
+test-control and computed-member expressions. This is a maintenance scope, not
+proof that changed assertions still express the intended product requirements;
+source review remains necessary. Unsupported source shapes retain full selection.
+
+The whole spec runs through the existing pinned config, independent listing and
+case/report completeness checks. Its current fourteen cases must all pass;
+missing cases, newly skipped cases, failed/cancelled processes and incomplete
+reports cannot pass. The plan retains default/OFF coverage and every existing
+fixture ON mode whose registry includes this spec. Other specs/modes are not
+added merely because they share the UI harness. Existing job timeouts, runner
+configuration and failure semantics are unchanged. The profile implementation
+itself is outside this spec-only scope and does not self-qualify.

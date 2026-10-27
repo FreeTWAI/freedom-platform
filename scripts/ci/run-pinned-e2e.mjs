@@ -210,7 +210,7 @@ async function main() {
   const output = input.output ? resolve(input.output) : resolve(root, '.freedom/reports/pinned-e2e.json');
   // Recompute from host SHAs before candidate test/config execution. No profile
   // env var, candidate JSON report or arbitrary file argument is accepted.
-  const selection = input.guildProfile ? {profile: input.guildProfile, reason: 'reviewed_guild_job_obligations'} : collectRepositoryE2eDecision({ ...input, repository: root });
+  const selection = input.guildProfile ? {profile: input.guildProfile, reason: 'reviewed_guild_job_obligations'} : collectRepositoryE2eDecision({ ...input, ref: process.env.GITHUB_REF ?? '', repository: root });
   let plan = E2E_PLAN, profile = 'full';
   let expectedFiles = [], passReports = [];
   const fail = (status, reason) => ({ check_id: 'ci.e2e', status, reason, test_count: 0,

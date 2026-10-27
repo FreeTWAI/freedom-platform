@@ -1025,3 +1025,58 @@ test('Guild preview requires every listed case from all three reviewed module fi
   withoutEvents[0].report.stats.expected--;assert.equal(check(withoutEvents).status,'failed');
   assert.equal(evaluateE2ePasses([...files,'modules/other/WorksBlock.spec.ts'],clean(),{rootDir,configFile,profile:'guild-preview'}).status,'failed');
 });
+
+test('public-reading maintenance runs the complete listed spec and rejects missing, skipped or extra mode evidence',async()=>{
+  const {PUBLIC_READING_FILES,PUBLIC_READING_PLAN,planE2eSelection}=await import('../pinned-e2e.mjs');
+  const source=await readFile(join(repoRoot,PUBLIC_READING_FILES[0]),'utf8');
+  const titles=[...source.matchAll(/^test\('([^']+)'/gm)].map(match=>match[1]);
+  assert.equal(titles.length,14);
+  const selection=planE2eSelection('public-reading-maintenance',[...expectedFiles,...PUBLIC_READING_FILES]);
+  assert.deepEqual(selection.expectedFiles,PUBLIC_READING_FILES);assert.deepEqual(selection.plan,PUBLIC_READING_PLAN);
+  assert.equal(planE2eSelection('public-reading-maintenance',expectedFiles).profile,'full');
+  const result=report([suite('public-social-posts.spec.ts',titles.map(title=>[title,'expected']))]);
+  const passes=[{id:'default',exit_code:0,report:result,listing:structuredClone(result),listing_exit_code:0,listing_evidence_sha256:'a'.repeat(64)}];
+  const check=p=>evaluateE2ePasses(PUBLIC_READING_FILES,p,{rootDir,configFile,profile:'public-reading-maintenance'});
+  assert.equal(check(passes).status,'passed');
+  for(const mutate of [p=>p[0].report.suites[0].suites[0].suites[0].specs.pop(),
+    p=>{p[0].report.suites[0].suites[0].suites[0].specs[0].tests=[state('skipped')];p[0].report.stats.expected--;p[0].report.stats.skipped++;},
+    p=>{p[0].listing_exit_code=1;},p=>{p[0].exit_code=1;},p=>p.push({...p[0],id:'private-ai'})]){
+    const changed=structuredClone(passes);mutate(changed);assert.equal(check(changed).status,'failed');
+  }
+});
+
+test('CLI derives public-reading maintenance from host SHAs and enumerates all fourteen cases',async()=>{
+  await withFixture(async root=>{
+    const {PUBLIC_READING_FILES}=await import('../pinned-e2e.mjs');
+    await playwrightFixture(root,"export default {grep:/never/,testIgnore:['**/*'],projects:[{name:'chromium'}]};");
+    const file=PUBLIC_READING_FILES[0];
+    const source=await readFile(join(repoRoot,file),'utf8');
+    const titles=[...source.matchAll(/^test\('([^']+)'/gm)].map(match=>match[1]);assert.equal(titles.length,14);
+    // Executes real Playwright listing/report handling, not the product browser
+    // journeys (whose independently reviewed evidence remains separate).
+    const cases="import {test} from '@playwright/test';\n"+titles.map(title=>`test(${JSON.stringify(title)},async()=>{});`).join('\n');
+    await writeFile(join(root,file),cases);
+    const descriptor={format:'freedom.module/v1',module_id:'public-social-post-sharing',owner_role:'foundation',
+      owned_paths:[file],dependencies:[],tests:['runtime.full'],public_exports:[],contract_families:['preview'],
+      client_profiles:['member'],instructions:['governance/README.md'],invariants:['local-only'],surfaces:[]};
+    await mkdir(join(root,'modules/public-social-post-sharing'),{recursive:true});
+    await writeFile(join(root,'modules/public-social-post-sharing/freedom.module.json'),JSON.stringify(descriptor));
+    await writeFile(join(root,'.gitignore'),'node_modules\nresult.json\n.freedom/\n');
+    const git=(args,input)=>execFileSync('git',['-C',root,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
+      input,encoding:'utf8',env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'CI Test',GIT_AUTHOR_EMAIL:'test@example.invalid',GIT_COMMITTER_NAME:'CI Test',GIT_COMMITTER_EMAIL:'test@example.invalid'}}).trim();
+    git(['init','-q','-b','main']);git(['add','.']);git(['commit','-qm','base']);const base=git(['rev-parse','HEAD']);
+    await writeFile(join(root,file),cases.replace(`test(${JSON.stringify(titles[5])},async()=>{});`,`test(${JSON.stringify(titles[5])},async()=>{await Promise.resolve();});`));
+    git(['add',file]);git(['commit','-qm','test maintenance']);const head=git(['rev-parse','HEAD']);
+    const candidate=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);
+    for(const event of ['pull_request','push']){
+      const child=invoke(['--root',root,'--output',join(root,'result.json'),'--event',event,'--base',base,'--head',event==='push'?candidate:head,'--candidate',candidate],
+        {GITHUB_REF:event==='push'?'refs/heads/main':'refs/pull/1/merge',FREEDOM_E2E_PRIVATE_AI_FIXTURE:'1'});
+      assert.equal(child.status,0,child.stdout+child.stderr);
+      const result=JSON.parse(await readFile(join(root,'result.json'),'utf8'));
+      assert.equal(result.selection.profile,'public-reading-maintenance');assert.deepEqual(result.selected_files,PUBLIC_READING_FILES);
+      assert.equal(result.test_count,14);assert.equal(result.passes.length,1);assert.equal(result.passes[0].listed_case_count,14);
+      assert.ok(result.passes[0].cases.every(c=>c.status==='passed'));
+    }
+    assert.equal(invoke(['--root',root,'--profile','public-reading-maintenance']).status,2);
+  });
+});

@@ -409,11 +409,15 @@ jobs:
         run: |
           test "$(git -C .freedom/trusted rev-parse HEAD)" = "$PINNED_SHA"
           test -z "$(git -C .freedom/trusted status --porcelain)"
+      - name: Install the pinned maintenance parser without lifecycle scripts
+        if: ${{ needs.select.outputs.reason == 'public_reading_maintenance' }}
+        working-directory: .freedom/trusted
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run the pinned browser plan for the exact integration tree
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CANDIDATE_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
@@ -421,6 +425,9 @@ jobs:
             node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --allow-fetch \
               --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA" \
               --candidate "$CANDIDATE_SHA" --pull-request "$PR_NUMBER"
+          elif [ "$EVENT_NAME" = push ]; then
+            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --allow-fetch \
+              --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA" --candidate "$CANDIDATE_SHA"
           else
             node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --event "$EVENT_NAME" --candidate "$CANDIDATE_SHA"
           fi

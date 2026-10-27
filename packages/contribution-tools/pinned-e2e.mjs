@@ -95,7 +95,16 @@ export const GUIDE_DEFAULT_FILES = Object.freeze([...new Set([
 ])].sort());
 export const GUILD_PREVIEW_PLAN = Object.freeze([{id: 'default', env: {}, files: GUILD_PRESENTATION_PROFILE.previewFiles}]);
 export const GUILD_E2E_PLAN = Object.freeze([{id: 'default', env: {}, files: GUILD_PRESENTATION_PROFILE.integrationFiles}]);
+export const PUBLIC_READING_FILES = Object.freeze(['tests/e2e/public-social-posts.spec.ts']);
+// Retain default/OFF coverage and every registered ON mode that owns this spec.
+export const PUBLIC_READING_PLAN = Object.freeze(E2E_PLAN
+  .filter(pass => pass.id === 'default' || pass.files.some(file => PUBLIC_READING_FILES.includes(file)))
+  .map(pass => Object.freeze({...pass, files: Object.freeze(pass.id === 'default'
+    ? [...PUBLIC_READING_FILES] : pass.files.filter(file => PUBLIC_READING_FILES.includes(file)))})));
 export function planE2eSelection(profile, catalog) {
+  if (profile === 'public-reading-maintenance' && PUBLIC_READING_FILES.every(file => catalog.includes(file))) {
+    return {profile, expectedFiles: [...PUBLIC_READING_FILES], plan: PUBLIC_READING_PLAN};
+  }
   if (profile === 'guild-presentation' && GUILD_PRESENTATION_PROFILE.integrationFiles.every(file => catalog.includes(file))) {
     return {profile, expectedFiles: [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort(), plan: GUILD_E2E_PLAN};
   }
@@ -170,9 +179,10 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
     if (!selected_files.length) throw Error('empty_test_set');
     const preview = options?.profile === 'guild-preview';
     const guild = options?.profile === 'guild-presentation' || preview;
-    const pilot = options?.profile === 'newcomer-guides' || guild;
-    const requiredPlan = preview ? GUILD_PREVIEW_PLAN : guild ? GUILD_E2E_PLAN : E2E_PLAN;
-    if (pilot && JSON.stringify(selected_files) !== JSON.stringify(preview ? [...GUILD_PRESENTATION_PROFILE.previewFiles].sort() : guild ? [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort() : GUIDE_DEFAULT_FILES)) throw Error('invalid_expected_files');
+    const reading = options?.profile === 'public-reading-maintenance';
+    const pilot = options?.profile === 'newcomer-guides' || guild || reading;
+    const requiredPlan = reading ? PUBLIC_READING_PLAN : preview ? GUILD_PREVIEW_PLAN : guild ? GUILD_E2E_PLAN : E2E_PLAN;
+    if (pilot && JSON.stringify(selected_files) !== JSON.stringify(reading ? PUBLIC_READING_FILES : preview ? [...GUILD_PRESENTATION_PROFILE.previewFiles].sort() : guild ? [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort() : GUIDE_DEFAULT_FILES)) throw Error('invalid_expected_files');
     if (!object(options) || !text(options.rootDir) || !options.rootDir.startsWith('/')
       || options.rootDir.includes('\\')) throw Error('invalid_root_dir');
     if (!text(options.configFile) || !isAbsolute(options.configFile)) throw Error('invalid_test_results');
