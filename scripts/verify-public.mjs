@@ -624,10 +624,11 @@ try {
   expect(privateSearch.status()).toBe(200);expect((await privateSearch.json()).total).toBe(0);
   await page.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill(nickname);
   await page.getByRole('button',{name:'搜尋',exact:true}).click();
-  await page.locator('.member-directory .directory-advanced > summary').click();
-  await expect(page.locator('.member-directory .directory-advanced')).toHaveAttribute('open','');
-  await page.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption(onboarding.primary_guild_key);
-  await page.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('oldest');
+  const memberFilters=page.getByRole('search',{name:'尋找工坊夥伴',exact:true});
+  await memberFilters.locator('.directory-advanced > summary').click();
+  await expect(memberFilters.locator('.directory-advanced')).toHaveAttribute('open','');
+  await memberFilters.getByRole('combobox',{name:'依公會篩選',exact:true}).selectOption(onboarding.primary_guild_key);
+  await memberFilters.getByRole('combobox',{name:'排序方式',exact:true}).selectOption('oldest');
   await expect(page.locator('.member-directory')).toHaveAttribute('aria-busy','false');
   await expect(page.locator('.directory-member')).toHaveCount(1);
   const directoryRow=page.locator('.directory-member');
