@@ -19,6 +19,18 @@ import './modules/SocialPostOptimizer.css'
 
 initializeExperienceProfile()
 
+// A cross-origin, sandboxed fixed-URL document keeps account and share URLs out of analytics.
+if (location.hostname === 'freetwai.com' && location.pathname === '/') {
+  const frame = document.createElement('iframe')
+  frame.src = 'https://aisns.evitina.tw/analytics-freetwai.html'
+  frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')
+  frame.referrerPolicy = 'no-referrer'
+  frame.setAttribute('aria-hidden', 'true')
+  frame.tabIndex = -1
+  frame.hidden = true
+  document.body.appendChild(frame)
+}
+
 const root = document.getElementById('root')
 if (!root) {
   throw new Error('找不到根節點')
