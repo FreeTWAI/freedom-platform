@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-27T13:30:56.079Z",
+  "recorded_at": "2026-10-27T18:17:56.901Z",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,32 +14,33 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
-    "tree": "eeb903e3e7afcf3a648e24b20175b9f5f7d9eba4",
-    "observed_at": "2026-10-27T13:30:56.079Z",
+    "sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+    "tree": "b623c0723c5260668b0209f1d3406f8370baf09c",
+    "observed_at": "2026-10-27T18:17:51.933Z",
     "observation_kind": "GitHub main readback, separate from actual deployed source.",
-    "runtime_release_source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-    "runtime_release_source_scope": "Both environments completed the shared five-phase release at 09:26/09:32 UTC. Later backup/release attempts failed; recovery is not yet validated.",
+    "runtime_release_source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+    "runtime_release_source_scope": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted.",
     "release_source_verify": {
       "conclusion": "success",
-      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "head": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "run": 40470403076,
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "head": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "run": 40550241102,
       "attempt": 1,
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-27T13:30:56.079Z",
-      "main": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
-      "main_verify_run": 40492244042,
+      "observed_at": "2026-10-27T18:17:51.933Z",
+      "main": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "main_verify_run": 40550241102,
       "main_verify_attempt": 1,
       "main_verify_last_reported_status": "completed",
       "main_verify_conclusion": "success",
-      "main_codeql_run": 40492244040,
+      "main_codeql_run": 40550240886,
       "main_codeql_conclusion": "success",
       "main_ci_complete": true,
       "deployed_by_existing_receipt": false,
-      "limitation": "main CI passed; latest authenticated successful deployment remains 34390b12. The later staging release failed."
+      "limitation": "Production final workflow is failed; deployed state is confirmed by a separate followup observation, not a fully successful release receipt.",
+      "deployed_by_receipt_and_followup_readback": true
     },
     "previous_main_verify_observation": {
       "observed_at": "2026-10-26T13:48:57.954Z",
@@ -66,88 +67,99 @@
       "main_verify_attempt": 1
     },
     "migrations_beyond_observed_runtime": [],
-    "limitation": "Merged 4d248428 has successful main CI but is not the live source. Actual deployment is 34390b12; member UX and original requirements remain incomplete."
+    "limitation": "Currently observed main and deployed source are separate observations; original acceptance is unchanged."
   },
   "deployment": {
     "production": {
       "url": "https://freetwai.com/",
-      "observed_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "observed_at": "2026-10-27T09:32:02.043Z",
+      "observed_release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "observed_at": "2026-10-27T18:17:56.901Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-        "observation_kind": "operator_validated_health_phase",
-        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480918857"
+        "release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+        "observation_kind": "independent_public_readback_after_workflow_cleanup_failure",
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40556772743"
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "status": "shared_actions_deployed_later_backup_recovery_pending",
-      "last_operator_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted.",
-      "health_observation": "Exact-source health validated by the installed operator and receipt.",
-      "health_observed_at": "2026-10-27T09:31:54.037Z",
-      "health_observed_between": {
-        "start": "2026-10-27T09:31:37.394Z",
-        "end": "2026-10-27T09:31:54.037Z"
-      },
-      "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
-      "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt.",
+      "status": "deployed_workflow_cleanup_failed_readback_confirmed",
+      "last_operator_release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "limitation": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted.",
+      "health_observation": "Operator health reported passed; later public HTTP readback and under-lease journal/DB/Worker confirmation retained separately.",
+      "health_observed_at": "2026-10-27T18:17:56.901Z",
+      "health_observed_at_basis": "Timestamp of the independent public HTTP request after the failed workflow.",
+      "worker_version_observation": "Provider version and bindings digest are in the confirmed journal observation in followup_control_read_fix.productionHandoffReadback.",
       "additional_public_health_readback": {
-        "observedAt": "2026-10-27T13:28:56.812Z",
+        "observedAt": "2026-10-27T18:17:56.901Z",
         "httpStatus": 200,
         "status": "ok",
-        "releaseSha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c"
+        "releaseSha": "f2c9b2fd14173e8d552771618590fdb2dc915142"
+      },
+      "workflow_conclusion": "failure",
+      "github_deployment_state": "failure",
+      "cleanup_followup": {
+        "workflow_failure": "release_lease_cleanup_failed",
+        "readback_started_at": "2026-10-27T18:16:08.155Z",
+        "readback_completed_at": "2026-10-27T18:16:21.864Z",
+        "journal_generation": 32,
+        "pending": null,
+        "lease_acquired_and_released": true,
+        "database_worker_verified": true,
+        "remote_persistent_writes": 0,
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json"
       }
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "observed_at": "2026-10-27T09:26:48.772Z",
+      "observed_release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "observed_at": "2026-10-27T17:58:57.703Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
         "observation_kind": "operator_validated_health_phase",
-        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480167897"
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40554821303"
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "status": "shared_actions_deployed_later_backup_recovery_pending",
-      "last_operator_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted.",
+      "status": "shared_actions_deployed_backup_pending_reconciled",
+      "last_operator_release_sha": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "limitation": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted.",
       "health_observation": "Exact-source health validated by the installed operator and receipt.",
-      "health_observed_at": "2026-10-27T09:26:39.640Z",
+      "health_observed_at": "2026-10-27T17:58:47.113Z",
       "health_observed_between": {
-        "start": "2026-10-27T09:26:22.906Z",
-        "end": "2026-10-27T09:26:39.640Z"
+        "start": "2026-10-27T17:58:27.971Z",
+        "end": "2026-10-27T17:58:47.113Z"
       },
       "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
-      "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt."
+      "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt.",
+      "workflow_conclusion": "success",
+      "github_deployment_state": "success"
     },
     "last_operator_rollout": {
-      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "at": "2026-10-27T09:32:02.043Z",
-      "kind": "authenticated_shared_actions_receipts",
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "at": "2026-10-27T18:17:56.901Z",
+      "kind": "shared_actions_and_independent_readback",
       "scope": "staging-next then next, same verified source and operator image",
-      "status": "passed",
+      "status": "deployed_production_cleanup_failed_later_readback_confirmed",
       "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted."
+      "limitation": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted."
     },
     "last_production_rollout": {
-      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "at": "2026-10-27T09:32:02.043Z",
-      "status": "shared_actions_deployed_later_backup_recovery_pending",
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "at": "2026-10-27T18:17:56.901Z",
+      "status": "deployed_workflow_cleanup_failed_readback_confirmed",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "run_id": 40480918857,
-      "deployment_id": 7354836825,
-      "kind": "authenticated_shared_actions_receipt"
+      "run_id": 40556772743,
+      "deployment_id": 7366505203,
+      "kind": "authenticated_shared_actions_receipt_and_later_readback"
     },
     "last_staging_rollout": {
-      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
-      "at": "2026-10-27T09:26:48.772Z",
-      "status": "shared_actions_deployed_later_backup_recovery_pending",
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "at": "2026-10-27T17:58:57.703Z",
+      "status": "shared_actions_deployed_backup_pending_reconciled",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "run_id": 40480167897,
-      "deployment_id": 7354722688,
+      "run_id": 40554821303,
+      "deployment_id": 7366221350,
       "kind": "authenticated_shared_actions_receipt"
     },
     "previous_production_rollout": {
@@ -762,6 +774,15 @@
         },
         "evidence_cutoff_at": "2026-10-26T13:49:45.532745+00:00",
         "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。"
+      },
+      {
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "at": "2026-10-27T09:32:02.043Z",
+        "kind": "authenticated_shared_actions_receipts",
+        "scope": "staging-next then next, same verified source and operator image",
+        "status": "passed",
+        "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+        "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted."
       }
     ],
     "execution_mode": "Manual Shared release workflow_dispatch on protected main, using Environment service credentials and a digest-pinned hosted operator. No personal machine required; this is not an on-push automatic release trigger.",
@@ -969,7 +990,17 @@
       "runtime_source": "1db283839296e284602217140a21921072d86629",
       "migrations": [],
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "limitation": "Git migration catalog unchanged from prior S11 through deployed source and observed main. Existing dated live schema189/188-row observations and floor authority retained; this reconciliation did not run a new DB ledger query."
+      "limitation": "Git migration catalog unchanged from prior S11 through deployed source and observed main. Existing dated live schema189/188-row observations and floor authority retained; this reconciliation did not run a new DB ledger query.",
+      "observation_scope": "historical_2026-10-27_0726_utc",
+      "observed_at": "2026-10-27T07:26:38.144639+00:00"
+    },
+    "latest_release_migration_catalog_comparison": {
+      "observed_at": "2026-10-27T18:17:56.901Z",
+      "previous_source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "changed_migrations": [],
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Git migration catalogs are identical; confirmed production journal records read-only unchanged-schema verification. No schema/floor mutation by the later readback."
     }
   },
   "topology": {
@@ -1310,6 +1341,36 @@
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-r21-2026-10-12.json",
       "own_content_only": true,
       "status": "deployed_and_synthetic_member_verified"
+    },
+    "shared_release_flag_changes": {
+      "observed_at": "2026-10-27T18:17:56.901Z",
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "decision": "https://github.com/FreeTWAI/freedom-platform/pull/1123",
+      "by_environment": {
+        "staging": [],
+        "production": [
+          {
+            "name": "FREEDOM_COMMUNITY_RELATIONS_ENABLED",
+            "from": null,
+            "to": "true",
+            "record": "https://github.com/FreeTWAI/freedom-platform/pull/1123"
+          }
+        ]
+      },
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Staging had already enabled this in run40540262261; next change is confirmed by the retained deploy journal and Worker bindings readback. Other historical flag observations retain their dates; no member acceptance inferred."
+    },
+    "community_relations": {
+      "flag": "FREEDOM_COMMUNITY_RELATIONS_ENABLED",
+      "last_operator_value": {
+        "staging": "true",
+        "production": "true"
+      },
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "observed_at": "2026-10-27T18:17:56.901Z",
+      "decision": "https://github.com/FreeTWAI/freedom-platform/pull/1123",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "status": "deployed_and_enabled_member_acceptance_not_observed"
     }
   },
   "recovery": {
@@ -3181,7 +3242,7 @@
       "Same-host isolated current-schema restore passed; a second authorized operator in a new environment is not yet accepted",
       "GC/OFF daily mode remains selected; retention executor and historical unsettled PUT remain open"
     ],
-    "operator_source_note": "Shared Actions is enabled and deployed 34390b12. The later natural backup failed before dump; its recovery remains pending in #1133/#1134. Earlier manual success and the independently reconciled 07:16 failure remain historical evidence, not proof that the new failure is settled. Legacy timer fields retain their dated configuration; no new timer observation or per-deployment backup requirement.",
+    "operator_source_note": "Shared Actions deployed f2c9b2fd. Original backup was settled in earlier staging run40540262261 and failed next preflight40555710003. The later next run40556772743 deployed and passed health but failed lease cleanup; independent under-lease readback confirmed pending=null and DB/Worker source, then released the lock. Original failures retained; no new backup/floor reset/timer change. Natural success of the new image remains unobserved.",
     "current_operator_scheduled_run": {
       "observed_at": "2026-10-27T13:30:56.079Z",
       "status": "observed_failed_before_dump",
@@ -3194,7 +3255,30 @@
       "event": "schedule",
       "run_attempt": 1,
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "limitation": "Natural execution observed, success not established. Both original failure receipts are verified; capture failed before snapshotDump, and pending recovery remains separate from prior successful manual backup."
+      "limitation": "Natural execution observed, success not established. Both original failure receipts are verified; capture failed before snapshotDump, and pending recovery remains separate from prior successful manual backup.",
+      "recovery_followup": {
+        "status": "original_backup_pending_reconciled_both_sources_deployed_production_cleanup_failure_readback_confirmed",
+        "observed_at": "2026-10-27T18:17:56.901Z",
+        "original_failed_schedule_run": 40492346184,
+        "original_failure_retained": true,
+        "new_backup_started": false,
+        "floor_reset": false,
+        "integration_pr": 1144,
+        "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+        "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d",
+        "release_runs": {
+          "staging-next": 40554821303,
+          "next": 40556772743
+        },
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+        "evidence_scope": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted."
+      },
+      "new_image_schedule_observation": {
+        "operator_source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+        "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d",
+        "status": "not_observed_for_new_image",
+        "observed_at": "2026-10-27T18:17:56.901Z"
+      }
     },
     "rollback": {
       "current_schema": {
@@ -3606,17 +3690,21 @@
       "natural_schedule_proven": false
     },
     "shared_actions_pending_recovery": {
-      "status": "pending_recovery_not_live_validated",
-      "failed_schedule_run": 40492346184,
-      "followup_failed_backup_run": 40496614066,
-      "failed_staging_deploy_run": 40494980290,
-      "source_fix_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1133",
-      "source_fix_head": "7186c57f974cc6cadcc04d25335c293f43a1d381",
-      "integration_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1134",
-      "integration_head": "11732a72c7169610c6302ceafe4cfc8112211f49",
-      "integration_verify_run": 40510156941,
-      "under_lease_pending_state": "Reported by the original operator in PR #1120/#1133; not independently re-read from the live database in this observation.",
-      "next_step": "Complete reviewed integration, install its validated operator image, then reconcile original failed run through staging and next using the existing recovery input. Do not reset floor or start another full backup merely for deployment."
+      "status": "original_backup_pending_reconciled_both_sources_deployed_production_cleanup_failure_readback_confirmed",
+      "observed_at": "2026-10-27T18:17:56.901Z",
+      "original_failed_schedule_run": 40492346184,
+      "original_failure_retained": true,
+      "new_backup_started": false,
+      "floor_reset": false,
+      "integration_pr": 1144,
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d",
+      "release_runs": {
+        "staging-next": 40554821303,
+        "next": 40556772743
+      },
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "evidence_scope": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted."
     }
   },
   "governance_current": {
@@ -9519,11 +9607,17 @@
         "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
         "limitation": "Staging manual run passed; production workflow failed and its completed backup was independently reconciled. Neither proves natural scheduling. Legacy timer operation/retirement is owned separately and was not changed by this task."
       }
+    },
+    {
+      "recorded_at": "2026-10-27T13:30:56.079Z",
+      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "scope": "The 13:30 UTC snapshot and original failed backup remain in followup_1330_utc; the new observation separately records backup settlement, deployed source and cleanup failure."
     }
   ],
   "shared_release_installation": {
-    "observed_at": "2026-10-27T13:28:50.804Z",
-    "status": "enabled_previous_deployments_passed_current_recovery_pending",
+    "observed_at": "2026-10-27T18:17:51.933Z",
+    "status": "enabled_and_deployed_production_cleanup_failure_readback_confirmed",
     "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
     "workflow": "https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml",
     "operators": [
@@ -9558,7 +9652,7 @@
           "BACKUP_ENABLED": "true",
           "RELEASE_CONFIG_SHA256": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376",
           "RELEASE_ENABLED": "true",
-          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d"
         }
       },
       {
@@ -9570,7 +9664,7 @@
           "BACKUP_ENABLED": "true",
           "RELEASE_CONFIG_SHA256": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6",
           "RELEASE_ENABLED": "true",
-          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d"
         }
       }
     ],
@@ -9580,7 +9674,7 @@
     ],
     "personal_keys_distributed": false,
     "ordinary_release_requires_daily_backup": false,
-    "natural_backup_acceptance": "observed_failed_before_dump",
+    "natural_backup_acceptance": "not_observed_for_new_image_previous_run_failed",
     "actual_deploy_operators_observed": [
       "teddashh"
     ],
@@ -9598,17 +9692,26 @@
       "limitation": "GitHub admission only; no operator, provider, database or deployment acceptance."
     },
     "current_release_blocker": {
-      "status": "pending_recovery_not_live_validated",
-      "failed_schedule_run": 40492346184,
-      "followup_failed_backup_run": 40496614066,
-      "failed_staging_deploy_run": 40494980290,
-      "source_fix_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1133",
-      "source_fix_head": "7186c57f974cc6cadcc04d25335c293f43a1d381",
-      "integration_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1134",
-      "integration_head": "11732a72c7169610c6302ceafe4cfc8112211f49",
-      "integration_verify_run": 40510156941,
-      "under_lease_pending_state": "Reported by the original operator in PR #1120/#1133; not independently re-read from the live database in this observation.",
-      "next_step": "Complete reviewed integration, install its validated operator image, then reconcile original failed run through staging and next using the existing recovery input. Do not reset floor or start another full backup merely for deployment."
+      "status": "cleared_by_later_readback",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Original cleanup failure remains; cause not established. No repeated deployment solely to obtain a green workflow."
+    },
+    "recovery_followup": {
+      "status": "original_backup_pending_reconciled_both_sources_deployed_production_cleanup_failure_readback_confirmed",
+      "observed_at": "2026-10-27T18:17:56.901Z",
+      "original_failed_schedule_run": 40492346184,
+      "original_failure_retained": true,
+      "new_backup_started": false,
+      "floor_reset": false,
+      "integration_pr": 1144,
+      "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+      "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:94c9ce07f01d4d8c190900698cc50a06abfa9b74d5715298847b75e6ab20060d",
+      "release_runs": {
+        "staging-next": 40554821303,
+        "next": 40556772743
+      },
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "evidence_scope": "Staging five-phase workflow passed. Production deployed and passed health but its workflow/deployment status remains failure because lease cleanup failed. A later read-only observation under a newly acquired/released lease confirms journal pending=null and DB/Worker source. Other accounts actual deploys, member journeys, second-operator restore, live rollback and original requirements remain unaccepted."
     }
   }
 }
