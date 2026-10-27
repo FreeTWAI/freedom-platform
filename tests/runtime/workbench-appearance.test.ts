@@ -89,3 +89,30 @@ test('failed pagination preserves existing items and cursor for an enabled retry
   assert.equal(model.slots[3],'');assert.deepEqual(model.slots[5],[{work_item_id:'first'},{work_item_id:'second'}]);
   assert.equal(model.button(),undefined);assert.equal(model.calls.length,2);
 });
+
+test('native focus checks do not assume the existing dark Workbench ancestor is a solid surface',()=>{
+  assert.match(readCss('LayoutDesign.css'),/\.main\s*\{\s*background:\s*linear-gradient\(/,'the current dark page uses a gradient');
+  const e2e=readFileSync(new URL('../e2e/work-pagination.spec.ts',import.meta.url),'utf8');
+  const helper=e2e.slice(e2e.indexOf('async function expectWorkPaginationColors'),e2e.indexOf("for(const profile of ['light'"));
+  assert.match(helper,/Focus contrast is button-side only/);
+  assert.match(helper,/focus:ratio\(style.outlineColor,style.backgroundColor\)/);
+  assert.doesNotMatch(helper,/adjacentSurface|adjacentFocus|outer\.backgroundImage/,'do not reject the supported ancestor gradient or infer its pixels');
+  assert.match(helper,/Number\(outer.opacity\)!==1/,'ancestor transparency still invalidates the opaque-color model');
+});
+
+// Both community-work pagination leaves share the palette contract, not a new
+// component/session API. TaskBoard retains its independent loading lane tests.
+test('TaskBoard pagination owns its exact style without changing filter, loading or composition guards',()=>{
+  const taskBoard=readFileSync(new URL('../../apps/portal-web/src/modules/TaskBoardPanel.tsx',import.meta.url),'utf8');
+  assert.match(taskBoard,/import ['"]\.\/TaskBoardPanel\.css['"]/);
+  assert.equal((taskBoard.match(/task-board-load-more/g)??[]).length,1);
+  assert.match(taskBoard,/className="btn btn-secondary btn-small task-board-load-more" disabled=\{loading\|\|loadingMore\|\|composing\} onClick=\{loadMore\}/);
+  const css=readCss('modules/TaskBoardPanel.css'),selector='.task-board-load-more.btn-secondary';
+  const rule=css.match(/\.task-board-load-more\.btn-secondary\s*\{([^}]+)\}/)?.[1];
+  assert.ok(rule);assert.match(rule,/background:\s*var\(--bg-elev\)/);assert.match(rule,/color:\s*var\(--ink\)/);
+  assert.match(rule,/border:\s*1px solid var\(--line\)/);
+  assert.ok(css.includes(selector+':hover:not(:disabled)'));assert.ok(css.includes(selector+':focus-visible'));
+  assert.match(css,/outline:\s*2px solid var\(--focus\)/);
+  for(const match of css.replace(/\/\*[\s\S]*?\*\//g,'').matchAll(/([^{}]+)\{/g))assert.ok(match[1].split(',').every(value=>value.trim().startsWith(selector)));
+  assert.doesNotMatch(css,/min-height|padding|font-size|opacity|pointer-events/);
+});

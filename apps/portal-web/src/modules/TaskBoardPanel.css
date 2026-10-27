@@ -1,0 +1,14 @@
+/* Only TaskBoard pagination; refresh, filter and work-entry controls keep their variants. */
+.task-board-load-more.btn-secondary {
+  background: var(--bg-elev);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.task-board-load-more.btn-secondary:hover:not(:disabled),
+.task-board-load-more.btn-secondary:focus-visible {
+  border-color: var(--focus);
+}
+.task-board-load-more.btn-secondary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
