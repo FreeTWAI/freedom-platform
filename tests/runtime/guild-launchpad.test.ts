@@ -156,7 +156,7 @@ test('every catalog guild and one custom guild resolve the platform default on p
   const objective = '寫下這次工作的目標。';
   const note = '記下過程、來源與下一步。';
   const starterCells: Record<string, string> = {
-    guild_talent_direction: '我的方向卡；寫下一至兩個小活動，選一個開始，記錄完成條件與回顧。',
+    guild_talent_direction: '我的方向卡；寫下過生活底線與第一週行動：選一個小活動，記錄可投入時間、完成條件與回顧。',
     guild_member_operations: '新人支援／活動準備',
     guild_platform_engineering: '問題重現／規格筆記',
     guild_ai_vibe: '開源作品需求／驗收',
@@ -183,7 +183,8 @@ test('every catalog guild and one custom guild resolve the platform default on p
     const seen = await request(`/public/guilds/${key}/launchpad`);
     assert.equal(seen.data.config.body.starter.title_label, title, key);
     assert.equal(seen.data.config.body.starter.objective_hint, hint, key);
-    assert.equal(seen.data.config.body.starter.note_hint, note, key);
+    assert.equal(seen.data.config.body.starter.note_hint, key === 'guild_talent_direction'
+      ? '過生活底線：哪些時間與生活品質不可犧牲？第一週行動：做什麼、何時完成、留下什麼證據？記下過程、來源與下一步。' : note, key);
   }
   const custom = rows.find(row => row.guild_key === customKey);
   assert.ok(custom);

@@ -13,7 +13,7 @@ import {guildKeyFromHash} from './guild-launchpad-route';
 import {GuildAnswersSection} from './GuildQuestions';
 import {GuildTopicFilter} from './GuildFilters';
 import {formatIsoLocal} from '../format';
-import type {GuildTopic} from '../../../../packages/shared/guild-topics';
+import {GUILD_TOPIC_LABELS,type GuildTopic} from '../../../../packages/shared/guild-topics';
 
 function failure(error:unknown){return error instanceof Error?error.message:'暫時無法取得資料，請重試。';}
 
@@ -61,6 +61,7 @@ type CatalogItem={guild_key:string;name:string;category:CategoryName|null;catego
 type CategoryCatalog={catalog_revision:string;categories:{category:CategoryName;section:string;items:CatalogItem[]}[];pending:CatalogItem[]};
 type CategoryBoard={view:PreferenceView;catalog:CategoryCatalog};
 type PreferenceDraft={category:CategoryName;guild_key:string|null;catalog_revision:string;guildName:string;actionGuild:string};
+type LeaveRetry={guild:GuildSummary;clearPrimary:boolean;section?:string;membershipVersion:number;preferenceVersion:string};
 const CATEGORY_ORDER=['internal','external','professional_industry'] as const;
 
 export function GuildsPanel({client,session,onNavigate,site,locationHash,registerPendingLeave,blockLoaders}:ModulePanelProps&{blockLoaders?:GuildBlockLoaders;site?:{guild_launchpad_enabled?:boolean;supplier_console_enabled?:boolean}|null;locationHash:string;registerPendingLeave:(guard:(()=>boolean)|null)=>void}) {
@@ -71,7 +72,14 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const [draft,setDraft]=useState({name:'',profession:'',reason:''}),[applicationSuccess,setApplicationSuccess]=useState(''),[focusDraft,setFocusDraft]=useState(false),[focusGuild,setFocusGuild]=useState<string|null>(null);
   const launchpadEnabled=site?.guild_launchpad_enabled===true;
   const [board,setBoard]=useState<CategoryBoard|null>(null),[categoryBusy,setCategoryBusy]=useState(false),[categoryNote,setCategoryNote]=useState(''),[held,setHeld]=useState<PreferenceDraft|null>(null),[unknownDraft,setUnknownDraft]=useState<{draft:PreferenceDraft;version:number}|null>(null),[leaveDraft,setLeaveDraft]=useState<{guild:GuildSummary;section:string}|null>(null),[focusAction,setFocusAction]=useState<string|null>(null);
-  const generation=useRef(0),successRef=useRef<HTMLParagraphElement>(null),nameRef=useRef<HTMLInputElement>(null),preferenceKeys=useRef(new Map<string,string>());
+  const [unknownLeave,setUnknownLeave]=useState<LeaveRetry|null>(null);
+  // A later denial cannot turn an earlier unknown write into a new command.
+  const categoryPending=useRef<string|null>(null),categoryInFlight=useRef(false),categoryEpoch=useRef(0);
+  const categoryOwner=useRef({client,sessionGeneration:client.sessionGeneration,active:true}),categoryClient=useRef(client);
+  categoryClient.current=client;
+  const writesBlocked=Boolean(unknownDraft||unknownLeave);
+  const secondaryTriggerRef=useRef<HTMLButtonElement>(null),toolsSummaryRef=useRef<HTMLElement>(null);
+  const generation=useRef(0),successRef=useRef<HTMLParagraphElement>(null),nameRef=useRef<HTMLInputElement>(null),preferenceKeys=useRef(new Map<string,{key:string;uncertain:boolean}>());
   const launchpadKey=launchpadEnabled?guildKeyFromHash(locationHash):null;
   const {mutate,busy,error,setError}=useModuleMutation(client);
   // A roster change refreshes expert counts without unmounting the open members dialog.
@@ -93,6 +101,9 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     }catch(e){if(sequence===generation.current)setLoadError(failure(e));}
     finally{if(sequence===generation.current)setLoading(false);}
   },[client,launchpadEnabled,setError]);
+  // Never transfer an old draft to a replacement client/session. App remounts
+  // the panel for a new session; cleanup also fences already-running closures.
+  useEffect(()=>{const owner=categoryOwner.current;owner.active=owner.client===client&&owner.sessionGeneration===client.sessionGeneration;return()=>{owner.active=false;categoryEpoch.current++;};},[client]);
   useEffect(()=>{if(launchpadKey)return()=>{generation.current++;};void load();return()=>{generation.current++;};},[load,launchpadKey]);
   useEffect(()=>{if(applicationSuccess)successRef.current?.focus();},[applicationSuccess]);
   useEffect(()=>{if(showApply&&focusDraft){nameRef.current?.focus();setFocusDraft(false);}},[showApply,focusDraft]);
@@ -112,37 +123,49 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   function catalogItem(guildKey:string){return board?.catalog.categories.flatMap(group=>group.items).find(item=>item.guild_key===guildKey)??board?.catalog.pending.find(item=>item.guild_key===guildKey);}
   function slotFor(guildKey:string){return board?.view.primaries.find(item=>item.guild_key===guildKey);}
   function categoryOf(guildKey:string):CategoryName|null{const item=catalogItem(guildKey);return item?.category_review==='approved'&&item.category?item.category:null;}
+  function currentCategoryOwner(owner:typeof categoryOwner.current){return owner===categoryOwner.current&&owner.active&&owner.client===categoryClient.current&&owner.sessionGeneration===owner.client.sessionGeneration;}
   async function sendPreference(draft:PreferenceDraft,version:number){
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner)||categoryInFlight.current)return;
     const requestKey=JSON.stringify(['set',draft,version]);
-    const key=preferenceKeys.current.get(requestKey)??crypto.randomUUID();
-    preferenceKeys.current.set(requestKey,key);
+    if(categoryPending.current&&categoryPending.current!==requestKey)return;
+    const attempt=preferenceKeys.current.get(requestKey)??{key:crypto.randomUUID(),uncertain:false};
+    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
-      const view=await client.post<PreferenceView>('/me/guild-preferences/v2/set',{category:draft.category,guild_key:draft.guild_key,catalog_revision:draft.catalog_revision},{idempotencyKey:key,ifMatch:version});
-      preferenceKeys.current.delete(requestKey);setHeld(null);setUnknownDraft(null);
-      setBoard(current=>current?{...current,view}:current);
+      const view=await client.post<PreferenceView>('/me/guild-preferences/v2/set',{category:draft.category,guild_key:draft.guild_key,catalog_revision:draft.catalog_revision},{idempotencyKey:attempt.key,ifMatch:version});
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
+      preferenceKeys.current.delete(requestKey);categoryPending.current=null;setHeld(null);setUnknownDraft(null);setUnknownLeave(null);
+      // Receipt replay may acknowledge an older version than the refreshed board.
+      setBoard(current=>current&&view.aggregate_version>current.view.aggregate_version?{...current,view}:current);
       announce(draft.guild_key?`已將${draft.guildName}設為${SECTION_LABELS[draft.category]}。`:`已清空${SECTION_LABELS[draft.category]}。`);
       setFocusAction(`${draft.actionGuild}:primary`);
       window.dispatchEvent(new Event('freedom-profile-updated'));
       await load(true);
     }catch(cause){
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
+      const definitive=cause instanceof ApiError&&!cause.network&&!cause.timedOut&&cause.status>=400&&cause.status<500;
+      if(attempt.uncertain||!definitive){attempt.uncertain=true;setUnknownDraft({draft:{...draft},version});setCategoryNote('正在確認是否已儲存');if(definitive)setError(failure(cause));return;}
+      categoryPending.current=null;preferenceKeys.current.delete(requestKey);
       if(cause instanceof ApiError&&cause.status===412){setHeld(draft);setUnknownDraft(null);setCategoryNote('這份選擇和伺服器上的版本不同。草稿已保留。');return;}
-      if(cause instanceof ApiError&&(cause.network||cause.status===0||cause.status>=500)){setUnknownDraft({draft,version});setCategoryNote('正在確認是否已儲存');return;}
-      preferenceKeys.current.delete(requestKey);setCategoryNote('');setError(cause instanceof Error?cause.message:'需要處理');
-    }finally{setCategoryBusy(false);}
+      setCategoryNote('');setError(failure(cause));
+    }finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current){categoryInFlight.current=false;setCategoryBusy(false);}}
   }
   async function submitFresh(draft:PreferenceDraft){
+    if(categoryPending.current||categoryInFlight.current)return;
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner))return;
+    const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
       const view=await client.get<PreferenceView>('/me/guild-preferences/v2',{background:true});
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current||categoryPending.current||categoryInFlight.current)return;
       if(view.migration_state!=='switched'){setCategoryNote('社群尚未切換到三類主力。');return;}
-      setBoard(current=>current?{...current,view}:current);
+      setBoard(current=>current&&view.aggregate_version>current.view.aggregate_version?{...current,view}:current);
       await sendPreference(draft,view.aggregate_version);
-    }catch(cause){setCategoryNote(cause instanceof Error?cause.message:'需要處理');}
-    finally{setCategoryBusy(false);}
+    }catch(cause){if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)setCategoryNote(failure(cause));}
+    finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)setCategoryBusy(false);}
   }
   function toggleCategory(g:GuildSummary){
-    if(!board)return;
+    if(!board||categoryPending.current||categoryInFlight.current)return;
     const selected=slotFor(g.guild_key);
     const category=selected?.category??categoryOf(g.guild_key);
     if(!category)return;
@@ -151,26 +174,35 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     const draft:PreferenceDraft={category,guild_key:selected?null:g.guild_key,catalog_revision:revision,guildName:g.name,actionGuild:g.guild_key};
     setHeld(draft);void sendPreference(draft,board.view.aggregate_version);
   }
-  async function leaveV2(g:GuildSummary,clearPrimary:boolean,section?:string){
-    if(!board||g.membership?.aggregate_version==null)return;
-    const body={clear_primary:clearPrimary};
-    const version=String(board.view.aggregate_version);
-    const requestKey=JSON.stringify(['leave',g.guild_key,body,g.membership.aggregate_version,clearPrimary?version:'']);
-    const key=preferenceKeys.current.get(requestKey)??crypto.randomUUID();
-    preferenceKeys.current.set(requestKey,key);
+  async function leaveV2(g:GuildSummary,clearPrimary:boolean,section?:string,retry?:LeaveRetry){
+    const owner=categoryOwner.current;if(!currentCategoryOwner(owner)||categoryInFlight.current)return;
+    if(!retry){
+      if(!board||g.membership?.aggregate_version==null)return;
+      retry={guild:g,clearPrimary,section,membershipVersion:g.membership.aggregate_version,preferenceVersion:String(board.view.aggregate_version)};
+    }
+    const command=retry,body={clear_primary:command.clearPrimary};
+    const requestKey=JSON.stringify(['leave',command.guild.guild_key,body,command.membershipVersion,command.clearPrimary?command.preferenceVersion:'']);
+    if(categoryPending.current&&categoryPending.current!==requestKey)return;
+    const attempt=preferenceKeys.current.get(requestKey)??{key:crypto.randomUUID(),uncertain:false};
+    preferenceKeys.current.set(requestKey,attempt);categoryPending.current=requestKey;categoryInFlight.current=true;const sequence=++categoryEpoch.current;
     setCategoryBusy(true);setCategoryNote('');setError(null);
     try{
-      await client.post(`/guilds/${g.guild_key}/leave-v2`,body,{idempotencyKey:key,ifMatch:g.membership.aggregate_version,...(clearPrimary?{preferenceVersion:version}:{})});
-      preferenceKeys.current.delete(requestKey);setLeaveDraft(null);setUnknownDraft(null);
-      announce(`已退出${g.name}，已解鎖的技能書保留。${section?`已清空${section}。私人業務資料沒有移動，也沒有刪除。`:''}`);
-      await load();window.dispatchEvent(new Event('freedom-profile-updated'));
+      await client.post(`/guilds/${command.guild.guild_key}/leave-v2`,body,{idempotencyKey:attempt.key,ifMatch:command.membershipVersion,...(command.clearPrimary?{preferenceVersion:command.preferenceVersion}:{})});
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
+      preferenceKeys.current.delete(requestKey);categoryPending.current=null;setLeaveDraft(null);setUnknownDraft(null);setUnknownLeave(null);
+      announce(`已退出${command.guild.name}，已解鎖的技能書保留。${command.section?`已清空${command.section}。私人業務資料沒有移動，也沒有刪除。`:''}`);
+      await load();if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current)window.dispatchEvent(new Event('freedom-profile-updated'));
     }catch(cause){
-      if(cause instanceof ApiError&&(cause.network||cause.status===0||cause.status>=500)){setCategoryNote('正在確認是否已儲存');return;}
+      if(!currentCategoryOwner(owner)||sequence!==categoryEpoch.current)return;
+      const definitive=cause instanceof ApiError&&!cause.network&&!cause.timedOut&&cause.status>=400&&cause.status<500;
+      if(attempt.uncertain||!definitive){attempt.uncertain=true;setUnknownLeave(command);setCategoryNote('正在確認是否已儲存');if(definitive)setError(failure(cause));return;}
+      categoryPending.current=null;preferenceKeys.current.delete(requestKey);
       if(cause instanceof ApiError&&cause.status===412)setLeaveDraft(null);
-      preferenceKeys.current.delete(requestKey);setError(cause instanceof Error?cause.message:'需要處理');
-    }finally{setCategoryBusy(false);}
+      setError(failure(cause));
+    }finally{if(currentCategoryOwner(owner)&&sequence===categoryEpoch.current){categoryInFlight.current=false;setCategoryBusy(false);}}
   }
   async function change(g:GuildSummary){
+    if(categoryPending.current||categoryInFlight.current)return;
     setApplicationSuccess('');
     const joining=g.membership?.state!=='active';setNotice('');setAnswerGuild('');
     if(!joining&&board){
@@ -181,8 +213,14 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     const result=await mutate(`/guilds/${g.guild_key}/${joining?'join':'leave'}`,{},g.membership?.aggregate_version);
     if(result){setEditing(false);announce(joining?`已加入${g.name}，技能書已解鎖。你會先以實習成員加入。`:`已退出${g.name}，已解鎖的技能書保留。`,joining?g.name:'');await load();window.dispatchEvent(new Event('freedom-profile-updated'));}
   }
-  async function primary(g:GuildSummary){setApplicationSuccess('');const result=await mutate(`/guilds/${g.guild_key}/primary`,{},preferences?.aggregate_version??undefined);if(result){setEditing(false);announce(`主要公會已設為${g.name}。`);await load();window.dispatchEvent(new Event('freedom-profile-updated'));}}
-  async function saveSecondary(event:FormEvent){event.preventDefault();setApplicationSuccess('');const result=await mutate('/me/guild-preferences/secondary',{secondary_guild_keys:secondaryDraft},preferences?.aggregate_version??undefined);if(result){setEditing(false);announce('次要公會已儲存。');await load();window.dispatchEvent(new Event('freedom-profile-updated'));}}
+  async function primary(g:GuildSummary){if(categoryPending.current||categoryInFlight.current)return;setApplicationSuccess('');const result=await mutate(`/guilds/${g.guild_key}/primary`,{},preferences?.aggregate_version??undefined);if(result){setEditing(false);announce(`主要公會已設為${g.name}。`);await load();window.dispatchEvent(new Event('freedom-profile-updated'));}}
+  function cancelSecondaryEditor(){
+    setEditing(false);
+    const trigger=secondaryTriggerRef.current;
+    const target=[trigger?.closest('details')?.open===false?null:trigger,toolsSummaryRef.current].find(element=>element?.isConnected&&element.getClientRects().length>0&&getComputedStyle(element).visibility==='visible');
+    target?.focus();
+  }
+  async function saveSecondary(event:FormEvent){event.preventDefault();if(categoryPending.current||categoryInFlight.current)return;setApplicationSuccess('');const result=await mutate('/me/guild-preferences/secondary',{secondary_guild_keys:secondaryDraft},preferences?.aggregate_version??undefined);if(result){setEditing(false);announce('次要公會已儲存。');await load();window.dispatchEvent(new Event('freedom-profile-updated'));}}
   async function apply(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setApplicationSuccess('');
     const submitted={name:draft.name.trim(),profession:draft.profession.trim(),reason:draft.reason.trim()};
@@ -219,6 +257,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const joinedCount=guilds.filter(g=>g.membership?.state==='active').length;
   const visibleApplications=showAllApplications?applications:applications.slice(0,3);
   async function toggleSecondary(g:GuildSummary){
+    if(categoryPending.current||categoryInFlight.current)return;
     const removing=secondaryKeys.includes(g.guild_key);
     if(!removing&&secondaryKeys.length>=2)return;
     setApplicationSuccess('');
@@ -230,7 +269,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   return <section className="module-panel guilds-panel" aria-label="公會目錄">
     <header className="guild-hub-heading">
       {!loading&&!loadError&&<p className="guild-overview" aria-label="我的公會概況"><span>已加入 <strong>{joinedCount}</strong> 個公會</span><span>共 {guilds.length} 個公會</span></p>}
-      <div className="actions"><button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('skills')}>前往技能書架</button><button type="button" className="btn btn-ghost" aria-expanded={showApply} aria-controls="guild-application" data-guide-anchor="guilds:create-application" onClick={openApply}>{showApply?'收起創建申請':'申請創建公會'}</button></div>
+      <div className="actions"><button type="button" className="btn btn-ghost" aria-expanded={showApply} aria-controls="guild-application" data-guide-anchor="guilds:create-application" onClick={openApply}>{showApply?'收起創建申請':'申請創建公會'}</button></div>
     </header>
     {applicationSuccess&&<p ref={successRef} role="status" tabIndex={-1} className="banner status-note">{applicationSuccess}</p>}
     {notice&&<div role="status" className="banner status-note guild-join-notice"><span>{notice}</span>{answerGuild&&<button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('positioning')}>回答{answerGuild}的小問題</button>}</div>}
@@ -255,20 +294,33 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
       <label className="field">搜尋公會<input data-guide-anchor="guilds:search" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="名稱、專業、會長或技能書" maxLength={100}/></label>
       <div className="guild-scope" data-guide-anchor="guilds:scope" role="group" aria-label="公會範圍"><button type="button" className="btn btn-ghost" aria-pressed={scope==='all'} onClick={()=>setScope('all')}>全部公會</button><button type="button" className="btn btn-ghost" aria-pressed={scope==='joined'} onClick={()=>setScope('joined')}>已加入</button></div>
     </div>
-    <GuildTopicFilter value={topic} onChange={setTopic}/>
+    <div className="guild-directory-options">
+      <details className="guild-directory-disclosure guild-topic-disclosure">
+        <summary>主題篩選 · {topic?GUILD_TOPIC_LABELS[topic]:'全部主題'}</summary>
+        <GuildTopicFilter value={topic} onChange={setTopic}/>
+      </details>
+      <details className="guild-directory-disclosure guild-tools-disclosure">
+        <summary ref={toolsSummaryRef}>公會設定與工具</summary>
+        <div className="guild-directory-settings">
+          <button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('skills')}>前往技能書架</button>
+          {!loading&&!loadError&&!board&&<div className="guild-secondary-toolbar"><button type="button" className="btn btn-ghost" ref={secondaryTriggerRef} aria-expanded={editing} aria-controls="secondary-guild-editor" disabled={busy} onClick={()=>{setSecondaryDraft(secondaryKeys);setEditing(!editing);}}>設定次要公會</button><span className="muted">主要 1 個・次要最多 2 個</span></div>}
+        </div>
+      </details>
+    </div>
+    {!loading&&!loadError&&<p className="guild-filter-result" role="status">符合篩選：{visible.length} 個公會{board?'（主力公會固定顯示）':''}</p>}
     {loading&&<p role="status">正在載入職業公會…</p>}
     {!loading&&!loadError&&<>
       {board&&<div className="guild-category-board">{CATEGORY_ORDER.map(category=>{
         const primary=board.view.primaries.find(item=>item.category===category);
         const guild=primary?.guild_key?guilds.find(item=>item.guild_key===primary.guild_key):undefined;
         const invalidated=board.view.invalidated.find(item=>item.category===category);
-        return <fieldset key={category}><legend>{SECTION_LABELS[category]}</legend>{guild?<GuildCard guild={guild} client={client} busy={busy||categoryBusy} viewerId={session.user.user_id} onChanged={()=>void load(true)} onPrimary={()=>undefined} onMembership={()=>void change(guild)} categorySlot={categorySlot(guild)} launchpadEnabled={launchpadEnabled} onLaunchpad={()=>{window.location.hash=`guilds/${guild.guild_key}`;}}/>:<p>尚未選擇</p>}{invalidated&&<p className="field-hint">先前的{SECTION_LABELS[category]}已失效，請重新選擇。</p>}</fieldset>;
+        return <fieldset key={category}><legend>{SECTION_LABELS[category]}</legend>{guild?<GuildCard guild={guild} client={client} busy={busy||categoryBusy} writesBlocked={writesBlocked} viewerId={session.user.user_id} onChanged={()=>void load(true)} onPrimary={()=>undefined} onMembership={()=>void change(guild)} categorySlot={categorySlot(guild)} launchpadEnabled={launchpadEnabled} onLaunchpad={()=>{window.location.hash=`guilds/${guild.guild_key}`;}}/>:<p>尚未選擇</p>}{invalidated&&<p className="field-hint">先前的{SECTION_LABELS[category]}已失效，請重新選擇。</p>}</fieldset>;
       })}</div>}
-      {categoryNote&&<div role="status" className="banner status-note"><p>{categoryNote}</p>{unknownDraft&&<button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void sendPreference(unknownDraft.draft,unknownDraft.version)}>再試一次</button>}{held&&board&&!unknownDraft&&<><p>草稿：{SECTION_LABELS[held.category]} · {held.guild_key?held.guildName:'清空'}</p><p>目前：{SECTION_LABELS[held.category]} · {guilds.find(item=>item.guild_key===board.view.primaries.find(slot=>slot.category===held.category)?.guild_key)?.name??'尚未選擇'}</p><button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void load()}>讀取新版本</button><button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void submitFresh(held)}>用新版本送出草稿</button></>}</div>}
-      {leaveDraft&&<div role="status" className="banner status-note"><p>退出{leaveDraft.guild.name}會清空{leaveDraft.section}。私人業務資料不會移動，也不會刪除。</p><div className="actions"><button type="button" className="btn btn-primary" disabled={categoryBusy} onClick={()=>void leaveV2(leaveDraft.guild,true,leaveDraft.section)}>確認退出</button><button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>setLeaveDraft(null)}>取消</button></div></div>}
-      {!board&&<div className="guild-secondary-toolbar"><button type="button" className="btn btn-ghost" aria-expanded={editing} aria-controls="secondary-guild-editor" disabled={busy} onClick={()=>{setSecondaryDraft(secondaryKeys);setEditing(!editing);}}>設定次要公會</button><span className="muted">主要 1 個・次要最多 2 個</span></div>}
-      {!board&&editing&&<form id="secondary-guild-editor" className="card guild-secondary-editor" onSubmit={saveSecondary}><fieldset disabled={busy}><legend>選擇次要公會 · {secondaryDraft.length} / 2</legend><div className="guild-secondary-choices">{classified.filter(g=>g.membership?.state==='active'&&!g.is_primary).map(g=><label key={g.guild_key} className="checkbox-row"><input type="checkbox" checked={secondaryDraft.includes(g.guild_key)} disabled={!secondaryDraft.includes(g.guild_key)&&secondaryDraft.length>=2} onChange={event=>setSecondaryDraft(current=>event.target.checked?[...current,g.guild_key]:current.filter(key=>key!==g.guild_key))}/>{g.name}{secondaryDraft.includes(g.guild_key)&&<span className="muted">次要 {secondaryDraft.indexOf(g.guild_key)+1}</span>}</label>)}</div>{joinedCount<2&&<p>先加入另一個公會，再設為次要公會。</p>}</fieldset><div className="actions"><button className="btn btn-primary" disabled={busy}>儲存次要公會</button><button className="btn btn-ghost" type="button" disabled={busy} onClick={()=>setEditing(false)}>取消</button></div></form>}
-      <div ref={cardsRoot} className="guild-groups">{groups.filter(group=>scope==='all'||group.key!=='unjoined').map(group=><section key={group.key} className="guild-group" aria-label={group.title}><header className="guild-group-heading"><h2>{group.title}</h2><span className="muted">{group.items.length}</span></header>{group.items.length?<div className="card-grid guild-directory">{group.items.map(g=><GuildCard key={g.guild_key} guild={g} client={client} busy={busy||categoryBusy} viewerId={session.user.user_id} onChanged={()=>void load(true)} onPrimary={()=>void primary(g)} onSecondary={board?undefined:()=>void toggleSecondary(g)} secondaryFull={secondaryKeys.length>=2} onMembership={()=>void change(g)} categorySlot={categorySlot(g)} launchpadEnabled={launchpadEnabled} onLaunchpad={()=>{window.location.hash=`guilds/${g.guild_key}`;}}/>)}</div>:<p className="muted">{search?'沒有符合的公會。':group.key==='featured'?'加入公會後，設定主要與次要公會。':group.key==='joined'?'沒有其他已加入公會。':'所有公會都已加入。'}</p>}</section>)}</div>
+      {categoryNote&&<div role="status" className="banner status-note"><p>{categoryNote}</p>{unknownDraft&&<button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void sendPreference(unknownDraft.draft,unknownDraft.version)}>再試一次</button>}{unknownLeave&&<button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void leaveV2(unknownLeave.guild,unknownLeave.clearPrimary,unknownLeave.section,unknownLeave)}>重試原退出</button>}{held&&board&&!writesBlocked&&<><p>草稿：{SECTION_LABELS[held.category]} · {held.guild_key?held.guildName:'清空'}</p><p>目前：{SECTION_LABELS[held.category]} · {guilds.find(item=>item.guild_key===board.view.primaries.find(slot=>slot.category===held.category)?.guild_key)?.name??'尚未選擇'}</p><button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void load()}>讀取新版本</button><button type="button" className="btn btn-ghost" disabled={categoryBusy} onClick={()=>void submitFresh(held)}>用新版本送出草稿</button></>}</div>}
+      {leaveDraft&&<div role="status" className="banner status-note"><p>退出{leaveDraft.guild.name}會清空{leaveDraft.section}。私人業務資料不會移動，也不會刪除。</p><div className="actions"><button type="button" className="btn btn-primary" disabled={categoryBusy||writesBlocked} onClick={()=>void leaveV2(leaveDraft.guild,true,leaveDraft.section)}>確認退出</button><button type="button" className="btn btn-ghost" disabled={categoryBusy||writesBlocked} onClick={()=>setLeaveDraft(null)}>取消</button></div></div>}
+
+      {!board&&editing&&<form id="secondary-guild-editor" className="card guild-secondary-editor" onSubmit={saveSecondary}><fieldset disabled={busy}><legend>選擇次要公會 · {secondaryDraft.length} / 2</legend><div className="guild-secondary-choices">{classified.filter(g=>g.membership?.state==='active'&&!g.is_primary).map(g=><label key={g.guild_key} className="checkbox-row"><input type="checkbox" checked={secondaryDraft.includes(g.guild_key)} disabled={!secondaryDraft.includes(g.guild_key)&&secondaryDraft.length>=2} onChange={event=>setSecondaryDraft(current=>event.target.checked?[...current,g.guild_key]:current.filter(key=>key!==g.guild_key))}/>{g.name}{secondaryDraft.includes(g.guild_key)&&<span className="muted">次要 {secondaryDraft.indexOf(g.guild_key)+1}</span>}</label>)}</div>{joinedCount<2&&<p>先加入另一個公會，再設為次要公會。</p>}</fieldset><div className="actions"><button className="btn btn-primary" disabled={busy||writesBlocked}>儲存次要公會</button><button className="btn btn-ghost" type="button" disabled={busy} onClick={cancelSecondaryEditor}>取消</button></div></form>}
+      <div ref={cardsRoot} className="guild-groups">{groups.filter(group=>scope==='all'||group.key!=='unjoined').map(group=><section key={group.key} className="guild-group" aria-label={group.title}><header className="guild-group-heading"><h2>{group.title}</h2><span className="muted">{group.items.length}</span></header>{group.items.length?<div className="card-grid guild-directory">{group.items.map(g=><GuildCard key={g.guild_key} guild={g} client={client} busy={busy||categoryBusy} writesBlocked={writesBlocked} viewerId={session.user.user_id} onChanged={()=>void load(true)} onPrimary={()=>void primary(g)} onSecondary={board?undefined:()=>void toggleSecondary(g)} secondaryFull={secondaryKeys.length>=2} onMembership={()=>void change(g)} categorySlot={categorySlot(g)} launchpadEnabled={launchpadEnabled} onLaunchpad={()=>{window.location.hash=`guilds/${g.guild_key}`;}}/>)}</div>:<p className="muted">{search||topic?'沒有符合篩選的公會。':group.key==='featured'?'加入公會後，設定主要與次要公會。':group.key==='joined'?'沒有其他已加入公會。':'所有公會都已加入。'}</p>}</section>)}</div>
     </>}
   </section>;
 }

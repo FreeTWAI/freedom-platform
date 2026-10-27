@@ -10,6 +10,8 @@ const SocialZone = lazy(() => import('../modules/SocialZone').then(m => ({defaul
 const MemberServices = lazy(() => import('../modules/MemberServices').then(m => ({default: m.MemberServices})))
 const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
 const EventHighlights = lazy(() => import('../modules/EventHighlights').then(m => ({default: m.EventHighlights})))
+const TesterMap = lazy(() => import('../modules/TesterMap').then(m => ({default: m.TesterMap})))
+const NewbieVillage = lazy(() => import('../modules/NewbieVillage').then(m => ({default: m.NewbieVillage})))
 const TaskBoardPanel = lazy(() => import('../modules/TaskBoardPanel').then(m => ({default: m.TaskBoardPanel})))
 
 const CommunityHub = lazy(() => import('../modules/CommunityHub').then(m=>({default:m.CommunityHub})));
@@ -17,13 +19,14 @@ const CommunityHub = lazy(() => import('../modules/CommunityHub').then(m=>({defa
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const communityFeatures = {
   "community-hub": {moduleId:"community-hub",placement:"page",render:()=> <CommunityHub/>},
+  "newbie-village": {moduleId:"newbie-village",placement:"page",render:()=> <NewbieVillage/>},
   "community": {
     moduleId: "community", placement: 'page',
     render: ({client, selectTab}) => <CommunityPanel client={client} onNavigate={selectTab} />,
   },
   "community-search": {
     moduleId: "community-search", placement: 'page',
-    render: ({client, session, site}) => (site?.community_search_enabled === true ? <CommunitySearch key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} authKey={`${session.user.user_id}:${client.sessionGeneration}`} relationsEnabled={site.community_relations_enabled === true}/> : <p>社群內容搜尋尚未開放。</p>),
+    render: ({client, session, site}) => (site?.community_search_enabled === true ? <CommunitySearch key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} authKey={`${session.user.user_id}:${client.sessionGeneration}`} relationsEnabled={site.community_relations_enabled === true} guildSearchEnabled={site.guild_launchpad_enabled === true}/> : <p>社群內容搜尋尚未開放。</p>),
   },
   "my-content": {
     moduleId: "personal-content", placement: 'page',
@@ -47,7 +50,7 @@ export const communityFeatures = {
   },
   "social": {
     moduleId: "social-feed", placement: 'page',
-    render: ({client, session, site, notificationTarget, headerMember}) => <SocialZone client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>,
+    render: ({client, session, site, notificationTarget, headerMember}) => <SocialZone bookmarksEnabled={site?.community_search_enabled===true && site.community_relations_enabled===true} client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>,
   },
   "services": {
     moduleId: "community", placement: 'page',
@@ -56,6 +59,10 @@ export const communityFeatures = {
   "promotion": {
     moduleId: "community", placement: 'page',
     render: ({client}) => <PromotionBoards client={client} />,
+  },
+  "tester-map": {
+    moduleId: "tester-map", placement: 'page',
+    render: () => <TesterMap />,
   },
   messages: {
     moduleId: 'member-communications', placement: 'overlay',

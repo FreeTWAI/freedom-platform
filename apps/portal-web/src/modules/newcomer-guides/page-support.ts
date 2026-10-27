@@ -4,6 +4,7 @@ export type GuidePageId = TabId | 'registration' | 'onboarding' | 'admin' | 'ski
 // Every real page must explicitly opt in or give a reason. CI also checks developmentPages.
 export const DRAGON_PAGE_SUPPORT = {
   'community-hub': {status:'disabled',reason:'靜態社群入口沿用頁面說明，角色導覽尚未審核'},
+  'newbie-village':{status:'disabled',reason:'新手村沿用頁內框架與任務說明，角色導覽尚未審核'},
   profile:{status:'disabled',reason:'本人個人空間沿用頁面內說明，角色導覽尚未審核'},
   'supplier-console':{status:'disabled',reason:'商店導覽尚未完成審核'},
   ar:{status:'disabled',reason:'AR 相機採用畫面內操作提示，角色導覽尚未審核'},
@@ -39,6 +40,7 @@ export const DRAGON_PAGE_SUPPORT = {
   'account': {status:'supported',characterId:'account',contentId:'account',guideIds:["account:topic-1", "account:topic-2"],anchorContractVersion:1},
   'todos': {status:'supported',characterId:'todos',contentId:'todos',guideIds:["todos:topic-2"],anchorContractVersion:1},
   'private-ai': {status:'disabled',reason:'本頁龍娘內容與定位尚未完成審核'},
+  'tester-map': {status:'disabled',reason:'靜態測試清單沿用頁面說明，角色導覽尚未審核'},
   'registration': {status:'disabled',reason:'登入前不載入會員導覽'},
   'onboarding': {status:'disabled',reason:'尚未完成原有會員存取流程'},
   'admin': {status:'disabled',reason:'管理員流程使用原有安全說明'},

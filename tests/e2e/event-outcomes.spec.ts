@@ -103,6 +103,100 @@ test.describe('isolated authored outcomes',()=>{
   test.use({memberFeatures:{squadOutcomesEnabled:true,eventOutcomesEnabled:true}});
   test.setTimeout(180000);
 
+  test('successful read retry clears only its alert and preserves an unsaved recap',async({page,e2eAuthPool})=>{
+    const author=await account(e2eAuthPool,'讀取復原作者'),eventId=await event(e2eAuthPool,author);
+    await login(page,author);
+    const section=await openEvent(page,eventId),published=`可閱讀精華 ${randomUUID()}`;
+    await saveRecap(section,published);await publishRecap(section);
+    await section.getByRole('button',{name:'建立另一份',exact:true}).click();
+    await section.getByLabel('精華標題').fill('尚未儲存的標題');
+    await section.getByLabel('活動摘要').fill('重新載入列表不可取代我的輸入');
+    await section.getByLabel('發布範圍').selectOption('guild');
+    const path=`**/api/v1/event-highlights/${eventId}/outcomes`;
+    let failing=true,reads=0,release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    await page.route(path,async route=>{
+      if(route.request().method()!=='GET'){await route.continue();return;}
+      reads++;
+      if(failing){await route.fulfill({status:503,json:{error:'讀取暫時失敗'}});return;}
+      await gate;await route.continue();
+    });
+    const retry=section.getByRole('button',{name:'重新載入精華與來源',exact:true});
+    for(let attempt=1;attempt<=2;attempt++){
+      await retry.click();await expect(section.getByRole('alert')).toHaveText('服務暫時無法回應（503）。請稍後重試。');
+      await expect(retry).toBeEnabled();expect(reads).toBe(attempt);
+    }
+    failing=false;
+    try{
+      await retry.click();await expect.poll(()=>reads).toBe(3);
+      await expect(section.getByRole('button',{name:'正在載入精華與來源…',exact:true})).toBeDisabled();
+      await expect(section.getByRole('alert')).toHaveText('服務暫時無法回應（503）。請稍後重試。');
+    }finally{release();}
+    await expect(retry).toBeEnabled();await expect(section.getByRole('alert')).toHaveCount(0);
+    await expect(section.getByRole('heading',{name:published,exact:true})).toBeVisible();
+    await expect(section.getByLabel('精華標題')).toHaveValue('尚未儲存的標題');
+    await expect(section.getByLabel('活動摘要')).toHaveValue('重新載入列表不可取代我的輸入');
+    await expect(section.getByLabel('發布範圍')).toHaveValue('guild');
+    expect(reads).toBe(3);
+  });
+
+  test('a delayed previous-event read cannot replace the current event after navigation',async({page,e2eAuthPool})=>{
+    const author=await account(e2eAuthPool,'延遲讀取作者'),first=await event(e2eAuthPool,author),second=await event(e2eAuthPool,author);
+    await login(page,author);const original=await openEvent(page,first),title=`前一場精華 ${randomUUID()}`;
+    await saveRecap(original,title);await publishRecap(original);
+    await page.goto('/#home');
+    let release!:()=>void,started!:()=>void,fulfilled!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;}),entered=new Promise<void>(resolve=>{started=resolve;}),done=new Promise<void>(resolve=>{fulfilled=resolve;});
+    const path=`/api/v1/event-highlights/${first}/outcomes`;
+    await page.route(`**${path}`,async route=>{
+      const response=await route.fetch();started();await gate;
+      try{await route.fulfill({response});}finally{fulfilled();}
+    });
+    await page.goto(`/#highlights/${first}`);await entered;
+    const secondSection=await openEvent(page,second);
+    await expect(secondSection.getByRole('button',{name:'重新載入精華與來源',exact:true})).toBeEnabled();
+    await secondSection.getByLabel('精華標題').fill('第二場未儲存標題');
+    const settled=page.waitForEvent('requestfinished',{predicate:request=>new URL(request.url()).pathname===path});
+    release();await done;await settled;
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    await expect(secondSection.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
+    await expect(secondSection.getByLabel('精華標題')).toHaveValue('第二場未儲存標題');
+    await expect(secondSection.getByRole('alert')).toHaveCount(0);
+    await expect(secondSection.getByRole('button',{name:'重新載入精華與來源',exact:true})).toBeEnabled();
+  });
+
+  for(const status of [503,412])test(`read recovery preserves a ${status} publish warning and consent without replay`,async({page,e2eAuthPool})=>{
+    const author=await account(e2eAuthPool,'寫入警示作者'),eventId=await event(e2eAuthPool,author);
+    await login(page,author);const section=await openEvent(page,eventId);
+    await saveRecap(section,`保留草稿 ${randomUUID()}`);
+    const consent=section.getByLabel('我有權向所選範圍發布摘要、連結與綁定媒體，已保留真實作者及來源，並取得涉及人物所需同意。');
+    await consent.check();let writes=0;
+    const warning=status===503?'服務暫時無法回應（503）。尚未確認結果，請稍後重試。':'請求未完成（412），請稍後重試。';
+    await page.route('**/api/v1/event-outcomes/*/publish',async route=>{
+      writes++;await route.fulfill({status,json:{error:`發布回覆 ${status}`}});
+    });
+    await section.getByRole('button',{name:'發布已儲存精華與綁定媒體'}).click();
+    await expect(section.getByRole('alert')).toHaveText(warning);
+    await expect(consent).toBeChecked();
+    await section.getByRole('button',{name:'重新載入精華與來源',exact:true}).click();
+    await expect(section.getByRole('button',{name:'重新載入精華與來源',exact:true})).toBeEnabled();
+    await expect(consent).toBeChecked();
+    await expect(section.getByRole('alert')).toHaveText(warning);
+    await section.getByLabel('活動摘要').fill('寫入警示之後的未儲存內容');
+    const path=`**/api/v1/event-highlights/${eventId}/outcomes`;
+    await page.route(path,route=>route.fulfill({status:503,json:{error:'列表暫時失敗'}}));
+    const retry=section.getByRole('button',{name:'重新載入精華與來源',exact:true});
+    await retry.click();await expect(section.getByRole('alert')).toHaveCount(2);
+    await page.unroute(path);await retry.click();await expect(retry).toBeEnabled();
+    await expect(section.getByRole('alert')).toHaveCount(1);
+    await expect(section.getByRole('alert')).toHaveText(warning);
+    await expect(section.getByLabel('活動摘要')).toHaveValue('寫入警示之後的未儲存內容');
+    await expect(consent).not.toBeChecked();
+    await expect(section.getByRole('button',{name:'發布已儲存精華與綁定媒體'})).toBeDisabled();
+    if(status===412)await expect(section.getByRole('status')).toContainText('目前輸入保留');
+    expect(writes).toBe(1);
+  });
+
   test('a partial photo batch keeps the saved recap and successful bytes, then retries only the remaining photo',async({page,request,e2eAuthPool})=>{
     const author=await account(e2eAuthPool,'部分上傳作者'),eventId=await event(e2eAuthPool,author);
     const title=`部分成功 ${randomUUID()}`;

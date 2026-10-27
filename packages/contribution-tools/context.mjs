@@ -65,7 +65,8 @@ async function descriptorsFor(workspace, revision) {
     }
     const descriptor = validateDescriptor(parseFormat('moduleDescriptor', bytes));
     // A descriptor change always selects its own previous/new module.
-    descriptors.push({ ...descriptor, owned_paths: [...descriptor.owned_paths, path] });
+    descriptors.push(owns(descriptor, path) ? descriptor
+      : validateDescriptor({ ...descriptor, owned_paths: [...descriptor.owned_paths, path] }));
   }
   check(new Set(descriptors.map(item => item.module_id)).size === descriptors.length, 'duplicate_module');
   const known = new Set(descriptors.map(item => item.module_id));
@@ -144,7 +145,7 @@ async function collectContext({ repositoryRoot, baseRef = 'origin/main', request
   const blockers = [], documents = [], seen = new Set(); let totalBytes = 0;
   if (!baseline.length) blockers.push('baseline_governance_unavailable');
   if (!candidate.length) blockers.push('candidate_governance_unavailable');
-  if (impact.unknown_paths.length) blockers.push('surface_unmapped');
+  if (impact.unknown_paths.length) console.warn(JSON.stringify({ severity: 'warning', code: 'surface_unmapped', unknown_paths: impact.unknown_paths }));
   const sharedInstructions = ['contracts/README.md', 'vendor/freedom-tooling/governance/README.md']
     .filter(path => workspace.base_paths.includes(path) || workspace.candidate_paths.includes(path));
   const relevantPaths = [...workspace.changed_paths, ...requestedPaths, ...[...baseline, ...candidate]

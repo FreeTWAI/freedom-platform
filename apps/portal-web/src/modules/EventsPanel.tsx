@@ -92,6 +92,9 @@ function EventDraftPreview({value,banner,existingBanner}:{value:EventDraft;banne
 
 export function EventsPanel({client,session,locationHash,registerLeave,onList,participationEnabled=false}:{client:PortalClient;session:SessionPayload;locationHash:string;registerLeave:(guard:(()=>boolean)|null)=>void;onList:()=>void;participationEnabled?:boolean}) {
   const [items,setItems]=useState<CommunityEvent[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
+  // Initial calendar insertion can scroll the submit target between pointer events.
+  // Later refreshes must still allow a new draft after a confirmed save.
+  const [initialLoadPending,setInitialLoadPending]=useState(true);
   const loadRequest=useRef(0);
   const [creating,setCreating]=useState(false),[draft,setDraft]=useState<EventDraft>(blankEvent);
   const draftBaseline=useRef(draft);
@@ -153,7 +156,7 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
       if(!current())return;
       setItems(events.items);setGuilds(directory.items);setBulletins(announcements.items);
     }catch(cause){if(current())setLoadError(cause instanceof Error?cause.message:'活動暫時無法載入。');}
-    finally{if(current())setLoading(false);}
+    finally{if(current()){setLoading(false);setInitialLoadPending(false);}}
   },[client]);
   useEffect(()=>{void load();return()=>{loadRequest.current++;};},[load]);
   useEffect(()=>{if(!selectedId||items.some(item=>item.event_id===selectedId)){setSelectedItem(null);return;}let active=true;void client.get<CommunityEvent>(`/events/${selectedId}`).then(item=>{if(active)setSelectedItem(item)}).catch(()=>{if(active)setSelectedItem(null)});return()=>{active=false}},[client,items,selectedId]);
@@ -326,7 +329,7 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
   if(selectedId)return <section className="experience-panel stack" aria-label="活動專頁"><div className="experience-actions"><button className="btn btn-ghost" type="button" onClick={onList}>返回活動列表與行事曆</button></div>{selected?render(selected):<p role="status">{loading?'正在載入活動…':'找不到這場活動，或目前無法查看。'}</p>}<EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>{notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}</section>;
   return <section className="experience-panel stack" aria-label="活動發佈區">
     <EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>
-    <div className="experience-intro"><div><p className="eyebrow">MEET / LEARN / BUILD</p><h2>和社群一起碰面、分享、動手做。</h2><p>已登入會員可提交活動。線上由會員與社群營運公會審核，實體及混合形式由活動與空間公會審核；公會技能交流由主辦公會審核，並可設定僅公會內部參與。平台管理員也能審核。核准後開放報名。</p></div><button type="button" className="btn btn-primary" data-guide-anchor="events:submit-event" disabled={saving||mediaUnknown} onClick={()=>{const open=!creating;if(leaveGuard.current()){discardDrafts();setCreating(open);}}}>＋ 提交活動</button></div>
+    <div className="experience-intro"><div><p className="eyebrow">MEET / LEARN / BUILD</p><h2>和社群一起碰面、分享、動手做。</h2><p>已登入會員可提交活動。線上由會員與社群營運公會審核，實體及混合形式由活動與空間公會審核；公會技能交流由主辦公會審核，並可設定僅公會內部參與。平台管理員也能審核。核准後開放報名。</p></div><button type="button" className="btn btn-primary" data-guide-anchor="events:submit-event" disabled={initialLoadPending||saving||mediaUnknown} onClick={()=>{const open=!creating;if(leaveGuard.current()){discardDrafts();setCreating(open);}}}>＋ 提交活動</button></div>
     {creating&&<form className="card experience-editor" onSubmit={e=>void save(e)}><h3>提交活動</h3><EventFields value={draft} onChange={setDraft} guilds={guilds} disabled={saving||busy||lastFailureUnknown||mediaUnknown}/>{internExchange(draft,guilds)&&<p className="field-hint">{INTERN_WRITE}</p>}<label className="field">活動海報（選填）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving||busy||recoveringSave} onChange={e=>void chooseBanner(e.target.files?.[0]??null)}/><small>直式、橫式皆可；JPEG、PNG 或 WebP，20 MB 內會自動調整大小。{bannerFile?` 已選擇 ${bannerFile.name}`:''}</small></label>{preparingBanner&&<p className="field-hint" role="status">正在處理圖片…</p>}<label className="field">活動影片（選填）<input type="file" accept="video/mp4,video/webm" disabled={saving||busy||recoveringSave} onChange={e=>chooseVideo(e.target.files?.[0]??null)}/><small>MP4 或 WebM，20 MiB 以下。{videoFile?` 已選擇 ${videoFile.name}`:''}</small></label><EventDraftPreview value={draft} banner={bannerFile}/><div className="experience-actions"><button className="btn btn-primary" disabled={busy||saving||mediaUnknown||preparingBanner||Boolean(bannerError)||internExchange(draft,guilds)}>送出審核</button><button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>{if(leaveGuard.current())discardDrafts();}}>返回</button></div></form>}
     {notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}{loadError&&<div role="alert" className="banner banner-error">{loadError}<button className="btn btn-ghost" onClick={()=>void load()}>重試</button></div>}
     {loading&&<p role="status">正在載入活動…</p>}

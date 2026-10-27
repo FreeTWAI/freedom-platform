@@ -5,6 +5,7 @@ import type {PageGuideSupport} from './contracts';
 // retain the reviewed product facts, access boundaries and safe focus behavior.
 export const AI_SISTER_PAGE_SUPPORT={
   'community-hub':DRAGON_PAGE_SUPPORT['community-hub'],
+  'newbie-village':DRAGON_PAGE_SUPPORT['newbie-village'],
   profile:DRAGON_PAGE_SUPPORT.profile,
   ar:{status:'disabled',reason:'AR 相機採用畫面內操作提示，角色導覽尚未審核'},
   'community-search':{status:'disabled',reason:'社群內容搜尋導覽尚未完成審核，沿用頁面說明'},
@@ -40,6 +41,7 @@ export const AI_SISTER_PAGE_SUPPORT={
   account:{...DRAGON_PAGE_SUPPORT.account,characterId:'member-selected',outfitId:'family'},
   todos:{...DRAGON_PAGE_SUPPORT.todos,characterId:'member-selected',outfitId:'philosophy'},
   'private-ai':{status:'disabled',reason:'本頁 AI Sister 內容與定位尚未完成審核'},
+  'tester-map':DRAGON_PAGE_SUPPORT['tester-map'],
   registration:{status:'disabled',reason:'登入前不載入會員導覽'},
   onboarding:{status:'disabled',reason:'尚未完成原有會員存取流程'},
   admin:{status:'disabled',reason:'管理員流程使用原有安全說明'},

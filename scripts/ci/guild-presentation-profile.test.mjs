@@ -134,7 +134,7 @@ function integration(t, extra='', changedPath=supply, descriptorSources=reviewed
   const commit=()=>{git('add','.');git('commit','-qm','Synthetic guild fixture');return git('rev-parse','HEAD');};
   git('init','-q','-b','main');
   // Preserve actual locations and raw descriptors: relocating a descriptor
-  // invents another owned path and can exceed the schema's 64-path limit.
+  // invents another owned path and can exceed the schema's 256-path limit.
   for(const [path,source] of descriptorSources)write(path,source);
   for(const [path,source] of Object.entries(sources))write(path,source);
   const base=commit();git('switch','-qc','feature');
@@ -175,7 +175,7 @@ test('actual expanded composition keeps guild edits on full jobs and browser cov
     assert.deepEqual(Object.keys(decideAffectedJobs(value).jobs).filter(id=>decideAffectedJobs(value).jobs[id]),[...SELECTABLE_JOBS]);
   }
   // Keep the real descriptor locations; moving them would change implicit
-  // ownership and could exceed the unchanged 64-path limit.
+  // ownership and could exceed the unchanged 256-path limit.
   const result=collectRepositoryDecision(integration(t,'',supply,actualDescriptorSources));
   assert.equal(result.mode,'full');assert.equal(result.reason,'guild_impact_unproven');
   assert.deepEqual(Object.keys(result.jobs).filter(id=>result.jobs[id]),[...SELECTABLE_JOBS]);
