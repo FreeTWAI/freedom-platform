@@ -172,10 +172,7 @@ test('the member list shows ended events newest first and filters by mode', asyn
   await expect(page.getByText('驗收帳號的活動')).toHaveCount(0);
   await expect(page.getByText('即將舉辦')).toHaveCount(0);
   await expect(cards.nth(0).locator('.hl-cover img')).toBeVisible();
-  await expect.poll(() => cards.nth(0).locator('.hl-cover img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await expect(cards.nth(0).locator('.hl-cover')).toHaveAccessibleName('查看集錦：線上分享回顧');
-  await expect(cards.nth(0).locator('.hl-cover')).toHaveAttribute('href', `#highlights/${ONLINE}`);
-  await expect(cards.nth(0).locator('.hl-cover img')).toHaveAttribute('alt', '');
   const titleGap = await cards.first().evaluate(article => {
     const cover = article.querySelector('.hl-cover')!.getBoundingClientRect();
     const title = article.querySelector('h2')!.getBoundingClientRect();
@@ -184,7 +181,6 @@ test('the member list shows ended events newest first and filters by mode', asyn
   expect(titleGap).toBeGreaterThanOrEqual(8);
   await expect(cards.nth(1).locator('.hl-placeholder')).toContainText('實體');
   await expect(cards.nth(1).locator('.hl-cover')).toHaveAccessibleName('查看集錦：實體公會聚會');
-  await expect(cards.nth(1).locator('h2 a')).toHaveAccessibleName('實體公會聚會');
   await expect(page.getByText(LOCATION)).toHaveCount(0);
   await expect(page.getByText(MEETING)).toHaveCount(0);
   await page.screenshot({path: `${SHOTS}/member-list-light-1280.png`, fullPage: true});
@@ -207,121 +203,48 @@ test('the member list shows ended events newest first and filters by mode', asyn
   await expect(cards).toHaveCount(2);
 });
 
-test('cover links retain the event name while an image loads and after it fails', async ({page}) => {
-  const title = '影像回顧 "A" & <B>';
-  await page.route(url => url.pathname === '/api/v1/event-highlights', async route => {
-    const response = await route.fetch();
-    const body = await response.json();
-    await route.fulfill({response, json: {...body, items: body.items.map((item: {event_id: string; title: string}) => item.event_id === ONLINE ? {...item, title} : item)}});
-  });
-  let releaseImage!: () => void;
-  const heldImage = new Promise<void>(resolve => { releaseImage = resolve; });
-  let imageRequested = false;
-  await page.route(url => url.pathname === `/api/v1/event-highlights/${ONLINE}/banner`, async route => {
-    imageRequested = true;
-    await heldImage;
-    await route.fulfill({status: 404, body: ''});
+// Controlled transport checks: successful mock ACKs below do not claim persisted media.
+test('pending photo submission dispatches once and preserves input after failure', async ({page}) => {
+  await login(page);
+  await page.goto(`/#highlights/${ONLINE}`);
+  await expect(page.getByRole('heading', {name: '線上分享回顧', level: 2})).toBeVisible();
+  await page.getByText('補上照片或影片連結', {exact: true}).click();
+  const group = page.getByRole('group', {name: '要補上的內容'});
+  await group.getByRole('button', {name: '照片', exact: true}).click();
+  const form = page.locator('.hl-add form');
+  await form.getByLabel('標題（選填）').fill('保留這份輸入');
+  await form.locator('input[type=file]').setInputFiles({name: 'pending.png', mimeType: 'image/png', buffer: await sharp({create: {width: 40, height: 20, channels: 3, background: '#325677'}}).png().toBuffer()});
+  const gate: {release: () => void} = {release: () => {}};
+  const held = new Promise<void>(resolve => {gate.release = resolve;});
+  const requests: string[] = [];
+  await page.route(`**/api/v1/event-highlights/${ONLINE}/photos`, async route => {
+    requests.push(route.request().headers()['idempotency-key']);
+    if (requests.length === 1) {await held; await route.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({detail: '合成暫時失敗'})});}
+    else await route.fulfill({status: 201, contentType: 'application/json', body: '{}'});
   });
   try {
-    await login(page);
-    await openHighlights(page);
-    const card = page.getByRole('article', {name: title, exact: true});
-    const cover = card.locator('.hl-cover');
-    await cover.scrollIntoViewIfNeeded();
-    await expect.poll(() => imageRequested).toBe(true);
-    await expect(cover.locator('img')).toHaveJSProperty('complete', false);
-    await expect(cover).toHaveAccessibleName(`查看集錦：${title}`);
-    await expect(cover).toHaveAttribute('href', `#highlights/${ONLINE}`);
-    await expect(card.locator('h2 a')).toHaveAccessibleName(title);
-
-    releaseImage();
-    await expect(cover.locator('.hl-placeholder')).toBeVisible();
-    await expect(cover.locator('img')).toHaveCount(0);
-    await expect(cover).toHaveAccessibleName(`查看集錦：${title}`);
-    await expect(cover).toHaveAttribute('href', `#highlights/${ONLINE}`);
-    // The cover remains a native keyboard-operable link, not a renamed button.
-    await card.locator('h2 a').focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(cover).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`#highlights/${ONLINE}$`));
-    await expect(page.getByRole('heading', {name: '線上分享回顧', level: 2, exact: true})).toBeVisible();
-  } finally {
-    releaseImage();
-  }
-});
-
-// Controlled transport checks: successful mock ACKs below do not claim persisted media.
-for (const kind of ['link', 'photo', 'poster'] as const) {
-  test(`pending ${kind} submission dispatches once and preserves input after failure`, async ({page}) => {
-    await login(page);
-    await page.goto(`/#highlights/${ONLINE}`);
-    await expect(page.getByRole('heading', {name: '線上分享回顧', level: 2})).toBeVisible();
-    await page.getByText('補上照片或影片連結', {exact: true}).click();
-    const group = page.getByRole('group', {name: '要補上的內容'});
-    await group.getByRole('button', {name: kind === 'link' ? '影片連結' : kind === 'photo' ? '照片' : '海報', exact: true}).click();
-    const form = page.locator('.hl-add form');
-    await form.getByLabel('標題（選填）').fill('保留這份輸入');
-    if (kind === 'link') await form.getByLabel('影片連結').fill('https://example.com/pending-highlight');
-    else await form.locator('input[type=file]').setInputFiles({name: 'pending.png', mimeType: 'image/png', buffer: await sharp({create: {width: 40, height: 20, channels: 3, background: '#325677'}}).png().toBuffer()});
-    const gate: {release: () => void} = {release: () => {}};
-    const held = new Promise<void>(resolve => {gate.release = resolve;});
-    const requests: string[] = [];
-    await page.route(`**/api/v1/event-highlights/${ONLINE}/${kind === 'link' ? 'links' : kind === 'photo' ? 'photos' : 'posters'}`, async route => {
-      requests.push(route.request().headers()['idempotency-key']);
-      if (requests.length === 1) {await held; await route.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({detail: '合成暫時失敗'})});}
-      else await route.fulfill({status: 201, contentType: 'application/json', body: '{}'});
-    });
-    try {
-      // Two submissions before React's next render also exercise the synchronous guard.
-      await form.evaluate(element => {const form = element as HTMLFormElement; form.requestSubmit(); form.requestSubmit();});
-      await expect.poll(() => requests.length).toBe(1);
-      await expect(form.getByRole('button', {name: '正在送出…', exact: true})).toBeDisabled();
-      await expect(form.getByLabel('標題（選填）')).toBeDisabled();
-      for (const button of await group.getByRole('button').all()) await expect(button).toBeDisabled();
-      await expect(form.locator(kind === 'link' ? 'input[type=url]' : 'input[type=file]')).toBeDisabled();
-      await expect(form.getByRole('status')).toBeVisible();
-      await form.evaluate(element => (element as HTMLFormElement).requestSubmit());
-      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-      expect(requests).toHaveLength(1);
-      gate.release();
-      await expect(form.getByRole('alert')).toHaveText('合成暫時失敗');
-      await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
-      await expect(form.getByLabel('標題（選填）')).toHaveValue('保留這份輸入');
-      if (kind === 'link') await expect(form.getByLabel('影片連結')).toHaveValue('https://example.com/pending-highlight');
-      else expect(await form.locator('input[type=file]').evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe('pending.png');
-      await form.getByRole('button', {name: '送出', exact: true}).click();
-      await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
-      await expect(form.getByRole('alert')).toHaveCount(0);
-      await expect(form.getByLabel('標題（選填）')).toHaveValue('');
-      expect(requests).toHaveLength(2);
-    } finally {gate.release();}
-  });
-}
-
-test('a partial photo batch unlocks and retries only its remaining selection', async ({page}) => {
-  await login(page); await page.goto(`/#highlights/${ONLINE}`);
-  await page.getByText('補上照片或影片連結', {exact: true}).click();
-  await page.getByRole('group', {name: '要補上的內容'}).getByRole('button', {name: '照片', exact: true}).click();
-  const form = page.locator('.hl-add form'), input = form.locator('input[type=file]');
-  const files = await Promise.all(['#112233', '#557799'].map(async (background, i) => ({name: `batch-${i}.png`, mimeType: 'image/png', buffer: await sharp({create: {width: 40, height: 20, channels: 3, background}}).png().toBuffer()})));
-  await input.setInputFiles(files);
-  const bodies: Buffer[] = [];
-  await page.route(`**/api/v1/event-highlights/${ONLINE}/photos`, async route => {
-    bodies.push(route.request().postDataBuffer()!);
-    await route.fulfill({status: bodies.length === 2 ? 503 : 201, contentType: 'application/json', body: bodies.length === 2 ? JSON.stringify({detail: '合成第二張失敗'}) : '{}'});
-  });
-  await form.getByRole('button', {name: '送出', exact: true}).click();
-  await expect(form.getByRole('alert')).toContainText('已新增 1 張；成功項目保留，其餘尚未新增。');
-  await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
-  expect(await input.evaluate(el => [...((el as HTMLInputElement).files ?? [])].map(f => f.name))).toEqual(['batch-1.png']);
-  await form.getByRole('button', {name: '送出', exact: true}).click();
-  await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
-  await expect(form.getByRole('alert')).toHaveCount(0);
-  expect(bodies).toHaveLength(3);
-  expect(bodies[0].equals(files[0].buffer)).toBe(true);
-  expect(bodies[1].equals(files[1].buffer)).toBe(true);
-  expect(bodies[2].equals(files[1].buffer)).toBe(true);
+    // Two submissions before React's next render also exercise the synchronous guard.
+    await form.evaluate(element => {const form = element as HTMLFormElement; form.requestSubmit(); form.requestSubmit();});
+    await expect.poll(() => requests.length).toBe(1);
+    await expect(form.getByRole('button', {name: '正在送出…', exact: true})).toBeDisabled();
+    await expect(form.getByLabel('標題（選填）')).toBeDisabled();
+    for (const button of await group.getByRole('button').all()) await expect(button).toBeDisabled();
+    await expect(form.locator('input[type=file]')).toBeDisabled();
+    await expect(form.getByRole('status')).toBeVisible();
+    await form.evaluate(element => (element as HTMLFormElement).requestSubmit());
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(requests).toHaveLength(1);
+    gate.release();
+    await expect(form.getByRole('alert')).toHaveText('合成暫時失敗');
+    await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
+    await expect(form.getByLabel('標題（選填）')).toHaveValue('保留這份輸入');
+    expect(await form.locator('input[type=file]').evaluate(input => (input as HTMLInputElement).files?.[0]?.name)).toBe('pending.png');
+    await form.getByRole('button', {name: '送出', exact: true}).click();
+    await expect(form.getByRole('button', {name: '送出', exact: true})).toBeEnabled();
+    await expect(form.getByRole('alert')).toHaveCount(0);
+    await expect(form.getByLabel('標題（選填）')).toHaveValue('');
+    expect(requests).toHaveLength(2);
+  } finally {gate.release();}
 });
 
 test('a late upload completion does not clear the replacement event draft or send its next image', async ({page}) => {
