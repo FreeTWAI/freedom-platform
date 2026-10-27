@@ -69,7 +69,7 @@ async function expectStates(page:Page,states:Partial<Record<typeof TASKS[number]
   for(const [key,state] of Object.entries(states))await expect(task(page,key),key).toHaveAttribute('data-task-state',state);
 }
 async function openTodos(page:Page){
-  await navigate(page,'待辦清單');await expect(page).toHaveURL(/#todos$/);
+  await navigate(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
   for(const key of TASKS)await expect(task(page,key)).toBeVisible();
   // Nothing on this page can be ticked by hand.
   await expect(page.locator('article[data-task] input')).toHaveCount(0);await expect(page.locator('article[data-task]').getByRole('checkbox')).toHaveCount(0);

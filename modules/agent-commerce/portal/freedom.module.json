@@ -6,10 +6,16 @@
     "apps/portal-web/src/modules/CommercePanels.tsx",
     "apps/portal-web/src/modules/AgentShops.css",
     "tests/e2e/agent-shops.spec.ts",
-    "tests/e2e/hosted-commerce-ux.spec.ts"
+    "tests/e2e/hosted-commerce-ux.spec.ts",
+    "apps/portal-web/src/modules/HostedStoreProductsArea.tsx",
+    "apps/portal-web/src/modules/HostedStoreCooperationArea.tsx",
+    "apps/portal-web/src/modules/HostedStorePublishArea.tsx",
+    "apps/portal-web/src/modules/HostedStoreSettingsArea.tsx",
+    "apps/portal-web/src/modules/hosted-store-area-shared.tsx",
+    "tests/runtime/hosted-store-areas.test.ts"
   ],
   "public_exports": [],
-  "dependencies": ["agent-commerce"],
+  "dependencies": ["agent-commerce", "commerce-storefront"],
   "contract_families": [],
   "client_profiles": ["member"],
   "instructions": [

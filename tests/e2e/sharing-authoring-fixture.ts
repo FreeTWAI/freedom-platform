@@ -148,7 +148,11 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
       await page.setViewportSize({width,height:844});await mountSharingFixture(page,'content');
       await page.evaluate(value=>{document.documentElement.dataset.theme=value},theme);
       await expect(page.getByRole('heading',{name:'草稿與已發布內容'})).toBeVisible();
+      const primary=page.locator('.nav-primary').getByRole('button',{name:'我的個人空間',exact:true});
+      await primary.focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('profile');
+      await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
       await page.locator('.nav-more > summary').click();
+      await page.getByRole('searchbox').fill('我的內容');
       await page.getByRole('button',{name:'我的內容',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('my-content');
       const trigger=page.getByRole('button',{name:'分享或提交'});await trigger.focus();await page.keyboard.press('Enter');
       await expect(page.getByRole('dialog')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

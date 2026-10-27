@@ -1,5 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
+import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
 import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 test('AD-2 validates seed and emits a public challenge without result or identity',()=>{for(const bad of [0,-1,Infinity,NaN,'1x','0x12','4294967296',null,{},1.5])assert.equal(seedOf(bad),20261023);assert.equal(seedOf('4294967295'),4294967295);const u=new URL(challengeUrl('https://example.org','photo',12));assert.equal(u.pathname,'/play');assert.deepEqual([...u.searchParams],[['game','photo'],['seed','12']]);});
@@ -17,3 +21,66 @@ test('AD-2 an input timestamp ahead of a queued render cannot double count foreg
 });
 test('AD-7 bounded guest draft survives reload, reads are pure, and stale clearing cannot delete a newer result',()=>{const s=storage(),now=Date.now(),draft={version:1 as const,createdAt:now,game:'photo' as const,seed:7,title:'這張能交嗎？',text:'真的拍到了。',image:'data:image/jpeg;base64,YWJjZA=='};saveGameDraft(s,draft,now);const before=s.getItem(GAME_HANDOFF_KEY);assert.deepEqual(readGameDraft(s,now),draft);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now-1);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now);assert.equal(readGameDraft(s,now),null);});
 test('AD-7 malformed, expired, future, oversized and unavailable storage cannot falsely succeed',()=>{const now=Date.now(),draft={version:1,createdAt:now,game:'cash',seed:7,title:'盤點',text:'道具鈔',image:'data:image/jpeg;base64,YWJjZA=='};for(const changed of [{version:2},{createdAt:now-HANDOFF_TTL-1},{createdAt:now+61000},{seed:NaN},{seed:0},{image:'data:text/html;base64,AAAA'},{title:''},{text:'x'.repeat(2001)}])assert.equal(parseGameDraft(JSON.stringify({...draft,...changed}),now),null);assert.equal(parseGameDraft('{bad',now),null);assert.equal(readGameDraft({getItem(){throw Error('denied');},setItem(){},removeItem(){}},now),null);assert.throws(()=>saveGameDraft({getItem(){return null;},setItem(){throw Error('quota');},removeItem(){}},draft as any,now),/quota/);});
+
+// Execute the actual cash/settlement closures with a controlled stage. Browser
+// coverage remains responsible for real WebGL, image export and input dispatch.
+function cashBoard(completedCards:number, failure?:'update'|'capture') {
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
+  const names=['render','stop','finish','settle','syncClock','applyCash'];
+  const functions=names.map(name=>{
+    const start=new RegExp(`^( *)function ${name}\\(`,'m').exec(source);assert.ok(start,name);
+    const tail=source.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,`${name} end`);
+    return tail.slice(0,end.index+end[0].length);
+  }).join('\n');
+  let cash=newCash(42);
+  for(const card of cashDeck(42).slice(0,completedCards))cash=sortCash(cash,cash.index,card.valid,cash.index*250).state;
+  const live={current:{game:'cash',seed:42,cash,clock:{elapsed:7500,last:7500,running:true},started:true,paused:false,done:false,pointer:{id:1},raised:true}};
+  const events:{kind:string;index:number;running:boolean;raised:boolean;pointer:unknown}[]=[];
+  const results:any[]=[],notices:string[]=[];
+  let fail=failure,captureError=false;
+  const record=(kind:string)=>events.push({kind,index:live.current.cash.index,running:live.current.clock.running,raised:live.current.raised,pointer:live.current.pointer});
+  const stage={current:{
+    update(){record('update');if(fail==='update'){fail=undefined;throw Error('render failed');}},
+    stats(){return {calls:1,triangles:1,textures:1};},
+    capture(){record('capture');if(fail==='capture'){fail=undefined;throw Error('capture failed');}return 'data:image/jpeg;base64,frame';},
+  }};
+  const pendingResult={current:null as any};
+  const api=runInNewContext(`${functions};({applyCash,settle})`,{
+    live,stage,pendingResult,view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
+    performance:{now:()=>7500},tick,pause,sortCash,seconds,GAMES,cancelAnimationFrame:()=>record('stop'),
+    sfx:()=>{},setNotice:(text:string)=>notices.push(text),updateUi:()=>{},onResult:(result:any)=>results.push(result),setCaptureError:(value:boolean)=>{captureError=value;},
+  }) as {applyCash:(accept:boolean,index?:number)=>void;settle:(summary:any)=>void};
+  return {...api,live,events,results,pendingResult,notices,get captureError(){return captureError;}};
+}
+
+test('AD-5 nonterminal cash inputs still render; wrong and stale inputs retain their rules',()=>{
+  const h=cashBoard(0),first=cashDeck(42)[0];
+  h.applyCash(!first.valid);
+  assert.equal(h.live.current.cash.index,0);assert.equal(h.live.current.cash.mistakes,1);
+  assert.deepEqual(h.events.map(e=>e.kind),['update']);assert.equal(h.results.length,0);
+  const correct=cashBoard(0);correct.applyCash(first.valid);
+  assert.equal(correct.live.current.cash.index,1);assert.deepEqual(correct.events.map(e=>e.kind),['update']);
+  correct.applyCash(first.valid,0);assert.equal(correct.events.length,1);
+});
+
+test('AD-5 terminal cash input stops before its sole update and publishes the complete result once',()=>{
+  const h=cashBoard(29);h.applyCash(true);
+  assert.deepEqual(h.events.map(e=>e.kind),['stop','update','capture','stop']);
+  const update=h.events[1];assert.equal(update.index,30);assert.equal(update.running,false);assert.equal(update.raised,false);assert.equal(update.pointer,null);
+  assert.equal(h.live.current.cash.amount,1_000_000);assert.equal(h.live.current.cash.rejected,6);
+  assert.equal(h.results.length,1);assert.match(h.results[0].details,/100 萬道具鈔 · 退回 6 張票券/);
+  assert.equal(h.results[0].image,'data:image/jpeg;base64,frame');
+  h.applyCash(true);assert.equal(h.results.length,1);assert.equal(h.events.length,4);
+});
+
+for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure} failure retains completed facts for explicit capture retry`,()=>{
+  const h=cashBoard(29,failure);h.applyCash(true);
+  assert.equal(h.captureError,true);assert.equal(h.results.length,0);assert.equal(h.live.current.done,false);
+  assert.equal(h.live.current.clock.running,false);assert.equal(h.live.current.cash.index,30);
+  assert.match(h.notices.at(-1)!,/完成次數不會重算/);
+  const completed=h.live.current.cash,summary=h.pendingResult.current;
+  h.events.length=0;h.settle(summary);
+  assert.deepEqual(h.events.map(e=>e.kind),['stop','update','capture','stop']);
+  assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
+  assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
+});

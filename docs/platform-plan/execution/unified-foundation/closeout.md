@@ -10,6 +10,112 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-26 main b14916cc 發布完成（導覽、公會與活動載入）
+
+截至05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`／189；完整證據見[發布收據](rollout-main-b14916cc-2026-10-26.json)。
+會員取得手機選單停靠頂欄下方並可關閉、導覽項目改名（#1047）；公會目錄可收合主題篩選、顯示符合數量並移動次要設定（#1055）。
+公會管理各分頁有用途說明、先列討論；收合討論草稿僅在留於該頁期間保留（#1056）。「提交活動」待第一次列表載入結束才開放，後續重讀不重套此初始gate（#1068）。
+三個first-parent merges為 #1069／#1070／#1071；HostedStore拆區無預期行為變更、#1057僅測試；#1038含backup／migrator角色分離修補，已合併但 `RELEASE_ENABLED`／`BACKUP_ENABLED` 均false，本次由本機Q5發布。
+Storefront僅修失敗關閉dialog後於React commit再回焦一次；checkout與交易Email仍OFF、無新購物流程，既有授權訂單讀取／忘記瀏覽器路徑未被checkout旗標關閉，本次未驗會員操作。
+Main Verify 40244683057 attempt1的17 jobs、CodeQL 40244683121的3 jobs成功；無migration，READ ONLY核對188列ledger，schema189及 `36bec661`／189回退下限不變，Q5未建新floor。
+27旗標加contact retention `all`共28設定、各37 vars、路由與cron不變；無新增線上 `FREEDOM_*` 名稱。
+四組正式備份讀回／隔離DB與物件還原／清理通過：staging before `7b71eb09`為Q4 wrapper首次觀察到的自然排程，after `ab983996`；production before `ee172b97`在Ted約03:28Z（操作者歷史）原話「快點推」後改為手動、通過IO gate，after pointer為第二次 `acc0a813`。
+Production after首試 `cb9c333f`於capture失敗、`daily_backup_cleanup_failed`／cleanupVerified=false；dump547秒後連線中斷。事後唯讀確認無殘留container／session、policy已disabled，未需或執行清理；第二次dump156秒成功，不覆寫首試。
+網路probe loss與04:13–04:46Z不穩窗口另列操作者觀察；path watcher於04:47Z健康後才重試，staging after無另錄mtr；不能改寫為全程乾淨路徑。
+Q5由Q4加入E觀察timer label與F合格自然備份pointer；Codex約01:55Z容量中斷exit1後同session續跑。Sandbox audit的mount拒絕保留；完整audit其後於sandbox外RUNBOOK steps0／1均exit0、隨後02:13:34Z receive，stdout計數屬操作者歷史、非repo evidence；02:02:45Z fixture驗證四命令exit0另列。
+兩次READ ONLY rehearsal均189／188列／floor36bec661，staging為 `timers_active_observed`、production為 `timers_paused_observed`，不是部署授權。
+Production公開smoke04:12:20.537Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過、最終 `14279926`；首次timer restore因錯過04:33:02Z production slot而拒絕、未啟動timer。依RUNBOOK於05:01:34Z只啟動production timer，catch-up `98d243d1`通過；兩service inactive／PID0後停timers、原程式重跑於05:12:56Z恢復active／enabled，排程／argv不變。
+Catch-up是operator啟動timer觸發，S10自然calendar-slot仍 `not_observed_for_new_wrapper`；下次10-27約03:34Z staging／04:33Z production。Deployments success為7324602016／20590722672、7324602177／20590723478。
+無staging acceptance window，會員UX為 `not_run`；真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留；隔離還原不授權公開資料。
+
+## 2026-10-25 main 1f7aee36 發布完成（遊戲結束少一次繪製）
+
+截至19:44 UTC，兩環境已部署 `1f7aee36`／schema189，接續 `758cabe2`／189；完整證據見[發布收據](rollout-main-1f7aee36-2026-10-25.json)。
+會員幾乎沒有可見變化：最多是 #1058 的 AbsurdDaily 最後分類後少一次重複繪製；其餘為測試、文件、無行為變更的重構或OFF旗標後的程式。
+前版以來兩個first-parent merges：#1064原樣整合 #1022／#1023／#1031／#1042；#1067原樣整合 #1053／#1058。
+#1042買家同意已發布商店政策仍無作用：兩環境 `FREEDOM_STORE_POLICIES_ENABLED` 不存在、OFF，checkout亦OFF；須由owner開啟兩者才會呈現。
+Main Verify 40219224039 attempt1的17個jobs、CodeQL 40219224127的3個jobs成功；無migration，READ ONLY核對188列ledger，schema189與 `36bec661`／189回退下限不變，Q4未建立新floor。
+27個既有旗標加contact retention `all`、各37 vars、路由與cron均不變；無新增線上 `FREEDOM_*` 名稱。
+Kit在 #1064 合併前以provisional batch head／授權建立；Follow-up0補安全診斷與rehearsal wrappers，Follow-up1改選S8／新授權，Follow-up2改選S9。
+S8 Verify 40208964551三次未成功：回條clock flake、native compile timeout後由orchestrator取消、guild-member-tiers timeout連帶duplicate key；細節為操作者歷史。#1053修首項，S8未receive／bind／deploy。
+兩組S8 staging before備份 `4b32ec82`（15:56:55.913Z）、`f2efe8e7`（17:22:07.856Z）均passed但未作pointer：前者無法滿足2h窗口，兩者亦早於S9的18:01:38.931Z授權，原證據保留。
+四組正式備份通過讀回、隔離DB／物件還原及清理：staging before `be5309c9`／after `f646857e`，production before `384c830a`／after `e7b182bc`；before在Q3 installed after-wrapper run dir，Q4保留pointer。
+每次備份前均執行IO／最終hop TCP mtr／DB RTT；staging before丟包10%，after 20次探測30%後重跑30次0%／RTT183ms；production before10%／177ms、after20%／179ms，延遲穩定，僅列操作者觀察，不改寫為乾淨路徑。
+兩次READ ONLY rehearsal均為 `rehearsed_readonly_not_deploy_authorized`／189／188列／floor36bec661；staging timers active，production已由step7暫停而inactive，常數 `timers_active_expected` 不代表實際active，符合RUNBOOK10b。
+Production公開唯讀smoke19:32:15.364Z通過14項、health首試符合；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging／both transitions通過，最終綁定 `64bdeee1`；19:44:03.881729Z原timers恢復active／enabled、排程／argv不變；Deployments success為7318209181／20564861826、7318209366／20564862554。
+無staging acceptance window，會員UX為 `not_run`；自然排程仍 `not_observed_for_new_wrapper`，真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+保留Follow-up2 sandbox的managed mount modes拒絕歷史；完整offline audit其後於sandbox外RUNBOOK steps0／1均exit0，屬操作者歷史、非repo evidence；隔離還原不授權公開資料。
+
+## 2026-10-25 main 758cabe2 發布完成（搜尋可見的 Repo 名稱）
+
+截至11:58 UTC，兩環境已部署 `758cabe2`／schema189，接續 `36bec661`／189；完整證據見[發布收據](rollout-main-758cabe2-2026-10-25.json)。
+會員搜尋可用已看見的精選 Repo 名稱找到公開作品（#1021）；其餘 #1026 為16檔測試／CI與相關文件，沒有其他產品變更。
+Main Verify 40175861457 attempt1的17個jobs、CodeQL 40175861736的3個jobs成功；檔案verify job10:39:12Z、run更新10:39:13Z，派工10:39:41Z未獨立佐證。
+無migration；以READ ONLY逐列核對188列ledger，schema189與兩環境 `36bec661`／189回退下限維持，Q3未建立新floor。
+27個既有旗標加contact retention `all`、各37 vars、路由及cron均不變；沒有新增線上 `FREEDOM_*`，代出貨不存在、仍OFF。
+四組備份首跑通過讀回、隔離DB／物件還原與清理：staging before `93606d6e`／after `583d0bfb`，production before `61411998`／after `23211552`；before在Q2 run dir，Q3保留pointer。
+S6 `0ec26d5c` 在receive前因 #1026 合併而失去current-main資格；Follow-up1改選S7並於08:17:35.841Z建立新授權，S6未發布，舊授權保留。
+Kit早期改選腳本曾讀取Q2兩份private template bytes算pin，未印出／複製內容但違反禁讀界線；已停止，後續pin改取既有closure entries，Q2未改。
+Step5首試舊Q2 root退出65；step8第二次因 `quote is not defined` 拒絕、無部署provider效果，該次Access已撤銷。Follow-up2／3分別修root與helper並補audit／測試；拒絕證據保留。
+每次修正後重跑bind／before pointer／plan，沿用10:31:36.262Z的staging before；最終bind 11:12:51Z、seal 11:13:23Z依mtime，READ ONLY staging gate11:13:35Z為操作者觀察。
+Step 7的10:59:19Z snapshot跨rebind保留、timer持續paused，未重跑step 7；每次備份前執行IO／mtr／DB RTT，production before最終hop有10–20% SYN探測丟包但延遲穩定、兩次DB RTT乾淨，僅列觀察。
+Production首試11:41Z在首次asset-upload-session遇Cloudflare10013；11:43:04Z GET-only確認仍前版100%、無新version／deployment，同一sealed wrapper於11:43:58–11:44:39Z重試成功，並非publish後redeploy。
+Production公開唯讀smoke11:45:06.011Z通過14項；`/` CSP允許youtube-nocookie frame、付款路徑無frame-src；admin兩路徑Access302，未觀察live admin Worker CSP，僅驗精確來源函式。
+Dispatcher staging約11:40Z、both約11:57Z綁定 `a423a61e`；11:57:13Z原timers恢復active／enabled，排程／argv不變；Deployments success為7312748338／20543559761、7312748460／20543560249。
+無staging acceptance window，會員UX為 `not_run`；自然排程仍 `not_observed_for_new_wrapper`，真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+Kit完整offline audit仍因managed mount modes拒絕，不能將內容gates通過寫成完整audit成功；隔離還原不授權公開資料。
+
+## 2026-10-25 main 36bec661 發布完成（已付款取消與會員體驗）
+
+截至05:22 UTC，兩環境已部署 `36bec661`／schema189，接續 `54961dd8`／187；完整證據見[發布收據](rollout-main-36bec661-2026-10-25.json)。
+自前版共4個 first-parent merges：#1001、#1015（16支）、#1017（fork head）、#1027（僅CI）；文件設計不算功能或會員驗收。
+已付款訂單取消流程已部署，但checkout與交易Email仍OFF，會員目前無法建立付款訂單，不能據此推定正式交易驗收。#1015涵蓋五語發文器、草稿／安全重試、留言修改刪除防舊讀覆蓋、按讚回饋、動態分類／分享入口及已讀通知同步。
+聊天重用歷史、有限回條查詢、貼圖預覽再送出並保留草稿；搜尋依登入狀態隔離已上線；返回保留私人清單分頁只在 `FREEDOM_COMMUNITY_RELATIONS_ENABLED` 開啟時呈現，該旗標不存在、仍OFF，會員目前看不到。
+另有技能書探索閱讀、免費預覽入口、首頁品牌與學習／公會自主展開、本人空間／頭像選單及已加入公會總覽；共創誌分開Claude／Codex並支援兩社群同日文章。
+#1017修正結果清單變動後關閉好友移除／拒絕確認；#1014僅為本人明選公開名片精選貼文設計，未宣稱交付。
+Main Verify 40149666118 attempt2的17個jobs與CodeQL 40149666157的3個jobs成功；檔案記錄最後job03:48:05Z、run更新03:48:06Z。
+Verify首輪partition1的test_timeout（62檔完成60、無測試失敗）僅有派工提供的操作者紀錄，Q2未見原始報告；不改寫為成功。
+Migrations188／189各由環境 `_migrator` 單一交易COMMIT；staging交易890305、production交易892468，ledger各188列。
+**兩環境回退下限升為 `36bec661`／189，只能相容前進修復**；代出貨migration已套用，但旗標不存在，仍OFF。
+27個既有旗標加contact retention `all`共28項設定、各37 vars、路由與cron均不變；沒有新增線上 `FREEDOM_*` 名稱。
+Ted的10月24日18:08:00.318Z原話：「當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了」；新授權記錄於10月25日01:14:37.562Z。
+無staging acceptance window，會員UX為 `not_run`；production公開唯讀smoke05:00:02.174Z通過14項、health首試符合來源，未登入會員或建單。
+`/` 線上CSP允許youtube-nocookie frame；`/pay/ecpay/`加43個A無frame-src；admin兩路徑被Access302攔截，未觀察線上admin Worker CSP，僅驗精確來源函式。
+四組發布備份皆首跑通過讀回、隔離DB／物件還原及清理：staging before `ecade880`／after `ad86e455`，production before `058c207a`／after `4d310d7f`。
+Before以Q既有after wrapper新擷取、保留 `54961dd8`／187；after為 `36bec661`／189；還原不授權公開資料。00:44:05Z receive拒絕S3 `53d528fc` 的 `not_actual_current_merged_main`，Follow-up2於01:14Z改選S5／新授權並保留舊檔。
+3b首試因wrapper舊pin退出65、log空且Node未啟動；Follow-up3僅重釘該行並新增永久inline-pin audit，第二次04:12:18Z通過。
+步序為觀察：step7 staging before03:57:56Z早於3b重試與bind／plan／seal，使用前代wrapper；pointer於bind後04:13:46Z記錄。
+Step8於04:12:08Z暫停timer，04:31Z production夜備未於原時段執行；發布before／after補足，後續Persistent補跑另列。
+Production before於04:28／04:31Z因上游延遲未啟動；04:41／04:42Z連續乾淨RTT與04:42Z乾淨precheck後，04:43:42Z才啟動並首跑通過；未複製主機或IP。
+Dispatcher staging階段約04:57Z，both為 `2fc4cb83`；timer restore首試啟動後因Persistent補跑而拒絕，補跑 `b1d1ccc0`成功後第二次05:21:20Z完整gate通過，排程／argv未改。
+Deployments staging-next／next success（7309017031／20527935508、7309017615／20527938074）；補跑非自然排程，仍為 `not_observed_for_new_wrapper`；真人手機／Safari、會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。
+
+## 2026-10-24 main 54961dd8 發布完成（共創誌、遊戲與聯絡資料保存）
+
+截至21:26 UTC，兩環境已部署 `54961dd8`／schema187，接續 `c140a346`／185；完整證據見[發布收據](rollout-main-54961dd8-2026-10-24.json)。
+會員取得共創誌模板／投稿 API、原話閱讀／排行／成員頁、3D 遊戲與成果分享、手機 PWA 聊天修正、關閉服務表單保留草稿。
+自前版共5個 first-parent merges：#991、#985、#1002、#1007、#1003（含 #989／#984／#973／#986／#992）；文件不算會員驗收。
+Main Verify 40100005287 的17個 jobs、CodeQL 40100005270 的3個 jobs 全部成功；migrations186／187各由環境 `_migrator` 單一交易COMMIT。
+Staging交易870002、production交易873627，ledger各186列；**兩環境回退下限升為 `54961dd8`／187，只能相容前進修復**。
+27個既有旗標、路由與cron維持；唯一新增 plain var `FREEDOM_COMMERCE_CONTACT_RETENTION=all`，各37 vars。
+Ted於10月23日06:21Z在 #989 決定「4. all, all」；其他不存在旗標仍預設OFF，checkout／交易Email仍OFF。
+Ted於10月24日18:08:00.318Z授權：「當然要發粄 你的工作就是一職當 orchestrator 確定東西都不會 delay 大家的東西出的去, 不要拖了」。
+無staging acceptance window，會員UX為 `not_run`；production公開唯讀smoke於21:25:09.946Z通過14項，health首試符合來源，未登入會員或建單。
+`/` 線上CSP允許youtube-nocookie frame；`/pay/ecpay/`加43個A無frame-src；admin兩路徑被Access302攔截，未觀察線上admin Worker CSP，僅驗精確來源函式。
+四組成功備份皆通過遠端讀回、隔離DB／物件還原與清理：staging before `64667475`／after `d68f2715`，production before `f66c3abb`／after `7e0ea7c6`。
+Before皆於本日以舊kit的after wrapper新擷取，保留 `c140a346`／185；after為 `54961dd8`／187，production after pointer約21:14Z記錄；還原不授權公開資料。
+Seal首試兩環境exit65拒絕、未寫seal；Follow-up2只修expected var順序、render bytes不變，重新釘選helper並重跑steps4／6。
+Follow-up3在materialize拒絕前改成忽略readback key順序的精確值比對；record-backup staging before首試因0664拒絕，169個kit檔僅移除group／other位元後重試通過。
+Staging after首試 `201d5358`於restore遇EOF，第二次 `6df7dfe5`於capture失敗，皆清理通過、未留下maintenance；第三次才成功。
+180秒dump預算／SIGTERM後docker CLI退出0為kit限制，**未修正**；第二次AWS東京路徑Cogent掉包及恢復為操作者觀察，與失敗收據分開。
+Production step15於20:54:15Z退出1，但Worker已發布；provider listing延遲，沒有redeploy。Follow-up4新增GET-only reconciliation。
+Reconcile首試21:10Z因把含runtime驗證首行的log當單份JSON而拒絕；Follow-up5修parse／加preflight，操作者記錄 `local_inputs_ok`，第二次21:24:41.936Z簽發receipt，**不是deploy helper成功收據**。
+兩環境dispatcher已綁定 `4dba0c67`；21:25:57Z恢復原timers，03:30／04:30 UTC、5分鐘隨機延遲、Persistent及service argv未改。
+Deployments staging-next／next皆記success（7304702552／20509123861、7304703178／20509126735）；新wrapper自然排程仍為 `not_observed_for_new_wrapper`。
+真人手機／Safari、會員旅程、第二操作者、live rollback、原168項需求與T-047未驗項保留；不以CI、部署或備份還原推定完成。
+
 ## 2026-10-23 main c140a346 發布完成（商店／供貨、公開閱讀與 migration 173–185）
 
 **截至11:28 UTC，staging 與 production 都已部署 `c140a346`／schema185，

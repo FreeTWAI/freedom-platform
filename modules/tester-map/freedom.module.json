@@ -1,0 +1,54 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "tester-map",
+  "owner_role": "community",
+  "owned_paths": [
+    "modules/tester-map/**",
+    "apps/portal-web/src/modules/TesterMap.tsx",
+    "apps/portal-web/src/modules/TesterMap.css",
+    "tests/runtime/tester-map.test.ts",
+    "tests/e2e/tester-map.spec.ts"
+  ],
+  "public_exports": [
+    "modules/tester-map/index.ts"
+  ],
+  "dependencies": [
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "modules/tester-map/README.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "tester-map.public-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/TesterMap.tsx",
+      "operations": [
+        "tester-map.static.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "tester-map.member-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/TesterMap.tsx",
+      "operations": [
+        "tester-map.static.read"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}
