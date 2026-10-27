@@ -338,5 +338,354 @@
       "shop_key_policy": "legacy-compatible",
       "shop_key_issuer_profile": "freedom.shop-service-key/v1"
     }
+  },
+  "followup_1330_utc": {
+    "observed_at": "2026-10-27T13:30:56.079Z",
+    "scope": "Authenticated existing deployment and backup artifacts, GitHub permissions/Environment variables, and public production health; no new deploy, backup, DB mutation or flag change.",
+    "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+    "previous_live_source": "1db283839296e284602217140a21921072d86629",
+    "deployments": {
+      "staging-next": {
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "target": "staging-next",
+        "mode": "deploy",
+        "status": "passed",
+        "completedAt": "2026-10-27T09:26:48.772Z",
+        "deploymentId": 7354722688,
+        "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "providerOutcome": "release_confirmed",
+        "phases": [
+          {
+            "name": "preflight",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:22:42.167Z",
+            "completedAt": "2026-10-27T09:25:50.148Z"
+          },
+          {
+            "name": "migration",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:25:50.150Z",
+            "completedAt": "2026-10-27T09:25:58.076Z"
+          },
+          {
+            "name": "deploy",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:25:58.077Z",
+            "completedAt": "2026-10-27T09:26:22.905Z"
+          },
+          {
+            "name": "health",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:26:22.906Z",
+            "completedAt": "2026-10-27T09:26:39.640Z"
+          },
+          {
+            "name": "handoff",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:26:39.642Z",
+            "completedAt": "2026-10-27T09:26:47.212Z"
+          }
+        ],
+        "runId": 40480167897,
+        "actor": "teddashh",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480167897",
+        "artifactId": 12721859757,
+        "artifactDigest": "sha256:b9649b79827fdc777b70e4286db66ce85fd03c52ff719cffd32a29df5d2bc8b4"
+      },
+      "next": {
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "target": "next",
+        "mode": "deploy",
+        "status": "passed",
+        "completedAt": "2026-10-27T09:32:02.043Z",
+        "deploymentId": 7354836825,
+        "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "providerOutcome": "release_confirmed",
+        "phases": [
+          {
+            "name": "preflight",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:28:37.774Z",
+            "completedAt": "2026-10-27T09:31:07.550Z"
+          },
+          {
+            "name": "migration",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:31:07.552Z",
+            "completedAt": "2026-10-27T09:31:15.892Z"
+          },
+          {
+            "name": "deploy",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:31:15.893Z",
+            "completedAt": "2026-10-27T09:31:37.383Z"
+          },
+          {
+            "name": "health",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:31:37.394Z",
+            "completedAt": "2026-10-27T09:31:54.037Z"
+          },
+          {
+            "name": "handoff",
+            "status": "passed",
+            "startedAt": "2026-10-27T09:31:54.061Z",
+            "completedAt": "2026-10-27T09:31:59.949Z"
+          }
+        ],
+        "runId": 40480918857,
+        "actor": "teddashh",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480918857",
+        "artifactId": 12722273411,
+        "artifactDigest": "sha256:dc87447e06c073c2c7325938710f14cbb85a3474e0fe9cc633675e5713819e8b"
+      }
+    },
+    "release_source_ci": [
+      {
+        "workflow": ".github/workflows/verify.yml",
+        "runId": 40470403076,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40470403076/attempts/1"
+      },
+      {
+        "workflow": ".github/workflows/codeql.yml",
+        "runId": 40470403318,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40470403318/attempts/1"
+      }
+    ],
+    "production_health": {
+      "observedAt": "2026-10-27T13:28:56.812Z",
+      "httpStatus": 200,
+      "status": "ok",
+      "releaseSha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c"
+    },
+    "access_readback": {
+      "observed_at": "2026-10-27T13:28:50.804Z",
+      "operators": [
+        {
+          "login": "teddashh",
+          "id": 233386770,
+          "permission": "admin"
+        },
+        {
+          "login": "arumwu",
+          "id": 75135621,
+          "permission": "admin"
+        },
+        {
+          "login": "Hao0321",
+          "id": 126182090,
+          "permission": "admin"
+        },
+        {
+          "login": "detna-vibe-coding",
+          "id": 267743027,
+          "permission": "admin"
+        }
+      ],
+      "environments": [
+        {
+          "target": "staging-next",
+          "protectionRules": [
+            {
+              "id": 70007924,
+              "node_id": "GA_kwDOUiPaPs4ELDx0",
+              "type": "branch_policy"
+            }
+          ],
+          "variables": [
+            {
+              "name": "BACKUP_ENABLED",
+              "value": "true"
+            },
+            {
+              "name": "RELEASE_CONFIG_SHA256",
+              "value": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376"
+            },
+            {
+              "name": "RELEASE_ENABLED",
+              "value": "true"
+            },
+            {
+              "name": "RELEASE_OPERATOR_IMAGE",
+              "value": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+            }
+          ]
+        },
+        {
+          "target": "next",
+          "protectionRules": [
+            {
+              "id": 70007927,
+              "node_id": "GA_kwDOUiPaPs4ELDx3",
+              "type": "branch_policy"
+            }
+          ],
+          "variables": [
+            {
+              "name": "BACKUP_ENABLED",
+              "value": "true"
+            },
+            {
+              "name": "RELEASE_CONFIG_SHA256",
+              "value": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6"
+            },
+            {
+              "name": "RELEASE_ENABLED",
+              "value": "true"
+            },
+            {
+              "name": "RELEASE_OPERATOR_IMAGE",
+              "value": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39"
+            }
+          ]
+        }
+      ]
+    },
+    "other_operator_plan": {
+      "runId": 40502413062,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40502413062",
+      "actor": "arumwu",
+      "actorId": 75135621,
+      "source": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+      "target": "staging-next",
+      "mode": "plan",
+      "admission": "success",
+      "deploy": "skipped",
+      "conclusion": "success",
+      "limitation": "GitHub admission only; no operator, provider, database or deployment acceptance."
+    },
+    "main": {
+      "sha": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+      "tree": "eeb903e3e7afcf3a648e24b20175b9f5f7d9eba4",
+      "verify": {
+        "id": 40492244042,
+        "head_sha": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40492244042"
+      },
+      "codeql": {
+        "id": 40492244040,
+        "head_sha": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40492244040"
+      }
+    },
+    "backup_attempts": [
+      {
+        "id": 40492346184,
+        "event": "schedule",
+        "conclusion": "failure",
+        "target": "next",
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "runAttempt": 1,
+        "artifactId": 12730220237,
+        "artifactDigest": "sha256:bdfbe5bfcdbf9b9197b96801ccf2d9963ce6e09257d14f22c5d33c600aecd206",
+        "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "completedAt": "2026-10-27T11:03:19.970Z",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "progress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "backup",
+            "reportedStatus": "failed",
+            "backupFailure": {
+              "stage": "capture",
+              "code": "daily_backup_cleanup_failed",
+              "cleanupVerified": false,
+              "phaseCode": "daily_backup_phase_failed",
+              "cleanupCode": "release_lease_lost",
+              "snapshotDump": "not_started"
+            }
+          }
+        ]
+      },
+      {
+        "id": 40492346184,
+        "event": "schedule",
+        "conclusion": "failure",
+        "target": "staging-next",
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "runAttempt": 1,
+        "artifactId": 12727799428,
+        "artifactDigest": "sha256:94e85189995f4aceb69b7204091ca3f2acf06e487f8c95e29d2bfeeb2def73bd",
+        "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "completedAt": "2026-10-27T10:59:09.988Z",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "progress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "backup",
+            "reportedStatus": "failed",
+            "backupFailure": {
+              "stage": "capture",
+              "code": "daily_backup_phase_failed",
+              "cleanupVerified": true,
+              "phaseCode": "daily_backup_phase_failed",
+              "snapshotDump": "not_started"
+            }
+          }
+        ]
+      },
+      {
+        "id": 40496614066,
+        "event": "workflow_dispatch",
+        "conclusion": "failure",
+        "target": "staging-next",
+        "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+        "runAttempt": 1,
+        "artifactId": 12731431137,
+        "artifactDigest": "sha256:792cd5ac5501ffb2380cd43355412f21de4e833cfad01ac73520ffeb630c0fe7",
+        "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "completedAt": "2026-10-27T11:36:46.800Z",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "progress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "failed"
+          }
+        ]
+      }
+    ],
+    "release_blocker": {
+      "status": "pending_recovery_not_live_validated",
+      "failed_schedule_run": 40492346184,
+      "followup_failed_backup_run": 40496614066,
+      "failed_staging_deploy_run": 40494980290,
+      "source_fix_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1133",
+      "source_fix_head": "7186c57f974cc6cadcc04d25335c293f43a1d381",
+      "integration_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1134",
+      "integration_head": "11732a72c7169610c6302ceafe4cfc8112211f49",
+      "integration_verify_run": 40510156941,
+      "under_lease_pending_state": "Reported by the original operator in PR #1120/#1133; not independently re-read from the live database in this observation.",
+      "next_step": "Complete reviewed integration, install its validated operator image, then reconcile original failed run through staging and next using the existing recovery input. Do not reset floor or start another full backup merely for deployment."
+    },
+    "dispatch_reconciliation": {
+      "original_monitor_status": "stopped_requires_observation",
+      "original_error": "dispatch_identity_ambiguous",
+      "matching_runs": [
+        40480167897,
+        40480183206
+      ],
+      "success_run": 40480167897,
+      "cancelled_run": 40480183206,
+      "production_success_run": 40480918857,
+      "observation_only": true,
+      "limitation": "Two dispatches shared actor/source/target. This observation does not attribute either to a particular local process; it verifies completed GitHub results without another deployment."
+    }
   }
 }

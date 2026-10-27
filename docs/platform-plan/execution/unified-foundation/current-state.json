@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-27T07:26:38.144639+00:00",
+  "recorded_at": "2026-10-27T13:30:56.079Z",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,32 +14,32 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "ea84b93cdc06476f0292807b0c7577e93403aa40",
-    "tree": "a2de3ba8c8c3b64f381d619bb5403f423553e696",
-    "observed_at": "2026-10-27T07:16:16.731Z",
+    "sha": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+    "tree": "eeb903e3e7afcf3a648e24b20175b9f5f7d9eba4",
+    "observed_at": "2026-10-27T13:30:56.079Z",
     "observation_kind": "GitHub main readback, separate from actual deployed source.",
-    "runtime_release_source": "1db283839296e284602217140a21921072d86629",
-    "runtime_release_source_scope": "Both environments completed shared five-stage Actions release; staging manual backup passed; production backup completion independently reconciled after workflow failure.",
+    "runtime_release_source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+    "runtime_release_source_scope": "Both environments completed the shared five-phase release at 09:26/09:32 UTC. Later backup/release attempts failed; recovery is not yet validated.",
     "release_source_verify": {
       "conclusion": "success",
-      "source": "1db283839296e284602217140a21921072d86629",
-      "head": "1db283839296e284602217140a21921072d86629",
-      "run": 40449510394,
+      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "head": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "run": 40470403076,
       "attempt": 1,
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-27T07:16:16.731Z",
-      "main": "ea84b93cdc06476f0292807b0c7577e93403aa40",
-      "main_verify_run": 40456820119,
-      "main_verify_attempt": 2,
-      "main_verify_last_reported_status": "in_progress",
-      "main_verify_conclusion": null,
-      "main_codeql_run": 40456820112,
+      "observed_at": "2026-10-27T13:30:56.079Z",
+      "main": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+      "main_verify_run": 40492244042,
+      "main_verify_attempt": 1,
+      "main_verify_last_reported_status": "completed",
+      "main_verify_conclusion": "success",
+      "main_codeql_run": 40492244040,
       "main_codeql_conclusion": "success",
-      "main_ci_complete": false,
+      "main_ci_complete": true,
       "deployed_by_existing_receipt": false,
-      "limitation": "Dated observation: attempt 1 failed UI; attempt 2 was running. No claim that this newer main was deployed."
+      "limitation": "main CI passed; latest authenticated successful deployment remains 34390b12. The later staging release failed."
     },
     "previous_main_verify_observation": {
       "observed_at": "2026-10-26T13:48:57.954Z",
@@ -66,97 +66,88 @@
       "main_verify_attempt": 1
     },
     "migrations_beyond_observed_runtime": [],
-    "limitation": "Successful main CI for deployed 1db28383 is separate from later main ea84b93c. Member UX and original acceptance remain incomplete."
+    "limitation": "Merged 4d248428 has successful main CI but is not the live source. Actual deployment is 34390b12; member UX and original requirements remain incomplete."
   },
   "deployment": {
     "production": {
       "url": "https://freetwai.com/",
-      "observed_release_sha": "1db283839296e284602217140a21921072d86629",
-      "observed_at": "2026-10-27T05:02:35.956Z",
+      "observed_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "observed_at": "2026-10-27T09:32:02.043Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "release_sha": "1db283839296e284602217140a21921072d86629",
+        "release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
         "observation_kind": "operator_validated_health_phase",
-        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452543953"
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480918857"
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
-      "last_operator_release_sha": "1db283839296e284602217140a21921072d86629",
-      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled.",
+      "status": "shared_actions_deployed_later_backup_recovery_pending",
+      "last_operator_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted.",
       "health_observation": "Exact-source health validated by the installed operator and receipt.",
-      "health_observed_at": "2026-10-27T05:02:28.705Z",
+      "health_observed_at": "2026-10-27T09:31:54.037Z",
       "health_observed_between": {
-        "start": "2026-10-27T05:02:08.500Z",
-        "end": "2026-10-27T05:02:28.705Z"
+        "start": "2026-10-27T09:31:37.394Z",
+        "end": "2026-10-27T09:31:54.037Z"
       },
       "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
       "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt.",
       "additional_public_health_readback": {
-        "observedAt": "2026-10-27T07:25:49.190Z",
+        "observedAt": "2026-10-27T13:28:56.812Z",
         "httpStatus": 200,
-        "body": {
-          "status": "ok",
-          "mode": "public",
-          "version": "0.13.0-member-messages",
-          "money_movement_enabled": false,
-          "official": false,
-          "runtime": "cloudflare-workers",
-          "release_sha": "1db283839296e284602217140a21921072d86629",
-          "shop_key_policy": "legacy-compatible",
-          "shop_key_issuer_profile": "freedom.shop-service-key/v1"
-        }
+        "status": "ok",
+        "releaseSha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c"
       }
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "1db283839296e284602217140a21921072d86629",
-      "observed_at": "2026-10-27T04:56:44.052Z",
+      "observed_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "observed_at": "2026-10-27T09:26:48.772Z",
       "health": {
         "http": 200,
         "status": "ok",
-        "release_sha": "1db283839296e284602217140a21921072d86629",
+        "release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
         "observation_kind": "operator_validated_health_phase",
-        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40452068872"
+        "evidence": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40480167897"
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
-      "last_operator_release_sha": "1db283839296e284602217140a21921072d86629",
-      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled.",
+      "status": "shared_actions_deployed_later_backup_recovery_pending",
+      "last_operator_release_sha": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted.",
       "health_observation": "Exact-source health validated by the installed operator and receipt.",
-      "health_observed_at": "2026-10-27T04:56:36.730Z",
+      "health_observed_at": "2026-10-27T09:26:39.640Z",
       "health_observed_between": {
-        "start": "2026-10-27T04:56:19.284Z",
-        "end": "2026-10-27T04:56:36.730Z"
+        "start": "2026-10-27T09:26:22.906Z",
+        "end": "2026-10-27T09:26:39.640Z"
       },
       "health_observed_at_basis": "Authenticated operator phase completion; not a separate HTTP request timestamp.",
       "worker_version_observation": "Version UUID is not copied into the public receipt; prior UUID remains in the dated S11 receipt."
     },
     "last_operator_rollout": {
-      "source": "1db283839296e284602217140a21921072d86629",
-      "at": "2026-10-27T05:02:35.956Z",
+      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "at": "2026-10-27T09:32:02.043Z",
       "kind": "authenticated_shared_actions_receipts",
       "scope": "staging-next then next, same verified source and operator image",
       "status": "passed",
       "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "limitation": "Shared Actions receipt authenticates the five release phases and exact source. Staging manual backup workflow passed. Production manual workflow failed after the completed backup journal event; authenticated journal replay and under-lease live readback verify completed backup, restore, cleanup and no pending operation. The exact finalization failure cause remains unavailable. Other operators actual runs, new-image natural scheduling, old timer retirement, live rollback, member journeys and original requirements remain unaccepted. No new commerce flag or payment capability is enabled."
+      "limitation": "Five-phase shared release is authenticated. Later scheduled backup 40492346184 failed in capture before dump; no completed recovery is claimed. arumwu ran plan only; other operators actual deploys, second-operator restore, member journeys, live rollback and original requirements remain unaccepted."
     },
     "last_production_rollout": {
-      "source": "1db283839296e284602217140a21921072d86629",
-      "at": "2026-10-27T05:02:35.956Z",
-      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "at": "2026-10-27T09:32:02.043Z",
+      "status": "shared_actions_deployed_later_backup_recovery_pending",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "run_id": 40452543953,
-      "deployment_id": 7350773249,
+      "run_id": 40480918857,
+      "deployment_id": 7354836825,
       "kind": "authenticated_shared_actions_receipt"
     },
     "last_staging_rollout": {
-      "source": "1db283839296e284602217140a21921072d86629",
-      "at": "2026-10-27T04:56:44.052Z",
-      "status": "shared_actions_deployed_backup_evidence_reconciled_natural_schedule_pending",
+      "source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
+      "at": "2026-10-27T09:26:48.772Z",
+      "status": "shared_actions_deployed_later_backup_recovery_pending",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "run_id": 40452068872,
-      "deployment_id": 7350698151,
+      "run_id": 40480167897,
+      "deployment_id": 7354722688,
       "kind": "authenticated_shared_actions_receipt"
     },
     "previous_production_rollout": {
@@ -865,6 +856,15 @@
       },
       "receipt_sha256": "6f0cfb3b73ea5531ba6f835f0c7d0e4c129d4d018824c2c78ff0608cb2bd6b38",
       "limitation": "Counts do not establish merchant settings correctness or independent real-member acceptance."
+    },
+    "later_failed_staging_attempt": {
+      "run_id": 40494980290,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40494980290",
+      "source": "ed0609a890858bbc5a16939c42566c93923d7161",
+      "status": "failed",
+      "provider_outcome": "unknown_until_confirmed",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "limitation": "Failure retained; no release success inferred. Live pending-state diagnosis is attributed to the original operator."
     }
   },
   "schema": {
@@ -3181,18 +3181,20 @@
       "Same-host isolated current-schema restore passed; a second authorized operator in a new environment is not yet accepted",
       "GC/OFF daily mode remains selected; retention executor and historical unsettled PUT remain open"
     ],
-    "operator_source_note": "The shared Actions image is installed and ordinary deployments passed; new-image staging manual backup passed and the production failed workflow was reconciled using its completed journal evidence and live readback. daily_operator_source and last_rollout_backup_release_pins below retain the dated legacy local-timer configuration, not the active shared image. No per-deployment backup is required. Natural schedule acceptance and legacy timer retirement remain separate.",
+    "operator_source_note": "Shared Actions is enabled and deployed 34390b12. The later natural backup failed before dump; its recovery remains pending in #1133/#1134. Earlier manual success and the independently reconciled 07:16 failure remain historical evidence, not proof that the new failure is settled. Legacy timer fields retain their dated configuration; no new timer observation or per-deployment backup requirement.",
     "current_operator_scheduled_run": {
-      "observed_at": "2026-10-27T07:25:49.190Z",
-      "status": "not_observed_for_new_image",
-      "operator_source": "1db283839296e284602217140a21921072d86629",
+      "observed_at": "2026-10-27T13:30:56.079Z",
+      "status": "observed_failed_before_dump",
+      "operator_source": "34390b1210e51a9ac071e32f8ac1bb6ed8d0382c",
       "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
       "workflow_active": true,
       "cron_utc": "43 5 * * *",
-      "latest_observed_schedule_run": 40315670754,
+      "latest_observed_schedule_run": 40492346184,
       "latest_observed_schedule_conclusion": "failure",
+      "event": "schedule",
+      "run_attempt": 1,
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
-      "limitation": "Staging manual run passed; production workflow failed and its completed backup was independently reconciled. Neither proves natural scheduling. Legacy timer operation/retirement is owned separately and was not changed by this task."
+      "limitation": "Natural execution observed, success not established. Both original failure receipts are verified; capture failed before snapshotDump, and pending recovery remains separate from prior successful manual backup."
     },
     "rollback": {
       "current_schema": {
@@ -3602,6 +3604,19 @@
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
       "natural_schedule_proven": false
+    },
+    "shared_actions_pending_recovery": {
+      "status": "pending_recovery_not_live_validated",
+      "failed_schedule_run": 40492346184,
+      "followup_failed_backup_run": 40496614066,
+      "failed_staging_deploy_run": 40494980290,
+      "source_fix_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1133",
+      "source_fix_head": "7186c57f974cc6cadcc04d25335c293f43a1d381",
+      "integration_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1134",
+      "integration_head": "11732a72c7169610c6302ceafe4cfc8112211f49",
+      "integration_verify_run": 40510156941,
+      "under_lease_pending_state": "Reported by the original operator in PR #1120/#1133; not independently re-read from the live database in this observation.",
+      "next_step": "Complete reviewed integration, install its validated operator image, then reconcile original failed run through staging and next using the existing recovery input. Do not reset floor or start another full backup merely for deployment."
     }
   },
   "governance_current": {
@@ -9473,11 +9488,42 @@
       "source": "274f0614208552e73c734108e73494503cf30c66",
       "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
       "scope": "Prior S11 deployment, local operator and timer evidence retained in its dated receipt and Git revision ea84b93cdc06476f0292807b0c7577e93403aa40."
+    },
+    {
+      "recorded_at": "2026-10-27T07:26:38.144639+00:00",
+      "source": "1db283839296e284602217140a21921072d86629",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+      "scope": "Original 07:26 UTC shared-release/manual-backup observation is retained in the receipt root; followup_1330_utc supersedes current deployment, main, access and natural-backup status.",
+      "main_verify_observation": {
+        "observed_at": "2026-10-27T07:16:16.731Z",
+        "main": "ea84b93cdc06476f0292807b0c7577e93403aa40",
+        "main_verify_run": 40456820119,
+        "main_verify_attempt": 2,
+        "main_verify_last_reported_status": "in_progress",
+        "main_verify_conclusion": null,
+        "main_codeql_run": 40456820112,
+        "main_codeql_conclusion": "success",
+        "main_ci_complete": false,
+        "deployed_by_existing_receipt": false,
+        "limitation": "Dated observation: attempt 1 failed UI; attempt 2 was running. No claim that this newer main was deployed."
+      },
+      "current_operator_scheduled_run": {
+        "observed_at": "2026-10-27T07:25:49.190Z",
+        "status": "not_observed_for_new_image",
+        "operator_source": "1db283839296e284602217140a21921072d86629",
+        "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:5b2fa38af5d87ee4117744286931e4ed117e8d86fdb2929b9e676410232b2c39",
+        "workflow_active": true,
+        "cron_utc": "43 5 * * *",
+        "latest_observed_schedule_run": 40315670754,
+        "latest_observed_schedule_conclusion": "failure",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+        "limitation": "Staging manual run passed; production workflow failed and its completed backup was independently reconciled. Neither proves natural scheduling. Legacy timer operation/retirement is owned separately and was not changed by this task."
+      }
     }
   ],
   "shared_release_installation": {
-    "observed_at": "2026-10-27T05:06:22.157Z",
-    "status": "enabled_and_actually_deployed",
+    "observed_at": "2026-10-27T13:28:50.804Z",
+    "status": "enabled_previous_deployments_passed_current_recovery_pending",
     "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
     "workflow": "https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml",
     "operators": [
@@ -9508,10 +9554,6 @@
         "protectionRules": [
           "branch_policy"
         ],
-        "branchPolicy": {
-          "protected_branches": false,
-          "custom_branch_policies": true
-        },
         "variables": {
           "BACKUP_ENABLED": "true",
           "RELEASE_CONFIG_SHA256": "5cc3c3977bdc98a0530ee3ba8685b1b28f50749ad6058a7ae1f30b5508d83376",
@@ -9524,10 +9566,6 @@
         "protectionRules": [
           "branch_policy"
         ],
-        "branchPolicy": {
-          "protected_branches": false,
-          "custom_branch_policies": true
-        },
         "variables": {
           "BACKUP_ENABLED": "true",
           "RELEASE_CONFIG_SHA256": "386aed1946d23b2c57ff8a9826e767a448182ae0589d8a1627a421def6289fd6",
@@ -9537,10 +9575,40 @@
       }
     ],
     "actual_operators_observed": [
-      "teddashh"
+      "teddashh",
+      "arumwu"
     ],
     "personal_keys_distributed": false,
     "ordinary_release_requires_daily_backup": false,
-    "natural_backup_acceptance": "not_observed_for_new_image"
+    "natural_backup_acceptance": "observed_failed_before_dump",
+    "actual_deploy_operators_observed": [
+      "teddashh"
+    ],
+    "other_operator_plan": {
+      "runId": 40502413062,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40502413062",
+      "actor": "arumwu",
+      "actorId": 75135621,
+      "source": "4d2484286a82e5795826ffe9e743cbaef33b86a6",
+      "target": "staging-next",
+      "mode": "plan",
+      "admission": "success",
+      "deploy": "skipped",
+      "conclusion": "success",
+      "limitation": "GitHub admission only; no operator, provider, database or deployment acceptance."
+    },
+    "current_release_blocker": {
+      "status": "pending_recovery_not_live_validated",
+      "failed_schedule_run": 40492346184,
+      "followup_failed_backup_run": 40496614066,
+      "failed_staging_deploy_run": 40494980290,
+      "source_fix_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1133",
+      "source_fix_head": "7186c57f974cc6cadcc04d25335c293f43a1d381",
+      "integration_pr": "https://github.com/FreeTWAI/freedom-platform/pull/1134",
+      "integration_head": "11732a72c7169610c6302ceafe4cfc8112211f49",
+      "integration_verify_run": 40510156941,
+      "under_lease_pending_state": "Reported by the original operator in PR #1120/#1133; not independently re-read from the live database in this observation.",
+      "next_step": "Complete reviewed integration, install its validated operator image, then reconcile original failed run through staging and next using the existing recovery input. Do not reset floor or start another full backup merely for deployment."
+    }
   }
 }

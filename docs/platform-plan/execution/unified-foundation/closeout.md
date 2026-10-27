@@ -10,6 +10,22 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-27 13:30 UTC 接續：34390b12 已部署，下一版待結清失敗備份
+
+兩環境已由共用 Actions 部署 `34390b12`：staging 09:26 UTC、production 09:32 UTC，五階段均通過。
+已重新核對兩份 artifact digest 與執行身分；正式站 13:28 UTC 回讀 HTTP 200、`status=ok`、同 SHA。
+[收據的 followup_1330_utc](rollout-shared-actions-2026-10-27.json)保留完整依據。接續程式原先因兩筆相同請求而停止，後來一筆成功、一筆取消；本輪只讀回結果，沒有重複部署。
+
+四人仍有 repo admin，兩環境部署開關開啟、沒有人工 reviewer 等待。arum 已以自己的帳號完成 [plan](https://github.com/FreeTWAI/freedom-platform/actions/runs/40502413062)；這只驗 GitHub 准入，deploy 被刻意跳過，不能寫成他已實際部署。
+主線 `4d248428` 的 Verify／CodeQL 均成功，但目前成功部署版本仍是 `34390b12`。
+
+新的自然排程 [40492346184](https://github.com/FreeTWAI/freedom-platform/actions/runs/40492346184) 已觀察到，兩環境都在 capture 失敗、dump 未開始。這和早上已結清的手動備份是不同事件。
+後續 staging 部署及手動備份仍失敗；原操作者讀回指出備份 pending 尚未結清，本輪沒有另讀 live DB，也沒有宣稱已恢復。
+修正 [#1133](https://github.com/FreeTWAI/freedom-platform/pull/1133) 已由 detna 審查，整合 [#1134](https://github.com/FreeTWAI/freedom-platform/pull/1134) 驗證中。
+沿原操作線完成合併與新 image 安裝，再用原失敗 run ID 經既有 recovery 入口先 staging、後 next；不重設 floor、不為部署重做備份。
+最小 CI [#1121](https://github.com/FreeTWAI/freedom-platform/pull/1121) 已通過適用 CI、待獨立審查，不加入這批固定範圍。
+原 168 項、功能旗標、會員驗收與第二操作者還原狀態不因這次觀察改成通過。以下早上的紀錄保留其當時範圍。
+
 ## 2026-10-27 共用 Actions 發布與備份接手
 
 兩環境已透過 `Shared release` 部署 `1db28383`，staging 04:56 UTC、production 05:02 UTC 完成。
