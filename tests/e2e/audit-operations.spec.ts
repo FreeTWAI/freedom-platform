@@ -35,7 +35,7 @@ const memberPages: [string, string][] = [['supplier', '我有東西要賣'], ['r
 
 test('supplier reply needs an explicit choice and manual-quantity products do not ask for stock', async ({ page }) => {
   await login(page);
-  await navigate(page, '我有東西要賣');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
+  await navigate(page, 'AI 整理供貨商品');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
   await expect(page.getByText('尚未開放買家結帳，平台不代收款', { exact: false })).toBeVisible();
   await page.getByRole('combobox', { name: /^供貨方式/ }).selectOption('manual_confirmation');
   await expect(page.getByLabel('可供數量（有明確庫存時必填）', { exact: true })).toHaveCount(0);
@@ -50,7 +50,7 @@ test('supplier reply needs an explicit choice and manual-quantity products do no
   await expect(page.getByRole('article').filter({ hasText: title }).getByText('數量須與供貨商確認', { exact: true })).toBeVisible();
 
   await switchTo(page, 'reviewer@local.test');
-  await navigate(page, '我可以賣東西');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
+  await navigate(page, 'AI 製作銷售網站');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
   await settled(page);
   // A seller who already has a store keeps the create form one click away instead of at the top.
   const hadStore = await page.getByText('內部預覽 · 尚未開放結帳').count() > 0;
@@ -71,7 +71,7 @@ test('supplier reply needs an explicit choice and manual-quantity products do no
   await expect(listing.getByText('待供貨商回覆', { exact: true })).toBeVisible();
 
   await switchTo(page, 'maker@local.test');
-  await navigate(page, '我有東西要賣');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
+  await navigate(page, 'AI 整理供貨商品');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
   const request = page.getByRole('region', { name: '銷售者的供貨請求', exact: true }).getByRole('article').filter({ hasText: title });
   await expect(request.getByRole('combobox', { name: /^回覆/ })).toHaveValue('');
   await request.getByLabel('給銷售者的說明', { exact: true }).fill('先確認數量');

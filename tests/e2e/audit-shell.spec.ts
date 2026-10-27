@@ -320,7 +320,7 @@ for (const viewport of VIEWPORTS) {
 test('selecting the current page closes More and leaves the legacy commerce control reachable', async ({ page }) => {
   await page.goto('/');
   await signIn(page);
-  await navigate(page, '我可以賣東西');
+  await navigate(page, 'AI 製作銷售網站');
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     for (const activation of ['pointer', 'keyboard']) {
@@ -334,7 +334,7 @@ test('selecting the current page closes More and leaves the legacy commerce cont
       const more = nav.locator('.nav-more');
       await more.locator(':scope > summary').click();
       await expect(more).toHaveJSProperty('open', true);
-      const current = nav.getByRole('button', { name: '我可以賣東西', exact: true });
+      const current = nav.getByRole('button', { name: 'AI 製作銷售網站', exact: true });
       await expect(current).toHaveAttribute('aria-current', 'page');
       if (activation === 'keyboard') {
         await current.focus();

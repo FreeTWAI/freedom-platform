@@ -62,7 +62,7 @@ test('synthetic entry budget: two required fields and one guild choice reach use
 });
 test('feature search finds chat and selling functions, and all themes work at 320 pixels',async({page})=>{
   await login(page);await openFeatureSearch(page);const search=page.getByLabel('搜尋功能');await search.fill('聊天室');await page.locator('.nav-search-results').getByRole('button',{name:'我的訊息',exact:true}).click();await expect(page.getByRole('heading',{name:'我的訊息',level:2})).toBeVisible();
-  await openFeatureSearch(page);await search.fill('電商');await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'我可以賣東西',exact:true}).click();await expect(page.getByRole('heading',{name:'我可以賣東西',level:1})).toBeVisible();
+  await openFeatureSearch(page);await search.fill('電商');await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'AI 製作銷售網站',exact:true}).click();await expect(page.getByRole('heading',{name:'我可以賣東西',level:1})).toBeVisible();
   await navigate(page,'會員首頁');await page.setViewportSize({width:320,height:720});
   for(const [label,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
     const settings=page.getByRole('button',{name:'設定',exact:true});if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme',theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

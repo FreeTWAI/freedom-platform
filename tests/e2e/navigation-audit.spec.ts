@@ -36,9 +36,24 @@ test('navigation separates collaboration, commerce and management without granti
   await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
   await page.getByText('使用 Agent 或聊天 AI 協助整理（進階）', { exact: true }).click();
   await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeVisible();
-  await navigate(page, '我有東西要賣');
+  await nav.locator('.nav-more > summary').click();
+  await commerce.locator(':scope > summary').click();
+  await expect(commerce.getByRole('group', { name: '平台內管理', exact: true })).toBeVisible();
+  await expect(commerce.getByRole('group', { name: 'AI 建站工具（進階）', exact: true })).toBeVisible();
+  await expect(commerce.getByRole('button', { name: '行銷工作室', exact: true })).toHaveAccessibleDescription('準備推廣文案，記錄分享連結');
+  await expect(commerce.getByRole('button', { name: 'AI 整理供貨商品', exact: true })).toHaveAccessibleDescription('下載任務給外部 AI，製作內部供貨網站');
+  const search = nav.getByRole('searchbox');
+  for (const [oldLabel, newLabel] of [['我的供貨商品庫', '供貨商品管理'], ['我的訂單', '購買與預留紀錄'], ['我有東西要賣', 'AI 整理供貨商品'], ['我可以賣東西', 'AI 製作銷售網站']]) {
+    await search.fill(oldLabel);
+    await expect(nav.getByRole('region', { name: '功能搜尋結果' }).getByRole('button', { name: newLabel, exact: true })).toBeVisible();
+  }
+  await search.fill('外部 AI');
+  await expect(nav.getByRole('region', { name: '功能搜尋結果' }).getByRole('button')).toHaveCount(2);
+  await search.fill('');
+  await navigate(page, 'AI 整理供貨商品');
+  await expect(page).toHaveURL(/#supplier$/);
   await expect(page.getByRole('heading', { name: '我有東西要賣', level: 1, exact: true })).toBeVisible();
-  await expect(commerce.getByRole('button', { name: '我有東西要賣', includeHidden: true, exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(commerce.getByRole('button', { name: 'AI 整理供貨商品', includeHidden: true, exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
 test('a synthetic maintainer permission projection reveals guild management beside platform management', async ({ page }) => {
@@ -64,9 +79,9 @@ test('phone navigation opens, escapes and closes after selection while keeping e
   await expect(nav).toBeHidden(); await expect(menu).toBeFocused();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const label of ['技能書架', '一起開發', '我有東西要賣', '工坊夥伴', '活動集錦', '自由工坊社群', '會員首頁']) {
+    for (const [label, heading] of [['技能書架', '技能書架'], ['一起開發', '一起開發'], ['AI 整理供貨商品', '我有東西要賣'], ['工坊夥伴', '工坊夥伴'], ['活動集錦', '活動集錦'], ['自由工坊社群', '自由工坊社群'], ['會員首頁', '會員首頁']]) {
       await navigate(page, label);
-      await expect(page.getByRole('heading', { name: label, level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: heading, level: 1, exact: true })).toBeVisible();
       await expect(nav).toBeHidden(); await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await expect(menu).toBeInViewport();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
