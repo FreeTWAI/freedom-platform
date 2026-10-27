@@ -99,7 +99,7 @@
     "apps/portal-web/src/modules/profile-publication-route.ts",
     "tests/runtime/profile-publication-controller.test.ts",
     "tests/e2e/profile-publication.spec.ts",
-    "migrations/191_member_profile_publications.sql"
+    "migrations/190_member_profile_publications.sql"
   ],
   "owner_role": "foundation",
   "public_exports": [

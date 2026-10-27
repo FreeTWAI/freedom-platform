@@ -1,7 +1,7 @@
 # 個人空間訪客投影：第一階段後端候選
 
-基準 `4d2484286a82e5795826ffe9e743cbaef33b86a6`。本地候選，未發布、未部署、未啟用；**完整功能尚未完成**。
-依 [Ted #1043 協調回覆](https://github.com/FreeTWAI/freedom-platform/pull/1043#issuecomment-6442295308)，本地以 `191_member_profile_publications.sql` 暫編開發，不須等 #1043；190仍屬Google候選。合併前由Ted依當時main改成最小空號，同步檔名、部署last與測試期望。現在main189缺190，因此原有嚴格planner應拒絕此暫編catalog；不把190加入known_gaps、不補GoogleSQL、不改planner通融。這是待整合候選，不可套用或部署。runtime grants／隔離DB驗證仍未執行。
+基準 `4d2484286a82e5795826ffe9e743cbaef33b86a6`。已提交 [Draft PR #1135](https://github.com/FreeTWAI/freedom-platform/pull/1135)，未部署、未啟用；**完整功能尚未完成**。
+依 [Ted #1135 最新更正](https://github.com/FreeTWAI/freedom-platform/pull/1135#issuecomment-6442736697)，本地改用main最小空號 `190_member_profile_publications.sql`。與 #1043 同號是明確允許的暫定碰撞；後合併者由Ted同步檔名、部署last、preflight期望與release recognition後改號。沒有修改known_gaps或引入GoogleSQL。先前191缺190的失敗收據保留。新表的精確檔名納入FOUNDATION_NAMES，只代表辨識schema，不授予公開、合併或部署權限；runtime grants／隔離DB／原生驗證仍未執行。
 
 ## 獨立同意與範圍
 

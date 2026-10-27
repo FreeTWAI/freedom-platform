@@ -224,6 +224,8 @@ const FOUNDATION_NAMES = [
   '187_checkout_contact_retention.sql',
   '188_paid_order_cancellation.sql',
   '189_hosted_drop_ship.sql',
+  // Explicitly consented profile records only; recognition grants no publication or release authority.
+  '190_member_profile_publications.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

@@ -1,4 +1,4 @@
--- PROVISIONAL 191: Ted assigns the smallest free number at integration.
+-- PROVISIONAL 190: per Ted #1135, later-merged candidates are renumbered.
 -- Source-only candidate; no migration execution or publication implied.
 -- No backfill: existing accounts, directory and e-card do not become publications.
 CREATE TABLE member_profile_publications (
